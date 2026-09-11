@@ -9,9 +9,16 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings, HealthCheck
+from conftest import (
+    dB_arrays,
+    envelope_arrays,
+    for_each_namespace,
+    positive_power_arrays,
+    to_numpy,
+)
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.numpy import arrays, array_shapes
+from hypothesis.extra.numpy import arrays
 from numpy.testing import assert_allclose
 
 from striqt.waveform.lib.power_analysis import (
@@ -22,20 +29,9 @@ from striqt.waveform.lib.power_analysis import (
     envtopow,
     powtodB,
     unit_dB_to_linear,
-    unit_linear_to_dB,
     unit_dB_to_wave,
+    unit_linear_to_dB,
     unit_wave_to_dB,
-    unit_wave_to_linear,
-)
-
-from conftest import (
-    to_numpy,
-    positive_power_arrays,
-    dB_arrays,
-    envelope_arrays,
-    available_namespaces,
-    convert_array,
-    for_each_namespace,
 )
 
 # Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
@@ -152,38 +148,6 @@ class TestUnitConversionProperties:
 class TestConversionIdentities:
     """Properties: Mathematical identities that must hold for dB conversions."""
 
-    @given(power=positive_power_arrays(dtype=np.float64))
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_powtodB_dBtopow_roundtrip(self, power):
-        """Property: dBtopow(powtodB(x)) ≈ x for all positive x."""
-        roundtrip = dBtopow(powtodB(power))
-        rtol = roundtrip_power_rtol(power.dtype, np.abs(powtodB(power)).max())
-        assert_allclose(roundtrip, power, rtol=rtol)
-
-    @given(dB=dB_arrays(min_value=-140, max_value=100, dtype=np.float64))
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_dBtopow_powtodB_roundtrip(self, dB):
-        """Property: powtodB(dBtopow(x)) ≈ x."""
-        roundtrip = powtodB(dBtopow(dB))
-        rtol, atol = roundtrip_dB_tol(dB.dtype, np.abs(dB).max())
-        assert_allclose(roundtrip, dB, rtol=rtol, atol=atol)
-
-    @given(
-        env=envelope_arrays(
-            include_complex=False,
-            dtype=np.float64,
-            min_magnitude=1e-6,
-            max_magnitude=1e6,
-        )
-    )
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_envtodB_equals_powtodB_envtopow(self, env):
-        """Property: envtodB(x) = powtodB(envtopow(x))."""
-        direct = envtodB(env)
-        via_power = powtodB(envtopow(env))
-        rtol, atol = log_conversion_tol(env.dtype, 20, n_impl=2)
-        assert_allclose(direct, via_power, rtol=rtol, atol=atol)
-
     @given(env=envelope_arrays(include_complex=False, dtype=np.float64))
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_envtopow_is_square(self, env):
@@ -216,89 +180,6 @@ class TestAlgebraicProperties:
     """Properties: Algebraic rules for dB arithmetic."""
 
     @given(
-        base_dB=st.floats(
-            min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
-        )
-    )
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_3dB_rule(self, base_dB):
-        """Property: Doubling power adds ~3.01 dB.
-
-        dBlinsum([x, x]) = x + 10*log10(2) ≈ x + 3.01
-        """
-        dB = np.array([base_dB, base_dB], dtype=np.float64)
-        result = dBlinsum(dB)
-        expected = base_dB + 10 * np.log10(2)
-        rtol, atol = linear_stat_tol(np.float64, abs(base_dB), 2)
-        assert_allclose(result, expected, rtol=rtol, atol=atol)
-
-    @given(
-        base_dB=st.floats(
-            min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
-        )
-    )
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_10dB_rule(self, base_dB):
-        """Property: 10x power adds exactly 10 dB.
-
-        dBlinsum([x]*10) = x + 10
-        """
-        dB = np.array([base_dB] * 10, dtype=np.float64)
-        result = dBlinsum(dB)
-        expected = base_dB + 10.0
-        rtol, atol = linear_stat_tol(np.float64, abs(base_dB), 10)
-        assert_allclose(result, expected, rtol=rtol, atol=atol)
-
-    @given(
-        dB=dB_arrays(
-            min_value=-50,
-            max_value=50,
-            min_size=2,
-            max_size=50,
-            dtype=np.float64,
-        )
-    )
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_mean_sum_relationship(self, dB):
-        """Property: dBlinmean = dBlinsum - 10*log10(N).
-
-        Linear mean = linear sum / N, so in dB:
-        mean_dB = sum_dB - 10*log10(N)
-        """
-        N = dB.size
-        mean_result = dBlinmean(dB, axis=None)
-        sum_result = dBlinsum(dB, axis=None)
-        expected_mean = sum_result - 10 * np.log10(N)
-        rtol, atol = linear_stat_tol(dB.dtype, np.abs(dB).max(), N, n_impl=2)
-        assert_allclose(mean_result, expected_mean, rtol=rtol, atol=atol)
-
-    @given(
-        dB=st.floats(
-            min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
-        )
-    )
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_single_value_mean_identity(self, dB):
-        """Property: dBlinmean([x]) = x."""
-        arr = np.array([dB], dtype=np.float64)
-        result = dBlinmean(arr)
-        rtol, atol = linear_stat_tol(np.float64, abs(dB), 1)
-        assert_allclose(result, dB, rtol=rtol, atol=atol)
-
-    @given(
-        dB=st.floats(
-            min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
-        )
-    )
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_single_value_sum_identity(self, dB):
-        """Property: dBlinsum([x]) = x."""
-        arr = np.array([dB], dtype=np.float64)
-        result = dBlinsum(arr)
-        rtol, atol = linear_stat_tol(np.float64, abs(dB), 1)
-        assert_allclose(result, dB, rtol=rtol, atol=atol)
-
-    @given(
         dB=st.floats(
             min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
         ),
@@ -312,16 +193,24 @@ class TestAlgebraicProperties:
         rtol, atol = linear_stat_tol(np.float64, abs(dB), n)
         assert_allclose(result, dB, rtol=rtol, atol=atol)
 
+    @given(
+        dB=st.floats(
+            min_value=-140, max_value=100, allow_nan=False, allow_infinity=False
+        ),
+        n=st.integers(min_value=1, max_value=20),
+    )
+    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_equal_values_sum(self, dB, n):
+        """Property: dBlinsum([x, x, ..., x]) = x + 10*log10(n)."""
+        arr = np.array([dB] * n, dtype=np.float64)
+        result = dBlinsum(arr)
+        expected = dB + 10 * np.log10(n)
+        rtol, atol = linear_stat_tol(np.float64, abs(dB), n)
+        assert_allclose(result, expected, rtol=rtol, atol=atol)
+
 
 class TestDtypePreservation:
     """Properties: Output dtype should be at least min_dtype."""
-
-    @given(power=positive_power_arrays(dtype=np.float32))
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_powtodB_float32_preserved(self, power):
-        """Property: float32 input with min_dtype='float32' → float32 output."""
-        result = powtodB(power, min_dtype='float32')
-        assert result.dtype == np.float32
 
     @given(power=positive_power_arrays(dtype=np.float64))
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -329,13 +218,6 @@ class TestDtypePreservation:
         """Property: float64 input is never downgraded."""
         result = powtodB(power, min_dtype='float32')
         assert result.dtype == np.float64
-
-    @given(dB=dB_arrays(dtype=np.float32))
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_dBtopow_float32_preserved(self, dB):
-        """Property: float32 input with min_dtype='float32' → float32 output."""
-        result = dBtopow(dB, min_dtype='float32')
-        assert result.dtype == np.float32
 
     @given(env=envelope_arrays(include_complex=False, dtype=np.float32))
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -466,49 +348,13 @@ class TestEdgeCases:
         assert_allclose(result, expected, rtol=rtol, atol=atol)
 
 
-class TestComplexValues:
-    """Properties: Correct handling of complex-valued inputs."""
-
-    @given(
-        env=envelope_arrays(
-            include_complex=True,
-            min_magnitude=1e-6,
-            max_magnitude=1e6,
-            dtype=np.float64,
-        )
-    )
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_envtopow_complex_is_magnitude_squared(self, env):
-        """Property: envtopow(z) = |z|² for complex z."""
-        result = envtopow(env)
-        expected = np.abs(env) ** 2
-        rtol = envelope_power_rtol(np.float64, complex_input=True, n_impl=2)
-        assert_allclose(result.real, expected, rtol=rtol)
-
-    @given(
-        env=envelope_arrays(
-            include_complex=True,
-            min_magnitude=1e-6,
-            max_magnitude=1e6,
-            dtype=np.float64,
-        )
-    )
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_envtodB_complex_is_20log10_magnitude(self, env):
-        """Property: envtodB(z) = 20*log10(|z|) for complex z."""
-        result = envtodB(env)
-        expected = 20 * np.log10(np.abs(env))
-        rtol, atol = log_conversion_tol(np.float64, 20, complex_input=True, n_impl=2)
-        assert_allclose(result.real, expected, rtol=rtol, atol=atol)
-
-
 class TestAxisParameter:
     """Properties: Correct behavior with axis parameter."""
 
     @given(data=st.data())
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_dBlinmean_axis_reduces_dimension(self, data):
-        """Property: dBlinmean along axis reduces that dimension."""
+    def test_axis_reduces_dimension(self, data):
+        """Property: dBlinmean and dBlinsum along axis reduce that dimension."""
         shape = data.draw(
             st.tuples(
                 st.integers(min_value=2, max_value=10),
@@ -526,36 +372,10 @@ class TestAxisParameter:
         )
         axis = data.draw(st.integers(min_value=0, max_value=1))
 
-        result = dBlinmean(dB, axis=axis)
         expected_shape = list(shape)
         del expected_shape[axis]
-        assert result.shape == tuple(expected_shape)
-
-    @given(data=st.data())
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_dBlinsum_axis_reduces_dimension(self, data):
-        """Property: dBlinsum along axis reduces that dimension."""
-        shape = data.draw(
-            st.tuples(
-                st.integers(min_value=2, max_value=10),
-                st.integers(min_value=2, max_value=10),
-            )
-        )
-        dB = data.draw(
-            arrays(
-                dtype=np.float64,
-                shape=shape,
-                elements=st.floats(
-                    min_value=-50, max_value=50, allow_nan=False, allow_infinity=False
-                ),
-            )
-        )
-        axis = data.draw(st.integers(min_value=0, max_value=1))
-
-        result = dBlinsum(dB, axis=axis)
-        expected_shape = list(shape)
-        del expected_shape[axis]
-        assert result.shape == tuple(expected_shape)
+        assert dBlinmean(dB, axis=axis).shape == tuple(expected_shape)
+        assert dBlinsum(dB, axis=axis).shape == tuple(expected_shape)
 
     @given(data=st.data())
     @settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -636,7 +456,7 @@ class TestMultiBackendRoundtrip:
 
     @given(
         data=for_each_namespace(
-            dB_arrays(min_value=-100, max_value=100, dtype=np.float64)
+            dB_arrays(min_value=-140, max_value=100, dtype=np.float64)
         )
     )
     @settings(
@@ -699,7 +519,7 @@ class TestMultiBackendAlgebraicProperties:
                 min_value=-50,
                 max_value=50,
                 min_size=2,
-                max_size=20,
+                max_size=50,
                 dtype=np.float64,
             )
         )
@@ -732,8 +552,8 @@ class TestMultiBackendComplexValues:
         data=for_each_namespace(
             envelope_arrays(
                 include_complex=True,
-                min_magnitude=1e-6,
-                max_magnitude=1e6,
+                min_magnitude=1e-8,
+                max_magnitude=1e8,
                 dtype=np.float64,
             )
         )
@@ -751,15 +571,16 @@ class TestMultiBackendComplexValues:
         result_np = to_numpy(result)
         expected = np.abs(arr_np) ** 2
 
+        assert np.isrealobj(result_np)
         rtol = envelope_power_rtol(np.float64, complex_input=True, n_impl=2)
-        assert_allclose(result_np.real, expected, rtol=rtol)
+        assert_allclose(result_np, expected, rtol=rtol)
 
     @given(
         data=for_each_namespace(
             envelope_arrays(
                 include_complex=True,
-                min_magnitude=1e-6,
-                max_magnitude=1e6,
+                min_magnitude=1e-8,
+                max_magnitude=1e8,
                 dtype=np.float64,
             )
         )
@@ -796,159 +617,73 @@ class TestNumpyCupyCrossComparison:
             pytest.skip('cupy is not available')
         return _cupy
 
-    @given(
-        power=positive_power_arrays(
-            min_value=1e-10, max_value=1e10, dtype=np.float64, min_dims=1, max_dims=1
-        )
-    )
+    @given(data=st.data(), dtype=st.sampled_from([np.float64, np.float32]))
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
     )
-    def test_powtodB_numpy_vs_cupy_float64(self, cupy_available, power):
-        """Cross-comparison: powtodB numpy vs cupy (float64)."""
+    def test_powtodB_numpy_vs_cupy(self, cupy_available, data, dtype):
+        """Cross-comparison: powtodB numpy vs cupy."""
         cp = cupy_available
-
-        result_np = powtodB(power)
-
-        power_cp = cp.asarray(power)
-        result_cp = powtodB(power_cp)
-        result_cp_np = result_cp.get()
-
-        rtol, atol = log_conversion_tol(np.float64, 10, n_impl=2)
-        tol_dB = dB_tolerance(rtol, atol, np.abs(result_np).max())
-        assert_allclose(
-            result_cp_np, result_np, rtol=rtol, atol=atol, err_msg=f'{tol_dB:.2e} dB'
+        lim = {np.float64: 1e10, np.float32: 1e5}[dtype]
+        power = data.draw(
+            positive_power_arrays(
+                min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
+            )
         )
-
-    @given(
-        power=positive_power_arrays(
-            min_value=1e-5, max_value=1e5, dtype=np.float32, min_dims=1, max_dims=1
-        )
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-    )
-    def test_powtodB_numpy_vs_cupy_float32(self, cupy_available, power):
-        """Cross-comparison: powtodB numpy vs cupy (float32)."""
-        cp = cupy_available
 
         result_np = powtodB(power, min_dtype='float32')
+        result_cp_np = powtodB(cp.asarray(power), min_dtype='float32').get()
 
-        power_cp = cp.asarray(power)
-        result_cp = powtodB(power_cp, min_dtype='float32')
-        result_cp_np = result_cp.get()
-
-        rtol, atol = log_conversion_tol(np.float32, 10, n_impl=2)
+        rtol, atol = log_conversion_tol(dtype, 10, n_impl=2)
         tol_dB = dB_tolerance(rtol, atol, np.abs(result_np).max())
         assert_allclose(
             result_cp_np, result_np, rtol=rtol, atol=atol, err_msg=f'{tol_dB:.2e} dB'
         )
 
-    @given(
-        dB=dB_arrays(
-            min_value=-100,
-            max_value=100,
-            dtype=np.float64,
-            min_dims=1,
-            max_dims=1,
-        )
-    )
+    @given(data=st.data(), dtype=st.sampled_from([np.float64, np.float32]))
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
     )
-    def test_dBtopow_numpy_vs_cupy_float64(self, cupy_available, dB):
-        """Cross-comparison: dBtopow numpy vs cupy (float64)."""
+    def test_dBtopow_numpy_vs_cupy(self, cupy_available, data, dtype):
+        """Cross-comparison: dBtopow numpy vs cupy."""
         cp = cupy_available
-
-        result_np = dBtopow(dB)
-
-        dB_cp = cp.asarray(dB)
-        result_cp = dBtopow(dB_cp)
-        result_cp_np = result_cp.get()
-
-        rtol = pow_conversion_rtol(np.float64, np.abs(dB).max(), n_impl=2)
-        tol_dB = linear_tolerance_dB(rtol)
-        assert_allclose(result_cp_np, result_np, rtol=rtol, err_msg=f'{tol_dB:.2e} dB')
-
-    @given(
-        dB=dB_arrays(
-            min_value=-30,
-            max_value=30,
-            dtype=np.float32,
-            min_dims=1,
-            max_dims=1,
+        lim = {np.float64: 100, np.float32: 30}[dtype]
+        dB = data.draw(
+            dB_arrays(
+                min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
+            )
         )
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-    )
-    def test_dBtopow_numpy_vs_cupy_float32(self, cupy_available, dB):
-        """Cross-comparison: dBtopow numpy vs cupy (float32)."""
-        cp = cupy_available
 
         result_np = dBtopow(dB, min_dtype='float32')
+        result_cp_np = dBtopow(cp.asarray(dB), min_dtype='float32').get()
 
-        dB_cp = cp.asarray(dB)
-        result_cp = dBtopow(dB_cp, min_dtype='float32')
-        result_cp_np = result_cp.get()
-
-        rtol = pow_conversion_rtol(np.float32, np.abs(dB).max(), n_impl=2)
+        rtol = pow_conversion_rtol(dtype, np.abs(dB).max(), n_impl=2)
         tol_dB = linear_tolerance_dB(rtol)
         assert_allclose(result_cp_np, result_np, rtol=rtol, err_msg=f'{tol_dB:.2e} dB')
 
-    @given(
-        env=envelope_arrays(
-            include_complex=False,
-            min_magnitude=1e-6,
-            max_magnitude=1e6,
-            dtype=np.float64,
-            min_dims=1,
-            max_dims=1,
-        )
-    )
+    @given(data=st.data(), dtype=st.sampled_from([np.float64, np.float32]))
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
     )
-    def test_envtodB_numpy_vs_cupy_float64(self, cupy_available, env):
-        """Cross-comparison: envtodB numpy vs cupy (float64)."""
+    def test_envtodB_numpy_vs_cupy(self, cupy_available, data, dtype):
+        """Cross-comparison: envtodB numpy vs cupy."""
         cp = cupy_available
-
-        result_np = envtodB(env)
-
-        env_cp = cp.asarray(env)
-        result_cp = envtodB(env_cp)
-        result_cp_np = result_cp.get()
-
-        rtol, atol = log_conversion_tol(np.float64, 20, n_impl=2)
-        tol_dB = dB_tolerance(rtol, atol, np.abs(result_np).max())
-        assert_allclose(
-            result_cp_np, result_np, rtol=rtol, atol=atol, err_msg=f'{tol_dB:.2e} dB'
+        lim = {np.float64: 1e6, np.float32: 1e4}[dtype]
+        env = data.draw(
+            envelope_arrays(
+                include_complex=False,
+                min_magnitude=1 / lim,
+                max_magnitude=lim,
+                dtype=dtype,
+                min_dims=1,
+                max_dims=1,
+            )
         )
-
-    @given(
-        env=envelope_arrays(
-            include_complex=False,
-            min_magnitude=1e-4,
-            max_magnitude=1e4,
-            dtype=np.float32,
-            min_dims=1,
-            max_dims=1,
-        )
-    )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-    )
-    def test_envtodB_numpy_vs_cupy_float32(self, cupy_available, env):
-        """Cross-comparison: envtodB numpy vs cupy (float32)."""
-        cp = cupy_available
 
         result_np = envtodB(env, min_dtype='float32')
+        result_cp_np = envtodB(cp.asarray(env), min_dtype='float32').get()
 
-        env_cp = cp.asarray(env)
-        result_cp = envtodB(env_cp, min_dtype='float32')
-        result_cp_np = result_cp.get()
-
-        rtol, atol = log_conversion_tol(np.float32, 20, n_impl=2)
+        rtol, atol = log_conversion_tol(dtype, 20, n_impl=2)
         tol_dB = dB_tolerance(rtol, atol, np.abs(result_np).max())
         assert_allclose(
             result_cp_np, result_np, rtol=rtol, atol=atol, err_msg=f'{tol_dB:.2e} dB'

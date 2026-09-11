@@ -1,4 +1,5 @@
-"""`!include` handling in decode_from_yaml_file: globs, lists, nesting, scalar typing"""
+"""striqt.analysis.lib.io.decode_from_yaml_file: `!include` globs, lists and nesting,
+flow-sequence keys, scalar typing"""
 
 from __future__ import annotations
 
@@ -21,6 +22,9 @@ _example_dirs = itertools.count()
 
 def _dump(d: dict) -> str:
     return ''.join(f'{k}: {v}\n' for k, v in d.items())
+
+
+# %% !include
 
 
 @given(
@@ -52,6 +56,13 @@ def test_list_include_merges_dicts_with_later_files_winning(write_yaml):
     write_yaml('b.yaml', 'y: 2\n')
     spec = write_yaml('spec.yaml', 'source: !include [a.yaml, b.yaml]\n')
     assert load(spec)['source'] == {'x': 1, 'y': 2}
+
+
+def test_glob_include_merges_only_one_level_deep(write_yaml):
+    write_yaml('sites/a.yaml', 'block:\n  x: 1\n  y: 1\n')
+    write_yaml('sites/b.yaml', 'block:\n  y: 2\n')
+    spec = write_yaml('spec.yaml', 'sites: !include "sites/*.yaml"\n')
+    assert load(spec)['sites'] == {'block': {'y': 2}}
 
 
 @pytest.mark.xfail(
@@ -87,41 +98,6 @@ def test_empty_glob_raises_with_the_pattern(write_yaml):
     with pytest.raises(FileNotFoundError) as excinfo:
         load(spec)
     assert excinfo.value.args == ('missing/*.yaml',)
-
-
-def test_flow_sequence_mapping_keys_become_tuples(write_yaml):
-    spec = write_yaml('spec.yaml', 'lookup:\n  [0, 1]: 2\n  [1, 0]: 3\n')
-    assert load(spec)['lookup'] == {(0, 1): 2, (1, 0): 3}
-
-
-@pytest.mark.parametrize(
-    'text, expected',
-    [
-        ('125.0e6', '125.0e6'),
-        ('3750e6', '3750e6'),
-        ('20e-3', '20e-3'),
-        ('inf', 'inf'),
-        ('nan', 'nan'),
-        ('none', 'none'),
-        ('13/28', '13/28'),
-        ('1/28000', '1/28000'),
-        ('.01', 0.01),
-        ('.inf', math.inf),
-        ('.nan', math.nan),
-        ('-0', 0),
-        ('null', None),
-        ('True', True),
-    ],
-)
-def test_scalar_typing(write_yaml, text, expected):
-    # YAML 1.1 leaves most engineering-notation numbers as strings; msgspec's lax
-    # conversion turns them into numbers only once a spec field type is known
-    value = load(write_yaml('spec.yaml', f'v: {text}\n'))['v']
-    if isinstance(expected, float) and math.isnan(expected):
-        assert isinstance(value, float) and math.isnan(value)
-    else:
-        assert value == expected
-        assert type(value) is type(expected)
 
 
 def test_parent_relative_glob_from_subdirectory(write_yaml):
@@ -167,3 +143,46 @@ def test_nested_include_resolves_relative_to_the_including_file(write_yaml):
     write_yaml('frag/c.yaml', 'x: !include leaf.yaml\n')
     spec = write_yaml('spec.yaml', 'top: !include frag/c.yaml\n')
     assert load(spec)['top'] == {'x': {'v': 1}}
+
+
+# %% loader behavior
+
+
+def test_flow_sequence_mapping_keys_become_tuples(write_yaml):
+    spec = write_yaml('spec.yaml', 'lookup:\n  [0, 1]: 2\n  [1, 0]: 3\n')
+    assert load(spec)['lookup'] == {(0, 1): 2, (1, 0): 3}
+
+
+def test_duplicate_top_level_key_keeps_the_last(write_yaml):
+    spec = write_yaml('spec.yaml', 'options: {a: 1}\noptions: {b: 2}\n')
+    assert load(spec) == {'options': {'b': 2}}
+
+
+@pytest.mark.parametrize(
+    'text, expected',
+    [
+        ('125.0e6', '125.0e6'),
+        ('3750e6', '3750e6'),
+        ('20e-3', '20e-3'),
+        ('inf', 'inf'),
+        ('nan', 'nan'),
+        ('none', 'none'),
+        ('13/28', '13/28'),
+        ('1/28000', '1/28000'),
+        ('.01', 0.01),
+        ('.inf', math.inf),
+        ('.nan', math.nan),
+        ('-0', 0),
+        ('null', None),
+        ('True', True),
+    ],
+)
+def test_scalar_typing(write_yaml, text, expected):
+    # YAML 1.1 leaves most engineering-notation numbers as strings; msgspec's lax
+    # conversion turns them into numbers only once a spec field type is known
+    value = load(write_yaml('spec.yaml', f'v: {text}\n'))['v']
+    if isinstance(expected, float) and math.isnan(expected):
+        assert isinstance(value, float) and math.isnan(value)
+    else:
+        assert value == expected
+        assert type(value) is type(expected)

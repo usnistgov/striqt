@@ -309,7 +309,7 @@ def fftfreq(
                 -fnyq + fnyq / nfft, fnyq - fnyq / nfft, nfft, dtype=dtype
             )
 
-    if not array_api_compat.is_numpy_namespace(np):  # pyright: ignore
+    if not array_api_compat.is_numpy_namespace(xp):  # pyright: ignore
         return xp.asarray(fftfreq(nfft, fs, dtype, as_index=as_index))
 
     # high resolution rational representation of frequency resolution

@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from typing import Any, List, Tuple
 
 import numpy as np
 import pytest
-from pathlib import Path
-
 
 np.seterr(divide='ignore')
 
@@ -28,9 +27,9 @@ def _get_cupy():
         return None
 
     try:
+        import cupy as cp  # type: ignore
         import pandas
         import scipy
-        import cupy as cp  # type: ignore
 
         # Verify CUDA is actually available
         cp.cuda.runtime.getDeviceCount()
@@ -60,13 +59,8 @@ def _get_dask_array():
     return da
 
 
-# Build list of available array namespaces
-_ARRAY_NAMESPACES: List[Tuple[str, Any]] = [('numpy', np)]
-
 _cupy = _get_cupy()
-if _cupy is not None:
-    _ARRAY_NAMESPACES.append(('cupy', _cupy))
-else:
+if _cupy is None:
     warnings.warn(
         'cupy is not available or CUDA is not configured; cupy tests will be skipped',
         UserWarning,
@@ -75,73 +69,12 @@ else:
 
 # Check dask availability without importing (to avoid reifying scipy)
 _dask_is_available = _dask_available()
-if _dask_is_available:
-    _ARRAY_NAMESPACES.append(('dask', None))  # placeholder, loaded lazily
-else:
+if not _dask_is_available:
     warnings.warn(
         'dask.array is not available; dask tests will be skipped',
         UserWarning,
         stacklevel=1,
     )
-
-
-@pytest.fixture(params=_ARRAY_NAMESPACES, ids=[name for name, _ in _ARRAY_NAMESPACES])
-def xp(request):
-    """Parameterized fixture providing array namespace (numpy, cupy, dask).
-
-    Use this fixture to write tests that run against multiple array backends.
-
-    Example:
-        def test_my_function(xp):
-            arr = xp.array([1, 2, 3])
-            result = my_function(arr)
-            # assertions...
-    """
-    name, ns = request.param
-    if name == 'dask' and ns is None:
-        return _get_dask_array()
-    return ns
-
-
-@pytest.fixture(params=_ARRAY_NAMESPACES, ids=[name for name, _ in _ARRAY_NAMESPACES])
-def xp_name(request):
-    """Parameterized fixture providing (name, namespace) tuple.
-
-    Use when you need both the name and the namespace.
-
-    Example:
-        def test_my_function(xp_name):
-            name, xp = xp_name
-            if name == 'dask':
-                pytest.skip('dask not supported for this test')
-            arr = xp.array([1, 2, 3])
-    """
-    name, ns = request.param
-    if name == 'dask' and ns is None:
-        return (name, _get_dask_array())
-    return request.param
-
-
-@pytest.fixture
-def np_array():
-    """Fixture providing numpy module (always available)."""
-    return np
-
-
-@pytest.fixture
-def cp_array():
-    """Fixture providing cupy module, skips if unavailable."""
-    if _cupy is None:
-        pytest.skip('cupy is not available')
-    return _cupy
-
-
-@pytest.fixture
-def da_array():
-    """Fixture providing dask.array module, skips if unavailable."""
-    if not _dask_is_available:
-        pytest.skip('dask.array is not available')
-    return _get_dask_array()
 
 
 def to_numpy(arr):
@@ -164,7 +97,7 @@ def to_numpy(arr):
 def _get_hypothesis_extras():
     """Lazily import hypothesis extras to avoid import overhead."""
     from hypothesis import strategies as st
-    from hypothesis.extra.numpy import arrays, array_shapes
+    from hypothesis.extra.numpy import array_shapes, arrays
 
     return st, arrays, array_shapes
 
@@ -232,7 +165,6 @@ def dB_arrays(
     max_size: int = 100,
     min_dims: int = 1,
     max_dims: int = 2,
-    filter_near_zero: bool = False,
 ):
     """Strategy for dB values in typical measurement range.
 
@@ -240,7 +172,6 @@ def dB_arrays(
         - Range: -150 to +150 dB (covers most RF applications)
         - No NaN or infinity
         - Supports float32 and float64 dtypes
-        - filter_near_zero: exclude values with |x| < 1e-6 (avoids precision issues)
     """
     st, arrays, array_shapes = _get_hypothesis_extras()
 
@@ -265,33 +196,13 @@ def dB_arrays(
             )
         )
 
-        if filter_near_zero:
-            # Use two ranges to avoid filtering: negative and positive values away from zero
-            near_zero = float(dt(1e-6))
-            elements = st.one_of(
-                st.floats(
-                    min_value=actual_min,
-                    max_value=-near_zero,
-                    allow_nan=False,
-                    allow_infinity=False,
-                    width=float_width,
-                ),
-                st.floats(
-                    min_value=near_zero,
-                    max_value=actual_max,
-                    allow_nan=False,
-                    allow_infinity=False,
-                    width=float_width,
-                ),
-            )
-        else:
-            elements = st.floats(
-                min_value=actual_min,
-                max_value=actual_max,
-                allow_nan=False,
-                allow_infinity=False,
-                width=float_width,
-            )
+        elements = st.floats(
+            min_value=actual_min,
+            max_value=actual_max,
+            allow_nan=False,
+            allow_infinity=False,
+            width=float_width,
+        )
 
         return draw(
             arrays(
@@ -559,7 +470,6 @@ def raises_on_both_paths(cls, exc, match, **kws):
 # ---------------------------------------------------------------------------
 
 SITE_DIR = SWEEP_DIR / 'site'
-SITE_RADIO_ID = '48b02d17a587'
 
 
 @pytest.fixture(scope='session')
@@ -591,12 +501,14 @@ def site_calibration_sweep():
 @pytest.fixture
 def fake_radio_id(monkeypatch):
     """stand in for the hardware id lookup, returning the id keyed in sites/radio02.yaml"""
+    from site_strategies import RADIO_ID
+
     import striqt.sensor as ss
 
     monkeypatch.setattr(
-        ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: SITE_RADIO_ID
+        ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: RADIO_ID
     )
-    return SITE_RADIO_ID
+    return RADIO_ID
 
 
 @pytest.fixture

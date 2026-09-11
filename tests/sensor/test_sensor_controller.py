@@ -1,5 +1,5 @@
-"""controller registry (lookup) lifetime: closing a stale controller must not
-disturb a live one opened later with an equal source spec"""
+"""striqt.sensor.lib.controller: registry (lookup) lifetime; closing a stale
+controller must not disturb a live one opened later with an equal source spec"""
 
 from __future__ import annotations
 

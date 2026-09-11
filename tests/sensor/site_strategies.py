@@ -7,13 +7,12 @@ public API, exactly as the sensor-sweep CLI does for out-of-tree extension modul
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
+from conftest import SITE_DIR
 from hypothesis import strategies as st
+from sweep_strategies import SOURCE
 
 import striqt.sensor as ss
-
-SITE_DIR = Path(__file__).parent / 'sweeps' / 'site'
 
 if 'site_single_tone' not in ss.lib.bindings.registry:
     ss.read_yaml_spec(SITE_DIR / 'site-cpu.yaml')
@@ -26,10 +25,8 @@ SiteCaptureCls = EXT.SiteCapture
 SurveyCaptureCls = EXT.SiteSurveyCapture
 SiteSweepCls = EXT.site_single_tone.sensor.sweep_spec_cls
 SurveySweepCls = EXT.site_survey.sensor.sweep_spec_cls
-SiteCalSweepCls = EXT.site_single_tone_calibration.sensor.sweep_spec_cls
 SiteCalCaptureCls = EXT.site_single_tone_calibration.schema.capture
 
-SOURCE = ss.specs.FunctionSource(master_clock_rate=125e6, num_rx_ports=2)
 Remap = ss.specs.CaptureRemap
 
 CHANNEL_NAMES = {3750e6: '3750 MHz', 3829.8e6: '3830 MHz', 3900e6: '3900 MHz'}
@@ -91,18 +88,6 @@ def make_site_sweep(
     if len(captures) == 0:
         captures = (make_site_capture(cls=cls.schema.capture),)
     return cls(source=SOURCE, captures=tuple(captures), loops=tuple(loops), **kws)
-
-
-def make_site_calibration_sweep(captures=None, loops=(), **kws):
-    if captures is None:
-        captures = (make_site_capture(cls=SiteCalCaptureCls, gain=0),)
-    kws.setdefault(
-        'calibration',
-        ss.specs.ManualYFactorPeripheral(enr=20.9, ambient_temperature=294.5),
-    )
-    return SiteCalSweepCls(
-        source=SOURCE, captures=tuple(captures), loops=tuple(loops), **kws
-    )
 
 
 def capture_dict(**kws) -> dict:
