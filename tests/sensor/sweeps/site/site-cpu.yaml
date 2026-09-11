@@ -1,0 +1,33 @@
+# Site-style sweep: extension module binding, fragment includes, and per-source overrides
+
+sensor_binding: site_single_tone
+
+extensions:
+  import_path: ../src
+  import_name: extensions
+
+description:
+  summary: End-to-end run of a site-style sweep with synthetic single-tone input
+  version: v2026-07-01
+
+peripherals:
+  control_orientation: false
+
+options:
+  skip_warmup: true
+
+source: !include [../fragments/source/tone.yaml, ../fragments/source/tone_unsync.yaml]
+
+captures: !include ../fragments/captures/tone.yaml
+
+loops:
+  - kind: repeat
+    count: 1
+
+adjust_captures: !include "../sites/*.yaml"
+
+analysis: !include ../fragments/analysis/quick.yaml
+
+plot_hint: !include ../fragments/plot/site.yaml
+
+sink: !include [../fragments/sink/zarr.yaml]
