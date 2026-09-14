@@ -994,26 +994,27 @@ def _fir_lowpass_fft(
     if xp is None:
         xp = np
 
+    nyquist = sample_rate / 2
+    if cutoff >= nyquist:
+        return xp.ones(size, dtype=dtype)
+
     from scipy import signal
 
-    if cutoff == float('inf'):
-        h = np.ones(size, dtype=dtype)
+    # firwin2 requires a nondecreasing grid that ends at nyquist, so a transition
+    # band that runs past it is cut short there
+    if cutoff + transition < nyquist:
+        freqs = [0, cutoff, cutoff + transition, nyquist]
+        gains = [1.0, 1.0, 0.0, 0.0]
     else:
-        freqs = [
-            0,
-            # cutoff - transition / 2,
-            cutoff,
-            cutoff + transition,
-            sample_rate / 2,
-        ]
-        h = signal.firwin2(
-            size, freqs, [1.0, 1, 0.0, 0.0], window=window, fs=sample_rate
-        )
+        freqs = [0, cutoff, nyquist]
+        gains = [1.0, 1.0, 0.0]
+    h = signal.firwin2(size, freqs, gains, window=window, fs=sample_rate)
 
     taps = xp.array(h).astype(dtype)
     w = get_window('rect', size, xp=xp, dtype=dtype, fftshift=True)
-    H = xp.fft.fft(taps * w)
-    return H * w
+    H = xp.fft.fft(taps * w) * w
+    # numpy < 2 evaluates fft in complex128 regardless of the input precision
+    return H.astype(dtype, copy=False)
 
 
 @util.lru_cache()

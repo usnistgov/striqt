@@ -255,11 +255,6 @@ class TestBinnedMean:
                 to_numpy(result_cp), result_np, rtol=0, atol=mean_atol(x, count)
             )
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=TypeError,
-        reason='binned_mean uses np.sort instead of xp.sort on cupy input',
-    )
     def test_reject_extrema_cupy(self, cupy_available):
         cp = cupy_available
         x = np.arange(12, dtype=np.float32)

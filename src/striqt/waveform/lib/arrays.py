@@ -156,7 +156,7 @@ def binned_mean(
     x = axis_to_blocks(x, count, axis=axis)
     stat_axis = axis + 1 if axis >= 0 else axis
     if reject_extrema:
-        x = np.sort(x, axis=stat_axis)
+        x = xp.sort(x, axis=stat_axis)
         x = axis_slice(x, 1, -1, axis=stat_axis)
     ret = xp.nanmean(x, axis=stat_axis)
 

@@ -129,16 +129,15 @@ def powtodB(
     elif _use_cuda_kernels(values):
         from .jit import cuda
 
+        out = _real_buffer(out)
+        use_abs = abs or xp.iscomplexobj(values)
         if eps == 0:
-            if abs:
-                values = cuda.powtodB(values, out)
-            else:
-                values = cuda.powtodB_noabs(values, out)
+            kernel = cuda.powtodB if use_abs else cuda.powtodB_noabs
+            kernel(values, out)
         else:
-            if abs:
-                values = cuda.powtodB_eps(values, out, eps)
-            else:
-                values = cuda.powtodB_eps_noabs(values, out, eps)
+            kernel = cuda.powtodB_eps if use_abs else cuda.powtodB_eps_noabs
+            kernel(values, out, eps)
+        values = out
     else:
         # torch, dask, ...
         if abs:
@@ -164,7 +163,9 @@ def dBtopow(
     elif _use_cuda_kernels(values):
         from .jit import cuda
 
-        values = cuda.dBtopow(values, out)
+        out = _real_buffer(out)
+        cuda.dBtopow(values, out)
+        values = out
     else:
         # torch, dask, ...
         values = xp.divide(
@@ -194,13 +195,12 @@ def envtopow(
     elif _use_cuda_kernels(values):
         from .jit import cuda
 
-        values = cuda.envtopow(values, out)
-
-        if xp.iscomplexobj(values):
-            values = values.real
+        out = _real_buffer(out)
+        cuda.envtopow(values, out)
+        values = out
     else:
         # torch, dask, ...
-        values = xp.abs(x, out=out)
+        values = xp.abs(values, out=out)
         values *= values
 
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_linear)
@@ -231,16 +231,15 @@ def envtodB(
     elif _use_cuda_kernels(values):
         from .jit import cuda
 
+        out = _real_buffer(out)
+        use_abs = abs or xp.iscomplexobj(values)
         if eps == 0:
-            if abs:
-                values = cuda.envtodB(values, out)
-            else:
-                values = cuda.envtodB_noabs(values, out)
+            kernel = cuda.envtodB if use_abs else cuda.envtodB_noabs
+            kernel(values, out)
         else:
-            if abs:
-                values = cuda.envtodB_eps(values, out, eps)
-            else:
-                values = cuda.envtodB_eps_noabs(values, out, eps)
+            kernel = cuda.envtodB_eps if use_abs else cuda.envtodB_eps_noabs
+            kernel(values, out, eps)
+        values = out
     else:
         # torch, dask, ...
         if abs:
@@ -602,11 +601,24 @@ def _arraylike_with_buffer(
         return values, values, xp
     elif xp is np or _use_cuda_kernels(values):
         # numexpr promotes to float64 if out=None, and the cupy fused kernels
-        # assign into `out` in place; a buffer of the input dtype serves both
-        out = xp.empty_like(values, dtype=values.dtype)
+        # assign into `out` in place. the results are real even for complex input
+        out = xp.empty_like(values, dtype=float_dtype_like(values))
         return values, out, xp
     else:
         return values, None, xp
+
+
+def _real_buffer(out: Array) -> Array:
+    """`out`, or its real part if it is complex.
+
+    `_arraylike_with_buffer` hands back a complex buffer only when overwriting
+    complex input in place. The fused kernels compute real values and cannot
+    assign into it, so they write the real part, which is also what the numpy
+    path returns.
+    """
+    if out.dtype.kind == 'c':
+        return out.real
+    return out
 
 
 def _use_cuda_kernels(values: Array) -> bool:

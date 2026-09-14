@@ -1910,15 +1910,25 @@ class TestFilterDesign:
         assert np.abs(np.abs(H[passband]) - 1).max() < FIR_LEAKAGE
         assert np.abs(H[stopband]).max() < FIR_LEAKAGE
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='the cutoff=inf branch sets the impulse response to ones rather than '
-        'an impulse, so the "all-pass" response is a single spectral line',
-    )
-    def test_fir_lowpass_fft_infinite_cutoff_is_allpass(self):
+    @pytest.mark.parametrize('cutoff', [np.inf, 0.5, 0.6])
+    def test_fir_lowpass_fft_cutoff_at_or_past_nyquist_is_allpass(self, cutoff):
         fourier = _get_lib_fourier()
-        H = fourier._fir_lowpass_fft(256, 1.0, cutoff=np.inf, transition=0.05)
-        assert_allclose(np.abs(H), 1)
+        H = fourier._fir_lowpass_fft(256, 1.0, cutoff=cutoff, transition=0.05)
+        assert H.dtype == np.complex64
+        assert_array_equal(H, 1)
+
+    def test_fir_lowpass_fft_transition_is_cut_at_nyquist(self):
+        """a transition band that would run past nyquist ends there instead"""
+        fourier = _get_lib_fourier()
+        size = 256
+        H = fourier._fir_lowpass_fft(size, 1.0, cutoff=0.4, transition=0.3)
+        freqs = fourier.fftfreq(size, 1.0)
+        assert H.shape == (size,) and H.dtype == np.complex64
+
+        passband = np.abs(freqs) < 0.38
+        assert np.abs(np.abs(H[passband]) - 1).max() < FIR_LEAKAGE
+        # firwin2 constrains an even-length (type II) design to zero gain at nyquist
+        assert np.abs(H[np.argmin(freqs)]) < FIR_LEAKAGE
 
 
 class TestOverlapAddFilters:

@@ -101,5 +101,5 @@ def powtodB_noabs(x, out):
 
 @cupy.fuse()
 def dBtopow(x, out):
-    out[:] = 10 ** (x / 10)
+    out[:] = cupy.power(10.0, x / 10)
     return out
