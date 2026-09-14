@@ -1332,19 +1332,12 @@ def _find_downsample_copy_range(
 
 
 def upfirdn(h, x, up=1, down=1, axis=-1, mode='constant', cval=0, overwrite_x=False):
-    from scipy import signal
-
-    kws = dict(locals())
-    del kws['overwrite_x']
-
-    xp = array_namespace(x)
-
     if is_cupy_array(x):
         raise NotImplementedError
-    else:
-        y = signal.upfirdn(**kws)
 
-    return y
+    from scipy import signal
+
+    return signal.upfirdn(h, x, up=up, down=down, axis=axis, mode=mode, cval=cval)
 
 
 def oaconvolve(x1, x2, mode='full', axes=-1):

@@ -791,14 +791,15 @@ def weighted_ssb_detect(
 
     # evaluate the sub-symbol IQ offset
     nfine = rpeak.shape[FINE_LAG_DIM]
-    nfill = round(window_fill * nfine)
-    # an odd zero count would be split unevenly around the window, which
-    # biases the lag estimate by one sample
-    nfill += (nfine - nfill) % 2
+    # an odd window has a single peak sample, so neighbouring lags never tie;
+    # even zero padding keeps that peak at the correlate1d origin
+    nfill = max(1, 2 * ((round(window_fill * nfine) - 1) // 2) + 1)
+    nzero = nfine - nfill
+    nzero -= nzero % 2
     w = fourier.get_window(
         window,
         nwindow=nfill,
-        nzero=nfine - nfill,
+        nzero=nzero,
         norm=False,
         center_zeros=True,
         fftbins=False,

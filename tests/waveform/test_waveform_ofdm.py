@@ -17,7 +17,7 @@ from math import ceil
 import numpy as np
 import pytest
 from conftest import to_numpy
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from numpy.testing import assert_allclose, assert_array_equal
 from test_fourier import tone_frequency
@@ -739,8 +739,6 @@ class TestChooseSsbOffset:
     @settings(max_examples=20)
     def test_recovers_the_delay(self, delay, window_fill):
         params, R = self._correlate([delay])
-        # the last fine lag is a known failure (test_last_fine_lag_wraps)
-        assume(delay % params.short_symbol_size != params.short_symbol_size - 1)
         offset = ofdm.choose_ssb_offset(R, params, window_fill=window_fill)
         assert offset.shape == (1,)
         assert offset[0] == delay
@@ -748,12 +746,6 @@ class TestChooseSsbOffset:
         # the port axis is optional
         assert_array_equal(ofdm.choose_ssb_offset(R[0], params), offset)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='the even-length triangular window ties between neighbouring lags; '
-        'at the last fine lag the tie partner wraps to index 0, so the offset is '
-        'reported one fine lag span early',
-    )
     def test_last_fine_lag_wraps(self):
         delay = 3 * sync_params().short_symbol_size - 1
         params, R = self._correlate([delay])

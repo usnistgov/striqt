@@ -13,7 +13,7 @@ import itertools
 import numpy as np
 import pytest
 from conftest import _cupy, float_arrays, shaped_arrays, to_numpy
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import array_shapes
 from numpy.testing import assert_allclose, assert_array_equal
@@ -223,15 +223,6 @@ class TestSlidingWindowView:
 
         assert_array_equal(result, expected)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=TypeError,
-        reason=(
-            'sliding_window_view normalizes axis=None only inside '
-            '_sliding_window_output_shape and then passes None to '
-            'normalize_axis_tuple'
-        ),
-    )
     def test_default_axis_windows_every_dimension(self):
         x = np.arange(12).reshape(3, 4)
         result = arrays.sliding_window_view(x, (2, 2))
@@ -305,7 +296,6 @@ class TestHistogramLastAxis:
     )
     def test_integer_bins_with_range_match_numpy(self, shape, nbins, lo, hi, data):
         x = data.draw(float_arrays(shape + (16,)))
-        assume(not np.any(x == hi))
 
         counts, edges = arrays.histogram_last_axis(x, nbins, range=(lo, hi))
 
@@ -328,7 +318,6 @@ class TestHistogramLastAxis:
     def test_explicit_edges_match_numpy(self, nrows, edges, data):
         x = data.draw(float_arrays((2, nrows, 16)))
         edges = np.asarray(edges, dtype=np.float64)
-        assume(not np.any(x == edges[-1]))
 
         counts, returned_edges = arrays.histogram_last_axis(x, edges)
 
@@ -350,17 +339,10 @@ class TestHistogramLastAxis:
         _, edges = arrays.histogram_last_axis(x, 3)
         assert_array_equal(edges, [0.0, 1.0, 2.0, 3.0])
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason=(
-            'the docstring declares the upper bound inclusive, but the maximum '
-            'sample lands in the extra bin that is sliced off'
-        ),
-    )
-    def test_default_range_counts_the_maximum(self):
+    @pytest.mark.parametrize('bins', [3, [0.0, 1.0, 2.0, 3.0]])
+    def test_upper_edge_is_inclusive(self, bins):
         x = np.array([[0.0, 1.0, 2.0, 3.0]])
-        counts, _ = arrays.histogram_last_axis(x, 3)
+        counts, _ = arrays.histogram_last_axis(x, bins)
         assert_array_equal(counts, [[1, 1, 2]])
 
 

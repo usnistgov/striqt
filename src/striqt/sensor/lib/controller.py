@@ -290,7 +290,10 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             self.backend = self.sensor.source_cls(spec)
             lookup._set_id(spec, self.source_id)
         except BaseException as ex:
-            lookup._raise(spec, ex)
+            try:
+                lookup._raise(spec, ex)
+            finally:
+                self.close()
         else:
             lookup._set_open(spec, self)
         try:
