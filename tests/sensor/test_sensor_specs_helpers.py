@@ -567,11 +567,6 @@ def test_analysis_loops_populate_adjust_analysis():
     assert [dict(c.adjust_analysis) for c in result] == expected
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='the final `c | adjust | loop_point` in _expand_capture_loops replaces '
-    "adjust_analysis wholesale, dropping the capture's own entries",
-)
 def test_analysis_loop_merges_with_the_captures_adjust_analysis():
     capture = make_capture(adjust_analysis={'keep': 1})
     loops = (ss.specs.List(field='window', isin='analysis', values=('hann',)),)
@@ -595,16 +590,15 @@ def test_loop_only_nyquist_keeps_bandwidths_within_the_sample_rate(bandwidths):
     filtered = H.loop_captures(
         make_sweep(captures=captures, loops=loops, options=options)
     )
-    expected = tuple(c for c in unfiltered if c.sample_rate >= c.analysis_bandwidth)
+    expected = tuple(
+        c
+        for c in unfiltered
+        if not math.isfinite(c.analysis_bandwidth)
+        or c.sample_rate >= c.analysis_bandwidth
+    )
     assert filtered == expected
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='loop_only_nyquist keeps sample_rate >= analysis_bandwidth, which drops '
-    'inf even though it is the field default meaning "no analysis filter"',
-)
 def test_loop_only_nyquist_keeps_inf_bandwidth():
     loops = (ss.specs.List(field='analysis_bandwidth', values=(0.5e6, math.inf)),)
     options = ss.specs.SweepOptions(loop_only_nyquist=True)
@@ -615,8 +609,11 @@ def test_loop_only_nyquist_keeps_inf_bandwidth():
 
 def test_calibration_fixture_expansion(calibration_sweep):
     result = H.loop_captures(calibration_sweep)
-    assert len(result) == 288
-    assert all(c.sample_rate >= c.analysis_bandwidth for c in result)
+    assert len(result) == 384
+    assert all(
+        not math.isfinite(c.analysis_bandwidth) or c.sample_rate >= c.analysis_bandwidth
+        for c in result
+    )
     assert all(type(c.sample_rate) is float for c in result)
     # the limit applies before the nyquist filter
     assert len(H.loop_captures(calibration_sweep, limit=7)) <= 7
@@ -699,7 +696,11 @@ def test_survey_loops_expand(site_survey_sweep):
     c = captures[0]
     assert (c.azimuth, c.elevation) == (-180.0, 0.0)
     assert type(c.azimuth_repeat) is int
-    assert dict(c.adjust_analysis) == {'frequency_offset': -46.08e6}
+    assert dict(c.adjust_analysis) == {
+        'time_statistic': ('mean', 'max'),
+        'frame_slots': None,
+        'frequency_offset': -46.08e6,
+    }
     assert c.frequency_offset == pytest.approx(-3e6)
 
 
@@ -802,13 +803,18 @@ def test_adjust_captures_per_port_key():
     assert H.adjust_captures(capture, spec, None) == {'snr': (5.0, 6.0)}
 
 
-def test_adjust_captures_per_port_miss_bypasses_default():
-    # the per-port path indexes the lookup directly, so `default` does not apply
+def test_adjust_captures_per_port_miss_uses_the_default():
     remap = Remap(key='frequency_offset', lookup={100: 5.0}, default=0.0)
     spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
     capture = capture_dict(port=(0, 1), frequency_offset=(100.0, 200.0))
-    with pytest.raises(KeyError):
-        H.adjust_captures(capture, spec, None)
+    assert H.adjust_captures(capture, spec, None) == {'snr': (5.0, 0.0)}
+
+
+def test_adjust_captures_per_port_miss_omits_optional_field():
+    remap = Remap(key='frequency_offset', lookup={100: 5.0}, required=False)
+    spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
+    capture = capture_dict(port=(0, 1), frequency_offset=(100.0, 200.0))
+    assert H.adjust_captures(capture, spec, None) == {}
 
 
 def test_adjust_captures_multi_field_key():
@@ -895,12 +901,6 @@ def test_nan_string_fixed_value_becomes_float_nan(site_survey_sweep):
     assert c.test_case == 3
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=KeyError,
-    reason='the per-port branch of do_lookup indexes the lookup directly, bypassing '
-    '`default`; this is how per-port center_frequency captures fail downstream',
-)
 def test_per_port_miss_uses_the_default(site_sweep):
     capture = site_capture_dict(port=(0, 1), center_frequency=(7350e6, 7350e6))
     result = H.adjust_captures(capture, site_sweep.adjust_captures, RADIO_ID)

@@ -805,7 +805,7 @@ def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
         paths = list(str(g.relative_to(root_dir)) for g in rel.glob(s))
         if len(paths) == 0:
             raise FileNotFoundError(s)
-        return paths
+        return sorted(paths)
 
     if isinstance(node.value, str):
         values = glob_path(node.value)
@@ -816,7 +816,7 @@ def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
     else:
         raise TypeError(f'invalid tag type {type(node.value)!r} in !import')
 
-    return sorted(values)
+    return values
 
 
 class _YAMLIncludeConstructor(yaml.Loader):

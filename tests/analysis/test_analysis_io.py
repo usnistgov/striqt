@@ -61,12 +61,6 @@ def test_glob_include_merges_only_one_level_deep(write_yaml):
     assert load(spec)['sites'] == {'block': {'y': 2}}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='_expand_paths sorts the expanded paths, so list-form includes apply in '
-    'filename order rather than the listed order',
-)
 def test_list_include_applies_files_in_listed_order(write_yaml):
     write_yaml('a.yaml', 'y: 1\n')
     write_yaml('b.yaml', 'x: 1\ny: 2\n')
