@@ -293,7 +293,10 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     x = xp.array(x, copy=False, subok=subok)
 
     out_shape = _sliding_window_output_shape(x.shape, window_shape, axis)
-    axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # type: ignore
+    if axis is None:
+        axis = tuple(range(x.ndim))
+    else:
+        axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # type: ignore
     out_strides = x.strides + tuple(x.strides[ax] for ax in axis)
 
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
@@ -373,6 +376,7 @@ def histogram_last_axis(
     size = bins.size  # pyright: ignore
     flat = x.reshape(-1, hist_size)
     idx = xp.searchsorted(bins, flat, 'right') - 1
+    idx[flat == bins[-1]] = size - 2
 
     # Some elements would be off limits, so get a mask for those
     bad_mask = (idx == -1) | (idx == size)

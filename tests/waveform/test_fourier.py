@@ -560,11 +560,6 @@ class TestResample:
         with pytest.raises(ValueError, match='even'):
             fourier.resample(np.ones(255, dtype=np.complex64), 128)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='upfirdn builds its keyword arguments from locals() after importing '
-        '`signal`, which is then passed on to scipy',
-    )
     def test_upfirdn_matches_scipy(self):
         from scipy import signal
 

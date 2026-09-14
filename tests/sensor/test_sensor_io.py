@@ -116,12 +116,6 @@ def test_rereading_a_spec_warns_that_nothing_new_was_bound(site_spec_path, caplo
     assert 'did not bind a sensor' in caplog.text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ModuleNotFoundError,
-    reason='_import_extensions_from_spec checks that the root directory exists but '
-    'not that root/import_path does',
-)
 def test_missing_import_path_raises_file_not_found(
     write_yaml, isolated_extension_import
 ):

@@ -237,6 +237,11 @@ def _import_extensions_from_spec(
                 raise IOError(f'root_path {root_dir!r} is not a directory')
             p = root / p
 
+        if not p.is_dir():
+            raise FileNotFoundError(
+                f'extension import_path {str(p)!r} is not a directory'
+            )
+
         if p != sys.path[0]:
             assert isinstance(p, (str, Path))
             sys.path.insert(0, str(p))
