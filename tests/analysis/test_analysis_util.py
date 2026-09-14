@@ -65,7 +65,7 @@ class TestStriqtLogger:
     def test_registered_at_import(self):
         logger = util.get_logger('analysis')
         assert isinstance(logger, util.StriqtLogger)
-        assert logger.logger.name == 'analysis'
+        assert logger.logger.name == 'striqt.analysis'
         assert logger.extra == util.StriqtLogger.EXTRA_DEFAULTS
         assert sa.util is util
 
@@ -140,7 +140,7 @@ class TestShowMessages:
 class TestStopwatch:
     @pytest.fixture
     def records(self, caplog):
-        caplog.set_level(util.PERFORMANCE_DETAIL, logger='analysis')
+        caplog.set_level(util.PERFORMANCE_DETAIL, logger='striqt.analysis')
         # caplog.records is re-created for the call phase, so resolve it lazily
         return lambda: caplog.records
 
@@ -174,12 +174,12 @@ class TestStopwatch:
 
     def test_other_logger_suffix(self, caplog):
         util.StriqtLogger(SECOND_LOGGER)
-        caplog.set_level(util.PERFORMANCE_DETAIL, logger=SECOND_LOGGER)
+        caplog.set_level(util.PERFORMANCE_DETAIL, logger=f'striqt.{SECOND_LOGGER}')
         with util.stopwatch(
             'x', logger_suffix=SECOND_LOGGER, logger_level=logging.INFO
         ):
             pass
-        assert caplog.records[-1].name == SECOND_LOGGER
+        assert caplog.records[-1].name == f'striqt.{SECOND_LOGGER}'
         assert caplog.records[-1].levelno == logging.INFO
 
 

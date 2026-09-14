@@ -98,7 +98,7 @@ def dump(
     # prefer the variable-length string dtype from numpy 2, if available
     string_dtype = getattr(np.dtype, 'StrDType', 'str')
 
-    from ..measurements.registry import measurements as registry
+    from .register import registry
 
     for name in dict(data.coords).keys():
         if data[name].size == 0:

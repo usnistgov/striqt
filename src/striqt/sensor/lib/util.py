@@ -482,11 +482,12 @@ def log_to_file(log_path: str | Path, level_name: str):
     )
 
     handler.setFormatter(formatter)
-    handler.setLevel(logging.DEBUG)
+    # the striqt.* child loggers carry their own levels from show_messages, so a
+    # level on this parent would never gate their records
+    handler.setLevel(_LOG_LEVEL_NAMES[level_name])
 
     if hasattr(logger, '_striqt_handler'):
         logger.removeHandler(logger._striqt_handler)  # type: ignore
 
-    logger.setLevel(_LOG_LEVEL_NAMES[level_name])
     logger.addHandler(handler)
     logger._striqt_handler = handler  # type: ignore

@@ -445,8 +445,8 @@ class TestLogCaptureContext:
 
 class TestLogToFile:
     @pytest.fixture
-    def labbench_logger(self):
-        logger = logging.getLogger('labbench')
+    def striqt_logger(self):
+        logger = logging.getLogger('striqt')
         saved = (logger.level, list(logger.handlers))
         yield logger
         for handler in logger.handlers:
@@ -456,21 +456,23 @@ class TestLogToFile:
         logger.setLevel(saved[0])
         logger.__dict__.pop('_striqt_handler', None)
 
-    def test_writes_yaml_records(self, tmp_path, labbench_logger):
+    def test_writes_yaml_records(self, tmp_path, striqt_logger):
         path = tmp_path / 'logs' / 'sweep.json'
         util.log_to_file(path, 'info')
-        assert labbench_logger.level == logging.INFO
-        handler = labbench_logger._striqt_handler
-        assert handler in labbench_logger.handlers
+        handler = striqt_logger._striqt_handler
+        assert handler in striqt_logger.handlers
+        assert handler.level == logging.INFO
 
+        # records from the striqt.* adapters propagate up to the file handler;
         # the JSON formatter merges a dict argument into the record
-        labbench_logger.info('started', {'radio': 'ab12'})  # noqa: PLE1205
-        labbench_logger.debug('filtered out')
+        sink = sa.util.get_logger('sink')
+        sink.info('started', {'radio': 'ab12'})
+        sink.debug('filtered out')
         try:
             raise RuntimeError('acquisition failed')
         except RuntimeError:
-            labbench_logger.error('stream error')
-        labbench_logger.removeHandler(handler)
+            sink.error('stream error')
+        striqt_logger.removeHandler(handler)
         handler.close()
 
         records = yaml.safe_load(path.read_text())
@@ -482,13 +484,13 @@ class TestLogToFile:
         assert 'RuntimeError: acquisition failed' == records[1]['exception']
         assert any('raise RuntimeError' in line for line in records[1]['traceback'])
 
-    def test_repeat_call_replaces_the_handler(self, tmp_path, labbench_logger):
+    def test_repeat_call_replaces_the_handler(self, tmp_path, striqt_logger):
         util.log_to_file(tmp_path / 'a.json', 'debug')
-        first = labbench_logger._striqt_handler
+        first = striqt_logger._striqt_handler
         util.log_to_file(tmp_path / 'b.json', 'warning')
-        assert first not in labbench_logger.handlers
-        assert labbench_logger._striqt_handler in labbench_logger.handlers
-        assert labbench_logger.level == logging.WARNING
+        assert first not in striqt_logger.handlers
+        assert striqt_logger._striqt_handler in striqt_logger.handlers
+        assert striqt_logger._striqt_handler.level == logging.WARNING
         first.close()
 
     def test_json_date_serializer(self):

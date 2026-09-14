@@ -35,7 +35,7 @@ class StriqtLogger(logging.LoggerAdapter):
     }
 
     def __init__(self, name_suffix, extra={}):
-        _logger = logging.getLogger(name_suffix)
+        _logger = logging.getLogger(f'striqt.{name_suffix}')
         super().__init__(_logger, self.EXTRA_DEFAULTS | extra)
         _logger_adapters[name_suffix] = self
 
@@ -94,7 +94,7 @@ def show_messages(
         logger._screen_handler.setLevel(level)
 
         if colors or (colors is None and sys.stderr.isatty()):
-            log_fmt = '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>8s}\x1b[0m \x1b[34m{capture_progress} \x1b[0m {message}'
+            log_fmt = '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>15s}\x1b[0m \x1b[34m{capture_progress} \x1b[0m {message}'
         else:
             log_fmt = '{levelname:^7s} {asctime} • {capture_progress}: {message}'
         formatter = logging.Formatter(log_fmt, style='{', datefmt='%X')

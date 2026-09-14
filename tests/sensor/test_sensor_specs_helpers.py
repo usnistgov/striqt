@@ -1078,7 +1078,7 @@ def test_adjust_analysis_replaces_matching_fields_everywhere(cw_sweep, fo):
 
 
 def test_adjust_analysis_warns_about_unused_keys(cw_sweep, caplog):
-    with caplog.at_level(logging.WARNING, logger='sweep'):
+    with caplog.at_level(logging.WARNING, logger='striqt.sweep'):
         result = H.adjust_analysis(cw_sweep.analysis, frozendict({'bogus_key': 1}))
     assert result == cw_sweep.analysis
     assert any('bogus_key' in record.getMessage() for record in caplog.records)
