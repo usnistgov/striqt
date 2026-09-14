@@ -190,7 +190,7 @@ def await_and_ignore(
     exc = ExceptionStack(except_msg)
     try:
         for fut in futures:
-            with exc:
+            with exc.defer():
                 fut.result()
     finally:
         exc.handle()
@@ -298,10 +298,10 @@ def retry(
         logger: if specified, a log info message is emitted on the first retry
     """
 
-    if isinstance(excs, type) and not issubclass(excs, BaseException):
-        excs = tuple(excs)
+    if isinstance(excs, type) and issubclass(excs, BaseException):
+        excs = (excs,)
     else:
-        excs = BaseException
+        excs = tuple(excs)
 
     def decorator(f):
         @functools.wraps(f)
@@ -368,13 +368,14 @@ def log_verbosity(verbose: int = 0):
 
 @contextlib.contextmanager
 def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
-    extra = {'capture_index': capture_index}
     logger = sa.util.get_logger(name_suffix)
 
     if isinstance(logger.extra, dict):
         extra: dict[str, object] = dict(logger.extra)
     else:
         extra = {}
+
+    extra['capture_index'] = capture_index
 
     if capture_count is not None:
         extra['capture_count'] = capture_count
@@ -387,8 +388,10 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
 
     unchanged = logger.extra
     logger.extra = extra
-    yield
-    logger.extra = unchanged
+    try:
+        yield
+    finally:
+        logger.extra = unchanged
 
 
 class _JSONFormatter(logging.Formatter):
@@ -472,7 +475,7 @@ def log_to_file(log_path: str | Path, level_name: str):
 
     Path(log_path).parent.mkdir(exist_ok=True, parents=True)
 
-    logger = logging.getLogger('labbench')
+    logger = logging.getLogger('striqt')
     formatter = _JSONFormatter()
     handler = _RotatingJSONFileHandler(
         log_path, maxBytes=50_000_000, backupCount=5, encoding='utf8'
@@ -481,8 +484,8 @@ def log_to_file(log_path: str | Path, level_name: str):
     handler.setFormatter(formatter)
     handler.setLevel(logging.DEBUG)
 
-    if hasattr(handler, '_striqt_handler'):
-        logger.removeHandler(handler._striqt_handler)  # type: ignore
+    if hasattr(logger, '_striqt_handler'):
+        logger.removeHandler(logger._striqt_handler)  # type: ignore
 
     logger.setLevel(_LOG_LEVEL_NAMES[level_name])
     logger.addHandler(handler)

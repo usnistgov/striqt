@@ -2,6 +2,7 @@ from __future__ import annotations as __
 
 import contextlib
 import io
+import itertools
 import logging
 import math
 import sys
@@ -84,7 +85,7 @@ def show_messages(
         if level is None:
             logger.setLevel(logging.CRITICAL)
             logger.logger.setLevel(logging.CRITICAL)
-            return
+            continue
 
         logger.setLevel(level)
         logger.logger.setLevel(level)
@@ -227,7 +228,4 @@ def ordered_set_union(*args: Iterable[Any]) -> list[Any]:
 
     Maintains ordering in the same way as dict/OrderedDict.
     """
-    union = []
-    for it in args:
-        union += list(dict.fromkeys(it))
-    return union
+    return list(dict.fromkeys(itertools.chain.from_iterable(args)))
