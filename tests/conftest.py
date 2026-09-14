@@ -55,6 +55,7 @@ def _get_cupy():
         return None
 
     try:
+        import numba.cuda
         import cupy as cp  # type: ignore
         import pandas
         import scipy
