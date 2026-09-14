@@ -502,6 +502,11 @@ def _build_loop_points_dict(
     capture_cls: type[SC],
     new_instance: bool = False,
 ) -> _LoopPointsDict:
+    """map (isin, field) to the loop points.
+
+    Capture loop points are coerced to the capture field type here so that remaps
+    keyed on a looped field see typed values rather than JSON/YAML decoded strings.
+    """
     loop_points: _LoopPointsDict = {
         (l.isin, l.field): l.get_points() for l in loops if l.field is not None
     }
@@ -519,6 +524,19 @@ def _build_loop_points_dict(
     extra = available - {f.name for f in fields}
     if len(extra) > 0:
         raise TypeError(f'invalid capture fields {extra!r} specified in loops')
+
+    field_types = {f.name: f.type for f in fields}
+    for (isin, name), points in loop_points.items():
+        if isin != 'capture':
+            continue
+        try:
+            loop_points[isin, name] = msgspec.convert(
+                points, list[field_types[name]], strict=False, dec_hook=_dec_hook
+            )
+        except msgspec.ValidationError as ex:
+            raise msgspec.ValidationError(
+                f'in loop over capture field {name!r}: {ex}'
+            ) from ex
 
     return loop_points
 

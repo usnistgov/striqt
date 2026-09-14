@@ -654,10 +654,12 @@ def test_site_adjustments_apply_to_calibration_points(site_calibration_sweep):
     captures = H.loop_captures(site_calibration_sweep, source_id=RADIO_ID)
     assert {c.radio_name for c in captures} == {'radio02'}
     assert {c.site_name for c in captures} == {'WAPA-north'}
-    # documented as current: the looped center_frequency values are still YAML
-    # strings when the channel_name remap is evaluated, so every lookup misses
-    # (see test_remaps_see_loop_values_given_as_yaml_strings)
-    assert {c.channel_name for c in captures} == {None}
+    assert {c.channel_name for c in captures} == {
+        '3750 MHz',
+        '3830 MHz',
+        '3900 MHz',
+        None,
+    }
 
 
 def test_tuple_port_fields_survive_looping():
@@ -730,7 +732,8 @@ def test_range_loop_on_an_int_field_accepts_integral_floats():
 def test_range_loop_on_an_int_field_rejects_fractions():
     loops = (ss.specs.Range(field='azimuth_repeat', start=0, stop=3, step=1.5),)
     sweep = make_site_sweep(cls=SurveySweepCls, loops=loops)
-    with pytest.raises(msgspec.ValidationError, match='Expected `int`'):
+    match = 'azimuth_repeat.*Expected `int`'
+    with pytest.raises(msgspec.ValidationError, match=match):
         H.loop_captures(sweep)
 
 
@@ -741,12 +744,6 @@ def test_remaps_see_loop_values_given_as_numbers(site_sweep):
     assert [c.channel_name for c in captures] == ['3750 MHz', '3900 MHz']
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='loop points are coerced to the field type only after adjust_captures has '
-    'run, so remaps keyed on a looped field see the raw YAML strings and miss',
-)
 def test_remaps_see_loop_values_given_as_yaml_strings(site_sweep):
     loops = [
         {'kind': 'list', 'field': 'center_frequency', 'values': ['3750e6', '3900e6']}
