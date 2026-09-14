@@ -505,7 +505,7 @@ def _build_loop_points_dict(
     """map (isin, field) to the loop points.
 
     Capture loop points are coerced to the capture field type here so that remaps
-    keyed on a looped field see typed values rather than the YAML strings.
+    keyed on a looped field see typed values rather than JSON/YAML decoded strings.
     """
     loop_points: _LoopPointsDict = {
         (l.isin, l.field): l.get_points() for l in loops if l.field is not None
