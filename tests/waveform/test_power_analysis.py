@@ -13,25 +13,37 @@ from conftest import (
     dB_arrays,
     envelope_arrays,
     for_each_namespace,
+    iq_waveforms,
     positive_power_arrays,
     to_numpy,
 )
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
-from numpy.testing import assert_allclose
+from numpy.testing import assert_allclose, assert_array_equal
 
+from striqt.waveform.lib.arrays import float_dtype_like
 from striqt.waveform.lib.power_analysis import (
+    _arraylike_with_buffer,
     dBlinmean,
     dBlinsum,
     dBtopow,
     envtodB,
     envtopow,
+    iq_to_bin_power,
+    iq_to_cyclic_power,
     powtodB,
+    sample_ccdf,
+    stat_ufunc_from_shorthand,
     unit_dB_to_linear,
     unit_dB_to_wave,
     unit_linear_to_dB,
     unit_wave_to_dB,
+    unit_wave_to_linear,
+)
+
+PROPERTY = settings(
+    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
 )
 
 # Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
@@ -143,6 +155,68 @@ class TestUnitConversionProperties:
     def test_dB_wave_roundtrip(self, dB_unit: str, wave_unit: str):
         """Property: dB → wave → dB is identity."""
         assert unit_wave_to_dB(unit_dB_to_wave(dB_unit)) == dB_unit
+
+    @pytest.mark.parametrize('dB_unit,wave_unit', WAVE_PAIRS)
+    def test_wave_linear_matches_dB_linear(self, dB_unit: str, wave_unit: str):
+        """Property: wave → linear agrees with dB → linear for the same quantity."""
+        assert unit_wave_to_linear(wave_unit) == unit_dB_to_linear(dB_unit)
+
+    @pytest.mark.parametrize('unit', ['V', 'counts', ''])
+    def test_unknown_units_pass_through(self, unit):
+        for func in (
+            unit_dB_to_linear,
+            unit_linear_to_dB,
+            unit_dB_to_wave,
+            unit_wave_to_dB,
+            unit_wave_to_linear,
+        ):
+            assert func(unit) == unit
+
+
+NAMED_STATS = {
+    'min': np.min,
+    'max': np.max,
+    'peak': np.max,
+    'mean': np.mean,
+    'rms': np.mean,
+    'median': np.median,
+}
+
+
+class TestStatUfuncFromShorthand:
+    @pytest.fixture
+    def data(self):
+        return np.random.default_rng(0).normal(size=(6, 5)).astype(np.float32)
+
+    @pytest.mark.parametrize('kind', sorted(NAMED_STATS))
+    @pytest.mark.parametrize('axis', [0, 1])
+    def test_named_statistics(self, data, kind, axis):
+        ufunc = stat_ufunc_from_shorthand(kind, axis=axis)
+        assert_array_equal(ufunc(data), NAMED_STATS[kind](data, axis=axis))
+
+    @pytest.mark.parametrize('q', [0.0, 0.25, 0.9, 1.0])
+    def test_quantile(self, data, q):
+        ufunc = stat_ufunc_from_shorthand(q, axis=1)
+        assert_array_equal(ufunc(data), np.quantile(data, q=q, axis=1))
+
+    def test_callable(self, data):
+        ufunc = stat_ufunc_from_shorthand(np.std, axis=0)
+        assert_array_equal(ufunc(data), np.std(data, axis=0))
+
+    def test_default_namespace_is_numpy(self, data):
+        assert_array_equal(
+            stat_ufunc_from_shorthand('mean')(data),
+            stat_ufunc_from_shorthand('mean', xp=np)(data),
+        )
+
+    @pytest.mark.parametrize('kind', ['average', 'rms2', ''])
+    def test_unknown_name_raises(self, kind):
+        with pytest.raises(ValueError, match='kind argument'):
+            stat_ufunc_from_shorthand(kind)
+
+    def test_invalid_type_raises(self):
+        with pytest.raises(ValueError, match='invalid statistic'):
+            stat_ufunc_from_shorthand(('mean',))
 
 
 class TestConversionIdentities:
@@ -602,6 +676,501 @@ class TestMultiBackendComplexValues:
         assert_allclose(result_np.real, expected, rtol=rtol, atol=atol)
 
 
+class TestAbsAndEpsBranches:
+    """Properties: the `abs` and `eps` arguments of powtodB and envtodB."""
+
+    @given(power=positive_power_arrays(min_value=1e-6, max_value=1e6, dtype=np.float64))
+    @PROPERTY
+    def test_powtodB_noabs_matches_abs_for_positive(self, power):
+        assert_array_equal(powtodB(power, abs=False), powtodB(power, abs=True))
+
+    @given(env=envelope_arrays(include_complex=False, dtype=np.float64))
+    @PROPERTY
+    def test_envtodB_noabs_matches_abs_for_positive(self, env):
+        assert_array_equal(envtodB(env, abs=False), envtodB(env, abs=True))
+
+    @given(power=positive_power_arrays(min_value=1e-6, max_value=1e6, dtype=np.float64))
+    @PROPERTY
+    def test_noabs_negative_input_is_nan(self, power):
+        """Property: without abs, log10 of a negative value is nan, not folded."""
+        assert np.all(np.isnan(powtodB(-power, abs=False)))
+        assert np.all(np.isnan(envtodB(-power, abs=False)))
+        assert np.all(np.isfinite(powtodB(-power, abs=True)))
+        assert np.all(np.isfinite(envtodB(-power, abs=True)))
+
+    @given(
+        power=positive_power_arrays(min_value=1e-6, max_value=1e6, dtype=np.float64),
+        eps=st.floats(min_value=1e-9, max_value=1e-3),
+        abs=st.booleans(),
+    )
+    @PROPERTY
+    def test_powtodB_eps_is_added_before_log(self, power, eps, abs):
+        expected = 10 * np.log10(power + eps)
+        rtol, atol = log_conversion_tol(np.float64, 10, n_impl=2)
+        assert_allclose(
+            powtodB(power, eps=eps, abs=abs), expected, rtol=rtol, atol=atol
+        )
+
+    @given(
+        env=envelope_arrays(
+            include_complex=False,
+            min_magnitude=1e-6,
+            max_magnitude=1e6,
+            dtype=np.float64,
+        ),
+        eps=st.floats(min_value=1e-9, max_value=1e-3),
+        abs=st.booleans(),
+    )
+    @PROPERTY
+    def test_envtodB_eps_is_added_before_log(self, env, eps, abs):
+        expected = 20 * np.log10(env + eps)
+        rtol, atol = log_conversion_tol(np.float64, 20, n_impl=2)
+        assert_allclose(envtodB(env, eps=eps, abs=abs), expected, rtol=rtol, atol=atol)
+
+
+class TestArrayLikeHandling:
+    """The array-like unpacking and repackaging behind every conversion."""
+
+    def test_min_dtype_none_raises(self):
+        with pytest.raises(TypeError, match='min_dtype'):
+            _arraylike_with_buffer(np.ones(3), min_dtype=None)
+
+    def test_min_dtype_float16_raises(self):
+        with pytest.raises(TypeError, match='float32 or larger'):
+            _arraylike_with_buffer(np.ones(3), min_dtype=np.dtype('float16'))
+
+    @pytest.mark.parametrize('obj', ['text', [1.0, 2.0], (1.0, 2.0), object()])
+    def test_unsupported_input_raises(self, obj):
+        with pytest.raises(TypeError, match='unable to associate'):
+            powtodB(obj)
+
+    def test_promotion_allocates_buffer(self):
+        x = np.ones(4, dtype=np.float16)
+        values, out, xp = _arraylike_with_buffer(
+            x, overwrite_x=True, min_dtype='float32'
+        )
+        assert values is x
+        assert out.dtype == np.float32
+        assert xp is np
+
+    def test_overwrite_returns_input_as_buffer(self):
+        x = np.ones(4, dtype=np.float32)
+        values, out, _ = _arraylike_with_buffer(x, overwrite_x=True)
+        assert values is x
+        assert out is x
+
+    def test_no_overwrite_returns_fresh_buffer(self):
+        x = np.ones(4, dtype=np.float32)
+        values, out, _ = _arraylike_with_buffer(x, overwrite_x=False)
+        assert values is x
+        assert out is not x
+        assert out.dtype == x.dtype
+        assert out.shape == x.shape
+
+    def test_scalar_input_never_overwrites(self):
+        x = np.array(2.0, dtype=np.float32)
+        _, out, _ = _arraylike_with_buffer(x, overwrite_x=True)
+        assert out is not x
+
+    @given(
+        value=st.floats(
+            min_value=1e-10, max_value=1e10, allow_nan=False, allow_infinity=False
+        )
+    )
+    @PROPERTY
+    def test_python_float_returns_python_float(self, value):
+        result = powtodB(value)
+        assert isinstance(result, float)
+        rtol, atol = log_conversion_tol(np.float64, 10, n_impl=2)
+        assert_allclose(result, 10 * np.log10(value), rtol=rtol, atol=atol)
+
+    def test_python_int_input(self):
+        assert isinstance(dBtopow(10), float)
+        assert_allclose(dBtopow(10), 10.0, rtol=pow_conversion_rtol(np.float64, 10))
+
+    @given(power=positive_power_arrays(dtype=np.float64, min_dims=1, max_dims=1))
+    @PROPERTY
+    def test_pandas_series_roundtrip(self, power):
+        pd = pytest.importorskip('pandas')
+
+        index = pd.RangeIndex(10, 10 + power.size)
+        series = pd.Series(power, index=index)
+
+        result = powtodB(series)
+        assert isinstance(result, pd.Series)
+        assert result.index.equals(index)
+        assert_array_equal(result.values, powtodB(power))
+
+    @given(
+        power=positive_power_arrays(
+            dtype=np.float64, min_dims=2, max_dims=2, min_size=1, max_size=6
+        )
+    )
+    @PROPERTY
+    def test_pandas_dataframe_roundtrip(self, power):
+        pd = pytest.importorskip('pandas')
+
+        columns = [f'c{i}' for i in range(power.shape[1])]
+        frame = pd.DataFrame(power, columns=columns)
+
+        result = powtodB(frame)
+        assert isinstance(result, pd.DataFrame)
+        assert list(result.columns) == columns
+        assert result.index.equals(frame.index)
+        assert_array_equal(result.values, powtodB(power))
+
+    @pytest.mark.parametrize(
+        'func,units_in,units_out',
+        [
+            (powtodB, 'mW', 'dBm'),
+            (powtodB, 'W/Hz', 'dBW/Hz'),
+            (dBtopow, 'dBm', 'mW'),
+            (dBtopow, 'dB', 'unitless'),
+            (envtodB, '√mW', 'dBm'),
+            (envtopow, '√W', 'W'),
+        ],
+    )
+    def test_xarray_units_transform(self, func, units_in, units_out):
+        xr = pytest.importorskip('xarray')
+
+        data = np.linspace(0.5, 2.0, 8, dtype=np.float64)
+        da = xr.DataArray(
+            data, dims=['t'], coords={'t': np.arange(8)}, attrs={'units': units_in}
+        )
+
+        result = func(da)
+        assert isinstance(result, xr.DataArray)
+        assert result.dims == ('t',)
+        assert result.attrs['units'] == units_out
+        assert da.attrs['units'] == units_in
+        assert_array_equal(result.values, func(data))
+
+    def test_xarray_without_units(self):
+        xr = pytest.importorskip('xarray')
+
+        da = xr.DataArray(np.ones(4), dims=['t'])
+        assert 'units' not in powtodB(da).attrs
+
+    def test_xarray_dataset_values_raise(self):
+        xr = pytest.importorskip('xarray')
+
+        ds = xr.Dataset({'a': ('t', np.ones(4))})
+        with pytest.raises(TypeError):
+            powtodB(ds)
+
+    def test_unknown_container_with_values_raises(self):
+        class Container:
+            @property
+            def values(self):
+                return np.ones(4)
+
+        with pytest.raises(TypeError, match='unable to associate an array type'):
+            powtodB(Container())
+
+    @given(
+        data=for_each_namespace(
+            positive_power_arrays(min_value=1e-3, max_value=1e3, dtype=np.float64)
+        ),
+        eps=st.floats(min_value=1e-9, max_value=1e-3),
+        abs=st.booleans(),
+    )
+    @PROPERTY
+    def test_eps_multibackend(self, data, eps, abs):
+        """Property: the eps offset is applied by every backend's code path."""
+        arr, xp_name, _ = data
+        arr_np = to_numpy(arr)
+
+        rtol, atol = log_conversion_tol(np.float64, 10, n_impl=2)
+        assert_allclose(
+            to_numpy(powtodB(arr, eps=eps, abs=abs)),
+            10 * np.log10(arr_np + eps),
+            rtol=rtol,
+            atol=atol,
+            err_msg=xp_name,
+        )
+        rtol, atol = log_conversion_tol(np.float64, 20, n_impl=2)
+        assert_allclose(
+            to_numpy(envtodB(arr, eps=eps, abs=abs)),
+            20 * np.log10(arr_np + eps),
+            rtol=rtol,
+            atol=atol,
+            err_msg=xp_name,
+        )
+
+    @given(
+        data=for_each_namespace(
+            positive_power_arrays(min_value=1e-3, max_value=1e3, dtype=np.float32)
+        )
+    )
+    @PROPERTY
+    def test_float16_promotion_multibackend(self, data):
+        arr, xp_name, _ = data
+        result = powtodB(arr.astype(np.float16), min_dtype='float32')
+        assert to_numpy(result).dtype == np.float32, xp_name
+
+
+def _blocks(x, size, axis):
+    """reshape the axis of x into (n_blocks, size) after truncating the remainder"""
+    x = np.moveaxis(x, axis, -1)
+    n_blocks = x.shape[-1] // size
+    x = x[..., : n_blocks * size].reshape(x.shape[:-1] + (n_blocks, size))
+    return np.moveaxis(x, (-2, -1), (axis, axis + 1))
+
+
+BIN_STATS = {
+    'mean': np.mean,
+    'rms': np.mean,
+    'max': np.max,
+    'peak': np.max,
+    'min': np.min,
+    'median': np.median,
+    0.9: lambda x, axis: np.quantile(x, 0.9, axis=axis),
+}
+
+
+def bin_power_reference(iq, size, kind, axis):
+    power = np.abs(iq.astype(np.complex128)) ** 2
+    return BIN_STATS[kind](_blocks(power, size, axis), axis=axis + 1)
+
+
+def bin_power_rtol(iq, size, n_impl=1):
+    """rtol for a statistic of |x|**2 over `size` samples against exact arithmetic"""
+    u = unit_roundoff(float_dtype_like(iq))
+    return (
+        envelope_power_rtol(float_dtype_like(iq), complex_input=True, n_impl=n_impl)
+        + ROUNDOFF_SAFETY * n_impl * size * u
+    )
+
+
+def bin_sizes():
+    return st.sampled_from([1, 2, 5, 8, 16])
+
+
+class TestIqToBinPower:
+    @given(
+        data=st.data(),
+        size=bin_sizes(),
+        kind=st.sampled_from(sorted(BIN_STATS, key=str)),
+        channels=st.sampled_from([None, 1, 3]),
+    )
+    @PROPERTY
+    def test_matches_reference(self, data, size, kind, channels):
+        """Property: each bin is the statistic of |iq|**2 over `size` samples."""
+        iq = data.draw(
+            iq_waveforms(
+                min_size=size, max_size=32 * size, multiple_of=size, channels=channels
+            )
+        )
+        axis = 0 if channels is None else 1
+        Ts = 1e-6
+
+        result = iq_to_bin_power(iq, Ts, size * Ts, kind=kind, axis=axis)
+
+        assert result.dtype == float_dtype_like(iq)
+        expected = bin_power_reference(iq, size, kind, axis)
+        assert result.shape == expected.shape
+        assert_allclose(result, expected, rtol=bin_power_rtol(iq, size))
+
+    @given(
+        data=st.data(),
+        size=bin_sizes().filter(lambda n: n > 1),
+        remainder=st.integers(min_value=1, max_value=4),
+    )
+    @PROPERTY
+    def test_truncate(self, data, size, remainder):
+        iq = data.draw(
+            iq_waveforms(min_size=size, max_size=16 * size, multiple_of=size)
+        )
+        iq = np.concatenate([iq, iq[:remainder]]) if remainder < size else iq[:-1]
+        Ts = 1e-6
+
+        with pytest.raises(ValueError):
+            iq_to_bin_power(iq, Ts, size * Ts, truncate=False)
+
+        result = iq_to_bin_power(iq, Ts, size * Ts, truncate=True)
+        expected = bin_power_reference(iq, size, 'mean', 0)
+        assert result.shape == (iq.shape[0] // size,)
+        assert_allclose(result, expected, rtol=bin_power_rtol(iq, size))
+
+    @given(ratio=st.floats(min_value=1.1, max_value=9.9).filter(lambda r: r % 1 > 0.01))
+    @PROPERTY
+    def test_bin_period_must_be_multiple(self, ratio):
+        iq = np.ones(64, dtype=np.complex64)
+        with pytest.raises(ValueError, match='multiple'):
+            iq_to_bin_power(iq, 1.0, ratio)
+
+    def test_truncate_allows_fractional_bin_period(self):
+        iq = np.ones(64, dtype=np.complex64)
+        result = iq_to_bin_power(iq, 1.0, 4.4, truncate=True)
+        assert result.shape == (64 // 4,)
+
+    @given(data=st.data(), size=bin_sizes().filter(lambda n: n > 1))
+    @PROPERTY
+    def test_randomize(self, data, size):
+        """Property: random bins keep the shape, dtype and range of contiguous bins."""
+        iq = data.draw(
+            iq_waveforms(min_size=4 * size, max_size=32 * size, multiple_of=size)
+        )
+        Ts = 1e-6
+
+        result = iq_to_bin_power(iq, Ts, size * Ts, randomize=True)
+
+        assert result.shape == (iq.shape[0] // size,)
+        assert result.dtype == float_dtype_like(iq)
+        power = np.abs(iq) ** 2
+        assert np.all(result >= power.min() * (1 - bin_power_rtol(iq, size)))
+        assert np.all(result <= power.max() * (1 + bin_power_rtol(iq, size)))
+
+    def test_randomize_requires_axis_0(self):
+        iq = np.ones((2, 64), dtype=np.complex64)
+        with pytest.raises(ValueError, match='axis=0'):
+            iq_to_bin_power(iq, 1.0, 4.0, randomize=True, axis=1)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='iq_to_bin_power applies the detector on axis+1 without normalizing '
+        'a negative axis first',
+    )
+    def test_negative_axis(self):
+        iq = np.random.default_rng(0).normal(size=(2, 32)).astype(np.complex64)
+        assert_array_equal(
+            iq_to_bin_power(iq, 1.0, 4.0, axis=-1),
+            iq_to_bin_power(iq, 1.0, 4.0, axis=1),
+        )
+
+
+class TestIqToCyclicPower:
+    """iq_to_cyclic_power on (channel, sample) input with axis=1, as the
+    cyclic_channel_power measurement calls it."""
+
+    DETECTORS = ('rms', 'peak')
+    CYCLE_STATS = ('min', 'mean', 'max')
+
+    @given(
+        data=st.data(),
+        size=st.sampled_from([2, 4, 8]),
+        bins_per_cycle=st.sampled_from([2, 3, 5]),
+        n_cycles=st.integers(min_value=1, max_value=6),
+        channels=st.sampled_from([1, 2]),
+    )
+    @PROPERTY
+    def test_matches_reference(self, data, size, bins_per_cycle, n_cycles, channels):
+        n = size * bins_per_cycle * n_cycles
+        iq = data.draw(iq_waveforms(min_size=n, max_size=n, channels=channels))
+        Ts = 1e-6
+
+        result = iq_to_cyclic_power(
+            iq,
+            Ts,
+            detector_period=size * Ts,
+            cyclic_period=size * bins_per_cycle * Ts,
+            detectors=self.DETECTORS,
+            cycle_stats=self.CYCLE_STATS,
+            axis=1,
+        )
+
+        assert set(result) == set(self.DETECTORS)
+        u = unit_roundoff(float_dtype_like(iq))
+        for detector in self.DETECTORS:
+            assert set(result[detector]) == set(self.CYCLE_STATS)
+            binned = iq_to_bin_power(iq, Ts, size * Ts, kind=detector, axis=1)
+            by_cycle = binned.reshape(channels, n_cycles, bins_per_cycle)
+            for stat in self.CYCLE_STATS:
+                value = result[detector][stat]
+                assert value.shape == (channels, bins_per_cycle)
+                expected = BIN_STATS[stat](by_cycle, axis=1)
+                assert_allclose(value, expected, rtol=ROUNDOFF_SAFETY * n_cycles * u)
+
+            assert np.all(result[detector]['min'] <= result[detector]['mean'])
+            assert np.all(result[detector]['mean'] <= result[detector]['max'])
+
+    def test_detectors_none_raises(self):
+        iq = np.ones((1, 64), dtype=np.complex64)
+        with pytest.raises(ValueError, match='detectors'):
+            iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, detectors=None, axis=1)
+
+    def test_cyclic_period_must_be_multiple(self):
+        iq = np.ones((1, 64), dtype=np.complex64)
+        with pytest.raises(ValueError, match='cyclic period'):
+            iq_to_cyclic_power(iq, 1.0, 4.0, 10.0, axis=1)
+
+    def test_misaligned_length_without_truncate_raises(self):
+        iq = np.ones((1, 4 * 7), dtype=np.complex64)
+        with pytest.raises(ValueError, match='truncate'):
+            iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, axis=1)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='iq_to_cyclic_power truncates axis 0 (channels) instead of the bin axis',
+    )
+    def test_misaligned_length_with_truncate(self):
+        iq = np.random.default_rng(0).normal(size=(2, 4 * 7)).astype(np.complex64)
+        result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, truncate=True, axis=1)
+        assert result['rms']['mean'].shape == (2, 4)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='iq_to_cyclic_power indexes power_shape[1], which a 1-D waveform lacks',
+    )
+    def test_1d_input(self):
+        iq = np.random.default_rng(0).normal(size=64).astype(np.complex64)
+        result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0)
+        assert result['rms']['mean'].shape == (4,)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='iq_to_cyclic_power normalizes a negative axis only after binning, so '
+        'the cycle statistics reduce the wrong axis',
+    )
+    def test_negative_axis(self):
+        iq = np.random.default_rng(0).normal(size=(2, 64)).astype(np.complex64)
+        expected = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, axis=1)
+        result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, axis=-1)
+        for detector, stats in expected.items():
+            for stat, value in stats.items():
+                assert_array_equal(result[detector][stat], value)
+
+
+def ccdf_reference(a, edges, density):
+    counts = np.array([(a > e).sum() for e in edges])
+    return counts / a.size if density else counts
+
+
+class TestSampleCcdf:
+    @given(
+        a=arrays(
+            dtype=np.float64,
+            shape=st.integers(min_value=1, max_value=200),
+            elements=st.floats(min_value=-100, max_value=100, allow_nan=False),
+        ),
+        edges=st.lists(
+            st.floats(min_value=-120, max_value=120, allow_nan=False),
+            min_size=1,
+            max_size=20,
+            unique=True,
+        ).map(sorted),
+        density=st.booleans(),
+    )
+    @PROPERTY
+    def test_matches_brute_force(self, a, edges, density):
+        edges = np.asarray(edges)
+        result = sample_ccdf(a, edges, density=density)
+        expected = ccdf_reference(a, edges, density)
+        assert result.shape == edges.shape
+        if density:
+            assert result.dtype == np.float64
+            assert_allclose(
+                result, expected, rtol=ROUNDOFF_SAFETY * unit_roundoff(np.float64)
+            )
+        else:
+            assert_array_equal(result, expected)
+
+    def test_samples_equal_to_edge_are_not_counted(self):
+        a = np.array([1.0, 1.0, 2.0])
+        edges = np.array([0.0, 1.0, 2.0])
+        assert_array_equal(sample_ccdf(a, edges, density=False), [3, 1, 0])
+
+
 class TestNumpyCupyCrossComparison:
     """Cross-comparison tests validating numpy and cupy produce close results.
 
@@ -621,8 +1190,10 @@ class TestNumpyCupyCrossComparison:
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
     )
-    def test_powtodB_numpy_vs_cupy(self, cupy_available, data, dtype):
-        """Cross-comparison: powtodB numpy vs cupy."""
+    @pytest.mark.parametrize('abs', [True, False])
+    @pytest.mark.parametrize('eps', [0, 1e-6])
+    def test_powtodB_numpy_vs_cupy(self, cupy_available, data, dtype, abs, eps):
+        """Cross-comparison: powtodB numpy vs cupy, on each fused kernel variant."""
         cp = cupy_available
         lim = {np.float64: 1e10, np.float32: 1e5}[dtype]
         power = data.draw(
@@ -631,8 +1202,10 @@ class TestNumpyCupyCrossComparison:
             )
         )
 
-        result_np = powtodB(power, min_dtype='float32')
-        result_cp_np = powtodB(cp.asarray(power), min_dtype='float32').get()
+        result_np = powtodB(power, min_dtype='float32', abs=abs, eps=eps)
+        result_cp_np = powtodB(
+            cp.asarray(power), min_dtype='float32', abs=abs, eps=eps
+        ).get()
 
         rtol, atol = log_conversion_tol(dtype, 10, n_impl=2)
         tol_dB = dB_tolerance(rtol, atol, np.abs(result_np).max())
@@ -665,8 +1238,10 @@ class TestNumpyCupyCrossComparison:
     @settings(
         suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
     )
-    def test_envtodB_numpy_vs_cupy(self, cupy_available, data, dtype):
-        """Cross-comparison: envtodB numpy vs cupy."""
+    @pytest.mark.parametrize('abs', [True, False])
+    @pytest.mark.parametrize('eps', [0, 1e-6])
+    def test_envtodB_numpy_vs_cupy(self, cupy_available, data, dtype, abs, eps):
+        """Cross-comparison: envtodB numpy vs cupy, on each fused kernel variant."""
         cp = cupy_available
         lim = {np.float64: 1e6, np.float32: 1e4}[dtype]
         env = data.draw(
@@ -680,8 +1255,10 @@ class TestNumpyCupyCrossComparison:
             )
         )
 
-        result_np = envtodB(env, min_dtype='float32')
-        result_cp_np = envtodB(cp.asarray(env), min_dtype='float32').get()
+        result_np = envtodB(env, min_dtype='float32', abs=abs, eps=eps)
+        result_cp_np = envtodB(
+            cp.asarray(env), min_dtype='float32', abs=abs, eps=eps
+        ).get()
 
         rtol, atol = log_conversion_tol(dtype, 20, n_impl=2)
         tol_dB = dB_tolerance(rtol, atol, np.abs(result_np).max())
@@ -775,3 +1352,144 @@ class TestNumpyCupyCrossComparison:
         assert_allclose(
             result_cp_np, result_np, rtol=rtol, atol=atol, err_msg=f'{tol_dB:.2e} dB'
         )
+
+    @given(
+        env=envelope_arrays(
+            include_complex=True,
+            min_magnitude=1e-4,
+            max_magnitude=1e4,
+            dtype=np.float32,
+            min_dims=1,
+            max_dims=1,
+        )
+    )
+    @PROPERTY
+    def test_envtopow_complex_numpy_vs_cupy(self, cupy_available, env):
+        """Cross-comparison: envtopow on complex input returns a real array on both."""
+        cp = cupy_available
+
+        result_np = envtopow(env)
+        result_cp_np = envtopow(cp.asarray(env)).get()
+
+        assert np.isrealobj(result_np)
+        assert np.isrealobj(result_cp_np)
+        rtol = envelope_power_rtol(np.float32, complex_input=True, n_impl=2)
+        assert_allclose(result_cp_np, result_np, rtol=rtol)
+
+    @given(
+        power=positive_power_arrays(
+            min_value=1e-3, max_value=1e3, dtype=np.float32, min_dims=1, max_dims=1
+        )
+    )
+    @PROPERTY
+    def test_overwrite_x_numpy_vs_cupy(self, cupy_available, power):
+        """Cross-comparison: in-place evaluation writes the result into the input."""
+        cp = cupy_available
+
+        expected = powtodB(power)
+        power_cp = cp.asarray(power)
+        result_cp = powtodB(power_cp, overwrite_x=True)
+
+        assert result_cp is power_cp
+        rtol, atol = log_conversion_tol(np.float32, 10, n_impl=2)
+        assert_allclose(result_cp.get(), expected, rtol=rtol, atol=atol)
+
+    def test_xarray_cupy_data(self, cupy_available):
+        """Cross-comparison: a DataArray wrapping cupy data keeps cupy data."""
+        cp = cupy_available
+        xr = pytest.importorskip('xarray')
+
+        data = np.linspace(0.5, 2.0, 8, dtype=np.float32)
+        da = xr.DataArray(cp.asarray(data), dims=['t'], attrs={'units': 'mW'})
+
+        result = powtodB(da)
+        assert isinstance(result.data, cp.ndarray)
+        assert result.attrs['units'] == 'dBm'
+        rtol, atol = log_conversion_tol(np.float32, 10, n_impl=2)
+        assert_allclose(result.data.get(), powtodB(data), rtol=rtol, atol=atol)
+
+    @given(
+        data=st.data(),
+        size=bin_sizes(),
+        kind=st.sampled_from(sorted(BIN_STATS, key=str)),
+    )
+    @PROPERTY
+    def test_iq_to_bin_power_numpy_vs_cupy(self, cupy_available, data, size, kind):
+        cp = cupy_available
+        iq = data.draw(
+            iq_waveforms(
+                min_size=size, max_size=32 * size, multiple_of=size, channels=2
+            )
+        )
+        Ts = 1e-6
+
+        result_np = iq_to_bin_power(iq, Ts, size * Ts, kind=kind, axis=1)
+        result_cp = iq_to_bin_power(cp.asarray(iq), Ts, size * Ts, kind=kind, axis=1)
+
+        assert result_cp.dtype == result_np.dtype
+        assert_allclose(result_cp.get(), result_np, rtol=bin_power_rtol(iq, size, 2))
+
+    @given(
+        data=st.data(),
+        size=st.sampled_from([2, 4, 8]),
+        bins_per_cycle=st.sampled_from([2, 3, 5]),
+        n_cycles=st.integers(min_value=1, max_value=6),
+    )
+    @PROPERTY
+    def test_iq_to_cyclic_power_numpy_vs_cupy(
+        self, cupy_available, data, size, bins_per_cycle, n_cycles
+    ):
+        cp = cupy_available
+        n = size * bins_per_cycle * n_cycles
+        iq = data.draw(iq_waveforms(min_size=n, max_size=n, channels=2))
+        Ts = 1e-6
+        kws = {
+            'detector_period': size * Ts,
+            'cyclic_period': size * bins_per_cycle * Ts,
+            'axis': 1,
+        }
+
+        result_np = iq_to_cyclic_power(iq, Ts, **kws)
+        result_cp = iq_to_cyclic_power(cp.asarray(iq), Ts, **kws)
+
+        u = unit_roundoff(float_dtype_like(iq))
+        rtol = bin_power_rtol(iq, size, 2) + ROUNDOFF_SAFETY * 2 * n_cycles * u
+        for detector, stats in result_np.items():
+            for stat, value in stats.items():
+                assert_allclose(result_cp[detector][stat].get(), value, rtol=rtol)
+
+    @given(
+        a=arrays(
+            dtype=np.float64,
+            shape=st.integers(min_value=1, max_value=200),
+            elements=st.floats(min_value=-100, max_value=100, allow_nan=False),
+        ),
+        edges=st.lists(
+            st.floats(min_value=-120, max_value=120, allow_nan=False),
+            min_size=1,
+            max_size=20,
+            unique=True,
+        ).map(sorted),
+        density=st.booleans(),
+    )
+    @PROPERTY
+    def test_sample_ccdf_numpy_vs_cupy(self, cupy_available, a, edges, density):
+        """Cross-comparison: counting is exact, so the backends agree exactly."""
+        cp = cupy_available
+        edges = np.asarray(edges)
+
+        result_np = sample_ccdf(a, edges, density=density)
+        result_cp = sample_ccdf(cp.asarray(a), cp.asarray(edges), density=density)
+
+        assert_array_equal(result_cp.get(), result_np)
+
+    @pytest.mark.parametrize('kind', ['min', 'max', 'mean', 'median', 0.25])
+    def test_stat_ufunc_numpy_vs_cupy(self, cupy_available, kind):
+        cp = cupy_available
+        data = np.random.default_rng(0).normal(size=(6, 5)).astype(np.float32)
+
+        result_np = stat_ufunc_from_shorthand(kind, xp=np, axis=1)(data)
+        result_cp = stat_ufunc_from_shorthand(kind, xp=cp, axis=1)(cp.asarray(data))
+
+        u = unit_roundoff(np.float32)
+        assert_allclose(result_cp.get(), result_np, rtol=ROUNDOFF_SAFETY * 2 * 5 * u)

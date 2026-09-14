@@ -124,21 +124,21 @@ def powtodB(
         if abs:
             expr = f'real(10*log10(abs(values){eps_str}))'
         else:
-            expr = f'real(10*log10(values+eps){eps_str})'
+            expr = f'real(10*log10(values{eps_str}))'
         values = ne.evaluate(expr, out=out, casting='unsafe')
-    elif is_cupy_array(xp):
+    elif _use_cuda_kernels(values):
         from .jit import cuda
 
         if eps == 0:
             if abs:
-                values = cuda.powtodB(x, out)
+                values = cuda.powtodB(values, out)
             else:
-                values = cuda.powtodB_noabs(x, out)
+                values = cuda.powtodB_noabs(values, out)
         else:
             if abs:
-                values = cuda.powtodB_eps(x, out, eps)
+                values = cuda.powtodB_eps(values, out, eps)
             else:
-                values = cuda.powtodB_eps_noabs(x, out, eps)
+                values = cuda.powtodB_eps_noabs(values, out, eps)
     else:
         # torch, dask, ...
         if abs:
@@ -161,10 +161,10 @@ def dBtopow(
     if xp is np:
         expr = '10**(values/10)'
         values = ne.evaluate(expr, out=out, casting='unsafe')
-    elif is_cupy_array(xp):
+    elif _use_cuda_kernels(values):
         from .jit import cuda
 
-        values = cuda.dBtopow(x, out)
+        values = cuda.dBtopow(values, out)
     else:
         # torch, dask, ...
         values = xp.divide(
@@ -191,10 +191,13 @@ def envtopow(
 
         if xp.iscomplexobj(values):
             values = values.real  # pyright: ignore
-    elif is_cupy_array(xp):
+    elif _use_cuda_kernels(values):
         from .jit import cuda
 
-        values = cuda.envtopow(x, out)
+        values = cuda.envtopow(values, out)
+
+        if xp.iscomplexobj(values):
+            values = values.real
     else:
         # torch, dask, ...
         values = xp.abs(x, out=out)
@@ -225,19 +228,19 @@ def envtodB(
         else:
             expr = f'real(20*log10(values{eps_str}))'
         values = ne.evaluate(expr, out=out, casting='unsafe')
-    elif is_cupy_array(xp):
+    elif _use_cuda_kernels(values):
         from .jit import cuda
 
         if eps == 0:
             if abs:
-                values = cuda.envtodB(x, out)
+                values = cuda.envtodB(values, out)
             else:
-                values = cuda.envtodB_noabs(x, out)
+                values = cuda.envtodB_noabs(values, out)
         else:
             if abs:
-                values = cuda.envtodB_eps(x, out, eps)
+                values = cuda.envtodB_eps(values, out, eps)
             else:
-                values = cuda.envtodB_eps_noabs(x, out, eps)
+                values = cuda.envtodB_eps_noabs(values, out, eps)
     else:
         # torch, dask, ...
         if abs:
@@ -597,12 +600,22 @@ def _arraylike_with_buffer(
         return values, out, xp
     elif overwrite_x:
         return values, values, xp
-    elif xp is np:
-        # numexpr promotes to float64 if out=None; provide buffer to preserve dtype
+    elif xp is np or _use_cuda_kernels(values):
+        # numexpr promotes to float64 if out=None, and the cupy fused kernels
+        # assign into `out` in place; a buffer of the input dtype serves both
         out = xp.empty_like(values, dtype=values.dtype)
         return values, out, xp
     else:
         return values, None, xp
+
+
+def _use_cuda_kernels(values: Array) -> bool:
+    """whether to evaluate on `values` with the fused kernels in `.jit.cuda`.
+
+    The kernels assign through `out[:]`, which 0-d arrays do not support, so
+    scalars take the generic array-API path.
+    """
+    return is_cupy_array(values) and values.ndim > 0
 
 
 def _repackage_arraylike(

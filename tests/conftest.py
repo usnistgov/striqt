@@ -3,13 +3,41 @@
 from __future__ import annotations
 
 import warnings
+from collections import UserDict
 from pathlib import Path
+from threading import Lock
 from typing import Any, List, Tuple
 
 import numpy as np
 import pytest
 
 np.seterr(divide='ignore')
+
+
+class _MemoryShelf(UserDict):
+    def sync(self):
+        pass
+
+
+@pytest.fixture(autouse=True, scope='session')
+def isolated_persistent_cache():
+    """Back util.persistent_lru_cache with an in-memory dict for the test session.
+
+    The on-disk shelf is dbm.ndbm on macOS, which corrupts once the cache evicts
+    past its size limit (the window-parameter searches alone write dozens of
+    entries per call) or when two test processes write concurrently, after which
+    every later get_window call on the machine fails. Tests also should not
+    leave one-off entries in the developer's cache.
+    """
+    from striqt.waveform.lib import util
+
+    shelf = _MemoryShelf(), Lock()
+    original = util._get_cache_shelf
+    util._get_cache_shelf = lambda: shelf
+    try:
+        yield
+    finally:
+        util._get_cache_shelf = original
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +330,88 @@ def envelope_arrays(
             )
 
     return _envelope()
+
+
+def shaped_arrays(
+    dtype=np.float32,
+    min_dims: int = 1,
+    max_dims: int = 3,
+    min_side: int = 1,
+    max_side: int = 8,
+    min_value: float = -10.0,
+    max_value: float = 10.0,
+):
+    """Strategy for (array, axis) pairs, with axis drawn from [-ndim, ndim).
+
+    Negative axes are drawn as often as positive ones so that axis-normalization
+    branches are exercised.
+    """
+    st, arrays, array_shapes = _get_hypothesis_extras()
+
+    @st.composite
+    def _shaped(draw):
+        shape = draw(
+            array_shapes(
+                min_dims=min_dims,
+                max_dims=max_dims,
+                min_side=min_side,
+                max_side=max_side,
+            )
+        )
+        elements = st.floats(
+            min_value=min_value,
+            max_value=max_value,
+            allow_nan=False,
+            allow_infinity=False,
+            width=32 if np.dtype(dtype) == np.float32 else 64,
+        )
+        arr = draw(arrays(dtype=dtype, shape=shape, elements=elements))
+        axis = draw(st.integers(min_value=-len(shape), max_value=len(shape) - 1))
+        return arr, axis
+
+    return _shaped()
+
+
+def iq_waveforms(
+    min_size: int = 64,
+    max_size: int = 1024,
+    multiple_of: int = 1,
+    channels: int | None = None,
+    dtype=None,
+):
+    """Strategy for complex gaussian IQ waveforms.
+
+    Hypothesis draws the dtype, the sample count (a multiple of `multiple_of`),
+    and a seed; the samples come from a generator with that seed so that
+    examples are reproducible and shrink toward short waveforms.
+
+    Args:
+        channels: None for a 1-D waveform, or the number of rows of a 2-D
+            (channel, sample) array as the analysis measurements use
+    """
+    st, _, _ = _get_hypothesis_extras()
+
+    if dtype is None:
+        dtype_strategy = st.sampled_from([np.complex64, np.complex128])
+    else:
+        dtype_strategy = st.just(dtype)
+
+    @st.composite
+    def _iq(draw):
+        dt = draw(dtype_strategy)
+        blocks = draw(
+            st.integers(
+                min_value=max(min_size // multiple_of, 1),
+                max_value=max(max_size // multiple_of, 1),
+            )
+        )
+        size = blocks * multiple_of
+        shape = (size,) if channels is None else (channels, size)
+        rng = np.random.default_rng(draw(st.integers(min_value=0, max_value=2**16)))
+        iq = rng.normal(size=shape) + 1j * rng.normal(size=shape)
+        return iq.astype(dt)
+
+    return _iq()
 
 
 def available_namespaces() -> List[Tuple[str, Any]]:
