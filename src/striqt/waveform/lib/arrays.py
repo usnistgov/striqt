@@ -493,13 +493,16 @@ def _pad_slices_to_dim(ndim: int, axis: int, /):
 
 
 def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
-    if axis >= 0:
-        pre_pad = [[0, 0]] * axis
-    else:
-        pre_pad = [[0, 0]] * (axis + a.ndim - 1)
+    if axis < 0:
+        axis += a.ndim
+
+    # xp.pad broadcasts a pad list shorter than a.ndim onto every axis, so the
+    # untouched axes need explicit zero padding on both sides of `axis`
+    pre_pad = [[0, 0]] * axis
+    post_pad = [[0, 0]] * (a.ndim - axis - 1)
 
     xp = array_namespace(a)
-    return xp.pad(a, pre_pad + pad_width, *args, **kws)
+    return xp.pad(a, pre_pad + list(pad_width) + post_pad, *args, **kws)
 
 
 # %% cupy configuration and memory management
