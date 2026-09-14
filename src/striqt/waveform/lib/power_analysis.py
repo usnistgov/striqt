@@ -124,21 +124,20 @@ def powtodB(
         if abs:
             expr = f'real(10*log10(abs(values){eps_str}))'
         else:
-            expr = f'real(10*log10(values+eps){eps_str})'
+            expr = f'real(10*log10(values{eps_str}))'
         values = ne.evaluate(expr, out=out, casting='unsafe')
-    elif is_cupy_array(xp):
+    elif _use_cuda_kernels(values):
         from .jit import cuda
 
+        out = _real_buffer(out)
+        use_abs = abs or xp.iscomplexobj(values)
         if eps == 0:
-            if abs:
-                values = cuda.powtodB(x, out)
-            else:
-                values = cuda.powtodB_noabs(x, out)
+            kernel = cuda.powtodB if use_abs else cuda.powtodB_noabs
+            kernel(values, out)
         else:
-            if abs:
-                values = cuda.powtodB_eps(x, out, eps)
-            else:
-                values = cuda.powtodB_eps_noabs(x, out, eps)
+            kernel = cuda.powtodB_eps if use_abs else cuda.powtodB_eps_noabs
+            kernel(values, out, eps)
+        values = out
     else:
         # torch, dask, ...
         if abs:
@@ -161,10 +160,12 @@ def dBtopow(
     if xp is np:
         expr = '10**(values/10)'
         values = ne.evaluate(expr, out=out, casting='unsafe')
-    elif is_cupy_array(xp):
+    elif _use_cuda_kernels(values):
         from .jit import cuda
 
-        values = cuda.dBtopow(x, out)
+        out = _real_buffer(out)
+        cuda.dBtopow(values, out)
+        values = out
     else:
         # torch, dask, ...
         values = xp.divide(
@@ -191,13 +192,15 @@ def envtopow(
 
         if xp.iscomplexobj(values):
             values = values.real  # pyright: ignore
-    elif is_cupy_array(xp):
+    elif _use_cuda_kernels(values):
         from .jit import cuda
 
-        values = cuda.envtopow(x, out)
+        out = _real_buffer(out)
+        cuda.envtopow(values, out)
+        values = out
     else:
         # torch, dask, ...
-        values = xp.abs(x, out=out)
+        values = xp.abs(values, out=out)
         values *= values
 
     return _repackage_arraylike(values, x, unit_transform=unit_wave_to_linear)
@@ -225,19 +228,18 @@ def envtodB(
         else:
             expr = f'real(20*log10(values{eps_str}))'
         values = ne.evaluate(expr, out=out, casting='unsafe')
-    elif is_cupy_array(xp):
+    elif _use_cuda_kernels(values):
         from .jit import cuda
 
+        out = _real_buffer(out)
+        use_abs = abs or xp.iscomplexobj(values)
         if eps == 0:
-            if abs:
-                values = cuda.envtodB(x, out)
-            else:
-                values = cuda.envtodB_noabs(x, out)
+            kernel = cuda.envtodB if use_abs else cuda.envtodB_noabs
+            kernel(values, out)
         else:
-            if abs:
-                values = cuda.envtodB_eps(x, out, eps)
-            else:
-                values = cuda.envtodB_eps_noabs(x, out, eps)
+            kernel = cuda.envtodB_eps if use_abs else cuda.envtodB_eps_noabs
+            kernel(values, out, eps)
+        values = out
     else:
         # torch, dask, ...
         if abs:
@@ -597,12 +599,35 @@ def _arraylike_with_buffer(
         return values, out, xp
     elif overwrite_x:
         return values, values, xp
-    elif xp is np:
-        # numexpr promotes to float64 if out=None; provide buffer to preserve dtype
-        out = xp.empty_like(values, dtype=values.dtype)
+    elif xp is np or _use_cuda_kernels(values):
+        # numexpr promotes to float64 if out=None, and the cupy fused kernels
+        # assign into `out` in place. the results are real even for complex input
+        out = xp.empty_like(values, dtype=float_dtype_like(values))
         return values, out, xp
     else:
         return values, None, xp
+
+
+def _real_buffer(out: Array) -> Array:
+    """`out`, or its real part if it is complex.
+
+    `_arraylike_with_buffer` hands back a complex buffer only when overwriting
+    complex input in place. The fused kernels compute real values and cannot
+    assign into it, so they write the real part, which is also what the numpy
+    path returns.
+    """
+    if out.dtype.kind == 'c':
+        return out.real
+    return out
+
+
+def _use_cuda_kernels(values: Array) -> bool:
+    """whether to evaluate on `values` with the fused kernels in `.jit.cuda`.
+
+    The kernels assign through `out[:]`, which 0-d arrays do not support, so
+    scalars take the generic array-API path.
+    """
+    return is_cupy_array(values) and values.ndim > 0
 
 
 def _repackage_arraylike(

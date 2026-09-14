@@ -8,15 +8,12 @@ import itertools
 import math
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
 import striqt.analysis as sa
 
 load = sa.lib.io.decode_from_yaml_file
-PROPERTY = settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-)
 _example_dirs = itertools.count()
 
 
@@ -38,7 +35,6 @@ def _dump(d: dict) -> str:
         unique_by=lambda e: e[0],
     )
 )
-@PROPERTY
 def test_glob_include_merges_in_sorted_filename_order(write_yaml, entries):
     sub = f'case{next(_example_dirs)}'
     for name, d in entries:

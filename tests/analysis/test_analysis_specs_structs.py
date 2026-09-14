@@ -7,7 +7,7 @@ import math
 import msgspec
 import pytest
 from conftest import raises_on_both_paths
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given
 from spec_strategies import (
     descending_ranges,
     fractional_delay_kwargs,
@@ -32,9 +32,6 @@ CORRELATORS = (
 SCS = 30e3
 PERIOD_MSG = 'is not an integer multiple of sample period'
 DELAY_MSG = r'delay \* sample_rate must be an integer'
-PROPERTY = settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-)
 
 by_correlator = pytest.mark.parametrize('cls', CORRELATORS, ids=lambda c: c.__name__)
 
@@ -88,14 +85,12 @@ class TestSpecBaseFreezing:
 
 class TestCapture:
     @given(kws=integer_sample_captures())
-    @PROPERTY
     def test_integer_sample_count_is_accepted(self, construct, kws):
         capture = construct(Capture, **kws)
         assert capture.duration == kws['duration']
         assert capture.sample_rate == kws['sample_rate']
 
     @given(kws=fractional_sample_captures())
-    @PROPERTY
     def test_fractional_sample_count_is_rejected(self, kws):
         raises_on_both_paths(Capture, ValueError, PERIOD_MSG, **kws)
 
@@ -149,14 +144,12 @@ class TestCapture:
 class TestSSBCorrelators:
     @by_correlator
     @given(kws=integer_delay_kwargs())
-    @PROPERTY
     def test_integer_delay_samples_accepted(self, construct, cls, kws):
         spec = construct(cls, subcarrier_spacing=SCS, **kws)
         assert spec.delay == kws['delay']
 
     @by_correlator
     @given(kws=fractional_delay_kwargs())
-    @PROPERTY
     def test_fractional_delay_samples_rejected(self, cls, kws):
         raises_on_both_paths(
             cls, msgspec.ValidationError, DELAY_MSG, subcarrier_spacing=SCS, **kws
@@ -196,7 +189,6 @@ class TestSSBCorrelators:
 
 class TestCellularCyclicAutocorrelator:
     @given(frame_range=valid_frame_ranges(), symbol_range=valid_symbol_ranges())
-    @PROPERTY
     def test_valid_ranges_accepted(self, construct, frame_range, symbol_range):
         spec = construct(CCA, frame_range=frame_range, symbol_range=symbol_range)
         assert spec.frame_range == frame_range
@@ -206,7 +198,6 @@ class TestCellularCyclicAutocorrelator:
 
     @pytest.mark.parametrize('field', ['frame_range', 'symbol_range'])
     @given(range_=descending_ranges())
-    @PROPERTY
     def test_descending_range_rejected(self, field, range_):
         raises_on_both_paths(
             CCA,

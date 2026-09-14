@@ -12,7 +12,6 @@ from sweep_strategies import (
     GAIN_LOOP,
     NDE_LOOP,
     PORT_LOOP,
-    PROPERTY,
     CalSweepCls,
     calibration_loop_orderings,
     calibration_sweep_dict,
@@ -33,7 +32,6 @@ TOGGLE_MSG = 'noise_diode_enabled must be the first specified loop'
 
 class TestNoiseDiodeToggle:
     @given(loops_accepted=calibration_loop_orderings())
-    @PROPERTY
     def test_explicit_toggle_position(self, loops_accepted):
         loops, accepted = loops_accepted
         if accepted:

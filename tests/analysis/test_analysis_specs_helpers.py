@@ -20,7 +20,7 @@ from frozen_strategies import (
     tuplify,
     unhashable_frozendicts,
 )
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 from msgspec import inspect as mi
 
@@ -39,10 +39,6 @@ from striqt.analysis.specs.helpers import (
     unfreeze,
 )
 
-PROPERTY = settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-)
-
 ATTRS_XFAIL = pytest.mark.xfail(
     strict=True,
     reason='get_capture_type_attrs reads raw Annotated aliases, which carry no .extra; '
@@ -55,7 +51,6 @@ ATTRS_XFAIL = pytest.mark.xfail(
 
 class TestFrozendict:
     @given(d=frozendict_dicts)
-    @PROPERTY
     def test_mapping_laws(self, d):
         fd = frozendict(d)
         assert len(fd) == len(d)
@@ -71,7 +66,6 @@ class TestFrozendict:
         assert d == fd
 
     @given(d=frozendict_dicts, data=st.data())
-    @PROPERTY
     def test_hash_is_order_independent(self, d, data):
         items = list(d.items())
         permuted = frozendict(data.draw(st.permutations(items)))
@@ -86,13 +80,11 @@ class TestFrozendict:
         assert hash(frozendict()) == 0
 
     @given(fd=unhashable_frozendicts)
-    @PROPERTY
     def test_unhashable_value_raises(self, fd):
         with pytest.raises(TypeError, match='unhashable frozendict entry'):
             hash(fd)
 
     @given(a=frozendict_dicts, b=frozendict_dicts)
-    @PROPERTY
     def test_or_returns_frozendict(self, a, b):
         fa = frozendict(a)
         merged = {**a, **b}
@@ -104,7 +96,6 @@ class TestFrozendict:
             fa | 5
 
     @given(a=frozendict_dicts, b=frozendict_dicts)
-    @PROPERTY
     def test_ror_returns_plain_dict(self, a, b):
         fb = frozendict(b)
         merged = {**a, **b}
@@ -124,7 +115,6 @@ class TestFrozendict:
         assert fd == {'a': 1}
 
     @given(d=frozendict_dicts)
-    @PROPERTY
     def test_pickle_roundtrip(self, d):
         fd = frozendict(d)
         restored = pickle.loads(pickle.dumps(fd))
@@ -151,14 +141,12 @@ class TestFrozendict:
 
 class TestFreeze:
     @given(tree=json_trees())
-    @PROPERTY
     def test_removes_mutable_containers(self, tree):
         frozen = freeze(tree)
         assert not has_mutable_below(frozen)
         hash(frozen)
 
     @given(tree=json_trees())
-    @PROPERTY
     def test_is_idempotent(self, tree):
         frozen = freeze(tree)
         refrozen = freeze(frozen)
@@ -167,18 +155,15 @@ class TestFreeze:
         assert not has_mutable_below(refrozen)
 
     @given(tree=json_trees())
-    @PROPERTY
     def test_matches_oracle(self, tree):
         assert freeze(tree) == tuplify(tree)
 
     @given(x=scalars)
-    @PROPERTY
     def test_scalars_pass_through_by_identity(self, x):
         assert freeze(x) is x
         assert unfreeze(x) is x
 
     @given(tree=json_trees(), max_depth=st.integers(min_value=-1, max_value=4))
-    @PROPERTY
     def test_depth_converts_only_shallower_levels(self, tree, max_depth):
         result = freeze(tree, max_depth)
         assert listify(result) == listify(tree)
@@ -202,14 +187,12 @@ class TestFreeze:
 
 class TestUnfreeze:
     @given(tree=json_trees())
-    @PROPERTY
     def test_roundtrip(self, tree):
         thawed = unfreeze(freeze(tree))
         assert thawed == listify(tree)
         assert not has_frozen_below(thawed)
 
     @given(tree=json_trees(), max_depth=st.integers(min_value=-1, max_value=4))
-    @PROPERTY
     def test_depth_converts_only_shallower_levels(self, tree, max_depth):
         frozen = freeze(tree)
         result = unfreeze(frozen, max_depth)
@@ -351,7 +334,6 @@ def test_convert_dict_lax_floats(value, expected):
 
 
 @given(x=st.fractions())
-@PROPERTY
 def test_convert_dict_fraction_roundtrip(x):
     assert convert_dict(str(x), fractions.Fraction) == x
 

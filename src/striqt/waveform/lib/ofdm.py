@@ -116,8 +116,8 @@ def _index_or_all(inds: tuple[int, ...] | typing.Literal['all'], name, size, xp=
     if x.ndim not in (0, 1):
         raise ValueError(f'{name} argument must be a sequence of indices')
 
-    if x.max() > size:
-        raise ValueError(f'{name} value {inds} exceeds the maximum {size}')
+    if x.max() >= size:
+        raise ValueError(f'{name} value {inds} exceeds the maximum {size - 1}')
     if (-x).max() > size:
         raise ValueError(f'{name} value {inds} is below the minimum {-size}')
 
@@ -790,8 +790,11 @@ def weighted_ssb_detect(
     rpeak[xp.where(rpeak < threshold)] = 0
 
     # evaluate the sub-symbol IQ offset
-    nfill = round(window_fill * rpeak.shape[FINE_LAG_DIM])
     nfine = rpeak.shape[FINE_LAG_DIM]
+    nfill = round(window_fill * nfine)
+    # an odd zero count would be split unevenly around the window, which
+    # biases the lag estimate by one sample
+    nfill += (nfine - nfill) % 2
     w = fourier.get_window(
         window,
         nwindow=nfill,
@@ -952,7 +955,6 @@ def _get_3gpp_index_cyclic_prefix(
     # axis 3: cp index
     grid.append(xp.ogrid[0 : phy.cp_sizes[1]])
 
-    grid = [x.squeeze() for x in grid if x.size > 1]
     # pad the axis dimensions so they can be broadcast together
     inds, *offsets = xp.meshgrid(*grid, indexing='ij', copy=False)
 
@@ -961,7 +963,9 @@ def _get_3gpp_index_cyclic_prefix(
     for offset in offsets:
         inds += offset
 
-    return inds
+    # drop singleton axes only after the sum, so that a single non-zero
+    # frame, slot or symbol selection keeps its offset
+    return inds.squeeze()
 
 
 class Phy3GPP(PhyOFDM):

@@ -61,7 +61,7 @@ gpu = [
     "cython",
 ]
 test = [
-    "coverage",
+    "coverage[toml]",
     "pytest",
     "nptdms",
     "pytest-order",
@@ -112,6 +112,16 @@ norecursedirs = [
     "bin",
     "dist",
     "build"
+]
+
+[tool.coverage.report]
+# numba compiles the decorated python into machine code, so the interpreter never
+# executes those bodies and coverage.py reports them as missed; an excluded decorator
+# line excludes the whole function
+exclude_also = [
+    "^\\s*@(nb|numba)\\.(njit|jit|vectorize|guvectorize)\\b",
+    "^\\s*@(numba\\.)?cuda\\.jit\\b",
+    "^\\s*@(njit|jit|vectorize|guvectorize)\\b",
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]

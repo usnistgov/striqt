@@ -960,7 +960,7 @@ def zero_stft_by_freq(
     xp = array_namespace(xstft)
 
     freq_step = float(freqs[1] - freqs[0])
-    fs = xstft.shape[axis] * freq_step
+    fs = xstft.shape[axis + 1] * freq_step
     ilo, ihi = _freq_band_edges(freqs.size, fs, *passband, xp=xp)
 
     xp.copyto(axis_slice(xstft, 0, ilo, axis=axis + 1), 0)
@@ -994,26 +994,27 @@ def _fir_lowpass_fft(
     if xp is None:
         xp = np
 
+    nyquist = sample_rate / 2
+    if cutoff >= nyquist:
+        return xp.ones(size, dtype=dtype)
+
     from scipy import signal
 
-    if cutoff == float('inf'):
-        h = np.ones(size, dtype=dtype)
+    # firwin2 requires a nondecreasing grid that ends at nyquist, so a transition
+    # band that runs past it is cut short there
+    if cutoff + transition < nyquist:
+        freqs = [0, cutoff, cutoff + transition, nyquist]
+        gains = [1.0, 1.0, 0.0, 0.0]
     else:
-        freqs = [
-            0,
-            # cutoff - transition / 2,
-            cutoff,
-            cutoff + transition,
-            sample_rate / 2,
-        ]
-        h = signal.firwin2(
-            size, freqs, [1.0, 1, 0.0, 0.0], window=window, fs=sample_rate
-        )
+        freqs = [0, cutoff, nyquist]
+        gains = [1.0, 1.0, 0.0]
+    h = signal.firwin2(size, freqs, gains, window=window, fs=sample_rate)
 
     taps = xp.array(h).astype(dtype)
     w = get_window('rect', size, xp=xp, dtype=dtype, fftshift=True)
-    H = xp.fft.fft(taps * w)
-    return H * w
+    H = xp.fft.fft(taps * w) * w
+    # numpy < 2 evaluates fft in complex128 regardless of the input precision
+    return H.astype(dtype, copy=False)
 
 
 @util.lru_cache()
@@ -1267,7 +1268,7 @@ def downsample_stft(
     # passband indexes in the input
     freq_step = float(freqs[1] - freqs[0])
     fs = y.shape[ax] * freq_step
-    passband_start, passband_end = _freq_band_edges(y.shape[ax], 1 / fs, *passband)
+    passband_start, passband_end = _freq_band_edges(y.shape[ax], fs, *passband)
     bounds_out, bounds_in, _ = _find_downsample_copy_range(
         y.shape[ax], nfft_out, passband_start, passband_end
     )
@@ -1281,7 +1282,7 @@ def downsample_stft(
     if out is None:
         xout = xp.empty(shape_out, dtype=y.dtype)
     else:
-        xout = _truncated_buffer(out, shape_out[ax], y.dtype)
+        xout = _truncated_buffer(out, shape_out, y.dtype)
 
     # copy first before zeroing, in case of input-output buffer reuse
     xp.copyto(
@@ -1543,7 +1544,7 @@ def oaresample(
 
 @util.lru_cache(16)
 def _find_downsampled_freqs(nfft_out, freq_step, xp=None):
-    return fftfreq(nfft_out, 1.0 / (freq_step * nfft_out), xp=xp or np)
+    return fftfreq(nfft_out, freq_step * nfft_out, xp=xp or np)
 
 
 # %% Helpers
