@@ -211,12 +211,8 @@ class TestComputeLock:
         with util.compute_lock(np.zeros(3)):
             assert lock_is_free(util._compute_lock)
 
-    def test_cupy_arrays_lock(self):
-        from conftest import _cupy
-
-        if _cupy is None:
-            pytest.skip('cupy is not available')
-        with util.compute_lock(_cupy.zeros(3)):
+    def test_cupy_arrays_lock(self, cupy_available):
+        with util.compute_lock(cupy_available.zeros(3)):
             assert not lock_is_free(util._compute_lock)
         assert lock_is_free(util._compute_lock)
 

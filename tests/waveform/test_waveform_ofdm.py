@@ -17,15 +17,13 @@ from math import ceil
 import numpy as np
 import pytest
 from conftest import to_numpy
-from hypothesis import HealthCheck, assume, given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from numpy.testing import assert_allclose, assert_array_equal
 from test_fourier import tone_frequency
 from test_waveform_jit import corr_atol
 
-PROPERTY = settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-)
+from striqt.waveform.lib import ofdm
 
 # the analysis default synchronization block sample rate (15.36e6 / 2)
 FS = 7.68e6
@@ -33,24 +31,7 @@ SCS_5G = (15e3, 30e3, 60e3)
 SC_COUNT = 127
 
 
-def _get_ofdm():
-    """import lazily so that collecting this module does not reify scipy"""
-    from striqt.waveform.lib import ofdm
-
-    return ofdm
-
-
-@pytest.fixture
-def cupy_available():
-    from conftest import _cupy
-
-    if _cupy is None:
-        pytest.skip('cupy is not available')
-    return _cupy
-
-
 def phy_5g(scs, fs=FS, xp=None):
-    ofdm = _get_ofdm()
     return ofdm.get_3gpp_phy(
         1, subcarrier_spacing=scs, sample_rate=fs, generation='5G', xp=xp
     )
@@ -58,7 +39,6 @@ def phy_5g(scs, fs=FS, xp=None):
 
 def sync_params(scs=30e3, fs=FS, **kws):
     """the parameters of the sensor sweep configurations: 30 kHz shared spectrum"""
-    ofdm = _get_ofdm()
     kws.setdefault('shared_spectrum', round(scs) == 30_000)
     return ofdm.pss_params(sample_rate=fs, subcarrier_spacing=scs, **kws)
 
@@ -122,6 +102,32 @@ def embed_symbol(iq, phy, body, symbol_index, delay, port=0, scale=1.0):
     return start
 
 
+def pss_setup(fs=FS):
+    """(params, phy, pss, bodies) for 30 kHz PSS detection at `fs`, where `bodies`
+    are the PSS symbols without their cyclic prefix"""
+    params = sync_params(fs=fs)
+    phy = phy_5g(30e3, fs)
+    pss = ofdm.pss_5g_nr(fs, 30e3)
+    return params, phy, pss, pss[:, int(phy.cp_sizes.min()) :]
+
+
+def silent_block(params, n_blocks=1, ports=1):
+    size = params.frame_size * params.frames_per_sync * n_blocks
+    return np.zeros((ports, size), dtype=np.complex64)
+
+
+def get_ssb_iq(iq, fs_in=FS, **kws):
+    """get_5g_ssb_iq with the 30 kHz, 20 ms discovery defaults of the measurements"""
+    kws = {
+        'discovery_periodicity': 20e-3,
+        'fs_out': FS,
+        'fs_in': fs_in,
+        'subcarrier_spacing': 30e3,
+        **kws,
+    }
+    return ofdm.get_5g_ssb_iq(iq, **kws)
+
+
 class TestPhy3GPP:
     @pytest.mark.xfail(
         strict=True,
@@ -131,7 +137,6 @@ class TestPhy3GPP:
     )
     @pytest.mark.parametrize('sample_rate', [1.92e6, 3.84e6, 7.68e6, 15.36e6, 30.72e6])
     def test_lte_and_5g_agree_at_15khz(self, sample_rate):
-        ofdm = _get_ofdm()
         lte = ofdm.Phy3GPP(1, sample_rate=sample_rate, generation='4G')
         nr = ofdm.Phy3GPP(1, sample_rate=sample_rate, generation='5G')
         assert_array_equal(lte.cp_sizes, nr.cp_sizes)
@@ -141,7 +146,6 @@ class TestPhy3GPP:
         sample_rate=st.sampled_from([3.84e6, 7.68e6, 15.36e6, 30.72e6, 61.44e6]),
         scs=st.sampled_from(SCS_5G),
     )
-    @PROPERTY
     def test_5g_slot_structure(self, sample_rate, scs):
         """3GPP TS 38.211 5.3.1: normal CP is 144*kappa*2**-mu samples, with an
         extra 16*kappa in the first symbol"""
@@ -206,7 +210,6 @@ class TestPhy3GPP:
         assert slots * phy.contiguous_size == phy.frame_size
 
     def test_argument_errors(self):
-        ofdm = _get_ofdm()
         with pytest.raises(ValueError, match='subcarrier_spacing'):
             ofdm.Phy3GPP(1, subcarrier_spacing=45e3, sample_rate=FS)
         with pytest.raises(ValueError, match='counting number'):
@@ -219,12 +222,10 @@ class TestPhy3GPP:
             )
 
     def test_default_sample_rate_from_bandwidth(self):
-        ofdm = _get_ofdm()
         for bw, fs in ofdm.Phy3GPP.BW_TO_SAMPLE_RATE.items():
             assert ofdm.Phy3GPP(bw).sample_rate == fs
 
     def test_get_3gpp_phy_caches(self):
-        ofdm = _get_ofdm()
         a = ofdm.get_3gpp_phy(
             1, subcarrier_spacing=30e3, sample_rate=FS, generation='5G'
         )
@@ -240,7 +241,6 @@ class TestIndexCyclicPrefix:
         frames=st.sampled_from([(0,), (0, 1), (2,), (1, 3)]),
         data=st.data(),
     )
-    @PROPERTY
     def test_matches_loop_reference(self, scs, frames, data):
         phy = phy_5g(scs)
         slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[scs]
@@ -301,7 +301,6 @@ class TestIndexCyclicPrefix:
         assert phy.index_cyclic_prefix() is phy.index_cyclic_prefix()
 
     def test_argument_errors(self):
-        ofdm = _get_ofdm()
         phy = phy_5g(30e3)
         slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[30e3]
 
@@ -325,7 +324,6 @@ class TestCorrAtIndices:
 
     @pytest.mark.parametrize('scs', SCS_5G)
     def test_normalized_correlation_peaks_at_zero_lag(self, scs):
-        ofdm = _get_ofdm()
         phy = phy_5g(scs)
         slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[scs]
         x = ofdm_slots(phy, slots_per_frame)
@@ -346,7 +344,6 @@ class TestCorrAtIndices:
 
     @pytest.mark.parametrize('scs', SCS_5G)
     def test_unnormalized_zero_lag_is_prefix_power(self, scs):
-        ofdm = _get_ofdm()
         phy = phy_5g(scs)
         x = ofdm_slots(phy, phy.SCS_TO_SLOTS_PER_FRAME[scs])
         inds = phy.index_cyclic_prefix()
@@ -357,7 +354,6 @@ class TestCorrAtIndices:
         assert R.dtype == x.dtype
 
     def test_out_buffer_and_ncp_from_indices(self):
-        ofdm = _get_ofdm()
         phy = phy_5g(30e3)
         x = ofdm_slots(phy, 2)
         inds = phy.index_cyclic_prefix(slots=(0, 1))
@@ -370,7 +366,6 @@ class TestSyncSequences:
     @pytest.mark.parametrize('n_id2', [0, 1, 2])
     def test_pss_m_sequence(self, n_id2):
         """TS 38.211 7.4.2.2: d(n) = 1 - 2 x((n + 43 N_id2) mod 127)"""
-        ofdm = _get_ofdm()
         pss = np.array(ofdm._pss_m_sequence(n_id2))
         base = np.array(ofdm._pss_m_sequence(0))
 
@@ -380,17 +375,14 @@ class TestSyncSequences:
         assert_array_equal(pss, np.roll(base, -43 * n_id2))
 
     def test_sss_m_sequences_are_distinct(self):
-        ofdm = _get_ofdm()
         sss = np.array([ofdm._sss_m_sequence(n) for n in range(1008)])
         assert sss.shape == (1008, SC_COUNT)
         assert set(sss.ravel()) <= {-1, 1}
         assert len({row.tobytes() for row in sss}) == 1008
 
     @given(n_id=st.integers(0, 1007))
-    @PROPERTY
     def test_sss_is_a_gold_sequence(self, n_id):
         """TS 38.211 7.4.2.3.1: the product of two shifted m-sequences"""
-        ofdm = _get_ofdm()
         n_id1, n_id2 = divmod(n_id, 3)
         m0 = 15 * (n_id1 // 112) + 5 * n_id2
         m1 = n_id1 % 112
@@ -409,7 +401,6 @@ class TestSyncSequences:
         'fs, scs', [(FS, 15e3), (FS, 30e3), (FS, 60e3), (15.36e6, 30e3)]
     )
     def test_pss_time_domain(self, fs, scs):
-        ofdm = _get_ofdm()
         phy = phy_5g(scs, fs)
         nfft = int(phy.nfft)
         cp = int(phy.cp_sizes.min())
@@ -432,7 +423,6 @@ class TestSyncSequences:
         assert_allclose(np.sum(np.abs(pss) ** 2, axis=1), 1 / nfft, rtol=1e-4)
 
     def test_pss_center_frequency_shifts_the_subcarriers(self):
-        ofdm = _get_ofdm()
         phy = phy_5g(30e3)
         nfft, cp = int(phy.nfft), int(phy.cp_sizes.min())
 
@@ -443,7 +433,6 @@ class TestSyncSequences:
         assert_array_equal(np.sort(np.where(occupied)[0]), np.sort(sync_bins(nfft, 5)))
 
     def test_sss_time_domain(self):
-        ofdm = _get_ofdm()
         phy = phy_5g(30e3)
         nfft, cp = int(phy.nfft), int(phy.cp_sizes.min())
 
@@ -459,7 +448,6 @@ class TestSyncSequences:
             assert_allclose(X, expected / np.sqrt(SC_COUNT), atol=1e-5)
 
     def test_argument_errors(self):
-        ofdm = _get_ofdm()
         with pytest.raises(ValueError, match='multiple of 15000'):
             ofdm.pss_5g_nr(FS, 20e3)
         with pytest.raises(ValueError, match='at least'):
@@ -495,18 +483,15 @@ SSB_CASES = [
 class TestIndexPssSymbols:
     @pytest.mark.parametrize('args, expected', SSB_CASES)
     def test_cell_search_cases(self, args, expected):
-        ofdm = _get_ofdm()
         offsets, period, repetitions = expected
         table = tuple(o + period * n for n in range(repetitions) for o in offsets)
         assert ofdm.index_pss_symbols(*args) == table
 
     def test_explicit_indexes_pass_through(self):
-        ofdm = _get_ofdm()
         assert ofdm.index_pss_symbols(30e3, symbol_indexes=(3, 9)) == (3, 9)
         assert ofdm.index_pss_symbols(30e3, symbol_indexes=[3, 9]) == [3, 9]
 
     def test_argument_errors(self):
-        ofdm = _get_ofdm()
         with pytest.raises(ValueError, match='"b" or "c"'):
             ofdm.index_pss_symbols(30e3)
         with pytest.raises(ValueError, match='do not exist'):
@@ -521,7 +506,6 @@ class TestIndexPssSymbols:
 
 class TestSyncParams:
     def test_min_diff(self):
-        ofdm = _get_ofdm()
         assert ofdm._min_diff([]) is None
         assert ofdm._min_diff([5]) is None
         assert ofdm._min_diff([2, 8, 16]) == 6
@@ -538,7 +522,6 @@ class TestSyncParams:
         ],
     )
     def test_pss_params_structure(self, scs, kws):
-        ofdm = _get_ofdm()
         params = ofdm.pss_params(sample_rate=FS, subcarrier_spacing=scs, **kws)
         phy = phy_5g(scs)
         slot_duration = 1e-3 * 15e3 / scs
@@ -581,7 +564,6 @@ class TestSyncParams:
         assert params.lag_count == 3 * params.short_symbol_size
 
     def test_sss_params_follow_pss_by_two_symbols(self):
-        ofdm = _get_ofdm()
         pss = sync_params()
         sss = ofdm.sss_params(
             sample_rate=FS, subcarrier_spacing=30e3, shared_spectrum=True
@@ -603,7 +585,6 @@ class TestSyncParams:
         assert explicit.symbol_indexes == [4, 10]
 
     def test_argument_errors(self):
-        ofdm = _get_ofdm()
         with pytest.raises(ValueError, match='multiple of 15000'):
             ofdm.pss_params(sample_rate=FS, subcarrier_spacing=20e3)
         with pytest.raises(ValueError, match='sample_rate must be a multiple'):
@@ -624,23 +605,14 @@ class TestGet5gSsbIq:
         return np.stack([s * x for s in scales]).astype(dtype)
 
     def _ssb_iq(self, iq, **kws):
-        ofdm = _get_ofdm()
-        kws.setdefault('discovery_periodicity', 20e-3)
-        kws.setdefault('fs_out', FS)
-        kws.setdefault('fs_in', self.FS_IN)
-        kws.setdefault('subcarrier_spacing', 30e3)
-        return ofdm.get_5g_ssb_iq(iq, **kws)
+        return get_ssb_iq(iq, fs_in=self.FS_IN, **kws)
 
     @given(
         oaresample=st.booleans(),
         f0_bins=st.integers(-8, 8),
         offset_bins=st.sampled_from([0, 3, -3]),
     )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
-        deadline=None,
-        max_examples=20,
-    )
+    @settings(max_examples=20)
     def test_recenters_and_downsamples(self, oaresample, f0_bins, offset_bins):
         """a tone at frequency_offset + f0 in the capture comes out at f0"""
         # the overlap-add path needs the offset on the grid fs_in/(3 * up)
@@ -684,32 +656,16 @@ class TestGet5gSsbIq:
 class TestCorrelateSyncSequence:
     """a PSS symbol embedded in an otherwise silent synchronization block"""
 
-    def _setup(self):
-        ofdm = _get_ofdm()
-        params = sync_params()
-        phy = phy_5g(30e3)
-        pss = ofdm.pss_5g_nr(FS, 30e3)
-        bodies = pss[:, int(phy.cp_sizes.min()) :]
-        return ofdm, params, phy, pss, bodies
-
-    def _silent_block(self, params, n_blocks=1, ports=1):
-        size = params.frame_size * params.frames_per_sync * n_blocks
-        return np.zeros((ports, size), dtype=np.complex64)
-
     @given(
         n_id2=st.integers(0, 2),
         beam=st.integers(0, 19),
         delay=st.integers(0, 1000),
         scale=st.sampled_from([0.5, 1.0, 3.0]),
     )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
-        deadline=None,
-        max_examples=25,
-    )
+    @settings(max_examples=25)
     def test_peak_locates_cell_beam_and_delay(self, n_id2, beam, delay, scale):
-        ofdm, params, phy, pss, bodies = self._setup()
-        iq = self._silent_block(params)
+        params, phy, pss, bodies = pss_setup()
+        iq = silent_block(params)
         embed_symbol(
             iq, phy, bodies[n_id2], params.symbol_indexes[beam], delay, scale=scale
         )
@@ -724,8 +680,8 @@ class TestCorrelateSyncSequence:
         assert mag.max() == pytest.approx(scale * energy, rel=1e-3)
 
     def test_sync_block_index(self):
-        ofdm, params, phy, pss, bodies = self._setup()
-        iq = self._silent_block(params, n_blocks=3)
+        params, phy, pss, bodies = pss_setup()
+        iq = silent_block(params, n_blocks=3)
         block_size = params.frame_size * params.frames_per_sync
         start = embed_symbol(
             iq[:, 2 * block_size :], phy, bodies[0], params.symbol_indexes[4], 7
@@ -738,8 +694,8 @@ class TestCorrelateSyncSequence:
         assert np.unravel_index(mag.argmax(), mag.shape) == (0, 0, 2, 4, 7)
 
     def test_multiple_ports(self):
-        ofdm, params, phy, pss, bodies = self._setup()
-        iq = self._silent_block(params, ports=2)
+        params, phy, pss, bodies = pss_setup()
+        iq = silent_block(params, ports=2)
         embed_symbol(iq, phy, bodies[1], params.symbol_indexes[2], 11, port=0)
         embed_symbol(iq, phy, bodies[2], params.symbol_indexes[6], 23, port=1)
 
@@ -750,48 +706,39 @@ class TestCorrelateSyncSequence:
             assert np.unravel_index(mag.argmax(), mag.shape) == expected
 
     def test_mixed_excess_cp_rejected(self):
-        ofdm, params, _, pss, _ = self._setup()
+        params, _, pss, _ = pss_setup()
         bad = dataclasses.replace(
             params, cp_offsets=[0] + [4] * 13, symbol_indexes=[0, 2]
         )
         with pytest.raises(ValueError, match='same excess CP'):
-            ofdm.correlate_sync_sequence(self._silent_block(params), pss, params=bad)
+            ofdm.correlate_sync_sequence(silent_block(params), pss, params=bad)
 
 
 class TestChooseSsbOffset:
     def _correlate(self, delays, scales=None, beam=3, n_id2=1):
-        ofdm = _get_ofdm()
-        params = sync_params()
-        phy = phy_5g(30e3)
-        pss = ofdm.pss_5g_nr(FS, 30e3)
-        body = pss[n_id2, int(phy.cp_sizes.min()) :]
+        params, phy, pss, bodies = pss_setup()
         scales = scales or [1.0] * len(delays)
 
-        size = params.frame_size * params.frames_per_sync
-        iq = np.zeros((len(delays), size), dtype=np.complex64)
+        iq = silent_block(params, ports=len(delays))
         for port, (delay, scale) in enumerate(zip(delays, scales)):
             embed_symbol(
                 iq,
                 phy,
-                body,
+                bodies[n_id2],
                 params.symbol_indexes[beam],
                 delay,
                 port=port,
                 scale=scale,
             )
-        return ofdm, params, ofdm.correlate_sync_sequence(iq, pss, params=params)
+        return params, ofdm.correlate_sync_sequence(iq, pss, params=params)
 
     @given(
         delay=st.integers(0, 1000),
         window_fill=st.sampled_from([1, Fraction(1, 2), Fraction(3, 4), 0.9, 0.25]),
     )
-    @settings(
-        suppress_health_check=[HealthCheck.function_scoped_fixture],
-        deadline=None,
-        max_examples=20,
-    )
+    @settings(max_examples=20)
     def test_recovers_the_delay(self, delay, window_fill):
-        ofdm, params, R = self._correlate([delay])
+        params, R = self._correlate([delay])
         # the last fine lag is a known failure (test_last_fine_lag_wraps)
         assume(delay % params.short_symbol_size != params.short_symbol_size - 1)
         offset = ofdm.choose_ssb_offset(R, params, window_fill=window_fill)
@@ -809,24 +756,24 @@ class TestChooseSsbOffset:
     )
     def test_last_fine_lag_wraps(self):
         delay = 3 * sync_params().short_symbol_size - 1
-        ofdm, params, R = self._correlate([delay])
+        params, R = self._correlate([delay])
         assert ofdm.choose_ssb_offset(R, params)[0] == delay
 
     def test_weighted_detect_shape(self):
-        ofdm, params, R = self._correlate([300])
+        params, R = self._correlate([300])
         weights = ofdm.weighted_ssb_detect(R, params)
         assert weights.shape == (1, params.max_lag_symbols, params.short_symbol_size)
         symbol, sample = np.unravel_index(weights[0].argmax(), weights[0].shape)
         assert symbol * params.short_symbol_size + sample == 300
 
     def test_per_port(self):
-        ofdm, params, R = self._correlate([40, 700], scales=[1.0, 3.0])
+        params, R = self._correlate([40, 700], scales=[1.0, 3.0])
         assert_array_equal(ofdm.choose_ssb_offset(R, params, per_port=True), [40, 700])
         # the ports are averaged in power, so the stronger one decides
         assert_array_equal(ofdm.choose_ssb_offset(R, params, per_port=False), [700])
 
     def test_max_beams(self):
-        ofdm, params, R = self._correlate([55], beam=3)
+        params, R = self._correlate([55], beam=3)
         assert ofdm.choose_ssb_offset(R, params, max_beams=4)[0] == 55
         assert (
             ofdm.choose_ssb_offset(R, params, max_beams=len(params.symbol_indexes) + 5)[
@@ -836,40 +783,22 @@ class TestChooseSsbOffset:
         )
 
     def test_rejects_low_dimensional_input(self):
-        ofdm, params, R = self._correlate([0])
+        params, R = self._correlate([0])
         with pytest.raises(TypeError, match='5 dimensions'):
             ofdm.weighted_ssb_detect(R[0, 0], params)
 
     def test_from_capture_rate_waveform(self):
         """the measurement path: capture at 15.36 MS/s, resample to 7.68 MS/s, detect"""
-        ofdm = _get_ofdm()
         fs_in = 15.36e6
-        params = sync_params()
-        phy_in = phy_5g(30e3, fs_in)
-        pss_in = ofdm.pss_5g_nr(fs_in, 30e3)
+        params, _, pss, _ = pss_setup()
+        _, phy_in, _, bodies_in = pss_setup(fs_in)
         delay_in = 2 * 123
 
-        iq = np.zeros(
-            (1, params.frame_size * params.frames_per_sync * 2), dtype=np.complex64
-        )
-        embed_symbol(
-            iq,
-            phy_in,
-            pss_in[2, int(phy_in.cp_sizes.min()) :],
-            params.symbol_indexes[5],
-            delay_in,
-        )
+        iq = silent_block(params, n_blocks=2)
+        embed_symbol(iq, phy_in, bodies_in[2], params.symbol_indexes[5], delay_in)
 
-        ssb_iq = ofdm.get_5g_ssb_iq(
-            iq,
-            discovery_periodicity=20e-3,
-            fs_out=FS,
-            fs_in=fs_in,
-            subcarrier_spacing=30e3,
-        )
-        R = ofdm.correlate_sync_sequence(
-            ssb_iq, ofdm.pss_5g_nr(FS, 30e3), params=params
-        )
+        ssb_iq = get_ssb_iq(iq, fs_in=fs_in)
+        R = ofdm.correlate_sync_sequence(ssb_iq, pss, params=params)
         mag = np.abs(R[0])
         n_id2, _, beam, lag = np.unravel_index(mag.argmax(), mag.shape)
         assert (n_id2, beam) == (2, 5)
@@ -889,7 +818,6 @@ class TestCupy:
 
     def test_corr_at_indices(self, cupy_available):
         cp = cupy_available
-        ofdm = _get_ofdm()
         ref = phy_5g(30e3)
         phy = phy_5g(30e3, xp=cp)
         x = ofdm_slots(ref, 4)
@@ -907,7 +835,6 @@ class TestCupy:
 
     def test_sync_sequences(self, cupy_available):
         cp = cupy_available
-        ofdm = _get_ofdm()
         pss = ofdm.pss_5g_nr(FS, 30e3, xp=cp)
         assert isinstance(pss, cp.ndarray)
         assert_allclose(to_numpy(pss), ofdm.pss_5g_nr(FS, 30e3), atol=1e-6)
@@ -916,31 +843,12 @@ class TestCupy:
 
     def test_detection_pipeline(self, cupy_available):
         cp = cupy_available
-        ofdm = _get_ofdm()
-        params = sync_params()
-        phy = phy_5g(30e3)
-        pss = ofdm.pss_5g_nr(FS, 30e3)
-        iq = np.zeros(
-            (1, params.frame_size * params.frames_per_sync), dtype=np.complex64
-        )
-        embed_symbol(
-            iq, phy, pss[1, int(phy.cp_sizes.min()) :], params.symbol_indexes[3], 77
-        )
+        params, phy, pss, bodies = pss_setup()
+        iq = silent_block(params)
+        embed_symbol(iq, phy, bodies[1], params.symbol_indexes[3], 77)
 
-        ssb_np = ofdm.get_5g_ssb_iq(
-            iq,
-            discovery_periodicity=20e-3,
-            fs_out=FS,
-            fs_in=FS,
-            subcarrier_spacing=30e3,
-        )
-        ssb_cp = ofdm.get_5g_ssb_iq(
-            cp.asarray(iq),
-            discovery_periodicity=20e-3,
-            fs_out=FS,
-            fs_in=FS,
-            subcarrier_spacing=30e3,
-        )
+        ssb_np = get_ssb_iq(iq)
+        ssb_cp = get_ssb_iq(cp.asarray(iq))
         assert_allclose(to_numpy(ssb_cp), ssb_np, atol=1e-5)
 
         R_np = ofdm.correlate_sync_sequence(ssb_np, pss, params=params)

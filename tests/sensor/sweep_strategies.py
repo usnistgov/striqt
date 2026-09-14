@@ -8,14 +8,10 @@ from __future__ import annotations
 
 import math
 
-from hypothesis import HealthCheck, settings
 from hypothesis import strategies as st
 
 import striqt.sensor as ss
 
-PROPERTY = settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-)
 SOURCE = ss.specs.FunctionSource(master_clock_rate=125e6, num_rx_ports=2)
 CaptureCls = ss.bindings.single_tone.schema.capture
 SweepCls = ss.bindings.single_tone.sensor.sweep_spec_cls

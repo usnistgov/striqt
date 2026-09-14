@@ -1,17 +1,24 @@
 """Tests for the JIT kernels in striqt.waveform.lib.jit.
 
 The numba `_corr_at_indices` kernels (CPU and CUDA) are checked against a numpy
-reference and against each other, and the `cupy.fuse` kernels in `jit.cuda` are checked
-against the numexpr path of `striqt.waveform.lib.power_analysis` on the same data. The
-CUDA tests skip when cupy is not available.
+reference, and the `cupy.fuse` kernels in `jit.cuda` are checked against the numexpr
+path of `striqt.waveform.lib.power_analysis` on the same data. The CUDA tests skip when
+cupy is not available.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from conftest import dB_arrays, envelope_arrays, iq_waveforms, positive_power_arrays
-from hypothesis import HealthCheck, given, settings
+from conftest import (
+    dB_arrays,
+    envelope_arrays,
+    gaussian_iq,
+    iq_waveforms,
+    positive_power_arrays,
+    to_numpy,
+)
+from hypothesis import given
 from hypothesis import strategies as st
 from numpy.testing import assert_allclose
 from test_power_analysis import (
@@ -22,24 +29,17 @@ from test_power_analysis import (
     unit_roundoff,
 )
 
+from striqt.waveform import ofdm
 from striqt.waveform.lib import power_analysis
 from striqt.waveform.lib.arrays import float_dtype_like
-
-PROPERTY = settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-)
 
 # thread block sizing from ofdm.corr_at_indices
 THREADS_PER_BLOCK = 32
 
-
-@pytest.fixture
-def cupy_available():
-    from conftest import _cupy
-
-    if _cupy is None:
-        pytest.skip('cupy is not available')
-    return _cupy
+# real and complex float32 envelopes within the range measured for the fused kernels
+COMPLEX_ENVELOPES = envelope_arrays(
+    min_magnitude=1e-4, max_magnitude=1e4, dtype=np.float32, min_dims=1, max_dims=1
+)
 
 
 def corr_reference(inds, x, nfft, ncp, norm):
@@ -125,115 +125,57 @@ def corr_cases(min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False):
     return _case()
 
 
-class TestCorrAtIndicesCpu:
-    """The numba CPU kernel against the numpy reference."""
+def assert_matches_reference(out, inds, x, nfft, ncp, norm):
+    expected = corr_reference(inds, x, nfft, ncp, norm)
+    assert_allclose(to_numpy(out), expected, rtol=0, atol=corr_atol(x, inds.size, norm))
 
-    @PROPERTY
+
+class TestCorrAtIndicesKernels:
+    """The numba kernels called directly, against the numpy reference."""
+
     @given(case=corr_cases())
-    def test_matches_reference(self, case):
+    def test_cpu(self, case):
         from striqt.waveform.lib.jit.cpu import _corr_at_indices
 
         inds, x, nfft, ncp, norm = case
         out = np.empty(nfft + ncp, dtype=x.dtype)
         _corr_at_indices(inds, x, nfft, ncp, norm, out)
+        assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
-        expected = corr_reference(inds, x, nfft, ncp, norm)
-        assert_allclose(out, expected, rtol=0, atol=corr_atol(x, inds.size, norm))
-
-    @PROPERTY
-    @given(case=corr_cases(ncp_from_inds=True))
-    def test_dispatcher_numpy(self, case):
-        """ofdm.corr_at_indices selects the CPU kernel and sizes `out` from `inds`."""
-        from striqt.waveform import ofdm
-
-        inds, x, nfft, ncp, norm = case
-        inds_2d = inds[np.newaxis, :]
-
-        out = ofdm.corr_at_indices(inds_2d, x, nfft, norm=norm)
-        assert out.shape == (nfft + ncp,)
-        assert out.dtype == x.dtype
-
-        expected = corr_reference(inds, x, nfft, ncp, norm)
-        assert_allclose(out, expected, rtol=0, atol=corr_atol(x, inds.size, norm))
-
-    def test_dispatcher_reuses_out(self):
-        from striqt.waveform import ofdm
-
-        rng = np.random.default_rng(0)
-        x = (rng.normal(size=512) + 1j * rng.normal(size=512)).astype(np.complex64)
-        inds = np.arange(4)[np.newaxis, :]
-        out = np.empty(64 + 4, dtype=np.complex64)
-
-        ret = ofdm.corr_at_indices(inds, x, 64, out=out)
-        assert ret is out
-
-
-class TestCorrAtIndicesCuda:
-    """The numba CUDA kernel against the CPU kernel and the numpy reference."""
-
-    @staticmethod
-    def _run_cuda(cp, inds, x, nfft, ncp, norm):
+    @given(case=corr_cases())
+    def test_cuda(self, cupy_available, case):
         from striqt.waveform.lib.jit.cuda import _corr_at_indices
 
+        cp = cupy_available
+        inds, x, nfft, ncp, norm = case
         x_cp = cp.asarray(x)
-        inds_cp = cp.asarray(inds)
         out = cp.empty(nfft + ncp, dtype=x.dtype)
         bpg = max((x_cp.size + THREADS_PER_BLOCK - 1) // THREADS_PER_BLOCK, 1)
-        _corr_at_indices[bpg, THREADS_PER_BLOCK](inds_cp, x_cp, nfft, ncp, norm, out)
-        cp.cuda.Device().synchronize()
-        return out.get()
-
-    @PROPERTY
-    @given(case=corr_cases())
-    def test_matches_cpu_kernel(self, cupy_available, case):
-        from striqt.waveform.lib.jit.cpu import _corr_at_indices
-
-        inds, x, nfft, ncp, norm = case
-        out_cpu = np.empty(nfft + ncp, dtype=x.dtype)
-        _corr_at_indices(inds, x, nfft, ncp, norm, out_cpu)
-
-        out_cuda = self._run_cuda(cupy_available, inds, x, nfft, ncp, norm)
-
-        assert_allclose(
-            out_cuda, out_cpu, rtol=0, atol=corr_atol(x, inds.size, norm, n_impl=2)
+        _corr_at_indices[bpg, THREADS_PER_BLOCK](
+            cp.asarray(inds), x_cp, nfft, ncp, norm, out
         )
+        cp.cuda.Device().synchronize()
+        assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
-    @PROPERTY
-    @given(case=corr_cases())
-    def test_matches_reference(self, cupy_available, case):
-        inds, x, nfft, ncp, norm = case
-        out = self._run_cuda(cupy_available, inds, x, nfft, ncp, norm)
-        expected = corr_reference(inds, x, nfft, ncp, norm)
-        assert_allclose(out, expected, rtol=0, atol=corr_atol(x, inds.size, norm))
 
-    @PROPERTY
+class TestCorrAtIndicesDispatcher:
+    """ofdm.corr_at_indices selects the kernel for the array namespace."""
+
     @given(case=corr_cases(ncp_from_inds=True))
-    def test_dispatcher_cupy(self, cupy_available, case):
-        """ofdm.corr_at_indices on cupy input selects the CUDA kernel."""
-        from striqt.waveform import ofdm
-
-        cp = cupy_available
+    def test_sizes_out_from_inds(self, xp, case):
         inds, x, nfft, ncp, norm = case
         inds_2d = inds[np.newaxis, :]
 
-        out = ofdm.corr_at_indices(cp.asarray(inds_2d), cp.asarray(x), nfft, norm=norm)
-        cp.cuda.Device().synchronize()
-        assert isinstance(out, cp.ndarray)
+        out = ofdm.corr_at_indices(xp.asarray(inds_2d), xp.asarray(x), nfft, norm=norm)
+        assert isinstance(out, xp.ndarray)
         assert out.shape == (nfft + ncp,)
+        assert out.dtype == x.dtype
+        assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
-        expected = corr_reference(inds, x, nfft, ncp, norm)
-        assert_allclose(out.get(), expected, rtol=0, atol=corr_atol(x, inds.size, norm))
-
-    def test_dispatcher_reuses_out(self, cupy_available):
-        from striqt.waveform import ofdm
-
-        cp = cupy_available
-        rng = np.random.default_rng(0)
-        x = cp.asarray(
-            (rng.normal(size=512) + 1j * rng.normal(size=512)).astype(np.complex64)
-        )
-        inds = cp.arange(4)[cp.newaxis, :]
-        out = cp.empty(64 + 4, dtype=np.complex64)
+    def test_reuses_out(self, xp):
+        x = xp.asarray(gaussian_iq(512))
+        inds = xp.arange(4)[xp.newaxis, :]
+        out = xp.empty(64 + 4, dtype=np.complex64)
 
         ret = ofdm.corr_at_indices(inds, x, 64, out=out)
         assert ret is out
@@ -268,13 +210,12 @@ class TestFusedKernelsCuda:
         cp.cuda.Device().synchronize()
         return ret.get()
 
-    @PROPERTY
-    @given(data=st.data(), dtype=st.sampled_from([np.float32, np.float64]))
     @pytest.mark.parametrize(
         'name,func,kws,takes_eps',
         FUSED_LOG_KERNELS,
         ids=[k[0] for k in FUSED_LOG_KERNELS],
     )
+    @given(data=st.data(), dtype=st.sampled_from([np.float32, np.float64]))
     def test_log_kernels(self, cupy_available, data, dtype, name, func, kws, takes_eps):
         scale = 10 if name.startswith('powtodB') else 20
         lim = {np.float64: 1e6, np.float32: 1e4}[dtype]
@@ -291,17 +232,7 @@ class TestFusedKernelsCuda:
         rtol, atol = log_conversion_tol(dtype, scale, n_impl=2)
         assert_allclose(result, expected, rtol=rtol, atol=atol)
 
-    @PROPERTY
-    @given(
-        env=envelope_arrays(
-            include_complex=True,
-            min_magnitude=1e-4,
-            max_magnitude=1e4,
-            dtype=np.float32,
-            min_dims=1,
-            max_dims=1,
-        )
-    )
+    @given(env=COMPLEX_ENVELOPES)
     def test_envtodB_complex(self, cupy_available, env):
         expected = power_analysis.envtodB(env)
         result = self._run(cupy_available, 'envtodB', env)
@@ -310,17 +241,7 @@ class TestFusedKernelsCuda:
         )
         assert_allclose(result, np.real(expected), rtol=rtol, atol=atol)
 
-    @PROPERTY
-    @given(
-        env=envelope_arrays(
-            include_complex=True,
-            min_magnitude=1e-4,
-            max_magnitude=1e4,
-            dtype=np.float32,
-            min_dims=1,
-            max_dims=1,
-        )
-    )
+    @given(env=COMPLEX_ENVELOPES)
     def test_envtopow(self, cupy_available, env):
         expected = power_analysis.envtopow(env)
         result = self._run(cupy_available, 'envtopow', env)
@@ -329,7 +250,6 @@ class TestFusedKernelsCuda:
         )
         assert_allclose(result, expected, rtol=rtol)
 
-    @PROPERTY
     @given(data=st.data(), dtype=st.sampled_from([np.float32, np.float64]))
     def test_dBtopow(self, cupy_available, data, dtype):
         lim = {np.float64: 100, np.float32: 30}[dtype]

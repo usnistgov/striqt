@@ -2,16 +2,27 @@
 
 from __future__ import annotations
 
+import importlib.util
 import warnings
 from collections import UserDict
 from pathlib import Path
 from threading import Lock
-from typing import Any, List, Tuple
 
 import numpy as np
 import pytest
+from hypothesis import HealthCheck, settings
+from hypothesis import strategies as st
+from hypothesis.extra.numpy import array_shapes, arrays
 
 np.seterr(divide='ignore')
+
+# every property test in the suite runs under these settings: the array fixtures
+# below are function scoped, and JIT compilation and GPU transfers make the
+# per-example deadline meaningless
+settings.register_profile(
+    'striqt', suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+)
+settings.load_profile('striqt')
 
 
 class _MemoryShelf(UserDict):
@@ -41,14 +52,12 @@ def isolated_persistent_cache():
 
 
 # ---------------------------------------------------------------------------
-# Array namespace fixtures for numerical testing (numpy, cupy, dask)
+# Array namespaces (numpy, cupy, dask)
 # ---------------------------------------------------------------------------
 
 
 def _get_cupy():
-    """Try to import cupy, return None if unavailable."""
-    import importlib.util
-
+    """the cupy module when a CUDA device is available, otherwise None"""
     # importing pandas and scipy here would reify striqt's lazy imports even
     # when cupy is absent, which is what tests/test_imports.py guards against
     if importlib.util.find_spec('cupy') is None:
@@ -60,7 +69,6 @@ def _get_cupy():
         import pandas
         import scipy
 
-        # Verify CUDA is actually available
         cp.cuda.runtime.getDeviceCount()
         return cp
     except (
@@ -68,24 +76,6 @@ def _get_cupy():
         cp.cuda.runtime.CUDARuntimeError if 'cp' in dir() else Exception,
     ):
         return None
-
-
-def _dask_available():
-    """Check if dask.array is available without importing it."""
-    try:
-        import importlib.util
-
-        # Only check for 'dask' top-level to avoid importing dask itself
-        return importlib.util.find_spec('dask') is not None
-    except (ImportError, ModuleNotFoundError):
-        return False
-
-
-def _get_dask_array():
-    """Import dask.array lazily."""
-    import dask.array as da
-
-    return da
 
 
 _cupy = _get_cupy()
@@ -96,8 +86,8 @@ if _cupy is None:
         stacklevel=1,
     )
 
-# Check dask availability without importing (to avoid reifying scipy)
-_dask_is_available = _dask_available()
+# checked without importing, which would reify scipy
+_dask_is_available = importlib.util.find_spec('dask') is not None
 if not _dask_is_available:
     warnings.warn(
         'dask.array is not available; dask tests will be skipped',
@@ -105,12 +95,33 @@ if not _dask_is_available:
         stacklevel=1,
     )
 
+NAMESPACES = ['numpy']
+if _cupy is not None:
+    NAMESPACES.append('cupy')
+if _dask_is_available:
+    NAMESPACES.append('dask')
+
+
+@pytest.fixture
+def cupy_available():
+    """the cupy module, skipping the test when no CUDA device is available"""
+    if _cupy is None:
+        pytest.skip('cupy is not available')
+    return _cupy
+
+
+@pytest.fixture(params=['numpy', 'cupy'])
+def xp(request):
+    """each array namespace in turn; the cupy case skips without a CUDA device"""
+    if request.param == 'cupy':
+        if _cupy is None:
+            pytest.skip('cupy is not available')
+        return _cupy
+    return np
+
 
 def to_numpy(arr):
-    """Convert array from any namespace to numpy for comparison.
-
-    Handles numpy, cupy, and dask arrays.
-    """
+    """a numpy copy of a numpy, cupy or dask array"""
     if hasattr(arr, 'get'):  # cupy
         return arr.get()
     elif hasattr(arr, 'compute'):  # dask
@@ -118,130 +129,89 @@ def to_numpy(arr):
     return np.asarray(arr)
 
 
+def convert_array(arr: np.ndarray, xp_name: str, chunks='auto'):
+    """`arr` converted into the array namespace named by `xp_name`"""
+    if xp_name == 'cupy':
+        return _cupy.asarray(arr)
+    elif xp_name == 'dask':
+        import dask.array as da
+
+        return da.from_array(arr, chunks=chunks)
+    return arr
+
+
+def numpy_and_cupy(cp, func, *args, **kws):
+    """`func` evaluated on numpy arguments and again on their cupy copies.
+
+    Returns the two results as numpy arrays for comparison.
+    """
+    result_np = func(*args, **kws)
+    cp_args = [cp.asarray(a) if isinstance(a, np.ndarray) else a for a in args]
+    return result_np, to_numpy(func(*cp_args, **kws))
+
+
 # ---------------------------------------------------------------------------
 # Hypothesis strategies for array-based property testing
 # ---------------------------------------------------------------------------
 
 
-def _get_hypothesis_extras():
-    """Lazily import hypothesis extras to avoid import overhead."""
-    from hypothesis import strategies as st
-    from hypothesis.extra.numpy import array_shapes, arrays
-
-    return st, arrays, array_shapes
-
-
-def positive_power_arrays(
-    min_value: float = 1e-15,
-    max_value: float = 1e15,
-    dtype=None,
-    min_size: int = 1,
-    max_size: int = 100,
-    min_dims: int = 1,
-    max_dims: int = 2,
-):
-    """Strategy for positive power values (valid for log operations).
-
-    Specification:
-        - All values > 0 (required for log10)
-        - Range spans typical RF power measurements (-150 to +150 dBm)
-        - Supports float32 and float64 dtypes
-    """
-    st, arrays, array_shapes = _get_hypothesis_extras()
-
+def _float_dtypes(dtype):
     if dtype is None:
-        dtype_strategy = st.sampled_from([np.float32, np.float64])
-    else:
-        dtype_strategy = st.just(dtype)
-
-    @st.composite
-    def _positive_power(draw):
-        dt = draw(dtype_strategy)
-        float_width = 32 if dt == np.float32 else 64
-        # Clamp min/max to representable range for the dtype
-        actual_min = float(dt(min_value))
-        actual_max = float(dt(max_value))
-        shape = draw(
-            array_shapes(
-                min_dims=min_dims,
-                max_dims=max_dims,
-                min_side=min_size,
-                max_side=max_size,
-            )
-        )
-        return draw(
-            arrays(
-                dtype=dt,
-                shape=shape,
-                elements=st.floats(
-                    min_value=actual_min,
-                    max_value=actual_max,
-                    allow_nan=False,
-                    allow_infinity=False,
-                    width=float_width,
-                ),
-            )
-        )
-
-    return _positive_power()
+        return st.sampled_from([np.float32, np.float64])
+    return st.just(dtype)
 
 
-def dB_arrays(
-    min_value: float = -150.0,
-    max_value: float = 150.0,
-    dtype=None,
-    min_size: int = 1,
-    max_size: int = 100,
-    min_dims: int = 1,
-    max_dims: int = 2,
-):
-    """Strategy for dB values in typical measurement range.
-
-    Specification:
-        - Range: -150 to +150 dB (covers most RF applications)
-        - No NaN or infinity
-        - Supports float32 and float64 dtypes
-    """
-    st, arrays, array_shapes = _get_hypothesis_extras()
-
-    if dtype is None:
-        dtype_strategy = st.sampled_from([np.float32, np.float64])
-    else:
-        dtype_strategy = st.just(dtype)
-
-    @st.composite
-    def _dB(draw):
-        dt = draw(dtype_strategy)
-        float_width = 32 if dt == np.float32 else 64
-        # Clamp min/max to representable range for the dtype
-        actual_min = float(dt(min_value))
-        actual_max = float(dt(max_value))
-        shape = draw(
-            array_shapes(
-                min_dims=min_dims,
-                max_dims=max_dims,
-                min_side=min_size,
-                max_side=max_size,
-            )
-        )
-
-        elements = st.floats(
-            min_value=actual_min,
-            max_value=actual_max,
+def float_arrays(shape, dtype=np.float64, min_value=-10.0, max_value=10.0):
+    """finite values of `dtype` in [min_value, max_value] (rounded to the dtype)"""
+    dtype = np.dtype(dtype)
+    return arrays(
+        dtype=dtype,
+        shape=shape,
+        elements=st.floats(
+            min_value=float(dtype.type(min_value)),
+            max_value=float(dtype.type(max_value)),
             allow_nan=False,
             allow_infinity=False,
-            width=float_width,
-        )
+            width=dtype.itemsize * 8,
+        ),
+    )
 
-        return draw(
-            arrays(
-                dtype=dt,
-                shape=shape,
-                elements=elements,
+
+def bounded_float_arrays(
+    min_value: float,
+    max_value: float,
+    dtype=None,
+    min_size: int = 1,
+    max_size: int = 100,
+    min_dims: int = 1,
+    max_dims: int = 2,
+):
+    """float32 or float64 arrays (or `dtype`) with values in [min_value, max_value]"""
+
+    @st.composite
+    def _bounded(draw):
+        dt = draw(_float_dtypes(dtype))
+        shape = draw(
+            array_shapes(
+                min_dims=min_dims,
+                max_dims=max_dims,
+                min_side=min_size,
+                max_side=max_size,
             )
         )
+        return draw(float_arrays(shape, dt, min_value, max_value))
 
-    return _dB()
+    return _bounded()
+
+
+def positive_power_arrays(min_value: float = 1e-15, max_value: float = 1e15, **kws):
+    """positive power values spanning typical RF measurements (-150 to +150 dBm)"""
+    return bounded_float_arrays(min_value, max_value, **kws)
+
+
+def dB_arrays(min_value: float = -150.0, max_value: float = 150.0, **kws):
+    """dB values in the typical measurement range"""
+    return bounded_float_arrays(min_value, max_value, **kws)
 
 
 def envelope_arrays(
@@ -254,29 +224,14 @@ def envelope_arrays(
     min_dims: int = 1,
     max_dims: int = 2,
 ):
-    """Strategy for envelope (amplitude) values, optionally complex.
+    """envelope (amplitude) values with magnitude in [min_magnitude, max_magnitude].
 
-    Specification:
-        - Magnitude > 0 (required for log10)
-        - Optionally includes complex values
-        - Complex values have controlled magnitude
+    With `include_complex`, half of the examples carry a uniformly drawn phase.
     """
-    st, arrays, array_shapes = _get_hypothesis_extras()
-
-    if dtype is None:
-        dtype_strategy = st.sampled_from([np.float32, np.float64])
-    else:
-        dtype_strategy = st.just(dtype)
 
     @st.composite
     def _envelope(draw):
-        dt = draw(dtype_strategy)
-        float_width = 32 if dt == np.float32 else 64
-        # Clamp min/max to representable range for the dtype
-        actual_min_mag = float(dt(min_magnitude))
-        actual_max_mag = float(dt(max_magnitude))
-        actual_min_phase = float(dt(-np.pi))
-        actual_max_phase = float(dt(np.pi))
+        dt = draw(_float_dtypes(dtype))
         shape = draw(
             array_shapes(
                 min_dims=min_dims,
@@ -285,50 +240,11 @@ def envelope_arrays(
                 max_side=max_size,
             )
         )
-
+        magnitudes = draw(float_arrays(shape, dt, min_magnitude, max_magnitude))
         if include_complex and draw(st.booleans()):
-            # Generate complex values with controlled magnitude
-            magnitudes = draw(
-                arrays(
-                    dtype=dt,
-                    shape=shape,
-                    elements=st.floats(
-                        min_value=actual_min_mag,
-                        max_value=actual_max_mag,
-                        allow_nan=False,
-                        allow_infinity=False,
-                        width=float_width,
-                    ),
-                )
-            )
-            phases = draw(
-                arrays(
-                    dtype=dt,
-                    shape=shape,
-                    elements=st.floats(
-                        min_value=actual_min_phase,
-                        max_value=actual_max_phase,
-                        allow_nan=False,
-                        allow_infinity=False,
-                        width=float_width,
-                    ),
-                )
-            )
+            phases = draw(float_arrays(shape, dt, -np.pi, np.pi))
             return magnitudes * np.exp(1j * phases)
-        else:
-            return draw(
-                arrays(
-                    dtype=dt,
-                    shape=shape,
-                    elements=st.floats(
-                        min_value=actual_min_mag,
-                        max_value=actual_max_mag,
-                        allow_nan=False,
-                        allow_infinity=False,
-                        width=float_width,
-                    ),
-                )
-            )
+        return magnitudes
 
     return _envelope()
 
@@ -342,12 +258,11 @@ def shaped_arrays(
     min_value: float = -10.0,
     max_value: float = 10.0,
 ):
-    """Strategy for (array, axis) pairs, with axis drawn from [-ndim, ndim).
+    """(array, axis) pairs, with axis drawn from [-ndim, ndim).
 
     Negative axes are drawn as often as positive ones so that axis-normalization
     branches are exercised.
     """
-    st, arrays, array_shapes = _get_hypothesis_extras()
 
     @st.composite
     def _shaped(draw):
@@ -359,18 +274,20 @@ def shaped_arrays(
                 max_side=max_side,
             )
         )
-        elements = st.floats(
-            min_value=min_value,
-            max_value=max_value,
-            allow_nan=False,
-            allow_infinity=False,
-            width=32 if np.dtype(dtype) == np.float32 else 64,
-        )
-        arr = draw(arrays(dtype=dtype, shape=shape, elements=elements))
+        arr = draw(float_arrays(shape, dtype, min_value, max_value))
         axis = draw(st.integers(min_value=-len(shape), max_value=len(shape) - 1))
         return arr, axis
 
     return _shaped()
+
+
+def gaussian_iq(shape, dtype=np.complex64, seed: int = 0):
+    """unit-variance gaussian noise from a fixed seed; complex unless `dtype` is real"""
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal(shape)
+    if np.dtype(dtype).kind == 'c':
+        x = x + 1j * rng.standard_normal(shape)
+    return x.astype(dtype)
 
 
 def iq_waveforms(
@@ -379,21 +296,25 @@ def iq_waveforms(
     multiple_of: int = 1,
     channels: int | None = None,
     dtype=None,
+    log_power: tuple[int, int] = (0, 0),
 ):
-    """Strategy for complex gaussian IQ waveforms.
+    """gaussian noise waveforms, complex unless `dtype` is a real float type.
 
-    Hypothesis draws the dtype, the sample count (a multiple of `multiple_of`),
-    and a seed; the samples come from a generator with that seed so that
-    examples are reproducible and shrink toward short waveforms.
+    Hypothesis draws the dtype, the sample count (a multiple of `multiple_of`), the
+    power in decades from the `log_power` range, and a seed; the samples come from a
+    generator with that seed so that examples are reproducible and shrink toward
+    short waveforms.
 
     Args:
         channels: None for a 1-D waveform, or the number of rows of a 2-D
             (channel, sample) array as the analysis measurements use
+        dtype: a dtype, a sequence of dtypes to draw from, or None for complex64
+            and complex128
     """
-    st, _, _ = _get_hypothesis_extras()
-
     if dtype is None:
-        dtype_strategy = st.sampled_from([np.complex64, np.complex128])
+        dtype = [np.complex64, np.complex128]
+    if isinstance(dtype, (list, tuple)):
+        dtype_strategy = st.sampled_from(dtype)
     else:
         dtype_strategy = st.just(dtype)
 
@@ -408,82 +329,21 @@ def iq_waveforms(
         )
         size = blocks * multiple_of
         shape = (size,) if channels is None else (channels, size)
-        rng = np.random.default_rng(draw(st.integers(min_value=0, max_value=2**16)))
-        iq = rng.normal(size=shape) + 1j * rng.normal(size=shape)
-        return iq.astype(dt)
+        seed = draw(st.integers(min_value=0, max_value=2**16))
+        scale = 10 ** (draw(st.integers(*log_power)) / 2)
+        return (scale * gaussian_iq(shape, dt, seed)).astype(dt, copy=False)
 
     return _iq()
 
 
-def available_namespaces() -> List[Tuple[str, Any]]:
-    """Return list of (name, module) for available array namespaces.
-
-    Note: dask is returned with a lazy loader to avoid importing scipy
-    during test collection.
-    """
-    namespaces = [('numpy', np)]
-    if _cupy is not None:
-        namespaces.append(('cupy', _cupy))
-    if _dask_is_available:
-        # Use lazy loading to avoid importing dask.array (which imports scipy)
-        # during test collection
-        namespaces.append(('dask', None))  # placeholder, loaded lazily
-    return namespaces
-
-
-def convert_array(arr: np.ndarray, xp, chunks: str | None = 'auto'):
-    """Convert numpy array to target namespace.
-
-    Args:
-        arr: Source numpy array
-        xp: Target array namespace (numpy, cupy, or dask.array), or None for dask
-        chunks: Chunk specification for dask arrays (default: 'auto')
-
-    Returns:
-        Array in target namespace
-    """
-    if xp is None:
-        # Lazy dask loading
-        xp = _get_dask_array()
-        return xp.from_array(arr, chunks=chunks)
-
-    xp_name = getattr(xp, '__name__', str(xp))
-
-    if 'cupy' in xp_name:
-        return xp.asarray(arr)
-    elif 'dask' in xp_name:
-        return xp.from_array(arr, chunks=chunks)
-    else:
-        return arr
-
-
 def for_each_namespace(base_strategy):
-    """Strategy that generates arrays across multiple backends.
-
-    Args:
-        base_strategy: Strategy yielding numpy arrays
-
-    Returns:
-        Strategy yielding (array, namespace_name, namespace_module) tuples.
-
-    Example:
-        @given(data=for_each_namespace(positive_power_arrays()))
-        def test_roundtrip(data):
-            arr, xp_name, xp = data
-            ...
-    """
-    st, _, _ = _get_hypothesis_extras()
+    """(array, namespace name) pairs of `base_strategy` examples, converted into each
+    available array namespace in turn"""
 
     @st.composite
     def _multi_backend(draw):
-        available = available_namespaces()
-        xp_name, xp = draw(st.sampled_from(available))
-        np_arr = draw(base_strategy)
-        # Handle lazy dask loading
-        if xp_name == 'dask' and xp is None:
-            xp = _get_dask_array()
-        arr = convert_array(np_arr, xp)
-        return arr, xp_name, xp
+        xp_name = draw(st.sampled_from(NAMESPACES))
+        return convert_array(draw(base_strategy), xp_name), xp_name
 
     return _multi_backend()
 

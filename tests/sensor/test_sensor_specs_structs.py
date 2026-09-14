@@ -14,7 +14,6 @@ from hypothesis import strategies as st
 from site_strategies import SiteCaptureCls, make_site_sweep
 from site_strategies import capture_dict as site_capture_dict
 from sweep_strategies import (
-    PROPERTY,
     SOURCE,
     CalSourceCls,
     CalSweepCls,
@@ -74,7 +73,6 @@ key_pairs = st.tuples(
 
 class TestSoapyCapture:
     @given(port_gain=consistent_port_gain())
-    @PROPERTY
     def test_consistent_port_gain_accepted(self, construct, port_gain):
         port, gain = port_gain
         capture = construct(SoapyCapture, port=port, gain=gain, **BASE)
@@ -82,7 +80,6 @@ class TestSoapyCapture:
         assert capture.gain == gain
 
     @given(port_gain=scalar_port_tuple_gain())
-    @PROPERTY
     def test_tuple_gain_with_scalar_port_rejected(self, port_gain):
         port, gain = port_gain
         raises_on_both_paths(
@@ -90,7 +87,6 @@ class TestSoapyCapture:
         )
 
     @given(port_gain=mismatched_port_gain())
-    @PROPERTY
     def test_gain_tuple_length_must_match_ports(self, port_gain):
         port, gain = port_gain
         raises_on_both_paths(
@@ -207,7 +203,6 @@ class TestSignalTrigger:
     @given(
         name=st.text(min_size=1).filter(lambda s: s not in sa.registry.signal_trigger)
     )
-    @PROPERTY
     def test_unregistered_name_rejected(self, name):
         raises_on_both_paths(
             SoapySource, ValueError, TRIGGER_MSG, signal_trigger=name, **MCR
@@ -282,7 +277,6 @@ class TestCaptureRemap:
         assert remap.lookup == {(1, 2): 5}
 
     @given(keys=st.lists(key_pairs, unique=True, max_size=6))
-    @PROPERTY
     def test_multi_key_roundtrip(self, construct, keys):
         lookup = {json.dumps(list(k)): i for i, k in enumerate(keys)}
         remap = construct(Remap, key=('a', 'b'), lookup=lookup)
@@ -320,14 +314,12 @@ class _ConflictingCapture(ss.specs.SingleToneCapture, frozen=True, kw_only=True)
 
 class TestSweepLoops:
     @given(loops=loop_sets())
-    @PROPERTY
     def test_valid_loop_sets_accepted(self, loops):
         sweep = make_sweep(captures=(make_capture(),), loops=loops)
         assert sweep.loops == loops
         assert SweepCls.from_dict(sweep.to_dict()) == sweep
 
     @given(loops=misplaced_repeat_loops())
-    @PROPERTY
     def test_repeat_must_be_first(self, loops):
         captures = (make_capture(),)
         with pytest.raises(msgspec.ValidationError, match=REPEAT_MSG):
@@ -340,7 +332,6 @@ class TestSweepLoops:
             make_sweep(loops=(Repeat(count=2), Repeat(count=3)))
 
     @given(loops_field=duplicate_field_loops())
-    @PROPERTY
     def test_duplicate_loop_field_rejected(self, loops_field):
         loops, field = loops_field
         match = f"{DUPLICATE_MSG} '{field}'"

@@ -30,7 +30,6 @@ from site_strategies import (
 from site_strategies import capture_dict as site_capture_dict
 from sweep_strategies import (
     LIST_LOOP_FIELDS,
-    PROPERTY,
     CaptureCls,
     capture_tuples,
     frequency_bin_range_loop,
@@ -95,14 +94,12 @@ def test_convert_capture_arg_downcasts_first_argument(cw_sweep):
 
 
 @given(port=port_scalars)
-@PROPERTY
 def test_split_scalar_port_is_identity(port):
     capture = make_capture(port=port)
     assert H.split_capture_ports(capture) == [capture]
 
 
 @given(spec=ports_and_lo())
-@PROPERTY
 def test_split_tuple_ports(spec):
     port, lo = spec
     capture = make_capture(port=port, external_lo_frequency=lo)
@@ -145,7 +142,6 @@ def test_pairwise_without_previous_capture():
 
 
 @given(port=port_tuples, offsets=st.tuples(st.floats(0, 1e3), st.floats(0, 1e3)))
-@PROPERTY
 def test_pairwise_pairs_by_index(port, offsets):
     c1 = make_capture(port=port, frequency_offset=offsets[0])
     c2 = make_capture(port=port, frequency_offset=offsets[1])
@@ -162,7 +158,6 @@ def test_pairwise_truncates_to_the_shorter_port_count():
 
 
 @given(x=scalars, size=st.one_of(st.none(), st.integers(min_value=0, max_value=5)))
-@PROPERTY
 def test_ensure_tuple_wraps_scalars(x, size):
     if size is None:
         assert H.ensure_tuple(x) == (x,)
@@ -174,7 +169,6 @@ def test_ensure_tuple_wraps_scalars(x, size):
     items=st.lists(scalars, min_size=1, max_size=4),
     size=st.integers(min_value=1, max_value=5),
 )
-@PROPERTY
 def test_ensure_tuple_broadcasts_only_singletons(items, size):
     t = tuple(items)
     assert H.ensure_tuple(t) is t
@@ -195,7 +189,6 @@ def test_ensure_tuple_size_zero():
     captures=capture_tuples(min_size=0, max_size=3),
     loop_ports=st.one_of(st.none(), st.lists(port_values, min_size=1, max_size=3)),
 )
-@PROPERTY
 def test_unique_ports_is_the_sorted_union(captures, loop_ports):
     expected = set()
     for c in captures:
@@ -209,7 +202,6 @@ def test_unique_ports_is_the_sorted_union(captures, loop_ports):
 
 
 @given(captures=capture_tuples())
-@PROPERTY
 def test_unique_ports_ignores_other_loops(captures):
     loops = (ss.specs.List(field='snr', values=(1.0, 2.0)),)
     assert H.get_unique_ports(captures, loops) == H.get_unique_ports(captures)
@@ -250,7 +242,6 @@ DESCRIBE_FIELDS = ('port', 'duration', 'sample_rate', 'frequency_offset', 'lo_sh
     fields=st.lists(st.sampled_from(DESCRIBE_FIELDS), min_size=1, unique=True),
     join=st.sampled_from((' | ', '; ')),
 )
-@PROPERTY
 def test_describe_capture_one_segment_per_field(captures, fields, join):
     text = H.describe_capture(captures[0], tuple(fields), source_id=None, join=join)
     parts = text.split(join)
@@ -284,7 +275,6 @@ def test_describe_capture_names_the_field_driven_by_a_key():
     captures=capture_tuples(min_size=1, max_size=6),
     min_size=st.integers(min_value=1, max_value=5),
 )
-@PROPERTY
 def test_concat_group_sizes_partition_the_captures(captures, min_size):
     sizes = H.concat_group_sizes(captures, min_size=min_size)
     assert sum(sizes) == len(captures)
@@ -300,7 +290,6 @@ def test_concat_group_sizes_empty():
     count=st.integers(min_value=1, max_value=12),
     min_size=st.integers(min_value=1, max_value=5),
 )
-@PROPERTY
 def test_concat_group_sizes_homogeneous(count, min_size):
     captures = (make_capture(),) * count
     expected = [min_size] * (count // min_size)
@@ -313,7 +302,6 @@ def test_concat_group_sizes_homogeneous(count, min_size):
     captures=capture_tuples(min_size=1, max_size=6),
     min_size=st.integers(min_value=1, max_value=4),
 )
-@PROPERTY
 def test_concat_group_sizes_ignore_subclass_fields(captures, min_size):
     base = tuple(c.replace(frequency_offset=0.0, snr=None) for c in captures)
     assert H.concat_group_sizes(captures, min_size=min_size) == H.concat_group_sizes(
@@ -354,7 +342,6 @@ def test_max_by_frequency_loop_replaces_the_field():
     gains=st.lists(st.floats(min_value=0, max_value=60), min_size=1, max_size=8),
     data=st.data(),
 )
-@PROPERTY
 def test_max_by_frequency_is_the_maximum(gains, data):
     frequencies = [data.draw(st.sampled_from((1e9, 2e9, 3e9))) for _ in gains]
     ports = [data.draw(st.integers(min_value=0, max_value=1)) for _ in gains]
@@ -379,7 +366,6 @@ def test_format_fields_are_extracted_in_order():
 
 
 @given(names=st.lists(st.from_regex(r'\A[a-z][a-z0-9_]{0,8}\Z'), max_size=5))
-@PROPERTY
 def test_format_fields_roundtrip(names):
     template = ''.join(f'{{{name}}}' for name in names)
     assert H.get_format_fields(template) == names
@@ -491,7 +477,6 @@ def test_formatter_fills_the_site_sink_template(
 
 
 @given(sweep=sweeps())
-@PROPERTY
 def test_loop_count_is_the_product_of_points_and_captures(sweep):
     result = H.loop_captures(sweep)
     assert isinstance(result, tuple)
@@ -525,7 +510,6 @@ def test_loop_order_is_declaration_order_with_captures_innermost():
         st.floats(min_value=0, max_value=1e5), min_size=1, max_size=4, unique=True
     )
 )
-@PROPERTY
 def test_string_loop_points_are_coerced_to_the_field_type(values):
     def sweep_with(points):
         loops = (ss.specs.List(field='frequency_offset', values=tuple(points)),)
@@ -538,13 +522,11 @@ def test_string_loop_points_are_coerced_to_the_field_type(values):
 
 
 @given(sweep=sweeps(), limit=st.integers(min_value=0, max_value=12))
-@PROPERTY
 def test_limit_is_a_prefix(sweep, limit):
     assert H.loop_captures(sweep, limit=limit) == H.loop_captures(sweep)[:limit]
 
 
 @given(sweep=sweeps(), data=st.data())
-@PROPERTY
 def test_only_fields_filters_capture_loops_but_keeps_analysis_loops(sweep, data):
     fields = tuple(data.draw(st.lists(st.sampled_from(LIST_LOOP_FIELDS), unique=True)))
     kept = tuple(l for l in sweep.loops if l.isin == 'analysis' or l.field in fields)
@@ -605,7 +587,6 @@ def test_analysis_loop_merges_with_the_captures_adjust_analysis():
         unique=True,
     )
 )
-@PROPERTY
 def test_loop_only_nyquist_keeps_bandwidths_within_the_sample_rate(bandwidths):
     captures = (make_capture(sample_rate=1e6, duration=1e-3),)
     loops = (ss.specs.List(field='analysis_bandwidth', values=tuple(bandwidths)),)
@@ -695,7 +676,6 @@ def test_tuple_port_fields_survive_looping():
         range_loop('frequency_offset'), frequency_bin_range_loop('frequency_offset')
     )
 )
-@PROPERTY
 def test_range_loops_follow_their_own_points(loop):
     result = H.loop_captures(make_sweep(captures=(make_capture(),), loops=(loop,)))
     assert [c.frequency_offset for c in result] == loop.get_points()
@@ -1031,7 +1011,6 @@ def test_list_capture_adjustments_empty(cw_sweep):
 
 
 @given(offsets=st.lists(st.sampled_from((100.0, 200.0, 300.0)), min_size=1, max_size=6))
-@PROPERTY
 def test_list_capture_adjustments_are_unique_in_first_seen_order(offsets):
     loops = (ss.specs.List(field='frequency_offset', values=tuple(offsets)),)
     sweep = make_sweep(captures=(make_capture(),), loops=loops, adjust_captures=ADJUST)
@@ -1057,7 +1036,6 @@ def test_adjust_analysis_is_identity_without_adjustments(cw_sweep):
 
 
 @given(fo=st.floats(min_value=-1e4, max_value=1e4))
-@PROPERTY
 def test_adjust_analysis_replaces_matching_fields_everywhere(cw_sweep, fo):
     analysis = cw_sweep.analysis
     adjusted = H.adjust_analysis(analysis, frozendict({'frequency_offset': fo}))

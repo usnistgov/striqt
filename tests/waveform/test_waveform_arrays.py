@@ -12,39 +12,13 @@ import itertools
 
 import numpy as np
 import pytest
-from conftest import _cupy, shaped_arrays, to_numpy
-from hypothesis import HealthCheck, assume, given, settings
+from conftest import _cupy, float_arrays, shaped_arrays, to_numpy
+from hypothesis import assume, given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import array_shapes
-from hypothesis.extra.numpy import arrays as np_arrays
 from numpy.testing import assert_allclose, assert_array_equal
 
 from striqt.waveform.lib import arrays
-
-PROPERTY = settings(
-    suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
-)
-
-
-@pytest.fixture
-def cupy_available():
-    if _cupy is None:
-        pytest.skip('cupy is not available')
-    return _cupy
-
-
-def float_arrays(shape, dtype=np.float64, min_value=-10.0, max_value=10.0):
-    return np_arrays(
-        dtype=dtype,
-        shape=shape,
-        elements=st.floats(
-            min_value=min_value,
-            max_value=max_value,
-            allow_nan=False,
-            allow_infinity=False,
-            width=np.dtype(dtype).itemsize * 8,
-        ),
-    )
 
 
 def mean_atol(x, count):
@@ -61,30 +35,13 @@ def reference_binned_mean(x, count, axis):
 
 
 class TestIsRoundMod:
-    """Properties: multiples of the divisor are detected, half-multiples are not."""
-
-    @PROPERTY
     @given(
         k=st.integers(min_value=-1000, max_value=1000),
         div=st.floats(min_value=1e-3, max_value=1e3, allow_nan=False),
     )
-    def test_integer_multiple_is_round(self, k, div):
+    def test_multiples_are_round_and_half_multiples_are_not(self, k, div):
         assert arrays.isroundmod(k * div, div)
-
-    @PROPERTY
-    @given(
-        k=st.integers(min_value=-1000, max_value=1000),
-        div=st.floats(min_value=1e-3, max_value=1e3, allow_nan=False),
-    )
-    def test_half_multiple_is_not_round(self, k, div):
         assert not arrays.isroundmod((k + 0.5) * div, div)
-
-    @PROPERTY
-    @given(
-        k=st.integers(min_value=-1000, max_value=1000),
-        div=st.floats(min_value=1e-3, max_value=1e3, allow_nan=False),
-    )
-    def test_array_input_is_elementwise(self, k, div):
         values = np.array([k * div, (k + 0.5) * div])
         assert_array_equal(arrays.isroundmod(values, div), [True, False])
 
@@ -154,20 +111,20 @@ class TestFloatDtypeLike:
 
 
 class TestBinnedMean:
-    @PROPERTY
+    """each case runs on every array namespace against the numpy reference"""
+
     @given(data=st.data())
-    def test_left_aligned_bins_match_reshape_mean(self, data):
+    def test_left_aligned_bins_match_reshape_mean(self, xp, data):
         x, axis = data.draw(shaped_arrays(dtype=np.float64))
         n = x.shape[axis]
         count = data.draw(st.integers(min_value=1, max_value=n))
 
-        result = arrays.binned_mean(x, count, axis=axis, fft=False)
+        result = arrays.binned_mean(xp.asarray(x), count, axis=axis, fft=False)
         ref = reference_binned_mean(x, count, axis)
 
         assert result.shape == ref.shape
-        assert_allclose(result, ref, rtol=0, atol=mean_atol(x, count))
+        assert_allclose(to_numpy(result), ref, rtol=0, atol=mean_atol(x, count))
 
-    @PROPERTY
     @given(data=st.data())
     def test_truncate_false_accepts_only_whole_bins(self, data):
         x, axis = data.draw(shaped_arrays(dtype=np.float64, min_side=2))
@@ -182,9 +139,8 @@ class TestBinnedMean:
             with pytest.raises(ValueError):
                 arrays.binned_mean(x, count, axis=axis, fft=False, truncate=False)
 
-    @PROPERTY
     @given(data=st.data())
-    def test_fft_bins_center_on_the_middle_sample(self, data):
+    def test_fft_bins_center_on_the_middle_sample(self, xp, data):
         """Property: with fft=True the sample at index n//2 is the center of the
         middle bin, the bin count is odd, and no further symmetric pair fits."""
         count = data.draw(st.integers(min_value=2, max_value=8))
@@ -195,7 +151,7 @@ class TestBinnedMean:
             n = data.draw(st.integers(min_value=count, max_value=64))
         x = data.draw(float_arrays((n,)))
 
-        result = arrays.binned_mean(x, count, fft=True)
+        result = to_numpy(arrays.binned_mean(xp.asarray(x), count, fft=True))
 
         nblocks = result.shape[0]
         assert nblocks % 2 == 1
@@ -218,19 +174,22 @@ class TestBinnedMean:
         result = arrays.binned_mean(np.arange(n, dtype=np.float64), count, fft=True)
         assert result.shape[0] % 2 == 1
 
-    @PROPERTY
     @given(
         count=st.integers(min_value=3, max_value=6),
         nbins=st.integers(min_value=1, max_value=8),
         data=st.data(),
     )
-    def test_reject_extrema_averages_the_sorted_interior(self, count, nbins, data):
+    def test_reject_extrema_averages_the_sorted_interior(self, xp, count, nbins, data):
         x = data.draw(float_arrays((nbins * count,)))
 
-        result = arrays.binned_mean(x, count, fft=False, reject_extrema=True)
+        result = arrays.binned_mean(
+            xp.asarray(x), count, fft=False, reject_extrema=True
+        )
 
         interior = np.sort(x.reshape(nbins, count), axis=1)[:, 1:-1]
-        assert_allclose(result, interior.mean(axis=1), rtol=0, atol=mean_atol(x, count))
+        assert_allclose(
+            to_numpy(result), interior.mean(axis=1), rtol=0, atol=mean_atol(x, count)
+        )
 
     def test_nan_samples_are_ignored(self):
         x = np.arange(8, dtype=np.float64)
@@ -238,32 +197,8 @@ class TestBinnedMean:
         result = arrays.binned_mean(x, 4, fft=False)
         assert_array_equal(result, [2.0, 5.5])
 
-    @PROPERTY
-    @given(data=st.data())
-    def test_numpy_vs_cupy(self, cupy_available, data):
-        cp = cupy_available
-        x, axis = data.draw(shaped_arrays(dtype=np.float32, min_side=2))
-        count = data.draw(st.integers(min_value=2, max_value=x.shape[axis]))
-        if count % 2:
-            count += 1
-        assume(count <= x.shape[axis])
-
-        for fft in (False, True):
-            result_np = arrays.binned_mean(x, count, axis=axis, fft=fft)
-            result_cp = arrays.binned_mean(cp.asarray(x), count, axis=axis, fft=fft)
-            assert_allclose(
-                to_numpy(result_cp), result_np, rtol=0, atol=mean_atol(x, count)
-            )
-
-    def test_reject_extrema_cupy(self, cupy_available):
-        cp = cupy_available
-        x = np.arange(12, dtype=np.float32)
-        result = arrays.binned_mean(cp.asarray(x), 3, fft=False, reject_extrema=True)
-        assert_array_equal(to_numpy(result), [1.0, 4.0, 7.0, 10.0])
-
 
 class TestSlidingWindowView:
-    @PROPERTY
     @given(data=st.data())
     def test_matches_numpy_for_integer_axis(self, data):
         x, axis = data.draw(shaped_arrays(max_side=6))
@@ -275,7 +210,6 @@ class TestSlidingWindowView:
         assert result.shape == expected.shape
         assert_array_equal(result, expected)
 
-    @PROPERTY
     @given(data=st.data())
     def test_matches_numpy_for_tuple_axis(self, data):
         x, _ = data.draw(shaped_arrays(min_dims=2, max_dims=2, max_side=6))
@@ -334,7 +268,6 @@ class TestSlidingWindowView:
 
 
 class TestAxisToBlocks:
-    @PROPERTY
     @given(data=st.data())
     def test_blocks_reshape_back_to_the_truncated_input(self, data):
         x, axis = data.draw(shaped_arrays())
@@ -363,7 +296,6 @@ class TestAxisToBlocks:
 
 
 class TestHistogramLastAxis:
-    @PROPERTY
     @given(
         shape=array_shapes(min_dims=1, max_dims=3, min_side=1, max_side=4),
         nbins=st.integers(min_value=1, max_value=8),
@@ -383,7 +315,6 @@ class TestHistogramLastAxis:
             expected, _ = np.histogram(row, bins=nbins, range=(lo, hi))
             assert_array_equal(row_counts, expected)
 
-    @PROPERTY
     @given(
         nrows=st.integers(min_value=1, max_value=4),
         edges=st.lists(
@@ -434,7 +365,6 @@ class TestHistogramLastAxis:
 
 
 class TestAxisSlicing:
-    @PROPERTY
     @given(data=st.data())
     def test_axis_index_matches_take(self, data):
         a, axis = data.draw(shaped_arrays(max_dims=4, max_side=5))
@@ -447,7 +377,6 @@ class TestAxisSlicing:
             arrays.axis_index(a, index, axis=axis), np.take(a, index, axis)
         )
 
-    @PROPERTY
     @given(data=st.data())
     def test_axis_index_with_mask_matches_compress(self, data):
         a, axis = data.draw(shaped_arrays(max_dims=4, max_side=5))
@@ -460,7 +389,6 @@ class TestAxisSlicing:
             arrays.axis_index(a, mask, axis=axis), np.compress(mask, a, axis=axis)
         )
 
-    @PROPERTY
     @given(data=st.data())
     def test_axis_slice_matches_direct_slicing(self, data):
         a, axis = data.draw(shaped_arrays(max_dims=4, max_side=5))
@@ -492,7 +420,6 @@ class TestAxisSlicing:
 
 
 class TestGroupedViews:
-    @PROPERTY
     @given(
         shape=array_shapes(min_dims=1, max_dims=3, min_side=1, max_side=8),
         max_size=st.integers(min_value=1, max_value=64),
@@ -527,7 +454,6 @@ class TestGroupedViews:
 
 
 class TestPadAlongAxis:
-    @PROPERTY
     @given(
         shape=array_shapes(min_dims=1, max_dims=3, min_side=1, max_side=4),
         before=st.integers(min_value=0, max_value=3),
