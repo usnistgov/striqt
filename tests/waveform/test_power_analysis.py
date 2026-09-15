@@ -471,13 +471,12 @@ class TestArrayLikeHandling:
         with pytest.raises(TypeError, match='unable to associate'):
             powtodB(obj)
 
-    def test_promotion_allocates_buffer(self):
+    def test_promotion_widens_the_input_before_evaluation(self):
         x = np.ones(4, dtype=np.float16)
-        values, out, xp = _arraylike_with_buffer(
-            x, overwrite_x=True, min_dtype='float32'
-        )
-        assert values is x
-        assert out.dtype == np.float32
+        values, out, xp = _arraylike_with_buffer(x, min_dtype='float32')
+        assert values.dtype == np.float32
+        assert out is values
+        assert x.dtype == np.float16
         assert xp is np
 
     def test_overwrite_returns_input_as_buffer(self):
