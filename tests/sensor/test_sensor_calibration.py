@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from conftest import SITE_DIR
+from conftest import FAKE_SOAPY_CALIBRATION_SPEC, FAKE_SOAPY_SPEC, SITE_DIR
 from hypothesis import given
 from site_strategies import SiteCalCaptureCls
 from sweep_strategies import (
@@ -599,3 +599,171 @@ class TestManualYFactorPeripheral:
             'ambient_temperature': 290.0,
             'implied_loops': (),
         }
+
+
+# %% closed loop through the fake SoapySDR device
+
+FAKE_TONE = (1.505e9, -60.0)
+
+
+def run_fake_sweep(spec_path, output_path, **replace):
+    """run a sweep YAML against the installed fake, returning the sink results"""
+    spec = ss.read_yaml_spec(spec_path)
+    spec = spec.replace(sink=spec.sink.replace(path=str(output_path)), **replace)
+    with ss.open_resources(spec, spec_path) as resources:
+        results = [ds for ds in ss.iterate_sweep(resources) if ds is not None]
+    return xr.concat(results, 'capture') if results else results
+
+
+@pytest.fixture(scope='module')
+def fake_calibration_run(tmp_path_factory):
+    """(netCDF path, prompt log) after the calibration sweep runs against the fake"""
+    import re
+
+    from fake_soapy import install_fake_soapy
+
+    path = tmp_path_factory.mktemp('fake-cal') / 'calibration.nc'
+    prompts = []
+
+    with pytest.MonkeyPatch.context() as mp:
+        fake = install_fake_soapy(mp)
+
+        def blocking_input(prompt=None):
+            prompts.append(prompt)
+            match = re.match(
+                r'(enable|disable) noise diode at port (\d+)', prompt or ''
+            )
+            if match:
+                fake.model.diode_on[int(match.group(2))] = match.group(1) == 'enable'
+                return ''
+            return 'y'
+
+        mp.setattr(sa.util, 'blocking_input', blocking_input)
+        run_fake_sweep(FAKE_SOAPY_CALIBRATION_SPEC, path)
+
+    yield str(path), prompts
+    sw.util.clear_caches()
+
+
+FAKE_CAL_GRID = dict(
+    YFACTOR_GRID, backend_sample_rate=(125e6, 62.5e6), analysis_bandwidth=(40e6, INF)
+)
+
+
+def _assert_within_dB(actual, expected, tol_dB, *, in_dB):
+    model = expected.broadcast_like(actual).transpose(*actual.dims)
+    if in_dB:
+        err = actual.values - model.values
+    else:
+        err = 10 * np.log10(actual.values / model.values)
+    assert np.abs(err).max() < tol_dB, err
+
+
+class TestFakeCalibrationSweep:
+    def test_prompts_follow_the_diode_state(self, fake_calibration_run):
+        _, prompts = fake_calibration_run
+        assert prompts[0].startswith('Confirm that the noise diode ENR is 20.87 dB')
+        # one prompt per (port, state) change; the loop toggles the diode per port
+        assert prompts[1:] == [
+            'disable noise diode at port 0 and press enter: ',
+            'enable noise diode at port 0 and press enter: ',
+            'disable noise diode at port 1 and press enter: ',
+            'enable noise diode at port 1 and press enter: ',
+        ]
+
+    def test_file_is_indexed_by_the_looped_fields(self, fake_calibration_run):
+        path, _ = fake_calibration_run
+        saved = ss.read_calibration(path)
+        assert set(saved.dims) == set(FAKE_CAL_GRID)
+        assert sorted(saved.backend_sample_rate.values) == [62.5e6, 125e6]
+        assert set(saved.data_vars) >= set(CORRECTION_VARS)
+
+    def test_finite_bandwidth_points_recover_the_model(self, fake_calibration_run):
+        # 5 ms at 40 MHz gives a 1-sigma statistical error near 0.015 dB
+        path, _ = fake_calibration_run
+        saved = ss.read_calibration(path).sel(analysis_bandwidth=40e6)
+        expected = expected_yfactor(dict(FAKE_CAL_GRID, analysis_bandwidth=(40e6,)))
+        _assert_within_dB(saved.noise_figure, expected.noise_figure, 0.1, in_dB=True)
+        _assert_within_dB(
+            saved.power_correction, expected.power_correction, 0.1, in_dB=False
+        )
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='_limit_nyquist_bandwidth never replaces inf (see the unit test above)',
+    )
+    def test_infinite_bandwidth_points_recover_the_model(self, fake_calibration_run):
+        path, _ = fake_calibration_run
+        saved = ss.read_calibration(path).sel(analysis_bandwidth=INF)
+        expected = expected_yfactor(dict(FAKE_CAL_GRID, analysis_bandwidth=(INF,)))
+        _assert_within_dB(
+            saved.power_correction, expected.power_correction, 0.1, in_dB=False
+        )
+
+
+def _rms_dBm(ds):
+    return ds.channel_power_time_series.sel(power_detector='rms').mean('time_elapsed')
+
+
+def _expected_dBm(port, bandwidth, tone_mW=0.0, nf_dB=YFACTOR_NF_DB):
+    Te = 290.0 * (10 ** (nf_dB[port] / 10) - 1)
+    return 10 * np.log10(tone_mW + BOLTZMANN_MW * (290.0 + Te) * bandwidth)
+
+
+class TestFakeMeasurementSweep:
+    def test_uncalibrated_power_is_in_full_scale_units(self, fake_soapy, tmp_path):
+        fake_soapy.model.tones[0] = FAKE_TONE
+        ds = run_fake_sweep(FAKE_SOAPY_SPEC, tmp_path / 'raw.zarr.zip')
+
+        assert ds.port.values.tolist() == [0, 1, 0]
+        assert ds.gain.values.tolist() == [0, 0, -10]
+        gain_dB = np.array([50.0, 50.0, 40.0])
+        expected = [
+            _expected_dBm(0, 40e6, tone_mW=1e-6),
+            _expected_dBm(1, 40e6),
+            _expected_dBm(0, 40e6, tone_mW=1e-6),
+        ]
+        assert _rms_dBm(ds).values == pytest.approx(expected + gain_dB, abs=0.1)
+        assert 'system_noise' not in ds
+
+    def test_calibrated_power_recovers_the_input(
+        self, fake_soapy, fake_calibration_run, tmp_path
+    ):
+        cal_path, _ = fake_calibration_run
+        fake_soapy.model.tones[0] = FAKE_TONE
+        spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
+        source = spec.source.replace(calibration=cal_path)
+
+        ds = run_fake_sweep(FAKE_SOAPY_SPEC, tmp_path / 'cal.zarr.zip', source=source)
+
+        rms = _rms_dBm(ds).values
+        assert rms[0] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
+        assert rms[2] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
+        # noise only: the FIR passband is not exactly 40 MHz wide
+        assert rms[1] == pytest.approx(_expected_dBm(1, 40e6), abs=0.15)
+        assert ds.system_noise.attrs['units'] == 'dBm/Hz'
+        assert ds.system_noise.values == pytest.approx(
+            [5.0, 8.0, 5.0] + 10 * np.log10(BOLTZMANN_MW * 290.0), abs=0.1
+        )
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='the calibration file holds an infinite power_correction at '
+        'analysis_bandwidth inf (see _limit_nyquist_bandwidth)',
+    )
+    def test_calibrated_power_at_infinite_bandwidth(
+        self, fake_soapy, fake_calibration_run, tmp_path
+    ):
+        cal_path, _ = fake_calibration_run
+        spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
+        capture = spec.captures[0].replace(analysis_bandwidth=INF)
+
+        ds = run_fake_sweep(
+            FAKE_SOAPY_SPEC,
+            tmp_path / 'inf.zarr.zip',
+            source=spec.source.replace(calibration=cal_path),
+            captures=(capture,),
+        )
+
+        expected = [_expected_dBm(0, 125e6), _expected_dBm(1, 125e6)]
+        assert _rms_dBm(ds).values == pytest.approx(expected, abs=0.1)

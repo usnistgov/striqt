@@ -125,3 +125,44 @@ def test_get_id_without_a_mac_address(net_if_addrs):
     net_if_addrs['eth0'] = [_snic('192.168.0.2'), _snic('fe80::1')]
     with pytest.raises(OSError, match='no MAC address'):
         deepwave.Airstack1Source.get_id(None)
+
+
+# %% Airstack1Source (fake SoapySDR device)
+
+
+class TestAirstack1Source:
+    def test_opens_with_the_airt_driver_and_clock_settings(self, fake_soapy):
+        spec = deepwave.Air7101BSourceSpec(
+            array_backend='numpy', time_source='gps', clock_source='external'
+        )
+        source = deepwave.Airstack1Source(spec)
+
+        assert source.device.kwargs == {
+            'driver': 'SoapyAIRT',
+            'time_src': 'gps',
+            'clk_src': 'external',
+        }
+        assert source.get_info().driver == 'SoapyAIRT'
+
+    def test_host_time_source_maps_to_internal(self, fake_soapy):
+        spec = deepwave.Air7101BSourceSpec(array_backend='numpy', time_source='host')
+        source = deepwave.Airstack1Source(spec)
+        assert source.device.kwargs['time_src'] == 'internal'
+
+    def test_open_clears_the_sysref_delay_field(self, fake_soapy):
+        spec = deepwave.Air7101BSourceSpec(array_backend='numpy')
+        source = deepwave.Airstack1Source(spec)
+        device = source.device
+        assert device.calls_named('writeRegister') == [
+            ('writeRegister', 'FPGA', 0x00040010, 0)
+        ]
+
+        device.registers['FPGA', 0x00040010] = 0xFFFF
+        source._set_jesd_sysref_delay(3)
+        assert device.registers['FPGA', 0x00040010] == 0xF3FF
+
+    def test_read_peripherals_reports_the_transceiver_temperature(self, fake_soapy):
+        source = deepwave.Airstack1Source(
+            deepwave.Air7101BSourceSpec(array_backend='numpy')
+        )
+        assert source.read_peripherals() == {'transceiver': 41.5}

@@ -516,3 +516,55 @@ def isolated_extension_import():
         sys.modules.pop('extensions', None)
         if saved_module is not None:
             sys.modules['extensions'] = saved_module
+
+
+# ---------------------------------------------------------------------------
+# Fake SoapySDR
+# ---------------------------------------------------------------------------
+
+FAKE_SOAPY_SPEC = SWEEP_DIR / 'fake_soapy-cpu.yaml'
+FAKE_SOAPY_CALIBRATION_SPEC = SWEEP_DIR / 'fake_soapy-calibration-cpu.yaml'
+
+
+@pytest.fixture
+def fake_soapy(monkeypatch):
+    """a FakeSoapySDR module installed as striqt.sensor.lib.sources.soapy.SoapySDR"""
+    import striqt.waveform as sw
+    from fake_soapy import install_fake_soapy
+
+    yield install_fake_soapy(monkeypatch)
+    # read_calibration and the lookups cache by path
+    sw.util.clear_caches()
+
+
+@pytest.fixture
+def fake_soapy_ext(fake_soapy):
+    """the fake_soapy_bindings module, registered by reading fake_soapy-cpu.yaml"""
+    import sys
+
+    import striqt.sensor as ss
+
+    ss.read_yaml_spec(FAKE_SOAPY_SPEC)
+    return sys.modules['fake_soapy_bindings']
+
+
+@pytest.fixture
+def answer_prompts(monkeypatch, fake_soapy):
+    """answer the calibration prompts: confirm the ENR, and switch the fake noise
+    diode on 'enable|disable noise diode at port N'. Returns the prompt log."""
+    import re
+
+    import striqt.analysis as sa
+
+    prompts = []
+
+    def blocking_input(prompt=None):
+        prompts.append(prompt)
+        match = re.match(r'(enable|disable) noise diode at port (\d+)', prompt or '')
+        if match:
+            fake_soapy.model.diode_on[int(match.group(2))] = match.group(1) == 'enable'
+            return ''
+        return 'y'
+
+    monkeypatch.setattr(sa.util, 'blocking_input', blocking_input)
+    return prompts

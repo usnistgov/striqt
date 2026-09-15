@@ -1,0 +1,55 @@
+# Y-factor calibration sweep against the fake SoapySDR device
+# (tests/sensor/fake_soapy.py). The noise_diode_enabled loop is inserted after port.
+
+sensor_binding: fake_soapy_calibration
+extensions:
+  import_path: src
+  import_name: fake_soapy_bindings
+
+source:
+  array_backend: numpy
+  time_source: host
+  time_sync_at: acquire
+  clock_source: internal
+  receive_retries: 3
+  adc_overload_limit: -1
+
+calibration:
+  enr: 20.87
+  ambient_temperature: 290.0
+
+captures:
+  - port: 0
+    center_frequency: 1e9
+    gain: 0
+    duration: 5e-3
+    sample_rate: 125e6
+    host_resample: false
+
+loops:
+  - kind: list
+    field: port
+    values: [0, 1]
+  - kind: list
+    field: sample_rate
+    values: [125e6, 62.5e6]
+  - kind: list
+    field: center_frequency
+    values: [1e9, 2e9]
+  - kind: list
+    field: gain
+    values: [0, -10]
+  - kind: list
+    field: analysis_bandwidth
+    values: [40e6, .inf]
+  - kind: list
+    field: lo_shift
+    values: [none]
+
+analysis:
+  channel_power_time_series:
+    detector_period: 1e-3
+    power_detectors: [rms, peak]
+
+sink:
+  path: "outputs/fake_soapy-calibration.nc"

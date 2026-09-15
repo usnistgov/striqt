@@ -203,3 +203,17 @@ def test_calibration_sweeps_decode(calibration_sweep, site_calibration_sweep):
         'analysis_bandwidth',
         'lo_shift',
     ]
+
+
+# %% output_path override
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=TypeError,
+    reason='_convert_dict_spec applies output_path as a field of the sweep rather '
+    'than of its sink, so the CLI -o option raises',
+)
+def test_output_path_overrides_the_sink_path():
+    spec = ss.read_yaml_spec(SWEEP_DIR / 'cw-cpu.yaml', output_path='out.zarr.zip')
+    assert spec.sink.path == 'out.zarr.zip'
