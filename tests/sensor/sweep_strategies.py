@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 from hypothesis import strategies as st
 
 import striqt.sensor as ss
@@ -282,3 +283,142 @@ def calibration_loop_orderings(draw):
     else:
         accepted = True
     return tuple(loops), accepted
+
+
+# %% y-factor calibration model
+#
+# A receiver with power gain G after a noise source at temperature Tsource, with
+# effective input noise temperature Te, has rms output power in full-scale units
+#   P = G * k * (Tsource + Te) * B
+# so the Y-factor method should recover noise_figure == nf_dB and
+# power_correction == 1/G exactly.
+
+BOLTZMANN_MW = 1.380649e-23 * 1e3
+T_REF = 290.0
+YFACTOR_ENR_DB = 20.87
+YFACTOR_NF_DB = {0: 5.0, 1: 8.0}
+YFACTOR_GRID = {
+    'port': (0, 1),
+    'backend_sample_rate': (125e6,),
+    'center_frequency': (1e9, 2e9),
+    'gain': (0.0, -10.0),
+    'analysis_bandwidth': (40e6,),
+    'lo_shift': ('none',),
+}
+
+
+def receiver_gain(gain_dB, front_end_gain_dB=50.0, fs_mW=1.0):
+    """power gain from the receiver input (mW) to full scale"""
+    return 10 ** ((front_end_gain_dB + gain_dB) / 10) / fs_mW
+
+
+def noise_figure_lookup(nf_dB, port, center_frequency) -> float:
+    """nf_dB is {port: value} or {port: {center_frequency: value}}"""
+    value = nf_dB[port]
+    if isinstance(value, dict):
+        return value[center_frequency]
+    return value
+
+
+def yfactor_rms_power(
+    gain_dB, nf_dB, bandwidth, *, diode_on, enr_dB=YFACTOR_ENR_DB, T0=T_REF, **gain_kws
+):
+    """rms output power in full-scale units of the modelled receiver"""
+    Te = T0 * (10 ** (nf_dB / 10) - 1)
+    Tsource = T0 + np.where(diode_on, T0 * 10 ** (enr_dB / 10), 0.0)
+    return (
+        receiver_gain(gain_dB, **gain_kws) * BOLTZMANN_MW * (Tsource + Te) * bandwidth
+    )
+
+
+def _noise_figure_grid(grid, nf_dB):
+    import xarray as xr
+
+    return xr.DataArray(
+        [
+            [noise_figure_lookup(nf_dB, p, fc) for fc in grid['center_frequency']]
+            for p in grid['port']
+        ],
+        dims=('port', 'center_frequency'),
+        coords={
+            'port': list(grid['port']),
+            'center_frequency': list(grid['center_frequency']),
+        },
+    )
+
+
+def make_yfactor_dataset(
+    grid=YFACTOR_GRID,
+    nf_dB=YFACTOR_NF_DB,
+    *,
+    enr_dB=YFACTOR_ENR_DB,
+    ambient_temperature=T_REF,
+    papr_dB=10.0,
+    time_count=4,
+    **gain_kws,
+):
+    """a calibration dataset shaped as YFactorSink.flush has it before the corrections:
+    one dimension per calibration field plus noise_diode_enabled, and a constant
+    channel_power_time_series drawn from the receiver model"""
+    import xarray as xr
+
+    coords = {'noise_diode_enabled': [False, True]}
+    coords.update({k: list(v) for k, v in grid.items()})
+    fields = xr.Dataset(coords=coords)
+    template = xr.DataArray(
+        np.zeros(tuple(fields.sizes.values())), coords=fields.coords
+    )
+
+    bw = fields.analysis_bandwidth
+    bandwidth = bw.where(np.isfinite(bw), fields.backend_sample_rate)
+    rms_dB = 10 * np.log10(
+        yfactor_rms_power(
+            fields.gain.broadcast_like(template),
+            _noise_figure_grid(grid, nf_dB).broadcast_like(template),
+            bandwidth.broadcast_like(template),
+            diode_on=fields.noise_diode_enabled.broadcast_like(template),
+            enr_dB=enr_dB,
+            **gain_kws,
+        )
+    )
+
+    pvt = xr.concat([rms_dB, rms_dB + papr_dB], dim='power_detector')
+    pvt = pvt.assign_coords(power_detector=['rms', 'peak'])
+    pvt = pvt.expand_dims(time_elapsed=np.arange(time_count) * 1e-3)
+    pvt = pvt.transpose(*fields.dims, 'power_detector', 'time_elapsed')
+    pvt.attrs = {'units': 'dBfs'}
+    capture_index = template.copy(data=np.arange(template.size).reshape(template.shape))
+
+    return xr.Dataset({
+        'channel_power_time_series': pvt.assign_coords(capture_index=capture_index),
+        'enr': template + enr_dB,
+        'ambient_temperature': template + ambient_temperature,
+    })
+
+
+def expected_yfactor(grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, *, T0=T_REF, **gain_kws):
+    """closed-form corrections for make_yfactor_dataset over the same grid"""
+    import xarray as xr
+
+    nf = _noise_figure_grid(grid, nf_dB)
+    gain = xr.DataArray(
+        list(grid['gain']), dims='gain', coords={'gain': list(grid['gain'])}
+    )
+    return xr.Dataset({
+        'noise_figure': nf,
+        'temperature': T0 * (10 ** (nf / 10) - 1),
+        'power_correction': 1 / receiver_gain(gain, **gain_kws),
+    })
+
+
+def save_yfactor_calibration(
+    path, grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, **kws
+) -> str:
+    """write the corrections for make_yfactor_dataset to a netCDF file and return its path"""
+    from striqt.sensor.lib import calibration, io
+
+    corrections = calibration._y_factor_power_corrections(
+        make_yfactor_dataset(grid, nf_dB, **kws)
+    )
+    io.save_calibration(path, corrections)
+    return str(path)
