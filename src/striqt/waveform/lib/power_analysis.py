@@ -590,14 +590,14 @@ def _arraylike_with_buffer(
     else:
         promote_dtype = np.dtype(min_dtype)
 
+    if promote_dtype is not None:
+        # cupy.fuse evaluates in the input dtype and casts only when assigning
+        # into `out`, so the input has to be widened before the kernel runs
+        values = values.astype(promote_dtype)
+
     if xp.__name__.startswith('dask'):
-        if promote_dtype is not None:
-            return values.astype(promote_dtype), None, xp
         return values, None, xp
-    elif promote_dtype:
-        out = xp.empty_like(values, dtype=promote_dtype)
-        return values, out, xp
-    elif overwrite_x:
+    elif promote_dtype is not None or overwrite_x:
         return values, values, xp
     elif xp is np or _use_cuda_kernels(values):
         # numexpr promotes to float64 if out=None, and the cupy fused kernels
