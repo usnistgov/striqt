@@ -9,6 +9,8 @@ numpy/cupy/dask compatibility, and roundoff bounds derived from an FFT error mod
 
 from __future__ import annotations
 
+import functools
+
 import numpy as np
 import pytest
 from conftest import gaussian_iq, iq_waveforms
@@ -473,24 +475,16 @@ class TestStft:
 
     def test_no_overlap_writes_in_place(self):
         x = gaussian_iq(512)
-        _, _, X_ref = fourier.stft(x, fs=1.0, window='hann', nperseg=64)
+        kws = {'fs': 1.0, 'window': 'hann', 'nperseg': 64}
+        _, _, X_ref = fourier.stft(x, **kws)
 
         y = x.copy()
-        X = fourier.stft(
-            y,
-            fs=1.0,
-            window='hann',
-            nperseg=64,
-            overwrite_x=True,
-            return_axis_arrays=False,
-        )
+        X = fourier.stft(y, overwrite_x=True, return_axis_arrays=False, **kws)
         assert np.shares_memory(X, y)
         assert_array_equal(X, X_ref)
 
         out = np.empty((8, 64), dtype=np.complex64)
-        X = fourier.stft(
-            x, fs=1.0, window='hann', nperseg=64, out=out, return_axis_arrays=False
-        )
+        X = fourier.stft(x, out=out, return_axis_arrays=False, **kws)
         assert np.shares_memory(X, out)
         assert_array_equal(X, X_ref)
 
@@ -972,16 +966,8 @@ class TestOverlapAddFilters:
         shift = shift_bins * self.FS / down
         x = self._tone(f0, channels=2)
 
-        y = fourier.oaresample(
-            x,
-            up,
-            down,
-            self.FS,
-            window='hamming',
-            axis=1,
-            frequency_shift=shift,
-            scale=scale,
-        )
+        kws = {'window': 'hamming', 'axis': 1, 'frequency_shift': shift, 'scale': scale}
+        y = fourier.oaresample(x, up, down, self.FS, **kws)
         assert y.shape == (2, round(x.shape[1] * up / down))
         assert y.dtype == x.dtype
         yi = interior(y, up, axis=1)
@@ -1154,14 +1140,8 @@ class TestNumpyCupyCrossComparison:
     @pytest.mark.parametrize('nwindow', [8, 64, 129, 512])
     @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
     def test_get_window(self, cupy_available, name, nwindow, dtype):
-        w_np, w_cp = numpy_and_cupy(
-            cupy_available,
-            fourier.get_window,
-            name,
-            nwindow,
-            dtype=dtype,
-            xp_kwarg='xp',
-        )
+        get_window = functools.partial(fourier.get_window, name, nwindow, dtype=dtype)
+        w_np, w_cp = numpy_and_cupy(cupy_available, get_window, xp_kwarg='xp')
         assert_close(w_cp, w_np, rtol=elementwise_rtol(dtype), atol=ATOL)
 
     @given(nfft=fft_sizes(min_size=8, max_size=512), fs=sample_rates())
@@ -1299,15 +1279,10 @@ class TestNumpyCupyCrossComparison:
         sigma = cross_backend_rms(x.dtype, [nfft, nfft], n_elementwise=3)
         assert_close(y_cp, y_np, sigma=sigma, err_msg='oafilter')
 
-        kws = {
-            'window': 'hamming',
-            'axis': 1,
-            'frequency_shift': 8 * fs / nfft,
-            'filter_bandwidth': 0.2e6,
-        }
-        y_np, y_cp = numpy_and_cupy(
-            cupy_available, fourier.oaresample, x, nfft // 2, nfft, fs, **kws
-        )
+        shift = 8 * fs / nfft
+        kws = {'window': 'hamming', 'axis': 1, 'filter_bandwidth': 0.2e6}
+        resample = functools.partial(fourier.oaresample, frequency_shift=shift, **kws)
+        y_np, y_cp = numpy_and_cupy(cupy_available, resample, x, nfft // 2, nfft, fs)
         # as oafilter, plus the FIR multiply and the output scaling
         sigma = cross_backend_rms(x.dtype, [nfft, nfft // 2], n_elementwise=5)
         assert_close(y_cp, y_np, sigma=sigma, err_msg='oaresample')

@@ -427,22 +427,14 @@ def _capture_dataset(sweep, capture, index, start):
     if not np.isfinite(bandwidth):
         bandwidth = capture.sample_rate
     nf = noise_figure_lookup(YFACTOR_NF_DB, capture.port, capture.center_frequency)
-    rms = 10 * np.log10(
-        yfactor_rms_power(
-            capture.gain, nf, bandwidth, diode_on=capture.noise_diode_enabled
-        )
-    )
+    diode_on = capture.noise_diode_enabled
+    rms_power = yfactor_rms_power(capture.gain, nf, bandwidth, diode_on=diode_on)
+    rms = 10 * np.log10(rms_power)
     values = np.array([[rms] * 4, [rms + 10.0] * 4])[np.newaxis]
 
-    ds = xr.Dataset(
-        {
-            'channel_power_time_series': (
-                ('capture', 'power_detector', 'time_elapsed'),
-                values,
-            )
-        },
-        coords={'power_detector': ['rms', 'peak'], 'time_elapsed': np.arange(4) * 1e-3},
-    )
+    pvt_dims = ('capture', 'power_detector', 'time_elapsed')
+    coords = {'power_detector': ['rms', 'peak'], 'time_elapsed': np.arange(4) * 1e-3}
+    ds = xr.Dataset({'channel_power_time_series': (pvt_dims, values)}, coords=coords)
     ds = ds.assign_coords(build_capture_coords(capture, info, sweep.loops))
     peripheral_data = {
         k: xr.DataArray(v, dims=[]).expand_dims({'capture': 1})
@@ -455,14 +447,14 @@ def _capture_dataset(sweep, capture, index, start):
 
 def _flush_model_captures(path):
     """YFactorSink.flush on a full grid of model captures; returns the sweep"""
+    captures = (make_calibration_capture(sample_rate=MCR, host_resample=False),)
+    cal = ss.specs.ManualYFactorPeripheral(
+        enr=YFACTOR_ENR_DB, ambient_temperature=290.0
+    )
+    source = CalSourceCls(array_backend='numpy')
+    sink = ss.specs.Sink(path=str(path))
     sweep = make_calibration_sweep(
-        captures=(make_calibration_capture(sample_rate=MCR, host_resample=False),),
-        loops=FLUSH_LOOPS,
-        source=CalSourceCls(array_backend='numpy'),
-        calibration=ss.specs.ManualYFactorPeripheral(
-            enr=YFACTOR_ENR_DB, ambient_temperature=290.0
-        ),
-        sink=ss.specs.Sink(path=str(path)),
+        captures=captures, loops=FLUSH_LOOPS, source=source, calibration=cal, sink=sink
     )
     start = pd.Timestamp('2026-09-15T00:00:00')
 
@@ -667,11 +659,9 @@ class TestFakeMeasurementSweep:
         assert ds.port.values.tolist() == [0, 1, 0]
         assert ds.gain.values.tolist() == [0, 0, -10]
         gain_dB = np.array([50.0, 50.0, 40.0])
-        expected = [
-            _expected_dBm(0, 40e6, tone_mW=1e-6),
-            _expected_dBm(1, 40e6),
-            _expected_dBm(0, 40e6, tone_mW=1e-6),
-        ]
+        tone_dBm = _expected_dBm(0, 40e6, tone_mW=1e-6)
+        noise_dBm = _expected_dBm(1, 40e6)
+        expected = [tone_dBm, noise_dBm, tone_dBm]
         assert _rms_dBm(ds).values == pytest.approx(expected + gain_dB, abs=0.1)
         assert 'system_noise' not in ds
 
@@ -702,11 +692,10 @@ class TestFakeMeasurementSweep:
         spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
         capture = spec.captures[0].replace(analysis_bandwidth=INF)
 
+        source = spec.source.replace(calibration=fake_calibration_run.path)
+        overrides = {'source': source, 'captures': (capture,)}
         ds = fake_sweep_runner(
-            FAKE_SOAPY_SPEC,
-            output_name='inf.zarr.zip',
-            source=spec.source.replace(calibration=fake_calibration_run.path),
-            captures=(capture,),
+            FAKE_SOAPY_SPEC, output_name='inf.zarr.zip', **overrides
         ).results
 
         expected = [_expected_dBm(0, 125e6), _expected_dBm(1, 125e6)]

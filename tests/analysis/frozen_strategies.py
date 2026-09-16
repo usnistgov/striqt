@@ -51,13 +51,10 @@ def listify(obj):
     return obj
 
 
-scalars = st.one_of(
-    st.none(),
-    st.booleans(),
-    st.integers(min_value=-(10**6), max_value=10**6),
-    st.floats(allow_nan=False, allow_infinity=False),
-    st.text(max_size=8),
-)
+bounded_ints = st.integers(min_value=-(10**6), max_value=10**6)
+finite_floats = st.floats(allow_nan=False, allow_infinity=False)
+short_text = st.text(max_size=8)
+scalars = st.one_of(st.none(), st.booleans(), bounded_ints, finite_floats, short_text)
 dict_keys = st.one_of(st.text(max_size=6), st.integers(min_value=-5, max_value=5))
 
 

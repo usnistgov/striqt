@@ -7,6 +7,7 @@ override files in sweeps/sites*, mirroring the downstream sensor configuration.
 
 from __future__ import annotations
 
+import itertools
 import logging
 import math
 import re
@@ -50,18 +51,15 @@ from striqt.analysis.specs.helpers import frozendict
 H = ss.specs.helpers
 Remap = ss.specs.CaptureRemap
 
+SNR_BY_OFFSET = {'100': 1.0, '200': 2.0}
+DEFAULT_SNR = Remap(key='frequency_offset', lookup=SNR_BY_OFFSET, default=-1.0)
+AB12_SNR = Remap(key='frequency_offset', lookup={100: 11.0})
 ADJUST = {
-    'defaults': {
-        'lo_shift': 'left',
-        'snr': Remap(
-            key='frequency_offset', lookup={'100': 1.0, '200': 2.0}, default=-1.0
-        ),
-    },
-    'ab12': {
-        'snr': Remap(key='frequency_offset', lookup={100: 11.0}),
-        'lo_shift': 'right',
-    },
+    'defaults': {'lo_shift': 'left', 'snr': DEFAULT_SNR},
+    'ab12': {'snr': AB12_SNR, 'lo_shift': 'right'},
 }
+MODEL_FROM_NAME = Remap(key='antenna_name', lookup=ANTENNA_MODELS)
+NAME_FROM_PORT = Remap(key='port', lookup={0: 'Omni'})
 
 
 def first_site_capture(sweep, source_id, **capture_kws):
@@ -144,16 +142,9 @@ def test_pairwise_without_previous_capture():
 def test_pairwise_pairs_by_index():
     c1 = make_capture(port=(0, 1), frequency_offset=1.0)
     c2 = make_capture(port=(0, 1), frequency_offset=2.0)
-    expected = [
-        (
-            make_capture(port=0, frequency_offset=1.0),
-            make_capture(port=0, frequency_offset=2.0),
-        ),
-        (
-            make_capture(port=1, frequency_offset=1.0),
-            make_capture(port=1, frequency_offset=2.0),
-        ),
-    ]
+    c1_by_port = [make_capture(port=p, frequency_offset=1.0) for p in (0, 1)]
+    c2_by_port = [make_capture(port=p, frequency_offset=2.0) for p in (0, 1)]
+    expected = list(zip(c1_by_port, c2_by_port))
     assert H.pairwise_by_port(c1, c2, False) == expected
 
 
@@ -276,15 +267,11 @@ def test_describe_capture_names_the_field_driven_by_a_key():
         captures=(make_capture(frequency_offset=100.0),),
         adjust_captures={'defaults': {'snr': remap}},
     )
+    capture, fields = sweep.captures[0], ('frequency_offset',)
     kws = {'adjust_spec': sweep.adjust_captures, 'source_id': None}
-    text = H.describe_capture(sweep.captures[0], ('frequency_offset',), **kws)
+    text = H.describe_capture(capture, fields, **kws)
     assert text.startswith('snr: ')
-    other = H.describe_capture(
-        sweep.captures[0],
-        ('frequency_offset',),
-        adjust_spec=sweep.adjust_captures,
-        source_id='ab12',
-    )
+    other = H.describe_capture(capture, fields, **{**kws, 'source_id': 'ab12'})
     assert text == other
 
 
@@ -486,18 +473,14 @@ def test_repeat_is_not_expanded(cw_sweep):
 
 
 def test_loop_order_is_declaration_order_with_captures_innermost():
-    captures = (make_capture(port=0), make_capture(port=1))
+    ports, offsets, snrs = (0, 1), (1e3, 2e3), (0.0, 5.0, 10.0)
+    captures = tuple(make_capture(port=p) for p in ports)
     loops = (
-        ss.specs.List(field='frequency_offset', values=(1e3, 2e3)),
+        ss.specs.List(field='frequency_offset', values=offsets),
         ss.specs.Range(field='snr', start=0, stop=10, step=5),
     )
     result = H.loop_captures(make_sweep(captures=captures, loops=loops))
-    expected = [
-        (fo, snr, port)
-        for fo in (1e3, 2e3)
-        for snr in (0.0, 5.0, 10.0)
-        for port in (0, 1)
-    ]
+    expected = list(itertools.product(offsets, snrs, ports))
     assert [(c.frequency_offset, c.snr, c.port) for c in result] == expected
 
 
@@ -620,11 +603,8 @@ def test_calibration_fixture_expansion(calibration_sweep):
 
 def test_adjustments_apply_before_loops_take_priority():
     loops = (ss.specs.List(field='lo_shift', values=('right',)),)
-    sweep = make_sweep(
-        captures=(make_capture(),),
-        loops=loops,
-        adjust_captures={'defaults': {'lo_shift': 'left'}},
-    )
+    adjust = {'defaults': {'lo_shift': 'left'}}
+    sweep = make_sweep(captures=(make_capture(),), loops=loops, adjust_captures=adjust)
     assert H.loop_captures(sweep)[0].lo_shift == 'right'
     assert H.loop_captures(sweep.replace(loops=()))[0].lo_shift == 'left'
 
@@ -870,14 +850,8 @@ def test_source_override_of_a_defaults_alias_keeps_its_evaluation_position():
     # the source block lists antenna_model before antenna_name, but antenna_name
     # was declared first in defaults, so the merged field order still resolves it first
     adjust = {
-        'defaults': {
-            'antenna_name': 'Unspecified',
-            'antenna_model': Remap(key='antenna_name', lookup=ANTENNA_MODELS),
-        },
-        RADIO_ID: {
-            'antenna_model': Remap(key='antenna_name', lookup=ANTENNA_MODELS),
-            'antenna_name': Remap(key='port', lookup={0: 'Omni'}),
-        },
+        'defaults': {'antenna_name': 'Unspecified', 'antenna_model': MODEL_FROM_NAME},
+        RADIO_ID: {'antenna_model': MODEL_FROM_NAME, 'antenna_name': NAME_FROM_PORT},
     }
     sweep = make_site_sweep(adjust_captures=adjust)
     assert first_site_capture(sweep, RADIO_ID).antenna_model == 'OmniModel'
@@ -932,12 +906,8 @@ def test_remap_keyed_on_an_unknown_field_is_rejected():
     'str, so remaps keyed on numeric aliases reject numeric lookup keys',
 )
 def test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys():
-    adjust = {
-        'defaults': {
-            'switch_input': 1,
-            'antenna_index': Remap(key='switch_input', lookup={1: 7}),
-        }
-    }
+    index_from_switch = Remap(key='switch_input', lookup={1: 7})
+    adjust = {'defaults': {'switch_input': 1, 'antenna_index': index_from_switch}}
     sweep = make_site_sweep(adjust_captures=adjust)
     assert first_site_capture(sweep, None).antenna_index == 7
 
@@ -950,10 +920,7 @@ def test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys():
 )
 def test_chained_remap_declared_before_its_key_resolves():
     adjust = {
-        'defaults': {
-            'antenna_model': Remap(key='antenna_name', lookup=ANTENNA_MODELS),
-            'antenna_name': Remap(key='port', lookup={0: 'Omni'}),
-        }
+        'defaults': {'antenna_model': MODEL_FROM_NAME, 'antenna_name': NAME_FROM_PORT}
     }
     sweep = make_site_sweep(adjust_captures=adjust)
     result = H.adjust_captures(make_site_capture_kws(), sweep.adjust_captures, None)
@@ -1035,11 +1002,8 @@ def test_adjust_analysis_replaces_matching_fields_everywhere(cw_sweep, fo):
     assert type(adjusted) is type(analysis)
     hash(adjusted)
     before, after = analysis.to_dict(), adjusted.to_dict()
-    touched = {
-        name
-        for name, kws in before.items()
-        if isinstance(kws, dict) and 'frequency_offset' in kws
-    }
+    measurement_kws = {n: kws for n, kws in before.items() if isinstance(kws, dict)}
+    touched = {n for n, kws in measurement_kws.items() if 'frequency_offset' in kws}
     assert touched
     for name in before:
         if name in touched:

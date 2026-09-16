@@ -343,11 +343,8 @@ class TestAxisSlicing:
     @given(case=shaped_arrays(max_dims=4, max_side=5), data=st.data())
     def test_axis_index_with_mask_matches_compress(self, case, data):
         a, axis = case
-        mask = np.asarray(
-            data.draw(
-                st.lists(st.booleans(), min_size=a.shape[axis], max_size=a.shape[axis])
-            )
-        )
+        n = a.shape[axis]
+        mask = np.asarray(data.draw(st.lists(st.booleans(), min_size=n, max_size=n)))
         assert_array_equal(
             arrays.axis_index(a, mask, axis=axis), np.compress(mask, a, axis=axis)
         )

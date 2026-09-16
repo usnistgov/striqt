@@ -19,19 +19,17 @@ class FakeSoapySourceSpec(specs.SoapySource, kw_only=True, frozen=True):
     stream_all_rx_ports = True
 
 
-fake_soapy = bindings.bind_sensor(
-    'fake_soapy',
-    bindings.Sensor(
-        source_cls=sources.SoapySource, peripherals_cls=peripherals.NoPeripherals
-    ),
-    bindings.Schema(
-        source=FakeSoapySourceSpec,
-        init_like=FakeSoapySourceSpec,
-        capture=specs.SoapyCapture,
-        arm_like=specs.SoapyCapture,
-        peripherals=specs.Peripherals,
-    ),
+_sensor = bindings.Sensor(
+    source_cls=sources.SoapySource, peripherals_cls=peripherals.NoPeripherals
 )
+_schema = bindings.Schema(
+    source=FakeSoapySourceSpec,
+    init_like=FakeSoapySourceSpec,
+    capture=specs.SoapyCapture,
+    arm_like=specs.SoapyCapture,
+    peripherals=specs.Peripherals,
+)
+fake_soapy = bindings.bind_sensor('fake_soapy', _sensor, _schema)
 
 fake_soapy_calibration = bindings.bind_manual_yfactor_calibration(
     'fake_soapy_calibration', fake_soapy

@@ -41,11 +41,8 @@ CONSTANTS = {
     'SOAPY_SDR_TIME_ERROR': -6,
     'SOAPY_SDR_UNDERFLOW': -7,
 }
-ERROR_NAMES = {
-    v: k.replace('SOAPY_SDR_', '')
-    for k, v in CONSTANTS.items()
-    if isinstance(v, int) and v < 0
-}
+_ERROR_CODES = {k: v for k, v in CONSTANTS.items() if isinstance(v, int) and v < 0}
+ERROR_NAMES = {v: k.replace('SOAPY_SDR_', '') for k, v in _ERROR_CODES.items()}
 
 RX = CONSTANTS['SOAPY_SDR_RX']
 DRIVER_KEY = 'SoapyAIRT'

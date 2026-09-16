@@ -48,13 +48,10 @@ def loop_point_count(loops) -> int:
     return math.prod(len(l.get_points()) for l in loops if l.field is not None)
 
 
-scalars = st.one_of(
-    st.none(),
-    st.booleans(),
-    st.integers(min_value=-(10**6), max_value=10**6),
-    st.floats(allow_nan=False, allow_infinity=False),
-    st.text(max_size=8),
-)
+small_ints = st.integers(min_value=-(10**6), max_value=10**6)
+finite_floats = st.floats(allow_nan=False, allow_infinity=False)
+short_text = st.text(max_size=8)
+scalars = st.one_of(st.none(), st.booleans(), small_ints, finite_floats, short_text)
 
 port_scalars = st.integers(min_value=0, max_value=3)
 port_tuples = st.lists(port_scalars, min_size=1, max_size=3, unique=True).map(tuple)
@@ -103,11 +100,8 @@ def _unique_floats(min_size: int = 0, max_size: int = 4):
 @st.composite
 def list_loop(draw, field: str, min_size: int = 0):
     if field == 'lo_shift':
-        values = draw(
-            st.lists(
-                st.sampled_from(LO_SHIFTS), min_size=min_size, max_size=3, unique=True
-            )
-        )
+        lo_shifts = st.sampled_from(LO_SHIFTS)
+        values = draw(st.lists(lo_shifts, min_size=min_size, max_size=3, unique=True))
     else:
         values = draw(_unique_floats(min_size))
     return ss.specs.List(field=field, values=tuple(values))
@@ -137,11 +131,10 @@ def loop_sets(draw, allow_repeat: bool = True, allow_analysis: bool = True):
     loops = []
     for field in fields:
         if field == 'frequency_offset':
-            loop = draw(
-                st.one_of(
-                    list_loop(field), range_loop(field), frequency_bin_range_loop(field)
-                )
+            offset_loop = st.one_of(
+                list_loop(field), range_loop(field), frequency_bin_range_loop(field)
             )
+            loop = draw(offset_loop)
         else:
             loop = draw(list_loop(field))
         loops.append(loop)
@@ -203,11 +196,8 @@ def misplaced_repeat_loops(draw):
 @st.composite
 def duplicate_field_loops(draw):
     """(loops, field) where two loops target the same capture field"""
-    base = draw(
-        loop_sets(allow_repeat=False, allow_analysis=False).filter(
-            lambda l: len(l) >= 1
-        )
-    )
+    capture_field_loops = loop_sets(allow_repeat=False, allow_analysis=False)
+    base = draw(capture_field_loops.filter(lambda l: len(l) >= 1))
     dup = draw(st.sampled_from(base))
     loops = draw(st.permutations([*base, draw(list_loop(dup.field))]))
     if draw(st.booleans()):
@@ -355,16 +345,14 @@ def make_yfactor_dataset(
 
     bw = fields.analysis_bandwidth
     bandwidth = bw.where(np.isfinite(bw), fields.backend_sample_rate)
-    rms_dB = 10 * np.log10(
-        yfactor_rms_power(
-            fields.gain.broadcast_like(template),
-            _noise_figure_grid(grid, nf_dB).broadcast_like(template),
-            bandwidth.broadcast_like(template),
-            diode_on=fields.noise_diode_enabled.broadcast_like(template),
-            enr_dB=enr_dB,
-            **gain_kws,
-        )
+    gain = fields.gain.broadcast_like(template)
+    nf = _noise_figure_grid(grid, nf_dB).broadcast_like(template)
+    bandwidth = bandwidth.broadcast_like(template)
+    diode_on = fields.noise_diode_enabled.broadcast_like(template)
+    rms_power = yfactor_rms_power(
+        gain, nf, bandwidth, diode_on=diode_on, enr_dB=enr_dB, **gain_kws
     )
+    rms_dB = 10 * np.log10(rms_power)
 
     pvt = xr.concat([rms_dB, rms_dB + papr_dB], dim='power_detector')
     pvt = pvt.assign_coords(power_detector=['rms', 'peak'])

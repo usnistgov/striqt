@@ -315,12 +315,9 @@ def iq_waveforms(
     @st.composite
     def _iq(draw):
         dt = draw(dtype_strategy)
-        blocks = draw(
-            st.integers(
-                min_value=max(min_size // multiple_of, 1),
-                max_value=max(max_size // multiple_of, 1),
-            )
-        )
+        min_blocks = max(min_size // multiple_of, 1)
+        max_blocks = max(max_size // multiple_of, 1)
+        blocks = draw(st.integers(min_value=min_blocks, max_value=max_blocks))
         size = blocks * multiple_of
         shape = (size,) if channels is None else (channels, size)
         seed = draw(st.integers(min_value=0, max_value=2**16))
@@ -682,22 +679,16 @@ def restore_logging_state():
 
     import striqt.analysis as sa
 
+    def snapshot(logger, handler_owner, attr):
+        return logger.level, list(logger.handlers), getattr(handler_owner, attr, None)
+
     adapters = dict(sa.util._logger_adapters)
     saved = {
-        name: (
-            adapter.logger.level,
-            list(adapter.logger.handlers),
-            getattr(adapter, '_screen_handler', None),
-            adapter.extra,
-        )
+        name: (*snapshot(adapter.logger, adapter, '_screen_handler'), adapter.extra)
         for name, adapter in adapters.items()
     }
     parent = logging.getLogger('striqt')
-    parent_saved = (
-        parent.level,
-        list(parent.handlers),
-        getattr(parent, '_striqt_handler', None),
-    )
+    parent_saved = snapshot(parent, parent, '_striqt_handler')
 
     def restore_handlers(logger, handlers):
         for handler in logger.handlers:

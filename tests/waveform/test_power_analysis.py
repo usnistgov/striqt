@@ -553,11 +553,10 @@ class TestIqToBinPower:
         The kinds are one name from each group of BIN_STATS: the aliases are
         covered by TestStatUfuncFromShorthand, and the cupy cross-comparison runs
         every kind because each is a separate kernel there."""
-        iq = data.draw(
-            iq_waveforms(
-                min_size=size, max_size=32 * size, multiple_of=size, channels=channels
-            )
+        waveforms = iq_waveforms(
+            min_size=size, max_size=32 * size, multiple_of=size, channels=channels
         )
+        iq = data.draw(waveforms)
         axis = 0 if channels is None else 1
         Ts = 1e-6
 
@@ -649,15 +648,10 @@ class TestIqToCyclicPower:
         channels = iq.shape[0]
         Ts = 1e-6
 
-        result = iq_to_cyclic_power(
-            iq,
-            Ts,
-            detector_period=size * Ts,
-            cyclic_period=size * bins_per_cycle * Ts,
-            detectors=self.DETECTORS,
-            cycle_stats=self.CYCLE_STATS,
-            axis=1,
-        )
+        detector_period = size * Ts
+        cyclic_period = size * bins_per_cycle * Ts
+        kws = {'detectors': self.DETECTORS, 'cycle_stats': self.CYCLE_STATS, 'axis': 1}
+        result = iq_to_cyclic_power(iq, Ts, detector_period, cyclic_period, **kws)
 
         assert set(result) == set(self.DETECTORS)
         u = unit_roundoff(float_dtype_like(iq))
@@ -728,21 +722,11 @@ def ccdf_reference(a, edges, density):
 @st.composite
 def ccdf_cases(draw):
     """(samples, sorted edges, density) arguments for sample_ccdf"""
-    a = draw(
-        arrays(
-            dtype=np.float64,
-            shape=st.integers(min_value=1, max_value=200),
-            elements=st.floats(min_value=-100, max_value=100, allow_nan=False),
-        )
-    )
-    edges = draw(
-        st.lists(
-            st.floats(min_value=-120, max_value=120, allow_nan=False),
-            min_size=1,
-            max_size=20,
-            unique=True,
-        )
-    )
+    sizes = st.integers(min_value=1, max_value=200)
+    sample_values = st.floats(min_value=-100, max_value=100, allow_nan=False)
+    a = draw(arrays(dtype=np.float64, shape=sizes, elements=sample_values))
+    edge_values = st.floats(min_value=-120, max_value=120, allow_nan=False)
+    edges = draw(st.lists(edge_values, min_size=1, max_size=20, unique=True))
     return a, np.asarray(sorted(edges)), draw(st.booleans())
 
 
@@ -790,11 +774,10 @@ class TestNumpyCupyCrossComparison:
     ):
         """Cross-comparison on each fused kernel variant."""
         lim = limits[dtype]
-        x = data.draw(
-            positive_power_arrays(
-                min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
-            )
+        powers = positive_power_arrays(
+            min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
         )
+        x = data.draw(powers)
         result_np, result_cp = numpy_and_cupy(
             cupy_available, func, x, min_dtype='float32', abs=abs, eps=eps
         )
@@ -807,11 +790,10 @@ class TestNumpyCupyCrossComparison:
     @given(data=st.data())
     def test_dBtopow(self, cupy_available, dtype, data):
         lim = by_dtype(dtype, float32=30, float64=100)
-        dB = data.draw(
-            dB_arrays(
-                min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
-            )
+        levels = dB_arrays(
+            min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
         )
+        dB = data.draw(levels)
         result_np, result_cp = numpy_and_cupy(
             cupy_available, dBtopow, dB, min_dtype='float32'
         )
@@ -888,11 +870,10 @@ class TestNumpyCupyCrossComparison:
     @for_each_bin_kind
     @given(data=st.data())
     def test_iq_to_bin_power(self, cupy_available, size, kind, data):
-        iq = data.draw(
-            iq_waveforms(
-                min_size=size, max_size=32 * size, multiple_of=size, channels=2
-            )
+        waveforms = iq_waveforms(
+            min_size=size, max_size=32 * size, multiple_of=size, channels=2
         )
+        iq = data.draw(waveforms)
         Ts = 1e-6
         result_np, result_cp = numpy_and_cupy(
             cupy_available, iq_to_bin_power, iq, Ts, size * Ts, kind=kind, axis=1
@@ -905,14 +886,12 @@ class TestNumpyCupyCrossComparison:
     def test_iq_to_cyclic_power(self, cupy_available, case):
         iq, size, bins_per_cycle, n_cycles = case
         Ts = 1e-6
-        kws = {
-            'detector_period': size * Ts,
-            'cyclic_period': size * bins_per_cycle * Ts,
-            'axis': 1,
-        }
+        detector_period = size * Ts
+        cyclic_period = size * bins_per_cycle * Ts
+        kws = {'detector_period': detector_period, 'cyclic_period': cyclic_period}
 
-        result_np = iq_to_cyclic_power(iq, Ts, **kws)
-        result_cp = iq_to_cyclic_power(cupy_available.asarray(iq), Ts, **kws)
+        result_np = iq_to_cyclic_power(iq, Ts, axis=1, **kws)
+        result_cp = iq_to_cyclic_power(cupy_available.asarray(iq), Ts, axis=1, **kws)
 
         u = unit_roundoff(float_dtype_like(iq))
         rtol = bin_power_rtol(iq, size, 2) + ROUNDOFF_SAFETY * 2 * n_cycles * u

@@ -44,6 +44,8 @@ def test_arg_info_validate_round_trips():
 )
 def test_port_info_round_trips_as_probed():
     span = soapy._SoapyRange.from_soapy(Range(-30.0, 0.0, 0.5))
+    full_freq_range = soapy._SoapyRange.from_soapy_tuple((Range(300e6, 6e9),))
+    sample_rate_range = soapy._SoapyRange.from_soapy_tuple((Range(3.9e6, 125e6),))
     info = soapy._SoapyPortInfo(
         port_info={},
         full_duplex=False,
@@ -55,11 +57,9 @@ def test_port_info_round_trips_as_probed():
         gains={'PGA': span},
         full_gain_range=span,
         frequencies={'RF': (span,)},
-        full_freq_range=soapy._SoapyRange.from_soapy_tuple((Range(300e6, 6e9),)),
+        full_freq_range=full_freq_range,
         tune_args={},
-        backend_sample_rate_range=soapy._SoapyRange.from_soapy_tuple((
-            Range(3.9e6, 125e6),
-        )),
+        backend_sample_rate_range=sample_rate_range,
         master_clock_rates=(125e6,),
         bandwidths=(span,),
         sensors={},

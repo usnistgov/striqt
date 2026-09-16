@@ -77,20 +77,16 @@ def _schema(capture_cls):
     )
 
 
+_site_sensor = bindings.Sensor(
+    source_cls=SiteToneSource, peripherals_cls=peripherals.NoPeripherals
+)
+
 site_single_tone = bindings.bind_sensor(
-    'site_single_tone',
-    bindings.Sensor(
-        source_cls=SiteToneSource, peripherals_cls=peripherals.NoPeripherals
-    ),
-    _schema(SiteCapture),
+    'site_single_tone', _site_sensor, _schema(SiteCapture)
 )
 
 site_survey = bindings.bind_sensor(
-    'site_survey',
-    bindings.Sensor(
-        source_cls=SiteToneSource, peripherals_cls=peripherals.NoPeripherals
-    ),
-    _schema(SiteSurveyCapture),
+    'site_survey', _site_sensor, _schema(SiteSurveyCapture)
 )
 
 site_single_tone_calibration = bindings.bind_manual_yfactor_calibration(

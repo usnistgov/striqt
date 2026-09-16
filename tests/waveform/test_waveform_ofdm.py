@@ -75,11 +75,8 @@ def cp_index_reference(phy, frames, symbols, slots):
     for a, symbol in enumerate(symbols):
         for b, slot in enumerate(slots):
             for c, frame in enumerate(frames):
-                start = (
-                    frame * phy.frame_size
-                    + slot * phy.contiguous_size
-                    + phy.cp_start_idx[symbol]
-                )
+                slot_start = frame * phy.frame_size + slot * phy.contiguous_size
+                start = slot_start + phy.cp_start_idx[symbol]
                 inds[a, b, c] = start + np.arange(ncp)
     return inds.squeeze()
 
@@ -272,6 +269,13 @@ class TestPhy3GPP:
         assert ofdm.Phy3GPP(100e6).sample_rate == pytest.approx(153.6e6)
 
 
+def all_or_some(max_index):
+    """'all' or a tuple of up to four distinct indexes in [0, max_index]"""
+    indexes = st.integers(0, max_index)
+    some = st.lists(indexes, min_size=1, max_size=4, unique=True).map(tuple)
+    return st.one_of(st.just('all'), some)
+
+
 class TestIndexCyclicPrefix:
     @given(
         scs=st.sampled_from(SCS_5G),
@@ -281,26 +285,8 @@ class TestIndexCyclicPrefix:
     def test_matches_loop_reference(self, scs, frames, data):
         phy = phy_5g(scs)
         slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[scs]
-
-        symbols = data.draw(
-            st.one_of(
-                st.just('all'),
-                st.lists(st.integers(0, 13), min_size=1, max_size=4, unique=True).map(
-                    tuple
-                ),
-            )
-        )
-        slots = data.draw(
-            st.one_of(
-                st.just('all'),
-                st.lists(
-                    st.integers(0, slots_per_frame - 1),
-                    min_size=1,
-                    max_size=4,
-                    unique=True,
-                ).map(tuple),
-            )
-        )
+        symbols = data.draw(all_or_some(13))
+        slots = data.draw(all_or_some(slots_per_frame - 1))
 
         inds = phy.index_cyclic_prefix(frames=frames, symbols=symbols, slots=slots)
         assert_array_equal(inds, cp_index_reference(phy, frames, symbols, slots))
@@ -690,19 +676,13 @@ class TestGet5gSsbIq:
     @pytest.mark.parametrize('oaresample', [False, True])
     def test_block_count_and_delay_crop_the_input(self, oaresample):
         iq = self._tones(1e6)
-        discovery_periodicity = 1e-3
-        max_block_count = 2
+        blocks = {'discovery_periodicity': 1e-3, 'max_block_count': 2}
         delay = 0.5e-3
+        out = self._ssb_iq(iq, delay=delay, oaresample=oaresample, **blocks)
 
-        out = self._ssb_iq(
-            iq,
-            discovery_periodicity=discovery_periodicity,
-            max_block_count=max_block_count,
-            delay=delay,
-            oaresample=oaresample,
-        )
         offs = round(delay * self.FS_IN)
-        size_in = round(max_block_count * discovery_periodicity * self.FS_IN)
+        crop_duration = blocks['max_block_count'] * blocks['discovery_periodicity']
+        size_in = round(crop_duration * self.FS_IN)
         expected = self._ssb_iq(iq[:, offs : offs + size_in], oaresample=oaresample)
         assert out.shape == (2, round(size_in * FS / self.FS_IN))
         assert_array_equal(out, expected)

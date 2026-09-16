@@ -233,11 +233,10 @@ class TestAwaitAndIgnore:
             time.sleep(0.05)
             return 'late'
 
-        futures = [
-            pool.submit(self.fail, ValueError('first')),
-            pool.submit(slow_success),
-            pool.submit(self.fail, TypeError('second'), 0.02),
-        ]
+        first_failure = pool.submit(self.fail, ValueError('first'))
+        late_success = pool.submit(slow_success)
+        second_failure = pool.submit(self.fail, TypeError('second'), 0.02)
+        futures = [first_failure, late_success, second_failure]
         started.set()
         with pytest.raises(ExceptionGroup) as info:
             util.await_and_ignore(futures, 'arm sensor')
@@ -245,7 +244,7 @@ class TestAwaitAndIgnore:
         assert info.value.message == 'arm sensor'
         assert {type(e) for e in info.value.exceptions} == {ValueError, TypeError}
         assert all(fut.done() for fut in futures)
-        assert futures[1].result() == 'late'
+        assert late_success.result() == 'late'
 
 
 # %% DebugOnException

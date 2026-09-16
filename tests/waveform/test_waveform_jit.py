@@ -88,14 +88,8 @@ def corr_cases(
             ncp = n_inds
         else:
             ncp = draw(st.integers(min_value=4, max_value=nfft // 4))
-        inds = draw(
-            st.lists(
-                st.integers(min_value=0, max_value=2 * nfft),
-                min_size=n_inds,
-                max_size=n_inds,
-                unique=True,
-            )
-        )
+        positions = st.integers(min_value=0, max_value=2 * nfft)
+        inds = draw(st.lists(positions, min_size=n_inds, max_size=n_inds, unique=True))
         inds = np.asarray(sorted(inds) if sorted_inds else inds, dtype=np.int64)
         # every lag keeps at least one valid pair (from the smallest index) so the
         # correlation is defined; larger indexes may still run past the end of x
@@ -222,11 +216,10 @@ class TestFusedKernelsCuda:
     def test_log_kernels(self, cupy_available, data, dtype, name, func, kws, takes_eps):
         scale = 10 if name.startswith('powtodB') else 20
         lim = by_dtype(dtype, float32=1e4, float64=1e6)
-        x = data.draw(
-            positive_power_arrays(
-                min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
-            )
+        powers = positive_power_arrays(
+            min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
         )
+        x = data.draw(powers)
 
         expected = func(x, **kws)
         args = (kws['eps'],) if takes_eps else ()
@@ -255,11 +248,10 @@ class TestFusedKernelsCuda:
     @given(data=st.data())
     def test_dBtopow(self, cupy_available, data, dtype):
         lim = by_dtype(dtype, float32=30, float64=100)
-        dB = data.draw(
-            dB_arrays(
-                min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
-            )
+        levels = dB_arrays(
+            min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
         )
+        dB = data.draw(levels)
 
         expected = power_analysis.dBtopow(dB)
         result = self._run(cupy_available, 'dBtopow', dB)
