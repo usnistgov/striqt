@@ -64,8 +64,12 @@ def _get_cupy():
         return None
 
     try:
+        try:
+            # this needs to happen first or a linking error happens on py39 jetson
+            import numba.cuda
+        except ImportError:
+            pass
         import cupy as cp  # type: ignore
-        import numba.cuda
         import pandas
         import scipy
 
