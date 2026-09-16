@@ -64,8 +64,8 @@ def _get_cupy():
         return None
 
     try:
-        import numba.cuda
         import cupy as cp  # type: ignore
+        import numba.cuda
         import pandas
         import scipy
 
@@ -529,8 +529,9 @@ FAKE_SOAPY_CALIBRATION_SPEC = SWEEP_DIR / 'fake_soapy-calibration-cpu.yaml'
 @pytest.fixture
 def fake_soapy(monkeypatch):
     """a FakeSoapySDR module installed as striqt.sensor.lib.sources.soapy.SoapySDR"""
-    import striqt.waveform as sw
     from fake_soapy import install_fake_soapy
+
+    import striqt.waveform as sw
 
     yield install_fake_soapy(monkeypatch)
     # read_calibration and the lookups cache by path
@@ -568,3 +569,29 @@ def answer_prompts(monkeypatch, fake_soapy):
 
     monkeypatch.setattr(sa.util, 'blocking_input', blocking_input)
     return prompts
+
+
+# ---------------------------------------------------------------------------
+# Hardware tests
+# ---------------------------------------------------------------------------
+
+HARDWARE_ENV = 'STRIQT_TEST_HARDWARE'
+
+
+def pytest_configure(config):
+    # registered here rather than in pyproject.toml: pytest 8 ignores [tool.pytest]
+    config.addinivalue_line(
+        'markers', f'hardware: needs an attached SDR; opt in with {HARDWARE_ENV}=1'
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """skip `hardware` tests unless STRIQT_TEST_HARDWARE=1 opts in"""
+    import os
+
+    if os.environ.get(HARDWARE_ENV) == '1':
+        return
+    skip = pytest.mark.skip(reason=f'needs an attached SDR; set {HARDWARE_ENV}=1')
+    for item in items:
+        if 'hardware' in item.keywords:
+            item.add_marker(skip)
