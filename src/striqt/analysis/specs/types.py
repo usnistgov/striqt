@@ -1,3 +1,4 @@
+import fractions
 from typing import Annotated, Literal, Union
 from .helpers import Meta
 import striqt.waveform as sw
@@ -41,6 +42,23 @@ CellularAverageRBs = Annotated[
         'True (or "half") to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1 or ½ RBs'
     ),
 ]
+CyclicPeriod = Annotated[
+    float,
+    Meta(
+        'Cyclic analysis period, a common multiple of the periods of the expected signals',
+        's',
+    ),
+]
+CyclicStatistics = Annotated[
+    tuple[Union[str, float], ...],
+    Meta(
+        "Statistics evaluated across cycles at each cycle lag: 'min', 'mean', 'max', 'median', or a quantile in (0, 1)"
+    ),
+]
+DetectorPeriod = Annotated[
+    fractions.Fraction,
+    Meta('Power detector bin duration, a whole number of waveform samples', 's'),
+]
 Duration = Annotated[float, Meta('Duration of the analysis waveform', 's')]
 GuardBandwidths = Annotated[
     tuple[float, float],
@@ -62,6 +80,9 @@ MaxLagSymbols = Annotated[
 ]
 PerPort = Annotated[
     bool, Meta('whether to evaluate signal synchronization separately on each port')
+]
+PowerDetectors = Annotated[
+    tuple[str, ...], Meta("Power detectors applied to each bin: 'rms' and/or 'peak'")
 ]
 PowerBinMin = Annotated[float, Meta('Minimum power bin', units='dB power')]
 PowerBinMax = Annotated[float, Meta('Maximum power bin', units='dB power')]

@@ -637,33 +637,132 @@ class TestIqToBinPower:
 
 class TestIqToCyclicPower:
     """iq_to_cyclic_power on (channel, sample) input with axis=1, as the
-    cyclic_channel_power measurement calls it."""
+    cyclic_channel_power measurement calls it.
+
+    The expectations follow doc/papers/cyclic_power.tex: the detector output is
+    folded into a (cycle, lag) matrix with cyclic_period / detector_period lags per
+    cycle, and each cyclic statistic reduces the cycle axis.
+    """
 
     DETECTORS = ('rms', 'peak')
-    CYCLE_STATS = ('min', 'mean', 'max')
+    CYCLE_STATS = ('min', 'mean', 'max', 0.9)
+
+    @staticmethod
+    def evaluate(iq, size, lags, **kws):
+        """iq_to_cyclic_power with unit sample period, `size` samples per detector
+        bin and `lags` bins per cycle"""
+        kws = {'detectors': TestIqToCyclicPower.DETECTORS, **kws}
+        kws = {'cycle_stats': TestIqToCyclicPower.CYCLE_STATS, 'axis': 1, **kws}
+        return iq_to_cyclic_power(iq, 1.0, size, size * lags, **kws)
 
     @given(case=cyclic_power_cases())
     def test_matches_reference(self, case):
+        """Property: each statistic is the column-wise reduction of the binned power
+        reshaped to (cycle, lag), including a quantile statistic."""
         iq, size, bins_per_cycle, n_cycles = case
         channels = iq.shape[0]
-        Ts = 1e-6
 
-        detector_period = size * Ts
-        cyclic_period = size * bins_per_cycle * Ts
-        kws = {'detectors': self.DETECTORS, 'cycle_stats': self.CYCLE_STATS, 'axis': 1}
-        result = iq_to_cyclic_power(iq, Ts, detector_period, cyclic_period, **kws)
+        result = self.evaluate(iq, size, bins_per_cycle)
 
         assert set(result) == set(self.DETECTORS)
         u = unit_roundoff(float_dtype_like(iq))
         for detector in self.DETECTORS:
             assert set(result[detector]) == set(self.CYCLE_STATS)
-            binned = iq_to_bin_power(iq, Ts, size * Ts, kind=detector, axis=1)
+            binned = iq_to_bin_power(iq, 1.0, size, kind=detector, axis=1)
             by_cycle = binned.reshape(channels, n_cycles, bins_per_cycle)
             for stat in self.CYCLE_STATS:
                 value = result[detector][stat]
                 assert value.shape == (channels, bins_per_cycle)
                 expected = BIN_STATS[stat](by_cycle, axis=1)
                 assert_close(value, expected, rtol=ROUNDOFF_SAFETY * n_cycles * u)
+
+    @given(case=cyclic_power_cases())
+    def test_lag_average_of_mean_rms_is_the_waveform_power(self, case):
+        """Property: the fold keeps every detector sample (K = L * M), so averaging
+        the mean rms trace over lags recovers the mean power of the waveform."""
+        iq, size, bins_per_cycle, _ = case
+
+        kws = {'detectors': ('rms',), 'cycle_stats': ('mean',)}
+        result = self.evaluate(iq, size, bins_per_cycle, **kws)
+
+        expected = np.mean(np.abs(iq.astype(np.complex128)) ** 2, axis=1)
+        rtol = ROUNDOFF_SAFETY * iq.shape[1] * unit_roundoff(float_dtype_like(iq))
+        assert_close(result['rms']['mean'].mean(axis=1), expected, rtol=rtol)
+
+    @pytest.mark.parametrize('n_cycles', [1, 3, 8], ids=lambda n: f'{n}_cycles')
+    @pytest.mark.parametrize(
+        'periods_per_cycle', [1, 2, 5], ids=lambda q: f'{q}_periods_per_cycle'
+    )
+    def test_commensurate_signal_has_no_spread(
+        self, periods_per_cycle, n_cycles, subtests
+    ):
+        """A signal whose period divides cyclic_period repeats identically in every
+        cycle, so every statistic returns the one-cycle power envelope, and the lag
+        count is fixed by cyclic_period / detector_period rather than by n_cycles."""
+        size, lags = 4, 10
+        rng = np.random.default_rng(0)
+        envelope = rng.uniform(0.5, 2.0, size=(2, lags // periods_per_cycle))
+        amplitude = np.tile(envelope, (1, periods_per_cycle * n_cycles))
+        iq = np.repeat(amplitude, size, axis=1).astype(np.complex64)
+
+        result = self.evaluate(iq, size, lags)
+
+        # constant amplitude within each bin makes the rms and peak detectors agree
+        expected = np.tile(envelope**2, (1, periods_per_cycle))
+        rtol = ROUNDOFF_SAFETY * size * unit_roundoff(np.float32)
+        for detector in self.DETECTORS:
+            for stat in self.CYCLE_STATS:
+                with subtests.test(detector=detector, stat=stat):
+                    assert result[detector][stat].shape == (2, lags)
+                    assert_close(result[detector][stat], expected, rtol=rtol)
+
+    def test_pulse_period_selectivity(self):
+        """Pulses whose period divides the cycle stay at fixed lags with zero spread.
+        Pulses at a period coprime with the lag count visit every lag: the max
+        trace is the pulse power everywhere, the min trace is zero, and the mean
+        is the pulse power diluted by the period."""
+        size, lags, n_cycles, pulse = 2, 8, 12, 4.0
+
+        def pulse_train(period):
+            power = np.zeros(lags * n_cycles)
+            power[::period] = pulse
+            iq = np.repeat(np.sqrt(power), size).astype(np.complex64)
+            kws = {'detectors': ('rms',), 'cycle_stats': ('min', 'mean', 'max')}
+            return self.evaluate(iq[np.newaxis], size, lags, **kws)['rms']
+
+        aligned = pulse_train(4)
+        expected = np.zeros((1, lags))
+        expected[0, ::4] = pulse
+        for stat in ('min', 'mean', 'max'):
+            assert_array_equal(aligned[stat], expected)
+
+        smeared = pulse_train(3)
+        assert_array_equal(smeared['max'], np.full((1, lags), pulse))
+        assert_array_equal(smeared['min'], np.zeros((1, lags)))
+        rtol = ROUNDOFF_SAFETY * n_cycles * unit_roundoff(np.float32)
+        assert_close(smeared['mean'], np.full((1, lags), pulse / 3), rtol=rtol)
+
+    @pytest.mark.parametrize(
+        'drift_per_cycle, bleeds', [(1, False), (2, True)], ids=['within_bin', 'bleeds']
+    )
+    def test_cycle_period_mismatch_bleeds_into_the_next_lag(
+        self, drift_per_cycle, bleeds
+    ):
+        """A period mismatch drifts a feature by (n_cycles - 1) * drift_per_cycle
+        samples over the capture. The peak trace keeps the pulse in one lag with no
+        spread while that stays below the bin size, and leaks it into the next lag
+        once it reaches the bin size."""
+        size, lags, n_cycles = 8, 4, 5
+        iq = np.zeros((1, size * lags * n_cycles), dtype=np.complex64)
+        for cycle in range(n_cycles):
+            iq[0, cycle * size * lags + cycle * drift_per_cycle] = 1.0
+        assert ((n_cycles - 1) * drift_per_cycle >= size) == bleeds
+
+        kws = {'detectors': ('peak',), 'cycle_stats': ('min', 'max')}
+        peak = self.evaluate(iq, size, lags, **kws)['peak']
+
+        assert peak['max'][0].tolist() == [1.0, 1.0 if bleeds else 0.0, 0.0, 0.0]
+        assert peak['min'][0].tolist() == [0.0 if bleeds else 1.0, 0.0, 0.0, 0.0]
 
     @pytest.mark.parametrize(
         'n, kws, match',
@@ -695,6 +794,8 @@ class TestIqToCyclicPower:
         reason='iq_to_cyclic_power indexes power_shape[1], which a 1-D waveform lacks',
     )
     def test_1d_input(self):
+        """The paper defines the input as a single power time series, and axis=0 is
+        the default."""
         iq = np.random.default_rng(0).normal(size=64).astype(np.complex64)
         result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0)
         assert result['rms']['mean'].shape == (4,)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 import os
+from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +35,19 @@ def check_cw(ds, subtests):
             psd = _mean_psd(ds, i)
             tone_bin = np.argmin(abs(psd.baseband_frequency.values - TONE_OFFSET))
             assert np.argmax(psd.values) == tone_bin
+
+
+def check_cw_cyclic_power(ds, subtests):
+    check_cw(ds, subtests)
+    cyclic = ds.cyclic_channel_power
+    detector_period = Fraction(cyclic.attrs['detector_period'])
+    lag_count = round(cyclic.attrs['cyclic_period'] / detector_period)
+    expected_lags = np.arange(lag_count) * float(detector_period)
+    assert np.allclose(cyclic.cyclic_lag.values, expected_lags)
+    for i in range(ds.sizes['capture']):
+        with subtests.test('constant tone power at every cycle lag', capture=i):
+            trace = cyclic.isel(capture=i).sel(power_detector='rms')
+            assert float(trace.max() - trace.min()) < 0.1
 
 
 def check_dirac_delta(ds, subtests):
@@ -92,7 +106,7 @@ def check_site(ds, subtests):
 
 
 CHECKS = {
-    'cw-cpu': (4, check_cw),
+    'cw-cpu': (4, check_cw_cyclic_power),
     'dirac_delta-cpu': (4, check_dirac_delta),
     'noise-cpu': (4, check_noise),
     'sawtooth-cpu': (4, check_sawtooth),

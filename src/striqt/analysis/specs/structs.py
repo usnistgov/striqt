@@ -314,8 +314,8 @@ class ChannelPowerTimeSeries(
     kw_only=True,
     frozen=True,
 ):
-    detector_period: fractions.Fraction
-    power_detectors: tuple[str, ...] = ('rms', 'peak')
+    detector_period: types.DetectorPeriod
+    power_detectors: types.PowerDetectors = ('rms', 'peak')
 
 
 class ChannelPowerHistogram(
@@ -329,10 +329,10 @@ class ChannelPowerHistogram(
 
 
 class CyclicChannelPower(Analysis, kw_only=True, frozen=True):
-    cyclic_period: float
-    detector_period: fractions.Fraction
-    power_detectors: tuple[str, ...] = ('rms', 'peak')
-    cyclic_statistics: tuple[Union[str, float], ...] = ('min', 'mean', 'max')
+    cyclic_period: types.CyclicPeriod
+    detector_period: types.DetectorPeriod
+    power_detectors: types.PowerDetectors = ('rms', 'peak')
+    cyclic_statistics: types.CyclicStatistics = ('min', 'mean', 'max')
 
 
 class IQWaveform(
