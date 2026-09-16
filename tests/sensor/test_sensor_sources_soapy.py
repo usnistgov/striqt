@@ -345,6 +345,7 @@ def test_probe_soapy_info_fields(device):
 
     assert isinstance(info, soapy.SoapyInfo)
     assert (info.driver, info.hardware) == ('SoapyAIRT', 'AIR7101B')
+    assert info.hardware_info == {'firmware': '1.0.0', 'fpga': 'fake'}
     assert (info.num_rx_ports, info.num_tx_ports) == (2, 0)
     assert info.has_timestamps is True
     assert info.timesources == ('internal', 'external', 'gps')
@@ -1105,16 +1106,10 @@ class TestNullDriver:
         assert info.timesources == ()
         assert info.min_port_count(2) == 0
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=RecursionError,
-        reason='probe_soapy_info stores getHardwareInfo() as the SWIG SoapySDRKwargs '
-        'object rather than a dict, so SoapyInfo cannot be encoded',
-    )
     def test_probe_null_device_round_trips(self, null_device):
         info = soapy.probe_soapy_info(null_device)
+        assert dict(info.hardware_info) == {}
         assert info.validate() == info
-        assert isinstance(info.hardware_info, dict)
 
     def test_time_sync_needs_hardware_time(self, null_device):
         with pytest.raises(IOError, match='hardware time'):

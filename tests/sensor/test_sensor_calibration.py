@@ -263,6 +263,13 @@ def _lookup_pc(path, capture, **kws):
     return calibration.lookup_power_correction(path, capture, MCR, **kws)
 
 
+def test_read_calibration_is_loaded_and_closed(calibration_nc):
+    saved = ss.read_calibration(calibration_nc)
+    assert all(var._in_memory for var in saved.variables.values())
+    saved.close()  # a no-op on an already closed file, so reads still work
+    assert float(saved.noise_figure.max()) == pytest.approx(8.0)
+
+
 class TestLookupPowerCorrection:
     def test_exact_grid_point(self, calibration_nc):
         result = _lookup_pc(calibration_nc, _capture(gain=-10))
@@ -610,25 +617,8 @@ def run_fake_sweep(spec_path, output_path, **replace):
     """run a sweep YAML against the installed fake, returning the sink results"""
     spec = ss.read_yaml_spec(spec_path)
     spec = spec.replace(sink=spec.sink.replace(path=str(output_path)), **replace)
-
-    read_calibration = ss.lib.io.read_calibration
-
-    def read_calibration_into_memory(path, format_path=None):
-        # the sweep otherwise opens the calibration file in a thread-pool worker,
-        # reads it lazily from the acquisition thread and closes it wherever the
-        # garbage collector runs; the conda-forge netCDF4/HDF5 build in the pixi
-        # environments is not thread safe and segfaults on that pattern (see
-        # tests/xfail-audit.md)
-        dataset = read_calibration(path, format_path)
-        if dataset is not None:
-            dataset.load()
-            dataset.close()
-        return dataset
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(ss.lib.io, 'read_calibration', read_calibration_into_memory)
-        with ss.open_resources(spec, spec_path) as resources:
-            results = [ds for ds in ss.iterate_sweep(resources) if ds is not None]
+    with ss.open_resources(spec, spec_path) as resources:
+        results = [ds for ds in ss.iterate_sweep(resources) if ds is not None]
     return xr.concat(results, 'capture') if results else results
 
 
@@ -667,19 +657,6 @@ FAKE_CAL_GRID = dict(
 )
 
 
-def _saved_calibration(path):
-    """the saved corrections, read into memory so no netCDF handle stays open.
-
-    A lazily read dataset kept alive by a failed assertion's traceback (every
-    strict xfail below) would otherwise still hold the file when the next fake
-    sweep opens it from a worker thread, which segfaults the conda-forge HDF5 build.
-    """
-    saved = ss.read_calibration(path)
-    saved.load()
-    saved.close()
-    return saved
-
-
 def _assert_within_dB(actual, expected, tol_dB, *, in_dB):
     model = expected.broadcast_like(actual).transpose(*actual.dims)
     if in_dB:
@@ -703,7 +680,7 @@ class TestFakeCalibrationSweep:
 
     def test_file_is_indexed_by_the_looped_fields(self, fake_calibration_run):
         path, _ = fake_calibration_run
-        saved = _saved_calibration(path)
+        saved = ss.read_calibration(path)
         assert set(saved.dims) == set(FAKE_CAL_GRID)
         assert sorted(saved.backend_sample_rate.values) == [62.5e6, 125e6]
         assert set(saved.data_vars) >= set(CORRECTION_VARS)
@@ -711,7 +688,7 @@ class TestFakeCalibrationSweep:
     def test_finite_bandwidth_points_recover_the_model(self, fake_calibration_run):
         # 5 ms at 40 MHz gives a 1-sigma statistical error near 0.015 dB
         path, _ = fake_calibration_run
-        saved = _saved_calibration(path).sel(analysis_bandwidth=40e6)
+        saved = ss.read_calibration(path).sel(analysis_bandwidth=40e6)
         expected = expected_yfactor(dict(FAKE_CAL_GRID, analysis_bandwidth=(40e6,)))
         _assert_within_dB(saved.noise_figure, expected.noise_figure, 0.1, in_dB=True)
         _assert_within_dB(
@@ -724,7 +701,7 @@ class TestFakeCalibrationSweep:
     )
     def test_infinite_bandwidth_points_recover_the_model(self, fake_calibration_run):
         path, _ = fake_calibration_run
-        saved = _saved_calibration(path).sel(analysis_bandwidth=INF)
+        saved = ss.read_calibration(path).sel(analysis_bandwidth=INF)
         expected = expected_yfactor(dict(FAKE_CAL_GRID, analysis_bandwidth=(INF,)))
         _assert_within_dB(
             saved.power_correction, expected.power_correction, 0.1, in_dB=False

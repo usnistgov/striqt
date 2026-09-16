@@ -198,7 +198,10 @@ def read_calibration(
     if format_path is not None:
         path = format_path(path)
 
-    return xr.open_dataset(path)
+    # the result is cached and read from several threads, so leave no open netCDF
+    # handle behind: the HDF5 library is not thread safe in every build
+    with xr.open_dataset(path) as dataset:
+        return dataset.load()
 
 
 def save_calibration(path, corrections: 'xr.Dataset'):

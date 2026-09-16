@@ -260,7 +260,7 @@ def probe_soapy_info(device: SoapySDR.Device, retries: int | None = None) -> Soa
     return SoapyInfo(
         driver=device.getDriverKey(),
         hardware=device.getHardwareKey(),
-        hardware_info=device.getHardwareInfo(),
+        hardware_info=dict(device.getHardwareInfo()),
         num_rx_ports=num_rx,
         num_tx_ports=num_tx,
         has_timestamps=device.hasHardwareTime(),
