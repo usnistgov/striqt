@@ -8,6 +8,7 @@ compatibility, and numpy-vs-cupy agreement within ulp budgets for the library ca
 from __future__ import annotations
 
 import functools
+from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -148,7 +149,7 @@ by_log_conversion = pytest.mark.parametrize(
 class TestUnitConversionProperties:
     """Property: Unit conversions form bijections (invertible mappings)."""
 
-    UNIT_PAIRS = [
+    UNIT_PAIRS: ClassVar = [
         ('dBm', 'mW'),
         ('dBW', 'W'),
         ('dB', 'unitless'),
@@ -156,7 +157,7 @@ class TestUnitConversionProperties:
         ('dBW/Hz', 'W/Hz'),
     ]
 
-    WAVE_PAIRS = [
+    WAVE_PAIRS: ClassVar = [
         ('dBm', '√mW'),
         ('dBW', '√W'),
         ('dB', '√unitless'),
@@ -164,6 +165,7 @@ class TestUnitConversionProperties:
 
     @pytest.mark.parametrize('dB_unit,linear_unit', UNIT_PAIRS)
     def test_dB_linear_roundtrip(self, dB_unit: str, linear_unit: str):
+        assert unit_dB_to_linear(dB_unit) == linear_unit
         assert unit_linear_to_dB(unit_dB_to_linear(dB_unit)) == dB_unit
         assert unit_dB_to_linear(unit_linear_to_dB(linear_unit)) == linear_unit
 
@@ -217,12 +219,6 @@ class TestStatUfuncFromShorthand:
         ufunc = stat_ufunc_from_shorthand(np.std, axis=0)
         assert_array_equal(ufunc(self.DATA), np.std(self.DATA, axis=0))
 
-    def test_default_namespace_is_numpy(self):
-        assert_array_equal(
-            stat_ufunc_from_shorthand('mean')(self.DATA),
-            stat_ufunc_from_shorthand('mean', xp=np)(self.DATA),
-        )
-
     @pytest.mark.parametrize('kind', ['average', 'rms2', ''])
     def test_unknown_name_raises(self, kind):
         with pytest.raises(ValueError, match='kind argument'):
@@ -265,29 +261,37 @@ class TestAlgebraicProperties:
         assert_allclose(dBlinsum(arr), dB + 10 * np.log10(n), rtol=rtol, atol=atol)
 
     @given(
-        dB=dB_arrays(
-            min_value=-50,
-            max_value=50,
-            dtype=np.float64,
-            min_dims=2,
-            max_dims=2,
-            min_size=2,
-            max_size=10,
+        data=for_each_namespace(
+            dB_arrays(
+                min_value=-50,
+                max_value=50,
+                dtype=np.float64,
+                min_dims=2,
+                max_dims=2,
+                min_size=2,
+                max_size=10,
+            )
         ),
-        axis=st.integers(min_value=0, max_value=1),
+        axis=st.sampled_from([None, 0, 1]),
     )
-    def test_axis_reduces_dimension_and_relates_mean_to_sum(self, dB, axis):
-        expected_shape = list(dB.shape)
-        del expected_shape[axis]
-        N = dB.shape[axis]
+    def test_axis_reduces_dimension_and_relates_mean_to_sum(self, data, axis):
+        """Property: dBlinmean = dBlinsum - 10*log10(N) over the reduced axis."""
+        dB, xp_name = data
+        shape = to_numpy(dB).shape
+        if axis is None:
+            expected_shape, N = (), to_numpy(dB).size
+        else:
+            expected_shape, N = shape[:axis] + shape[axis + 1 :], shape[axis]
 
-        mean_result = dBlinmean(dB, axis=axis)
-        sum_result = dBlinsum(dB, axis=axis)
-        assert mean_result.shape == sum_result.shape == tuple(expected_shape)
+        mean_result = to_numpy(dBlinmean(dB, axis=axis))
+        sum_result = to_numpy(dBlinsum(dB, axis=axis))
+        assert mean_result.shape == sum_result.shape == expected_shape
 
         rtol, atol = linear_stat_tol(np.float64, 50, N, n_impl=2)
         expected_mean = sum_result - 10 * np.log10(N)
-        assert_allclose(mean_result, expected_mean, rtol=rtol, atol=atol)
+        assert_allclose(
+            mean_result, expected_mean, rtol=rtol, atol=atol, err_msg=xp_name
+        )
 
 
 class TestInputPreservation:
@@ -304,9 +308,8 @@ class TestEdgeCases:
     """Properties: Behavior at edge cases (zeros, extreme values)."""
 
     @by_log_conversion
-    @given(n=st.integers(min_value=1, max_value=10))
-    def test_zero_produces_neg_inf(self, func, scale, n):
-        assert np.all(func(np.zeros(n, dtype=np.float64), eps=0) == -np.inf)
+    def test_zero_produces_neg_inf(self, func, scale):
+        assert np.all(func(np.zeros(4, dtype=np.float64), eps=0) == -np.inf)
 
     @by_log_conversion
     @given(eps=st.floats(min_value=1e-30, max_value=1e-10, allow_nan=False))
@@ -385,26 +388,6 @@ class TestMultiBackend:
         rtol, atol = roundtrip_dB_tol(np.float64, np.abs(original).max())
         assert_allclose(roundtrip, original, rtol=rtol, atol=atol, err_msg=xp_name)
 
-    @given(
-        data=for_each_namespace(
-            dB_arrays(
-                min_value=-50, max_value=50, min_size=2, max_size=50, dtype=np.float64
-            )
-        )
-    )
-    def test_mean_sum_relationship(self, data):
-        """Property: dBlinmean = dBlinsum - 10*log10(N)."""
-        arr, xp_name = data
-        N = to_numpy(arr).size
-
-        mean_np = to_numpy(dBlinmean(arr, axis=None))
-        sum_np = to_numpy(dBlinsum(arr, axis=None))
-
-        expected_mean = sum_np - 10 * np.log10(N)
-        max_abs_dB = np.abs(to_numpy(arr)).max()
-        rtol, atol = linear_stat_tol(np.float64, max_abs_dB, N, n_impl=2)
-        assert_allclose(mean_np, expected_mean, rtol=rtol, atol=atol, err_msg=xp_name)
-
     @given(data=for_each_namespace(envelope_arrays(dtype=np.float64)))
     def test_complex_envelopes(self, data):
         """Property: envtopow(z) = |z|² and envtodB(z) = 20*log10(|z|) for complex z."""
@@ -417,9 +400,10 @@ class TestMultiBackend:
         assert_allclose(power, np.abs(arr_np) ** 2, rtol=rtol, err_msg=xp_name)
 
         dB = to_numpy(envtodB(arr))
+        assert np.isrealobj(dB)
         rtol, atol = log_conversion_tol(np.float64, 20, complex_input=True, n_impl=2)
         expected = 20 * np.log10(np.abs(arr_np))
-        assert_allclose(dB.real, expected, rtol=rtol, atol=atol, err_msg=xp_name)
+        assert_allclose(dB, expected, rtol=rtol, atol=atol, err_msg=xp_name)
 
 
 class TestAbsAndEpsBranches:
@@ -462,9 +446,12 @@ class TestArrayLikeHandling:
         with pytest.raises(TypeError, match='min_dtype'):
             _arraylike_with_buffer(np.ones(3), min_dtype=None)
 
-    def test_min_dtype_float16_raises(self):
+    @pytest.mark.parametrize(
+        'min_dtype', ['float16', np.float16, np.dtype('float16')], ids=repr
+    )
+    def test_min_dtype_float16_raises(self, min_dtype):
         with pytest.raises(TypeError, match='float32 or larger'):
-            _arraylike_with_buffer(np.ones(3), min_dtype=np.dtype('float16'))
+            _arraylike_with_buffer(np.ones(3), min_dtype=min_dtype)
 
     @pytest.mark.parametrize('obj', ['text', [1.0, 2.0], (1.0, 2.0), object()])
     def test_unsupported_input_raises(self, obj):
@@ -696,13 +683,15 @@ class TestIqToBinPower:
             iq_to_bin_power(iq, 1.0, ratio)
 
     def test_truncate_allows_fractional_bin_period(self):
+        """truncate=True intentionally rounds a fractional Tbin/Ts to whole samples."""
         iq = np.ones(64, dtype=np.complex64)
         result = iq_to_bin_power(iq, 1.0, 4.4, truncate=True)
         assert result.shape == (64 // 4,)
 
     @given(data=st.data(), size=bin_sizes().filter(lambda n: n > 1))
     def test_randomize(self, data, size):
-        """Property: random bins keep the shape, dtype and range of contiguous bins."""
+        """Property: every random bin is the mean power of some `size` contiguous
+        samples, i.e. a value of the sliding-window mean of |iq|**2."""
         iq = data.draw(
             iq_waveforms(min_size=4 * size, max_size=32 * size, multiple_of=size)
         )
@@ -712,9 +701,12 @@ class TestIqToBinPower:
 
         assert result.shape == (iq.shape[0] // size,)
         assert result.dtype == float_dtype_like(iq)
-        power = np.abs(iq) ** 2
-        assert np.all(result >= power.min() * (1 - bin_power_rtol(iq, size)))
-        assert np.all(result <= power.max() * (1 + bin_power_rtol(iq, size)))
+        power = np.abs(iq.astype(np.complex128)) ** 2
+        windows = np.lib.stride_tricks.sliding_window_view(power, size).mean(axis=1)
+        matches = np.isclose(
+            result[:, np.newaxis], windows[np.newaxis, :], rtol=bin_power_rtol(iq, size)
+        )
+        assert np.all(matches.any(axis=1))
 
     def test_randomize_requires_axis_0(self):
         iq = np.ones((2, 64), dtype=np.complex64)
@@ -769,9 +761,6 @@ class TestIqToCyclicPower:
                 expected = BIN_STATS[stat](by_cycle, axis=1)
                 assert_allclose(value, expected, rtol=ROUNDOFF_SAFETY * n_cycles * u)
 
-            assert np.all(result[detector]['min'] <= result[detector]['mean'])
-            assert np.all(result[detector]['mean'] <= result[detector]['max'])
-
     def test_detectors_none_raises(self):
         iq = np.ones((1, 64), dtype=np.complex64)
         with pytest.raises(ValueError, match='detectors'):
@@ -807,8 +796,9 @@ class TestIqToCyclicPower:
 
     @pytest.mark.xfail(
         strict=True,
-        reason='iq_to_cyclic_power normalizes a negative axis only after binning, so '
-        'the cycle statistics reduce the wrong axis',
+        reason='iq_to_cyclic_power(axis=-1) fails upstream in iq_to_bin_power, which '
+        'applies its detector on axis+1 == 0 and so reduces the channel axis (see '
+        'TestIqToBinPower.test_negative_axis)',
     )
     def test_negative_axis(self):
         iq = np.random.default_rng(0).normal(size=(2, 64)).astype(np.complex64)

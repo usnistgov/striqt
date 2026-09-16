@@ -64,7 +64,11 @@ def _get_cupy():
         return None
 
     try:
-        import numba.cuda
+        try:
+            # this needs to happen first or a linking error happens on py39 jetson
+            import numba.cuda
+        except ImportError:
+            pass
         import cupy as cp  # type: ignore
         import pandas
         import scipy
@@ -516,3 +520,82 @@ def isolated_extension_import():
         sys.modules.pop('extensions', None)
         if saved_module is not None:
             sys.modules['extensions'] = saved_module
+
+
+# ---------------------------------------------------------------------------
+# Fake SoapySDR
+# ---------------------------------------------------------------------------
+
+FAKE_SOAPY_SPEC = SWEEP_DIR / 'fake_soapy-cpu.yaml'
+FAKE_SOAPY_CALIBRATION_SPEC = SWEEP_DIR / 'fake_soapy-calibration-cpu.yaml'
+
+
+@pytest.fixture
+def fake_soapy(monkeypatch):
+    """a FakeSoapySDR module installed as striqt.sensor.lib.sources.soapy.SoapySDR"""
+    from fake_soapy import install_fake_soapy
+
+    import striqt.waveform as sw
+
+    yield install_fake_soapy(monkeypatch)
+    # read_calibration and the lookups cache by path
+    sw.util.clear_caches()
+
+
+@pytest.fixture
+def fake_soapy_ext(fake_soapy):
+    """the fake_soapy_bindings module, registered by reading fake_soapy-cpu.yaml"""
+    import sys
+
+    import striqt.sensor as ss
+
+    ss.read_yaml_spec(FAKE_SOAPY_SPEC)
+    return sys.modules['fake_soapy_bindings']
+
+
+@pytest.fixture
+def answer_prompts(monkeypatch, fake_soapy):
+    """answer the calibration prompts: confirm the ENR, and switch the fake noise
+    diode on 'enable|disable noise diode at port N'. Returns the prompt log."""
+    import re
+
+    import striqt.analysis as sa
+
+    prompts = []
+
+    def blocking_input(prompt=None):
+        prompts.append(prompt)
+        match = re.match(r'(enable|disable) noise diode at port (\d+)', prompt or '')
+        if match:
+            fake_soapy.model.diode_on[int(match.group(2))] = match.group(1) == 'enable'
+            return ''
+        return 'y'
+
+    monkeypatch.setattr(sa.util, 'blocking_input', blocking_input)
+    return prompts
+
+
+# ---------------------------------------------------------------------------
+# Hardware tests
+# ---------------------------------------------------------------------------
+
+HARDWARE_ENV = 'STRIQT_TEST_HARDWARE'
+
+
+def pytest_configure(config):
+    # registered here rather than in pyproject.toml: pytest 8 ignores [tool.pytest]
+    config.addinivalue_line(
+        'markers', f'hardware: needs an attached SDR; opt in with {HARDWARE_ENV}=1'
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """skip `hardware` tests unless STRIQT_TEST_HARDWARE=1 opts in"""
+    import os
+
+    if os.environ.get(HARDWARE_ENV) == '1':
+        return
+    skip = pytest.mark.skip(reason=f'needs an attached SDR; set {HARDWARE_ENV}=1')
+    for item in items:
+        if 'hardware' in item.keywords:
+            item.add_marker(skip)

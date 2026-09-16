@@ -26,11 +26,7 @@ SS = TypeVar('SS', bound='specs.SoapySource')
 
 
 def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
-    ret = _y_factor_power_corrections(dataset, Tref=Tref)
-    # ret['baseband_frequency_response'] = _y_factor_frequency_response_correction(
-    #     **kwargs, fc_temperatures=ret.temperature
-    # )
-    return ret
+    return _y_factor_power_corrections(dataset, Tref=Tref)
 
 
 def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
@@ -168,8 +164,6 @@ class YFactorSink(sinks.SinkBase):
         super().flush()
 
         # re-index by radio setting rather than capture
-        port = int(data[0].port)
-
         loops = data[0].attrs['loops']
         implied_loops = (data[0].attrs['calibration'] or {}).get('implied_loops', [])
         fields = list(implied_loops) + [
@@ -385,32 +379,13 @@ def _ensure_loop_at_position(sweep: specs.Sweep):
             raise TypeError('noise_diode_enabled must be the first specified loop')
 
 
-def _y_factor_temperature(
-    power: 'xr.DataArray', enr_dB: float, Tamb: float, Tref=290.0
-) -> 'xr.DataArray':
-    Toff = Tamb
-    Ton = Tref * 10 ** (enr_dB / 10.0)
-
-    # compute the Y-factor from measured power
-    Pon = power.sel(noise_diode_enabled=True, drop=True)
-    Poff = power.sel(noise_diode_enabled=False, drop=True)
-    Y = Pon / Poff
-
-    # compute receive noise temperature from the Y-factor
-    T = (Ton - Y * Toff) / (Y - 1)
-    T.name = 'T'
-    T.attrs = {'units': 'K'}
-
-    return T
-
-
 def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
     """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
 
     # return bandwidth with same shape as dataset.channel_power_time_series
     bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
     sample_rate = data.backend_sample_rate.broadcast_like(data).squeeze()
-    where = ~np.isfinite(bw.values == float('inf'))
+    where = ~np.isfinite(bw.values)
     bw.values[where] = sample_rate.values[where]
     return bw
 
@@ -464,30 +439,6 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
         'papr_on': papr.sel(noise_diode_enabled=True, drop=True),
         'papr_off': papr.sel(noise_diode_enabled=False, drop=True),
     })
-
-
-def _y_factor_frequency_response_correction(
-    dataset: 'xr.DataArray',
-    fc_temperatures: 'xr.DataArray',
-    enr_dB: float,
-    Tamb: float,
-    Tref=290,
-):
-    spectrum = dataset.power_spectral_density.sel(
-        time_statistic='mean', drop=True
-    ).pipe(lambda x: 10 ** (x / 10.0))
-
-    all_T = _y_factor_temperature(spectrum, enr_dB=20.87, Tamb=294.5389)
-
-    # normalize the power correction at each center frequency, and then average the result across center frequency
-
-    temp_norm = fc_temperatures.broadcast_like(all_T) / all_T
-    frequency_response = temp_norm.median(dim='center_frequency')
-
-    frequency_response.name = 'Baseband power scaling correction'
-    frequency_response.attrs = {'units': 'unitless'}
-
-    return frequency_response
 
 
 def _summarize_calibration_field(

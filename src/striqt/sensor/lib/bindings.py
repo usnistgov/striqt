@@ -34,7 +34,7 @@ PC2 = ParamSpec('PC2')
 
 
 class BoundSweep(specs.Sweep[SS, SP, SC], frozen=True, kw_only=True):
-    mock_sensor: specs.types.MockSensor = None
+    mock_source: specs.types.MockSource = None
 
 
 registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any]]'] = {}
@@ -64,10 +64,9 @@ class SensorBinding(Sensor[SS, SP, SC]):
 
     def __post_init__(self):
         super().__post_init__()
-        assert isinstance(self.sweep_spec_cls, type) and (
-            self.sweep_spec_cls,
-            BoundSweep,
-        )
+        assert isinstance(self.sweep_spec_cls, type)
+        if not issubclass(self.sweep_spec_cls, specs.Sweep):
+            raise TypeError(f'sweep_spec_cls is not a Sweep subclass')
 
 
 def bind_sensor(

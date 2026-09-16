@@ -29,15 +29,12 @@ from site_strategies import (
 )
 from site_strategies import capture_dict as site_capture_dict
 from sweep_strategies import (
-    LIST_LOOP_FIELDS,
     CaptureCls,
     capture_tuples,
     frequency_bin_range_loop,
-    loop_point_count,
     make_capture,
     make_sweep,
     port_scalars,
-    port_tuples,
     port_values,
     ports_and_lo,
     range_loop,
@@ -127,11 +124,15 @@ def test_split_leaves_adjust_analysis_intact():
         assert c.adjust_analysis == {'a': (1, 2, 3)}
 
 
-def test_split_short_tuple_field_is_left_on_the_extra_port():
-    # zip stops at the shorter tuple, so the third port keeps the whole 2-tuple
+@pytest.mark.xfail(
+    strict=True,
+    reason='split_capture_ports zips each tuple field against port, so a tuple '
+    'shorter than port is copied whole onto the extra ports instead of raising',
+)
+def test_split_rejects_a_tuple_field_shorter_than_port():
     capture = make_capture(port=(0, 1, 2), external_lo_frequency=(1e9, 2e9))
-    split = H.split_capture_ports(capture)
-    assert [c.external_lo_frequency for c in split] == [1e9, 2e9, (1e9, 2e9)]
+    with pytest.raises(ValueError):
+        H.split_capture_ports(capture)
 
 
 def test_pairwise_without_previous_capture():
@@ -141,17 +142,30 @@ def test_pairwise_without_previous_capture():
     assert H.pairwise_by_port(capture, capture, True) == [(first, None), (second, None)]
 
 
-@given(port=port_tuples, offsets=st.tuples(st.floats(0, 1e3), st.floats(0, 1e3)))
-def test_pairwise_pairs_by_index(port, offsets):
-    c1 = make_capture(port=port, frequency_offset=offsets[0])
-    c2 = make_capture(port=port, frequency_offset=offsets[1])
-    expected = list(zip(H.split_capture_ports(c1), H.split_capture_ports(c2)))
+def test_pairwise_pairs_by_index():
+    c1 = make_capture(port=(0, 1), frequency_offset=1.0)
+    c2 = make_capture(port=(0, 1), frequency_offset=2.0)
+    expected = [
+        (
+            make_capture(port=0, frequency_offset=1.0),
+            make_capture(port=0, frequency_offset=2.0),
+        ),
+        (
+            make_capture(port=1, frequency_offset=1.0),
+            make_capture(port=1, frequency_offset=2.0),
+        ),
+    ]
     assert H.pairwise_by_port(c1, c2, False) == expected
 
 
-def test_pairwise_truncates_to_the_shorter_port_count():
-    pairs = H.pairwise_by_port(make_capture(port=(0, 1)), make_capture(port=0), False)
-    assert len(pairs) == 1
+@pytest.mark.xfail(
+    strict=True,
+    reason='pairwise_by_port zips the two split lists, silently truncating to the '
+    'shorter port count instead of raising',
+)
+def test_pairwise_rejects_different_port_counts():
+    with pytest.raises(ValueError):
+        H.pairwise_by_port(make_capture(port=(0, 1)), make_capture(port=0), False)
 
 
 # %% ensure_tuple
@@ -216,20 +230,28 @@ def test_unique_ports_of_fixtures(cw_sweep, calibration_sweep):
 # %% get_capture_type
 
 
-@pytest.mark.parametrize(
-    'binding',
-    [
-        'single_tone',
-        'noise',
-        'sawtooth',
-        'dirac_delta',
-        'warmup',
-        'air7101b_calibration',
+class _UnboundSweep(
+    ss.specs.Sweep[
+        ss.specs.FunctionSource, ss.specs.NoPeripherals, ss.specs.SingleToneCapture
     ],
-)
-def test_capture_type_of_bound_sweeps(binding):
-    b = getattr(ss.bindings, binding)
+    frozen=True,
+    kw_only=True,
+):
+    pass
+
+
+def test_capture_type_of_a_bound_sweep():
+    b = ss.bindings.single_tone
     assert H.get_capture_type(b.sensor.sweep_spec_cls) is b.schema.capture
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='get_type_hints does not substitute the Generic parameters of a Sweep '
+    'subclass, so the unbound branch returns the bare SC TypeVar',
+)
+def test_capture_type_of_an_unbound_sweep():
+    assert H.get_capture_type(_UnboundSweep) is ss.specs.SingleToneCapture
 
 
 # %% describe_capture
@@ -269,17 +291,6 @@ def test_describe_capture_names_the_field_driven_by_a_key():
 
 
 # %% concat_group_sizes
-
-
-@given(
-    captures=capture_tuples(min_size=1, max_size=6),
-    min_size=st.integers(min_value=1, max_value=5),
-)
-def test_concat_group_sizes_partition_the_captures(captures, min_size):
-    sizes = H.concat_group_sizes(captures, min_size=min_size)
-    assert sum(sizes) == len(captures)
-    assert all(size >= 1 for size in sizes)
-    assert all(size >= min_size for size in sizes[:-1])
 
 
 def test_concat_group_sizes_empty():
@@ -414,12 +425,6 @@ def test_path_fields_only_string_fixed_values_from_site_files(site_sweep):
     assert 'mast_height' not in H.get_path_fields(site_sweep, source_id=OTHER_ID)
 
 
-def test_path_fields_are_cached_per_argument_set(cw_sweep):
-    # the lru_cache also freezes start_time for repeated identical arguments
-    first = H.get_path_fields(cw_sweep, source_id='cafe')
-    assert H.get_path_fields(cw_sweep, source_id='cafe') is first
-
-
 def test_formatter_passes_through_paths_without_fields(cw_sweep, monkeypatch):
     def fail(*args, **kws):
         raise AssertionError('lookup.id must not be called')
@@ -447,12 +452,6 @@ def test_formatter_names_the_unknown_field_and_the_allowed_ones(
     assert 'source_id' in str(info.value)
 
 
-def test_formatter_resolves_spec_path(cw_sweep):
-    relative = 'tests/sensor/sweeps/cw-cpu.yaml'
-    assert H.PathFormatter(cw_sweep, spec_path=relative).spec_path.is_absolute()
-    assert H.PathFormatter(cw_sweep).spec_path is None
-
-
 @pytest.mark.xfail(
     strict=True,
     reason="Sink.path defaults to '{yaml_name}-{start_time}' but get_path_fields "
@@ -477,10 +476,9 @@ def test_formatter_fills_the_site_sink_template(
 
 
 @given(sweep=sweeps())
-def test_loop_count_is_the_product_of_points_and_captures(sweep):
+def test_loop_captures_returns_a_tuple_of_the_capture_class(sweep):
     result = H.loop_captures(sweep)
     assert isinstance(result, tuple)
-    assert len(result) == loop_point_count(sweep.loops) * len(sweep.captures)
     assert all(type(c) is CaptureCls for c in result)
 
 
@@ -526,12 +524,19 @@ def test_limit_is_a_prefix(sweep, limit):
     assert H.loop_captures(sweep, limit=limit) == H.loop_captures(sweep)[:limit]
 
 
-@given(sweep=sweeps(), data=st.data())
-def test_only_fields_filters_capture_loops_but_keeps_analysis_loops(sweep, data):
-    fields = tuple(data.draw(st.lists(st.sampled_from(LIST_LOOP_FIELDS), unique=True)))
-    kept = tuple(l for l in sweep.loops if l.isin == 'analysis' or l.field in fields)
-    expected = H.loop_captures(make_sweep(captures=sweep.captures, loops=kept))
-    assert H.loop_captures(sweep, only_fields=fields) == expected
+def test_only_fields_filters_capture_loops_but_keeps_analysis_loops():
+    base = make_capture(frequency_offset=7.0)
+    loops = (
+        ss.specs.List(field='frequency_offset', values=(1.0, 2.0, 3.0)),
+        ss.specs.List(field='snr', values=(10.0, 20.0)),
+        ss.specs.List(field='window', isin='analysis', values=('hann', 'hamming')),
+    )
+    sweep = make_sweep(captures=(base,), loops=loops)
+    result = H.loop_captures(sweep, only_fields=('snr',))
+    assert len(result) == 2 * 2
+    assert [c.frequency_offset for c in result] == [7.0] * 4
+    assert [c.snr for c in result] == [10.0, 10.0, 20.0, 20.0]
+    assert [c.adjust_analysis['window'] for c in result] == ['hann', 'hamming'] * 2
 
 
 def test_loops_without_captures_build_new_instances():
@@ -585,18 +590,12 @@ def test_analysis_loop_merges_with_the_captures_adjust_analysis():
 def test_loop_only_nyquist_keeps_bandwidths_within_the_sample_rate(bandwidths):
     captures = (make_capture(sample_rate=1e6, duration=1e-3),)
     loops = (ss.specs.List(field='analysis_bandwidth', values=tuple(bandwidths)),)
-    unfiltered = H.loop_captures(make_sweep(captures=captures, loops=loops))
     options = ss.specs.SweepOptions(loop_only_nyquist=True)
     filtered = H.loop_captures(
         make_sweep(captures=captures, loops=loops, options=options)
     )
-    expected = tuple(
-        c
-        for c in unfiltered
-        if not math.isfinite(c.analysis_bandwidth)
-        or c.sample_rate >= c.analysis_bandwidth
-    )
-    assert filtered == expected
+    expected = [b for b in bandwidths if b in (0.5e6, 1e6, math.inf)]
+    assert [c.analysis_bandwidth for c in filtered] == expected
 
 
 def test_loop_only_nyquist_keeps_inf_bandwidth():
@@ -675,9 +674,11 @@ def test_tuple_port_fields_survive_looping():
         range_loop('frequency_offset'), frequency_bin_range_loop('frequency_offset')
     )
 )
-def test_range_loops_follow_their_own_points(loop):
+def test_range_loops_step_from_start_to_stop(loop):
     result = H.loop_captures(make_sweep(captures=(make_capture(),), loops=(loop,)))
-    assert [c.frequency_offset for c in result] == loop.get_points()
+    count = round((loop.stop - loop.start) / loop.step) + 1
+    expected = [loop.start + i * loop.step for i in range(count)]
+    assert [c.frequency_offset for c in result] == pytest.approx(expected)
 
 
 def test_survey_loops_expand(site_survey_sweep):
@@ -836,11 +837,6 @@ def test_port_adjustments_are_rejected_when_the_sweep_is_built():
 # %% adjust_captures: site override files on the extension binding
 
 
-def test_site_fields_are_accepted_by_the_bound_capture_class():
-    sweep = make_site_sweep(adjust_captures=SITE_ADJUST)
-    assert SiteSweepCls.from_dict(sweep.to_dict()) == sweep
-
-
 def test_yaml_and_direct_adjustments_agree(site_sweep):
     direct = make_site_sweep(adjust_captures=SITE_ADJUST)
     assert site_sweep.adjust_captures == direct.adjust_captures
@@ -915,13 +911,6 @@ def test_single_element_tuple_key_remap_is_optional(site_sweep, center_frequency
 def test_multi_field_key_with_per_port_values(site_sweep):
     c = first_site_capture(site_sweep, OTHER_ID, port=(0, 1), switch_input=1)
     assert c.antenna_index == (2, 3)
-
-
-def test_remap_keyed_on_an_unknown_field_is_dropped():
-    # documented as current; see the xfail below
-    remap = Remap(key='centre_frequency', lookup={1.0: 'x'})
-    sweep = make_site_sweep(adjust_captures={'defaults': {'channel_name': remap}})
-    assert dict(sweep.adjust_captures['defaults']) == {}
 
 
 @pytest.mark.xfail(

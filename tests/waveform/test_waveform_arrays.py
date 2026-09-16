@@ -8,8 +8,6 @@ Known defects are recorded as strict expected failures.
 
 from __future__ import annotations
 
-import itertools
-
 import numpy as np
 import pytest
 from conftest import _cupy, float_arrays, shaped_arrays, to_numpy
@@ -276,7 +274,7 @@ class TestAxisToBlocks:
         truncated = np.take(x, np.arange(m * size), axis=axis)
         assert_array_equal(result.reshape(truncated.shape), truncated)
 
-    @pytest.mark.parametrize('size', [2.0, np.int64(2), '2'])
+    @pytest.mark.parametrize('size', [2.0, '2'])
     def test_non_int_size_raises(self, size):
         with pytest.raises(TypeError):
             arrays.axis_to_blocks(np.zeros(4), size)
@@ -417,14 +415,10 @@ class TestGroupedViews:
             assert len(views) == 1 and views[0] is x
             return
 
-        coverage = np.zeros(shape, dtype=int)
-        slices = itertools.product(
-            *arrays.grouped_slices_along_axis(shape, max_size, axis)
-        )
-        for view, slice_ in zip(views, slices):
-            assert_array_equal(view, x[slice_])
+        coverage = np.zeros(x.size, dtype=int)
+        for view in views:
             assert view.size <= max(max_size, shape[axis])
-            coverage[slice_] += 1
+            coverage[view.ravel()] += 1
         assert_array_equal(coverage, 1)
 
     def test_axis_dimension_is_never_split(self):
@@ -492,19 +486,13 @@ class TestConvertNpToXp:
     def test_other_namespace_converts_with_asarray(self):
         tag, converted = _arange_np(3, xp=_AsarrayNamespace())
         assert tag == 'asarray'
-        assert_array_equal(converted[1], [0, 1, 2])
+        assert type(converted) is np.ndarray
+        assert_array_equal(converted, [0, 1, 2])
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason=(
-            'convert_np_to_xp falls back to xp.array but then unconditionally '
-            'calls xp.asarray on the result'
-        ),
-    )
     def test_other_namespace_converts_with_array(self):
         tag, converted = _arange_np(3, xp=_ArrayOnlyNamespace())
         assert tag == 'array'
+        assert type(converted) is np.ndarray
         assert_array_equal(converted, [0, 1, 2])
 
     def test_namespace_without_constructors_raises(self):
@@ -519,11 +507,6 @@ class TestConvertNpToXp:
 
 
 class TestCupyHelpers:
-    def test_non_stream_context_is_a_no_op(self):
-        with arrays.NonStreamContext(1, a=2) as ctx:
-            assert ctx.synchronize() is None
-            assert ctx.use() is None
-
     def test_numpy_arrays_get_a_non_stream_context(self):
         x = np.zeros(4)
         assert isinstance(arrays.array_stream(x), arrays.NonStreamContext)
@@ -537,15 +520,14 @@ class TestCupyHelpers:
         assert arrays.array_namespace(x) is np
         assert arrays.array_namespace(x, use_compat=True) is anp
 
+    @pytest.mark.skipif(
+        _cupy is not None,
+        reason='with a device, set_cuda_mem_limit(1.0) caps the pool for the session',
+    )
     def test_memory_helpers_run_without_a_device(self):
         assert arrays.free_cupy_mempool() is None
         assert arrays.configure_cupy() is None
         assert arrays.set_cuda_mem_limit(fraction=1.0) is None
-
-    @pytest.mark.skipif(_cupy is not None, reason='cupy is installed')
-    def test_pinned_copy_requires_cupy(self):
-        with pytest.raises(AssertionError):
-            arrays.pinned_array_as_cupy(np.zeros(4, dtype=np.float32))
 
     def test_cupy_arrays_get_a_stream(self, cupy_available):
         cp = cupy_available

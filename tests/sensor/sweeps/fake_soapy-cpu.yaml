@@ -1,0 +1,40 @@
+# Measurement sweep against the fake SoapySDR device (tests/sensor/fake_soapy.py).
+# Every capture has a matching grid point in fake_soapy-calibration-cpu.yaml.
+
+sensor_binding: fake_soapy
+extensions:
+  import_path: src
+  import_name: fake_soapy_bindings
+
+source:
+  array_backend: numpy
+  time_source: host
+  time_sync_at: acquire
+  clock_source: internal
+  receive_retries: 3
+  adc_overload_limit: -1
+  calibration: null
+
+captures:
+  - port: [0, 1]
+    center_frequency: 1.5e9
+    gain: 0
+    duration: 5e-3
+    sample_rate: 125e6
+    analysis_bandwidth: 40e6
+    host_resample: false
+  - port: 0
+    center_frequency: 1.5e9
+    gain: -10
+    duration: 5e-3
+    sample_rate: 62.5e6
+    analysis_bandwidth: 40e6
+    host_resample: false
+
+analysis:
+  channel_power_time_series:
+    detector_period: 1e-3
+    power_detectors: [rms, peak]
+
+sink:
+  path: "outputs/{spec_name}-{start_time}.zarr.zip"

@@ -5,7 +5,7 @@ from __future__ import annotations as __
 import sys
 import msgspec
 from pathlib import Path
-from typing import Any, Optional, overload, TYPE_CHECKING
+from typing import Optional, overload, TYPE_CHECKING
 
 import striqt.analysis as sa
 
@@ -146,12 +146,10 @@ def _convert_dict_spec(
     sink = spec.sink
     if store_backend is not None:
         sink = sink.replace(store=store_backend)
-
-    replace: dict[str, Any] = dict(sink=sink)
     if output_path is not None:
-        replace['path'] = output_path
+        sink = sink.replace(path=output_path)
 
-    return spec.replace(**replace)
+    return spec.replace(sink=sink)
 
 
 def read_tdms_iq(
@@ -198,7 +196,10 @@ def read_calibration(
     if format_path is not None:
         path = format_path(path)
 
-    return xr.open_dataset(path)
+    # the result is cached and read from several threads, so leave no open netCDF
+    # handle behind: the HDF5 library is not thread safe in every build
+    with xr.open_dataset(path) as dataset:
+        return dataset.load()
 
 
 def save_calibration(path, corrections: 'xr.Dataset'):
@@ -242,7 +243,7 @@ def _import_extensions_from_spec(
                 f'extension import_path {str(p)!r} is not a directory'
             )
 
-        if p != sys.path[0]:
+        if p != Path(sys.path[0]):
             assert isinstance(p, (str, Path))
             sys.path.insert(0, str(p))
 

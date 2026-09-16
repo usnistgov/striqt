@@ -13,10 +13,6 @@ warmup = "_warmup_striqt"
 # general development
 python = ">=3.9.0"
 pip = "*"
-jupyter = "*"
-ruff = "*"
-eval_type_backport = "*"
-# pyrefly = ">=0.45.0"
 
 # I/O and validation
 msgspec = "~=0.19"
@@ -43,17 +39,23 @@ matplotlib-base = ">=3.7"
 soapysdr = ">=0.8.1"
 
 [pypi-dependencies]
-striqt = {path = ".", editable = true}
+striqt = {path = ".", editable = true, extras = ["dev"]}
 
 [feature.py39.dependencies]
 python = "~=3.9.0"
 
-[feature.py313.dependencies]
-python = "~=3.13.0"
+[feature.py314.dependencies]
+python = "~=3.14.0"
 
 [feature.test.dependencies]
-pytest = "*"
 nptdms = "*"
+SoapySDR = "*"
+
+[feature.test.pypi-dependencies]
+striqt = {path = ".", editable = true, extras = ["dev", "test"]}
+
+[feature.doc.pypi-dependencies]
+striqt = {path = ".", editable = true, extras = ["dev", "doc"]}
 
 [feature.cupy]
 platforms = ["linux-aarch64", "linux-64", "win-64"]
@@ -66,6 +68,7 @@ default = ["py39"]
 cupy = ["cupy"]
 test = ["test"]
 py39 = ["py39"]
-py313 = ["py313"]
+py314 = ["py314"]
 test39 = ["test","py39"]
-test313 = ["test","py313"]
+test314 = ["test","py314"]
+doc = ["doc", "py314"]

@@ -564,7 +564,7 @@ def _arraylike_with_buffer(
     # infer the array object and namespace
     if min_dtype is None:
         raise TypeError('must pass a dtype as min_dtype')
-    if min_dtype is np.dtype('float16'):
+    if np.dtype(min_dtype) == np.dtype('float16'):
         raise TypeError('min_dtype must be at least float32 or larger')
 
     type_ = type(x)

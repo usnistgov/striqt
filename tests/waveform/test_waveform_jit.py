@@ -45,8 +45,8 @@ COMPLEX_ENVELOPES = envelope_arrays(
 def corr_reference(inds, x, nfft, ncp, norm):
     """float64 evaluation of the cyclic-prefix correlation computed by _corr_at_indices.
 
-    Index pairs that run past the end of `x` are dropped, matching the kernels'
-    zero-fill (CPU) and early exit (CUDA).
+    Index pairs that run past the end of `x` are dropped, as the CPU kernel's zero-fill
+    does for any index order.
     """
     xc = np.asarray(x).astype(np.complex128)
     inds = np.asarray(inds)
@@ -84,12 +84,16 @@ def corr_atol(x, n_inds, norm, n_impl=1):
     return ROUNDOFF_SAFETY * n_impl * (n_inds + 3) * u * scale
 
 
-def corr_cases(min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False):
+def corr_cases(
+    min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False, sorted_inds=False
+):
     """Strategy for (inds, x, nfft, ncp, norm) kernel arguments.
 
     The waveform length is drawn so that some examples run index pairs past the end of
-    `x`, which exercises the kernels' bounds handling. With `ncp_from_inds`, ncp is the
-    number of indices, as ofdm.corr_at_indices infers it from the last axis of `inds`.
+    `x`, which exercises the kernels' bounds handling; the indices are drawn in
+    arbitrary order unless `sorted_inds`, so an out-of-range pair may precede a valid
+    one. With `ncp_from_inds`, ncp is the number of indices, as ofdm.corr_at_indices
+    infers it from the last axis of `inds`.
     """
 
     @st.composite
@@ -100,19 +104,15 @@ def corr_cases(min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False):
             ncp = n_inds
         else:
             ncp = draw(st.integers(min_value=4, max_value=nfft // 4))
-        inds = np.sort(
-            np.asarray(
-                draw(
-                    st.lists(
-                        st.integers(min_value=0, max_value=2 * nfft),
-                        min_size=n_inds,
-                        max_size=n_inds,
-                        unique=True,
-                    )
-                ),
-                dtype=np.int64,
+        inds = draw(
+            st.lists(
+                st.integers(min_value=0, max_value=2 * nfft),
+                min_size=n_inds,
+                max_size=n_inds,
+                unique=True,
             )
         )
+        inds = np.asarray(sorted(inds) if sorted_inds else inds, dtype=np.int64)
         # every lag keeps at least one valid pair (from the smallest index) so the
         # correlation is defined; larger indexes may still run past the end of x
         min_size = int(inds.min()) + 2 * nfft + ncp
@@ -142,12 +142,10 @@ class TestCorrAtIndicesKernels:
         _corr_at_indices(inds, x, nfft, ncp, norm, out)
         assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
-    @given(case=corr_cases())
-    def test_cuda(self, cupy_available, case):
+    @staticmethod
+    def _run_cuda(cp, inds, x, nfft, ncp, norm):
         from striqt.waveform.lib.jit.cuda import _corr_at_indices
 
-        cp = cupy_available
-        inds, x, nfft, ncp, norm = case
         x_cp = cp.asarray(x)
         out = cp.empty(nfft + ncp, dtype=x.dtype)
         bpg = max((x_cp.size + THREADS_PER_BLOCK - 1) // THREADS_PER_BLOCK, 1)
@@ -155,30 +153,50 @@ class TestCorrAtIndicesKernels:
             cp.asarray(inds), x_cp, nfft, ncp, norm, out
         )
         cp.cuda.Device().synchronize()
+        return out
+
+    # the CUDA kernel stops at the first out-of-range pair, which only matches the
+    # reference for sorted indices; test_cuda_unsorted_indices covers the rest
+    @given(case=corr_cases(sorted_inds=True))
+    def test_cuda(self, cupy_available, case):
+        inds, x, nfft, ncp, norm = case
+        out = self._run_cuda(cupy_available, inds, x, nfft, ncp, norm)
         assert_matches_reference(out, inds, x, nfft, ncp, norm)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason='the CUDA _corr_at_indices breaks out of the index loop at the first '
+        'out-of-range pair (jit/cuda.py:25-26) instead of skipping it like the CPU '
+        'kernel, so a valid index after an out-of-range one is dropped',
+    )
+    def test_cuda_unsorted_indices(self, cupy_available):
+        nfft, ncp = 32, 4
+        x = gaussian_iq(3 * nfft, seed=0)
+        # the first index runs past the end of x at every lag; the second never does
+        inds = np.array([2 * nfft, 0], dtype=np.int64)
+        out = self._run_cuda(cupy_available, inds, x, nfft, ncp, False)
+        assert_matches_reference(out, inds, x, nfft, ncp, False)
 
 
 class TestCorrAtIndicesDispatcher:
     """ofdm.corr_at_indices selects the kernel for the array namespace."""
 
-    @given(case=corr_cases(ncp_from_inds=True))
+    @given(case=corr_cases(ncp_from_inds=True, sorted_inds=True))
     def test_sizes_out_from_inds(self, xp, case):
         inds, x, nfft, ncp, norm = case
-        inds_2d = inds[np.newaxis, :]
+        inds_2d = xp.asarray(inds[np.newaxis, :])
+        x_xp = xp.asarray(x)
 
-        out = ofdm.corr_at_indices(xp.asarray(inds_2d), xp.asarray(x), nfft, norm=norm)
+        out = ofdm.corr_at_indices(inds_2d, x_xp, nfft, norm=norm)
         assert isinstance(out, xp.ndarray)
         assert out.shape == (nfft + ncp,)
         assert out.dtype == x.dtype
         assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
-    def test_reuses_out(self, xp):
-        x = xp.asarray(gaussian_iq(512))
-        inds = xp.arange(4)[xp.newaxis, :]
-        out = xp.empty(64 + 4, dtype=np.complex64)
-
-        ret = ofdm.corr_at_indices(inds, x, 64, out=out)
-        assert ret is out
+        buffer = xp.empty(nfft + ncp, dtype=x.dtype)
+        ret = ofdm.corr_at_indices(inds_2d, x_xp, nfft, norm=norm, out=buffer)
+        assert ret is buffer
+        assert_matches_reference(ret, inds, x, nfft, ncp, norm)
 
 
 # (kernel name, power_analysis function, its keyword arguments, kernel takes eps)

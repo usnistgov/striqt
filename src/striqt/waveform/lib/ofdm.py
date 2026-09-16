@@ -458,11 +458,13 @@ def index_pss_symbols(
     elif case == 'd':
         offsets = [4, 8, 16, 20]
         mult = 28
-        nrange = range(19)
+        # TS 38.213 §4.1 skips n = 4, 9, 14 so that L_max = 64
+        nrange = [n for n in range(19) if n % 5 != 4]
     elif case == 'e':
         offsets = [8, 12, 16, 20, 32, 36, 40, 44]
         mult = 56
-        nrange = range(9)
+        # TS 38.213 §4.1 skips n = 4 so that L_max = 64
+        nrange = [n for n in range(9) if n != 4]
     elif case == 'f' or case == 'g':
         offsets = [2, 9]
         mult = 14

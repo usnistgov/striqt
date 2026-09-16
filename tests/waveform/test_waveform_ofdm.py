@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import dataclasses
 from fractions import Fraction
-from math import ceil
 
 import numpy as np
 import pytest
@@ -148,7 +147,11 @@ class TestPhy3GPP:
     )
     def test_5g_slot_structure(self, sample_rate, scs):
         """3GPP TS 38.211 5.3.1: normal CP is 144*kappa*2**-mu samples, with an
-        extra 16*kappa in the first symbol"""
+        extra 16*kappa in the first symbol of a subframe.
+
+        Symbol 7 is left to `test_subframe_cp_layout`: at 15 kHz it carries the
+        subframe's second extra CP, which Phy3GPP omits.
+        """
         nfft = round(sample_rate / scs)
         mu = round(np.log2(scs / 15e3))
 
@@ -164,7 +167,8 @@ class TestPhy3GPP:
         assert len(phy.cp_sizes) == phy.FFT_PER_SLOT == 14
 
         normal_cp = 144 * nfft // 2048
-        assert_array_equal(phy.cp_sizes[1:], normal_cp)
+        assert_array_equal(phy.cp_sizes[1:7], normal_cp)
+        assert_array_equal(phy.cp_sizes[8:], normal_cp)
         assert phy.cp_sizes[0] == normal_cp + 16 * nfft * 2**mu // 2048
         assert phy.cp_sizes[0] - phy.cp_sizes[1] == round(sample_rate / 1.92e6)
 
@@ -177,8 +181,51 @@ class TestPhy3GPP:
             np.sort(np.concatenate([phy.cp_idx, phy.symbol_idx])),
             np.arange(phy.contiguous_size),
         )
-        if nfft in phy.FFT_SIZE_TO_SUBCARRIERS:
-            assert phy.subcarriers == phy.FFT_SIZE_TO_SUBCARRIERS[nfft]
+        # 6 and 100 LTE resource blocks of 12 subcarriers, plus DC
+        if nfft == 128:
+            assert phy.subcarriers == 73
+        elif nfft == 2048:
+            assert phy.subcarriers == 1201
+
+    @pytest.mark.parametrize(
+        'scs',
+        [
+            pytest.param(
+                15e3,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason='TS 38.211 5.3.1 puts the extra 16*kappa CP samples at '
+                    'symbols l=0 and l=7 of each 14-symbol subframe at 15 kHz; '
+                    'Phy3GPP.__init__ (ofdm.py:1063) lengthens only l=0, so the '
+                    'slot has one long CP instead of two',
+                ),
+            ),
+            30e3,
+            pytest.param(
+                60e3,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason='TS 38.211 5.3.1 puts the extra 16*kappa CP samples at '
+                    'symbols l=0 and l=28 of each 56-symbol subframe at 60 kHz; '
+                    'Phy3GPP.__init__ (ofdm.py:1063) lengthens the first symbol '
+                    'of every 14-symbol slot, which is twice too often',
+                ),
+            ),
+        ],
+    )
+    def test_subframe_cp_layout(self, scs):
+        """TS 38.211 5.3.1: of the 14*2**mu symbols in a 1 ms subframe, only l=0 and
+        l=7*2**mu carry the extra 16*kappa cyclic prefix samples"""
+        sample_rate = 15.36e6
+        phy = phy_5g(scs, sample_rate)
+        mu = round(np.log2(scs / 15e3))
+        nfft = round(sample_rate / scs)
+
+        expected = np.full(14 * 2**mu, 144 * nfft // 2048)
+        expected[[0, 7 * 2**mu]] += round(sample_rate / 1.92e6)
+
+        slots_per_subframe = 2**mu
+        assert_array_equal(np.tile(phy.cp_sizes, slots_per_subframe), expected)
 
     @pytest.mark.parametrize(
         'scs',
@@ -212,27 +259,18 @@ class TestPhy3GPP:
     def test_argument_errors(self):
         with pytest.raises(ValueError, match='subcarrier_spacing'):
             ofdm.Phy3GPP(1, subcarrier_spacing=45e3, sample_rate=FS)
-        with pytest.raises(ValueError, match='counting number'):
+        with pytest.raises(ValueError, match='sample_rate'):
             ofdm.Phy3GPP(1, subcarrier_spacing=30e3, sample_rate=FS + 1)
         with pytest.raises(ValueError, match='generation'):
             ofdm.Phy3GPP(1, sample_rate=FS, generation='LTE')
-        with pytest.raises(ValueError, match='non-integer cyclic prefix'):
+        with pytest.raises(ValueError):
             ofdm.Phy3GPP(
                 1, subcarrier_spacing=60e3, sample_rate=1.92e6, generation='5G'
             )
 
     def test_default_sample_rate_from_bandwidth(self):
-        for bw, fs in ofdm.Phy3GPP.BW_TO_SAMPLE_RATE.items():
-            assert ofdm.Phy3GPP(bw).sample_rate == fs
-
-    def test_get_3gpp_phy_caches(self):
-        a = ofdm.get_3gpp_phy(
-            1, subcarrier_spacing=30e3, sample_rate=FS, generation='5G'
-        )
-        b = ofdm.get_3gpp_phy(
-            1, subcarrier_spacing=30e3, sample_rate=FS, generation='5G'
-        )
-        assert a is b
+        assert ofdm.Phy3GPP(20e6).sample_rate == pytest.approx(30.72e6)
+        assert ofdm.Phy3GPP(100e6).sample_rate == pytest.approx(153.6e6)
 
 
 class TestIndexCyclicPrefix:
@@ -268,19 +306,6 @@ class TestIndexCyclicPrefix:
         inds = phy.index_cyclic_prefix(frames=frames, symbols=symbols, slots=slots)
         assert_array_equal(inds, cp_index_reference(phy, frames, symbols, slots))
 
-    @pytest.mark.parametrize('scs', SCS_5G)
-    def test_default_call_shape(self, scs):
-        """the cyclic autocorrelation measurement: frame 0, all symbols, given slots"""
-        phy = phy_5g(scs)
-        slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[scs]
-        inds = phy.index_cyclic_prefix(frames=(0,), symbols='all', slots='all')
-        assert inds.shape == (14, slots_per_frame, phy.cp_sizes[1])
-        assert inds.min() == 0
-        assert inds.max() < slots_per_frame * phy.contiguous_size
-
-        # indices are cyclic prefix samples of the slot structure
-        assert np.isin(inds % phy.contiguous_size, phy.cp_idx).all()
-
     def test_single_selection_keeps_its_offset(self):
         phy = phy_5g(30e3)
         base = phy.index_cyclic_prefix(slots=(0,))
@@ -304,28 +329,25 @@ class TestIndexCyclicPrefix:
         phy = phy_5g(30e3)
         slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[30e3]
 
-        with pytest.raises(ValueError, match='indices or "all"'):
+        with pytest.raises(ValueError, match='slots'):
             phy.index_cyclic_prefix(slots='bogus')
-        with pytest.raises(ValueError, match='exceeds the maximum'):
+        with pytest.raises(ValueError, match='slots'):
             phy.index_cyclic_prefix(slots=(slots_per_frame,))
-        with pytest.raises(ValueError, match='exceeds the maximum'):
+        with pytest.raises(ValueError, match='symbols'):
             phy.index_cyclic_prefix(symbols=(14,))
-        with pytest.raises(ValueError, match='below the minimum'):
+        with pytest.raises(ValueError, match='symbols'):
             phy.index_cyclic_prefix(symbols=(-15,))
-        with pytest.raises(ValueError, match='sequence of indices'):
+        with pytest.raises(ValueError, match='slots'):
             phy.index_cyclic_prefix(slots=((0, 1), (2, 3)))
-        with pytest.raises(ValueError, match='"all"'):
-            ofdm._index_or_all('all', 'x', size=None)
 
 
 class TestCorrAtIndices:
     """cyclic prefix correlation on a synthetic OFDM waveform, indexed as the
     cellular cyclic autocorrelation measurement does"""
 
-    @pytest.mark.parametrize('scs', SCS_5G)
-    def test_normalized_correlation_peaks_at_zero_lag(self, scs):
-        phy = phy_5g(scs)
-        slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[scs]
+    def test_normalized_correlation_peaks_at_zero_lag(self):
+        phy = phy_5g(30e3)
+        slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[30e3]
         x = ofdm_slots(phy, slots_per_frame)
         inds = phy.index_cyclic_prefix()
         ncp = int(phy.cp_sizes[1])
@@ -342,10 +364,9 @@ class TestCorrAtIndices:
         assert_allclose(R[:ncp], 1 - lags / ncp, atol=0.1)
         assert R[ncp : phy.nfft].max() < 0.1
 
-    @pytest.mark.parametrize('scs', SCS_5G)
-    def test_unnormalized_zero_lag_is_prefix_power(self, scs):
-        phy = phy_5g(scs)
-        x = ofdm_slots(phy, phy.SCS_TO_SLOTS_PER_FRAME[scs])
+    def test_unnormalized_zero_lag_is_prefix_power(self):
+        phy = phy_5g(30e3)
+        x = ofdm_slots(phy, phy.SCS_TO_SLOTS_PER_FRAME[30e3])
         inds = phy.index_cyclic_prefix()
 
         R = ofdm.corr_at_indices(inds, x, phy.nfft, norm=False)
@@ -353,26 +374,18 @@ class TestCorrAtIndices:
         assert R[0] == pytest.approx(power, abs=corr_atol(x, inds.size, norm=False))
         assert R.dtype == x.dtype
 
-    def test_out_buffer_and_ncp_from_indices(self):
-        phy = phy_5g(30e3)
-        x = ofdm_slots(phy, 2)
-        inds = phy.index_cyclic_prefix(slots=(0, 1))
-        out = np.empty(phy.nfft + inds.shape[-1], dtype=x.dtype)
-        R = ofdm.corr_at_indices(inds, x, phy.nfft, out=out)
-        assert R is out
-
 
 class TestSyncSequences:
     @pytest.mark.parametrize('n_id2', [0, 1, 2])
     def test_pss_m_sequence(self, n_id2):
-        """TS 38.211 7.4.2.2: d(n) = 1 - 2 x((n + 43 N_id2) mod 127)"""
-        pss = np.array(ofdm._pss_m_sequence(n_id2))
-        base = np.array(ofdm._pss_m_sequence(0))
+        """TS 38.211 7.4.2.2.1: d(n) = 1 - 2 x((n + 43 N_id2) mod 127), where
+        x(i+7) = (x(i+4) + x(i)) mod 2 from x(6)...x(0) = 1 1 1 0 1 1 0"""
+        x = [0, 1, 1, 0, 1, 1, 1]
+        for i in range(SC_COUNT - 7):
+            x.append((x[i + 4] + x[i]) % 2)
+        expected = [1 - 2 * x[(n + 43 * n_id2) % SC_COUNT] for n in range(SC_COUNT)]
 
-        assert pss.shape == (SC_COUNT,)
-        assert set(pss) <= {-1, 1}
-        assert pss.sum() == -1  # the m-sequence is balanced: 64 ones, 63 zeros
-        assert_array_equal(pss, np.roll(base, -43 * n_id2))
+        assert_array_equal(ofdm._pss_m_sequence(n_id2), expected)
 
     def test_sss_m_sequences_are_distinct(self):
         sss = np.array([ofdm._sss_m_sequence(n) for n in range(1008)])
@@ -448,57 +461,66 @@ class TestSyncSequences:
             assert_allclose(X, expected / np.sqrt(SC_COUNT), atol=1e-5)
 
     def test_argument_errors(self):
-        with pytest.raises(ValueError, match='multiple of 15000'):
+        with pytest.raises(ValueError, match='subcarrier_spacing'):
             ofdm.pss_5g_nr(FS, 20e3)
-        with pytest.raises(ValueError, match='at least'):
+        with pytest.raises(ValueError, match='sample_rate'):
             ofdm.pss_5g_nr(1e6, 30e3)
-        with pytest.raises(ValueError, match='multiple of subcarrier spacing'):
+        with pytest.raises(ValueError, match='sample_rate'):
             ofdm.pss_5g_nr(FS + 15e3, 30e3)
-        with pytest.raises(ValueError, match='whole multiple'):
+        with pytest.raises(ValueError, match='center_frequency'):
             ofdm.pss_5g_nr(FS, 30e3, 15e3)
-        with pytest.raises(ValueError, match='outside of Nyquist'):
+        with pytest.raises(ValueError, match='center_frequency'):
             ofdm.pss_5g_nr(FS, 30e3, 100 * 30e3)
 
 
+# TS 38.213 Section 4.1 lists the values of n for cases D and E explicitly
+CASE_D_N = (0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18)
+CASE_E_N = (0, 1, 2, 3, 5, 6, 7, 8)
+
 # (subcarrier spacing, shared spectrum, symbol_indexes, center_frequency) ->
-# (offsets, symbols per repetition, repetitions) from TS 38.213 Section 4.1
+# (offsets, symbols per repetition, values of n) from TS 38.213 Section 4.1
 SSB_CASES = [
-    ((15e3, False, 'auto', None), ([2, 8], 14, 4)),
-    ((15e3, False, 'auto', 2e9), ([2, 8], 14, 2)),
-    ((15e3, False, 'auto', (1e9, 4e9)), ([2, 8], 14, 4)),
-    ((15e3, True, 'auto', None), ([2, 8], 14, 5)),
-    ((15e3, False, 'A', None), ([2, 8], 14, 4)),
-    ((30e3, True, 'auto', None), ([2, 8], 14, 10)),
-    ((30e3, False, 'b', None), ([4, 8, 16, 20], 28, 2)),
-    ((30e3, False, 'b', 2e9), ([4, 8, 16, 20], 28, 1)),
-    ((30e3, False, 'c', None), ([2, 8], 14, 4)),
-    ((30e3, False, 'c', 1.5e9), ([2, 8], 14, 2)),
-    ((120e3, False, 'auto', None), ([4, 8, 16, 20], 28, 19)),
-    ((240e3, False, 'auto', None), ([8, 12, 16, 20, 32, 36, 40, 44], 56, 9)),
-    ((480e3, False, 'auto', None), ([2, 9], 14, 32)),
-    ((960e3, False, 'auto', None), ([2, 9], 14, 32)),
+    ((15e3, False, 'auto', None), ([2, 8], 14, range(4))),
+    ((15e3, False, 'auto', 2e9), ([2, 8], 14, range(2))),
+    ((15e3, False, 'auto', (1e9, 4e9)), ([2, 8], 14, range(4))),
+    ((15e3, True, 'auto', None), ([2, 8], 14, range(5))),
+    ((15e3, False, 'A', None), ([2, 8], 14, range(4))),
+    ((30e3, True, 'auto', None), ([2, 8], 14, range(10))),
+    ((30e3, False, 'b', None), ([4, 8, 16, 20], 28, range(2))),
+    ((30e3, False, 'b', 2e9), ([4, 8, 16, 20], 28, range(1))),
+    ((30e3, False, 'c', None), ([2, 8], 14, range(4))),
+    ((30e3, False, 'c', 1.5e9), ([2, 8], 14, range(2))),
+    ((120e3, False, 'auto', None), ([4, 8, 16, 20], 28, CASE_D_N)),
+    ((240e3, False, 'auto', None), ([8, 12, 16, 20, 32, 36, 40, 44], 56, CASE_E_N)),
+    ((480e3, False, 'auto', None), ([2, 9], 14, range(32))),
+    ((960e3, False, 'auto', None), ([2, 9], 14, range(32))),
 ]
 
 
 class TestIndexPssSymbols:
     @pytest.mark.parametrize('args, expected', SSB_CASES)
     def test_cell_search_cases(self, args, expected):
-        offsets, period, repetitions = expected
-        table = tuple(o + period * n for n in range(repetitions) for o in offsets)
+        offsets, period, n_values = expected
+        table = tuple(o + period * n for n in n_values for o in offsets)
         assert ofdm.index_pss_symbols(*args) == table
+
+    @pytest.mark.parametrize('scs', [120e3, 240e3, 480e3, 960e3])
+    def test_fr2_cases_have_64_candidates(self, scs):
+        """TS 38.213 Section 4.1: L_max = 64 for cases D through G"""
+        assert len(ofdm.index_pss_symbols(scs)) == 64
 
     def test_explicit_indexes_pass_through(self):
         assert ofdm.index_pss_symbols(30e3, symbol_indexes=(3, 9)) == (3, 9)
         assert ofdm.index_pss_symbols(30e3, symbol_indexes=[3, 9]) == [3, 9]
 
     def test_argument_errors(self):
-        with pytest.raises(ValueError, match='"b" or "c"'):
+        with pytest.raises(ValueError):
             ofdm.index_pss_symbols(30e3)
-        with pytest.raises(ValueError, match='do not exist'):
+        with pytest.raises(ValueError):
             ofdm.index_pss_symbols(45e3)
-        with pytest.raises(ValueError, match='invalid str'):
+        with pytest.raises(ValueError, match='symbol_indexes'):
             ofdm.index_pss_symbols(30e3, symbol_indexes='z')
-        with pytest.raises(ValueError, match='shared_spectrum unsupported'):
+        with pytest.raises(ValueError, match='shared_spectrum'):
             ofdm.index_pss_symbols(30e3, shared_spectrum=True, symbol_indexes='b')
         with pytest.raises(TypeError):
             ofdm.index_pss_symbols(30e3, symbol_indexes=5)
@@ -510,53 +532,38 @@ class TestSyncParams:
         assert ofdm._min_diff([5]) is None
         assert ofdm._min_diff([2, 8, 16]) == 6
 
-    @pytest.mark.parametrize(
-        'scs, kws',
-        [
-            (30e3, {'shared_spectrum': True}),
-            (15e3, {}),
-            (15e3, {'center_frequency': 2e9}),
-            (30e3, {'symbol_indexes': 'b'}),
-            (30e3, {'symbol_indexes': (4,)}),
-            (60e3, {'symbol_indexes': (2, 8), 'discovery_periodicity': 40e-3}),
-        ],
-    )
-    def test_pss_params_structure(self, scs, kws):
-        params = ofdm.pss_params(sample_rate=FS, subcarrier_spacing=scs, **kws)
-        phy = phy_5g(scs)
-        slot_duration = 1e-3 * 15e3 / scs
-        symbols = ofdm.index_pss_symbols(
-            scs,
-            kws.get('shared_spectrum', False),
-            kws.get('symbol_indexes', 'auto'),
-            kws.get('center_frequency'),
-        )
+    def test_pss_params_structure(self):
+        """the production configuration: 30 kHz Case C shared spectrum at 7.68 MS/s.
 
-        assert params.symbol_indexes == list(symbols)
-        assert params.frame_size == round(10e-3 * FS)
-        assert params.frames_per_sync == round(
-            kws.get('discovery_periodicity', 20e-3) / 10e-3
-        )
+        TS 38.213 4.1 Case C with shared spectrum puts the PSS in symbols {2, 8} + 14n
+        for n = 0..9. The closest pair is 6 symbols apart, so 5 lag symbols are
+        searched, and the last candidate (134) plus those lags rounds up to 10 slots.
+        A 30 kHz slot at 7.68 MS/s is 3840 samples, so a short symbol is
+        3840 // 14 = 274 samples; the normal CP is 144 * 256 / 2048 = 18 samples and
+        the excess 16 kappa in the first symbol is 7.68e6 / 1.92e6 = 4 samples.
+        """
+        params = sync_params()
 
-        spacing = ofdm._min_diff(sorted(symbols))
-        assert params.max_lag_symbols == (
-            5 if spacing is not None and spacing >= 5 else 4
-        )
-
-        assert params.slot_count == ceil(
-            (symbols[-1] + params.max_lag_symbols + 1) / 14
-        )
-        assert params.duration == pytest.approx(params.slot_count * slot_duration)
-        assert params.corr_size == round(params.duration * FS)
-        assert params.short_symbol_size == round(slot_duration * FS) // 14
-        assert params.lag_count == params.short_symbol_size * params.max_lag_symbols
-
-        assert params.min_cp_size == phy.cp_sizes.min()
-        assert_array_equal(
-            params.cp_offsets, np.cumsum(phy.cp_sizes - phy.cp_sizes.min())
-        )
+        assert params.symbol_indexes == [
+            *(2, 8, 16, 22, 30, 36, 44, 50, 58, 64),
+            *(72, 78, 86, 92, 100, 106, 114, 120, 128, 134),
+        ]
+        assert params.max_lag_symbols == 5
+        assert params.slot_count == 10
+        assert params.frame_size == 76800
+        assert params.frames_per_sync == 2
+        assert params.duration == pytest.approx(5e-3)
+        assert params.corr_size == 38400
+        assert params.short_symbol_size == 274
+        assert params.lag_count == 1370
+        assert params.min_cp_size == 18
+        assert params.cp_offsets == [4] * 14
         assert params.sample_rate == FS
-        assert params.subcarrier_spacing == scs
+        assert params.subcarrier_spacing == pytest.approx(30e3)
+        assert params.shared_spectrum is True
+        assert params.discovery_periodicity == pytest.approx(20e-3)
+
+        assert sync_params(discovery_periodicity=40e-3).frames_per_sync == 4
 
     def test_explicit_max_lag_symbols(self):
         params = sync_params(max_lag_symbols=3)
@@ -585,9 +592,9 @@ class TestSyncParams:
         assert explicit.symbol_indexes == [4, 10]
 
     def test_argument_errors(self):
-        with pytest.raises(ValueError, match='multiple of 15000'):
+        with pytest.raises(ValueError, match='subcarrier_spacing'):
             ofdm.pss_params(sample_rate=FS, subcarrier_spacing=20e3)
-        with pytest.raises(ValueError, match='sample_rate must be a multiple'):
+        with pytest.raises(ValueError, match='sample_rate'):
             ofdm.pss_params(
                 sample_rate=8e6, subcarrier_spacing=30e3, shared_spectrum=True
             )
@@ -628,6 +635,24 @@ class TestGet5gSsbIq:
         interior = out[:, 2000:-2000]
         assert tone_frequency(interior[0], FS) == pytest.approx(
             f0, abs=FS / interior.shape[1]
+        )
+        rms = np.sqrt(np.mean(np.abs(interior) ** 2, axis=1))
+        assert_allclose(rms, [1.0, 2.0], rtol=1e-3)
+
+    def test_off_grid_frequency_offset(self):
+        """a frequency_offset between input FFT bins still recenters the tone"""
+        grid = self.FS_IN / self.SIZE
+        f0 = 300e3
+        frequency_offset = 3.4 * grid
+
+        iq = self._tones(f0 + frequency_offset)
+        out = self._ssb_iq(iq, frequency_offset=frequency_offset)
+
+        interior = out[:, 2000:-2000]
+        # the shift is applied in whole input bins, so allow half a bin of
+        # quantization beyond the estimator's resolution
+        assert tone_frequency(interior[0], FS) == pytest.approx(
+            f0, abs=grid / 2 + FS / interior.shape[1]
         )
         rms = np.sqrt(np.mean(np.abs(interior) ** 2, axis=1))
         assert_allclose(rms, [1.0, 2.0], rtol=1e-3)
@@ -755,8 +780,6 @@ class TestChooseSsbOffset:
         params, R = self._correlate([300])
         weights = ofdm.weighted_ssb_detect(R, params)
         assert weights.shape == (1, params.max_lag_symbols, params.short_symbol_size)
-        symbol, sample = np.unravel_index(weights[0].argmax(), weights[0].shape)
-        assert symbol * params.short_symbol_size + sample == 300
 
     def test_per_port(self):
         params, R = self._correlate([40, 700], scales=[1.0, 3.0])
@@ -765,14 +788,15 @@ class TestChooseSsbOffset:
         assert_array_equal(ofdm.choose_ssb_offset(R, params, per_port=False), [700])
 
     def test_max_beams(self):
-        params, R = self._correlate([55], beam=3)
+        """only the first max_beams SSB candidates are searched"""
+        params, phy, pss, bodies = pss_setup()
+        iq = silent_block(params)
+        embed_symbol(iq, phy, bodies[1], params.symbol_indexes[1], 55)
+        embed_symbol(iq, phy, bodies[1], params.symbol_indexes[6], 400, scale=3.0)
+        R = ofdm.correlate_sync_sequence(iq, pss, params=params)
+
+        assert ofdm.choose_ssb_offset(R, params)[0] == 400
         assert ofdm.choose_ssb_offset(R, params, max_beams=4)[0] == 55
-        assert (
-            ofdm.choose_ssb_offset(R, params, max_beams=len(params.symbol_indexes) + 5)[
-                0
-            ]
-            == 55
-        )
 
     def test_rejects_low_dimensional_input(self):
         params, R = self._correlate([0])

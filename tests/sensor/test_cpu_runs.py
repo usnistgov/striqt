@@ -1,7 +1,136 @@
-import striqt.sensor as ss
+"""end-to-end sweeps from the CPU_RUNS YAML files, checked against the synthetic
+source models in striqt.sensor.lib.sources.function"""
+
+from __future__ import annotations
+
+import logging
+import math
+import os
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+import striqt.analysis as sa
 from striqt.cli import sensor_sweep
 
+CORE_VARIABLES = {'power_spectral_density', 'channel_power_time_series', 'spectrogram'}
 
-def test_run(cpu_sweep_file):
-    ss.util.log_verbosity(1)
-    sensor_sweep.run(cpu_sweep_file)
+# capture and analysis values shared by every CPU_RUNS file
+TONE_OFFSET = -3e6
+PULSE_TIME = 1e-3
+NOISE_PSD = 1e-17
+INTEGRATION_BANDWIDTH = 360e3
+
+
+@pytest.fixture
+def restore_sweep_logging():
+    """a sweep swaps the adapters' extra per capture, and a Sink.log_path adds a
+    handler on the parent striqt logger; snapshot that process-global state"""
+    adapters = dict(sa.util._logger_adapters)
+    parent = logging.getLogger('striqt')
+    saved = {
+        name: (a.logger.level, list(a.logger.handlers), a.extra)
+        for name, a in adapters.items()
+    }
+    parent_handlers = list(parent.handlers)
+    yield
+    for name, (level, handlers, extra) in saved.items():
+        adapter = sa.util._logger_adapters[name]
+        adapter.logger.setLevel(level)
+        adapter.logger.handlers[:] = handlers
+        adapter.extra = extra
+    parent.handlers[:] = parent_handlers
+
+
+def _mean_psd(ds, capture: int):
+    row = ds.power_spectral_density.sel(time_statistic='mean').isel(capture=capture)
+    return row.dropna('baseband_frequency')
+
+
+def check_cw(ds):
+    assert set(ds.frequency_offset.values) == {TONE_OFFSET}
+    for i in range(ds.sizes['capture']):
+        psd = _mean_psd(ds, i)
+        tone_bin = np.argmin(abs(psd.baseband_frequency.values - TONE_OFFSET))
+        assert np.argmax(psd.values) == tone_bin
+
+
+def check_dirac_delta(ds):
+    assert set(ds.time.values) == {PULSE_TIME}
+    # the pulse lands on a detector bin edge (time == detector_period), so it is the
+    # first sample of the bin that starts at PULSE_TIME
+    peak = ds.channel_power_time_series.sel(power_detector='peak')
+    pulse_bin = np.argmin(abs(peak.time_elapsed.values - PULSE_TIME))
+    for i in range(ds.sizes['capture']):
+        assert np.argmax(peak.isel(capture=i).values) == pulse_bin
+
+
+def check_noise(ds):
+    assert set(ds.noise_psd.values) == {NOISE_PSD}
+    expected = 10 * math.log10(NOISE_PSD * INTEGRATION_BANDWIDTH)
+    for i in range(ds.sizes['capture']):
+        psd = _mean_psd(ds, i)
+        inner = psd.where(
+            abs(psd.baseband_frequency) < 0.4 * float(ds.analysis_bandwidth[i]),
+            drop=True,
+        )
+        assert float(inner.max() - inner.min()) < 2.0
+        assert float(inner.mean()) == pytest.approx(expected, abs=1.0)
+
+
+def check_sawtooth(ds):
+    # period == duration and power == 0: a single ramp from 0 to full scale, so the
+    # detected power rises across the time bins and ends at 0 dBm
+    assert np.all(ds.period.values == ds.duration.values)
+    assert set(ds.power.values) == {0.0}
+    detectors = ds.channel_power_time_series
+    for i in range(ds.sizes['capture']):
+        peak = detectors.sel(power_detector='peak').isel(capture=i).values
+        rms = detectors.sel(power_detector='rms').isel(capture=i).values
+        assert np.all(np.diff(peak) > 0)
+        assert np.all(rms < peak)
+        assert peak[-1] == pytest.approx(0.0, abs=1.0)
+
+
+def check_site(ds):
+    # sites/global.yaml and sites/radio02.yaml keyed on the extension module's RADIO_ID
+    assert set(ds.source_id.values) == {'48b02d17a587'}
+    assert set(ds.site_name.values) == {'WAPA-north'}
+    assert set(ds.radio_name.values) == {'radio02'}
+    assert set(ds.channel_name.values) == {'3750 MHz'}
+    assert ds.antenna_name.values.tolist() == ['Omni', '1x32']
+    assert ds.antenna_polarization.values.tolist() == ['Vertical', 'Linear +45']
+    assert ds.antenna_model.values.tolist() == ['OmniModel', 'PanelModel']
+    assert ds.antenna_index.values.tolist() == [0, 1]
+    assert set(ds.gain.values) == {0.0}
+    assert set(ds.mast_height.values) == {1.7}
+    check_cw(ds)
+
+
+CHECKS = {
+    'cw-cpu': (4, check_cw),
+    'dirac_delta-cpu': (4, check_dirac_delta),
+    'noise-cpu': (4, check_noise),
+    'sawtooth-cpu': (4, check_sawtooth),
+    'site-cpu': (1, check_site),
+}
+
+
+def test_run(cpu_sweep_file, tmp_path, monkeypatch, restore_sweep_logging):
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+    out_path = tmp_path / 'out.zarr.zip'
+
+    sensor_sweep.run(cpu_sweep_file, output_path=str(out_path))
+
+    assert out_path.exists()
+    capture_count, check = CHECKS[Path(cpu_sweep_file).stem]
+    ds = sa.load(out_path)
+
+    # one row per (capture, port) with 2 ports in every file
+    assert ds.sizes['capture'] == 2 * capture_count
+    assert len(set(ds.capture_index.values)) == capture_count
+    assert ds.port.values.tolist() == [0, 1] * capture_count
+    assert CORE_VARIABLES <= set(ds.data_vars)
+    check(ds)

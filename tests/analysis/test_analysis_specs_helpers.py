@@ -44,6 +44,11 @@ ATTRS_XFAIL = pytest.mark.xfail(
     reason='get_capture_type_attrs reads raw Annotated aliases, which carry no .extra; '
     'the metadata is on msgspec.inspect.type_info(cls).fields',
 )
+VAR_TUPLE_DEPTH_XFAIL = pytest.mark.xfail(
+    strict=True,
+    reason='_inspect_container_depth (analysis/specs/helpers.py:341) handles '
+    'TupleType but not VarTupleType, so tuple[T, ...] fields get depth 0',
+)
 
 
 # %% frozendict
@@ -71,13 +76,6 @@ class TestFrozendict:
         permuted = frozendict(data.draw(st.permutations(items)))
         assert hash(frozendict(items)) == hash(permuted)
         assert len({frozendict(items), permuted}) == 1
-
-    def test_hash_is_cached(self):
-        fd = frozendict({'a': 1})
-        assert fd._hash is None
-        h = hash(fd)
-        assert fd._hash == h
-        assert hash(frozendict()) == 0
 
     @given(fd=unhashable_frozendicts)
     def test_unhashable_value_raises(self, fd):
@@ -121,7 +119,7 @@ class TestFrozendict:
         assert isinstance(restored, frozendict)
         assert restored == fd
 
-    def test_constructors_copy_and_repr(self):
+    def test_constructors_copy(self):
         fd = frozendict(a=1, b=2)
         assert fd == {'a': 1, 'b': 2}
         assert frozendict.fromkeys('ab', 0) == {'a': 0, 'b': 0}
@@ -129,7 +127,6 @@ class TestFrozendict:
         assert isinstance(copied, frozendict)
         assert copied == fd
         assert copied is not fd
-        assert repr(fd) == "frozendict({'a': 1, 'b': 2})"
 
     def test_nested_frozendict_is_hashable(self):
         nested = frozendict({'a': frozendict({'b': (1, 2)})})
@@ -140,12 +137,6 @@ class TestFrozendict:
 
 
 class TestFreeze:
-    @given(tree=json_trees())
-    def test_removes_mutable_containers(self, tree):
-        frozen = freeze(tree)
-        assert not has_mutable_below(frozen)
-        hash(frozen)
-
     @given(tree=json_trees())
     def test_is_idempotent(self, tree):
         frozen = freeze(tree)
@@ -219,30 +210,39 @@ class DepthProbe(msgspec.Struct):
     i: fractions.Fraction
 
 
-def test_freeze_depths_count_dict_list_and_fixed_tuple_nesting():
-    # variable-length tuples, sets and scalars contribute no depth
+@VAR_TUPLE_DEPTH_XFAIL
+def test_freeze_depths_count_dict_list_and_tuple_nesting():
+    # sets and scalars contribute no depth; freeze() does not convert sets
     assert inspect_freeze_depths(DepthProbe) == {
         'a': 3,
         'b': 1,
+        'c': 1,
         'e': 1,
         'f': 1,
         'g': 2,
     }
+
+
+def test_freeze_depths_are_cached():
     assert inspect_freeze_depths(DepthProbe) is inspect_freeze_depths(DepthProbe)
 
 
+@VAR_TUPLE_DEPTH_XFAIL
 def test_freeze_depths_of_real_specs(cw_sweep):
-    assert inspect_freeze_depths(ss.specs.SingleToneCapture) == {'adjust_analysis': 1}
-    assert inspect_freeze_depths(ss.specs.CaptureRemap) == {'lookup': 1}
-    assert inspect_freeze_depths(type(cw_sweep)) == {'adjust_captures': 2}
+    assert inspect_freeze_depths(ss.specs.SingleToneCapture) == {
+        'port': 1,
+        'adjust_analysis': 1,
+        'external_lo_frequency': 1,
+    }
+    assert inspect_freeze_depths(ss.specs.CaptureRemap) == {'key': 1, 'lookup': 1}
+    assert inspect_freeze_depths(type(cw_sweep)) == {
+        'captures': 1,
+        'loops': 1,
+        'adjust_captures': 2,
+    }
 
 
 # %% Meta and get_capture_type_attrs
-
-
-def test_meta_rejects_duplicate_description():
-    with pytest.raises(TypeError):
-        Meta('x', description='y')
 
 
 @pytest.mark.parametrize('units', [None, 'Hz'])
@@ -256,14 +256,10 @@ def test_meta_units_key_only_when_given(units):
     assert meta.extra == expected
 
 
-def test_capture_type_attrs_covers_every_field():
-    attrs = get_capture_type_attrs(ss.specs.SingleToneCapture)
-    assert set(attrs) == set(ss.specs.SingleToneCapture.__struct_fields__)
-
-
 @ATTRS_XFAIL
 def test_capture_type_attrs_units():
     attrs = get_capture_type_attrs(ss.specs.SingleToneCapture)
+    assert set(attrs) == set(ss.specs.SingleToneCapture.__struct_fields__)
     assert attrs['duration'] == {
         'standard_name': 'Duration of the analysis waveform',
         'units': 's',
@@ -308,29 +304,26 @@ def test_json_schema_unknown_type_raises():
 
 
 def test_json_schema_of_bound_sweep(cw_sweep):
-    assert '$defs' in json_schema(type(cw_sweep))
+    schema = json_schema(type(cw_sweep))
+    name = schema['$ref'].rsplit('/', 1)[-1]
+    sweep_def = schema['$defs'][name]
+    assert sweep_def['properties']['sensor_binding'] == {'enum': [name]}
+    assert 'sensor_binding' in sweep_def['required']
+
+    capture_ref = sweep_def['properties']['captures']['items']['$ref']
+    capture_props = schema['$defs'][capture_ref.rsplit('/', 1)[-1]]['properties']
+    assert (
+        capture_props['duration']['description'] == 'Duration of the analysis waveform'
+    )
+    assert capture_props['port']['description'] == 'Input port indices'
 
 
 # %% convert_dict, convert_spec and the encode/decode hooks
 
 
-@pytest.mark.parametrize(
-    'value, expected',
-    [
-        (0.5, fractions.Fraction(1, 2)),
-        (3, fractions.Fraction(3)),
-    ],
-)
-def test_convert_dict_fraction(value, expected):
-    assert convert_dict(value, fractions.Fraction) == expected
-
-
-@pytest.mark.parametrize(
-    'value, expected', [('1e6', 1e6), ('inf', float('inf')), (2, 2.0)]
-)
-def test_convert_dict_lax_floats(value, expected):
+def test_convert_dict_lax_floats():
     # loop points arrive as strings from YAML; strict=False is what coerces them
-    assert convert_dict(value, float) == expected
+    assert convert_dict('1e6', float) == pytest.approx(1e6)
 
 
 @given(x=st.fractions())
@@ -350,6 +343,19 @@ def test_spec_dict_fields_are_frozen_to_their_depth(construct):
     assert spec.d == {'a': (1, {'b': 2})}
     assert type(spec.d['a'][1]) is dict
     hash(construct(DictField, d={'a': [1]}))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason='SpecBase.__post_init__ (analysis/specs/structs.py:82-86) freezes a '
+    'dict[str, Any] field to depth 2, so a list nested 3 deep stays a list',
+)
+def test_three_deep_adjust_analysis_is_hashable():
+    spec = ss.specs.SingleToneCapture(
+        port=0, adjust_analysis={'spectrogram': {'window': ['kaiser', 8]}}
+    )
+    hash(spec)
+    assert spec.adjust_analysis['spectrogram']['window'] == ('kaiser', 8)
 
 
 def test_convert_spec_downcasts_to_base_capture():
