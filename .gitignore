@@ -62,3 +62,4 @@ pixi.lock
 # virtual environments
 .venv
 .pixi/envs
+.pixi/cache
