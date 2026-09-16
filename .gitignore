@@ -63,3 +63,9 @@ pixi.lock
 .venv
 .pixi/envs
 .pixi/cache
+.python-version
+
+# AI/IDEs
+.claude/
+.cospec/
+.vscode
