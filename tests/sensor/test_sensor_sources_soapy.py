@@ -319,7 +319,7 @@ def test_assign_iq_calibration_scales_voltage_and_adds_system_noise(calibration_
     noise = iq.extra_data['system_noise']
     assert noise.dims == ('capture',)
     assert noise.attrs['units'] == 'dBm/Hz'
-    assert float(noise) == pytest.approx(5.0 + 10 * np.log10(BOLTZMANN_MW * 290))
+    assert noise.item() == pytest.approx(5.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
 
 def test_assign_iq_calibration_without_a_file_leaves_iq_alone():

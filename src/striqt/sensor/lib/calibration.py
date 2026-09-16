@@ -168,8 +168,6 @@ class YFactorSink(sinks.SinkBase):
         super().flush()
 
         # re-index by radio setting rather than capture
-        port = int(data[0].port)
-
         loops = data[0].attrs['loops']
         implied_loops = (data[0].attrs['calibration'] or {}).get('implied_loops', [])
         fields = list(implied_loops) + [
@@ -410,7 +408,7 @@ def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
     # return bandwidth with same shape as dataset.channel_power_time_series
     bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
     sample_rate = data.backend_sample_rate.broadcast_like(data).squeeze()
-    where = ~np.isfinite(bw.values == float('inf'))
+    where = ~np.isfinite(bw.values)
     bw.values[where] = sample_rate.values[where]
     return bw
 

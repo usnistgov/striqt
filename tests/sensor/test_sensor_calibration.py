@@ -153,14 +153,9 @@ class TestYFactorCorrections:
         p_off = yfactor_rms_power(0.0, 5.0, 40e6, diode_on=False)
         p_on = yfactor_rms_power(0.0, 5.0, 40e6, diode_on=True)
         point = {'port': 0, 'gain': 0.0, 'center_frequency': 1e9}
-        assert float(corrections.p_off.sel(point)) == pytest.approx(p_off, rel=1e-9)
-        assert float(corrections.p_on.sel(point)) == pytest.approx(p_on, rel=1e-9)
+        assert corrections.p_off.sel(point).item() == pytest.approx(p_off, rel=1e-9)
+        assert corrections.p_on.sel(point).item() == pytest.approx(p_on, rel=1e-9)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='_limit_nyquist_bandwidth never replaces inf, so power_correction is '
-        'inf wherever analysis_bandwidth is',
-    )
     def test_infinite_bandwidth_uses_the_nyquist_bandwidth(self):
         grid = dict(YFACTOR_GRID, analysis_bandwidth=(40e6, INF))
         corrections = calibration._y_factor_power_corrections(
@@ -188,11 +183,6 @@ def test_limit_nyquist_bandwidth_keeps_finite_values():
     assert bw.sel(analysis_bandwidth=40e6).values.tolist() == [40e6, 40e6]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='the mask ~np.isfinite(bw.values == inf) is a boolean comparison passed to '
-    'isfinite, so it is False everywhere',
-)
 def test_limit_nyquist_bandwidth_replaces_inf_with_the_sample_rate():
     bw = calibration._limit_nyquist_bandwidth(_bandwidth_grid())
     assert bw.sel(analysis_bandwidth=INF).values.tolist() == [125e6, 62.5e6]
@@ -341,9 +331,10 @@ class TestLookupPowerCorrection:
 
     @pytest.mark.xfail(
         strict=True,
-        raises=TypeError,
+        raises=(TypeError, ValueError),
         reason='exact-match fields are selected with sel(), which needs an index; a '
-        'scalar lo_shift coordinate makes _describe_missing_data iterate a 0-d array',
+        'scalar lo_shift coordinate makes _describe_missing_data iterate a 0-d array '
+        '(xarray >= 2025 raises ValueError from sel() before that)',
     )
     def test_calibration_without_a_lo_shift_loop(self, tmp_path, calibration_nc):
         squeezed = tmp_path / 'squeezed.nc'
@@ -362,17 +353,17 @@ class TestLookupSystemNoisePower:
         noise = self._lookup(calibration_nc, _capture(port=1))
         assert noise.dims == ('capture',)
         assert noise.attrs['units'] == 'dBm/Hz'
-        assert float(noise) == pytest.approx(8.0 + 10 * np.log10(BOLTZMANN_MW * 290))
+        assert noise.item() == pytest.approx(8.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
     def test_bandwidth_and_temperature_scale_the_result(self, calibration_nc):
         noise = self._lookup(calibration_nc, _capture(), B=1e6, T=300.0)
         assert noise.attrs['units'] == 'dBm/1000000 Hz'
         expected = 5.0 + 10 * np.log10(BOLTZMANN_MW * 300.0 * 1e6)
-        assert float(noise) == pytest.approx(expected)
+        assert noise.item() == pytest.approx(expected)
 
     def test_noise_figure_is_interpolated_in_frequency(self, calibration_nc):
         noise = self._lookup(calibration_nc, _capture(center_frequency=1.5e9))
-        assert float(noise) == pytest.approx(6.0 + 10 * np.log10(BOLTZMANN_MW * 290))
+        assert noise.item() == pytest.approx(6.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
     def test_none_input(self):
         assert self._lookup(None, _capture()) is None
@@ -459,10 +450,8 @@ def _capture_dataset(sweep, capture, index, start):
     return ds
 
 
-@pytest.fixture(scope='module')
-def flushed_calibration(tmp_path_factory):
-    """(saved path, sweep) after YFactorSink.flush on a full grid of model captures"""
-    path = tmp_path_factory.mktemp('yfactor') / 'flushed.nc'
+def _flush_model_captures(path):
+    """YFactorSink.flush on a full grid of model captures; returns the sweep"""
     sweep = make_calibration_sweep(
         captures=(make_calibration_capture(sample_rate=125e6, host_resample=False),),
         loops=FLUSH_LOOPS,
@@ -483,8 +472,21 @@ def flushed_calibration(tmp_path_factory):
             for i, c in enumerate(H.loop_captures(sweep, 'beef'))
         ]
         sink.flush()
+    return sweep
 
+
+@pytest.fixture(scope='module')
+def flushed_calibration(tmp_path_factory):
+    """(saved path, sweep) after YFactorSink.flush on a full grid of model captures"""
+    path = tmp_path_factory.mktemp('yfactor') / 'flushed.nc'
+    sweep = _flush_model_captures(path)
     yield str(path), sweep
+    sw.util.clear_caches()
+
+
+def test_flush_saves_a_file(tmp_path):
+    _flush_model_captures(tmp_path / 'flushed.nc')
+    assert (tmp_path / 'flushed.nc').exists()
     sw.util.clear_caches()
 
 
@@ -509,10 +511,6 @@ class TestYFactorSinkFlush:
         result = calibration.lookup_power_correction(path, capture, MCR)
         assert result == pytest.approx([1 / receiver_gain(-10)], rel=1e-6)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='_limit_nyquist_bandwidth never replaces inf (see the unit test above)',
-    )
     def test_infinite_bandwidth_points_match_the_model(self, flushed_calibration):
         path, _ = flushed_calibration
         saved = ss.lib.io.read_calibration(path).sel(analysis_bandwidth=INF)
@@ -695,10 +693,6 @@ class TestFakeCalibrationSweep:
             saved.power_correction, expected.power_correction, 0.1, in_dB=False
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='_limit_nyquist_bandwidth never replaces inf (see the unit test above)',
-    )
     def test_infinite_bandwidth_points_recover_the_model(self, fake_calibration_run):
         path, _ = fake_calibration_run
         saved = ss.read_calibration(path).sel(analysis_bandwidth=INF)
@@ -753,11 +747,6 @@ class TestFakeMeasurementSweep:
             [5.0, 8.0, 5.0] + 10 * np.log10(BOLTZMANN_MW * 290.0), abs=0.1
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='the calibration file holds an infinite power_correction at '
-        'analysis_bandwidth inf (see _limit_nyquist_bandwidth)',
-    )
     def test_calibrated_power_at_infinite_bandwidth(
         self, fake_soapy, fake_calibration_run, tmp_path
     ):

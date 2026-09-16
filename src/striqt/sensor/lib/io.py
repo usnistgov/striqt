@@ -5,7 +5,7 @@ from __future__ import annotations as __
 import sys
 import msgspec
 from pathlib import Path
-from typing import Any, Optional, overload, TYPE_CHECKING
+from typing import Optional, overload, TYPE_CHECKING
 
 import striqt.analysis as sa
 
@@ -146,12 +146,10 @@ def _convert_dict_spec(
     sink = spec.sink
     if store_backend is not None:
         sink = sink.replace(store=store_backend)
-
-    replace: dict[str, Any] = dict(sink=sink)
     if output_path is not None:
-        replace['path'] = output_path
+        sink = sink.replace(path=output_path)
 
-    return spec.replace(**replace)
+    return spec.replace(sink=sink)
 
 
 def read_tdms_iq(
