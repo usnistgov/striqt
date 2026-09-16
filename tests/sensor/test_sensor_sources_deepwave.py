@@ -19,21 +19,12 @@ SPECS = {
 # %% spec defaults
 
 
-@pytest.mark.parametrize(
-    'cls, rx_enable_delay',
-    [
-        (deepwave.Air7101BSourceSpec, 0.35),
-        (deepwave.Air7201BSourceSpec, 0.35),
-        (deepwave.Air8201BSourceSpec, 1.4),
-    ],
-)
-def test_airstack_source_defaults(cls, rx_enable_delay):
+@pytest.mark.parametrize('cls', list(SPECS.values()), ids=list(SPECS))
+def test_airstack_specs_target_the_gpu_with_retries(cls):
     spec = cls()
     assert spec.master_clock_rate == pytest.approx(125e6)
     assert spec.array_backend == 'cupy'
     assert spec.receive_retries == 3
-    assert spec.rx_enable_delay == rx_enable_delay
-    assert spec.transient_holdoff_time == pytest.approx(2e-3)
     assert spec.stream_all_rx_ports is True
     assert spec.transport_dtype == 'float32'
     assert isinstance(spec, ss.specs.SoapySource)

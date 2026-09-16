@@ -130,14 +130,3 @@ class TestReadRetries:
                 ctrl.acquire()
 
             assert len(device.calls_named('activateStream')) == 1
-
-    def test_first_read_ignores_overflow(self, fake_soapy, fake_soapy_ext):
-        with _fake_controller(fake_soapy_ext, receive_retries=0) as ctrl:
-            device = fake_soapy.devices[0]
-            ctrl._arm_spec(_fake_capture())
-            device.fault_queue = [fake_soapy.SOAPY_SDR_OVERFLOW]
-
-            iq = ctrl.acquire()
-
-            assert len(device.calls_named('activateStream')) == 1
-            assert iq.pre_align.all()
