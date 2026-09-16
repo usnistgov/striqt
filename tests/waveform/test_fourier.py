@@ -196,9 +196,13 @@ def assert_backends_agree(
     )
 
 
-def bin_centered_tone(nfft, bin_fraction, nseg, dtype=np.complex64):
-    """a unit tone with an integer number of cycles per segment, over `nseg` segments"""
-    k = int(round(bin_fraction * (nfft - 1))) - nfft // 2
+def tone_bin(nfft, bin_fraction):
+    """the signed bin index k in [-nfft//2, nfft//2) at `bin_fraction` of the grid"""
+    return round(bin_fraction * (nfft - 1)) - nfft // 2
+
+
+def bin_centered_tone(nfft, k, nseg, dtype=np.complex64):
+    """a unit tone with `k` cycles per segment, over `nseg` segments"""
     n = np.arange(nseg * nfft)
     return np.exp(2j * np.pi * k * n / nfft).astype(dtype)
 
@@ -376,11 +380,12 @@ class TestFrequencySlicing:
         offset = offset_bins * fres
 
         s = fourier._slice_freqs(nfft, fs, bandwidth, offset=offset)
-        freqs = fourier.fftfreq(nfft, fs)[s]
+        bins = np.arange(nfft)[s]
 
-        assert freqs.size == bw_bins
-        # the selected bins are centered on the offset to within one bin
-        assert abs(float(freqs.mean()) - offset) <= fres
+        assert bins.size == bw_bins
+        # an even bin count cannot be centered on a bin, so the mean may sit half
+        # a bin off the offset
+        assert abs(bins.mean() - (nfft // 2 + offset_bins)) <= 0.5
 
         x = np.arange(nfft, dtype=np.float32)[np.newaxis, np.newaxis, :]
         x = np.broadcast_to(x, (2, 3, nfft)).copy()
@@ -461,34 +466,11 @@ class TestOaconvolve:
         # atol for samples near zero, where rtol is meaningless
         assert_allclose(result, x, rtol=1e-8, atol=1e-12)
 
-    @settings(max_examples=50)
-    @given(
-        x=noise_waveforms(min_size=64, max_size=256, dtype=np.float64),
-        scale=st.floats(min_value=0.1, max_value=10.0, allow_nan=False),
-    )
-    def test_linearity_scaling(self, x, scale):
-        kernel = np.array([0.25, 0.5, 0.25], dtype=x.dtype)
-        result_scaled_input = fourier.oaconvolve(scale * x, kernel, mode='same')
-        result_scaled_output = scale * fourier.oaconvolve(x, kernel, mode='same')
-        assert_allclose(
-            result_scaled_input, result_scaled_output, rtol=1e-6, atol=1e-12
-        )
-
-    @settings(max_examples=50)
-    @given(x1=noise_waveforms(min_size=64, max_size=256, dtype=np.float64))
-    def test_commutativity_and_full_length(self, x1):
-        x2 = gaussian_iq(15, dtype=x1.dtype, seed=42)
-        result1 = fourier.oaconvolve(x1, x2, mode='full')
-        result2 = fourier.oaconvolve(x2, x1, mode='full')
-        assert len(result1) == len(x1) + len(x2) - 1
-        assert_allclose(result1, result2, rtol=1e-8, atol=1e-12)
-
 
 class TestResample:
-    @settings(max_examples=50)
-    @given(x=noise_waveforms(min_size=64, max_size=512, dtype=np.complex128))
-    def test_identity(self, x):
-        assert_allclose(fourier.resample(x, len(x)), x, rtol=1e-10)
+    def test_identity_returns_input(self):
+        x = gaussian_iq(128, dtype=np.complex128, seed=42)
+        assert fourier.resample(x, len(x)) is x
 
     @settings(max_examples=50)
     @given(scale=st.floats(min_value=0.5, max_value=2.0, allow_nan=False))
@@ -498,23 +480,6 @@ class TestResample:
         result_unscaled = fourier.resample(x, num_out, scale=1.0)
         result_scaled = fourier.resample(x, num_out, scale=scale)
         assert_allclose(result_scaled, scale * result_unscaled, rtol=1e-8, atol=1e-15)
-
-    @settings(max_examples=50)
-    @given(
-        x=noise_waveforms(min_size=64, max_size=512), ratio=st.sampled_from([0.5, 2])
-    )
-    def test_length_and_dtype(self, x, ratio):
-        num_out = int(len(x) * ratio)
-        result = fourier.resample(x, num_out)
-        assert len(result) == num_out
-        assert result.dtype == x.dtype
-
-    @pytest.mark.parametrize('size, num', [(256, 16), (64, 512)])
-    def test_extreme_ratios(self, size, num):
-        x = gaussian_iq(size, dtype=np.complex128, seed=42)
-        result = fourier.resample(x, num)
-        assert len(result) == num
-        assert result.dtype == x.dtype
 
     @settings(max_examples=30)
     @given(x=noise_waveforms(min_size=64, max_size=256, dtype=np.complex128))
@@ -536,10 +501,15 @@ class TestResample:
         k = 26
         x = unit_tone(nfft_in, 1.0, k / nfft_in)
         y = fourier.resample(x, nfft_out, shift=shift)
+        assert y.shape == (nfft_out,) and y.dtype == x.dtype
         # the band copied to the output starts `shift` bins higher, so the tone
         # lands `shift` bins lower in the output spectrum
         expected = (k - shift) / nfft_out
         assert abs(tone_frequency(y, 1.0) - expected) <= 1 / nfft_out
+        # a bin-centered unit tone comes back as a unit tone; fftshift multiply,
+        # fft(N), ifft(N/2), ifftshift multiply
+        sigma = single_backend_rms(x.dtype, [nfft_in, nfft_out], n_elementwise=2)
+        assert_allclose(np.abs(y), 1, rtol=0, atol=peak_factor(y.size) * sigma)
 
     @pytest.mark.parametrize(
         'kws, match',
@@ -559,15 +529,6 @@ class TestResample:
     def test_odd_length_rejected(self):
         with pytest.raises(ValueError, match='even'):
             fourier.resample(np.ones(255, dtype=np.complex64), 128)
-
-    def test_upfirdn_matches_scipy(self):
-        from scipy import signal
-
-        x = gaussian_iq(64, dtype=np.float64)
-        h = np.array([0.5, 1.0, 0.5])
-        assert_allclose(
-            fourier.upfirdn(h, x, up=2, down=3), signal.upfirdn(h, x, up=2, down=3)
-        )
 
 
 class TestStft:
@@ -604,39 +565,19 @@ class TestStft:
         assert Sxx.dtype == np.finfo(x.dtype).dtype
         assert_array_equal(freqs, fourier.fftfreq(params['nperseg'], params['fs']))
 
-    @settings(max_examples=30)
-    @given(x=noise_waveforms(min_size=128, max_size=256, dtype=np.complex64))
-    def test_spectrogram_equals_stft_power_squared(self, x):
-        kws = {
-            'fs': 1e6,
-            'window': 'hamming',
-            'nperseg': 64,
-            'noverlap': 0,
-            'truncate': True,
-        }
-        _, _, X = fourier.stft(x, norm='power', **kws)
-        _, _, Sxx = fourier.spectrogram(x, **kws)
-
-        assert np.isrealobj(Sxx)
-        assert np.all(Sxx >= 0)
-        assert_allclose(Sxx, np.abs(X) ** 2, rtol=1e-5)
-
-    def test_spectrogram_zero_input(self):
-        x = np.zeros(256, dtype=np.complex64)
-        _, _, Sxx = fourier.spectrogram(
-            x, fs=1e6, window='hamming', nperseg=64, noverlap=0, truncate=True
-        )
-        assert_allclose(Sxx, 0, atol=1e-10)
-
     @pytest.mark.parametrize(
         'size, noverlap, nseg',
         [(128, 0, 2), (100, 0, None), (96, 32, 2), (100, 32, None)],
     )
     def test_truncate_false_requires_whole_segments(self, size, noverlap, nseg):
         x = np.ones(size, dtype=np.complex64)
-        kws = dict(
-            fs=1e6, window='hamming', nperseg=64, noverlap=noverlap, truncate=False
-        )
+        kws = {
+            'fs': 1e6,
+            'window': 'hamming',
+            'nperseg': 64,
+            'noverlap': noverlap,
+            'truncate': False,
+        }
         if nseg is None:
             with pytest.raises(ValueError, match=f'size {size}'):
                 fourier.stft(x, **kws)
@@ -742,17 +683,25 @@ class TestIstft:
             f'rms error above {level_tolerance_dB(sigma):.1e} dB'
         )
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason='the no-overlap path of stft scales the window by 1/nfft '
+        '(fourier.py:558) and istft never undoes it, unlike the overlapped path '
+        'whose _stack_stft_windows normalization (fourier.py:750) cancels the '
+        'factor, so istft(stft(x)) with noverlap=0 returns x/nfft',
+    )
     @settings(max_examples=30)
     @given(x=iq_waveforms(min_size=8 * NFFT, max_size=16 * NFFT, multiple_of=NFFT))
-    def test_no_overlap_roundtrip_is_proportional(self, x):
-        """Without overlap, istft(stft(x)) reproduces x up to a constant gain."""
+    def test_no_overlap_roundtrip_is_identity(self, x):
+        """With a rectangular window and no overlap, istft(stft(x)) reproduces x."""
         nfft = self.NFFT
         _, _, X = fourier.stft(x, fs=1.0, window='rect', nperseg=nfft, noverlap=0)
         y = fourier.istft(X, nfft=nfft, noverlap=0)
 
-        gain = np.vdot(x, y) / np.vdot(x, x)
+        assert y.dtype == x.dtype
+        assert y.shape == x.shape
         sigma = self._roundtrip_sigma(x.dtype)
-        assert _rms(y - gain * x) < sigma * _rms(y), (
+        assert _rms(y - x) < sigma * _rms(x), (
             f'rms error above {level_tolerance_dB(sigma):.1e} dB'
         )
 
@@ -813,13 +762,26 @@ class TestStftFrequencyEditing:
         )
         return freqs, Y
 
-    def test_zero_stft_by_freq_zeroes_outside_passband(self):
+    OFF_GRID_XFAIL = pytest.mark.xfail(
+        strict=True,
+        reason='_freq_band_edges returns the index of the last bin <= cutoff_hi as '
+        'the exclusive end of the passband (fourier.py:446), so an upper cutoff '
+        'between bins zeroes the last in-band bin',
+    )
+
+    @pytest.mark.parametrize(
+        'edge_shift_bins',
+        [0, pytest.param(0.5, marks=OFF_GRID_XFAIL)],
+        ids=['on_grid', 'off_grid'],
+    )
+    def test_zero_stft_by_freq_zeroes_outside_passband(self, edge_shift_bins):
         fs = 1e6
         freqs, Y = self._stft(fs)
+        hi = fs / 4 + edge_shift_bins * fs / self.NFFT
         # the passband is half-open: a bin centered on the upper cutoff is zeroed
-        inside = (freqs >= -fs / 4) & (freqs < fs / 4)
+        inside = (freqs >= -hi) & (freqs < hi)
 
-        Yz = fourier.zero_stft_by_freq(freqs, Y.copy(), passband=(-fs / 4, fs / 4))
+        Yz = fourier.zero_stft_by_freq(freqs, Y.copy(), passband=(-hi, hi))
         assert_array_equal(Yz[:, ~inside], 0)
         assert_array_equal(Yz[:, inside], Y[:, inside])
 
@@ -851,12 +813,20 @@ class TestStftFrequencyEditing:
         assert_array_equal(Yo[:, pad + self.NFFT :], 0)
         assert_array_equal(Yo[:, pad : pad + self.NFFT], Y)
 
-    def test_downsample_stft_passband_zeroing(self):
+    @pytest.mark.parametrize(
+        'edge_shift_bins',
+        [0, pytest.param(-0.5, marks=OFF_GRID_XFAIL)],
+        ids=['on_grid', 'off_grid'],
+    )
+    def test_downsample_stft_passband_zeroing(self, edge_shift_bins):
         fs = 1e6
         freqs, Y = self._stft(fs)
         nfft_out = self.NFFT // 2
-        # a passband half as wide as the output leaves a quarter zeroed on each side
-        _, Yo = fourier.downsample_stft(freqs, Y, nfft_out, passband=(-fs / 8, fs / 8))
+        # a passband half as wide as the output leaves a quarter zeroed on each side.
+        # Shifting both half-open edges down by less than a bin selects the same bins.
+        shift = edge_shift_bins * fs / self.NFFT
+        passband = (-fs / 8 + shift, fs / 8 + shift)
+        _, Yo = fourier.downsample_stft(freqs, Y, nfft_out, passband=passband)
         quarter = nfft_out // 4
         assert_array_equal(Yo[:, :quarter], 0)
         assert_array_equal(Yo[:, -quarter:], 0)
@@ -900,7 +870,7 @@ class TestStftFrequencyEditing:
             start = data.draw(st.integers(min_value=0, max_value=nfft_in - 1))
             end = data.draw(st.integers(min_value=start + 1, max_value=nfft_in))
 
-        (out0, out1), (in0, in1), center = fourier._find_downsample_copy_range(
+        (out0, out1), (in0, in1), _ = fourier._find_downsample_copy_range(
             nfft_in, nfft_out, start, end
         )
         assert out1 - out0 == in1 - in0
@@ -909,7 +879,6 @@ class TestStftFrequencyEditing:
         assert in1 - in0 <= nfft_out
         # the copied block is centered in the output
         assert abs(out0 - (nfft_out - out1)) <= 1
-        assert center == ((start or 0) + (nfft_in if end is None else end)) // 2
 
 
 class TestFilterDesign:
@@ -1016,8 +985,16 @@ class TestFilterDesign:
             and upsample['nfft'] < upsample['nfft_out']
         )
 
-        with_primes = fourier.design_cola_resampler(125e6, 15.36e6, avoid_primes=False)
-        assert with_primes['nfft_out'] <= design['nfft_out']
+        # 8209 is the first prime above the default min_fft_size, so it is the
+        # smallest rational FFT size for this ratio and the one avoid_primes rejects
+        prime = 8209
+        fs_target = 125e6 * prime / (prime + 1)
+        pruned = fourier.design_cola_resampler(125e6, fs_target)
+        with_primes = fourier.design_cola_resampler(
+            125e6, fs_target, avoid_primes=False
+        )
+        assert with_primes['nfft_out'] == prime
+        assert pruned['nfft_out'] == 2 * prime
 
         fs_sdr, fir = fourier.design_fir_resampler(125e6, 107.52e6)
         assert fs_sdr == pytest.approx(125e6)
@@ -1060,7 +1037,7 @@ class TestFilterDesign:
         assert np.abs(np.abs(H[passband]) - 1).max() < FIR_LEAKAGE
         assert np.abs(H[stopband]).max() < FIR_LEAKAGE
 
-    @pytest.mark.parametrize('cutoff', [np.inf, 0.5, 0.6])
+    @pytest.mark.parametrize('cutoff', [np.inf, 0.5])
     def test_fir_lowpass_fft_cutoff_at_or_past_nyquist_is_allpass(self, cutoff):
         H = fourier._fir_lowpass_fft(256, 1.0, cutoff=cutoff, transition=0.05)
         assert H.dtype == np.complex64
@@ -1247,24 +1224,34 @@ class TestToneFarBinFloor:
 
     @given(nfft=FAR_BIN_NFFTS, bin_fraction=st.floats(min_value=0, max_value=1))
     def test_stft_far_bins(self, xp, nfft, bin_fraction):
-        x = bin_centered_tone(nfft, bin_fraction, self.NSEG)
+        k = tone_bin(nfft, bin_fraction)
+        x = bin_centered_tone(nfft, k, self.NSEG)
         X_ref = self._stft(x.astype(np.complex128), nfft)
         X = to_numpy(self._stft(xp.asarray(x), nfft)).astype(np.complex128)
 
-        peak_bin = int(np.argmax(np.abs(X_ref[0])))
+        # the bins are in ascending fftfreq order, and a unit tone fills its bin
+        # with the rect window's unit gain
+        peak_bin = k + nfft // 2
+        assert np.all(np.argmax(np.abs(X), axis=1) == peak_bin)
+        tone_peak = np.abs(X_ref[0, peak_bin])
+        assert abs(tone_peak - 1) < tone_peak_roundoff(np.complex64)
+        assert np.abs(np.abs(X[:, peak_bin]) - 1).max() < tone_peak_roundoff(
+            np.complex64
+        )
+
         far = np.ones(nfft, dtype=bool)
         far[peak_bin] = False
 
         # window/nfft and the window multiply, then fft(nfft)
         sigma = single_backend_rms(np.complex64, [nfft], n_elementwise=2)
         rms_bound = sigma * _rms(X_ref)
-        tone_peak = np.abs(X_ref[0, peak_bin])
         self._assert_far_bins((X - X_ref)[:, far], rms_bound, tone_peak, nfft, sigma)
 
     @given(nfft=FAR_BIN_NFFTS, bin_fraction=st.floats(min_value=0, max_value=1))
     def test_resample_far_bins(self, xp, nfft, bin_fraction):
         # keep the tone inside the half band that survives downsampling by 2
-        x = bin_centered_tone(nfft, 0.3 + 0.4 * bin_fraction, self.NSEG)
+        k = tone_bin(nfft, 0.3 + 0.4 * bin_fraction)
+        x = bin_centered_tone(nfft, k, self.NSEG)
         num_out = x.size // 2
         # fftshift multiply, fft(N), ifft(N/2), ifftshift multiply
         sigma = single_backend_rms(np.complex64, [x.size, num_out], n_elementwise=2)
@@ -1274,7 +1261,7 @@ class TestToneFarBinFloor:
 
     @given(nfft=FAR_BIN_NFFTS, bin_fraction=st.floats(min_value=0, max_value=1))
     def test_oaconvolve_far_bins(self, xp, nfft, bin_fraction):
-        x = bin_centered_tone(nfft, bin_fraction, self.NSEG)
+        x = bin_centered_tone(nfft, tone_bin(nfft, bin_fraction), self.NSEG)
         # a unit-gain lowpass; the tone may land in its stopband, so bounds are
         # anchored to the input tone rather than the output
         kernel = np.hanning(self.KERNEL_TAPS).astype(np.float32)

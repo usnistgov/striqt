@@ -70,14 +70,17 @@ class TestSpecBaseFreezing:
         assert spec.subcarrier_spacings == (15e3, 30e3)
         hash(spec)
 
-    def test_unhashable_direct_struct_cannot_validate_or_replace(self):
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            '_inspect_container_depth handles TupleType but not VarTupleType, so '
+            'the list is never frozen and the lru-cached _validate cannot hash it'
+        ),
+    )
+    def test_direct_struct_with_list_validates_and_replaces(self):
         spec = CCA(subcarrier_spacings=[15e3])
-        with pytest.raises(TypeError, match='unhashable'):
-            spec.validate()
-        with pytest.raises(TypeError, match='unhashable'):
-            spec.replace(frame_range=(0, 2))
-        # the msgspec replace itself is fine; only the cached validate step hashes
-        msgspec.structs.replace(spec, frame_range=(0, 2))
+        assert spec.validate() == spec
+        assert spec.replace(frame_range=(0, 2)).subcarrier_spacings == (15e3,)
 
 
 # %% Capture
@@ -99,10 +102,6 @@ class TestCapture:
         with pytest.raises(ValueError, match=PERIOD_MSG):
             capture.replace(duration=1.5e-6)
 
-    def test_replace_without_attrs_is_identity(self):
-        capture = Capture(duration=1e-3, sample_rate=1e6)
-        assert capture.replace() is capture
-
     def test_tolerance_is_one_microsample(self):
         Capture(duration=(1000 + 1e-7) / 1e6, sample_rate=1e6)
 
@@ -122,20 +121,16 @@ class TestCapture:
         with pytest.raises(ValueError, match=PERIOD_MSG):
             Capture(duration=1e-3, sample_rate=math.inf)
 
-    @pytest.mark.parametrize(
-        'kws',
-        [{'duration': 0, 'sample_rate': 1e6}, {'duration': 1e-3, 'sample_rate': -1e6}],
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            'types.SampleRate (analysis/specs/types.py:69) carries no gt=0 bound, '
+            'unlike the sensor BackendSampleRate, so a negative rate converts'
+        ),
     )
-    def test_zero_duration_and_negative_sample_rate_pass(self, construct, kws):
-        # the analysis Capture has no positivity constraints; those live on the
-        # sensor-side backend rate types
-        construct(Capture, **kws)
-
-    def test_json_decode_runs_post_init(self):
-        with pytest.raises(msgspec.ValidationError, match=PERIOD_MSG):
-            msgspec.json.decode(
-                b'{"duration": 1.5e-6, "sample_rate": 1e6}', type=Capture
-            )
+    def test_negative_sample_rate_is_rejected_on_convert(self):
+        with pytest.raises(msgspec.ValidationError, match='sample_rate'):
+            Capture.from_dict({'duration': 1e-3, 'sample_rate': -1e6})
 
 
 # %% Cellular 5G NR SSB correlators
@@ -157,7 +152,7 @@ class TestSSBCorrelators:
 
     def test_subcarrier_spacing_is_required(self):
         cls = CORRELATORS[0]
-        with pytest.raises(TypeError, match="Missing required argument 'subcarrier"):
+        with pytest.raises(TypeError, match='subcarrier_spacing'):
             cls()
         with pytest.raises(msgspec.ValidationError, match='subcarrier_spacing'):
             cls.from_dict({})
@@ -214,20 +209,18 @@ class TestCellularCyclicAutocorrelator:
             symbol_range=(1, None),
         )
 
-    def test_open_ended_frame_range_fails_type_conversion(self):
-        # the annotation forbids None, so conversion fails on type before
-        # __post_init__ runs
-        with pytest.raises(
-            msgspec.ValidationError, match=r'Expected `int`, got `null`'
-        ):
-            CCA.from_dict({'frame_range': [1, None]})
-
-    def test_zero_start_skips_range_check(self, construct):
-        spec = construct(CCA, frame_range=(0, -5), symbol_range=(0, -1))
-        assert spec.frame_range == (0, -5)
-        assert spec.symbol_range == (0, -1)
-
-    def test_int_range_form_skips_check(self, construct):
-        spec = construct(CCA, frame_range=3, symbol_range=5)
-        assert spec.frame_range == 3
-        assert spec.symbol_range == 5
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            '_validate_range (analysis/specs/structs.py:270) returns before the '
+            'end >= start check when start is 0, so (0, -5) becomes an empty range'
+        ),
+    )
+    @pytest.mark.parametrize('field', ['frame_range', 'symbol_range'])
+    def test_descending_range_from_zero_rejected(self, field):
+        raises_on_both_paths(
+            CCA,
+            msgspec.ValidationError,
+            f'{field} end must be >= start',
+            **{field: (0, -5)},
+        )

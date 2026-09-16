@@ -97,7 +97,7 @@ LOFrequency = Annotated[
     Meta('LO frequency of external frequency converter'),
 ]
 LOShift = Annotated[Literal['left', 'right', 'none'], Meta('LO shift direction')]
-MockSensor = Annotated[
+MockSource = Annotated[
     Optional[str],
     Meta('replace the bound sensor with one from this binding name'),
 ]

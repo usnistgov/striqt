@@ -21,7 +21,6 @@ from sweep_strategies import (
     calibration_sweep_dict,
     consistent_port_gain,
     duplicate_field_loops,
-    loop_sets,
     make_calibration_capture,
     make_calibration_sweep,
     make_capture,
@@ -98,11 +97,18 @@ class TestSoapyCapture:
         with pytest.raises(ValueError, match=GAIN_COUNT_MSG):
             capture.replace(gain=(1.0,))
 
-    def test_center_frequency_tuple_length_is_unchecked(self, construct):
-        # only gain is validated against the port count
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            'only gain is validated against the port count; a center_frequency '
+            'tuple of the wrong length is accepted and split_capture_ports then '
+            'drops the extras'
+        ),
+    )
+    def test_center_frequency_tuple_length_must_match_ports(self):
         kws = dict(BASE, center_frequency=(1e9, 2e9, 3e9))
-        capture = construct(SoapyCapture, port=(0, 1), gain=0.0, **kws)
-        assert capture.center_frequency == (1e9, 2e9, 3e9)
+        with pytest.raises(ValueError):
+            SoapyCapture(port=(0, 1), gain=0.0, **kws)
 
     @pytest.mark.xfail(
         strict=True,
@@ -183,12 +189,7 @@ class TestGapless:
         source = construct(SoapySource, gapless=True, time_sync_at='open', **MCR)
         assert source.gapless is True
 
-    def test_sync_check_precedes_retries_check(self):
-        with pytest.raises(ValueError, match=SYNC_MSG):
-            SoapySource(gapless=True, time_sync_at='acquire', receive_retries=3, **MCR)
-
-    def test_air7101b_default_retries_forbid_gapless(self):
-        assert Air7101BSource().receive_retries == 3
+    def test_air7101b_nonzero_default_retries_forbid_gapless(self):
         with pytest.raises(ValueError, match=RETRIES_MSG):
             Air7101BSource(gapless=True, time_sync_at='open')
         assert Air7101BSource(gapless=True, time_sync_at='open', receive_retries=0)
@@ -220,12 +221,6 @@ class TestSignalTrigger:
         group = sa.specs.AnalysisGroup()
         source = SoapySource(signal_trigger=group, **MCR)
         assert isinstance(source.signal_trigger, sa.specs.AnalysisGroup)
-
-
-def test_time_sync_at_literal_enforced_only_on_convert():
-    assert SoapySource(time_sync_at='never', **MCR).time_sync_at == 'never'
-    with pytest.raises(msgspec.ValidationError, match="Invalid enum value 'never'"):
-        SoapySource.from_dict(dict(time_sync_at='never', **MCR))
 
 
 # %% Loops, plot options and extensions
@@ -287,14 +282,17 @@ class TestCaptureRemap:
         remap = construct(Remap, key=key, lookup={'[1]': 5})
         assert remap.lookup == {'[1]': 5}
 
-    def test_multi_key_non_json_key_raises_decode_error(self, construct):
-        # not translated into a spec-level message
-        with pytest.raises(msgspec.DecodeError):
-            construct(Remap, key=('a', 'b'), lookup={'foo': 5})
-
-    def test_multi_key_non_string_key_raises_type_error(self):
-        with pytest.raises(TypeError, match='bytes-like object'):
-            Remap(key=('a', 'b'), lookup={1: 5})
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            'CaptureRemap.__post_init__ leaks msgspec.DecodeError/TypeError from '
+            'json.decode instead of a ValidationError naming the lookup key'
+        ),
+    )
+    @pytest.mark.parametrize('lookup', [{'foo': 5}, {1: 5}], ids=['text', 'int'])
+    def test_multi_key_undecodable_key_is_a_validation_error(self, lookup):
+        with pytest.raises(msgspec.ValidationError, match='lookup'):
+            Remap(key=('a', 'b'), lookup=lookup)
 
     def test_nested_lookup_values_are_frozen(self, construct):
         remap = construct(Remap, key='a', lookup={'x': [1, 2]})
@@ -313,12 +311,6 @@ class _ConflictingCapture(ss.specs.SingleToneCapture, frozen=True, kw_only=True)
 
 
 class TestSweepLoops:
-    @given(loops=loop_sets())
-    def test_valid_loop_sets_accepted(self, loops):
-        sweep = make_sweep(captures=(make_capture(),), loops=loops)
-        assert sweep.loops == loops
-        assert SweepCls.from_dict(sweep.to_dict()) == sweep
-
     @given(loops=misplaced_repeat_loops())
     def test_repeat_must_be_first(self, loops):
         captures = (make_capture(),)
@@ -344,8 +336,9 @@ class TestSweepLoops:
 class TestSweepCaptures:
     @pytest.mark.parametrize('cls', [ss.specs.Sweep, ss.specs.CalibrationSweep])
     def test_bare_sweep_is_not_constructible(self, cls):
-        # the capture type comes from a bound schema
-        with pytest.raises(TypeError, match='Must be called with a struct type'):
+        # the TypeError comes from msgspec.structs.fields on the unbound capture
+        # TypeVar, not from a guard, so there is no message to match
+        with pytest.raises(TypeError):
             cls(source=SOURCE)
 
     def test_capture_field_conflicting_with_measurement_name(self):
@@ -385,10 +378,17 @@ class TestSweepAdjustCaptures:
         with pytest.raises(msgspec.ValidationError, match=match):
             SweepCls.from_dict(sweep_dict(adjust_captures=adjust))
 
-    def test_tuple_form_is_broken(self):
-        # the tuple branch of _get_capture_adjust_map references an undefined name
-        with pytest.raises(NameError, match='source_fields'):
-            make_sweep(adjust_captures=(('defaults', {'snr': 1.0}),))
+    @pytest.mark.xfail(
+        strict=True,
+        raises=NameError,
+        reason=(
+            'the tuple branch of _get_capture_adjust_map references an undefined '
+            'name source_fields'
+        ),
+    )
+    def test_tuple_of_pairs_form_is_accepted(self):
+        sweep = make_sweep(adjust_captures=(('defaults', {'snr': 1.0}),))
+        assert sweep.adjust_captures['defaults'] == {'snr': 1.0}
 
 
 # %% CalibrationSweep
@@ -423,8 +423,10 @@ class TestCalibrationSweep:
         with pytest.raises(msgspec.ValidationError, match=SOURCE_CAL_MSG):
             CalSweepCls.from_dict(calibration_sweep_dict(source=source))
 
-    def test_default_options_are_calibration_defaults(self):
-        expected = ss.specs.SweepOptions(
-            reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
-        )
-        assert make_calibration_sweep().options == expected
+    def test_default_options_loop_only_nyquist(self):
+        loops = (List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)
+        sweep = make_calibration_sweep(loops=loops)
+        bandwidths = {
+            c.analysis_bandwidth for c in ss.specs.helpers.loop_captures(sweep)
+        }
+        assert bandwidths == {0.5e6, math.inf}

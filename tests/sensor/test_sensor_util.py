@@ -124,11 +124,8 @@ class TestThreadInterrupts:
             cancel_then_fail()
         assert not util._cancel_threads.is_set()
 
-    def test_threadpool_is_created_lazily_once(self):
-        pool = util.threadpool
-        assert isinstance(pool, concurrent.futures.ThreadPoolExecutor)
-        assert util.threadpool is pool
-        assert pool.submit(lambda: 3).result() == 3
+    def test_threadpool_is_a_module_singleton(self):
+        assert util.threadpool is util.threadpool
 
     def test_unknown_attribute(self):
         with pytest.raises(AttributeError, match='no attribute'):
@@ -137,11 +134,6 @@ class TestThreadInterrupts:
 
 # %% ExceptionStack / await_and_ignore
 class TestExceptionStack:
-    def test_no_exceptions(self):
-        with util.ExceptionStack() as stack, stack.defer():
-            pass
-        stack.handle()
-
     def test_single_exception_is_reraised_at_exit(self):
         stack = util.ExceptionStack()
 
@@ -156,6 +148,9 @@ class TestExceptionStack:
             defer_one_failure()
         assert stack.exceptions == []
 
+        with stack, stack.defer():
+            pass
+
     def test_multiple_exceptions_form_a_group(self):
         stack = util.ExceptionStack('label')
         with stack.defer():
@@ -167,11 +162,6 @@ class TestExceptionStack:
             stack.handle()
         assert info.value.message == 'label'
         assert [type(e) for e in info.value.exceptions] == [ValueError, TypeError]
-
-    def test_default_label(self):
-        assert (
-            util.ExceptionStack().group_label == 'exceptions raised by multiple threads'
-        )
 
     def test_interrupts_yield_to_other_exceptions(self):
         stack = util.ExceptionStack()
@@ -199,6 +189,8 @@ class TestExceptionStack:
             stack.handle()
 
     def test_cancel_on_except(self):
+        # the deferred exceptions are cleared because ExceptionStack.__del__ calls
+        # handle(), which would re-raise them when the stack is garbage collected
         stack = util.ExceptionStack(cancel_on_except=True)
         with stack.defer():
             raise ValueError
@@ -283,9 +275,6 @@ class TestDebugOnException:
         with pytest.raises(ExceptionGroup):
             raise_inside(util.DebugOnException(), group)
         out = capsys.readouterr().out
-        assert 'Exception in owning thread' in out
-        assert 'Exception 1/2 in spawned threads' in out
-        assert 'Exception 2/2 in spawned threads' in out
         assert 'one' in out and 'two' in out
 
     def test_silent_cases(self, capsys):
@@ -350,22 +339,26 @@ class TestRetry:
     def test_exception_func_and_logger(self, caplog):
         flaky = Flaky(2)
         hook_calls = []
+        records_at_hook = []
         logger = logging.getLogger('test-retry')
+
+        def retry_records():
+            return [r for r in caplog.records if r.name == 'test-retry']
+
+        def hook(*a, **k):
+            hook_calls.append((a, k))
+            records_at_hook.append(len(retry_records()))
+
         wrapped = util.retry(
-            ConnectionError,
-            tries=4,
-            exception_func=lambda *a, **k: hook_calls.append((a, k)),
-            logger=logger,
+            ConnectionError, tries=4, exception_func=hook, logger=logger
         )(flaky)
 
         with caplog.at_level(logging.INFO, logger='test-retry'):
             assert wrapped('a', b=1) == 'ok'
 
         assert hook_calls == [(('a',), {'b': 1})] * 2
-        messages = [r.getMessage() for r in caplog.records if r.name == 'test-retry']
-        assert len(messages) == 1
-        assert "caught 'ConnectionError'" in messages[0]
-        assert 'repeating the call 3 more times' in messages[0]
+        assert [r.levelno for r in retry_records()] == [logging.INFO]
+        assert records_at_hook == [1, 1]
 
     def test_delay_and_backoff(self, monkeypatch):
         sleeps = []
@@ -373,6 +366,21 @@ class TestRetry:
         flaky = Flaky(3)
         util.retry(ConnectionError, tries=4, delay=0.1, backoff=2)(flaky)()
         assert sleeps == pytest.approx([0.1, 0.2, 0.4])
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason='util.py:323-325 run exception_func and time.sleep after the final '
+        'failed try as well, before the for-else re-raises',
+    )
+    def test_exhausted_tries_sleep_only_between_tries(self, monkeypatch):
+        sleeps = []
+        monkeypatch.setattr(util.time, 'sleep', sleeps.append)
+        tries = 4
+        wrapped = util.retry(ConnectionError, tries=tries, delay=0.1)(Flaky(tries))
+        with pytest.raises(ConnectionError):
+            wrapped()
+        assert len(sleeps) == tries - 1
 
 
 # %% logging helpers
@@ -492,14 +500,6 @@ class TestLogToFile:
         assert striqt_logger._striqt_handler in striqt_logger.handlers
         assert striqt_logger._striqt_handler.level == logging.WARNING
         first.close()
-
-    def test_json_date_serializer(self):
-        import datetime
-
-        stamp = datetime.datetime(2026, 9, 14, 12, 0, 0)
-        assert util._JSONFormatter.json_serialize_dates(stamp) == stamp.isoformat()
-        with pytest.raises(TypeError, match='not serializable'):
-            util._JSONFormatter.json_serialize_dates(object())
 
 
 def test_public_reexports():

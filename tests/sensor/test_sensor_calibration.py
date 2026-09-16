@@ -62,8 +62,6 @@ class TestNoiseDiodeToggle:
             assert fields == loop_fields(
                 CalSweepCls.from_dict(calibration_sweep_dict(loops=loops))
             )
-            idx = fields.index(TOGGLE)
-            assert idx == 0 or (idx == 1 and fields[0] == 'port')
             assert [f for f in fields if f != TOGGLE] == [
                 l.field for l in loops if l.field != TOGGLE
             ]

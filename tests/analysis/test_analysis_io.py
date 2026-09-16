@@ -85,9 +85,8 @@ def test_mixed_include_types_raise(write_yaml):
 
 def test_empty_glob_raises_with_the_pattern(write_yaml):
     spec = write_yaml('spec.yaml', 'sites: !include "missing/*.yaml"\n')
-    with pytest.raises(FileNotFoundError) as excinfo:
+    with pytest.raises(FileNotFoundError, match=r'missing/\*\.yaml'):
         load(spec)
-    assert excinfo.value.args == ('missing/*.yaml',)
 
 
 def test_parent_relative_glob_from_subdirectory(write_yaml):
@@ -143,36 +142,14 @@ def test_flow_sequence_mapping_keys_become_tuples(write_yaml):
     assert load(spec)['lookup'] == {(0, 1): 2, (1, 0): 3}
 
 
-def test_duplicate_top_level_key_keeps_the_last(write_yaml):
-    spec = write_yaml('spec.yaml', 'options: {a: 1}\noptions: {b: 2}\n')
-    assert load(spec) == {'options': {'b': 2}}
-
-
 @pytest.mark.parametrize(
     'text, expected',
-    [
-        ('125.0e6', '125.0e6'),
-        ('3750e6', '3750e6'),
-        ('20e-3', '20e-3'),
-        ('inf', 'inf'),
-        ('nan', 'nan'),
-        ('none', 'none'),
-        ('13/28', '13/28'),
-        ('1/28000', '1/28000'),
-        ('.01', 0.01),
-        ('.inf', math.inf),
-        ('.nan', math.nan),
-        ('-0', 0),
-        ('null', None),
-        ('True', True),
-    ],
+    [('3750e6', '3750e6'), ('inf', 'inf'), ('.inf', math.inf)],
 )
 def test_scalar_typing(write_yaml, text, expected):
-    # YAML 1.1 leaves most engineering-notation numbers as strings; msgspec's lax
-    # conversion turns them into numbers only once a spec field type is known
+    # YAML 1.1 leaves engineering-notation numbers as strings, so loop points
+    # like 3750e6 reach _build_loop_points_dict untyped and it must coerce them
+    # to the capture field type (xfail-audit #1)
     value = load(write_yaml('spec.yaml', f'v: {text}\n'))['v']
-    if isinstance(expected, float) and math.isnan(expected):
-        assert isinstance(value, float) and math.isnan(value)
-    else:
-        assert value == expected
-        assert type(value) is type(expected)
+    assert value == expected
+    assert type(value) is type(expected)

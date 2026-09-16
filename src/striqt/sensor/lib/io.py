@@ -243,7 +243,7 @@ def _import_extensions_from_spec(
                 f'extension import_path {str(p)!r} is not a directory'
             )
 
-        if p != sys.path[0]:
+        if p != Path(sys.path[0]):
             assert isinstance(p, (str, Path))
             sys.path.insert(0, str(p))
 

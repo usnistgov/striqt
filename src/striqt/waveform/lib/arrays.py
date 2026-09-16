@@ -610,6 +610,6 @@ def convert_np_to_xp(func: _TC) -> _TC:
         else:
             raise AttributeError(f'invalid array module {xp}')
 
-        return xp.asarray(x)  # pyright: ignore
+        return x
 
     return cast(_TC, wrapped)
