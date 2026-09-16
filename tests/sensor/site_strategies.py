@@ -69,15 +69,19 @@ SITE_ADJUST = {
 }
 
 
-def make_site_capture(cls=SiteCaptureCls, **kws):
-    defaults = {
+def make_site_capture_kws(**kws) -> dict:
+    return {
         'port': 0,
         'center_frequency': 3750e6,
         'gain': -10,
         'sample_rate': 53.76e6,
         'duration': 1e-3,
+        **kws,
     }
-    return cls(**{**defaults, **kws})
+
+
+def make_site_capture(cls=SiteCaptureCls, **kws):
+    return cls(**make_site_capture_kws(**kws))
 
 
 def make_site_sweep(
@@ -88,10 +92,6 @@ def make_site_sweep(
     if len(captures) == 0:
         captures = (make_site_capture(cls=cls.schema.capture),)
     return cls(source=SOURCE, captures=tuple(captures), loops=tuple(loops), **kws)
-
-
-def capture_dict(**kws) -> dict:
-    return dict(make_site_capture(**kws).to_dict())
 
 
 center_frequency_keys = st.sampled_from(tuple(CHANNEL_NAMES))

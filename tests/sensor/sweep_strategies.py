@@ -22,21 +22,26 @@ LIST_LOOP_FIELDS = ('frequency_offset', 'snr', 'lo_shift')
 SAMPLE_RATES = (1e6, 2e6, 4e6)
 
 
+def make_capture_kws(**kws) -> dict:
+    return {'port': 0, 'sample_rate': 1e6, 'duration': 1e-3, **kws}
+
+
 def make_capture(**kws):
-    kws = {'port': 0, 'sample_rate': 1e6, 'duration': 1e-3, **kws}
-    return CaptureCls(**kws)
+    return CaptureCls(**make_capture_kws(**kws))
+
+
+def make_sweep_kws(captures=(), loops=(), adjust_captures=None, **kws) -> dict:
+    return {
+        'source': SOURCE,
+        'captures': tuple(captures),
+        'loops': tuple(loops),
+        'adjust_captures': {} if adjust_captures is None else adjust_captures,
+        **kws,
+    }
 
 
 def make_sweep(captures=(), loops=(), adjust_captures=None, **kws):
-    if adjust_captures is None:
-        adjust_captures = {}
-    return SweepCls(
-        source=SOURCE,
-        captures=tuple(captures),
-        loops=tuple(loops),
-        adjust_captures=adjust_captures,
-        **kws,
-    )
+    return SweepCls(**make_sweep_kws(captures, loops, adjust_captures, **kws))
 
 
 def loop_point_count(loops) -> int:
@@ -158,16 +163,6 @@ def sweeps(draw, min_captures: int = 1):
     return make_sweep(captures=captures, loops=draw(loop_sets()))
 
 
-def sweep_dict(captures=(), loops=(), **kws):
-    """from_dict input for SweepCls, usable even when construction should fail"""
-    return {
-        'source': SOURCE.to_dict(),
-        'captures': [c.to_dict() for c in captures],
-        'loops': [l.to_dict() for l in loops],
-        **kws,
-    }
-
-
 gains = st.floats(min_value=-30, max_value=60)
 
 
@@ -243,27 +238,16 @@ def make_calibration_capture(**kws):
     return CalCaptureCls(**kws)
 
 
+def make_calibration_sweep_kws(captures=None, loops=(), source=None, **kws) -> dict:
+    if captures is None:
+        captures = (make_calibration_capture(),)
+    if source is None:
+        source = CalSourceCls()
+    return {'source': source, 'captures': tuple(captures), 'loops': tuple(loops), **kws}
+
+
 def make_calibration_sweep(captures=None, loops=(), source=None, **kws):
-    if captures is None:
-        captures = (make_calibration_capture(),)
-    if source is None:
-        source = CalSourceCls()
-    return CalSweepCls(
-        source=source, captures=tuple(captures), loops=tuple(loops), **kws
-    )
-
-
-def calibration_sweep_dict(captures=None, loops=(), source=None, **kws):
-    if captures is None:
-        captures = (make_calibration_capture(),)
-    if source is None:
-        source = CalSourceCls()
-    return {
-        'source': source.to_dict(),
-        'captures': [c.to_dict() for c in captures],
-        'loops': [l.to_dict() for l in loops],
-        **kws,
-    }
+    return CalSweepCls(**make_calibration_sweep_kws(captures, loops, source, **kws))
 
 
 def loop_fields(sweep) -> list:

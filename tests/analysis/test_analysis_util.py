@@ -19,41 +19,6 @@ import striqt.analysis as sa
 from striqt.analysis.lib import util
 
 
-@pytest.fixture(autouse=True)
-def restore_logging():
-    """undo the module-level logging state that show_messages and StriqtLogger mutate
-
-    Deleting an adapter does not delete its ``striqt.<suffix>`` logger, which lives
-    on in the logging manager with whatever level the test set on it.
-    """
-    adapters = dict(util._logger_adapters)
-    saved = {}
-    for name, adapter in adapters.items():
-        saved[name] = (
-            adapter.logger.level,
-            list(adapter.logger.handlers),
-            getattr(adapter, '_screen_handler', None),
-            adapter.extra,
-        )
-    try:
-        yield
-    finally:
-        for name in list(util._logger_adapters):
-            if name not in adapters:
-                adapter = util._logger_adapters.pop(name)
-                adapter.logger.setLevel(logging.NOTSET)
-                adapter.logger.handlers.clear()
-        for name, (logger_level, handlers, screen, extra) in saved.items():
-            adapter = util._logger_adapters[name]
-            adapter.logger.setLevel(logger_level)
-            adapter.logger.handlers[:] = handlers
-            adapter.extra = extra
-            if screen is None:
-                adapter.__dict__.pop('_screen_handler', None)
-            else:
-                adapter._screen_handler = screen
-
-
 def screen_handlers(name):
     adapter = util.get_logger(name)
     return [
@@ -124,17 +89,19 @@ class TestShowMessages:
         fmt = util.get_logger('analysis')._screen_handler.formatter._fmt
         assert '{capture_progress}' in fmt
 
-    def test_none_silences_every_named_logger(self):
+    def test_none_silences_every_named_logger(self, subtests):
         util.StriqtLogger('test-silenced-logger')
         names = ('analysis', 'test-silenced-logger')
         util.show_messages(None, logger_names=names)
         for name in names:
-            assert util.get_logger(name).logger.level == logging.CRITICAL
+            with subtests.test(msg=name):
+                assert util.get_logger(name).logger.level == logging.CRITICAL
 
-    def test_all_applies_to_every_adapter(self):
+    def test_all_applies_to_every_adapter(self, subtests):
         util.show_messages(logging.WARNING, colors=False)
-        for adapter in util._logger_adapters.values():
-            assert adapter.logger.level == logging.WARNING
+        for name, adapter in util._logger_adapters.items():
+            with subtests.test(msg=name):
+                assert adapter.logger.level == logging.WARNING
 
 
 # %% stopwatch

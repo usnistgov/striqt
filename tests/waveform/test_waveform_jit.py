@@ -16,17 +16,18 @@ from conftest import (
     gaussian_iq,
     iq_waveforms,
     positive_power_arrays,
-    to_numpy,
 )
 from hypothesis import given
 from hypothesis import strategies as st
-from numpy.testing import assert_allclose
-from test_power_analysis import (
-    ROUNDOFF_SAFETY,
+from numeric_checks import (
+    FLOAT_DTYPES,
+    assert_close,
+    by_dtype,
+    corr_atol,
+    dtype_id,
     envelope_power_rtol,
     log_conversion_tol,
     pow_conversion_rtol,
-    unit_roundoff,
 )
 
 from striqt.waveform import ofdm
@@ -65,23 +66,6 @@ def corr_reference(inds, x, nfft, ncp, norm):
         out[j] = corr
 
     return out
-
-
-def corr_atol(x, n_inds, norm, n_impl=1):
-    """absolute tolerance on _corr_at_indices against exact arithmetic.
-
-    Each of the n_inds products a*conj(b) and the power terms are rounded at the input
-    precision before the complex128 accumulation, and the result is rounded once more
-    on output. With norm=True the Cauchy-Schwarz bound sum|a||b| <= sqrt(Pa*Pb) makes
-    the error relative to a unit-scale output; with norm=False it is relative to the
-    largest product magnitude.
-    """
-    u = unit_roundoff(float_dtype_like(x))
-    if norm:
-        scale = 1.0
-    else:
-        scale = float(np.abs(x).max() ** 2)
-    return ROUNDOFF_SAFETY * n_impl * (n_inds + 3) * u * scale
 
 
 def corr_cases(
@@ -127,7 +111,7 @@ def corr_cases(
 
 def assert_matches_reference(out, inds, x, nfft, ncp, norm):
     expected = corr_reference(inds, x, nfft, ncp, norm)
-    assert_allclose(to_numpy(out), expected, rtol=0, atol=corr_atol(x, inds.size, norm))
+    assert_close(out, expected, atol=corr_atol(x, inds.size, norm))
 
 
 class TestCorrAtIndicesKernels:
@@ -215,7 +199,7 @@ FUSED_LOG_KERNELS = [
 class TestFusedKernelsCuda:
     """The cupy.fuse kernels in jit.cuda against the numexpr path on the same data.
 
-    Tolerances are the two-implementation budgets from test_power_analysis.
+    Tolerances are the two-implementation budgets of numeric_checks.
     """
 
     @staticmethod
@@ -226,17 +210,18 @@ class TestFusedKernelsCuda:
         out = cp.empty(x.shape, dtype=float_dtype_like(x))
         ret = getattr(cuda, name)(x_cp, out, *args)
         cp.cuda.Device().synchronize()
-        return ret.get()
+        return ret
 
     @pytest.mark.parametrize(
         'name,func,kws,takes_eps',
         FUSED_LOG_KERNELS,
         ids=[k[0] for k in FUSED_LOG_KERNELS],
     )
-    @given(data=st.data(), dtype=st.sampled_from([np.float32, np.float64]))
+    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
+    @given(data=st.data())
     def test_log_kernels(self, cupy_available, data, dtype, name, func, kws, takes_eps):
         scale = 10 if name.startswith('powtodB') else 20
-        lim = {np.float64: 1e6, np.float32: 1e4}[dtype]
+        lim = by_dtype(dtype, float32=1e4, float64=1e6)
         x = data.draw(
             positive_power_arrays(
                 min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
@@ -246,18 +231,16 @@ class TestFusedKernelsCuda:
         expected = func(x, **kws)
         args = (kws['eps'],) if takes_eps else ()
         result = self._run(cupy_available, name, x, *args)
-
-        rtol, atol = log_conversion_tol(dtype, scale, n_impl=2)
-        assert_allclose(result, expected, rtol=rtol, atol=atol)
+        assert_close(result, expected, **log_conversion_tol(dtype, scale, n_impl=2))
 
     @given(env=COMPLEX_ENVELOPES)
     def test_envtodB_complex(self, cupy_available, env):
         expected = power_analysis.envtodB(env)
         result = self._run(cupy_available, 'envtodB', env)
-        rtol, atol = log_conversion_tol(
+        tol = log_conversion_tol(
             np.float32, 20, complex_input=np.iscomplexobj(env), n_impl=2
         )
-        assert_allclose(result, np.real(expected), rtol=rtol, atol=atol)
+        assert_close(result, np.real(expected), **tol)
 
     @given(env=COMPLEX_ENVELOPES)
     def test_envtopow(self, cupy_available, env):
@@ -266,11 +249,12 @@ class TestFusedKernelsCuda:
         rtol = envelope_power_rtol(
             np.float32, complex_input=np.iscomplexobj(env), n_impl=2
         )
-        assert_allclose(result, expected, rtol=rtol)
+        assert_close(result, expected, rtol=rtol)
 
-    @given(data=st.data(), dtype=st.sampled_from([np.float32, np.float64]))
+    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
+    @given(data=st.data())
     def test_dBtopow(self, cupy_available, data, dtype):
-        lim = {np.float64: 100, np.float32: 30}[dtype]
+        lim = by_dtype(dtype, float32=30, float64=100)
         dB = data.draw(
             dB_arrays(
                 min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
@@ -279,6 +263,5 @@ class TestFusedKernelsCuda:
 
         expected = power_analysis.dBtopow(dB)
         result = self._run(cupy_available, 'dBtopow', dB)
-
         rtol = pow_conversion_rtol(dtype, np.abs(dB).max(), n_impl=2)
-        assert_allclose(result, expected, rtol=rtol)
+        assert_close(result, expected, rtol=rtol)

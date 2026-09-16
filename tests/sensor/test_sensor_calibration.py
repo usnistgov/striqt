@@ -7,14 +7,22 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import msgspec
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from conftest import FAKE_SOAPY_CALIBRATION_SPEC, FAKE_SOAPY_SPEC, SITE_DIR
+from conftest import (
+    FAKE_SOAPY_CALIBRATION_SPEC,
+    FAKE_SOAPY_SPEC,
+    SITE_DIR,
+    FakeRun,
+    construct_both,
+    raises_on_both_paths,
+)
 from hypothesis import given
+from pytest_lazy_fixtures import lf
 from site_strategies import SiteCalCaptureCls
+from soapy_factories import MCR, soapy_capture
 from sweep_strategies import (
     BOLTZMANN_MW,
     GAIN_LOOP,
@@ -26,11 +34,11 @@ from sweep_strategies import (
     CalSourceCls,
     CalSweepCls,
     calibration_loop_orderings,
-    calibration_sweep_dict,
     expected_yfactor,
     loop_fields,
     make_calibration_capture,
     make_calibration_sweep,
+    make_calibration_sweep_kws,
     make_yfactor_dataset,
     noise_figure_lookup,
     receiver_gain,
@@ -40,7 +48,6 @@ from sweep_strategies import (
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-import striqt.waveform as sw
 from striqt.sensor.lib import calibration
 from striqt.sensor.lib.compute.datasets import build_capture_coords
 
@@ -57,19 +64,16 @@ class TestNoiseDiodeToggle:
     @given(loops_accepted=calibration_loop_orderings())
     def test_explicit_toggle_position(self, loops_accepted):
         loops, accepted = loops_accepted
+        kws = make_calibration_sweep_kws(loops=loops)
         if accepted:
-            fields = loop_fields(make_calibration_sweep(loops=loops))
-            assert fields == loop_fields(
-                CalSweepCls.from_dict(calibration_sweep_dict(loops=loops))
-            )
+            direct, converted = construct_both(CalSweepCls, **kws)
+            fields = loop_fields(direct)
+            assert fields == loop_fields(converted)
             assert [f for f in fields if f != TOGGLE] == [
                 l.field for l in loops if l.field != TOGGLE
             ]
         else:
-            with pytest.raises(TypeError, match=TOGGLE_MSG):
-                make_calibration_sweep(loops=loops)
-            with pytest.raises(msgspec.ValidationError, match=TOGGLE_MSG):
-                CalSweepCls.from_dict(calibration_sweep_dict(loops=loops))
+            raises_on_both_paths(CalSweepCls, TypeError, TOGGLE_MSG, **kws)
 
     def test_replace_loops_reinserts_or_rejects(self):
         sweep = make_calibration_sweep()
@@ -118,26 +122,33 @@ def test_calibration_capture_class_has_a_descriptive_name():
 
 INF = float('inf')
 CORRECTION_VARS = ('noise_figure', 'temperature', 'power_correction')
+# float64 roundoff of the closed-form corrections, expressed in dB
+EXACT_DB = 1e-8
 
 
-def _assert_matches_model(corrections, expected, rtol=1e-9):
-    for name in CORRECTION_VARS:
-        actual = corrections[name]
-        model = expected[name].broadcast_like(actual).transpose(*actual.dims)
-        np.testing.assert_allclose(actual.values, model.values, rtol=rtol)
+def assert_corrections_match(actual, expected, tol_dB=EXACT_DB, names=CORRECTION_VARS):
+    """each correction variable of `actual` matches the model `expected`, which may
+    span fewer dimensions, to within `tol_dB`; temperature and power_correction are
+    compared in dB"""
+    for name in names:
+        result = actual[name].reset_coords(drop=True)
+        model = expected[name].reset_coords(drop=True).broadcast_like(result)
+        if name != 'noise_figure':
+            result, model = 10 * np.log10(result), 10 * np.log10(model)
+        xr.testing.assert_allclose(result, model, rtol=0, atol=tol_dB)
 
 
 class TestYFactorCorrections:
     def test_recovers_the_receiver_model(self):
         corrections = calibration._y_factor_power_corrections(make_yfactor_dataset())
-        _assert_matches_model(corrections, expected_yfactor())
+        assert_corrections_match(corrections, expected_yfactor())
 
     def test_frequency_dependent_noise_figure(self):
         nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
         corrections = calibration._y_factor_power_corrections(
             make_yfactor_dataset(nf_dB=nf)
         )
-        _assert_matches_model(corrections, expected_yfactor(nf_dB=nf))
+        assert_corrections_match(corrections, expected_yfactor(nf_dB=nf))
 
     def test_output_is_indexed_by_the_calibration_fields(self):
         corrections = calibration._y_factor_power_corrections(make_yfactor_dataset())
@@ -162,7 +173,7 @@ class TestYFactorCorrections:
         corrections = calibration._y_factor_power_corrections(
             make_yfactor_dataset(grid)
         )
-        _assert_matches_model(corrections, expected_yfactor(grid))
+        assert_corrections_match(corrections, expected_yfactor(grid))
 
 
 # %% _limit_nyquist_bandwidth
@@ -215,33 +226,33 @@ def test_summarize_noise_figure_per_frequency(model_corrections):
 
 # %% calibration lookups
 
-MCR = 125e6
-
-
-@pytest.fixture
-def calibration_nc(tmp_path):
-    nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
-    yield save_yfactor_calibration(tmp_path / 'cal.nc', nf_dB=nf)
-    # read_calibration and the lookups cache by path
-    sw.util.clear_caches()
-
-
-def _capture(**kws):
-    kws = {
-        'port': 0,
-        'center_frequency': 1e9,
-        'gain': 0,
-        'sample_rate': MCR,
-        'duration': 1e-3,
-        'analysis_bandwidth': 40e6,
-        'host_resample': False,
-        **kws,
-    }
-    return ss.specs.SoapyCapture(**kws)
-
 
 def _lookup_pc(path, capture, **kws):
     return calibration.lookup_power_correction(path, capture, MCR, **kws)
+
+
+@pytest.fixture
+def legacy_channel_nc(tmp_path, calibration_nc):
+    """calibration_nc with the port coordinate under its former name, channel"""
+    path = tmp_path / 'legacy.nc'
+    saved = ss.lib.io.read_calibration(calibration_nc)
+    ss.lib.io.save_calibration(path, saved.rename(port='channel'))
+    return str(path)
+
+
+@pytest.fixture
+def squeezed_lo_shift_nc(tmp_path, calibration_nc):
+    """calibration_nc with the single-valued lo_shift dimension squeezed away"""
+    path = tmp_path / 'squeezed.nc'
+    saved = ss.lib.io.read_calibration(calibration_nc)
+    ss.lib.io.save_calibration(path, saved.squeeze('lo_shift'))
+    return str(path)
+
+
+@pytest.fixture
+def single_frequency_nc(tmp_path, clear_function_caches):
+    grid = dict(YFACTOR_GRID, center_frequency=(1e9,))
+    return save_yfactor_calibration(tmp_path / 'one.nc', grid)
 
 
 def test_read_calibration_does_not_depend_on_the_open_file(calibration_nc):
@@ -252,44 +263,81 @@ def test_read_calibration_does_not_depend_on_the_open_file(calibration_nc):
 
 
 class TestLookupPowerCorrection:
-    def test_exact_grid_point(self, calibration_nc):
-        result = _lookup_pc(calibration_nc, _capture(gain=-10))
+    @pytest.mark.parametrize(
+        'cal_path, capture_kws',
+        [
+            pytest.param(lf('calibration_nc'), {'gain': -10}, id='exact_grid_point'),
+            pytest.param(
+                lf('legacy_channel_nc'), {'port': 1}, id='legacy_channel_coordinate'
+            ),
+            pytest.param(
+                lf('single_frequency_nc'),
+                {},
+                id='single_frequency_calibration',
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    raises=ValueError,
+                    reason='_lookup_calibration_var squeezes before '
+                    'dropna(center_frequency), so a calibration at one center '
+                    'frequency has no such dimension',
+                ),
+            ),
+            pytest.param(
+                lf('squeezed_lo_shift_nc'),
+                {},
+                id='calibration_without_a_lo_shift_loop',
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    raises=(TypeError, ValueError),
+                    reason='exact-match fields are selected with sel(), which needs '
+                    'an index; a scalar lo_shift coordinate makes '
+                    '_describe_missing_data iterate a 0-d array (xarray >= 2025 '
+                    'raises ValueError from sel() before that)',
+                ),
+            ),
+        ],
+    )
+    def test_recovers_the_receiver_gain(self, cal_path, capture_kws):
+        result = _lookup_pc(cal_path, soapy_capture(**capture_kws))
         assert result.dtype == np.float32
-        assert result == pytest.approx([1 / receiver_gain(-10)], rel=1e-6)
+        expected = 1 / receiver_gain(capture_kws.get('gain', 0))
+        assert result == pytest.approx([expected], rel=1e-6)
 
     def test_multiport_capture_gives_one_value_per_port(self, calibration_nc):
-        result = _lookup_pc(calibration_nc, _capture(port=(0, 1), gain=(0, -10)))
+        capture = soapy_capture(port=(0, 1), gain=(0, -10))
+        result = _lookup_pc(calibration_nc, capture)
         expected = [1 / receiver_gain(0), 1 / receiver_gain(-10)]
         assert result == pytest.approx(expected, rel=1e-6)
 
     def test_array_namespace(self, calibration_nc, xp):
-        result = _lookup_pc(calibration_nc, _capture(), xp=xp)
+        result = _lookup_pc(calibration_nc, soapy_capture(), xp=xp)
         assert isinstance(result, xp.ndarray)
 
     def test_host_resampled_capture_matches_on_backend_sample_rate(
         self, calibration_nc
     ):
         # 125 MS/s -> 62.5 MS/s designs fs_sdr = 62.5 MS/s, which is not calibrated
+        capture = soapy_capture(sample_rate=62.5e6, host_resample=True)
         with pytest.raises(KeyError, match=r"62500000\.0 in 'backend_sample_rate'"):
-            _lookup_pc(calibration_nc, _capture(sample_rate=62.5e6, host_resample=True))
+            _lookup_pc(calibration_nc, capture)
 
-    def test_none_and_invalid_inputs(self, calibration_nc):
-        assert _lookup_pc(None, _capture()) is None
+    def test_none_and_invalid_inputs(self):
+        assert _lookup_pc(None, soapy_capture()) is None
         with pytest.raises(TypeError, match='cal_data'):
-            _lookup_pc(3, _capture())
+            _lookup_pc(3, soapy_capture())
 
     def test_missing_grid_point_names_the_field(self, calibration_nc):
         with pytest.raises(KeyError) as exc_info:
-            _lookup_pc(calibration_nc, _capture(gain=5.0))
+            _lookup_pc(calibration_nc, soapy_capture(gain=5.0))
         message = str(exc_info.value)
         assert "'gain'" in message and '5.0' in message
         assert "'port'" not in message
 
     def test_out_of_range_frequency(self, calibration_nc):
         with pytest.raises(ValueError, match='exceeds calibration max'):
-            _lookup_pc(calibration_nc, _capture(center_frequency=3e9))
+            _lookup_pc(calibration_nc, soapy_capture(center_frequency=3e9))
         with pytest.raises(ValueError, match='below calibration min'):
-            _lookup_pc(calibration_nc, _capture(center_frequency=0.5e9))
+            _lookup_pc(calibration_nc, soapy_capture(center_frequency=0.5e9))
 
     @pytest.mark.xfail(
         strict=True,
@@ -298,42 +346,7 @@ class TestLookupPowerCorrection:
     )
     def test_out_of_range_message_shows_the_limit_in_mhz(self, calibration_nc):
         with pytest.raises(ValueError, match=r'exceeds calibration max 2000\.0 MHz'):
-            _lookup_pc(calibration_nc, _capture(center_frequency=3e9))
-
-    def test_legacy_channel_coordinate(self, tmp_path, calibration_nc):
-        legacy = tmp_path / 'legacy.nc'
-        ss.lib.io.save_calibration(
-            legacy, ss.lib.io.read_calibration(calibration_nc).rename(port='channel')
-        )
-        result = _lookup_pc(str(legacy), _capture(port=1, gain=0))
-        assert result == pytest.approx([1 / receiver_gain(0)], rel=1e-6)
-
-    @pytest.mark.xfail(
-        strict=True,
-        raises=ValueError,
-        reason='_lookup_calibration_var squeezes before dropna(center_frequency), '
-        'so a calibration at one center frequency has no such dimension',
-    )
-    def test_single_frequency_calibration(self, tmp_path):
-        grid = dict(YFACTOR_GRID, center_frequency=(1e9,))
-        path = save_yfactor_calibration(tmp_path / 'one.nc', grid)
-        result = _lookup_pc(path, _capture())
-        assert result == pytest.approx([1 / receiver_gain(0)], rel=1e-6)
-
-    @pytest.mark.xfail(
-        strict=True,
-        raises=(TypeError, ValueError),
-        reason='exact-match fields are selected with sel(), which needs an index; a '
-        'scalar lo_shift coordinate makes _describe_missing_data iterate a 0-d array '
-        '(xarray >= 2025 raises ValueError from sel() before that)',
-    )
-    def test_calibration_without_a_lo_shift_loop(self, tmp_path, calibration_nc):
-        squeezed = tmp_path / 'squeezed.nc'
-        ss.lib.io.save_calibration(
-            squeezed, ss.lib.io.read_calibration(calibration_nc).squeeze('lo_shift')
-        )
-        result = _lookup_pc(str(squeezed), _capture())
-        assert result == pytest.approx([1 / receiver_gain(0)], rel=1e-6)
+            _lookup_pc(calibration_nc, soapy_capture(center_frequency=3e9))
 
 
 class TestLookupSystemNoisePower:
@@ -341,22 +354,22 @@ class TestLookupSystemNoisePower:
         return calibration.lookup_system_noise_power(path, capture, MCR, **kws)
 
     def test_spectral_density_from_the_noise_figure(self, calibration_nc):
-        noise = self._lookup(calibration_nc, _capture(port=1))
+        noise = self._lookup(calibration_nc, soapy_capture(port=1))
         assert noise.dims == ('capture',)
         assert noise.attrs['units'] == 'dBm/Hz'
         assert noise.item() == pytest.approx(8.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
     def test_bandwidth_and_temperature_scale_the_result(self, calibration_nc):
-        noise = self._lookup(calibration_nc, _capture(), B=1e6, T=300.0)
+        noise = self._lookup(calibration_nc, soapy_capture(), B=1e6, T=300.0)
         expected = 5.0 + 10 * np.log10(BOLTZMANN_MW * 300.0 * 1e6)
         assert noise.item() == pytest.approx(expected)
 
     def test_noise_figure_is_interpolated_in_frequency(self, calibration_nc):
-        noise = self._lookup(calibration_nc, _capture(center_frequency=1.5e9))
+        noise = self._lookup(calibration_nc, soapy_capture(center_frequency=1.5e9))
         assert noise.item() == pytest.approx(6.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
     def test_none_input(self):
-        assert self._lookup(None, _capture()) is None
+        assert self._lookup(None, soapy_capture()) is None
 
 
 # %% _get_port_variable and _describe_missing_data
@@ -385,16 +398,18 @@ def test_describe_missing_data_is_empty_when_everything_matches(model_correction
 
 # %% YFactorSink
 
-FLUSH_GRID = dict(
+# the grid covered both by the flushed model captures and by
+# sweeps/fake_soapy-calibration-cpu.yaml
+SWEEP_GRID = dict(
     YFACTOR_GRID, backend_sample_rate=(125e6, 62.5e6), analysis_bandwidth=(40e6, INF)
 )
 FLUSH_LOOPS = (
     PORT_LOOP,
-    ss.specs.List(field='sample_rate', values=FLUSH_GRID['backend_sample_rate']),
-    ss.specs.List(field='center_frequency', values=FLUSH_GRID['center_frequency']),
+    ss.specs.List(field='sample_rate', values=SWEEP_GRID['backend_sample_rate']),
+    ss.specs.List(field='center_frequency', values=SWEEP_GRID['center_frequency']),
     GAIN_LOOP,
-    ss.specs.List(field='analysis_bandwidth', values=FLUSH_GRID['analysis_bandwidth']),
-    ss.specs.List(field='lo_shift', values=FLUSH_GRID['lo_shift']),
+    ss.specs.List(field='analysis_bandwidth', values=SWEEP_GRID['analysis_bandwidth']),
+    ss.specs.List(field='lo_shift', values=SWEEP_GRID['lo_shift']),
 )
 
 
@@ -441,7 +456,7 @@ def _capture_dataset(sweep, capture, index, start):
 def _flush_model_captures(path):
     """YFactorSink.flush on a full grid of model captures; returns the sweep"""
     sweep = make_calibration_sweep(
-        captures=(make_calibration_capture(sample_rate=125e6, host_resample=False),),
+        captures=(make_calibration_capture(sample_rate=MCR, host_resample=False),),
         loops=FLUSH_LOOPS,
         source=CalSourceCls(array_backend='numpy'),
         calibration=ss.specs.ManualYFactorPeripheral(
@@ -451,59 +466,35 @@ def _flush_model_captures(path):
     )
     start = pd.Timestamp('2026-09-15T00:00:00')
 
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: 'beef')
-        sink = calibration.YFactorSink(sweep)
-        sink.open()
-        sink._pending_data = [
-            _capture_dataset(sweep, c, i, start)
-            for i, c in enumerate(H.loop_captures(sweep, 'beef'))
-        ]
-        sink.flush()
+    sink = calibration.YFactorSink(sweep)
+    sink.open()
+    sink._pending_data = [
+        _capture_dataset(sweep, c, i, start)
+        for i, c in enumerate(H.loop_captures(sweep, 'beef'))
+    ]
+    sink.flush()
     return sweep
 
 
 @pytest.fixture(scope='module')
-def flushed_calibration(tmp_path_factory):
-    """(saved path, sweep) after YFactorSink.flush on a full grid of model captures"""
+def flushed_calibration(fake_sweep_runner, tmp_path_factory) -> FakeRun:
+    """the calibration YFactorSink.flush saves from a full grid of model captures,
+    as a FakeRun with the sweep but no prompts, fake device or results"""
+    # the runner stubs the source id lookup that the sink's path formatting performs
     path = tmp_path_factory.mktemp('yfactor') / 'flushed.nc'
     sweep = _flush_model_captures(path)
-    yield str(path), sweep
-    sw.util.clear_caches()
+    return FakeRun(str(path), [], sweep, None, None)
 
 
-def test_flush_saves_a_file(tmp_path):
-    _flush_model_captures(tmp_path / 'flushed.nc')
-    assert (tmp_path / 'flushed.nc').exists()
-    sw.util.clear_caches()
+def test_flush_saves_a_file(flushed_calibration):
+    assert Path(flushed_calibration.path).exists()
 
 
 class TestYFactorSinkFlush:
-    def test_writes_corrections_indexed_by_the_looped_fields(self, flushed_calibration):
-        path, _ = flushed_calibration
-        saved = ss.lib.io.read_calibration(path)
-        assert set(saved.dims) == set(FLUSH_GRID)
-        assert saved.sizes['backend_sample_rate'] == 2
-        assert 'noise_diode_enabled' not in saved.coords
-        assert set(saved.data_vars) >= set(CORRECTION_VARS)
-
-    def test_finite_bandwidth_points_match_the_model(self, flushed_calibration):
-        path, _ = flushed_calibration
-        saved = ss.lib.io.read_calibration(path).sel(analysis_bandwidth=40e6)
-        grid = dict(FLUSH_GRID, analysis_bandwidth=(40e6,))
-        _assert_matches_model(saved, expected_yfactor(grid))
-
     def test_saved_file_is_usable_for_lookups(self, flushed_calibration):
-        path, _ = flushed_calibration
-        capture = _capture(port=1, gain=-10, sample_rate=62.5e6)
-        result = calibration.lookup_power_correction(path, capture, MCR)
+        capture = soapy_capture(port=1, gain=-10, sample_rate=62.5e6)
+        result = _lookup_pc(flushed_calibration.path, capture)
         assert result == pytest.approx([1 / receiver_gain(-10)], rel=1e-6)
-
-    def test_infinite_bandwidth_points_match_the_model(self, flushed_calibration):
-        path, _ = flushed_calibration
-        saved = ss.lib.io.read_calibration(path).sel(analysis_bandwidth=INF)
-        grid = dict(FLUSH_GRID, analysis_bandwidth=(INF,))
-        _assert_matches_model(saved, expected_yfactor(grid))
 
     @pytest.mark.xfail(
         strict=True,
@@ -513,8 +504,7 @@ class TestYFactorSinkFlush:
         'without them',
     )
     def test_saved_attrs_record_the_calibration_fields(self, flushed_calibration):
-        path, _ = flushed_calibration
-        saved = ss.lib.io.read_calibration(path)
+        saved = ss.lib.io.read_calibration(flushed_calibration.path)
         assert list(saved.attrs['calibration_fields']) == [
             'port',
             'noise_diode_enabled',
@@ -577,7 +567,8 @@ class TestManualYFactorPeripheral:
         periph.arm(make_calibration_capture(port=0, noise_diode_enabled=True))
         periph.arm(make_calibration_capture(port=1, noise_diode_enabled=True))
 
-        # the answer_prompts fixture parses this wording to switch the fake diode
+        # conftest.answer_calibration_prompts parses this wording to switch the fake
+        # diode
         matches = [
             re.match(r'(enable|disable) noise diode at port (\d+)', prompt)
             for prompt in scripted_input['prompts']
@@ -602,64 +593,28 @@ class TestManualYFactorPeripheral:
 # %% closed loop through the fake SoapySDR device
 
 FAKE_TONE = (1.505e9, -60.0)
-
-
-def run_fake_sweep(spec_path, output_path, **replace):
-    """run a sweep YAML against the installed fake, returning the sink results"""
-    spec = ss.read_yaml_spec(spec_path)
-    spec = spec.replace(sink=spec.sink.replace(path=str(output_path)), **replace)
-    with ss.open_resources(spec, spec_path) as resources:
-        results = [ds for ds in ss.iterate_sweep(resources) if ds is not None]
-    return xr.concat(results, 'capture') if results else results
+# 5 ms at 40 MHz gives a 1-sigma statistical error near 0.015 dB
+FAKE_TOL_DB = 0.1
 
 
 @pytest.fixture(scope='module')
-def fake_calibration_run(tmp_path_factory):
-    """(netCDF path, prompt log) after the calibration sweep runs against the fake"""
-    import re
-
-    from fake_soapy import install_fake_soapy
-
-    path = tmp_path_factory.mktemp('fake-cal') / 'calibration.nc'
-    prompts = []
-
-    with pytest.MonkeyPatch.context() as mp:
-        fake = install_fake_soapy(mp)
-
-        def blocking_input(prompt=None):
-            prompts.append(prompt)
-            match = re.match(
-                r'(enable|disable) noise diode at port (\d+)', prompt or ''
-            )
-            if match:
-                fake.model.diode_on[int(match.group(2))] = match.group(1) == 'enable'
-                return ''
-            return 'y'
-
-        mp.setattr(sa.util, 'blocking_input', blocking_input)
-        run_fake_sweep(FAKE_SOAPY_CALIBRATION_SPEC, path)
-
-    yield str(path), prompts
-    sw.util.clear_caches()
+def fake_calibration_run(fake_sweep_runner) -> FakeRun:
+    return fake_sweep_runner(FAKE_SOAPY_CALIBRATION_SPEC, output_name='calibration.nc')
 
 
-FAKE_CAL_GRID = dict(
-    YFACTOR_GRID, backend_sample_rate=(125e6, 62.5e6), analysis_bandwidth=(40e6, INF)
-)
-
-
-def _assert_within_dB(actual, expected, tol_dB, *, in_dB):
-    model = expected.broadcast_like(actual).transpose(*actual.dims)
-    if in_dB:
-        err = actual.values - model.values
-    else:
-        err = 10 * np.log10(actual.values / model.values)
-    assert np.abs(err).max() < tol_dB, err
+@pytest.fixture
+def fake_model(fake_calibration_run):
+    """the fake device's signal model with the noise diodes, which the calibration
+    sweep leaves on, switched off; tones set by the test are cleared afterwards"""
+    model = fake_calibration_run.fake.model
+    model.diode_on.clear()
+    yield model
+    model.tones.clear()
 
 
 class TestFakeCalibrationSweep:
     def test_prompts_follow_the_diode_state(self, fake_calibration_run):
-        _, prompts = fake_calibration_run
+        prompts = fake_calibration_run.prompts
         assert prompts[0].startswith('Confirm that the noise diode ENR is 20.87 dB')
         # one prompt per (port, state) change; the loop toggles the diode per port
         assert prompts[1:] == [
@@ -669,30 +624,28 @@ class TestFakeCalibrationSweep:
             'enable noise diode at port 1 and press enter: ',
         ]
 
-    def test_file_is_indexed_by_the_looped_fields(self, fake_calibration_run):
-        path, _ = fake_calibration_run
-        saved = ss.read_calibration(path)
-        assert set(saved.dims) == set(FAKE_CAL_GRID)
+
+SAVED_CALIBRATIONS = [
+    pytest.param(lf('flushed_calibration'), EXACT_DB, id='flushed'),
+    pytest.param(lf('fake_calibration_run'), FAKE_TOL_DB, id='fake_sweep'),
+]
+
+
+class TestSavedCalibration:
+    @pytest.mark.parametrize('run, tol_dB', SAVED_CALIBRATIONS)
+    def test_indexed_by_the_looped_fields(self, run, tol_dB):
+        saved = ss.read_calibration(run.path)
+        assert set(saved.dims) == set(SWEEP_GRID)
         assert sorted(saved.backend_sample_rate.values) == [62.5e6, 125e6]
+        assert 'noise_diode_enabled' not in saved.coords
         assert set(saved.data_vars) >= set(CORRECTION_VARS)
 
-    def test_finite_bandwidth_points_recover_the_model(self, fake_calibration_run):
-        # 5 ms at 40 MHz gives a 1-sigma statistical error near 0.015 dB
-        path, _ = fake_calibration_run
-        saved = ss.read_calibration(path).sel(analysis_bandwidth=40e6)
-        expected = expected_yfactor(dict(FAKE_CAL_GRID, analysis_bandwidth=(40e6,)))
-        _assert_within_dB(saved.noise_figure, expected.noise_figure, 0.1, in_dB=True)
-        _assert_within_dB(
-            saved.power_correction, expected.power_correction, 0.1, in_dB=False
-        )
-
-    def test_infinite_bandwidth_points_recover_the_model(self, fake_calibration_run):
-        path, _ = fake_calibration_run
-        saved = ss.read_calibration(path).sel(analysis_bandwidth=INF)
-        expected = expected_yfactor(dict(FAKE_CAL_GRID, analysis_bandwidth=(INF,)))
-        _assert_within_dB(
-            saved.power_correction, expected.power_correction, 0.1, in_dB=False
-        )
+    @pytest.mark.parametrize('run, tol_dB', SAVED_CALIBRATIONS)
+    @pytest.mark.parametrize('analysis_bandwidth', [40e6, INF])
+    def test_points_match_the_model(self, run, tol_dB, analysis_bandwidth):
+        saved = run.calibration(analysis_bandwidth=analysis_bandwidth)
+        grid = dict(SWEEP_GRID, analysis_bandwidth=(analysis_bandwidth,))
+        assert_corrections_match(saved, expected_yfactor(grid), tol_dB)
 
 
 def _rms_dBm(ds):
@@ -705,9 +658,11 @@ def _expected_dBm(port, bandwidth, tone_mW=0.0, nf_dB=YFACTOR_NF_DB):
 
 
 class TestFakeMeasurementSweep:
-    def test_uncalibrated_power_is_in_full_scale_units(self, fake_soapy, tmp_path):
-        fake_soapy.model.tones[0] = FAKE_TONE
-        ds = run_fake_sweep(FAKE_SOAPY_SPEC, tmp_path / 'raw.zarr.zip')
+    def test_uncalibrated_power_is_in_full_scale_units(
+        self, fake_sweep_runner, fake_model
+    ):
+        fake_model.tones[0] = FAKE_TONE
+        ds = fake_sweep_runner(FAKE_SOAPY_SPEC, output_name='raw.zarr.zip').results
 
         assert ds.port.values.tolist() == [0, 1, 0]
         assert ds.gain.values.tolist() == [0, 0, -10]
@@ -721,14 +676,15 @@ class TestFakeMeasurementSweep:
         assert 'system_noise' not in ds
 
     def test_calibrated_power_recovers_the_input(
-        self, fake_soapy, fake_calibration_run, tmp_path
+        self, fake_sweep_runner, fake_calibration_run, fake_model
     ):
-        cal_path, _ = fake_calibration_run
-        fake_soapy.model.tones[0] = FAKE_TONE
+        fake_model.tones[0] = FAKE_TONE
         spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
-        source = spec.source.replace(calibration=cal_path)
+        source = spec.source.replace(calibration=fake_calibration_run.path)
 
-        ds = run_fake_sweep(FAKE_SOAPY_SPEC, tmp_path / 'cal.zarr.zip', source=source)
+        ds = fake_sweep_runner(
+            FAKE_SOAPY_SPEC, output_name='cal.zarr.zip', source=source
+        ).results
 
         rms = _rms_dBm(ds).values
         assert rms[0] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
@@ -741,18 +697,17 @@ class TestFakeMeasurementSweep:
         )
 
     def test_calibrated_power_at_infinite_bandwidth(
-        self, fake_soapy, fake_calibration_run, tmp_path
+        self, fake_sweep_runner, fake_calibration_run, fake_model
     ):
-        cal_path, _ = fake_calibration_run
         spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
         capture = spec.captures[0].replace(analysis_bandwidth=INF)
 
-        ds = run_fake_sweep(
+        ds = fake_sweep_runner(
             FAKE_SOAPY_SPEC,
-            tmp_path / 'inf.zarr.zip',
-            source=spec.source.replace(calibration=cal_path),
+            output_name='inf.zarr.zip',
+            source=spec.source.replace(calibration=fake_calibration_run.path),
             captures=(capture,),
-        )
+        ).results
 
         expected = [_expected_dBm(0, 125e6), _expected_dBm(1, 125e6)]
         assert _rms_dBm(ds).values == pytest.approx(expected, abs=0.1)

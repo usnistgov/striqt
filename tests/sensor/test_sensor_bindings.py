@@ -8,8 +8,8 @@ from pathlib import Path
 
 import msgspec
 import pytest
-from conftest import SWEEP_DIR
-from sweep_strategies import SweepCls, make_sweep, sweep_dict
+from conftest import SWEEP_DIR, raises_on_both_paths
+from sweep_strategies import SweepCls, make_sweep, make_sweep_kws
 
 import striqt.sensor as ss
 
@@ -40,11 +40,12 @@ def test_yaml_schema_binding(spec_dir):
     )
 
 
-def test_extension_module_registers_site_bindings():
+def test_extension_module_registers_site_bindings(subtests):
     import site_strategies as S
 
     for name in ('site_single_tone', 'site_survey', 'site_single_tone_calibration'):
-        assert name in ss.lib.bindings.registry
+        with subtests.test(msg=name):
+            assert name in ss.lib.bindings.registry
     assert Path(S.EXT.__file__).resolve().parent == (SWEEP_DIR / 'src').resolve()
 
 
@@ -54,11 +55,12 @@ def test_extension_module_registers_site_bindings():
 class TestMockSource:
     def test_mock_source_must_be_a_registered_binding(self):
         names = re.escape(repr(tuple(ss.lib.bindings.registry)))
-        with pytest.raises(TypeError, match=MOCK_MSG) as excinfo:
-            make_sweep(mock_source='bogus')
-        assert re.search(names, str(excinfo.value))
-        with pytest.raises(msgspec.ValidationError, match=MOCK_MSG):
-            SweepCls.from_dict(sweep_dict(mock_source='bogus'))
+        raises_on_both_paths(
+            SweepCls,
+            TypeError,
+            f'{MOCK_MSG}.*{names}',
+            **make_sweep_kws(mock_source='bogus'),
+        )
         assert make_sweep(mock_source='warmup').mock_source == 'warmup'
 
     @pytest.mark.xfail(
