@@ -382,6 +382,22 @@ def fake_source_id(monkeypatch):
     return 'beef'
 
 
+@pytest.fixture
+def run_sweep_to_zarr(tmp_path, fake_source_id):
+    """run(spec, name='out.zarr.zip') -> (spec as run, store path) after a sweep end
+    to end into tmp_path, without chdir (no spec path is given to open_resources)"""
+    import striqt.sensor as ss
+
+    def run(spec, name='out.zarr.zip'):
+        path = tmp_path / name
+        spec = spec.replace(sink=spec.sink.replace(path=str(path)))
+        with ss.open_resources(spec, None) as resources:
+            list(ss.iterate_sweep(resources))
+        return spec, path
+
+    return run
+
+
 # ---------------------------------------------------------------------------
 # Spec construction paths
 # ---------------------------------------------------------------------------

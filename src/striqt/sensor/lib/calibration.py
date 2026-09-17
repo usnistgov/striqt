@@ -399,7 +399,7 @@ def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Datase
     enr_dB = dataset.enr.sel(noise_diode_enabled=True, drop=True)
     enr = 10 ** (enr_dB / 10.0)
 
-    pvt = dataset.channel_power_time_series.drop('capture_index')
+    pvt = dataset.channel_power_time_series.drop_vars('capture_index')
     power = (
         pvt
         .sel(power_detector='rms', drop=True)

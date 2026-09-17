@@ -1,20 +1,24 @@
-"""striqt.sensor.lib.io: read_yaml_spec and read_json_spec, including the `extensions:`
-block and YAML files shaped like the downstream sensor and fragment files"""
+"""striqt.sensor.lib.io: read_yaml_spec, read_json_spec and read_zarr_spec, including
+the `extensions:` block and YAML files shaped like the downstream sensor and fragment
+files"""
 
 from __future__ import annotations
 
+import json
 import sys
 from fractions import Fraction
 from pathlib import Path
 
 import msgspec
 import pytest
-from conftest import SWEEP_DIR
+from conftest import SITE_DIR, SWEEP_DIR
+from hypothesis import given, settings
 from site_strategies import SiteCalCaptureCls, SiteCaptureCls
-from sweep_strategies import CalSweepCls, loop_fields
+from sweep_strategies import CalSweepCls, loop_fields, make_capture, make_sweep, sweeps
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+from striqt.sensor.lib.io import _convert_zarr_attrs_spec
 
 FRAGMENTS = SWEEP_DIR / 'fragments'
 
@@ -194,3 +198,101 @@ def test_calibration_sweeps_decode(calibration_sweep, site_calibration_sweep):
 def test_output_path_overrides_the_sink_path():
     spec = ss.read_yaml_spec(SWEEP_DIR / 'cw-cpu.yaml', output_path='out.zarr.zip')
     assert spec.sink.path == 'out.zarr.zip'
+
+
+# %% read_zarr_spec
+
+Remap = ss.specs.CaptureRemap
+
+ROUND_TRIP_SWEEPS = {
+    'single_port': make_sweep(captures=(make_capture(),)),
+    'tuple_port_list_loop_remap': make_sweep(
+        captures=(make_capture(port=(0, 1)),),
+        loops=(ss.specs.List(field='frequency_offset', values=(0.0, 2e3)),),
+        adjust_captures={
+            'defaults': {
+                'snr': Remap(
+                    key=('lo_shift', 'frequency_offset'),
+                    lookup={('none', 0.0): 5.0, ('none', 2e3): 7.0},
+                )
+            }
+        },
+    ),
+    'fraction_analysis': make_sweep(
+        captures=(make_capture(),),
+        analysis=ss.specs.BundledAnalysis.from_dict({
+            'channel_power_time_series': {'detector_period': 0.001},
+            'power_spectral_density': {
+                'frequency_resolution': 10e3,
+                'window': ('kaiser', 11.884),
+                'fractional_overlap': '13/28',
+            },
+        }),
+    ),
+}
+
+
+def _json_round_trip(spec) -> dict:
+    # zarr writes attrs with stdlib json, which keeps inf as Infinity where
+    # msgspec.json would encode it as null
+    return json.loads(json.dumps(spec.to_dict(True, allow_tuple_keys=False)))
+
+
+@pytest.mark.parametrize(
+    'sweep', ROUND_TRIP_SWEEPS.values(), ids=list(ROUND_TRIP_SWEEPS)
+)
+def test_read_zarr_spec_rebuilds_the_spec_that_ran(run_sweep_to_zarr, sweep):
+    spec, path = run_sweep_to_zarr(sweep)
+    rebuilt = ss.read_zarr_spec(path)
+    assert type(rebuilt) is type(spec)
+    assert rebuilt == spec
+
+
+def test_read_zarr_spec_decodes_fractions(run_sweep_to_zarr):
+    _, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['fraction_analysis'])
+    analysis = ss.read_zarr_spec(path).analysis
+    detector_period = analysis.channel_power_time_series.detector_period
+    assert isinstance(detector_period, Fraction)
+    assert detector_period == Fraction(1, 1000)
+    assert analysis.power_spectral_density.fractional_overlap == Fraction(13, 28)
+
+
+@settings(max_examples=25)
+@given(sweep=sweeps())
+def test_attrs_tree_rebuilds_any_sweep(sweep):
+    assert _convert_zarr_attrs_spec(_json_round_trip(sweep), SWEEP_DIR) == sweep
+
+
+def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
+    import zarr
+
+    spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')
+    zarr.open(sa.open_store(path, mode='a')).attrs['junk'] = 1
+    assert ss.read_zarr_spec(path) == spec
+
+
+def test_unknown_tree_keys_are_rejected():
+    tree = _json_round_trip(ROUND_TRIP_SWEEPS['single_port'])
+    with pytest.raises(msgspec.ValidationError, match='junk'):
+        _convert_zarr_attrs_spec({**tree, 'junk': 1}, SWEEP_DIR)
+
+
+def test_read_zarr_spec_output_overrides(run_sweep_to_zarr):
+    _, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'])
+    spec = ss.read_zarr_spec(
+        path, output_path='elsewhere.zarr.zip', store_backend='zip'
+    )
+    assert spec.sink.path == 'elsewhere.zarr.zip'
+    assert spec.sink.store == 'zip'
+
+
+def test_read_zarr_spec_extension_root(run_sweep_to_zarr, fake_radio_id, site_sweep):
+    spec, path = run_sweep_to_zarr(site_sweep)
+
+    # the store is in tmp_path, so its relative import_path '../src' resolves nowhere
+    with pytest.raises(FileNotFoundError, match='src'):
+        ss.read_zarr_spec(path)
+
+    rebuilt = ss.read_zarr_spec(path, extension_root=SITE_DIR)
+    assert type(rebuilt) is type(spec)
+    assert rebuilt == spec
