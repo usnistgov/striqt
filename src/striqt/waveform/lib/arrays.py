@@ -392,7 +392,7 @@ def histogram_last_axis(
 
     # Get the counts and reshape to multi-dim
     counts = xp.bincount(scaled_idx.ravel(), minlength=limit + 1)[:-1]
-    counts.shape = x.shape[:-1] + (size,)
+    counts = counts.reshape(x.shape[:-1] + (size,))
     return counts[..., :-1], bins
 
 

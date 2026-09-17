@@ -123,7 +123,9 @@ def test_run(cpu_sweep_file, tmp_path, monkeypatch, subtests):
     sensor_sweep.run(cpu_sweep_file, output_path=str(out_path))
 
     assert out_path.exists()
-    spec = ss.read_yaml_spec(cpu_sweep_file)
+    spec = ss.read_yaml_spec(cpu_sweep_file, output_path=str(out_path))
+    rebuilt = ss.read_zarr_spec(out_path, extension_root=Path(cpu_sweep_file).parent)
+    assert rebuilt == spec
     ds = sa.load(out_path)
 
     # one row per (capture, port); the repeat loops in these files all count 1

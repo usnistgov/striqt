@@ -206,13 +206,14 @@ def _enc_hook(obj) -> Any:
 
 @util.lru_cache()
 def _enc_hook_no_tuple_keys(obj) -> Any:
-    """convert any dictionary tuple keys to strings"""
+    """like `_enc_hook`, but with dictionary tuple keys encoded as JSON array text"""
 
     out = _enc_hook(obj)
-    if isinstance(out, dict):
-        for k in list(out.keys()):
-            if isinstance(k, tuple):
-                out[repr(list(k))] = out.pop(k)
+    if isinstance(out, dict) and any(isinstance(k, tuple) for k in out):
+        out = {
+            msgspec.json.encode(list(k)).decode() if isinstance(k, tuple) else k: v
+            for k, v in out.items()
+        }
     return out
 
 
@@ -222,6 +223,9 @@ def _dec_hook(type_, obj):
     if issubclass(schema_cls, (int, float)) and hasattr(obj, '__float__'):
         return float(obj)
     elif issubclass(schema_cls, fractions.Fraction):
+        if isinstance(obj, float):
+            # a YAML/JSON float is the author's decimal (.001), not its binary expansion
+            return fractions.Fraction(obj).limit_denominator(10**10)
         return fractions.Fraction(obj)
     else:
         return obj

@@ -331,6 +331,26 @@ def test_convert_dict_fraction_roundtrip(x):
     assert convert_dict(str(x), fractions.Fraction) == x
 
 
+@pytest.mark.parametrize(
+    'value, expected',
+    [
+        (0.001, fractions.Fraction(1, 1000)),
+        (1 / 28000, fractions.Fraction(1, 28000)),
+        (13 / 28, fractions.Fraction(13, 28)),
+        (0.5, fractions.Fraction(1, 2)),
+    ],
+    ids=['1e-3', '1/28000', '13/28', '1/2'],
+)
+def test_convert_dict_fraction_snaps_floats(value, expected):
+    assert convert_dict(value, fractions.Fraction) == expected
+
+
+def test_convert_dict_fraction_keeps_strings_and_ints_exact():
+    big = fractions.Fraction(1152921504606847, 1152921504606846976)
+    assert convert_dict(str(big), fractions.Fraction) == big
+    assert convert_dict(1, fractions.Fraction) == fractions.Fraction(1)
+
+
 class DictField(sa.specs.SpecBase, frozen=True):
     d: dict[str, Any] = msgspec.field(default_factory=dict)
 
@@ -366,16 +386,19 @@ def test_convert_spec_downcasts_to_base_capture():
     assert not hasattr(base, 'frequency_offset')
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='_enc_hook_no_tuple_keys rewrites the keys of the frozendict it was given, '
-    'and the hook is lru-cached',
-)
 def test_to_dict_without_tuple_keys_does_not_mutate():
     remap = ss.specs.CaptureRemap(key=('a', 'b'), lookup={(1, 2): 'x'})
     encoded = remap.to_dict(allow_tuple_keys=False)
-    assert encoded['lookup'] == {'[1, 2]': 'x'}
+    assert encoded['lookup'] == {'[1,2]': 'x'}
     assert remap.lookup == {(1, 2): 'x'}
+
+
+def test_to_dict_without_tuple_keys_roundtrips_string_components():
+    remap = ss.specs.CaptureRemap(key=('lo_shift', 'port'), lookup={('none', 0): 1.0})
+    encoded = remap.to_dict(allow_tuple_keys=False)
+    assert encoded['lookup'] == {'["none",0]': 1.0}
+    assert ss.specs.CaptureRemap.from_dict(encoded) == remap
+    assert remap.lookup == {('none', 0): 1.0}
 
 
 # %% infer_coord_info
