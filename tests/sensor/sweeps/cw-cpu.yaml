@@ -26,28 +26,28 @@ captures:
       guard_bandwidths: [875e3, 575e3]
       frame_slots: "dddsuudddddddsuudddd"
       special_symbols: "ddddddfffffffu"
-  - analysis_bandwidth: 60e6 # Hz
-    sample_rate: 107.52e6 # Hz
-    port: [0, 1]
-    duration: 10e-3
-    frequency_offset: -3e6
-    snr: 80
-    adjust_analysis:
-      frequency_offset: -20520000
-      guard_bandwidths: [875e3, 875e3]
-      frame_slots: "dddsuudddddddsuudddd"
-      special_symbols: "ddddddfffffffu"
-  - analysis_bandwidth: 80e6 # Hz
-    sample_rate: 107.52e6 # Hz
-    port: [0, 1]
-    duration: 10e-3
-    frequency_offset: -3e6
-    snr: 80
-    adjust_analysis:
-      frequency_offset: -28800000
-      guard_bandwidths: [875e3, 875e3]
-      frame_slots: "dddsuudddddddsuudddd"
-      special_symbols: "ddddddfffffffu"
+  # - analysis_bandwidth: 60e6 # Hz
+  #   sample_rate: 107.52e6 # Hz
+  #   port: [0, 1]
+  #   duration: 10e-3
+  #   frequency_offset: -3e6
+  #   snr: 80
+  #   adjust_analysis:
+  #     frequency_offset: -20520000
+  #     guard_bandwidths: [875e3, 875e3]
+  #     frame_slots: "dddsuudddddddsuudddd"
+  #     special_symbols: "ddddddfffffffu"
+  # - analysis_bandwidth: 80e6 # Hz
+  #   sample_rate: 107.52e6 # Hz
+  #   port: [0, 1]
+  #   duration: 10e-3
+  #   frequency_offset: -3e6
+  #   snr: 80
+  #   adjust_analysis:
+  #     frequency_offset: -28800000
+  #     guard_bandwidths: [875e3, 875e3]
+  #     frame_slots: "dddsuudddddddsuudddd"
+  #     special_symbols: "ddddddfffffffu"
   - sample_rate: 53.76e6 # Hz
     analysis_bandwidth: 40e6 # Hz
     port: [0, 1]

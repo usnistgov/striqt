@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 import striqt.analysis as sa
+import striqt.sensor as ss
 from striqt.cli import sensor_sweep
 
 CORE_VARIABLES = {'power_spectral_density', 'channel_power_time_series', 'spectrogram'}
@@ -106,11 +107,11 @@ def check_site(ds, subtests):
 
 
 CHECKS = {
-    'cw-cpu': (4, check_cw_cyclic_power),
-    'dirac_delta-cpu': (4, check_dirac_delta),
-    'noise-cpu': (4, check_noise),
-    'sawtooth-cpu': (4, check_sawtooth),
-    'site-cpu': (1, check_site),
+    'cw-cpu': check_cw_cyclic_power,
+    'dirac_delta-cpu': check_dirac_delta,
+    'noise-cpu': check_noise,
+    'sawtooth-cpu': check_sawtooth,
+    'site-cpu': check_site,
 }
 
 
@@ -122,12 +123,11 @@ def test_run(cpu_sweep_file, tmp_path, monkeypatch, subtests):
     sensor_sweep.run(cpu_sweep_file, output_path=str(out_path))
 
     assert out_path.exists()
-    capture_count, check = CHECKS[Path(cpu_sweep_file).stem]
+    spec = ss.read_yaml_spec(cpu_sweep_file)
     ds = sa.load(out_path)
 
-    # one row per (capture, port) with 2 ports in every file
-    assert ds.sizes['capture'] == 2 * capture_count
-    assert len(set(ds.capture_index.values)) == capture_count
-    assert ds.port.values.tolist() == [0, 1] * capture_count
+    # one row per (capture, port); the repeat loops in these files all count 1
+    assert ds.port.values.tolist() == [p for c in spec.captures for p in c.port]
+    assert len(set(ds.capture_index.values)) == len(spec.captures)
     assert CORE_VARIABLES <= set(ds.data_vars)
-    check(ds, subtests)
+    CHECKS[Path(cpu_sweep_file).stem](ds, subtests)

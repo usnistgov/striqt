@@ -49,7 +49,6 @@ python = "~=3.14.0"
 
 [feature.test.dependencies]
 nptdms = "*"
-SoapySDR = "*"
 
 [feature.test.pypi-dependencies]
 striqt = {path = ".", editable = true, extras = ["dev", "test"]}
