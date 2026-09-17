@@ -7,7 +7,9 @@ import warnings
 from collections import UserDict
 from pathlib import Path
 from threading import Lock
+from typing import NamedTuple
 
+import msgspec
 import numpy as np
 import pytest
 from hypothesis import HealthCheck, settings
@@ -18,9 +20,17 @@ np.seterr(divide='ignore')
 
 # every property test in the suite runs under these settings: the array fixtures
 # below are function scoped, and JIT compilation and GPU transfers make the
-# per-example deadline meaningless
+# per-example deadline meaningless. differing_executors is suppressed because the
+# hypothesis plugin recognizes parametrization only through parametrize marks or
+# fixture params, not the pytest_generate_tests call that drives the `xp` fixture
+# (hypothesis issue 3733)
 settings.register_profile(
-    'striqt', suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None
+    'striqt',
+    suppress_health_check=[
+        HealthCheck.function_scoped_fixture,
+        HealthCheck.differing_executors,
+    ],
+    deadline=None,
 )
 settings.load_profile('striqt')
 
@@ -66,20 +76,20 @@ def _get_cupy():
     try:
         try:
             # this needs to happen first or a linking error happens on py39 jetson
-            import numba.cuda
+            import numba.cuda  # noqa: F401
         except ImportError:
             pass
         import cupy as cp  # type: ignore
-        import pandas
-        import scipy
-
-        cp.cuda.runtime.getDeviceCount()
-        return cp
-    except (
-        ImportError,
-        cp.cuda.runtime.CUDARuntimeError if 'cp' in dir() else Exception,
-    ):
+        import pandas  # noqa: F401
+        import scipy  # noqa: F401
+    except ImportError:
         return None
+
+    try:
+        cp.cuda.runtime.getDeviceCount()
+    except cp.cuda.runtime.CUDARuntimeError:
+        return None
+    return cp
 
 
 _cupy = _get_cupy()
@@ -92,66 +102,60 @@ if _cupy is None:
 
 # checked without importing, which would reify scipy
 _dask_is_available = importlib.util.find_spec('dask') is not None
-if not _dask_is_available:
-    warnings.warn(
-        'dask.array is not available; dask tests will be skipped',
-        UserWarning,
-        stacklevel=1,
-    )
 
-NAMESPACES = ['numpy']
-if _cupy is not None:
-    NAMESPACES.append('cupy')
-if _dask_is_available:
-    NAMESPACES.append('dask')
+
+def namespace_module(name: str):
+    """the array module named 'numpy', 'cupy' or 'dask', skipping the test when cupy
+    or dask is unavailable"""
+    if name == 'numpy':
+        return np
+    elif name == 'cupy':
+        if _cupy is None:
+            pytest.skip('cupy is not available')
+        return _cupy
+    elif name == 'dask':
+        if not _dask_is_available:
+            pytest.skip('dask is not available')
+        import dask.array as da
+
+        return da
+    raise ValueError(f'unknown array namespace {name!r}')
 
 
 @pytest.fixture
 def cupy_available():
     """the cupy module, skipping the test when no CUDA device is available"""
-    if _cupy is None:
-        pytest.skip('cupy is not available')
-    return _cupy
+    return namespace_module('cupy')
 
 
-@pytest.fixture(params=['numpy', 'cupy'])
+def pytest_generate_tests(metafunc):
+    """parametrize `xp` over the namespaces named by a `namespaces` marker, or numpy
+    and cupy by default"""
+    if 'xp' in metafunc.fixturenames:
+        marker = metafunc.definition.get_closest_marker('namespaces')
+        names = marker.args if marker else ('numpy', 'cupy')
+        metafunc.parametrize('xp', names, indirect=True)
+
+
+@pytest.fixture
 def xp(request):
-    """each array namespace in turn; the cupy case skips without a CUDA device"""
-    if request.param == 'cupy':
-        if _cupy is None:
-            pytest.skip('cupy is not available')
-        return _cupy
-    return np
+    """each array namespace in turn; cupy and dask cases skip when unavailable"""
+    return namespace_module(request.param)
 
 
-def to_numpy(arr):
-    """a numpy copy of a numpy, cupy or dask array"""
-    if hasattr(arr, 'get'):  # cupy
-        return arr.get()
-    elif hasattr(arr, 'compute'):  # dask
-        return arr.compute()
-    return np.asarray(arr)
+def as_xp(xp, *arrays):
+    """numpy arrays converted into the namespace `xp`; one array in, one array out,
+    otherwise a tuple"""
 
+    def convert(arr):
+        if xp is np:
+            return arr
+        elif xp.__name__.startswith('dask'):
+            return xp.from_array(arr, chunks='auto')
+        return xp.asarray(arr)
 
-def convert_array(arr: np.ndarray, xp_name: str, chunks='auto'):
-    """`arr` converted into the array namespace named by `xp_name`"""
-    if xp_name == 'cupy':
-        return _cupy.asarray(arr)
-    elif xp_name == 'dask':
-        import dask.array as da
-
-        return da.from_array(arr, chunks=chunks)
-    return arr
-
-
-def numpy_and_cupy(cp, func, *args, **kws):
-    """`func` evaluated on numpy arguments and again on their cupy copies.
-
-    Returns the two results as numpy arrays for comparison.
-    """
-    result_np = func(*args, **kws)
-    cp_args = [cp.asarray(a) if isinstance(a, np.ndarray) else a for a in args]
-    return result_np, to_numpy(func(*cp_args, **kws))
+    converted = tuple(convert(a) for a in arrays)
+    return converted[0] if len(converted) == 1 else converted
 
 
 # ---------------------------------------------------------------------------
@@ -159,10 +163,17 @@ def numpy_and_cupy(cp, func, *args, **kws):
 # ---------------------------------------------------------------------------
 
 
-def _float_dtypes(dtype):
+def float_dtypes(dtype=None):
+    """float32 and float64, or just `dtype` when given"""
     if dtype is None:
         return st.sampled_from([np.float32, np.float64])
     return st.just(dtype)
+
+
+def _shape_strategy(min_dims, max_dims, min_side, max_side):
+    return array_shapes(
+        min_dims=min_dims, max_dims=max_dims, min_side=min_side, max_side=max_side
+    )
 
 
 def float_arrays(shape, dtype=np.float64, min_value=-10.0, max_value=10.0):
@@ -194,15 +205,8 @@ def bounded_float_arrays(
 
     @st.composite
     def _bounded(draw):
-        dt = draw(_float_dtypes(dtype))
-        shape = draw(
-            array_shapes(
-                min_dims=min_dims,
-                max_dims=max_dims,
-                min_side=min_size,
-                max_side=max_size,
-            )
-        )
+        dt = draw(float_dtypes(dtype))
+        shape = draw(_shape_strategy(min_dims, max_dims, min_size, max_size))
         return draw(float_arrays(shape, dt, min_value, max_value))
 
     return _bounded()
@@ -235,15 +239,8 @@ def envelope_arrays(
 
     @st.composite
     def _envelope(draw):
-        dt = draw(_float_dtypes(dtype))
-        shape = draw(
-            array_shapes(
-                min_dims=min_dims,
-                max_dims=max_dims,
-                min_side=min_size,
-                max_side=max_size,
-            )
-        )
+        dt = draw(float_dtypes(dtype))
+        shape = draw(_shape_strategy(min_dims, max_dims, min_size, max_size))
         magnitudes = draw(float_arrays(shape, dt, min_magnitude, max_magnitude))
         if include_complex and draw(st.booleans()):
             phases = draw(float_arrays(shape, dt, -np.pi, np.pi))
@@ -270,14 +267,7 @@ def shaped_arrays(
 
     @st.composite
     def _shaped(draw):
-        shape = draw(
-            array_shapes(
-                min_dims=min_dims,
-                max_dims=max_dims,
-                min_side=min_side,
-                max_side=max_side,
-            )
-        )
+        shape = draw(_shape_strategy(min_dims, max_dims, min_side, max_side))
         arr = draw(float_arrays(shape, dtype, min_value, max_value))
         axis = draw(st.integers(min_value=-len(shape), max_value=len(shape) - 1))
         return arr, axis
@@ -325,12 +315,9 @@ def iq_waveforms(
     @st.composite
     def _iq(draw):
         dt = draw(dtype_strategy)
-        blocks = draw(
-            st.integers(
-                min_value=max(min_size // multiple_of, 1),
-                max_value=max(max_size // multiple_of, 1),
-            )
-        )
+        min_blocks = max(min_size // multiple_of, 1)
+        max_blocks = max(max_size // multiple_of, 1)
+        blocks = draw(st.integers(min_value=min_blocks, max_value=max_blocks))
         size = blocks * multiple_of
         shape = (size,) if channels is None else (channels, size)
         seed = draw(st.integers(min_value=0, max_value=2**16))
@@ -338,18 +325,6 @@ def iq_waveforms(
         return (scale * gaussian_iq(shape, dt, seed)).astype(dt, copy=False)
 
     return _iq()
-
-
-def for_each_namespace(base_strategy):
-    """(array, namespace name) pairs of `base_strategy` examples, converted into each
-    available array namespace in turn"""
-
-    @st.composite
-    def _multi_backend(draw):
-        xp_name = draw(st.sampled_from(NAMESPACES))
-        return convert_array(draw(base_strategy), xp_name), xp_name
-
-    return _multi_backend()
 
 
 # ---------------------------------------------------------------------------
@@ -375,12 +350,6 @@ def cpu_sweep_file(request):
 @pytest.fixture(scope='session')
 def spec_dir() -> Path:
     return SWEEP_DIR
-
-
-@pytest.fixture(scope='session')
-def output_dir(data_dir) -> Path:
-    """path to dataset outputs"""
-    return data_dir / 'outputs'
 
 
 @pytest.fixture(scope='session')
@@ -430,14 +399,25 @@ def raises_on_both_paths(cls, exc, match, **kws):
     """assert that constructing `cls` raises `exc` directly and via from_dict.
 
     msgspec re-raises ValueError and TypeError from __post_init__ as its own
-    ValidationError on the conversion path, so either is accepted there.
+    ValidationError on the conversion path, so either is accepted there. Nested spec
+    values in `kws` are converted to builtins for the from_dict path.
     """
-    import msgspec
-
     with pytest.raises(exc, match=match):
         cls(**kws)
     with pytest.raises((exc, msgspec.ValidationError), match=match):
-        cls.from_dict(kws)
+        cls.from_dict(_spec_kws_to_builtins(kws))
+
+
+def construct_both(cls, **kws):
+    """(direct, from_dict) instances of `cls` built from the same keywords"""
+    return cls(**kws), cls.from_dict(_spec_kws_to_builtins(kws))
+
+
+def _spec_kws_to_builtins(kws: dict) -> dict:
+    # nested capture specs carry frozendict fields, which need the specs' enc_hook
+    import striqt.analysis as sa
+
+    return msgspec.to_builtins(kws, enc_hook=sa.specs.helpers._enc_hook)
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +533,10 @@ def fake_soapy_ext(fake_soapy):
     return sys.modules['fake_soapy_bindings']
 
 
-@pytest.fixture
-def answer_prompts(monkeypatch, fake_soapy):
-    """answer the calibration prompts: confirm the ENR, and switch the fake noise
-    diode on 'enable|disable noise diode at port N'. Returns the prompt log."""
+def answer_calibration_prompts(monkeypatch, fake) -> list[str]:
+    """stub blocking_input to answer the calibration prompts: confirm the ENR, and
+    switch the fake noise diode on 'enable|disable noise diode at port N'. Returns
+    the live prompt log."""
     import re
 
     import striqt.analysis as sa
@@ -567,12 +547,174 @@ def answer_prompts(monkeypatch, fake_soapy):
         prompts.append(prompt)
         match = re.match(r'(enable|disable) noise diode at port (\d+)', prompt or '')
         if match:
-            fake_soapy.model.diode_on[int(match.group(2))] = match.group(1) == 'enable'
+            fake.model.diode_on[int(match.group(2))] = match.group(1) == 'enable'
             return ''
         return 'y'
 
     monkeypatch.setattr(sa.util, 'blocking_input', blocking_input)
     return prompts
+
+
+@pytest.fixture
+def answer_prompts(monkeypatch, fake_soapy):
+    """answer the calibration prompts against the function-scoped fake; returns the
+    prompt log"""
+    return answer_calibration_prompts(monkeypatch, fake_soapy)
+
+
+@pytest.fixture
+def soapy_device(fake_soapy):
+    """one fake device opened through the sequence form of SoapySDR.Device"""
+    return fake_soapy.Device(({},))[0]
+
+
+@pytest.fixture
+def soapy_stream(soapy_device):
+    """an RxStream on `soapy_device` with a default SoapySource spec, set up and
+    enabled on port 0"""
+    from soapy_factories import source_spec
+
+    from striqt.sensor.lib.sources import soapy
+
+    stream = soapy.RxStream(source_spec(), soapy.probe_soapy_info(soapy_device))
+    stream.setup(soapy_device, ports=(0,))
+    stream.enable(soapy_device, True)
+    yield stream
+
+
+@pytest.fixture
+def clear_function_caches():
+    """clear the striqt.waveform function caches after the test (read_calibration and
+    the lookups cache by path)"""
+    import striqt.waveform as sw
+
+    yield
+    sw.util.clear_caches()
+
+
+@pytest.fixture
+def calibration_nc(tmp_path, clear_function_caches):
+    """path of a saved Y-factor calibration with a frequency-dependent noise figure on
+    port 0 and a flat one on port 1"""
+    from sweep_strategies import save_yfactor_calibration
+
+    nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
+    return save_yfactor_calibration(tmp_path / 'cal.nc', nf_dB=nf)
+
+
+class FakeRun(NamedTuple):
+    """the outcome of one sweep against the fake SoapySDR device"""
+
+    path: str
+    prompts: list
+    sweep: object
+    fake: object
+    results: object
+
+    def calibration(self, **sel):
+        """the calibration saved at `path`, selected by field values"""
+        import striqt.sensor as ss
+
+        return ss.read_calibration(self.path).sel(**sel)
+
+
+@pytest.fixture(scope='module')
+def fake_sweep_runner(tmp_path_factory):
+    """run(spec_path_or_spec, *, output_name, **replace) -> FakeRun against one fake
+    SoapySDR module installed for the whole test module, with the calibration prompts
+    answered and the source id lookup stubbed to 'beef'.
+
+    `replace` fields are applied to the sweep spec before it runs; the sink path is
+    replaced by `output_name` under a fresh temporary directory. `FakeRun.prompts`
+    holds only the prompts of that run and `FakeRun.results` the sink output
+    concatenated along `capture` (an empty list when the sink yields nothing).
+
+    A module that uses this fixture must not also use the function-scoped
+    `fake_soapy` fixture: the second install_fake_soapy would shadow the first.
+    """
+    from pathlib import Path
+
+    from fake_soapy import install_fake_soapy
+
+    import striqt.sensor as ss
+    import striqt.waveform as sw
+
+    with pytest.MonkeyPatch.context() as mp:
+        fake = install_fake_soapy(mp)
+        prompts = answer_calibration_prompts(mp, fake)
+        mp.setattr(ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: 'beef')
+
+        def run(spec, *, output_name, **replace):
+            import xarray as xr
+
+            if isinstance(spec, (str, Path)):
+                spec_path = spec
+                spec = ss.read_yaml_spec(spec_path)
+            else:
+                spec_path = None
+            path = tmp_path_factory.mktemp('fake-sweep') / output_name
+            spec = spec.replace(sink=spec.sink.replace(path=str(path)), **replace)
+            first_prompt = len(prompts)
+            with ss.open_resources(spec, spec_path) as resources:
+                results = [ds for ds in ss.iterate_sweep(resources) if ds is not None]
+            if results:
+                results = xr.concat(results, 'capture')
+            return FakeRun(str(path), prompts[first_prompt:], spec, fake, results)
+
+        yield run
+    sw.util.clear_caches()
+
+
+@pytest.fixture(autouse=True)
+def restore_logging_state():
+    """snapshot and restore the process-global logging state that show_messages,
+    log_to_file, log_capture_context and StriqtLogger mutate.
+
+    Only the adapters that existed at setup are restored. Adapters created during
+    the test are left as they are: they come from the lazy import of a striqt
+    package, and the modules that import them at module level would otherwise
+    find their adapter deleted.
+    """
+    import logging
+
+    import striqt.analysis as sa
+
+    def snapshot(logger, handler_owner, attr):
+        return logger.level, list(logger.handlers), getattr(handler_owner, attr, None)
+
+    adapters = dict(sa.util._logger_adapters)
+    saved = {
+        name: (*snapshot(adapter.logger, adapter, '_screen_handler'), adapter.extra)
+        for name, adapter in adapters.items()
+    }
+    parent = logging.getLogger('striqt')
+    parent_saved = snapshot(parent, parent, '_striqt_handler')
+
+    def restore_handlers(logger, handlers):
+        for handler in logger.handlers:
+            if handler not in handlers:
+                handler.close()
+        logger.handlers[:] = handlers
+
+    try:
+        yield
+    finally:
+        for name, (level, handlers, screen, extra) in saved.items():
+            adapter = sa.util._logger_adapters[name]
+            adapter.logger.setLevel(level)
+            restore_handlers(adapter.logger, handlers)
+            adapter.extra = extra
+            if screen is None:
+                adapter.__dict__.pop('_screen_handler', None)
+            else:
+                adapter._screen_handler = screen
+        level, handlers, file_handler = parent_saved
+        parent.setLevel(level)
+        restore_handlers(parent, handlers)
+        if file_handler is None:
+            parent.__dict__.pop('_striqt_handler', None)
+        else:
+            parent._striqt_handler = file_handler
 
 
 # ---------------------------------------------------------------------------
@@ -586,6 +728,11 @@ def pytest_configure(config):
     # registered here rather than in pyproject.toml: pytest 8 ignores [tool.pytest]
     config.addinivalue_line(
         'markers', f'hardware: needs an attached SDR; opt in with {HARDWARE_ENV}=1'
+    )
+    config.addinivalue_line(
+        'markers',
+        'namespaces(*names): array namespaces to parametrize the xp fixture over '
+        "(default 'numpy', 'cupy'; 'dask' may be added)",
     )
 
 

@@ -426,26 +426,56 @@ def iq_to_cyclic_power(
     cycle_stats=('min', 'mean', 'max'),
     axis=0,
 ) -> dict[str, dict[str, Array]]:
-    """computes a time series of periodic frame power statistics.
+    """Evaluate cyclic statistics of binned channel power.
 
-    The time axis on the cyclic time lag [0, cyclic_period) is binned with step size
-    `detector_period`, for a total of `cyclic_period/detector_period` samples.
+    Channel power along `axis` is first binned with each power detector on
+    `detector_period`, giving a time series of ``K`` detector samples. That series
+    is re-indexed as a matrix of cycles and cycle lags: detector sample ``k`` lands
+    in cycle ``k // L`` at lag ``(k % L) * detector_period``, where
+    ``L = cyclic_period / detector_period`` is the number of detector bins per
+    cycle and ``M = K / L`` is the number of cycles in the capture. Each cyclic
+    statistic then reduces the cycle axis, so the value at lag index ``m``
+    summarizes the ``M`` power samples that share the same time offset from the
+    start of a cycle. The result spans one `cyclic_period` at the resolution of
+    `detector_period` with ``L`` samples per detector and statistic, independent
+    of the capture length.
 
-    RMS and peak power detector data are returned. For each type of detector, a time
-    series is returned for (min, mean, max) statistics, which are computed across the
-    number of frames (`cyclic_period/Ts`).
+    Choosing `cyclic_period` as a common multiple of the periods of the expected
+    signals (for example 10 ms for the LCM of TDD cellular frames, 5 ms WiMAX
+    frames and the 1 ms pulse repetition interval of the SPN-43 radar) aligns their
+    features across cycles, so that each resolves at fixed lags while occupancy
+    with an incommensurate period is spread across all lags. Uplink and downlink
+    levels of a TDD network can then be read from disjoint lag windows. Statistics
+    are evaluated in linear power units, so convert to dB afterwards.
+
+    A mismatch ``dT`` between `cyclic_period` and the true signal period, such as
+    a sample clock offset, drifts features by ``M * dT / detector_period`` lags by
+    the end of the capture and bleeds power between neighbouring lags. Keep
+    ``M * dT`` below `detector_period` by limiting the number of cycles ``M``.
+
+    Reference: D.G. Kuester et al., "Cyclic Analysis of Power in Radio Channels".
 
     Args:
-        iq: complex-valued input waveform samples
-        Ts: sample period of the iq waveform
-        detector_period: sampling period within the frame
-        cyclic_period: the cyclic period to analyze
+        x: complex-valued input waveform samples
+        Ts: sample period of the waveform
+        detector_period: duration of each power detector bin
+        cyclic_period: duration of one cycle, an integer multiple of `detector_period`
+        truncate: if True, drop trailing detector bins that do not complete a cycle
+        detectors: power detector names accepted by `iq_to_bin_power`
+        cycle_stats: statistics accepted by `stat_ufunc_from_shorthand`, evaluated
+            across cycles (names such as 'min', 'mean', 'max', or quantiles in
+            (0, 1))
+        axis: the time axis of `x`
 
     Raises:
-        ValueError: if detector_period%Ts != 0 or cyclic_period%detector_period != 0
+        ValueError: if `detector_period` is not an integer multiple of `Ts`,
+            `cyclic_period` is not an integer multiple of `detector_period`, or
+            the capture does not hold a whole number of cycles and `truncate` is
+            False
 
     Returns:
-        dict keyed on detector type, with values (dict of np.arrays keyed on cyclic statistic)
+        dict keyed on detector, of dicts keyed on cyclic statistic, of arrays whose
+        `axis` dimension has been replaced by the ``L`` cycle lags
     """
 
     # apply the detector statistic

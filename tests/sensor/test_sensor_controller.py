@@ -7,6 +7,7 @@ import gc
 from threading import Event
 
 import pytest
+from soapy_factories import fake_controller, soapy_capture
 
 import striqt.sensor as ss
 
@@ -71,30 +72,11 @@ def test_failed_setup_entry_is_cleared_for_the_next_open(cw_sweep, monkeypatch):
 # %% read_retries (fake SoapySDR device)
 
 
-def _fake_capture(**kws):
-    kws = {
-        'port': (0, 1),
-        'center_frequency': 1e9,
-        'gain': (0, 0),
-        'sample_rate': 125e6,
-        'duration': 1e-3,
-        'host_resample': False,
-        **kws,
-    }
-    return ss.specs.SoapyCapture(**kws)
-
-
-def _fake_controller(fake_soapy_ext, **spec_kws):
-    ctrl_cls = ss.lib.bindings.get_controller('fake_soapy')
-    spec = fake_soapy_ext.FakeSoapySourceSpec(**spec_kws)
-    return ctrl_cls.from_source_spec(spec, rx_ports=(0, 1))
-
-
 class TestReadRetries:
     def test_overflow_after_the_first_read_retriggers(self, fake_soapy, fake_soapy_ext):
-        with _fake_controller(fake_soapy_ext, receive_retries=3) as ctrl:
+        with fake_controller(fake_soapy_ext, receive_retries=3) as ctrl:
             device = fake_soapy.devices[0]
-            ctrl._arm_spec(_fake_capture())
+            ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, 0)))
             # the first read tolerates overflow; the second (holdoff) read does not
             device.fault_queue = [None, fake_soapy.SOAPY_SDR_OVERFLOW]
 
@@ -107,9 +89,9 @@ class TestReadRetries:
             assert iq.info.start_time.value > device.streams[0].activate_time_ns
 
     def test_persistent_timeout_exhausts_the_retries(self, fake_soapy, fake_soapy_ext):
-        with _fake_controller(fake_soapy_ext, receive_retries=1) as ctrl:
+        with fake_controller(fake_soapy_ext, receive_retries=1) as ctrl:
             device = fake_soapy.devices[0]
-            ctrl._arm_spec(_fake_capture())
+            ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, 0)))
             device.fault_queue = [fake_soapy.SOAPY_SDR_TIMEOUT] * 3
 
             with pytest.raises(ss.lib.sources.base.ReceiveStreamError, match='TIMEOUT'):
@@ -119,9 +101,9 @@ class TestReadRetries:
             assert device.fault_queue == [fake_soapy.SOAPY_SDR_TIMEOUT]
 
     def test_no_retries_raises_on_the_first_fault(self, fake_soapy, fake_soapy_ext):
-        with _fake_controller(fake_soapy_ext, receive_retries=0) as ctrl:
+        with fake_controller(fake_soapy_ext, receive_retries=0) as ctrl:
             device = fake_soapy.devices[0]
-            ctrl._arm_spec(_fake_capture())
+            ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, 0)))
             device.fault_queue = [fake_soapy.SOAPY_SDR_STREAM_ERROR]
 
             with pytest.raises(

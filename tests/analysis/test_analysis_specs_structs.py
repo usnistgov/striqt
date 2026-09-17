@@ -151,11 +151,7 @@ class TestSSBCorrelators:
         )
 
     def test_subcarrier_spacing_is_required(self):
-        cls = CORRELATORS[0]
-        with pytest.raises(TypeError, match='subcarrier_spacing'):
-            cls()
-        with pytest.raises(msgspec.ValidationError, match='subcarrier_spacing'):
-            cls.from_dict({})
+        raises_on_both_paths(CORRELATORS[0], TypeError, 'subcarrier_spacing')
 
     @pytest.mark.parametrize(
         'cls, field, value, match',

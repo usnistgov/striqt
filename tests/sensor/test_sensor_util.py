@@ -233,11 +233,10 @@ class TestAwaitAndIgnore:
             time.sleep(0.05)
             return 'late'
 
-        futures = [
-            pool.submit(self.fail, ValueError('first')),
-            pool.submit(slow_success),
-            pool.submit(self.fail, TypeError('second'), 0.02),
-        ]
+        first_failure = pool.submit(self.fail, ValueError('first'))
+        late_success = pool.submit(slow_success)
+        second_failure = pool.submit(self.fail, TypeError('second'), 0.02)
+        futures = [first_failure, late_success, second_failure]
         started.set()
         with pytest.raises(ExceptionGroup) as info:
             util.await_and_ignore(futures, 'arm sensor')
@@ -245,7 +244,7 @@ class TestAwaitAndIgnore:
         assert info.value.message == 'arm sensor'
         assert {type(e) for e in info.value.exceptions} == {ValueError, TypeError}
         assert all(fut.done() for fut in futures)
-        assert futures[1].result() == 'late'
+        assert late_success.result() == 'late'
 
 
 # %% DebugOnException
@@ -387,14 +386,6 @@ class TestRetry:
 LOGGER_NAMES = ('sweep', 'source', 'analysis', 'sink', 'periph')
 
 
-@pytest.fixture
-def restore_levels():
-    saved = {n: sa.util.get_logger(n).logger.level for n in LOGGER_NAMES}
-    yield
-    for name, level in saved.items():
-        sa.util.show_messages(level, colors=False, logger_names=(name,))
-
-
 class TestLogVerbosity:
     @pytest.mark.parametrize(
         'verbose, level',
@@ -406,10 +397,11 @@ class TestLogVerbosity:
             (3, logging.DEBUG),
         ],
     )
-    def test_levels(self, verbose, level, restore_levels):
+    def test_levels(self, verbose, level, subtests):
         util.log_verbosity(verbose)
         for name in LOGGER_NAMES:
-            assert sa.util.get_logger(name).logger.level == level
+            with subtests.test(msg=name):
+                assert sa.util.get_logger(name).logger.level == level
 
 
 class TestLogCaptureContext:
@@ -454,15 +446,7 @@ class TestLogCaptureContext:
 class TestLogToFile:
     @pytest.fixture
     def striqt_logger(self):
-        logger = logging.getLogger('striqt')
-        saved = (logger.level, list(logger.handlers))
-        yield logger
-        for handler in logger.handlers:
-            if handler not in saved[1]:
-                logger.removeHandler(handler)
-                handler.close()
-        logger.setLevel(saved[0])
-        logger.__dict__.pop('_striqt_handler', None)
+        return logging.getLogger('striqt')
 
     def test_writes_yaml_records(self, tmp_path, striqt_logger):
         path = tmp_path / 'logs' / 'sweep.json'
@@ -502,6 +486,7 @@ class TestLogToFile:
         first.close()
 
 
-def test_public_reexports():
+def test_public_reexports(subtests):
     for name in ('zip_offsets', 'retry', 'ExceptionStack', 'log_verbosity'):
-        assert getattr(ss.util, name) is getattr(util, name)
+        with subtests.test(msg=name):
+            assert getattr(ss.util, name) is getattr(util, name)

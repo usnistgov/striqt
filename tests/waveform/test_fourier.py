@@ -9,62 +9,47 @@ numpy/cupy/dask compatibility, and roundoff bounds derived from an FFT error mod
 
 from __future__ import annotations
 
-import contextlib
+import functools
 
 import numpy as np
 import pytest
-from conftest import gaussian_iq, iq_waveforms, to_numpy
+from conftest import gaussian_iq, iq_waveforms
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from numeric_checks import (
+    ATOL,
+    FFT_ROUNDOFF_SAFETY,
+    FIR_LEAKAGE,
+    FIR_RECT_STOPBAND_DB,
+    FLOAT_DTYPES,
+    RTOL_FLOAT64,
+    assert_close,
+    assert_tone_level,
+    bin_centered_tone,
+    cross_backend_rms,
+    dtype_id,
+    elementwise_rtol,
+    far_bin_floor_dBc,
+    interior,
+    level_error_dB,
+    level_tolerance_dB,
+    numpy_and_cupy,
+    peak_factor,
+    rms,
+    single_backend_rms,
+    to_numpy,
+    tone_bin,
+    tone_frequency,
+    tone_peak_roundoff,
+    unit_roundoff,
+    unit_tone,
+)
 from numpy.testing import assert_allclose, assert_array_equal
 
 from striqt.waveform.lib import fourier
 
-# Roundoff model for the cross-backend and far-bin tests. Per FFT pass the rms error
-# relative to the output rms is c*eps*sqrt(log2 N), eps the unit roundoff (Gentleman &
-# Sande 1966; FFTW accuracy notes), and each elementwise rounding adds (eps/sqrt(3))**2
-# of error variance. c was fitted with chores/tests/measure_fft_accuracy.py: pocketfft
-# gives 0.55-0.65 (1.2 for sizes with a prime factor >= 128); cuFFT on a Jetson TX2i
-# reaches 1.9 at N=512 and 2.1 for Bluestein sizes. Errors of independent backends add
-# in quadrature (measured 0.83-1.0).
-FFT_ROUNDOFF_C = 2.2
-ROUNDOFF_SAFETY = 3
-# An FFT of a tone concentrates roundoff in a few bins instead of spreading it evenly:
-# measured up to 6.7 units of roundoff of the tone amplitude at the tone (cuFFT, N=512)
-# and 3.9 in a far bin (cuFFT, N=1024), against ~2 for pocketfft.
-TONE_PEAK_ROUNDOFF = 8
-
-# elementwise tolerances for the deterministic outputs (windows, frequency axes)
-RTOL_FLOAT32 = 1e-5
-RTOL_FLOAT64 = 1e-12
-ATOL = 1e-10
-
-# Overlap-add reconstruction of a tone is limited by the COLA window's passband
-# ripple after spectral truncation, not by roundoff. Measured for a hamming window at
-# nfft=256: the rms level is within 0.015 dB and the per-sample envelope ripple within
-# 0.25 dB (0.47 dB for a tone in the FIR transition band). Engineering bounds with margin:
-COLA_LEVEL_DB = 0.05
-COLA_RIPPLE_DB = 0.5
-
-# scipy.signal.firwin2 with a hamming window reaches about -53 dB in the stopband,
-# and its passband ripple is far below that; bound both at -40 dB
-FIR_LEAKAGE = 1e-2
-# _stft_fir_lowpass designs its FIR with a rectangular window, whose Gibbs sidelobes
-# limit the stopband to about -21 dB
-FIR_RECT_STOPBAND_DB = -20
-
-FAR_BIN_NFFTS = st.sampled_from([64, 256, 1024, 4096])
-
-
-def window_names():
-    return st.sampled_from([
-        'hann',
-        'hamming',
-        'blackman',
-        'blackmanharris',
-        'bartlett',
-        'nuttall',
-    ])
+FAR_BIN_NFFTS = [64, 256, 1024, 4096]
+WINDOW_NAMES = ['hann', 'hamming', 'blackman', 'blackmanharris', 'bartlett', 'nuttall']
 
 
 def fft_sizes(min_size: int = 4, max_size: int = 512):
@@ -103,160 +88,28 @@ def stft_parameters(draw):
     }
 
 
-def roundoff_rms(dtype, nffts, n_elementwise=0):
-    """expected rms roundoff error of one backend, relative to the output rms"""
-    eps = np.finfo(dtype).eps / 2
-    var = n_elementwise * (eps / np.sqrt(3)) ** 2
-    var += sum((FFT_ROUNDOFF_C * eps * np.sqrt(np.log2(n))) ** 2 for n in nffts)
-    return float(np.sqrt(var))
-
-
-def single_backend_rms(dtype, nffts, n_elementwise=0):
-    """rms tolerance on one backend's error against an exact reference, relative to
-    the output rms"""
-    return ROUNDOFF_SAFETY * roundoff_rms(dtype, nffts, n_elementwise)
-
-
-def cross_backend_rms(dtype, nffts, n_elementwise=0):
-    """rms tolerance on the difference between two backends, relative to output rms"""
-    return np.sqrt(2) * single_backend_rms(dtype, nffts, n_elementwise)
-
-
-def peak_factor(size):
-    """max/rms ratio of `size` complex gaussian errors, with 2x margin on the tail"""
-    return 2 * np.sqrt(np.log(size))
-
-
-def _rms(x):
-    return float(np.sqrt(np.mean(np.abs(x) ** 2)))
-
-
-def rms_tolerance_dBc(sigma):
-    """express an rms amplitude tolerance relative to the output rms as error power
-    relative to the signal, in dBc"""
-    return 20 * np.log10(sigma)
-
-
-def level_tolerance_dB(sigma, power=False):
-    """express a relative tolerance on an output as the uncertainty of its level in dB.
-
-    `sigma` bounds an amplitude ratio (level 20*log10|x|) unless `power` is True
-    (level 10*log10 x, e.g. spectrogram bins).
-    """
-    return (10 if power else 20) * np.log10(1 + sigma)
-
-
-def peak_level_tolerance_dB(sigma, size, power=False):
-    """express the peak tolerance implied by `sigma` over `size` outputs as a level
-    uncertainty in dB"""
-    return level_tolerance_dB(peak_factor(size) * sigma, power=power)
-
-
-def tone_peak_roundoff(dtype):
-    """bound on structured roundoff in any one bin, relative to a tone's amplitude"""
-    return ROUNDOFF_SAFETY * TONE_PEAK_ROUNDOFF * np.finfo(dtype).eps / 2
-
-
-def far_bin_floor_dBc(sigma, nfft, size=None, dtype=np.complex64):
-    """express the roundoff tolerance in bins away from a bin-centered tone, relative
-    to the tone, in dBc.
-
-    The tone occupies one bin while roundoff spreads evenly over all `nfft` bins. With
-    `size`, the result is the peak tolerance over that many far bins, which is the
-    larger of the white-noise tail and the structured `tone_peak_roundoff`.
-    """
-    if size is None:
-        return rms_tolerance_dBc(sigma / np.sqrt(nfft))
-    white = peak_factor(size) * sigma / np.sqrt(nfft)
-    return rms_tolerance_dBc(max(white, tone_peak_roundoff(dtype)))
-
-
-def assert_backends_agree(
-    result_cp, result_np, sigma, err_msg='', rtol=0, scale=None, power=False
-):
-    """check a cupy result against numpy within the rms model `sigma` and the peak it
-    implies over the output size.
-
-    `sigma` is relative to `scale`, the output rms unless given. `rtol` covers the
-    largest bins of a power output, whose error grows with the bin value.
-    """
-    result_cp = to_numpy(result_cp)
-    if scale is None:
-        scale = _rms(result_np)
-    assert _rms(result_cp - result_np) < sigma * scale, (
-        f'{err_msg} rms roundoff above {level_tolerance_dB(sigma, power):.1e} dB'
-    )
-    peak_dB = peak_level_tolerance_dB(sigma, result_np.size, power)
-    assert_allclose(
-        result_cp,
-        result_np,
-        rtol=rtol,
-        atol=peak_factor(result_np.size) * sigma * scale,
-        err_msg=f'{err_msg} peak above {peak_dB:.1e} dB',
-    )
-
-
-def tone_bin(nfft, bin_fraction):
-    """the signed bin index k in [-nfft//2, nfft//2) at `bin_fraction` of the grid"""
-    return round(bin_fraction * (nfft - 1)) - nfft // 2
-
-
-def bin_centered_tone(nfft, k, nseg, dtype=np.complex64):
-    """a unit tone with `k` cycles per segment, over `nseg` segments"""
-    n = np.arange(nseg * nfft)
-    return np.exp(2j * np.pi * k * n / nfft).astype(dtype)
-
-
-def unit_tone(size, fs, f0, dtype=np.complex64):
-    """a unit complex tone at f0 Hz sampled at fs Hz"""
-    t = np.arange(size) / fs
-    return np.exp(2j * np.pi * f0 * t).astype(dtype)
-
-
-def tone_frequency(x, fs):
-    """the frequency of the strongest spectral line of x, to within fs/x.size"""
-    X = np.fft.fft(np.asarray(x).astype(np.complex128))
-    return float(np.fft.fftfreq(x.size, 1 / fs)[np.argmax(np.abs(X))])
-
-
-def interior(x, pad, axis=-1):
-    """x with `pad` samples trimmed from each end of `axis`"""
-    return np.moveaxis(np.moveaxis(np.asarray(x), axis, 0)[pad:-pad], 0, axis)
-
-
-def level_error_dB(x, ref=1.0):
-    return 20 * np.log10(np.abs(x) / ref)
-
-
-def assert_tone_level(y, ref=1.0):
-    """check the rms level and per-sample envelope of a reconstructed unit tone"""
-    assert abs(level_error_dB(_rms(y), ref)) < COLA_LEVEL_DB
-    assert np.abs(level_error_dB(y, ref)).max() < COLA_RIPPLE_DB
-
-
-@contextlib.contextmanager
-def max_cupy_fft_chunk(size):
+@pytest.fixture
+def max_cupy_fft_chunk():
+    """a setter for the cupy FFT chunk size; the prior value is restored afterwards"""
     previous = fourier.get_max_cupy_fft_chunk()
-    fourier.set_max_cupy_fft_chunk(size)
-    try:
-        yield
-    finally:
-        fourier.set_max_cupy_fft_chunk(previous)
+    yield fourier.set_max_cupy_fft_chunk
+    fourier.set_max_cupy_fft_chunk(previous)
 
 
-def test_max_cupy_fft_chunk_roundtrip():
+def test_max_cupy_fft_chunk_roundtrip(max_cupy_fft_chunk):
     previous = fourier.get_max_cupy_fft_chunk()
-    with max_cupy_fft_chunk(4096):
-        assert fourier.get_max_cupy_fft_chunk() == 4096
+    max_cupy_fft_chunk(4096)
+    assert fourier.get_max_cupy_fft_chunk() == 4096
+    max_cupy_fft_chunk(previous)
     assert fourier.get_max_cupy_fft_chunk() == previous
 
 
 class TestGetWindow:
+    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
     @given(
-        name=window_names(),
+        name=st.sampled_from(WINDOW_NAMES),
         nwindow=st.integers(min_value=2, max_value=256),
         nzero=st.integers(min_value=0, max_value=64),
-        dtype=st.sampled_from([np.float32, np.float64]),
     )
     def test_length_and_dtype(self, name, nwindow, nzero, dtype):
         w = fourier.get_window(name, nwindow, nzero=nzero, dtype=dtype)
@@ -266,7 +119,10 @@ class TestGetWindow:
     def test_dtype_none_keeps_float64(self):
         assert fourier.get_window('hann', 16, dtype=None).dtype == np.float64
 
-    @given(name=window_names(), nwindow=st.integers(min_value=8, max_value=256))
+    @given(
+        name=st.sampled_from(WINDOW_NAMES),
+        nwindow=st.integers(min_value=8, max_value=256),
+    )
     def test_normalization(self, name, nwindow):
         """norm=True gives unit mean square; norm=False peaks at 1 and is non-negative"""
         w = fourier.get_window(name, nwindow, norm=True)
@@ -277,7 +133,10 @@ class TestGetWindow:
         assert np.all(w >= -1e-10)
         assert np.max(w) <= 1.0 + 1e-10
 
-    @given(name=window_names(), nwindow=st.integers(min_value=8, max_value=128))
+    @given(
+        name=st.sampled_from(WINDOW_NAMES),
+        nwindow=st.integers(min_value=8, max_value=128),
+    )
     def test_fftshift_preserves_energy(self, name, nwindow):
         """an odd size shifts by half a sample, which makes the window complex"""
         w0 = fourier.get_window(name, nwindow, fftshift=False, norm=False)
@@ -285,11 +144,9 @@ class TestGetWindow:
         assert np.iscomplexobj(w) == bool(nwindow % 2)
         assert_allclose(np.sum(np.abs(w) ** 2), np.sum(w0**2), rtol=1e-6)
 
-    @given(
-        name=st.sampled_from(['hann', 'hamming']),
-        nwindow=st.sampled_from([8, 16, 64]),
-        nzero=st.sampled_from([2, 4, 6]),
-    )
+    @pytest.mark.parametrize('name', ['hann', 'hamming'])
+    @pytest.mark.parametrize('nwindow', [8, 16, 64])
+    @pytest.mark.parametrize('nzero', [2, 4, 6])
     def test_center_zeros_pads_both_sides(self, name, nwindow, nzero):
         w = fourier.get_window(
             name, nwindow, nzero=nzero, center_zeros=True, norm=False
@@ -321,11 +178,14 @@ class TestGetWindow:
         # parameter is of order 1, so this is loose by a factor of 100
         assert_allclose(enbw, target, rtol=1e-4)
 
-    def test_find_window_param_errors(self):
-        with pytest.raises(ValueError, match='greater than 1'):
-            fourier.find_window_param_from_enbw('kaiser', 1.0)
-        with pytest.raises(ValueError, match='window_name'):
-            fourier.find_window_param_from_enbw('hann', 1.5)
+    @pytest.mark.parametrize(
+        'window, enbw, match',
+        [('kaiser', 1.0, 'greater than 1'), ('hann', 1.5, 'window_name')],
+        ids=['enbw_at_rect_limit', 'window_without_parameter'],
+    )
+    def test_find_window_param_errors(self, window, enbw, match):
+        with pytest.raises(ValueError, match=match):
+            fourier.find_window_param_from_enbw(window, enbw)
 
 
 class TestFftfreq:
@@ -492,7 +352,7 @@ class TestResample:
         y_freq = fourier.resample(X.copy(), num, domain='freq')
         y_freq_inplace = fourier.resample(X, num, domain='freq', overwrite_x=True)
         sigma = cross_backend_rms(x.dtype, [x.size], n_elementwise=1)
-        assert _rms(y_freq - y_time) < sigma * _rms(y_time)
+        assert_close(y_freq, y_time, sigma=sigma)
         assert_array_equal(y_freq_inplace, y_freq)
 
     @given(shift=st.integers(min_value=-16, max_value=16))
@@ -509,7 +369,7 @@ class TestResample:
         # a bin-centered unit tone comes back as a unit tone; fftshift multiply,
         # fft(N), ifft(N/2), ifftshift multiply
         sigma = single_backend_rms(x.dtype, [nfft_in, nfft_out], n_elementwise=2)
-        assert_allclose(np.abs(y), 1, rtol=0, atol=peak_factor(y.size) * sigma)
+        assert_close(np.abs(y), np.ones(y.size), sigma=sigma)
 
     @pytest.mark.parametrize(
         'kws, match',
@@ -596,7 +456,7 @@ class TestStft:
 
         # the two paths differ only in the order of the window and 1/nfft multiplies
         sigma = single_backend_rms(np.complex64, [64], n_elementwise=2)
-        assert _rms(X_array - X_named) < sigma * _rms(X_named)
+        assert_close(X_array, X_named, sigma=sigma)
 
     def test_variants(self):
         x = np.ones(512, dtype=np.complex64)
@@ -615,24 +475,16 @@ class TestStft:
 
     def test_no_overlap_writes_in_place(self):
         x = gaussian_iq(512)
-        _, _, X_ref = fourier.stft(x, fs=1.0, window='hann', nperseg=64)
+        kws = {'fs': 1.0, 'window': 'hann', 'nperseg': 64}
+        _, _, X_ref = fourier.stft(x, **kws)
 
         y = x.copy()
-        X = fourier.stft(
-            y,
-            fs=1.0,
-            window='hann',
-            nperseg=64,
-            overwrite_x=True,
-            return_axis_arrays=False,
-        )
+        X = fourier.stft(y, overwrite_x=True, return_axis_arrays=False, **kws)
         assert np.shares_memory(X, y)
         assert_array_equal(X, X_ref)
 
         out = np.empty((8, 64), dtype=np.complex64)
-        X = fourier.stft(
-            x, fs=1.0, window='hann', nperseg=64, out=out, return_axis_arrays=False
-        )
+        X = fourier.stft(x, out=out, return_axis_arrays=False, **kws)
         assert np.shares_memory(X, out)
         assert_array_equal(X, X_ref)
 
@@ -677,11 +529,8 @@ class TestIstft:
 
         assert y.dtype == x.dtype
         assert y.shape == x.shape
-        err = interior(y, nfft) - interior(x, nfft)
         sigma = self._roundtrip_sigma(x.dtype)
-        assert _rms(err) < sigma * _rms(x), (
-            f'rms error above {level_tolerance_dB(sigma):.1e} dB'
-        )
+        assert_close(interior(y, nfft), interior(x, nfft), sigma=sigma)
 
     @pytest.mark.xfail(
         strict=True,
@@ -700,10 +549,7 @@ class TestIstft:
 
         assert y.dtype == x.dtype
         assert y.shape == x.shape
-        sigma = self._roundtrip_sigma(x.dtype)
-        assert _rms(y - x) < sigma * _rms(x), (
-            f'rms error above {level_tolerance_dB(sigma):.1e} dB'
-        )
+        assert_close(y, x, sigma=self._roundtrip_sigma(x.dtype))
 
     @given(size=st.integers(min_value=NFFT, max_value=8 * NFFT))
     def test_size_trims_output(self, size):
@@ -741,9 +587,8 @@ class TestIstft:
         y = fourier._unstack_stft_windows(stacked, noverlap=noverlap, nperseg=nfft)
 
         # only the overlap-add sums round
-        eps = np.finfo(np.float32).eps / 2
-        sigma = ROUNDOFF_SAFETY * hop_divisor * eps
-        assert _rms(interior(y, nfft) - interior(x, nfft)) < sigma * _rms(x)
+        sigma = FFT_ROUNDOFF_SAFETY * hop_divisor * unit_roundoff(np.float32)
+        assert_close(interior(y, nfft), interior(x, nfft), sigma=sigma)
 
     def test_stack_windows_rejects_unknown_norm(self):
         x = np.ones(256, dtype=np.complex64)
@@ -916,20 +761,21 @@ class TestFilterDesign:
         assert noverlap == round(nfft * overlap_scale)
         assert pad_out == 0
 
-    def test_design_oafilter_errors(self):
-        with pytest.raises(TypeError, match='window'):
-            fourier.design_oafilter(
-                1200, window='hann', nfft_out=120, nfft=120, extend=False
-            )
-        with pytest.raises(ValueError, match='% 3'):
-            fourier.design_oafilter(
-                1210, window='blackman', nfft_out=121, nfft=120, extend=False
-            )
-        with pytest.raises(ValueError, match='integer multiple of noverlap'):
-            fourier.design_oafilter(
-                1000, window='hamming', nfft_out=120, nfft=120, extend=False
-            )
+    @pytest.mark.parametrize(
+        'size, kws, exc, match',
+        [
+            (1200, {'window': 'hann'}, TypeError, 'window'),
+            (1210, {'window': 'blackman', 'nfft_out': 121}, ValueError, '% 3'),
+            (1000, {'window': 'hamming'}, ValueError, 'integer multiple of noverlap'),
+        ],
+        ids=['unsupported_window', 'nfft_out_off_divisor', 'size_off_noverlap'],
+    )
+    def test_design_oafilter_errors(self, size, kws, exc, match):
+        kws = {'nfft_out': 120, 'nfft': 120, 'extend': False, **kws}
+        with pytest.raises(exc, match=match):
+            fourier.design_oafilter(size, **kws)
 
+    def test_design_oafilter_options(self):
         pad_out = fourier.design_oafilter(
             1000, window='hamming', nfft_out=120, nfft=120, extend=True
         )[3]
@@ -940,16 +786,19 @@ class TestFilterDesign:
         )[0]
         assert nfft_out == 120
 
-    @given(
-        fs_base=st.sampled_from([122.88e6, 125e6]),
-        fs_target=st.sampled_from([7.68e6, 15.36e6, 20e6, 30.72e6, 61.44e6, 107.52e6]),
-        window=st.sampled_from(['hamming', 'blackman']),
-        shift=st.sampled_from([False, 'none', None, 'left', 'right']),
-        bw=st.sampled_from([5e6, 10e6, 20e6]),
+    @pytest.mark.parametrize('fs_base', [122.88e6, 125e6])
+    @pytest.mark.parametrize(
+        'fs_target', [7.68e6, 15.36e6, 20e6, 30.72e6, 61.44e6, 107.52e6]
     )
-    def test_design_cola_resampler_consistency(
-        self, fs_base, fs_target, window, shift, bw
-    ):
+    @pytest.mark.parametrize('window', ['hamming', 'blackman'])
+    @pytest.mark.parametrize('shift', [None, 'none', 'left', 'right'])
+    def test_design_cola_resampler_consistency(self, fs_base, fs_target, window, shift):
+        """The rates, FFT sizes and passband of a design are mutually consistent.
+
+        The grid omits `bw`, which only sets the passband width, and shift=False,
+        which the design treats exactly like None (unlike the truthy 'none').
+        """
+        bw = 10e6
         design = fourier.design_cola_resampler(
             fs_base, fs_target, bw=bw, shift=shift, window=window
         )
@@ -1015,10 +864,8 @@ class TestFilterDesign:
         with pytest.raises(ValueError, match=match):
             fourier.design_cola_resampler(**kws)
 
-    @given(
-        numtaps=st.sampled_from([401, 1001, 4001]),
-        dtype=st.sampled_from(['float32', 'float64']),
-    )
+    @pytest.mark.parametrize('numtaps', [401, 1001, 4001])
+    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
     def test_design_fir_lpf(self, numtaps, dtype):
         b = fourier.design_fir_lpf(10e6, 50e6, numtaps=numtaps, dtype=dtype)
         assert b.shape == (numtaps,)
@@ -1086,7 +933,7 @@ class TestOverlapAddFilters:
         yi = interior(y, self.NFFT)
         # the residual is the hamming sidelobe leakage (-53 dB); the window's
         # -22 dB edge pedestal leaves the ringing concentrated at the segment edges
-        assert level_error_dB(_rms(yi)) < -40
+        assert level_error_dB(rms(yi)) < -40
         assert level_error_dB(yi).max() < -25
 
     def test_oafilter_downsample_length(self):
@@ -1119,16 +966,8 @@ class TestOverlapAddFilters:
         shift = shift_bins * self.FS / down
         x = self._tone(f0, channels=2)
 
-        y = fourier.oaresample(
-            x,
-            up,
-            down,
-            self.FS,
-            window='hamming',
-            axis=1,
-            frequency_shift=shift,
-            scale=scale,
-        )
+        kws = {'window': 'hamming', 'axis': 1, 'frequency_shift': shift, 'scale': scale}
+        y = fourier.oaresample(x, up, down, self.FS, **kws)
         assert y.shape == (2, round(x.shape[1] * up / down))
         assert y.dtype == x.dtype
         yi = interior(y, up, axis=1)
@@ -1195,7 +1034,7 @@ class TestToneFarBinFloor:
         """`err_far`: the roundoff in the far bins; `rms_bound`: the rms error model
         in the same units; `tone_peak`: the tone's own bin value, which anchors the
         structured roundoff bound"""
-        assert _rms(err_far) < rms_bound, (
+        assert rms(err_far) < rms_bound, (
             f'far-bin rms roundoff above {far_bin_floor_dBc(sigma, nfft):.1f} dBc'
         )
         white = peak_factor(err_far.size) * rms_bound
@@ -1222,7 +1061,10 @@ class TestToneFarBinFloor:
     def _stft(x, nfft):
         return fourier.stft(x, fs=1.0, window='rect', nperseg=nfft, noverlap=0)[2]
 
-    @given(nfft=FAR_BIN_NFFTS, bin_fraction=st.floats(min_value=0, max_value=1))
+    @given(
+        nfft=st.sampled_from(FAR_BIN_NFFTS),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
     def test_stft_far_bins(self, xp, nfft, bin_fraction):
         k = tone_bin(nfft, bin_fraction)
         x = bin_centered_tone(nfft, k, self.NSEG)
@@ -1244,10 +1086,13 @@ class TestToneFarBinFloor:
 
         # window/nfft and the window multiply, then fft(nfft)
         sigma = single_backend_rms(np.complex64, [nfft], n_elementwise=2)
-        rms_bound = sigma * _rms(X_ref)
+        rms_bound = sigma * rms(X_ref)
         self._assert_far_bins((X - X_ref)[:, far], rms_bound, tone_peak, nfft, sigma)
 
-    @given(nfft=FAR_BIN_NFFTS, bin_fraction=st.floats(min_value=0, max_value=1))
+    @given(
+        nfft=st.sampled_from(FAR_BIN_NFFTS),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
     def test_resample_far_bins(self, xp, nfft, bin_fraction):
         # keep the tone inside the half band that survives downsampling by 2
         k = tone_bin(nfft, 0.3 + 0.4 * bin_fraction)
@@ -1259,7 +1104,10 @@ class TestToneFarBinFloor:
         out = fourier.resample(xp.asarray(x), num_out)
         self._check_error_spectrum(out, out_ref, sigma)
 
-    @given(nfft=FAR_BIN_NFFTS, bin_fraction=st.floats(min_value=0, max_value=1))
+    @given(
+        nfft=st.sampled_from(FAR_BIN_NFFTS),
+        bin_fraction=st.floats(min_value=0, max_value=1),
+    )
     def test_oaconvolve_far_bins(self, xp, nfft, bin_fraction):
         x = bin_centered_tone(nfft, tone_bin(nfft, bin_fraction), self.NSEG)
         # a unit-gain lowpass; the tone may land in its stopband, so bounds are
@@ -1286,47 +1134,41 @@ class TestNumpyCupyCrossComparison:
 
     NFFT = 64
 
-    @given(
-        name=st.sampled_from(['hamming', 'hann', 'blackman', 'bartlett', 'flattop']),
-        nwindow=st.sampled_from([8, 64, 129, 512]),
-        dtype=st.sampled_from([np.float32, np.float64]),
+    @pytest.mark.parametrize(
+        'name', ['hamming', 'hann', 'blackman', 'bartlett', 'flattop']
     )
+    @pytest.mark.parametrize('nwindow', [8, 64, 129, 512])
+    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
     def test_get_window(self, cupy_available, name, nwindow, dtype):
-        cp = cupy_available
-        result_np = fourier.get_window(name, nwindow, dtype=dtype)
-        result_cp = fourier.get_window(name, nwindow, dtype=dtype, xp=cp)
-        rtol = {np.float32: RTOL_FLOAT32, np.float64: RTOL_FLOAT64}[dtype]
-        assert_allclose(result_cp.get(), result_np, rtol=rtol, atol=ATOL)
+        get_window = functools.partial(fourier.get_window, name, nwindow, dtype=dtype)
+        w_np, w_cp = numpy_and_cupy(cupy_available, get_window, xp_kwarg='xp')
+        assert_close(w_cp, w_np, rtol=elementwise_rtol(dtype), atol=ATOL)
 
     @given(nfft=fft_sizes(min_size=8, max_size=512), fs=sample_rates())
     def test_fftfreq(self, cupy_available, nfft, fs):
-        cp = cupy_available
-        result_np = fourier.fftfreq(nfft, fs, dtype=np.float64)
-        result_cp = fourier.fftfreq(nfft, fs, dtype=np.float64, xp=cp)
-        assert_allclose(result_cp.get(), result_np, rtol=RTOL_FLOAT64, atol=ATOL)
+        f_np, f_cp = numpy_and_cupy(
+            cupy_available, fourier.fftfreq, nfft, fs, dtype=np.float64, xp_kwarg='xp'
+        )
+        assert_close(f_cp, f_np, rtol=RTOL_FLOAT64, atol=ATOL)
 
     def test_designs_on_cupy(self, cupy_available):
-        cp = cupy_available
-
         b_np = fourier.design_fir_lpf(10e6, 50e6, numtaps=401)
-        b_cp = fourier.design_fir_lpf(10e6, 50e6, numtaps=401, xp=cp)
-        assert isinstance(b_cp, cp.ndarray)
-        assert_array_equal(b_cp.get(), b_np)
+        b_cp = fourier.design_fir_lpf(10e6, 50e6, numtaps=401, xp=cupy_available)
+        assert isinstance(b_cp, cupy_available.ndarray)
+        assert_close(b_cp, b_np)
 
         f_np = fourier.fftfreq(65, 1e6, as_index=False)
-        f_cp = fourier.fftfreq(65, 1e6, as_index=False, xp=cp)
-        assert isinstance(f_cp, cp.ndarray)
-        assert_allclose(f_cp.get(), f_np, rtol=RTOL_FLOAT64)
+        f_cp = fourier.fftfreq(65, 1e6, as_index=False, xp=cupy_available)
+        assert isinstance(f_cp, cupy_available.ndarray)
+        assert_close(f_cp, f_np, rtol=RTOL_FLOAT64)
 
     @given(x=noise_waveforms(min_size=64, max_size=256, dtype=np.complex64))
     def test_resample(self, cupy_available, x):
-        cp = cupy_available
         num_out = len(x) // 2
-        result_np = fourier.resample(x, num_out)
-        result_cp = fourier.resample(cp.asarray(x), num_out)
+        y_np, y_cp = numpy_and_cupy(cupy_available, fourier.resample, x, num_out)
         # fftshift multiply, fft(N), ifft(N/2), ifftshift multiply
         sigma = cross_backend_rms(x.dtype, [len(x), num_out], n_elementwise=2)
-        assert_backends_agree(result_cp, result_np, sigma)
+        assert_close(y_cp, y_np, sigma=sigma)
 
     @pytest.mark.parametrize(
         'func, n_elementwise, power',
@@ -1335,7 +1177,6 @@ class TestNumpyCupyCrossComparison:
     )
     @given(x=noise_waveforms(min_size=256, max_size=512, dtype=np.complex64))
     def test_stft_and_spectrogram(self, cupy_available, func, n_elementwise, power, x):
-        cp = cupy_available
         kws = {
             'fs': 1e6,
             'window': 'hamming',
@@ -1343,34 +1184,37 @@ class TestNumpyCupyCrossComparison:
             'noverlap': 32,
             'truncate': True,
         }
-        freqs_np, times_np, X_np = func(x, **kws)
-        freqs_cp, times_cp, X_cp = func(cp.asarray(x), **kws)
+        (freqs_np, times_np, X_np), (freqs_cp, times_cp, X_cp) = numpy_and_cupy(
+            cupy_available, func, x, **kws
+        )
 
-        assert_allclose(freqs_cp.get(), freqs_np, rtol=RTOL_FLOAT32, atol=ATOL)
-        assert_allclose(times_cp.get(), times_np, rtol=RTOL_FLOAT32, atol=ATOL)
+        assert_close(
+            freqs_cp, freqs_np, rtol=elementwise_rtol(freqs_np.dtype), atol=ATOL
+        )
+        assert_close(
+            times_cp, times_np, rtol=elementwise_rtol(times_np.dtype), atol=ATOL
+        )
 
         # window/nfft and the window multiply, then fft(nperseg); the spectrogram
         # adds the |X|**2 rounding. For noise-like input the relative rms error of
         # power equals that of amplitude, but the error in one bin grows with
         # sqrt(Sxx), so rtol covers the large bins and atol the small ones.
         sigma = cross_backend_rms(x.dtype, [64], n_elementwise=n_elementwise)
-        rtol = 4 * sigma if power else 0
-        assert_backends_agree(X_cp, X_np, sigma, rtol=rtol, power=power)
+        assert_close(X_cp, X_np, rtol=4 * sigma if power else 0, sigma=sigma)
 
     @given(x=noise_waveforms(64, 256, dtype=[np.float32, np.float64]))
     def test_oaconvolve(self, cupy_available, x):
-        cp = cupy_available
         kernel = np.array([0.25, 0.5, 0.25], dtype=x.dtype)
-        result_np = fourier.oaconvolve(x, kernel, mode='same')
-        result_cp = fourier.oaconvolve(cp.asarray(x), cp.asarray(kernel), mode='same')
+        y_np, y_cp = numpy_and_cupy(
+            cupy_available, fourier.oaconvolve, x, kernel, mode='same'
+        )
         # overlap-add blocks are at most len(x) long; anchoring to the input rms
         # accounts for the kernel's gain
         sigma = cross_backend_rms(x.dtype, [len(x), len(x)], n_elementwise=1)
-        assert_backends_agree(result_cp, result_np, sigma, scale=_rms(x))
+        assert_close(y_cp, y_np, sigma=sigma, scale=rms(x))
 
     @given(x=iq_waveforms(min_size=8 * NFFT, max_size=16 * NFFT, multiple_of=NFFT))
     def test_istft_roundtrip(self, cupy_available, x):
-        cp = cupy_available
         nfft = self.NFFT
 
         def roundtrip(x):
@@ -1379,87 +1223,84 @@ class TestNumpyCupyCrossComparison:
             )
             return fourier.istft(X, nfft=nfft, noverlap=nfft // 2)
 
+        y_np, y_cp = numpy_and_cupy(cupy_available, roundtrip, x)
         sigma = cross_backend_rms(x.dtype, [nfft, nfft], n_elementwise=3)
-        assert_backends_agree(roundtrip(cp.asarray(x)), roundtrip(x), sigma)
+        assert_close(y_cp, y_np, sigma=sigma)
 
     @given(x=iq_waveforms(min_size=8, max_size=64, multiple_of=2, channels=3))
     def test_time_fftshift(self, cupy_available, x):
-        cp = cupy_available
         scale = np.array([1, 2, 3], dtype=x.real.dtype)
-        y_np = fourier.time_fftshift(x, scale, axis=1)
-        y_cp = fourier.time_fftshift(cp.asarray(x), cp.asarray(scale), axis=1)
-        assert_allclose(y_cp.get(), y_np, rtol=np.finfo(x.dtype).eps)
+        y_np, y_cp = numpy_and_cupy(
+            cupy_available, fourier.time_fftshift, x, scale, axis=1
+        )
+        assert_close(y_cp, y_np, rtol=np.finfo(x.dtype).eps)
 
     def test_frequency_slicing(self, cupy_available):
-        cp = cupy_available
         x = np.arange(2 * 3 * 64, dtype=np.float32).reshape(2, 3, 64)
 
-        t_np = fourier.truncate_freqs(x, 64, 1.0, 0.5, axis=2)
-        t_cp = fourier.truncate_freqs(cp.asarray(x), 64, 1.0, 0.5, axis=2)
-        assert_array_equal(t_cp.get(), t_np)
+        t_np, t_cp = numpy_and_cupy(
+            cupy_available, fourier.truncate_freqs, x, 64, 1.0, 0.5, axis=2
+        )
+        assert_array_equal(t_cp, t_np)
 
-        x_cp = cp.asarray(x)
-        fourier.null_lo(x, 64, 1.0, 0.25, axis=2)
-        fourier.null_lo(x_cp, 64, 1.0, 0.25, axis=2)
-        assert_array_equal(x_cp.get(), x)
+        def nulled(x):
+            x = x.copy()
+            fourier.null_lo(x, 64, 1.0, 0.25, axis=2)
+            return x
+
+        n_np, n_cp = numpy_and_cupy(cupy_available, nulled, x)
+        assert_array_equal(n_cp, n_np)
 
     def test_stft_frequency_editing(self, cupy_available):
-        cp = cupy_available
         x = gaussian_iq(8 * 64)
         freqs, _, Y = fourier.stft(x, fs=1.0, window='rect', nperseg=64, noverlap=0)
-        Y_cp = cp.asarray(Y)
-        freqs_cp = cp.asarray(freqs)
 
-        Yz_np = fourier.zero_stft_by_freq(freqs, Y.copy(), passband=(-0.25, 0.25))
-        Yz_cp = fourier.zero_stft_by_freq(freqs_cp, Y_cp.copy(), passband=(-0.25, 0.25))
-        assert_array_equal(Yz_cp.get(), Yz_np)
+        def zeroed(freqs, Y):
+            return fourier.zero_stft_by_freq(freqs, Y.copy(), passband=(-0.25, 0.25))
 
-        fo_np, Yo_np = fourier.downsample_stft(freqs, Y, 32)
-        fo_cp, Yo_cp = fourier.downsample_stft(freqs_cp, Y_cp, 32)
-        assert_array_equal(Yo_cp.get(), Yo_np)
-        assert_allclose(fo_cp.get(), fo_np, rtol=RTOL_FLOAT64)
+        Yz_np, Yz_cp = numpy_and_cupy(cupy_available, zeroed, freqs, Y)
+        assert_array_equal(Yz_cp, Yz_np)
+
+        (fo_np, Yo_np), (fo_cp, Yo_cp) = numpy_and_cupy(
+            cupy_available, fourier.downsample_stft, freqs, Y, 32
+        )
+        assert_array_equal(Yo_cp, Yo_np)
+        assert_close(fo_cp, fo_np, rtol=RTOL_FLOAT64)
 
     @settings(max_examples=10)
     @given(f0_bins=st.integers(min_value=-20, max_value=20))
     def test_oafilter_and_oaresample(self, cupy_available, f0_bins):
-        cp = cupy_available
         fs, nfft = 1e6, 256
         x = np.tile(unit_tone(nfft * 40, fs, f0_bins * fs / nfft), (2, 1))
 
         kws = {'fs': fs, 'nfft': nfft, 'window': 'hamming', 'passband': (-0.2e6, 0.2e6)}
-        y_np = fourier.oafilter(x[0], **kws)
-        y_cp = fourier.oafilter(cp.asarray(x[0]), **kws)
+        y_np, y_cp = numpy_and_cupy(cupy_available, fourier.oafilter, x[0], **kws)
         # window multiply, fft(nfft), zeroing, ifft(nfft), window multiply, overlap add
         sigma = cross_backend_rms(x.dtype, [nfft, nfft], n_elementwise=3)
-        assert_backends_agree(y_cp, y_np, sigma, 'oafilter')
+        assert_close(y_cp, y_np, sigma=sigma, err_msg='oafilter')
 
-        kws = {
-            'window': 'hamming',
-            'axis': 1,
-            'frequency_shift': 8 * fs / nfft,
-            'filter_bandwidth': 0.2e6,
-        }
-        y_np = fourier.oaresample(x, nfft // 2, nfft, fs, **kws)
-        y_cp = fourier.oaresample(cp.asarray(x), nfft // 2, nfft, fs, **kws)
+        shift = 8 * fs / nfft
+        kws = {'window': 'hamming', 'axis': 1, 'filter_bandwidth': 0.2e6}
+        resample = functools.partial(fourier.oaresample, frequency_shift=shift, **kws)
+        y_np, y_cp = numpy_and_cupy(cupy_available, resample, x, nfft // 2, nfft, fs)
         # as oafilter, plus the FIR multiply and the output scaling
         sigma = cross_backend_rms(x.dtype, [nfft, nfft // 2], n_elementwise=5)
-        assert_backends_agree(y_cp, y_np, sigma, 'oaresample')
+        assert_close(y_cp, y_np, sigma=sigma, err_msg='oaresample')
 
     @given(x=iq_waveforms(min_size=256, max_size=1024, multiple_of=64, channels=4))
-    def test_fft_out_buffer_and_chunking(self, cupy_available, x):
-        cp = cupy_available
+    def test_fft_out_buffer_and_chunking(self, cupy_available, max_cupy_fft_chunk, x):
         X_np = fourier.fft(x, axis=1)
         x_np_back = fourier.ifft(X_np, axis=1)
 
         # small enough that the 4-row input is split across several calls
-        with max_cupy_fft_chunk(x.shape[1]):
-            x_cp = cp.asarray(x)
-            out = cp.empty_like(x_cp)
-            X_cp = fourier.fft(x_cp, axis=1, out=out)
-            assert X_cp is out or cp.shares_memory(X_cp, out)
-            x_cp_back = fourier.ifft(X_cp, axis=1, out=cp.empty_like(x_cp))
+        max_cupy_fft_chunk(x.shape[1])
+        x_cp = cupy_available.asarray(x)
+        out = cupy_available.empty_like(x_cp)
+        X_cp = fourier.fft(x_cp, axis=1, out=out)
+        assert X_cp is out or cupy_available.shares_memory(X_cp, out)
+        x_cp_back = fourier.ifft(X_cp, axis=1, out=cupy_available.empty_like(x_cp))
 
         n = x.shape[1]
-        assert_backends_agree(X_cp, X_np, cross_backend_rms(x.dtype, [n]), 'fft')
+        assert_close(X_cp, X_np, sigma=cross_backend_rms(x.dtype, [n]), err_msg='fft')
         sigma = cross_backend_rms(x.dtype, [n, n])
-        assert_backends_agree(x_cp_back, x_np_back, sigma, 'ifft')
+        assert_close(x_cp_back, x_np_back, sigma=sigma, err_msg='ifft')

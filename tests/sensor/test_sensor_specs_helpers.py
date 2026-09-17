@@ -7,6 +7,7 @@ override files in sweeps/sites*, mirroring the downstream sensor configuration.
 
 from __future__ import annotations
 
+import itertools
 import logging
 import math
 import re
@@ -16,6 +17,7 @@ import msgspec
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from pytest_lazy_fixtures import lf
 from site_strategies import (
     ANTENNA_MODELS,
     OTHER_ID,
@@ -25,14 +27,15 @@ from site_strategies import (
     SurveyCaptureCls,
     SurveySweepCls,
     make_site_capture,
+    make_site_capture_kws,
     make_site_sweep,
 )
-from site_strategies import capture_dict as site_capture_dict
 from sweep_strategies import (
     CaptureCls,
     capture_tuples,
     frequency_bin_range_loop,
     make_capture,
+    make_capture_kws,
     make_sweep,
     port_scalars,
     port_values,
@@ -48,22 +51,15 @@ from striqt.analysis.specs.helpers import frozendict
 H = ss.specs.helpers
 Remap = ss.specs.CaptureRemap
 
+SNR_BY_OFFSET = {'100': 1.0, '200': 2.0}
+DEFAULT_SNR = Remap(key='frequency_offset', lookup=SNR_BY_OFFSET, default=-1.0)
+AB12_SNR = Remap(key='frequency_offset', lookup={100: 11.0})
 ADJUST = {
-    'defaults': {
-        'lo_shift': 'left',
-        'snr': Remap(
-            key='frequency_offset', lookup={'100': 1.0, '200': 2.0}, default=-1.0
-        ),
-    },
-    'ab12': {
-        'snr': Remap(key='frequency_offset', lookup={100: 11.0}),
-        'lo_shift': 'right',
-    },
+    'defaults': {'lo_shift': 'left', 'snr': DEFAULT_SNR},
+    'ab12': {'snr': AB12_SNR, 'lo_shift': 'right'},
 }
-
-
-def capture_dict(**kws):
-    return make_capture(**kws).to_dict()
+MODEL_FROM_NAME = Remap(key='antenna_name', lookup=ANTENNA_MODELS)
+NAME_FROM_PORT = Remap(key='port', lookup={0: 'Omni'})
 
 
 def first_site_capture(sweep, source_id, **capture_kws):
@@ -118,10 +114,11 @@ def test_split_soapy_capture_fields():
     ]
 
 
-def test_split_leaves_adjust_analysis_intact():
+def test_split_leaves_adjust_analysis_intact(subtests):
     capture = make_capture(port=(0, 1), adjust_analysis={'a': (1, 2, 3)})
     for c in H.split_capture_ports(capture):
-        assert c.adjust_analysis == {'a': (1, 2, 3)}
+        with subtests.test(msg=f'port {c.port}'):
+            assert c.adjust_analysis == {'a': (1, 2, 3)}
 
 
 @pytest.mark.xfail(
@@ -145,16 +142,9 @@ def test_pairwise_without_previous_capture():
 def test_pairwise_pairs_by_index():
     c1 = make_capture(port=(0, 1), frequency_offset=1.0)
     c2 = make_capture(port=(0, 1), frequency_offset=2.0)
-    expected = [
-        (
-            make_capture(port=0, frequency_offset=1.0),
-            make_capture(port=0, frequency_offset=2.0),
-        ),
-        (
-            make_capture(port=1, frequency_offset=1.0),
-            make_capture(port=1, frequency_offset=2.0),
-        ),
-    ]
+    c1_by_port = [make_capture(port=p, frequency_offset=1.0) for p in (0, 1)]
+    c2_by_port = [make_capture(port=p, frequency_offset=2.0) for p in (0, 1)]
+    expected = list(zip(c1_by_port, c2_by_port))
     assert H.pairwise_by_port(c1, c2, False) == expected
 
 
@@ -221,10 +211,9 @@ def test_unique_ports_ignores_other_loops(captures):
     assert H.get_unique_ports(captures, loops) == H.get_unique_ports(captures)
 
 
-def test_unique_ports_of_fixtures(cw_sweep, calibration_sweep):
-    assert H.get_unique_ports(cw_sweep.captures, cw_sweep.loops) == (0, 1)
-    cal = calibration_sweep
-    assert H.get_unique_ports(cal.captures, cal.loops) == (0, 1)
+@pytest.mark.parametrize('sweep', [lf('cw_sweep'), lf('calibration_sweep')])
+def test_unique_ports_of_fixtures(sweep):
+    assert H.get_unique_ports(sweep.captures, sweep.loops) == (0, 1)
 
 
 # %% get_capture_type
@@ -278,15 +267,11 @@ def test_describe_capture_names_the_field_driven_by_a_key():
         captures=(make_capture(frequency_offset=100.0),),
         adjust_captures={'defaults': {'snr': remap}},
     )
+    capture, fields = sweep.captures[0], ('frequency_offset',)
     kws = {'adjust_spec': sweep.adjust_captures, 'source_id': None}
-    text = H.describe_capture(sweep.captures[0], ('frequency_offset',), **kws)
+    text = H.describe_capture(capture, fields, **kws)
     assert text.startswith('snr: ')
-    other = H.describe_capture(
-        sweep.captures[0],
-        ('frequency_offset',),
-        adjust_spec=sweep.adjust_captures,
-        source_id='ab12',
-    )
+    other = H.describe_capture(capture, fields, **{**kws, 'source_id': 'ab12'})
     assert text == other
 
 
@@ -320,13 +305,13 @@ def test_concat_group_sizes_ignore_subclass_fields(captures, min_size):
     )
 
 
-def test_concat_group_sizes_of_fixtures(cw_sweep, calibration_sweep):
+@pytest.mark.parametrize('sweep', [lf('cw_sweep'), lf('calibration_sweep')])
+def test_concat_group_sizes_of_fixtures(sweep):
     # a group only closes while every distinct shape is still pending *and* remaining,
     # so mixed sweeps collapse into a single group once any shape runs out
-    assert H.concat_group_sizes(cw_sweep.captures) == [4]
-    cal = H.loop_captures(calibration_sweep)
-    assert H.concat_group_sizes(cal) == [len(cal)]
-    assert H.concat_group_sizes(cw_sweep.captures, min_size=10) == [4]
+    captures = H.loop_captures(sweep)
+    assert H.concat_group_sizes(captures) == [len(captures)]
+    assert H.concat_group_sizes(captures, min_size=10) == [len(captures)]
 
 
 # %% max_by_frequency
@@ -488,18 +473,14 @@ def test_repeat_is_not_expanded(cw_sweep):
 
 
 def test_loop_order_is_declaration_order_with_captures_innermost():
-    captures = (make_capture(port=0), make_capture(port=1))
+    ports, offsets, snrs = (0, 1), (1e3, 2e3), (0.0, 5.0, 10.0)
+    captures = tuple(make_capture(port=p) for p in ports)
     loops = (
-        ss.specs.List(field='frequency_offset', values=(1e3, 2e3)),
+        ss.specs.List(field='frequency_offset', values=offsets),
         ss.specs.Range(field='snr', start=0, stop=10, step=5),
     )
     result = H.loop_captures(make_sweep(captures=captures, loops=loops))
-    expected = [
-        (fo, snr, port)
-        for fo in (1e3, 2e3)
-        for snr in (0.0, 5.0, 10.0)
-        for port in (0, 1)
-    ]
+    expected = list(itertools.product(offsets, snrs, ports))
     assert [(c.frequency_offset, c.snr, c.port) for c in result] == expected
 
 
@@ -579,22 +560,24 @@ def test_analysis_loop_merges_with_the_captures_adjust_analysis():
     assert dict(result.adjust_analysis) == {'keep': 1, 'window': 'hann'}
 
 
-@given(
-    bandwidths=st.lists(
-        st.sampled_from((0.5e6, 1e6, 2e6, float('inf'))),
-        min_size=1,
-        max_size=4,
-        unique=True,
-    )
+@pytest.mark.parametrize(
+    'bandwidths, expected',
+    [
+        ((0.5e6, 1e6, 2e6, math.inf), [0.5e6, 1e6, math.inf]),
+        ((math.inf, 2e6, 0.5e6), [math.inf, 0.5e6]),
+        ((2e6,), []),
+    ],
+    ids=['ascending', 'order_kept', 'all_above_nyquist'],
 )
-def test_loop_only_nyquist_keeps_bandwidths_within_the_sample_rate(bandwidths):
+def test_loop_only_nyquist_keeps_bandwidths_within_the_sample_rate(
+    bandwidths, expected
+):
     captures = (make_capture(sample_rate=1e6, duration=1e-3),)
-    loops = (ss.specs.List(field='analysis_bandwidth', values=tuple(bandwidths)),)
+    loops = (ss.specs.List(field='analysis_bandwidth', values=bandwidths),)
     options = ss.specs.SweepOptions(loop_only_nyquist=True)
     filtered = H.loop_captures(
         make_sweep(captures=captures, loops=loops, options=options)
     )
-    expected = [b for b in bandwidths if b in (0.5e6, 1e6, math.inf)]
     assert [c.analysis_bandwidth for c in filtered] == expected
 
 
@@ -620,11 +603,8 @@ def test_calibration_fixture_expansion(calibration_sweep):
 
 def test_adjustments_apply_before_loops_take_priority():
     loops = (ss.specs.List(field='lo_shift', values=('right',)),)
-    sweep = make_sweep(
-        captures=(make_capture(),),
-        loops=loops,
-        adjust_captures={'defaults': {'lo_shift': 'left'}},
-    )
+    adjust = {'defaults': {'lo_shift': 'left'}}
+    sweep = make_sweep(captures=(make_capture(),), loops=loops, adjust_captures=adjust)
     assert H.loop_captures(sweep)[0].lo_shift == 'right'
     assert H.loop_captures(sweep.replace(loops=()))[0].lo_shift == 'left'
 
@@ -661,12 +641,13 @@ def test_site_adjustments_apply_to_calibration_points(site_calibration_sweep):
     }
 
 
-def test_tuple_port_fields_survive_looping():
+def test_tuple_port_fields_survive_looping(subtests):
     capture = make_capture(port=(0, 1), external_lo_frequency=(1e9, 2e9))
     loops = (ss.specs.List(field='frequency_offset', values=(1.0, 2.0)),)
     for c in H.loop_captures(make_sweep(captures=(capture,), loops=loops)):
-        assert c.port == (0, 1)
-        assert c.external_lo_frequency == (1e9, 2e9)
+        with subtests.test(msg=f'frequency_offset {c.frequency_offset}'):
+            assert c.port == (0, 1)
+            assert c.external_lo_frequency == (1e9, 2e9)
 
 
 @given(
@@ -759,11 +740,11 @@ def test_remaps_see_loop_values_given_as_yaml_strings(site_sweep):
 
 def test_adjust_captures_source_overrides_and_falls_back_to_defaults():
     spec = make_sweep(adjust_captures=ADJUST).adjust_captures
-    hit = H.adjust_captures(capture_dict(frequency_offset=100.0), spec, 'ab12')
+    hit = H.adjust_captures(make_capture_kws(frequency_offset=100.0), spec, 'ab12')
     assert hit == {'lo_shift': 'right', 'snr': 11.0}
-    miss = H.adjust_captures(capture_dict(frequency_offset=300.0), spec, 'ab12')
+    miss = H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, 'ab12')
     assert miss == {'lo_shift': 'right', 'snr': -1.0}
-    unknown = H.adjust_captures(capture_dict(frequency_offset=300.0), spec, None)
+    unknown = H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None)
     assert unknown == {'lo_shift': 'left', 'snr': -1.0}
 
 
@@ -771,7 +752,7 @@ def test_adjust_captures_missing_required_source_lookup_raises():
     adjust = {'ab12': {'snr': Remap(key='frequency_offset', lookup={100: 1.0})}}
     spec = make_sweep(adjust_captures=adjust).adjust_captures
     with pytest.raises(KeyError, match='is missing a lookup for key'):
-        H.adjust_captures(capture_dict(frequency_offset=300.0), spec, 'ab12')
+        H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, 'ab12')
 
 
 @pytest.mark.xfail(
@@ -783,35 +764,35 @@ def test_adjust_captures_missing_required_default_lookup_raises():
     adjust = {'defaults': {'snr': Remap(key='frequency_offset', lookup={100: 1.0})}}
     spec = make_sweep(adjust_captures=adjust).adjust_captures
     with pytest.raises(KeyError, match='is missing a lookup for key'):
-        H.adjust_captures(capture_dict(frequency_offset=300.0), spec, None)
+        H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None)
 
 
 def test_adjust_captures_omits_optional_misses():
     remap = Remap(key='frequency_offset', lookup={100: 1.0}, required=False)
     spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
-    assert H.adjust_captures(capture_dict(frequency_offset=300.0), spec, None) == {}
-    hit = H.adjust_captures(capture_dict(frequency_offset=100.0), spec, None)
+    assert H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None) == {}
+    hit = H.adjust_captures(make_capture_kws(frequency_offset=100.0), spec, None)
     assert hit == {'snr': 1.0}
 
 
 def test_adjust_captures_per_port_key():
     remap = Remap(key='frequency_offset', lookup={100: 5.0, 200: 6.0})
     spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
-    capture = capture_dict(port=(0, 1), frequency_offset=(100.0, 200.0))
+    capture = make_capture_kws(port=(0, 1), frequency_offset=(100.0, 200.0))
     assert H.adjust_captures(capture, spec, None) == {'snr': (5.0, 6.0)}
 
 
 def test_adjust_captures_per_port_miss_uses_the_default():
     remap = Remap(key='frequency_offset', lookup={100: 5.0}, default=0.0)
     spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
-    capture = capture_dict(port=(0, 1), frequency_offset=(100.0, 200.0))
+    capture = make_capture_kws(port=(0, 1), frequency_offset=(100.0, 200.0))
     assert H.adjust_captures(capture, spec, None) == {'snr': (5.0, 0.0)}
 
 
 def test_adjust_captures_per_port_miss_omits_optional_field():
     remap = Remap(key='frequency_offset', lookup={100: 5.0}, required=False)
     spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
-    capture = capture_dict(port=(0, 1), frequency_offset=(100.0, 200.0))
+    capture = make_capture_kws(port=(0, 1), frequency_offset=(100.0, 200.0))
     assert H.adjust_captures(capture, spec, None) == {}
 
 
@@ -819,7 +800,7 @@ def test_adjust_captures_multi_field_key():
     remap = Remap(key=('frequency_offset', 'lo_shift'), lookup={'[100.0, "none"]': 7.0})
     spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
     assert (100.0, 'none') in spec['defaults']['snr'].lookup
-    capture = capture_dict(frequency_offset=100.0, lo_shift='none')
+    capture = make_capture_kws(frequency_offset=100.0, lo_shift='none')
     assert H.adjust_captures(capture, spec, None) == {'snr': 7.0}
 
 
@@ -869,14 +850,8 @@ def test_source_override_of_a_defaults_alias_keeps_its_evaluation_position():
     # the source block lists antenna_model before antenna_name, but antenna_name
     # was declared first in defaults, so the merged field order still resolves it first
     adjust = {
-        'defaults': {
-            'antenna_name': 'Unspecified',
-            'antenna_model': Remap(key='antenna_name', lookup=ANTENNA_MODELS),
-        },
-        RADIO_ID: {
-            'antenna_model': Remap(key='antenna_name', lookup=ANTENNA_MODELS),
-            'antenna_name': Remap(key='port', lookup={0: 'Omni'}),
-        },
+        'defaults': {'antenna_name': 'Unspecified', 'antenna_model': MODEL_FROM_NAME},
+        RADIO_ID: {'antenna_model': MODEL_FROM_NAME, 'antenna_name': NAME_FROM_PORT},
     }
     sweep = make_site_sweep(adjust_captures=adjust)
     assert first_site_capture(sweep, RADIO_ID).antenna_model == 'OmniModel'
@@ -895,7 +870,7 @@ def test_nan_string_fixed_value_becomes_float_nan(site_survey_sweep):
 
 
 def test_per_port_miss_uses_the_default(site_sweep):
-    capture = site_capture_dict(port=(0, 1), center_frequency=(7350e6, 7350e6))
+    capture = make_site_capture_kws(port=(0, 1), center_frequency=(7350e6, 7350e6))
     result = H.adjust_captures(capture, site_sweep.adjust_captures, RADIO_ID)
     assert result['channel_name'] == (None, None)
 
@@ -931,12 +906,8 @@ def test_remap_keyed_on_an_unknown_field_is_rejected():
     'str, so remaps keyed on numeric aliases reject numeric lookup keys',
 )
 def test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys():
-    adjust = {
-        'defaults': {
-            'switch_input': 1,
-            'antenna_index': Remap(key='switch_input', lookup={1: 7}),
-        }
-    }
+    index_from_switch = Remap(key='switch_input', lookup={1: 7})
+    adjust = {'defaults': {'switch_input': 1, 'antenna_index': index_from_switch}}
     sweep = make_site_sweep(adjust_captures=adjust)
     assert first_site_capture(sweep, None).antenna_index == 7
 
@@ -949,20 +920,17 @@ def test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys():
 )
 def test_chained_remap_declared_before_its_key_resolves():
     adjust = {
-        'defaults': {
-            'antenna_model': Remap(key='antenna_name', lookup=ANTENNA_MODELS),
-            'antenna_name': Remap(key='port', lookup={0: 'Omni'}),
-        }
+        'defaults': {'antenna_model': MODEL_FROM_NAME, 'antenna_name': NAME_FROM_PORT}
     }
     sweep = make_site_sweep(adjust_captures=adjust)
-    result = H.adjust_captures(site_capture_dict(), sweep.adjust_captures, None)
+    result = H.adjust_captures(make_site_capture_kws(), sweep.adjust_captures, None)
     assert result.get('antenna_model') == 'OmniModel'
 
 
 def test_empty_string_source_key_is_valid_hex():
     # documented as current: the built-in function sources report '' as their id
     sweep = make_site_sweep(adjust_captures={'': {'radio_name': 'anon'}})
-    result = H.adjust_captures(site_capture_dict(), sweep.adjust_captures, '')
+    result = H.adjust_captures(make_site_capture_kws(), sweep.adjust_captures, '')
     assert result == {'radio_name': 'anon'}
 
 
@@ -996,12 +964,18 @@ def test_list_capture_adjustments_empty(cw_sweep):
     assert H.list_capture_adjustments(cw_sweep, 'ffff') == {}
 
 
-@given(offsets=st.lists(st.sampled_from((100.0, 200.0, 300.0)), min_size=1, max_size=6))
-def test_list_capture_adjustments_are_unique_in_first_seen_order(offsets):
-    loops = (ss.specs.List(field='frequency_offset', values=tuple(offsets)),)
+@pytest.mark.parametrize(
+    'offsets, expected',
+    [
+        ((100.0,), (1.0,)),
+        ((300.0, 100.0, 300.0, 200.0), (-1.0, 1.0, 2.0)),
+        ((200.0, 100.0, 200.0, 100.0), (2.0, 1.0)),
+    ],
+    ids=['single', 'miss_first', 'repeated_pairs'],
+)
+def test_list_capture_adjustments_are_unique_in_first_seen_order(offsets, expected):
+    loops = (ss.specs.List(field='frequency_offset', values=offsets),)
     sweep = make_sweep(captures=(make_capture(),), loops=loops, adjust_captures=ADJUST)
-    table = {100.0: 1.0, 200.0: 2.0}
-    expected = tuple(dict.fromkeys(table.get(fo, -1.0) for fo in offsets))
     assert H.list_capture_adjustments(sweep, 'ffff')['snr'] == expected
 
 
@@ -1028,11 +1002,8 @@ def test_adjust_analysis_replaces_matching_fields_everywhere(cw_sweep, fo):
     assert type(adjusted) is type(analysis)
     hash(adjusted)
     before, after = analysis.to_dict(), adjusted.to_dict()
-    touched = {
-        name
-        for name, kws in before.items()
-        if isinstance(kws, dict) and 'frequency_offset' in kws
-    }
+    measurement_kws = {n: kws for n, kws in before.items() if isinstance(kws, dict)}
+    touched = {n for n, kws in measurement_kws.items() if 'frequency_offset' in kws}
     assert touched
     for name in before:
         if name in touched:

@@ -3,25 +3,25 @@ the resampler and the analysis filter consume"""
 
 from __future__ import annotations
 
-import pytest
+from math import inf
 
-import striqt.sensor as ss
+import pytest
+from soapy_factories import MCR, soapy_capture, source_spec
+
 from striqt.sensor.lib.compute import corrections
 
-MCR = 125e6
-SOURCE = ss.specs.SoapySource(master_clock_rate=MCR)
+SOURCE = source_spec()
 
 
 def _capture(**kws):
-    kws = {
-        'port': 0,
-        'center_frequency': 1e9,
-        'gain': 0,
+    """a 10 ms capture at the SoapyCapture defaults of no analysis filter and host
+    resampling, unless `kws` says otherwise"""
+    return soapy_capture(**{
         'duration': 10e-3,
-        'sample_rate': MCR,
+        'analysis_bandwidth': inf,
+        'host_resample': True,
         **kws,
-    }
-    return ss.specs.SoapyCapture(**kws)
+    })
 
 
 # %% get_correction_overlaps

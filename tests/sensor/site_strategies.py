@@ -32,13 +32,13 @@ Remap = ss.specs.CaptureRemap
 CHANNEL_NAMES = {3750e6: '3750 MHz', 3829.8e6: '3830 MHz', 3900e6: '3900 MHz'}
 ANTENNA_MODELS = {'Omni': 'OmniModel', '1x32': 'PanelModel'}
 POLARIZATIONS = {'Omni': 'Vertical', '1x32': 'Linear +45'}
+SWITCHED_ANTENNA_INDEX = {(0, 0): 0, (0, 1): 1, (1, 0): 2, (1, 1): 3}
+CHANNEL_NAME_REMAP = Remap(key='center_frequency', lookup=CHANNEL_NAMES, default=None)
 
 # python mirror of sweeps/sites/*.yaml
 SITE_ADJUST = {
     'defaults': {
-        'channel_name': Remap(
-            key='center_frequency', lookup=CHANNEL_NAMES, default=None
-        ),
+        'channel_name': CHANNEL_NAME_REMAP,
         'antenna_index': Remap(key='port', lookup={0: 0, 1: 1}),
         'antenna_name': 'Unspecified',
         'antenna_polarization': 'Unspecified',
@@ -62,22 +62,25 @@ SITE_ADJUST = {
         'antenna_name': 'Omni',
         'gain': Remap(key=('channel_name',), lookup={'3750 MHz': 0}, required=False),
         'antenna_index': Remap(
-            key=('switch_input', 'port'),
-            lookup={(0, 0): 0, (0, 1): 1, (1, 0): 2, (1, 1): 3},
+            key=('switch_input', 'port'), lookup=SWITCHED_ANTENNA_INDEX
         ),
     },
 }
 
 
-def make_site_capture(cls=SiteCaptureCls, **kws):
-    defaults = {
+def make_site_capture_kws(**kws) -> dict:
+    return {
         'port': 0,
         'center_frequency': 3750e6,
         'gain': -10,
         'sample_rate': 53.76e6,
         'duration': 1e-3,
+        **kws,
     }
-    return cls(**{**defaults, **kws})
+
+
+def make_site_capture(cls=SiteCaptureCls, **kws):
+    return cls(**make_site_capture_kws(**kws))
 
 
 def make_site_sweep(
@@ -88,10 +91,6 @@ def make_site_sweep(
     if len(captures) == 0:
         captures = (make_site_capture(cls=cls.schema.capture),)
     return cls(source=SOURCE, captures=tuple(captures), loops=tuple(loops), **kws)
-
-
-def capture_dict(**kws) -> dict:
-    return dict(make_site_capture(**kws).to_dict())
 
 
 center_frequency_keys = st.sampled_from(tuple(CHANNEL_NAMES))

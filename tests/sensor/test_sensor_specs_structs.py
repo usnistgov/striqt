@@ -8,27 +8,26 @@ import math
 
 import msgspec
 import pytest
-from conftest import raises_on_both_paths
+from conftest import construct_both, raises_on_both_paths
 from hypothesis import given
 from hypothesis import strategies as st
-from site_strategies import SiteCaptureCls, make_site_sweep
-from site_strategies import capture_dict as site_capture_dict
+from site_strategies import SiteCaptureCls, make_site_capture_kws, make_site_sweep
 from sweep_strategies import (
     SOURCE,
     CalSourceCls,
     CalSweepCls,
     SweepCls,
-    calibration_sweep_dict,
     consistent_port_gain,
     duplicate_field_loops,
     make_calibration_capture,
     make_calibration_sweep,
+    make_calibration_sweep_kws,
     make_capture,
     make_sweep,
+    make_sweep_kws,
     mismatched_port_gain,
     misplaced_repeat_loops,
     scalar_port_tuple_gain,
-    sweep_dict,
 )
 
 import striqt.analysis as sa
@@ -150,14 +149,14 @@ class TestExtensionCapture:
 
     def test_nan_fails_a_lower_bound(self):
         with pytest.raises(msgspec.ValidationError, match='mast_height'):
-            SiteCaptureCls.from_dict(site_capture_dict(mast_height=math.nan))
+            SiteCaptureCls.from_dict(make_site_capture_kws(mast_height=math.nan))
 
     def test_null_analysis_bandwidth_is_rejected(self):
         # documented as current: inf, not null, disables the analysis filter
         with pytest.raises(
             msgspec.ValidationError, match='Expected `float`, got `null`'
         ):
-            SiteCaptureCls.from_dict(site_capture_dict(analysis_bandwidth=None))
+            SiteCaptureCls.from_dict(make_site_capture_kws(analysis_bandwidth=None))
 
 
 # %% SoapySource
@@ -313,11 +312,8 @@ class _ConflictingCapture(ss.specs.SingleToneCapture, frozen=True, kw_only=True)
 class TestSweepLoops:
     @given(loops=misplaced_repeat_loops())
     def test_repeat_must_be_first(self, loops):
-        captures = (make_capture(),)
-        with pytest.raises(msgspec.ValidationError, match=REPEAT_MSG):
-            make_sweep(captures=captures, loops=loops)
-        with pytest.raises(msgspec.ValidationError, match=REPEAT_MSG):
-            SweepCls.from_dict(sweep_dict(captures, loops))
+        kws = make_sweep_kws(captures=(make_capture(),), loops=loops)
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, REPEAT_MSG, **kws)
 
     def test_two_repeats_rejected(self):
         with pytest.raises(msgspec.ValidationError, match=REPEAT_MSG):
@@ -327,10 +323,9 @@ class TestSweepLoops:
     def test_duplicate_loop_field_rejected(self, loops_field):
         loops, field = loops_field
         match = f"{DUPLICATE_MSG} '{field}'"
-        with pytest.raises(msgspec.ValidationError, match=match):
-            make_sweep(loops=loops)
-        with pytest.raises(msgspec.ValidationError, match=match):
-            SweepCls.from_dict(sweep_dict(loops=loops))
+        raises_on_both_paths(
+            SweepCls, msgspec.ValidationError, match, **make_sweep_kws(loops=loops)
+        )
 
 
 class TestSweepCaptures:
@@ -349,14 +344,10 @@ class TestSweepCaptures:
 
 
 class TestSweepAdjustCaptures:
-    @pytest.mark.parametrize('path', ['direct', 'from_dict'])
-    def test_lookup_keys_are_converted_before_freezing(self, path):
+    def test_lookup_keys_are_converted_before_freezing(self, construct):
         remap = Remap(key='frequency_offset', lookup={'1': 2.0})
-        if path == 'direct':
-            sweep = make_sweep(adjust_captures={'defaults': {'snr': remap}})
-        else:
-            adjust = {'defaults': {'snr': remap.to_dict()}}
-            sweep = SweepCls.from_dict(sweep_dict(adjust_captures=adjust))
+        adjust = {'defaults': {'snr': remap}}
+        sweep = construct(SweepCls, **make_sweep_kws(adjust_captures=adjust))
         assert isinstance(sweep.adjust_captures, frozendict)
         lookup = sweep.adjust_captures['defaults']['snr'].lookup
         assert lookup == {1.0: 2.0}
@@ -373,10 +364,8 @@ class TestSweepAdjustCaptures:
         ],
     )
     def test_invalid_adjustments_rejected(self, adjust, match):
-        with pytest.raises(msgspec.ValidationError, match=match):
-            make_sweep(adjust_captures=adjust)
-        with pytest.raises(msgspec.ValidationError, match=match):
-            SweepCls.from_dict(sweep_dict(adjust_captures=adjust))
+        kws = make_sweep_kws(adjust_captures=adjust)
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
     @pytest.mark.xfail(
         strict=True,
@@ -396,32 +385,24 @@ class TestSweepAdjustCaptures:
 
 class TestCalibrationSweep:
     def test_single_capture_needs_no_implied_loops(self):
-        sweep = make_calibration_sweep()
-        assert len(sweep.captures) == 1
-        CalSweepCls.from_dict(calibration_sweep_dict())
+        for sweep in construct_both(CalSweepCls, **make_calibration_sweep_kws()):
+            assert len(sweep.captures) == 1
 
     def test_multiple_captures_need_implied_loops(self):
         captures = (make_calibration_capture(), make_calibration_capture(gain=-10))
-        with pytest.raises(TypeError, match=IMPLIED_MSG):
-            make_calibration_sweep(captures=captures)
-        with pytest.raises(msgspec.ValidationError, match=IMPLIED_MSG):
-            CalSweepCls.from_dict(calibration_sweep_dict(captures=captures))
+        kws = make_calibration_sweep_kws(captures=captures)
+        raises_on_both_paths(CalSweepCls, TypeError, IMPLIED_MSG, **kws)
 
         peripheral = ss.specs.ManualYFactorPeripheral(
             enr=10, ambient_temperature=290, implied_loops=('gain',)
         )
-        sweep = make_calibration_sweep(captures=captures, calibration=peripheral)
-        assert len(sweep.captures) == 2
-        CalSweepCls.from_dict(
-            calibration_sweep_dict(captures=captures, calibration=peripheral.to_dict())
-        )
+        kws = make_calibration_sweep_kws(captures=captures, calibration=peripheral)
+        for sweep in construct_both(CalSweepCls, **kws):
+            assert len(sweep.captures) == 2
 
     def test_source_calibration_must_be_none(self):
-        source = CalSourceCls(calibration='cal.nc')
-        with pytest.raises(ValueError, match=SOURCE_CAL_MSG):
-            make_calibration_sweep(source=source)
-        with pytest.raises(msgspec.ValidationError, match=SOURCE_CAL_MSG):
-            CalSweepCls.from_dict(calibration_sweep_dict(source=source))
+        kws = make_calibration_sweep_kws(source=CalSourceCls(calibration='cal.nc'))
+        raises_on_both_paths(CalSweepCls, ValueError, SOURCE_CAL_MSG, **kws)
 
     def test_default_options_loop_only_nyquist(self):
         loops = (List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)

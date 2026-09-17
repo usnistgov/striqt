@@ -13,18 +13,36 @@ from typing import ClassVar
 import numpy as np
 import pytest
 from conftest import (
+    as_xp,
     dB_arrays,
     envelope_arrays,
-    for_each_namespace,
     iq_waveforms,
-    numpy_and_cupy,
     positive_power_arrays,
-    to_numpy,
 )
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
-from numpy.testing import assert_allclose, assert_array_equal
+from numeric_checks import (
+    FLOAT_DTYPES,
+    ROUNDOFF_SAFETY,
+    assert_close,
+    blocks,
+    by_dtype,
+    dB_tolerance,
+    dtype_id,
+    envelope_power_rtol,
+    func_id,
+    linear_stat_tol,
+    linear_tolerance_dB,
+    log_conversion_tol,
+    numpy_and_cupy,
+    pow_conversion_rtol,
+    roundtrip_dB_tol,
+    roundtrip_power_rtol,
+    to_numpy,
+    unit_roundoff,
+)
+from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib.arrays import float_dtype_like
 from striqt.waveform.lib.power_analysis import (
@@ -46,89 +64,6 @@ from striqt.waveform.lib.power_analysis import (
     unit_wave_to_linear,
 )
 
-# Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
-# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (log10f 2,
-# powf 8, hypotf 3 ulp) as well as libm (~1 ulp). Measured with
-# chores/tests/measure_db_accuracy.py: libm log10 1.1-1.9 ulp; CUDA libdevice on a
-# Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
-LOG10_ULP = 2
-POW_ULP = 8
-HYPOT_ULP = 3
-ROUNDOFF_SAFETY = 2
-DB_PER_NEPER = 10 / np.log(10)
-
-
-def unit_roundoff(dtype):
-    return np.finfo(dtype).eps / 2
-
-
-def log_conversion_tol(dtype, scale, complex_input=False, n_impl=1):
-    """(rtol, atol) for scale*log10(|x|), against exact math (n_impl=1) or a second
-    implementation (n_impl=2).
-
-    Roundoff on the input side of the log becomes an absolute dB error, which is what
-    bounds the result near 0 dB where ulps of the output are meaningless.
-    """
-    u = unit_roundoff(dtype)
-    rtol = 2 * u * (LOG10_ULP + 0.5)
-    input_ulp = (HYPOT_ULP if complex_input else 0) + 0.5
-    atol = (scale / np.log(10)) * 2 * u * input_ulp
-    return ROUNDOFF_SAFETY * n_impl * rtol, ROUNDOFF_SAFETY * n_impl * atol
-
-
-def pow_conversion_rtol(dtype, max_abs_dB, n_impl=1):
-    """rtol for 10**(x/10) with |x| <= max_abs_dB.
-
-    Rounding x/10 perturbs the exponent, so its effect scales with |x|.
-    """
-    u = unit_roundoff(dtype)
-    rtol = u * (np.log(10) * max_abs_dB / 10 + 2 * POW_ULP)
-    return ROUNDOFF_SAFETY * n_impl * rtol
-
-
-def envelope_power_rtol(dtype, complex_input=False, n_impl=1):
-    """rtol for |x|**2"""
-    u = unit_roundoff(dtype)
-    rtol = 2 * u * (0.5 + (2 * HYPOT_ULP if complex_input else 0))
-    return ROUNDOFF_SAFETY * n_impl * rtol
-
-
-def linear_stat_tol(dtype, max_abs_dB, n, n_impl=1):
-    """(rtol, atol) in dB for dBlinmean/dBlinsum over n terms with |x| <= max_abs_dB"""
-    u = unit_roundoff(dtype)
-    rel_linear = pow_conversion_rtol(dtype, max_abs_dB) + ROUNDOFF_SAFETY * n * u
-    rtol, atol = log_conversion_tol(dtype, 10)
-    return n_impl * rtol, n_impl * (atol + DB_PER_NEPER * rel_linear)
-
-
-def roundtrip_power_rtol(dtype, max_abs_dB):
-    """rtol for dBtopow(powtodB(x)) with |powtodB(x)| <= max_abs_dB"""
-    rtol_dB, atol_dB = log_conversion_tol(dtype, 10)
-    dB_err = rtol_dB * max_abs_dB + atol_dB
-    return np.log(10) / 10 * dB_err + pow_conversion_rtol(dtype, max_abs_dB)
-
-
-def roundtrip_dB_tol(dtype, max_abs_dB):
-    """(rtol, atol) for powtodB(dBtopow(x)) with |x| <= max_abs_dB"""
-    rtol, atol = log_conversion_tol(dtype, 10)
-    return rtol, atol + DB_PER_NEPER * pow_conversion_rtol(dtype, max_abs_dB)
-
-
-def linear_tolerance_dB(rtol):
-    """express a relative tolerance on a linear power as a tolerance in dB"""
-    return 10 * np.log10(1 + rtol)
-
-
-def dB_tolerance(rtol, atol, max_abs_dB):
-    """express (rtol, atol) on a dB-valued output as its worst-case tolerance in dB"""
-    return atol + rtol * max_abs_dB
-
-
-def func_id(value):
-    """parametrize id for a function argument; other argument types get the default"""
-    return getattr(value, '__name__', None)
-
-
 # strategy factories for the valid inputs of each conversion, keyed by function
 INPUTS = {
     powtodB: positive_power_arrays,
@@ -144,6 +79,18 @@ LOG_CONVERSIONS = [(powtodB, 10), (envtodB, 20)]
 by_log_conversion = pytest.mark.parametrize(
     'func, scale', LOG_CONVERSIONS, ids=[func_id(f) for f, _ in LOG_CONVERSIONS]
 )
+for_each_float_dtype = pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
+
+
+NAMED_STATS = {
+    'min': np.min,
+    'max': np.max,
+    'peak': np.max,
+    'mean': np.mean,
+    'rms': np.mean,
+    'median': np.median,
+}
+BIN_STATS = {**NAMED_STATS, 0.9: functools.partial(np.quantile, q=0.9)}
 
 
 class TestUnitConversionProperties:
@@ -175,7 +122,7 @@ class TestUnitConversionProperties:
         assert unit_wave_to_linear(wave_unit) == unit_dB_to_linear(dB_unit)
 
     @pytest.mark.parametrize('unit', ['V', 'counts', ''])
-    def test_unknown_units_pass_through(self, unit):
+    def test_unknown_units_pass_through(self, subtests, unit):
         for func in (
             unit_dB_to_linear,
             unit_linear_to_dB,
@@ -183,17 +130,8 @@ class TestUnitConversionProperties:
             unit_wave_to_dB,
             unit_wave_to_linear,
         ):
-            assert func(unit) == unit
-
-
-NAMED_STATS = {
-    'min': np.min,
-    'max': np.max,
-    'peak': np.max,
-    'mean': np.mean,
-    'rms': np.mean,
-    'median': np.median,
-}
+            with subtests.test(msg=func.__name__):
+                assert func(unit) == unit
 
 
 class TestStatUfuncFromShorthand:
@@ -203,8 +141,8 @@ class TestStatUfuncFromShorthand:
 
     def _check(self, xp, kind, axis, expected):
         ufunc = stat_ufunc_from_shorthand(kind, xp=xp, axis=axis)
-        result = ufunc(xp.asarray(self.DATA))
-        assert_allclose(to_numpy(result), expected, rtol=self.RTOL)
+        result = ufunc(as_xp(xp, self.DATA))
+        assert_close(result, expected, rtol=self.RTOL)
 
     @pytest.mark.parametrize('kind', sorted(NAMED_STATS))
     @pytest.mark.parametrize('axis', [0, 1])
@@ -219,14 +157,19 @@ class TestStatUfuncFromShorthand:
         ufunc = stat_ufunc_from_shorthand(np.std, axis=0)
         assert_array_equal(ufunc(self.DATA), np.std(self.DATA, axis=0))
 
-    @pytest.mark.parametrize('kind', ['average', 'rms2', ''])
-    def test_unknown_name_raises(self, kind):
-        with pytest.raises(ValueError, match='kind argument'):
+    @pytest.mark.parametrize(
+        'kind, match',
+        [
+            ('average', 'kind argument'),
+            ('rms2', 'kind argument'),
+            ('', 'kind argument'),
+            (('mean',), 'invalid statistic'),
+        ],
+        ids=['average', 'rms2', 'empty', 'tuple'],
+    )
+    def test_invalid_kind_raises(self, kind, match):
+        with pytest.raises(ValueError, match=match):
             stat_ufunc_from_shorthand(kind)
-
-    def test_invalid_type_raises(self):
-        with pytest.raises(ValueError, match='invalid statistic'):
-            stat_ufunc_from_shorthand(('mean',))
 
 
 class TestConversionIdentities:
@@ -235,13 +178,13 @@ class TestConversionIdentities:
     @given(env=envelope_arrays(include_complex=False, dtype=np.float64))
     def test_envtopow_is_square(self, env):
         rtol = envelope_power_rtol(env.dtype, n_impl=2)
-        assert_allclose(envtopow(env), np.abs(env) ** 2, rtol=rtol)
+        assert_close(envtopow(env), np.abs(env) ** 2, rtol=rtol)
 
     @by_log_conversion
     @given(x=positive_power_arrays(dtype=np.float64))
     def test_log_conversion_is_scaled_log10(self, func, scale, x):
-        rtol, atol = log_conversion_tol(x.dtype, scale, n_impl=2)
-        assert_allclose(func(x), scale * np.log10(x), rtol=rtol, atol=atol)
+        tol = log_conversion_tol(x.dtype, scale, n_impl=2)
+        assert_close(func(x), scale * np.log10(x), **tol)
 
 
 class TestAlgebraicProperties:
@@ -256,42 +199,38 @@ class TestAlgebraicProperties:
     def test_equal_values(self, dB, n):
         """Property: dBlinmean([x, ..., x]) = x and dBlinsum([x, ..., x]) = x + 10*log10(n)."""
         arr = np.array([dB] * n, dtype=np.float64)
-        rtol, atol = linear_stat_tol(np.float64, abs(dB), n)
-        assert_allclose(dBlinmean(arr), dB, rtol=rtol, atol=atol)
-        assert_allclose(dBlinsum(arr), dB + 10 * np.log10(n), rtol=rtol, atol=atol)
+        tol = linear_stat_tol(np.float64, abs(dB), n)
+        assert_close(dBlinmean(arr), dB, **tol)
+        assert_close(dBlinsum(arr), dB + 10 * np.log10(n), **tol)
 
+    @pytest.mark.namespaces('numpy', 'cupy', 'dask')
+    @pytest.mark.parametrize('axis', [None, 0, 1])
     @given(
-        data=for_each_namespace(
-            dB_arrays(
-                min_value=-50,
-                max_value=50,
-                dtype=np.float64,
-                min_dims=2,
-                max_dims=2,
-                min_size=2,
-                max_size=10,
-            )
-        ),
-        axis=st.sampled_from([None, 0, 1]),
+        dB=dB_arrays(
+            min_value=-50,
+            max_value=50,
+            dtype=np.float64,
+            min_dims=2,
+            max_dims=2,
+            min_size=2,
+            max_size=10,
+        )
     )
-    def test_axis_reduces_dimension_and_relates_mean_to_sum(self, data, axis):
+    def test_axis_reduces_dimension_and_relates_mean_to_sum(self, xp, axis, dB):
         """Property: dBlinmean = dBlinsum - 10*log10(N) over the reduced axis."""
-        dB, xp_name = data
-        shape = to_numpy(dB).shape
         if axis is None:
-            expected_shape, N = (), to_numpy(dB).size
+            expected_shape, N = (), dB.size
         else:
-            expected_shape, N = shape[:axis] + shape[axis + 1 :], shape[axis]
+            expected_shape, N = dB.shape[:axis] + dB.shape[axis + 1 :], dB.shape[axis]
 
-        mean_result = to_numpy(dBlinmean(dB, axis=axis))
-        sum_result = to_numpy(dBlinsum(dB, axis=axis))
+        x = as_xp(xp, dB)
+        mean_result = to_numpy(dBlinmean(x, axis=axis))
+        sum_result = to_numpy(dBlinsum(x, axis=axis))
         assert mean_result.shape == sum_result.shape == expected_shape
 
-        rtol, atol = linear_stat_tol(np.float64, 50, N, n_impl=2)
         expected_mean = sum_result - 10 * np.log10(N)
-        assert_allclose(
-            mean_result, expected_mean, rtol=rtol, atol=atol, err_msg=xp_name
-        )
+        tol = linear_stat_tol(np.float64, 50, N, n_impl=2)
+        assert_close(mean_result, expected_mean, **tol)
 
 
 class TestInputPreservation:
@@ -316,13 +255,14 @@ class TestEdgeCases:
     def test_eps_avoids_neg_inf(self, func, scale, eps):
         result = func(np.array([0.0], dtype=np.float64), eps=eps)
         assert np.isfinite(result[0])
-        rtol, atol = log_conversion_tol(np.float64, scale, n_impl=2)
-        assert_allclose(result[0], scale * np.log10(eps), rtol=rtol, atol=atol)
+        tol = log_conversion_tol(np.float64, scale, n_impl=2)
+        assert_close(result[0], scale * np.log10(eps), **tol)
 
-    def test_empty_array(self):
+    def test_empty_array(self, subtests):
         empty = np.array([], dtype=np.float64)
         for func in (powtodB, dBtopow, envtodB, envtopow):
-            assert func(empty).shape == (0,)
+            with subtests.test(msg=func.__name__):
+                assert func(empty).shape == (0,)
 
     @given(
         value=st.floats(
@@ -331,79 +271,69 @@ class TestEdgeCases:
     )
     def test_scalar_like_array(self, value):
         result = powtodB(np.array(value, dtype=np.float64))
-        rtol, atol = log_conversion_tol(np.float64, 10, n_impl=2)
-        assert_allclose(result, 10 * np.log10(value), rtol=rtol, atol=atol)
+        tol = log_conversion_tol(np.float64, 10, n_impl=2)
+        assert_close(result, 10 * np.log10(value), **tol)
 
 
+@pytest.mark.namespaces('numpy', 'cupy', 'dask')
 class TestMultiBackend:
     """Properties that must hold on every available array namespace."""
 
     @pytest.mark.parametrize('func', [powtodB, dBtopow, envtodB, envtopow], ids=func_id)
-    @given(data=st.data(), dtype=st.sampled_from([np.float32, np.float64]))
-    def test_dtype_is_preserved(self, func, data, dtype):
+    @for_each_float_dtype
+    @given(data=st.data())
+    def test_dtype_is_preserved(self, xp, func, dtype, data):
         """Property: with min_dtype='float32', the input precision is kept."""
-        arr, xp_name = data.draw(for_each_namespace(INPUTS[func](dtype=dtype)))
-        assert to_numpy(func(arr, min_dtype='float32')).dtype == dtype, xp_name
+        x = as_xp(xp, data.draw(INPUTS[func](dtype=dtype)))
+        assert to_numpy(func(x, min_dtype='float32')).dtype == dtype
 
     @pytest.mark.parametrize(
         'func, limits', [(powtodB, (1e-3, 1e3)), (dBtopow, (-30, 30))], ids=func_id
     )
     @given(data=st.data())
-    def test_float16_is_promoted_to_float32(self, func, limits, data):
+    def test_float16_is_promoted_to_float32(self, xp, func, limits, data):
         """The expected value follows the float16-quantized input, not the float32
         draw it was made from."""
         strategy = INPUTS[func](
             dtype=np.float32, min_value=limits[0], max_value=limits[1]
         )
-        arr, xp_name = data.draw(for_each_namespace(strategy))
-        x16 = arr.astype(np.float16)
+        x16 = data.draw(strategy).astype(np.float16)
 
-        result = func(x16, min_dtype='float32')
-        assert to_numpy(result).dtype == np.float32, xp_name
+        result = func(as_xp(xp, x16), min_dtype='float32')
+        assert to_numpy(result).dtype == np.float32
 
-        expected = func(to_numpy(x16).astype(np.float32), min_dtype='float32')
+        expected = func(x16.astype(np.float32), min_dtype='float32')
         if func is dBtopow:
-            rtol, atol = pow_conversion_rtol(np.float32, 30, n_impl=2), 0
+            tol = {'rtol': pow_conversion_rtol(np.float32, 30, n_impl=2)}
         else:
-            rtol, atol = log_conversion_tol(np.float32, 10, n_impl=2)
-        assert_allclose(to_numpy(result), expected, rtol=rtol, atol=atol)
+            tol = log_conversion_tol(np.float32, 10, n_impl=2)
+        assert_close(result, expected, **tol)
 
-    @given(data=for_each_namespace(positive_power_arrays(dtype=np.float64)))
-    def test_powtodB_dBtopow_roundtrip(self, data):
-        arr, xp_name = data
-        original = to_numpy(arr)
-        roundtrip = to_numpy(dBtopow(powtodB(arr)))
-        rtol = roundtrip_power_rtol(np.float64, np.abs(powtodB(original)).max())
-        assert_allclose(roundtrip, original, rtol=rtol, err_msg=xp_name)
+    @given(power=positive_power_arrays(dtype=np.float64))
+    def test_powtodB_dBtopow_roundtrip(self, xp, power):
+        roundtrip = dBtopow(powtodB(as_xp(xp, power)))
+        rtol = roundtrip_power_rtol(np.float64, np.abs(powtodB(power)).max())
+        assert_close(roundtrip, power, rtol=rtol)
 
-    @given(
-        data=for_each_namespace(
-            dB_arrays(min_value=-140, max_value=100, dtype=np.float64)
-        )
-    )
-    def test_dBtopow_powtodB_roundtrip(self, data):
-        arr, xp_name = data
-        original = to_numpy(arr)
-        roundtrip = to_numpy(powtodB(dBtopow(arr)))
-        rtol, atol = roundtrip_dB_tol(np.float64, np.abs(original).max())
-        assert_allclose(roundtrip, original, rtol=rtol, atol=atol, err_msg=xp_name)
+    @given(dB=dB_arrays(min_value=-140, max_value=100, dtype=np.float64))
+    def test_dBtopow_powtodB_roundtrip(self, xp, dB):
+        roundtrip = powtodB(dBtopow(as_xp(xp, dB)))
+        assert_close(roundtrip, dB, **roundtrip_dB_tol(np.float64, np.abs(dB).max()))
 
-    @given(data=for_each_namespace(envelope_arrays(dtype=np.float64)))
-    def test_complex_envelopes(self, data):
+    @given(env=envelope_arrays(dtype=np.float64))
+    def test_complex_envelopes(self, xp, env):
         """Property: envtopow(z) = |z|² and envtodB(z) = 20*log10(|z|) for complex z."""
-        arr, xp_name = data
-        arr_np = to_numpy(arr)
+        x = as_xp(xp, env)
 
-        power = to_numpy(envtopow(arr))
+        power = to_numpy(envtopow(x))
         assert np.isrealobj(power)
         rtol = envelope_power_rtol(np.float64, complex_input=True, n_impl=2)
-        assert_allclose(power, np.abs(arr_np) ** 2, rtol=rtol, err_msg=xp_name)
+        assert_close(power, np.abs(env) ** 2, rtol=rtol)
 
-        dB = to_numpy(envtodB(arr))
+        dB = to_numpy(envtodB(x))
         assert np.isrealobj(dB)
-        rtol, atol = log_conversion_tol(np.float64, 20, complex_input=True, n_impl=2)
-        expected = 20 * np.log10(np.abs(arr_np))
-        assert_allclose(dB, expected, rtol=rtol, atol=atol, err_msg=xp_name)
+        tol = log_conversion_tol(np.float64, 20, complex_input=True, n_impl=2)
+        assert_close(dB, 20 * np.log10(np.abs(env)), **tol)
 
 
 class TestAbsAndEpsBranches:
@@ -422,35 +352,36 @@ class TestAbsAndEpsBranches:
         assert np.all(np.isfinite(powtodB(-power, abs=True)))
         assert np.all(np.isfinite(envtodB(-power, abs=True)))
 
+    @pytest.mark.namespaces('numpy', 'cupy', 'dask')
     @by_log_conversion
     @given(
-        data=for_each_namespace(
-            positive_power_arrays(min_value=1e-3, max_value=1e3, dtype=np.float64)
-        ),
+        power=positive_power_arrays(min_value=1e-3, max_value=1e3, dtype=np.float64),
         eps=st.floats(min_value=1e-9, max_value=1e-3),
         abs=st.booleans(),
     )
-    def test_eps_is_added_before_log(self, func, scale, data, eps, abs):
+    def test_eps_is_added_before_log(self, xp, func, scale, power, eps, abs):
         """Property: the eps offset is applied by every backend's code path."""
-        arr, xp_name = data
-        expected = scale * np.log10(to_numpy(arr) + eps)
-        rtol, atol = log_conversion_tol(np.float64, scale, n_impl=2)
-        result = to_numpy(func(arr, eps=eps, abs=abs))
-        assert_allclose(result, expected, rtol=rtol, atol=atol, err_msg=xp_name)
+        result = func(as_xp(xp, power), eps=eps, abs=abs)
+        expected = scale * np.log10(power + eps)
+        tol = log_conversion_tol(np.float64, scale, n_impl=2)
+        assert_close(result, expected, **tol)
 
 
 class TestArrayLikeHandling:
     """The array-like unpacking and repackaging behind every conversion."""
 
-    def test_min_dtype_none_raises(self):
-        with pytest.raises(TypeError, match='min_dtype'):
-            _arraylike_with_buffer(np.ones(3), min_dtype=None)
-
     @pytest.mark.parametrize(
-        'min_dtype', ['float16', np.float16, np.dtype('float16')], ids=repr
+        'min_dtype, match',
+        [
+            (None, 'min_dtype'),
+            ('float16', 'float32 or larger'),
+            (np.float16, 'float32 or larger'),
+            (np.dtype('float16'), 'float32 or larger'),
+        ],
+        ids=['none', 'float16_str', 'float16_type', 'float16_dtype'],
     )
-    def test_min_dtype_float16_raises(self, min_dtype):
-        with pytest.raises(TypeError, match='float32 or larger'):
+    def test_invalid_min_dtype_raises(self, min_dtype, match):
+        with pytest.raises(TypeError, match=match):
             _arraylike_with_buffer(np.ones(3), min_dtype=min_dtype)
 
     @pytest.mark.parametrize('obj', ['text', [1.0, 2.0], (1.0, 2.0), object()])
@@ -493,12 +424,12 @@ class TestArrayLikeHandling:
     def test_python_float_returns_python_float(self, value):
         result = powtodB(value)
         assert isinstance(result, float)
-        rtol, atol = log_conversion_tol(np.float64, 10, n_impl=2)
-        assert_allclose(result, 10 * np.log10(value), rtol=rtol, atol=atol)
+        tol = log_conversion_tol(np.float64, 10, n_impl=2)
+        assert_close(result, 10 * np.log10(value), **tol)
 
     def test_python_int_input(self):
         assert isinstance(dBtopow(10), float)
-        assert_allclose(dBtopow(10), 10.0, rtol=pow_conversion_rtol(np.float64, 10))
+        assert_close(dBtopow(10), 10.0, rtol=pow_conversion_rtol(np.float64, 10))
 
     @given(power=positive_power_arrays(dtype=np.float64, min_dims=1, max_dims=1))
     def test_pandas_series_roundtrip(self, power):
@@ -578,28 +509,9 @@ class TestArrayLikeHandling:
             powtodB(Container())
 
 
-def _blocks(x, size, axis):
-    """reshape the axis of x into (n_blocks, size) after truncating the remainder"""
-    x = np.moveaxis(x, axis, -1)
-    n_blocks = x.shape[-1] // size
-    x = x[..., : n_blocks * size].reshape(x.shape[:-1] + (n_blocks, size))
-    return np.moveaxis(x, (-2, -1), (axis, axis + 1))
-
-
-BIN_STATS = {
-    'mean': np.mean,
-    'rms': np.mean,
-    'max': np.max,
-    'peak': np.max,
-    'min': np.min,
-    'median': np.median,
-    0.9: lambda x, axis: np.quantile(x, 0.9, axis=axis),
-}
-
-
 def bin_power_reference(iq, size, kind, axis):
     power = np.abs(iq.astype(np.complex128)) ** 2
-    return BIN_STATS[kind](_blocks(power, size, axis), axis=axis + 1)
+    return BIN_STATS[kind](blocks(power, size, axis), axis=axis + 1)
 
 
 def bin_power_rtol(iq, size, n_impl=1):
@@ -611,12 +523,9 @@ def bin_power_rtol(iq, size, n_impl=1):
     )
 
 
-def bin_sizes():
-    return st.sampled_from([1, 2, 5, 8, 16])
-
-
-def bin_kinds():
-    return st.sampled_from(sorted(BIN_STATS, key=str))
+BIN_SIZES = [1, 5, 16]
+for_each_bin_size = pytest.mark.parametrize('size', BIN_SIZES)
+for_each_bin_kind = pytest.mark.parametrize('kind', sorted(BIN_STATS, key=str))
 
 
 @st.composite
@@ -633,19 +542,21 @@ def cyclic_power_cases(draw, channels=(1, 2)):
 
 
 class TestIqToBinPower:
-    @given(
-        data=st.data(),
-        size=bin_sizes(),
-        kind=bin_kinds(),
-        channels=st.sampled_from([None, 1, 3]),
-    )
-    def test_matches_reference(self, data, size, kind, channels):
-        """Property: each bin is the statistic of |iq|**2 over `size` samples."""
-        iq = data.draw(
-            iq_waveforms(
-                min_size=size, max_size=32 * size, multiple_of=size, channels=channels
-            )
+    @for_each_bin_size
+    @pytest.mark.parametrize('kind', ['mean', 'max', 0.9])
+    @pytest.mark.parametrize('channels', [None, 3])
+    @given(data=st.data())
+    def test_matches_reference(self, size, kind, channels, data):
+        """Property: each bin is the statistic of |iq|**2 over `size` samples,
+        for a 1-D waveform (axis 0) and a (channel, sample) array (axis 1).
+
+        The kinds are one name from each group of BIN_STATS: the aliases are
+        covered by TestStatUfuncFromShorthand, and the cupy cross-comparison runs
+        every kind because each is a separate kernel there."""
+        waveforms = iq_waveforms(
+            min_size=size, max_size=32 * size, multiple_of=size, channels=channels
         )
+        iq = data.draw(waveforms)
         axis = 0 if channels is None else 1
         Ts = 1e-6
 
@@ -654,14 +565,11 @@ class TestIqToBinPower:
         assert result.dtype == float_dtype_like(iq)
         expected = bin_power_reference(iq, size, kind, axis)
         assert result.shape == expected.shape
-        assert_allclose(result, expected, rtol=bin_power_rtol(iq, size))
+        assert_close(result, expected, rtol=bin_power_rtol(iq, size))
 
-    @given(
-        data=st.data(),
-        size=bin_sizes().filter(lambda n: n > 1),
-        remainder=st.integers(min_value=1, max_value=4),
-    )
-    def test_truncate(self, data, size, remainder):
+    @pytest.mark.parametrize('size', BIN_SIZES[1:])
+    @given(data=st.data(), remainder=st.integers(min_value=1, max_value=4))
+    def test_truncate(self, size, data, remainder):
         iq = data.draw(
             iq_waveforms(min_size=size, max_size=16 * size, multiple_of=size)
         )
@@ -674,7 +582,7 @@ class TestIqToBinPower:
         result = iq_to_bin_power(iq, Ts, size * Ts, truncate=True)
         expected = bin_power_reference(iq, size, 'mean', 0)
         assert result.shape == (iq.shape[0] // size,)
-        assert_allclose(result, expected, rtol=bin_power_rtol(iq, size))
+        assert_close(result, expected, rtol=bin_power_rtol(iq, size))
 
     @given(ratio=st.floats(min_value=1.1, max_value=9.9).filter(lambda r: r % 1 > 0.01))
     def test_bin_period_must_be_multiple(self, ratio):
@@ -688,8 +596,9 @@ class TestIqToBinPower:
         result = iq_to_bin_power(iq, 1.0, 4.4, truncate=True)
         assert result.shape == (64 // 4,)
 
-    @given(data=st.data(), size=bin_sizes().filter(lambda n: n > 1))
-    def test_randomize(self, data, size):
+    @pytest.mark.parametrize('size', BIN_SIZES[1:])
+    @given(data=st.data())
+    def test_randomize(self, size, data):
         """Property: every random bin is the mean power of some `size` contiguous
         samples, i.e. a value of the sliding-window mean of |iq|**2."""
         iq = data.draw(
@@ -728,53 +637,148 @@ class TestIqToBinPower:
 
 class TestIqToCyclicPower:
     """iq_to_cyclic_power on (channel, sample) input with axis=1, as the
-    cyclic_channel_power measurement calls it."""
+    cyclic_channel_power measurement calls it.
+
+    The expectations follow doc/papers/cyclic_power.tex: the detector output is
+    folded into a (cycle, lag) matrix with cyclic_period / detector_period lags per
+    cycle, and each cyclic statistic reduces the cycle axis.
+    """
 
     DETECTORS = ('rms', 'peak')
-    CYCLE_STATS = ('min', 'mean', 'max')
+    CYCLE_STATS = ('min', 'mean', 'max', 0.9)
+
+    @staticmethod
+    def evaluate(iq, size, lags, **kws):
+        """iq_to_cyclic_power with unit sample period, `size` samples per detector
+        bin and `lags` bins per cycle"""
+        kws = {'detectors': TestIqToCyclicPower.DETECTORS, **kws}
+        kws = {'cycle_stats': TestIqToCyclicPower.CYCLE_STATS, 'axis': 1, **kws}
+        return iq_to_cyclic_power(iq, 1.0, size, size * lags, **kws)
 
     @given(case=cyclic_power_cases())
     def test_matches_reference(self, case):
+        """Property: each statistic is the column-wise reduction of the binned power
+        reshaped to (cycle, lag), including a quantile statistic."""
         iq, size, bins_per_cycle, n_cycles = case
         channels = iq.shape[0]
-        Ts = 1e-6
 
-        result = iq_to_cyclic_power(
-            iq,
-            Ts,
-            detector_period=size * Ts,
-            cyclic_period=size * bins_per_cycle * Ts,
-            detectors=self.DETECTORS,
-            cycle_stats=self.CYCLE_STATS,
-            axis=1,
-        )
+        result = self.evaluate(iq, size, bins_per_cycle)
 
         assert set(result) == set(self.DETECTORS)
         u = unit_roundoff(float_dtype_like(iq))
         for detector in self.DETECTORS:
             assert set(result[detector]) == set(self.CYCLE_STATS)
-            binned = iq_to_bin_power(iq, Ts, size * Ts, kind=detector, axis=1)
+            binned = iq_to_bin_power(iq, 1.0, size, kind=detector, axis=1)
             by_cycle = binned.reshape(channels, n_cycles, bins_per_cycle)
             for stat in self.CYCLE_STATS:
                 value = result[detector][stat]
                 assert value.shape == (channels, bins_per_cycle)
                 expected = BIN_STATS[stat](by_cycle, axis=1)
-                assert_allclose(value, expected, rtol=ROUNDOFF_SAFETY * n_cycles * u)
+                assert_close(value, expected, rtol=ROUNDOFF_SAFETY * n_cycles * u)
 
-    def test_detectors_none_raises(self):
-        iq = np.ones((1, 64), dtype=np.complex64)
-        with pytest.raises(ValueError, match='detectors'):
-            iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, detectors=None, axis=1)
+    @given(case=cyclic_power_cases())
+    def test_lag_average_of_mean_rms_is_the_waveform_power(self, case):
+        """Property: the fold keeps every detector sample (K = L * M), so averaging
+        the mean rms trace over lags recovers the mean power of the waveform."""
+        iq, size, bins_per_cycle, _ = case
 
-    def test_cyclic_period_must_be_multiple(self):
-        iq = np.ones((1, 64), dtype=np.complex64)
-        with pytest.raises(ValueError, match='cyclic period'):
-            iq_to_cyclic_power(iq, 1.0, 4.0, 10.0, axis=1)
+        kws = {'detectors': ('rms',), 'cycle_stats': ('mean',)}
+        result = self.evaluate(iq, size, bins_per_cycle, **kws)
 
-    def test_misaligned_length_without_truncate_raises(self):
-        iq = np.ones((1, 4 * 7), dtype=np.complex64)
-        with pytest.raises(ValueError, match='truncate'):
-            iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, axis=1)
+        expected = np.mean(np.abs(iq.astype(np.complex128)) ** 2, axis=1)
+        rtol = ROUNDOFF_SAFETY * iq.shape[1] * unit_roundoff(float_dtype_like(iq))
+        assert_close(result['rms']['mean'].mean(axis=1), expected, rtol=rtol)
+
+    @pytest.mark.parametrize('n_cycles', [1, 3, 8], ids=lambda n: f'{n}_cycles')
+    @pytest.mark.parametrize(
+        'periods_per_cycle', [1, 2, 5], ids=lambda q: f'{q}_periods_per_cycle'
+    )
+    def test_commensurate_signal_has_no_spread(
+        self, periods_per_cycle, n_cycles, subtests
+    ):
+        """A signal whose period divides cyclic_period repeats identically in every
+        cycle, so every statistic returns the one-cycle power envelope, and the lag
+        count is fixed by cyclic_period / detector_period rather than by n_cycles."""
+        size, lags = 4, 10
+        rng = np.random.default_rng(0)
+        envelope = rng.uniform(0.5, 2.0, size=(2, lags // periods_per_cycle))
+        amplitude = np.tile(envelope, (1, periods_per_cycle * n_cycles))
+        iq = np.repeat(amplitude, size, axis=1).astype(np.complex64)
+
+        result = self.evaluate(iq, size, lags)
+
+        # constant amplitude within each bin makes the rms and peak detectors agree
+        expected = np.tile(envelope**2, (1, periods_per_cycle))
+        rtol = ROUNDOFF_SAFETY * size * unit_roundoff(np.float32)
+        for detector in self.DETECTORS:
+            for stat in self.CYCLE_STATS:
+                with subtests.test(detector=detector, stat=stat):
+                    assert result[detector][stat].shape == (2, lags)
+                    assert_close(result[detector][stat], expected, rtol=rtol)
+
+    def test_pulse_period_selectivity(self):
+        """Pulses whose period divides the cycle stay at fixed lags with zero spread.
+        Pulses at a period coprime with the lag count visit every lag: the max
+        trace is the pulse power everywhere, the min trace is zero, and the mean
+        is the pulse power diluted by the period."""
+        size, lags, n_cycles, pulse = 2, 8, 12, 4.0
+
+        def pulse_train(period):
+            power = np.zeros(lags * n_cycles)
+            power[::period] = pulse
+            iq = np.repeat(np.sqrt(power), size).astype(np.complex64)
+            kws = {'detectors': ('rms',), 'cycle_stats': ('min', 'mean', 'max')}
+            return self.evaluate(iq[np.newaxis], size, lags, **kws)['rms']
+
+        aligned = pulse_train(4)
+        expected = np.zeros((1, lags))
+        expected[0, ::4] = pulse
+        for stat in ('min', 'mean', 'max'):
+            assert_array_equal(aligned[stat], expected)
+
+        smeared = pulse_train(3)
+        assert_array_equal(smeared['max'], np.full((1, lags), pulse))
+        assert_array_equal(smeared['min'], np.zeros((1, lags)))
+        rtol = ROUNDOFF_SAFETY * n_cycles * unit_roundoff(np.float32)
+        assert_close(smeared['mean'], np.full((1, lags), pulse / 3), rtol=rtol)
+
+    @pytest.mark.parametrize(
+        'drift_per_cycle, bleeds', [(1, False), (2, True)], ids=['within_bin', 'bleeds']
+    )
+    def test_cycle_period_mismatch_bleeds_into_the_next_lag(
+        self, drift_per_cycle, bleeds
+    ):
+        """A period mismatch drifts a feature by (n_cycles - 1) * drift_per_cycle
+        samples over the capture. The peak trace keeps the pulse in one lag with no
+        spread while that stays below the bin size, and leaks it into the next lag
+        once it reaches the bin size."""
+        size, lags, n_cycles = 8, 4, 5
+        iq = np.zeros((1, size * lags * n_cycles), dtype=np.complex64)
+        for cycle in range(n_cycles):
+            iq[0, cycle * size * lags + cycle * drift_per_cycle] = 1.0
+        assert ((n_cycles - 1) * drift_per_cycle >= size) == bleeds
+
+        kws = {'detectors': ('peak',), 'cycle_stats': ('min', 'max')}
+        peak = self.evaluate(iq, size, lags, **kws)['peak']
+
+        assert peak['max'][0].tolist() == [1.0, 1.0 if bleeds else 0.0, 0.0, 0.0]
+        assert peak['min'][0].tolist() == [0.0 if bleeds else 1.0, 0.0, 0.0, 0.0]
+
+    @pytest.mark.parametrize(
+        'n, kws, match',
+        [
+            (64, {'detectors': None}, 'detectors'),
+            (64, {'cyclic_period': 10.0}, 'cyclic period'),
+            (4 * 7, {}, 'truncate'),
+        ],
+        ids=['detectors_none', 'cyclic_period_not_multiple', 'misaligned_no_truncate'],
+    )
+    def test_argument_errors(self, n, kws, match):
+        iq = np.ones((1, n), dtype=np.complex64)
+        with pytest.raises(ValueError, match=match):
+            iq_to_cyclic_power(
+                iq, 1.0, 4.0, **{'cyclic_period': 16.0, 'axis': 1, **kws}
+            )
 
     @pytest.mark.xfail(
         strict=True,
@@ -790,6 +794,8 @@ class TestIqToCyclicPower:
         reason='iq_to_cyclic_power indexes power_shape[1], which a 1-D waveform lacks',
     )
     def test_1d_input(self):
+        """The paper defines the input as a single power time series, and axis=0 is
+        the default."""
         iq = np.random.default_rng(0).normal(size=64).astype(np.complex64)
         result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0)
         assert result['rms']['mean'].shape == (4,)
@@ -817,21 +823,11 @@ def ccdf_reference(a, edges, density):
 @st.composite
 def ccdf_cases(draw):
     """(samples, sorted edges, density) arguments for sample_ccdf"""
-    a = draw(
-        arrays(
-            dtype=np.float64,
-            shape=st.integers(min_value=1, max_value=200),
-            elements=st.floats(min_value=-100, max_value=100, allow_nan=False),
-        )
-    )
-    edges = draw(
-        st.lists(
-            st.floats(min_value=-120, max_value=120, allow_nan=False),
-            min_size=1,
-            max_size=20,
-            unique=True,
-        )
-    )
+    sizes = st.integers(min_value=1, max_value=200)
+    sample_values = st.floats(min_value=-100, max_value=100, allow_nan=False)
+    a = draw(arrays(dtype=np.float64, shape=sizes, elements=sample_values))
+    edge_values = st.floats(min_value=-120, max_value=120, allow_nan=False)
+    edges = draw(st.lists(edge_values, min_size=1, max_size=20, unique=True))
     return a, np.asarray(sorted(edges)), draw(st.booleans())
 
 
@@ -844,9 +840,8 @@ class TestSampleCcdf:
         assert result.shape == edges.shape
         if density:
             assert result.dtype == np.float64
-            assert_allclose(
-                result, expected, rtol=ROUNDOFF_SAFETY * unit_roundoff(np.float64)
-            )
+            rtol = ROUNDOFF_SAFETY * unit_roundoff(np.float64)
+            assert_close(result, expected, rtol=rtol)
         else:
             assert_array_equal(result, expected)
 
@@ -859,8 +854,8 @@ class TestSampleCcdf:
 class TestNumpyCupyCrossComparison:
     """Cross-comparison tests validating numpy and cupy produce close results.
 
-    Tolerances come from the ulp budgets at the top of this module, so a difference
-    larger than the two libraries' rounding bounds fails the test.
+    Tolerances come from the ulp budgets in numeric_checks, so a difference larger
+    than the two libraries' rounding bounds fails the test.
     """
 
     @pytest.mark.parametrize(
@@ -873,42 +868,40 @@ class TestNumpyCupyCrossComparison:
     )
     @pytest.mark.parametrize('abs', [True, False])
     @pytest.mark.parametrize('eps', [0, 1e-6])
-    @given(data=st.data(), dtype=st.sampled_from([np.float64, np.float32]))
+    @for_each_float_dtype
+    @given(data=st.data())
     def test_log_conversions(
-        self, cupy_available, func, scale, limits, abs, eps, data, dtype
+        self, cupy_available, func, scale, limits, abs, eps, dtype, data
     ):
         """Cross-comparison on each fused kernel variant."""
         lim = limits[dtype]
-        x = data.draw(
-            positive_power_arrays(
-                min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
-            )
+        powers = positive_power_arrays(
+            min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
         )
+        x = data.draw(powers)
         result_np, result_cp = numpy_and_cupy(
             cupy_available, func, x, min_dtype='float32', abs=abs, eps=eps
         )
 
-        rtol, atol = log_conversion_tol(dtype, scale, n_impl=2)
-        tol_dB = dB_tolerance(rtol, atol, np.abs(result_np).max())
-        assert_allclose(
-            result_cp, result_np, rtol=rtol, atol=atol, err_msg=f'{tol_dB:.2e} dB'
-        )
+        tol = log_conversion_tol(dtype, scale, n_impl=2)
+        tol_dB = dB_tolerance(max_abs_dB=np.abs(result_np).max(), **tol)
+        assert_close(result_cp, result_np, err_msg=f'{tol_dB:.2e} dB', **tol)
 
-    @given(data=st.data(), dtype=st.sampled_from([np.float64, np.float32]))
-    def test_dBtopow(self, cupy_available, data, dtype):
-        lim = {np.float64: 100, np.float32: 30}[dtype]
-        dB = data.draw(
-            dB_arrays(
-                min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
-            )
+    @for_each_float_dtype
+    @given(data=st.data())
+    def test_dBtopow(self, cupy_available, dtype, data):
+        lim = by_dtype(dtype, float32=30, float64=100)
+        levels = dB_arrays(
+            min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
         )
+        dB = data.draw(levels)
         result_np, result_cp = numpy_and_cupy(
             cupy_available, dBtopow, dB, min_dtype='float32'
         )
 
         rtol = pow_conversion_rtol(dtype, np.abs(dB).max(), n_impl=2)
         tol_dB = linear_tolerance_dB(rtol)
-        assert_allclose(result_cp, result_np, rtol=rtol, err_msg=f'{tol_dB:.2e} dB')
+        assert_close(result_cp, result_np, rtol=rtol, err_msg=f'{tol_dB:.2e} dB')
 
     @given(
         env=envelope_arrays(
@@ -924,7 +917,7 @@ class TestNumpyCupyCrossComparison:
         rtol = envelope_power_rtol(
             float_dtype_like(env), complex_input=np.iscomplexobj(env), n_impl=2
         )
-        assert_allclose(result_cp, result_np, rtol=rtol)
+        assert_close(result_cp, result_np, rtol=rtol)
 
     @pytest.mark.parametrize('func', [dBlinmean, dBlinsum], ids=func_id)
     @given(
@@ -941,11 +934,9 @@ class TestNumpyCupyCrossComparison:
     def test_linear_statistics(self, cupy_available, func, dB):
         result_np, result_cp = numpy_and_cupy(cupy_available, func, dB, axis=None)
 
-        rtol, atol = linear_stat_tol(np.float64, np.abs(dB).max(), dB.size, n_impl=2)
-        tol_dB = dB_tolerance(rtol, atol, abs(result_np))
-        assert_allclose(
-            result_cp, result_np, rtol=rtol, atol=atol, err_msg=f'{tol_dB:.2e} dB'
-        )
+        tol = linear_stat_tol(np.float64, np.abs(dB).max(), dB.size, n_impl=2)
+        tol_dB = dB_tolerance(max_abs_dB=abs(result_np), **tol)
+        assert_close(result_cp, result_np, err_msg=f'{tol_dB:.2e} dB', **tol)
 
     @given(
         power=positive_power_arrays(
@@ -954,64 +945,60 @@ class TestNumpyCupyCrossComparison:
     )
     def test_overwrite_x(self, cupy_available, power):
         """Cross-comparison: in-place evaluation writes the result into the input."""
-        cp = cupy_available
-
-        expected = powtodB(power)
-        power_cp = cp.asarray(power)
+        power_cp = cupy_available.asarray(power)
         result_cp = powtodB(power_cp, overwrite_x=True)
 
         assert result_cp is power_cp
-        rtol, atol = log_conversion_tol(np.float32, 10, n_impl=2)
-        assert_allclose(result_cp.get(), expected, rtol=rtol, atol=atol)
+        tol = log_conversion_tol(np.float32, 10, n_impl=2)
+        assert_close(result_cp, powtodB(power), **tol)
 
     def test_xarray_cupy_data(self, cupy_available):
         """Cross-comparison: a DataArray wrapping cupy data keeps cupy data."""
-        cp = cupy_available
         xr = pytest.importorskip('xarray')
 
         data = np.linspace(0.5, 2.0, 8, dtype=np.float32)
-        da = xr.DataArray(cp.asarray(data), dims=['t'], attrs={'units': 'mW'})
+        da = xr.DataArray(
+            cupy_available.asarray(data), dims=['t'], attrs={'units': 'mW'}
+        )
 
         result = powtodB(da)
-        assert isinstance(result.data, cp.ndarray)
+        assert isinstance(result.data, cupy_available.ndarray)
         assert result.attrs['units'] == 'dBm'
-        rtol, atol = log_conversion_tol(np.float32, 10, n_impl=2)
-        assert_allclose(result.data.get(), powtodB(data), rtol=rtol, atol=atol)
+        tol = log_conversion_tol(np.float32, 10, n_impl=2)
+        assert_close(result.data, powtodB(data), **tol)
 
-    @given(data=st.data(), size=bin_sizes(), kind=bin_kinds())
-    def test_iq_to_bin_power(self, cupy_available, data, size, kind):
-        iq = data.draw(
-            iq_waveforms(
-                min_size=size, max_size=32 * size, multiple_of=size, channels=2
-            )
+    @for_each_bin_size
+    @for_each_bin_kind
+    @given(data=st.data())
+    def test_iq_to_bin_power(self, cupy_available, size, kind, data):
+        waveforms = iq_waveforms(
+            min_size=size, max_size=32 * size, multiple_of=size, channels=2
         )
+        iq = data.draw(waveforms)
         Ts = 1e-6
         result_np, result_cp = numpy_and_cupy(
             cupy_available, iq_to_bin_power, iq, Ts, size * Ts, kind=kind, axis=1
         )
 
         assert result_cp.dtype == result_np.dtype
-        assert_allclose(result_cp, result_np, rtol=bin_power_rtol(iq, size, 2))
+        assert_close(result_cp, result_np, rtol=bin_power_rtol(iq, size, 2))
 
     @given(case=cyclic_power_cases(channels=(2,)))
     def test_iq_to_cyclic_power(self, cupy_available, case):
-        cp = cupy_available
         iq, size, bins_per_cycle, n_cycles = case
         Ts = 1e-6
-        kws = {
-            'detector_period': size * Ts,
-            'cyclic_period': size * bins_per_cycle * Ts,
-            'axis': 1,
-        }
+        detector_period = size * Ts
+        cyclic_period = size * bins_per_cycle * Ts
+        kws = {'detector_period': detector_period, 'cyclic_period': cyclic_period}
 
-        result_np = iq_to_cyclic_power(iq, Ts, **kws)
-        result_cp = iq_to_cyclic_power(cp.asarray(iq), Ts, **kws)
+        result_np = iq_to_cyclic_power(iq, Ts, axis=1, **kws)
+        result_cp = iq_to_cyclic_power(cupy_available.asarray(iq), Ts, axis=1, **kws)
 
         u = unit_roundoff(float_dtype_like(iq))
         rtol = bin_power_rtol(iq, size, 2) + ROUNDOFF_SAFETY * 2 * n_cycles * u
         for detector, stats in result_np.items():
             for stat, value in stats.items():
-                assert_allclose(result_cp[detector][stat].get(), value, rtol=rtol)
+                assert_close(result_cp[detector][stat], value, rtol=rtol)
 
     @given(case=ccdf_cases())
     def test_sample_ccdf(self, cupy_available, case):
