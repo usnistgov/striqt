@@ -6,9 +6,7 @@ import math
 
 import msgspec
 import pytest
-from conftest import raises_on_both_paths
-from hypothesis import given
-from spec_strategies import (
+from analysis_strategies import (
     descending_ranges,
     fractional_delay_kwargs,
     fractional_sample_captures,
@@ -17,6 +15,8 @@ from spec_strategies import (
     valid_frame_ranges,
     valid_symbol_ranges,
 )
+from conftest import raises_on_both_paths
+from hypothesis import given
 
 import striqt.analysis as sa
 

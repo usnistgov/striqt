@@ -30,7 +30,7 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
     def get_info(self):
         return specs.SourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
-    def _generator_kws(self, count: int, start: int, offset: int, xp) -> dict:
+    def _generator_kws(self, count: int, start_index: int, xp) -> dict:
         """the `striqt.analysis.testing` arguments shared by every source here.
 
         The sample rate is the source's rather than the capture's, because host
@@ -40,7 +40,7 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
         return dict(
             duration=None,
             sample_rate=self.get_resampler(self._capture)['fs_sdr'],
-            start_index=start + offset,
+            start_index=start_index,
             count=count,
             xp=xp,
             dtype=self.setup_spec.transport_dtype,
@@ -79,8 +79,7 @@ class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapt
     def get_waveform(
         self,
         count: int,
-        start: int,
-        offset: int,
+        start_index: int,
         *,
         port: int = 0,
         xp,
@@ -94,7 +93,7 @@ class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapt
             snr=capture.snr,
             lo_offset=self.get_resampler(capture)['lo_offset'],
             ports=ports,
-            **self._generator_kws(count, start, offset, xp),
+            **self._generator_kws(count, start_index, xp),
         )
 
         return x[index : index + 1]
@@ -104,31 +103,26 @@ class DiracDeltaSource(TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapt
     def get_waveform(
         self,
         count: int,
-        start: int,
-        offset: int,
+        start_index: int,
         *,
         port: int = 0,
         xp,
         dtype='complex64',
     ) -> Array:
         capture = self._capture
-        kws = self._generator_kws(count, start, offset, xp)
 
-        # capture.time is referenced to the start of the corrected waveform. read()
-        # maps generator sample start+offset onto acquisition sample offset, and
-        # correct_iq then trims the same `start` leading overlap samples, so the
-        # capture begins 2*start samples into the generated waveform
-        time = capture.time + 2 * start / kws['sample_rate']
-
-        return testing.dirac_delta(time=time, power=capture.power, **kws)
+        return testing.dirac_delta(
+            time=capture.time,
+            power=capture.power,
+            **self._generator_kws(count, start_index, xp),
+        )
 
 
 class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCapture]):
     def get_waveform(
         self,
         count: int,
-        start: int,
-        offset: int,
+        start_index: int,
         *,
         port: int = 0,
         xp,
@@ -139,7 +133,7 @@ class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCapture]
         return testing.sawtooth(
             period=capture.period,
             power=capture.power,
-            **self._generator_kws(count, start, offset, xp),
+            **self._generator_kws(count, start_index, xp),
         )
 
 
@@ -147,8 +141,7 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture]):
     def get_waveform(
         self,
         count: int,
-        start: int,
-        offset: int,
+        start_index: int,
         *,
         port: int = 0,
         xp,
@@ -160,7 +153,7 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture]):
         x = testing.noise(
             noise_psd=capture.noise_psd,
             ports=ports,
-            **self._generator_kws(count, start, offset, xp),
+            **self._generator_kws(count, start_index, xp),
         )
 
         return x[index : index + 1]

@@ -1,7 +1,7 @@
 - port: [0, 1]
   center_frequency: 3750e6 # Hz
   gain: -10 # dB
-  duration: 10e-3 # s
+  duration: 2e-3 # s
   sample_rate: 53.76e6 # Hz
   analysis_bandwidth: 40e6 # Hz
   frequency_offset: -3e6 # Hz

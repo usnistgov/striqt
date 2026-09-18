@@ -9,7 +9,14 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from numeric_checks import mean_atol, rms, to_numpy, tone_frequency
+from numeric_checks import (
+    assert_close,
+    elementwise_rtol,
+    mean_atol,
+    rms,
+    to_numpy,
+    tone_frequency,
+)
 
 from striqt.analysis import testing
 
@@ -39,9 +46,20 @@ GENERATORS = {
 WINDOWS = [(0, SIZE), (0, 7), (13, 29), (SIZE - 1, 1)]
 WINDOW_IDS = [f'start{start}_count{count}' for start, count in WINDOWS]
 
+# samples before index 0 in the windowing tests that cross the capture start
+PREROLL = 11
+PREROLL_WINDOWS = [
+    (-PREROLL, PREROLL + SIZE),
+    (-PREROLL, 5),
+    (-7, 20),
+    (-1, 1),
+    (0, SIZE),
+    (13, 29),
+]
+PREROLL_WINDOW_IDS = [f'start{start}_count{count}' for start, count in PREROLL_WINDOWS]
+
 INVALID_KWS = {
     'ports0': {'ports': 0},
-    'negative_start': {'start_index': -1},
     'negative_count': {'count': -1},
     'start_past_duration': {'start_index': SIZE + 1},
 }
@@ -325,9 +343,156 @@ def test_window_matches_the_whole_capture(xp, name, start_index, count, ports):
     assert np.array_equal(window, whole[:, start_index : start_index + count])
 
 
-def test_count_defaults_to_the_remainder_of_the_capture(xp):
-    x = testing.noise(DURATION, FS, start_index=SIZE - 10, xp=xp)
-    assert x.shape == (1, 10)
+@pytest.mark.parametrize(
+    ('start_index', 'count'),
+    [(SIZE - 10, 10), (-10, SIZE + 10)],
+    ids=['tail', 'preroll'],
+)
+def test_count_defaults_to_the_remainder_of_the_capture(xp, start_index, count):
+    x = testing.noise(DURATION, FS, start_index=start_index, xp=xp)
+    assert x.shape == (1, count)
+
+
+# %% pre-roll: negative absolute indices
+
+
+@pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
+@pytest.mark.parametrize(
+    ('start_index', 'count'), PREROLL_WINDOWS, ids=PREROLL_WINDOW_IDS
+)
+@pytest.mark.parametrize('ports', [1, 2], ids='ports{}'.format)
+def test_window_across_zero_matches_the_longer_window(
+    xp, name, start_index, count, ports
+):
+    """the windowing identity with index 0 inside the reference window, so that the
+    pre-roll and the capture are each the corresponding slice of one longer call"""
+    func, kws = GENERATORS[name]
+    whole = to_numpy(
+        func(
+            DURATION,
+            FS,
+            ports=ports,
+            start_index=-PREROLL,
+            count=PREROLL + SIZE,
+            xp=xp,
+            **kws,
+        )
+    )
+    window = to_numpy(
+        func(
+            DURATION,
+            FS,
+            ports=ports,
+            start_index=start_index,
+            count=count,
+            xp=xp,
+            **kws,
+        )
+    )
+
+    assert window.shape == (ports, count)
+    offset = start_index + PREROLL
+    assert np.array_equal(window, whole[:, offset : offset + count])
+
+
+@pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
+def test_preroll_window_ends_with_the_capture(xp, name):
+    """a call that starts before index 0 continues into exactly the capture"""
+    func, kws = GENERATORS[name]
+    with_preroll = to_numpy(
+        func(DURATION, FS, start_index=-PREROLL, count=PREROLL + SIZE, xp=xp, **kws)
+    )
+    capture = to_numpy(func(DURATION, FS, xp=xp, **kws))
+    assert np.array_equal(with_preroll[:, PREROLL:], capture)
+
+
+def test_tone_preroll_follows_the_closed_form(xp):
+    frequency = 1e5
+    x = to_numpy(
+        testing.tone(
+            DURATION,
+            FS,
+            frequency=frequency,
+            start_index=-PREROLL,
+            count=PREROLL,
+            xp=xp,
+        )
+    )
+    i = np.arange(-PREROLL, 0)
+    expected = np.exp(2j * np.pi * frequency / FS * i).astype('complex64')
+    assert_close(x[0], expected, rtol=elementwise_rtol(np.complex64))
+
+
+def test_sawtooth_preroll_follows_the_closed_form(xp):
+    # binary-exact rate and period so that `t % period` is exact (see
+    # test_sawtooth_ramps_and_resets)
+    fs = 2**20
+    samples_per_period = 16
+    period = samples_per_period / fs
+    amplitude = 10 ** (3 / 20)
+    count = 2 * samples_per_period + 3
+
+    x = to_numpy(
+        testing.sawtooth(
+            None,
+            fs,
+            period=period,
+            power=3,
+            start_index=-count,
+            count=count,
+            xp=xp,
+        )
+    )
+    t = np.arange(-count, 0) / fs
+    expected = (t % period) * (amplitude / period)
+
+    assert np.array_equal(x.imag, np.zeros_like(x.imag))
+    assert x.real[0] == pytest.approx(expected, rel=1e-6)
+    # the ramp is continuous across index 0: sample -1 is the top step of a ramp
+    assert x.real[0, -1] == pytest.approx(
+        amplitude * (samples_per_period - 1) / samples_per_period, rel=1e-6
+    )
+
+
+@pytest.mark.parametrize(
+    'time', [3.7e-5, -5 / FS, -PREROLL / FS], ids=['in_capture', 'in_preroll', 'first']
+)
+def test_dirac_delta_preroll_has_the_impulse_only_at_its_time(xp, time):
+    x = to_numpy(
+        testing.dirac_delta(
+            DURATION,
+            FS,
+            time=time,
+            power=-4,
+            start_index=-PREROLL,
+            count=PREROLL + SIZE,
+            xp=xp,
+        )
+    )
+    _, indices = np.nonzero(x)
+    assert indices.tolist() == [round(time * FS) + PREROLL]
+    assert x[0, indices[0]] == pytest.approx(10 ** (-4 / 20))
+
+
+@pytest.mark.parametrize('power', [1.0, 1e-3], ids='power{:g}'.format)
+def test_circular_awgn_preroll_power_matches_the_request(xp, power):
+    x = testing.circular_awgn(
+        None, FS, power=power, start_index=-STAT_SIZE, count=STAT_SIZE, xp=xp
+    )
+    assert x.dtype == np.dtype('complex64')
+    assert mean_power(x) == pytest.approx(power, rel=STAT_RTOL)
+
+
+def test_circular_awgn_preroll_is_independent_of_the_capture(xp):
+    kws = {'count': STAT_SIZE, 'ports': 2, 'xp': xp}
+    preroll = to_numpy(testing.circular_awgn(None, FS, start_index=-STAT_SIZE, **kws))
+    capture = to_numpy(testing.circular_awgn(None, FS, start_index=0, **kws))
+
+    assert not np.array_equal(preroll, capture)
+    assert not np.array_equal(preroll, capture[:, ::-1])
+    for a, b in [(preroll[0], capture[0]), (preroll[0], preroll[1])]:
+        correlation = np.abs(np.mean(a * b.conj())) / (rms(a) * rms(b))
+        assert correlation < STAT_RTOL
 
 
 # %% argument validation

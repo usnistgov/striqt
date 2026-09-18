@@ -9,7 +9,7 @@ import math
 import msgspec
 import pytest
 from conftest import construct_both, raises_on_both_paths
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 from site_strategies import SiteCaptureCls, make_site_capture_kws, make_site_sweep
 from sweep_strategies import (
@@ -17,17 +17,17 @@ from sweep_strategies import (
     CalSourceCls,
     CalSweepCls,
     SweepCls,
-    consistent_port_gain,
-    duplicate_field_loops,
+    list_loop,
+    loop_sets,
     make_calibration_capture,
     make_calibration_sweep,
     make_calibration_sweep_kws,
     make_capture,
     make_sweep,
     make_sweep_kws,
-    mismatched_port_gain,
-    misplaced_repeat_loops,
-    scalar_port_tuple_gain,
+    port_scalars,
+    port_tuples,
+    port_values,
 )
 
 import striqt.analysis as sa
@@ -65,6 +65,20 @@ key_pairs = st.tuples(
     st.integers(min_value=-100, max_value=100),
 )
 
+gains = st.floats(min_value=-30, max_value=60)
+gain_tuples = st.lists(gains, min_size=1, max_size=5).map(tuple)
+
+
+@st.composite
+def consistent_port_gain(draw):
+    """a port value with a gain of a shape that SoapyCapture accepts for it"""
+    port = draw(port_values)
+    if isinstance(port, tuple) and draw(st.booleans()):
+        return port, tuple(
+            draw(st.lists(gains, min_size=len(port), max_size=len(port)))
+        )
+    return port, draw(gains)
+
 
 # %% Capture specs
 
@@ -77,16 +91,15 @@ class TestSoapyCapture:
         assert capture.port == port
         assert capture.gain == gain
 
-    @given(port_gain=scalar_port_tuple_gain())
-    def test_tuple_gain_with_scalar_port_rejected(self, port_gain):
-        port, gain = port_gain
+    @given(port=port_scalars, gain=gain_tuples)
+    def test_tuple_gain_with_scalar_port_rejected(self, port, gain):
         raises_on_both_paths(
             SoapyCapture, ValueError, SCALAR_GAIN_MSG, port=port, gain=gain, **BASE
         )
 
-    @given(port_gain=mismatched_port_gain())
-    def test_gain_tuple_length_must_match_ports(self, port_gain):
-        port, gain = port_gain
+    @given(port=port_tuples, gain=gain_tuples)
+    def test_gain_tuple_length_must_match_ports(self, port, gain):
+        assume(len(gain) != len(port))
         raises_on_both_paths(
             SoapyCapture, ValueError, GAIN_COUNT_MSG, port=port, gain=gain, **BASE
         )
@@ -309,23 +322,34 @@ class _ConflictingCapture(ss.specs.SingleToneCapture, frozen=True, kw_only=True)
     spectrogram: int = 0
 
 
+CAPTURE_FIELD_LOOPS = loop_sets(allow_repeat=False, allow_analysis=False)
+
+
 class TestSweepLoops:
-    @given(loops=misplaced_repeat_loops())
-    def test_repeat_must_be_first(self, loops):
-        kws = make_sweep_kws(captures=(make_capture(),), loops=loops)
+    @given(
+        loops=loop_sets(allow_repeat=False).filter(bool),
+        position=st.integers(min_value=1, max_value=4),
+        count=st.integers(min_value=1, max_value=3),
+    )
+    def test_repeat_must_be_first(self, loops, position, count):
+        loops = list(loops)
+        loops.insert(min(position, len(loops)), Repeat(count=count))
+        kws = make_sweep_kws(captures=(make_capture(),), loops=tuple(loops))
         raises_on_both_paths(SweepCls, msgspec.ValidationError, REPEAT_MSG, **kws)
 
     def test_two_repeats_rejected(self):
         with pytest.raises(msgspec.ValidationError, match=REPEAT_MSG):
             make_sweep(loops=(Repeat(count=2), Repeat(count=3)))
 
-    @given(loops_field=duplicate_field_loops())
-    def test_duplicate_loop_field_rejected(self, loops_field):
-        loops, field = loops_field
-        match = f"{DUPLICATE_MSG} '{field}'"
-        raises_on_both_paths(
-            SweepCls, msgspec.ValidationError, match, **make_sweep_kws(loops=loops)
-        )
+    @given(base=CAPTURE_FIELD_LOOPS.filter(bool), data=st.data())
+    def test_duplicate_loop_field_rejected(self, base, data):
+        dup = data.draw(st.sampled_from(base))
+        loops = data.draw(st.permutations([*base, data.draw(list_loop(dup.field))]))
+        if data.draw(st.booleans()):
+            loops.insert(0, Repeat(count=1))
+        match = f"{DUPLICATE_MSG} '{dup.field}'"
+        kws = make_sweep_kws(loops=tuple(loops))
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
 
 class TestSweepCaptures:

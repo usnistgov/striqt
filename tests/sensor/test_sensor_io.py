@@ -196,7 +196,7 @@ def test_calibration_sweeps_decode(calibration_sweep, site_calibration_sweep):
 
 
 def test_output_path_overrides_the_sink_path():
-    spec = ss.read_yaml_spec(SWEEP_DIR / 'cw-cpu.yaml', output_path='out.zarr.zip')
+    spec = ss.read_yaml_spec(SWEEP_DIR / 'synthetic.yaml', output_path='out.zarr.zip')
     assert spec.sink.path == 'out.zarr.zip'
 
 

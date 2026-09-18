@@ -8,8 +8,9 @@ import msgspec
 import numpy as np
 import pytest
 from fake_soapy import CONSTANTS, ERROR_NAMES, RX, ArgInfo, Range, StreamResult
-from soapy_factories import MCR, call_names, fake_controller, soapy_capture, source_spec
+from soapy_factories import MCR, call_names, soapy_capture, source_spec
 from sweep_strategies import BOLTZMANN_MW, receiver_gain
+from synthetic_sources import build_acquired_iq
 
 import striqt.sensor as ss
 import striqt.waveform as sw
@@ -207,16 +208,9 @@ def test_if_headroom_needs_the_if_limit(xp):
 
 
 def _acquired_iq(capture, source):
-    return ss.specs.AcquiredIQ(
-        pre_align=np.zeros((1, 16), dtype='complex64'),
-        pre_filter=None,
-        aligned=None,
-        capture=capture,
-        info=ss.specs.SoapyAcquisitionInfo(start_time=None, backend_sample_rate=MCR),
-        extra_data={},
-        source_spec=source,
-        resampler=design_resampler(capture, MCR),
-    )
+    info = ss.specs.SoapyAcquisitionInfo(start_time=None, backend_sample_rate=MCR)
+    x = np.zeros((1, 16), dtype='complex64')
+    return build_acquired_iq(x, capture, source, info=info)
 
 
 def test_assign_iq_calibration_scales_voltage_and_adds_system_noise(calibration_nc):
@@ -837,9 +831,9 @@ def _dBfs(x):
 
 
 class TestControllerAcquire:
-    def test_start_time_and_sample_count(self, fake_soapy, fake_soapy_ext):
+    def test_start_time_and_sample_count(self, fake_soapy, fake_controller):
         capture = soapy_capture(port=(0, 1), gain=(0, 0), duration=2e-3)
-        with fake_controller(fake_soapy_ext) as ctrl:
+        with fake_controller() as ctrl:
             ctrl._arm_spec(capture)
             overlaps = ss.lib.compute.get_correction_overlaps(capture, ctrl.source_spec)
             iq = ctrl.acquire()
@@ -859,10 +853,10 @@ class TestControllerAcquire:
             assert iq.info.start_time.value <= stream.activate_time_ns + window_ns
 
     def test_single_port_capture_streams_both_and_keeps_its_own(
-        self, fake_soapy, fake_soapy_ext
+        self, fake_soapy, fake_controller
     ):
         fake_soapy.model.tones[1] = (1.505e9, -60.0)
-        with fake_controller(fake_soapy_ext) as ctrl:
+        with fake_controller() as ctrl:
             ctrl._arm_spec(soapy_capture(port=1, duration=1e-3))
             iq = ctrl.acquire()
             assert fake_soapy.devices[0].streams[0].channels == (0, 1)
@@ -871,8 +865,8 @@ class TestControllerAcquire:
         assert iq.pre_align.shape[0] == 1
         assert _dBfs(iq.pre_align)[0] == pytest.approx(-10.0, abs=0.05)
 
-    def test_noise_level_matches_the_model(self, fake_soapy, fake_soapy_ext):
-        with fake_controller(fake_soapy_ext) as ctrl:
+    def test_noise_level_matches_the_model(self, fake_soapy, fake_controller):
+        with fake_controller() as ctrl:
             ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, -10), duration=1e-3))
             iq = ctrl.acquire()
 
@@ -882,8 +876,8 @@ class TestControllerAcquire:
         ]
         assert _dBfs(iq.pre_align) == pytest.approx(expected, abs=0.05)
 
-    def test_stale_first_timestamp_is_a_stream_error(self, fake_soapy, fake_soapy_ext):
-        with fake_controller(fake_soapy_ext, receive_retries=0) as ctrl:
+    def test_stale_first_timestamp_is_a_stream_error(self, fake_soapy, fake_controller):
+        with fake_controller(receive_retries=0) as ctrl:
             ctrl._arm_spec(soapy_capture(duration=1e-3))
             device = fake_soapy.devices[0]
             activate = device.activateStream

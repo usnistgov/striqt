@@ -15,6 +15,7 @@ from pathlib import Path
 
 import msgspec
 import pytest
+from conftest import SITE_SPEC, scalars
 from hypothesis import given
 from hypothesis import strategies as st
 from pytest_lazy_fixtures import lf
@@ -41,7 +42,6 @@ from sweep_strategies import (
     port_values,
     ports_and_lo,
     range_loop,
-    scalars,
     sweeps,
 )
 
@@ -71,14 +71,14 @@ def first_site_capture(sweep, source_id, **capture_kws):
 # %% convert_capture_arg
 
 
-def test_convert_capture_arg_downcasts_first_argument(cw_sweep):
+def test_convert_capture_arg_downcasts_first_argument(synthetic_sweep):
     @H.convert_capture_arg(ss.specs.SensorCapture)
     def probe(capture, extra):
         return capture, extra
 
-    capture, extra = probe(cw_sweep.captures[0], 'x')
+    capture, extra = probe(synthetic_sweep.captures[0], 'x')
     assert type(capture) is ss.specs.SensorCapture
-    assert capture.port == cw_sweep.captures[0].port
+    assert capture.port == synthetic_sweep.captures[0].port
     assert extra == 'x'
     assert probe.__name__ == 'probe'
 
@@ -211,7 +211,7 @@ def test_unique_ports_ignores_other_loops(captures):
     assert H.get_unique_ports(captures, loops) == H.get_unique_ports(captures)
 
 
-@pytest.mark.parametrize('sweep', [lf('cw_sweep'), lf('calibration_sweep')])
+@pytest.mark.parametrize('sweep', [lf('synthetic_sweep'), lf('calibration_sweep')])
 def test_unique_ports_of_fixtures(sweep):
     assert H.get_unique_ports(sweep.captures, sweep.loops) == (0, 1)
 
@@ -305,7 +305,7 @@ def test_concat_group_sizes_ignore_subclass_fields(captures, min_size):
     )
 
 
-@pytest.mark.parametrize('sweep', [lf('cw_sweep'), lf('calibration_sweep')])
+@pytest.mark.parametrize('sweep', [lf('synthetic_sweep'), lf('calibration_sweep')])
 def test_concat_group_sizes_of_fixtures(sweep):
     # a group only closes while every distinct shape is still pending *and* remaining,
     # so mixed sweeps collapse into a single group once any shape runs out
@@ -367,8 +367,10 @@ def test_format_fields_roundtrip(names):
     assert H.get_format_fields(template) == names
 
 
-def test_path_fields_with_spec_path(cw_sweep, cw_spec_path):
-    fields = H.get_path_fields(cw_sweep, source_id='abcd', spec_path=cw_spec_path)
+def test_path_fields_with_spec_path(synthetic_sweep, synthetic_spec_path):
+    fields = H.get_path_fields(
+        synthetic_sweep, source_id='abcd', spec_path=synthetic_spec_path
+    )
     assert set(fields) == {
         'start_time',
         'sensor_binding',
@@ -377,19 +379,19 @@ def test_path_fields_with_spec_path(cw_sweep, cw_spec_path):
         'source_id',
     }
     assert fields['sensor_binding'] == 'single_tone'
-    assert fields['spec_name'] == 'cw-cpu'
+    assert fields['spec_name'] == 'synthetic'
     assert fields['parent_name'] == 'sweeps'
     assert fields['source_id'] == 'abcd'
     assert re.fullmatch(r'\d{8}-\d{2}h\d{2}m\d{2}', fields['start_time'])
 
 
-def test_path_fields_without_spec_path(cw_sweep):
-    fields = H.get_path_fields(cw_sweep, source_id='abcd')
+def test_path_fields_without_spec_path(synthetic_sweep):
+    fields = H.get_path_fields(synthetic_sweep, source_id='abcd')
     assert set(fields) == {'start_time', 'sensor_binding', 'source_id'}
 
 
-def test_path_fields_accept_a_callable_source_id(cw_sweep):
-    fields = H.get_path_fields(cw_sweep, source_id=lambda: 'abcd')
+def test_path_fields_accept_a_callable_source_id(synthetic_sweep):
+    fields = H.get_path_fields(synthetic_sweep, source_id=lambda: 'abcd')
     assert fields['source_id'] == 'abcd'
 
 
@@ -410,30 +412,37 @@ def test_path_fields_only_string_fixed_values_from_site_files(site_sweep):
     assert 'mast_height' not in H.get_path_fields(site_sweep, source_id=OTHER_ID)
 
 
-def test_formatter_passes_through_paths_without_fields(cw_sweep, monkeypatch):
+def test_formatter_passes_through_paths_without_fields(synthetic_sweep, monkeypatch):
     def fail(*args, **kws):
         raise AssertionError('lookup.id must not be called')
 
     monkeypatch.setattr(ss.lib.controller.lookup, 'id', fail)
-    assert H.PathFormatter(cw_sweep)('outputs/noformat.zarr') == 'outputs/noformat.zarr'
+    assert (
+        H.PathFormatter(synthetic_sweep)('outputs/noformat.zarr')
+        == 'outputs/noformat.zarr'
+    )
 
 
-def test_formatter_substitutes_fields(cw_sweep, cw_spec_path, fake_source_id):
-    formatter = H.PathFormatter(cw_sweep, spec_path=cw_spec_path)
+def test_formatter_substitutes_fields(
+    synthetic_sweep, synthetic_spec_path, fake_source_id
+):
+    formatter = H.PathFormatter(synthetic_sweep, spec_path=synthetic_spec_path)
     result = formatter('outputs/{spec_name}-{source_id}.zarr')
-    assert result == f'outputs/cw-cpu-{fake_source_id}.zarr'
+    assert result == f'outputs/synthetic-{fake_source_id}.zarr'
 
 
-def test_formatter_expands_user(cw_sweep, cw_spec_path, fake_source_id):
-    result = H.PathFormatter(cw_sweep, spec_path=cw_spec_path)('~/{parent_name}')
+def test_formatter_expands_user(synthetic_sweep, synthetic_spec_path, fake_source_id):
+    result = H.PathFormatter(synthetic_sweep, spec_path=synthetic_spec_path)(
+        '~/{parent_name}'
+    )
     assert result == str(Path.home() / 'sweeps')
 
 
 def test_formatter_names_the_unknown_field_and_the_allowed_ones(
-    cw_sweep, fake_source_id
+    synthetic_sweep, fake_source_id
 ):
     with pytest.raises(KeyError, match="'nope'") as info:
-        H.PathFormatter(cw_sweep)('{nope}')
+        H.PathFormatter(synthetic_sweep)('{nope}')
     assert 'source_id' in str(info.value)
 
 
@@ -443,16 +452,16 @@ def test_formatter_names_the_unknown_field_and_the_allowed_ones(
     'provides spec_name, not yaml_name',
 )
 def test_formatter_accepts_the_default_sink_path(
-    cw_sweep, cw_spec_path, fake_source_id
+    synthetic_sweep, synthetic_spec_path, fake_source_id
 ):
-    result = H.PathFormatter(cw_sweep, spec_path=cw_spec_path)(ss.specs.Sink().path)
-    assert 'cw-cpu-' in result
+    result = H.PathFormatter(synthetic_sweep, spec_path=synthetic_spec_path)(
+        ss.specs.Sink().path
+    )
+    assert 'synthetic-' in result
 
 
-def test_formatter_fills_the_site_sink_template(
-    site_sweep, site_spec_path, fake_radio_id
-):
-    path = H.PathFormatter(site_sweep, spec_path=site_spec_path)(site_sweep.sink.path)
+def test_formatter_fills_the_site_sink_template(site_sweep, fake_radio_id):
+    path = H.PathFormatter(site_sweep, spec_path=SITE_SPEC)(site_sweep.sink.path)
     assert path.startswith('../outputs/WAPA-north/site-cpu_site_')
     assert path.endswith('.zarr.zip')
 
@@ -467,9 +476,11 @@ def test_loop_captures_returns_a_tuple_of_the_capture_class(sweep):
     assert all(type(c) is CaptureCls for c in result)
 
 
-def test_repeat_is_not_expanded(cw_sweep):
-    assert isinstance(cw_sweep.loops[0], ss.specs.Repeat)
-    assert H.loop_captures(cw_sweep) == cw_sweep.captures
+def test_repeat_is_not_expanded(synthetic_sweep):
+    repeat, *others = synthetic_sweep.loops
+    assert isinstance(repeat, ss.specs.Repeat) and repeat.count > 1
+    without_repeat = synthetic_sweep.replace(loops=tuple(others))
+    assert H.loop_captures(synthetic_sweep) == H.loop_captures(without_repeat)
 
 
 def test_loop_order_is_declaration_order_with_captures_innermost():
@@ -960,8 +971,16 @@ def test_list_capture_adjustments_by_source():
     }
 
 
-def test_list_capture_adjustments_empty(cw_sweep):
-    assert H.list_capture_adjustments(cw_sweep, 'ffff') == {}
+def test_list_capture_adjustments_empty():
+    sweep = make_sweep(captures=(make_capture(),))
+    assert H.list_capture_adjustments(sweep, 'ffff') == {}
+
+
+def test_list_capture_adjustments_of_the_synthetic_sweep(synthetic_sweep):
+    # the defaults remap of synthetic.yaml keys frequency_offset on the snr loop
+    listed = H.list_capture_adjustments(synthetic_sweep, 'ffff')
+    assert set(listed) == {'frequency_offset'}
+    assert {float(v) for v in listed['frequency_offset']} == {-1e6, 1e6}
 
 
 @pytest.mark.parametrize(
@@ -989,31 +1008,39 @@ def test_list_capture_adjustments_for_a_radio(site_sweep):
 # %% adjust_analysis
 
 
-def test_adjust_analysis_is_identity_without_adjustments(cw_sweep):
-    analysis = cw_sweep.analysis
-    assert H.adjust_analysis(analysis, None) is analysis
-    assert H.adjust_analysis(analysis, frozendict()) is analysis
+def test_adjust_analysis_is_identity_without_adjustments(synthetic_sweep):
+    # through the lru_cache an equal analysis seen earlier in the session would be
+    # returned instead, so the identity is checked on the uncached function
+    adjust_analysis = H.adjust_analysis.__wrapped__
+    analysis = synthetic_sweep.analysis
+    assert adjust_analysis(analysis, None) is analysis
+    assert adjust_analysis(analysis, frozendict()) is analysis
 
 
-@given(fo=st.floats(min_value=-1e4, max_value=1e4))
-def test_adjust_analysis_replaces_matching_fields_everywhere(cw_sweep, fo):
-    analysis = cw_sweep.analysis
-    adjusted = H.adjust_analysis(analysis, frozendict({'frequency_offset': fo}))
+@given(resolution=st.floats(min_value=1e3, max_value=1e5))
+def test_adjust_analysis_replaces_matching_fields_everywhere(
+    synthetic_sweep, resolution
+):
+    analysis = synthetic_sweep.analysis
+    adjustment = frozendict({'frequency_resolution': resolution})
+    adjusted = H.adjust_analysis(analysis, adjustment)
     assert type(adjusted) is type(analysis)
     hash(adjusted)
     before, after = analysis.to_dict(), adjusted.to_dict()
     measurement_kws = {n: kws for n, kws in before.items() if isinstance(kws, dict)}
-    touched = {n for n, kws in measurement_kws.items() if 'frequency_offset' in kws}
-    assert touched
+    touched = {n for n, kws in measurement_kws.items() if 'frequency_resolution' in kws}
+    assert touched and touched < set(measurement_kws)
     for name in before:
         if name in touched:
-            assert after[name] == {**before[name], 'frequency_offset': fo}
+            assert after[name] == {**before[name], 'frequency_resolution': resolution}
         else:
             assert after[name] == before[name]
 
 
-def test_adjust_analysis_warns_about_unused_keys(cw_sweep, caplog):
+def test_adjust_analysis_warns_about_unused_keys(synthetic_sweep, caplog):
     with caplog.at_level(logging.WARNING, logger='striqt.sweep'):
-        result = H.adjust_analysis(cw_sweep.analysis, frozendict({'bogus_key': 1}))
-    assert result == cw_sweep.analysis
+        result = H.adjust_analysis(
+            synthetic_sweep.analysis, frozendict({'bogus_key': 1})
+        )
+    assert result == synthetic_sweep.analysis
     assert any('bogus_key' in record.getMessage() for record in caplog.records)

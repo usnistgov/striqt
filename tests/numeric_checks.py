@@ -6,13 +6,13 @@ count of the roundings the tested code performs, so that a failure means the lib
 rounds worse than its model rather than worse than a hand-picked number. The `*_tol`
 helpers return ``{'rtol': ..., 'atol': ...}`` for splatting into `assert_close`.
 
-Not a conftest: importable by bare name from the waveform test modules only.
+Not a conftest: importable by bare name from every test module.
 """
 
 from __future__ import annotations
 
 import numpy as np
-from numpy.testing import assert_allclose, assert_array_max_ulp
+from numpy.testing import assert_allclose
 
 # %% dtype helpers
 
@@ -44,6 +44,12 @@ def rms(x, axis=None):
     """root-mean-square of `x` over `axis`; a float when axis is None"""
     out = np.sqrt(np.mean(np.abs(x) ** 2, axis=axis))
     return float(out) if axis is None else out
+
+
+def reference_power(x, axis=None):
+    """|x|**2 evaluated in complex128, averaged over `axis` when one is given"""
+    power = np.abs(to_numpy(x).astype(np.complex128)) ** 2
+    return power if axis is None else power.mean(axis=axis)
 
 
 # %% array namespace conversion
@@ -99,15 +105,6 @@ def assert_close(
         )
         atol = max(atol, peak_factor(expected.size) * sigma * scale)
     assert_allclose(actual, expected, rtol=rtol, atol=atol, err_msg=err_msg)
-
-
-def assert_ulps(actual, expected, maxulp):
-    """assert_array_max_ulp after to_numpy(), counting ulps at the lower of the two
-    precisions"""
-    actual = to_numpy(actual)
-    expected = to_numpy(expected)
-    dtype = max((actual.dtype, expected.dtype), key=lambda d: np.finfo(d).eps)
-    assert_array_max_ulp(actual.astype(dtype), expected.astype(dtype), maxulp=maxulp)
 
 
 # %% FFT roundoff model (fourier, ofdm)
@@ -190,12 +187,6 @@ def level_tolerance_dB(sigma, power=False):
     return (10 if power else 20) * np.log10(1 + sigma)
 
 
-def peak_level_tolerance_dB(sigma, size, power=False):
-    """express the peak tolerance implied by `sigma` over `size` outputs as a level
-    uncertainty in dB"""
-    return level_tolerance_dB(peak_factor(size) * sigma, power=power)
-
-
 def tone_peak_roundoff(dtype):
     """bound on structured roundoff in any one bin, relative to a tone's amplitude"""
     return FFT_ROUNDOFF_SAFETY * TONE_PEAK_ROUNDOFF * unit_roundoff(dtype)
@@ -213,26 +204,6 @@ def far_bin_floor_dBc(sigma, nfft, size=None, dtype=np.complex64):
         return rms_tolerance_dBc(sigma / np.sqrt(nfft))
     white = peak_factor(size) * sigma / np.sqrt(nfft)
     return rms_tolerance_dBc(max(white, tone_peak_roundoff(dtype)))
-
-
-def assert_backends_agree(
-    result_cp, result_np, sigma, err_msg='', rtol=0, scale=None, power=False
-):
-    """check a cupy result against numpy within the rms model `sigma` and the peak it
-    implies over the output size.
-
-    `sigma` is relative to `scale`, the output rms unless given. `rtol` covers the
-    largest bins of a power output, whose error grows with the bin value.
-    """
-    tol_dB = level_tolerance_dB(sigma, power)
-    assert_close(
-        result_cp,
-        result_np,
-        rtol=rtol,
-        sigma=sigma,
-        scale=scale,
-        err_msg=f'{err_msg} (level tolerance {tol_dB:.1e} dB rms)',
-    )
 
 
 def tone_bin(nfft, bin_fraction):
@@ -359,6 +330,12 @@ def dB_tolerance(rtol, atol, max_abs_dB):
 
 
 # %% binned statistics (arrays, power_analysis)
+
+
+def accum_rtol(dtype, n, n_impl=1):
+    """rtol on a sum or reduction over `n` terms of `dtype`, against exact arithmetic
+    (n_impl=1) or against a second implementation (n_impl=2)"""
+    return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
 
 
 def mean_atol(x, count):

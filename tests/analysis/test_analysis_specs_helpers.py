@@ -9,7 +9,7 @@ from typing import Annotated, Any, Optional, Union
 
 import msgspec
 import pytest
-from frozen_strategies import (
+from analysis_strategies import (
     container_depth,
     frozendict_dicts,
     has_frozen_below,
@@ -228,14 +228,14 @@ def test_freeze_depths_are_cached():
 
 
 @VAR_TUPLE_DEPTH_XFAIL
-def test_freeze_depths_of_real_specs(cw_sweep):
+def test_freeze_depths_of_real_specs(synthetic_sweep):
     assert inspect_freeze_depths(ss.specs.SingleToneCapture) == {
         'port': 1,
         'adjust_analysis': 1,
         'external_lo_frequency': 1,
     }
     assert inspect_freeze_depths(ss.specs.CaptureRemap) == {'key': 1, 'lookup': 1}
-    assert inspect_freeze_depths(type(cw_sweep)) == {
+    assert inspect_freeze_depths(type(synthetic_sweep)) == {
         'captures': 1,
         'loops': 1,
         'adjust_captures': 2,
@@ -303,8 +303,8 @@ def test_json_schema_unknown_type_raises():
         json_schema(SchemaUnknown)
 
 
-def test_json_schema_of_bound_sweep(cw_sweep):
-    schema = json_schema(type(cw_sweep))
+def test_json_schema_of_bound_sweep(synthetic_sweep):
+    schema = json_schema(type(synthetic_sweep))
     name = schema['$ref'].rsplit('/', 1)[-1]
     sweep_def = schema['$defs'][name]
     assert sweep_def['properties']['sensor_binding'] == {'enum': [name]}

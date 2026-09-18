@@ -20,11 +20,13 @@ from conftest import (
     raises_on_both_paths,
 )
 from hypothesis import given
+from hypothesis import strategies as st
 from pytest_lazy_fixtures import lf
 from site_strategies import SiteCalCaptureCls
 from soapy_factories import MCR, soapy_capture
 from sweep_strategies import (
     BOLTZMANN_MW,
+    CAL_LOOP_VALUES,
     GAIN_LOOP,
     NDE_LOOP,
     PORT_LOOP,
@@ -33,7 +35,6 @@ from sweep_strategies import (
     YFACTOR_NF_DB,
     CalSourceCls,
     CalSweepCls,
-    calibration_loop_orderings,
     expected_yfactor,
     loop_fields,
     make_calibration_capture,
@@ -61,9 +62,19 @@ TOGGLE_MSG = 'noise_diode_enabled must be the first specified loop'
 
 
 class TestNoiseDiodeToggle:
-    @given(loops_accepted=calibration_loop_orderings())
-    def test_explicit_toggle_position(self, loops_accepted):
-        loops, accepted = loops_accepted
+    @given(ordering=st.permutations(list(CAL_LOOP_VALUES)), data=st.data())
+    def test_explicit_toggle_position(self, ordering, data):
+        """the toggle is accepted where calibration.py inserts it: outermost, or just
+        inside a port loop"""
+        count = data.draw(st.integers(min_value=0, max_value=len(ordering)))
+        names = ordering[:count]
+        loops = [ss.specs.List(field=f, values=CAL_LOOP_VALUES[f]) for f in names]
+        accepted = True
+        if data.draw(st.booleans()):
+            index = data.draw(st.integers(min_value=0, max_value=len(loops)))
+            loops.insert(index, NDE_LOOP)
+            accepted = index == 0 or (index == 1 and names[0] == 'port')
+        loops = tuple(loops)
         kws = make_calibration_sweep_kws(loops=loops)
         if accepted:
             direct, converted = construct_both(CalSweepCls, **kws)
@@ -559,8 +570,7 @@ class TestManualYFactorPeripheral:
         periph.arm(make_calibration_capture(port=0, noise_diode_enabled=True))
         periph.arm(make_calibration_capture(port=1, noise_diode_enabled=True))
 
-        # conftest.answer_calibration_prompts parses this wording to switch the fake
-        # diode
+        # conftest.fake_sweep_runner parses this wording to switch the fake diode
         matches = [
             re.match(r'(enable|disable) noise diode at port (\d+)', prompt)
             for prompt in scripted_input['prompts']

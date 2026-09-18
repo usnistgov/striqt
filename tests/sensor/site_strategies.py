@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import sys
 
-from conftest import SITE_DIR
-from hypothesis import strategies as st
+from conftest import SITE_SPEC
 from sweep_strategies import SOURCE
 
 import striqt.sensor as ss
 
 if 'site_single_tone' not in ss.lib.bindings.registry:
-    ss.read_yaml_spec(SITE_DIR / 'site-cpu.yaml')
+    ss.read_yaml_spec(SITE_SPEC)
 
 EXT = sys.modules['extensions']
 RADIO_ID: str = EXT.RADIO_ID
@@ -91,6 +90,3 @@ def make_site_sweep(
     if len(captures) == 0:
         captures = (make_site_capture(cls=cls.schema.capture),)
     return cls(source=SOURCE, captures=tuple(captures), loops=tuple(loops), **kws)
-
-
-center_frequency_keys = st.sampled_from(tuple(CHANNEL_NAMES))
