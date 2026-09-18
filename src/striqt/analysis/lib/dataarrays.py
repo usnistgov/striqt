@@ -198,6 +198,22 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
         raise ValueError(problem) from exc
 
 
+def _restore_padded_coord_dtype(da: 'xr.DataArray', info: register.CoordInfo) -> None:
+    """undo the integer dtype promotion caused by the nan fill in `xr.DataArray.pad`.
+
+    The padded region spans the whole coordinate and is overwritten by the
+    coordinate factory, so the fill values themselves need not survive.
+    """
+
+    dtype = np.dtype(info.dtype)
+    coord = da[info.name]
+
+    if dtype.kind not in 'iub' or coord.dtype == dtype:
+        return
+
+    da[info.name] = xr.zeros_like(coord, dtype=dtype)
+
+
 def build_dataarray(
     delayed: DelayedDataArray,
     *,
@@ -239,6 +255,7 @@ def build_dataarray(
 
     for coord_factory in delayed.info.coord_factories:
         factory_info = register.registry.coordinates[coord_factory]
+        _restore_padded_coord_dtype(da, factory_info)
         coord = da[factory_info.name]
 
         ret = coord_factory(delayed.capture, delayed.spec)
