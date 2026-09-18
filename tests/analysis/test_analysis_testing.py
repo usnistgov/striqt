@@ -244,9 +244,16 @@ def test_sawtooth_ramps_and_resets(xp, power):
 
 @pytest.mark.parametrize('power', [0, -6], ids='power{}'.format)
 def test_sawtooth_follows_the_closed_form(xp, power):
-    """On a sample grid where i/fs is inexact, `t % period` at a reset rounds to
-    `period` instead of 0, so the ramp is bounded by the amplitude rather than
-    strictly below it."""
+    """At an exact reset (`t == k * period`) the ramp has a jump discontinuity
+    from `amplitude` back to `0`. `period` (1e-5) and `FS` (1e6) are not exact
+    binary fractions, so `i / FS` at a reset sample only approximates that
+    instant rather than landing on it exactly: the sample is a floating-point
+    tie between the discontinuity's two endpoints, and which side a backend's
+    modulo resolves it to is not guaranteed to agree between `numpy` and
+    `cupy`. Away from the resets the closed form is unambiguous and is checked
+    pointwise; at the resets only the weaker, backend-agnostic invariant --
+    close to `0` or close to `amplitude` -- is checked.
+    """
     period = 1e-5
     x = to_numpy(testing.sawtooth(DURATION, FS, period=period, power=power, xp=xp))
     amplitude = 10 ** (power / 20)
@@ -254,9 +261,17 @@ def test_sawtooth_follows_the_closed_form(xp, power):
     t = np.arange(SIZE, dtype='int64') / FS
     expected = (t % period) * (amplitude / period)
 
+    samples_per_period = round(period * FS)
+    is_boundary = np.arange(SIZE) % samples_per_period == 0
+
     assert np.array_equal(x.imag, np.zeros_like(x.imag))
-    assert x.real[0] == pytest.approx(expected, rel=1e-6)
-    assert x.real.min() >= 0 and x.real.max() <= amplitude
+
+    interior = x.real[0][~is_boundary]
+    assert interior == pytest.approx(expected[~is_boundary], rel=1e-6)
+
+    boundary = x.real[0][is_boundary]
+    tol = max(1e-6 * abs(amplitude), 1e-9)
+    assert np.all((np.abs(boundary) <= tol) | (np.abs(boundary - amplitude) <= tol))
 
 
 def test_sawtooth_ports_are_identical(xp):

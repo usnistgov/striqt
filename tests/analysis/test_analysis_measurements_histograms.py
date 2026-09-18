@@ -161,6 +161,11 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
     The populated bin is therefore 0 dBm -- the whole power of the tone -- rather than
     a level referred to the 50 kHz noise bandwidth that the units attr reports, and
     the empty bins fall in the -inf catch-all.
+
+    The fractions are 19/20 and 1/20 (`NFFT` is 20, not a power of two, so these are
+    not dyadic), computed here in float32 to match the measurement's registered
+    dtype, so they are compared with a float32-appropriate tolerance rather than
+    exact equality.
     """
     iq = sa.testing.tone(DURATION, FS, frequency=2 * FREQUENCY_RESOLUTION)
 
@@ -174,10 +179,9 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
     )
 
     assert da.attrs['noise_bandwidth'] == FREQUENCY_RESOLUTION
-    assert populated(da.values[0], da.spectrogram_power_bin.values) == [
-        (float('-inf'), (NFFT - 1) / NFFT),
-        (0.0, 1 / NFFT),
-    ]
+    bins, fractions = zip(*populated(da.values[0], da.spectrogram_power_bin.values))
+    assert bins == (float('-inf'), 0.0)
+    assert_close(fractions, ((NFFT - 1) / NFFT, 1 / NFFT), rtol=RTOL)
 
 
 @pytest.mark.parametrize(
