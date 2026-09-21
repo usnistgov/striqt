@@ -77,7 +77,59 @@ def loop_captures(
     only_fields: tuple[str, ...] | None = None,
     limit: int | None = None,
 ) -> tuple[SC, ...]:
-    """evaluate the loop specification, and flatten into one list of loops"""
+    """expand `sweep.loops` into the flat tuple of captures that the sweep will run.
+
+    The loops are nested in declaration order, outermost first, with `sweep.captures`
+    innermost, so 2 captures under a 3-point loop give 6 captures ordered
+    ``(point0, capture0), (point0, capture1), (point1, capture0), ...``. A leading
+    `Repeat` is not expanded here, since its captures would be identical; the sweep
+    runner multiplies this tuple by `Repeat.count` instead. When `sweep.captures` is
+    empty, each loop point instead builds a new capture, and the loops must then
+    supply every field the capture class requires.
+
+    Each capture is assembled in three passes, the later ones winning:
+
+    1. the entry from `sweep.captures`, with the loop point applied;
+    2. `adjust_captures` for `source_id`, evaluated against that result, so a
+       `CaptureRemap` may key on a looped field;
+    3. the loop point again, which therefore always overrides an adjustment.
+
+    Loops with ``isin='analysis'`` name a measurement parameter rather than a capture
+    field; they accumulate into the capture's `adjust_analysis` mapping, merged with
+    whatever that capture already carries. Loop points are coerced to the capture's
+    field type, so a sweep decoded from YAML strings expands to the same captures as
+    the equivalent numeric one.
+
+    Results are cached on the loop-determining fields rather than on the sweep, so
+    the acquire, analyze and write stages can each call this without recomputing.
+
+    Args:
+        sweep: the sweep to expand. Its capture class is that of `sweep.captures[0]`,
+            or the sensor binding's `schema.capture` when no captures are listed.
+        source_id: hex id of the open source, selecting which `adjust_captures` block
+            applies on top of the `'defaults'` block. `None` uses `'defaults'` alone,
+            which is what lets a sweep be expanded with no hardware open; per-source
+            remaps are then not applied.
+        only_fields: keep only the capture loops naming one of these fields, dropping
+            the rest. Analysis loops are unaffected. Used to expand just the
+            dimensions a lookup depends on, as `max_by_frequency` does.
+        limit: stop expanding after this many captures. Applied before the
+            `options.loop_only_nyquist` filter, so fewer may come back.
+
+    Returns:
+        the expanded captures, as instances of the sweep's capture class. Empty when
+        the sweep has neither captures nor loops, or when `loop_only_nyquist` is set
+        and every point has a finite `analysis_bandwidth` above its `sample_rate`.
+
+    Raises:
+        TypeError: a loop names a field the capture class does not declare, or the
+            sweep has neither explicit captures nor a sensor binding, leaving no
+            capture class to instantiate.
+        msgspec.ValidationError: a loop point does not convert to the type of its
+            capture field; or an expanded capture is invalid -- it violates a `Meta`
+            bound or a `Capture.__post_init__` rule that no single input violates on
+            its own, or the loops left a required capture field unset.
+    """
 
     if len(sweep.captures) > 0:
         cls = type(sweep.captures[0])
@@ -131,6 +183,57 @@ def adjust_analysis(
         )
 
     return sa.specs.helpers.freeze(structs.BundledAnalysis.from_dict(result))
+
+
+def validate_sweep_analysis(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None = None,
+) -> None:
+    """validate each unique (capture, analysis) combination that `sweep` will run.
+
+    The chain mirrors the one `iterate_sweep` follows, so what is checked here is what
+    will run. `source_id=None` resolves `adjust_captures` through its 'defaults' block,
+    which needs no hardware but also leaves per-source remaps checked only in their
+    default form.
+
+    Raises:
+        `msgspec.ValidationError` naming the first offending capture and measurement
+    """
+
+    if len(sweep.analysis.to_dict()) == 0:
+        return
+
+    if len(sweep.captures) == 0 and sweep.sensor is None:
+        # loop_captures refuses this combination; leave such a sweep constructible
+        return
+
+    loop_fields = tuple(
+        loop.field
+        for loop in sweep.loops
+        if loop.isin == 'capture' and loop.field is not None
+    )
+
+    seen = set()
+
+    for i, capture in enumerate(loop_captures(sweep, source_id)):
+        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
+        key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        try:
+            with sa.specs.helpers.validation_path(f'.captures[{i}]'):
+                sa.registry.validate(capture, analysis)
+        except sa.specs.helpers.SpecValidationError as ex:
+            if len(loop_fields) == 0:
+                raise
+            # the loop fields themselves, not the adjust_captures fields they drive:
+            # the loop coordinate is what identifies the capture in the sweep
+            desc = describe_capture(capture, loop_fields, source_id=source_id)
+            raise type(ex)(f'{ex.message} ({desc})', ex.path) from ex.__cause__
 
 
 @sa.util.lru_cache()
