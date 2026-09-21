@@ -74,6 +74,32 @@ _coord_factories = [
 ]
 
 
+@util.lru_cache()
+def _spectrogram_spec(spec: specs.Cellular5GNRSSBSpectrogram) -> specs.Spectrogram:
+    """the STFT that lands one bin on each half-subcarrier and one hop on each symbol"""
+    return specs.Spectrogram(
+        frequency_resolution=spec.subcarrier_spacing / 2,
+        fractional_overlap=Fraction(13, 28),
+        window_fill=Fraction(15, 28),
+        window=spec.window,
+        lo_bandstop=spec.lo_bandstop,
+        integration_bandwidth=spec.subcarrier_spacing,
+        trim_stopband=False,
+    )
+
+
+def validate_cellular_5g_ssb_spectrogram(
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
+) -> shared.SpectrogramSizing:
+    """check the STFT sizing of the symbol-resolved SSB spectrogram.
+
+    The 3GPP cell-search parameters are deliberately not consulted: this measurement
+    lays symbols out from `subcarrier_spacing` and `discovery_periodicity` alone, and
+    unlike the correlators it has no `symbol_indexes` field to pick a search case with.
+    """
+    return shared.validate_spectrogram_sizing(capture, _spectrogram_spec(spec))
+
+
 @hint_keywords(specs.Cellular5GNRSSBSpectrogram)
 @registry.measurement(
     specs.Cellular5GNRSSBSpectrogram,
@@ -82,6 +108,7 @@ _coord_factories = [
     caches=(shared.spectrogram_cache,),
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'SSB Spectrogram'},
+    validate=validate_cellular_5g_ssb_spectrogram,
 )
 def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
@@ -101,18 +128,12 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     # TODO: compute this with the striqt.waveform.ofdm
     symbol_count = round(28 * spec.subcarrier_spacing / 15e3)  # per burst set
 
-    spg_spec = specs.Spectrogram(
-        frequency_resolution=spec.subcarrier_spacing / 2,
-        fractional_overlap=Fraction(13, 28),
-        window_fill=Fraction(15, 28),
-        window=spec.window,
-        lo_bandstop=spec.lo_bandstop,
-        integration_bandwidth=spec.subcarrier_spacing,
-        trim_stopband=False,
-    )
-
     spg, attrs = shared.evaluate_spectrogram(
-        iq, capture=capture, spec=spg_spec, limit_digits=3, dtype='float16'
+        iq,
+        capture=capture,
+        spec=_spectrogram_spec(spec),
+        limit_digits=3,
+        dtype='float16',
     )
 
     slot_period = 1e-3 * (15e3 / spec.subcarrier_spacing)

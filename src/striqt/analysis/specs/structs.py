@@ -111,6 +111,18 @@ class Capture(SpecBase, kw_only=True, frozen=True):
             )
 
 
+class AnalysisCapture(Capture, kw_only=True, frozen=True):
+    """the capture fields that measurements and coordinate factories may read.
+
+    Measurement validators take this projection of a (potentially much larger)
+    sensor capture so that captures differing only in fields the analysis layer
+    ignores share one validation cache entry. A measurement outside this package
+    whose validator needs another capture field cannot see it here.
+    """
+
+    center_frequency: Union[types.CenterFrequency, None] = None
+
+
 class AnalysisFilter(SpecBase, kw_only=True, frozen=True):
     nfft: int = 8192
     window: types.WindowType = 'hamming'

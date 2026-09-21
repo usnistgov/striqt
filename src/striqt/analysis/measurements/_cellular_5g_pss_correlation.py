@@ -113,6 +113,7 @@ def choose_sync_offsets(
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
+    validate=shared.validate_5g_ssb_sync,
 )
 def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     """compute sync index offsets based on correlate_5g_pss"""
@@ -144,6 +145,7 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance'},
+    validate=shared.validate_5g_ssb_sync,
 )
 def cellular_5g_pss_correlation(
     iq, capture: specs.Capture, **kwargs

@@ -452,6 +452,8 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
                     f'capture fields {tuple(invalid)} conflict with measurements of the same name'
                 )
 
+        helpers.validate_sweep_analysis(self)
+
 
 class CalibrationSweep(
     Sweep[SS, SP, SC],

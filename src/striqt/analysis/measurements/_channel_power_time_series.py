@@ -17,13 +17,54 @@ else:
     pd = util.lazy_import('pandas')
 
 
+class ChannelPowerBinning(typing.NamedTuple):
+    """the detector binning implied by a (capture, channel power spec) combination"""
+
+    bin_size: int
+    bin_count: int
+
+
+def validate_detector_period(
+    capture: specs.Capture,
+    spec: typing.Union[specs.ChannelPowerTimeSeries, specs.CyclicChannelPower],
+) -> int:
+    """check that `detector_period` spans a whole number of samples, returning that count"""
+    if not sw.isroundmod(float(spec.detector_period), 1 / capture.sample_rate):
+        raise ValueError(
+            'detector_period must be a counting-number multiple of the sample period'
+        )
+
+    return round(float(spec.detector_period) * capture.sample_rate)
+
+
+def validate_channel_power_time_series(
+    capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
+) -> ChannelPowerBinning:
+    """check that `detector_period` tiles the capture in whole samples.
+
+    `sw.iq_to_bin_power` and `sw.axis_to_blocks` apply these same two rules once IQ is
+    in hand; checking them here moves the failure ahead of the acquisition.
+    """
+    bin_size = validate_detector_period(capture, spec)
+
+    if not sw.isroundmod(capture.duration, float(spec.detector_period)):
+        raise ValueError(
+            'duration must be a counting-number multiple of detector_period'
+        )
+
+    return ChannelPowerBinning(
+        bin_size=bin_size,
+        bin_count=round(capture.duration / float(spec.detector_period)),
+    )
+
+
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
 @util.lru_cache()
 def time_elapsed(capture: specs.Capture, spec: specs.ChannelPowerTimeSeries):
-    length = round(capture.duration / spec.detector_period)
-    return pd.RangeIndex(length) * float(spec.detector_period)
+    binning = validate_channel_power_time_series(capture, spec)
+    return pd.RangeIndex(binning.bin_count) * float(spec.detector_period)
 
 
 @registry.coordinates(dtype=object, attrs={'standard_name': 'Power detector'})
@@ -68,6 +109,7 @@ def evaluate_channel_power_time_series(
     caches=_channel_power_cache,
     prefer_iq_source='aligned',
     attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
+    validate=validate_channel_power_time_series,
 )
 def channel_power_time_series(iq, capture: specs.Capture, **kwargs):
     """Compute a binned time series of channel power detector measurements.

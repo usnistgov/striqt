@@ -19,6 +19,7 @@ which is far below any level a measurement is read at.
 from __future__ import annotations
 
 import fractions
+import re
 
 import msgspec
 import numpy as np
@@ -61,6 +62,13 @@ def cyclic(iq, duration=DURATION, **kws):
     kws.setdefault('cyclic_period', CYCLIC_PERIOD)
     kws.setdefault('detector_period', DETECTOR_PERIOD)
     return sa.measurements.cyclic_channel_power(iq, capture(duration=duration), **kws)
+
+
+def validate_cyclic(capture: sa.specs.Capture, spec: sa.specs.CyclicChannelPower):
+    """call the registered validator the way the registry wrapper does"""
+    validate = sa.registry[sa.specs.CyclicChannelPower].validate
+    assert validate is not None
+    return validate(sa.specs.helpers.to_analysis_capture(capture), spec)
 
 
 def dB_tol(n_terms=1):
@@ -131,6 +139,48 @@ class TestChannelPowerTimeSeries:
         with pytest.raises(msgspec.ValidationError, match='Expected `str`'):
             cpts(iq, power_detectors=('peak', 0.5))
 
+    @pytest.mark.parametrize(
+        ('kwargs', 'duration', 'message'),
+        [
+            (
+                {'detector_period': fractions.Fraction(1, 300_000)},
+                DURATION,
+                (
+                    'detector_period must be a counting-number multiple of the '
+                    'sample period'
+                ),
+            ),
+            (
+                {},
+                10.5 * float(DETECTOR_PERIOD),
+                'duration must be a counting-number multiple of detector_period',
+            ),
+        ],
+        ids=['detector_period_3.33_samples', 'duration_10.5_detector_periods'],
+    )
+    def test_unevenly_tiled_capture_is_rejected(self, kwargs, duration, message):
+        """`detector_period` is 10/3 samples at `sample_rate`, then the capture is 10.5
+        detector periods long. `iq_to_bin_power` and `axis_to_blocks` reject both once
+        they have IQ; the validator rejects them before any is acquired."""
+        iq = testing.tone(duration, FS, frequency=1e5)
+        with pytest.raises(
+            msgspec.ValidationError, match=re.escape(message)
+        ) as excinfo:
+            cpts(iq, duration=duration, as_xarray=False, **kwargs)
+
+        assert str(excinfo.value).endswith('at `$.channel_power_time_series`')
+
+        validate = sa.registry[sa.specs.ChannelPowerTimeSeries].validate
+        assert validate is not None
+        with pytest.raises(ValueError, match=re.escape(message)):
+            validate(
+                sa.specs.helpers.to_analysis_capture(capture(duration=duration)),
+                sa.specs.ChannelPowerTimeSeries(**{
+                    'detector_period': DETECTOR_PERIOD,
+                    **kwargs,
+                }),
+            )
+
     @pytest.mark.parametrize('power', [0.0, -13.0, 7.5], ids='{:g}dBm'.format)
     def test_absolute_level_is_the_amplitude_in_dBm(self, power):
         amplitude = np.float32(10 ** (power / 20))
@@ -168,6 +218,65 @@ class TestCyclicChannelPower:
         assert da.shape == (1, len(detectors), len(statistics), CYCLIC_LAGS)
         assert tuple(da.coords['power_detector'].values) == detectors
         assert tuple(da.coords['cyclic_statistic'].values) == statistics
+
+    @pytest.mark.parametrize(
+        ('kwargs', 'duration', 'message'),
+        [
+            (
+                {},
+                1.5 * CYCLIC_PERIOD,
+                'duration must be a counting-number multiple of cyclic_period',
+            ),
+            (
+                {'cyclic_period': 2.5 * float(DETECTOR_PERIOD)},
+                DURATION,
+                'cyclic_period must be a counting-number multiple of detector_period',
+            ),
+            (
+                {'detector_period': fractions.Fraction(1, 300_000)},
+                DURATION,
+                'detector_period must be a counting-number multiple of the sample period',
+            ),
+        ],
+        ids=[
+            'duration_1.5_cycles',
+            'cyclic_period_2.5_detector_periods',
+            'detector_period_3.33_samples',
+        ],
+    )
+    def test_unevenly_nested_periods_are_rejected(self, kwargs, duration, message):
+        """the three couplings the docstring states: `duration` is 1.5 cycles,
+        `cyclic_period` is 2.5 detector periods, and `detector_period` is 10/3 samples
+        at `sample_rate`. Each is caught before any IQ is touched, so the error carries
+        the measurement's field path."""
+        iq = testing.tone(duration, FS, frequency=1e5)
+        with pytest.raises(
+            msgspec.ValidationError, match=re.escape(message)
+        ) as excinfo:
+            cyclic(iq, duration=duration, as_xarray=False, **kwargs)
+
+        assert str(excinfo.value).endswith('at `$.cyclic_channel_power`')
+
+        spec_kwargs = {
+            'cyclic_period': CYCLIC_PERIOD,
+            'detector_period': DETECTOR_PERIOD,
+            **kwargs,
+        }
+        with pytest.raises(ValueError, match=re.escape(message)):
+            validate_cyclic(
+                capture(duration=duration),
+                sa.specs.CyclicChannelPower(**spec_kwargs),
+            )
+
+    def test_validator_returns_the_lag_count(self):
+        lag_count = validate_cyclic(
+            capture(),
+            sa.specs.CyclicChannelPower(
+                cyclic_period=CYCLIC_PERIOD, detector_period=DETECTOR_PERIOD
+            ),
+        )
+
+        assert lag_count == CYCLIC_LAGS
 
     def test_statistics_are_taken_in_linear_power(self):
         """cycles that alternate between 0 dBm and 20 dBm average to 17.03 dBm in

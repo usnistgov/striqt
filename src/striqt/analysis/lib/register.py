@@ -243,6 +243,9 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
 PreferIQSource = Literal['aligned', 'pre_filter', 'pre_align']
 
 
+AnalysisValidator = Callable[['specs.AnalysisCapture', Any], Any]
+
+
 class AnalysisInfo(NamedTuple):
     name: str
     func: AnalysisFunc
@@ -254,10 +257,15 @@ class AnalysisInfo(NamedTuple):
     depends: Iterable[AnalysisFunc]
     store_compressed: bool
     dims: tuple[str, ...] | None = None
+    validate: AnalysisValidator | None = None
 
 
 class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     """a registry of keyword-only arguments for decorated functions"""
+
+    # a registry is mutated only at import time, so identity is a stable key; dict
+    # inherits __eq__, which would otherwise leave it unhashable
+    __hash__ = object.__hash__  # pyright: ignore
 
     caches: dict[AnalysisFunc, list[KwArgCache]]
     parameter_fields: dict[str, 'msgspec.structs.FieldInfo|None']
@@ -300,8 +308,14 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         prefer_iq_source: PreferIQSource = 'aligned',
         store_compressed=True,
         attrs={},
+        validate: AnalysisValidator | None = None,
     ) -> AnalysisFuncWrapper:
-        """add decorated `func` and its keyword arguments in the self.tostruct() schema"""
+        """add decorated `func` and its keyword arguments in the self.tostruct() schema.
+
+        Arguments:
+            validate: checks the (capture, spec) combination without touching IQ, so
+                that a sweep can reject a bad combination before it acquires
+        """
 
         if isinstance(dims, str):
             dims = (dims,)
@@ -314,6 +328,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             attrs=attrs,
             store_compressed=store_compressed,
             dims=dims,
+            validate=validate,
         )
 
         if coord_factories is None:
@@ -357,6 +372,11 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                     )
 
                 spec = spec_type.from_dict(kwargs)
+
+                if validate is not None:
+                    with specs.helpers.validation_path(f'.{info_kws["name"]}'):
+                        validate(specs.helpers.to_analysis_capture(capture), spec)
+
                 ret = func(iq, capture, *args, **spec.to_dict())
 
                 data, more_attrs = normalize_factory_return(ret, name=func.__name__)
@@ -453,6 +473,35 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
     def cache_context(self, capture: specs.Capture, callback: Callable | None = None):
         return cached_registry_context(self, capture, callback)
+
+    def validate(self, capture: specs.Capture, analysis: specs.AnalysisGroup) -> None:
+        """check each measurement in `analysis` against `capture` without IQ.
+
+        Raises:
+            specs.helpers.SpecValidationError: on the first invalid combination,
+                with a field path rooted at `$.analysis`
+        """
+        _validate_analysis_group(
+            specs.helpers.to_analysis_capture(capture), analysis, self
+        )
+
+
+@util.lru_cache(1024)
+def _validate_analysis_group(
+    capture: specs.AnalysisCapture,
+    analysis: specs.AnalysisGroup,
+    registry: AnalysisRegistry,
+) -> None:
+    for name, kwargs in analysis.to_dict().items():
+        if not kwargs:
+            # mirror the skip in dataarrays.evaluate_by_spec: a measurement with no
+            # parameters set does not run
+            continue
+        info = registry[type(getattr(analysis, name))]
+        if info.validate is None:
+            continue
+        with specs.helpers.validation_path('.analysis', f'.{name}'):
+            info.validate(capture, getattr(analysis, name))
 
 
 @contextlib.contextmanager

@@ -6,7 +6,7 @@ import typing
 from .. import specs
 
 from ..lib import util
-from ._channel_power_time_series import power_detector
+from ._channel_power_time_series import power_detector, validate_detector_period
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
@@ -22,12 +22,38 @@ def cyclic_statistic(capture: specs.Capture, spec: specs.CyclicChannelPower):
     return list(spec.cyclic_statistics)
 
 
+def validate_cyclic_channel_power(
+    capture: specs.Capture, spec: specs.CyclicChannelPower
+) -> int:
+    """check that the sample, detector and cycle periods nest evenly.
+
+    `sw.iq_to_cyclic_power` applies these same three rules once IQ is in hand; checking
+    them here moves the failure ahead of the acquisition.
+
+    Returns:
+        the number of detector bins in one cycle, i.e. the length of `cyclic_lag`
+    """
+    validate_detector_period(capture, spec)
+
+    detector_period = float(spec.detector_period)
+
+    if not sw.isroundmod(spec.cyclic_period, detector_period):
+        raise ValueError(
+            'cyclic_period must be a counting-number multiple of detector_period'
+        )
+
+    if not sw.isroundmod(capture.duration, spec.cyclic_period):
+        raise ValueError('duration must be a counting-number multiple of cyclic_period')
+
+    return round(spec.cyclic_period / detector_period)
+
+
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
 )
 @util.lru_cache()
 def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
-    lag_count = int(np.rint(spec.cyclic_period / spec.detector_period))
+    lag_count = validate_cyclic_channel_power(capture, spec)
 
     return np.arange(lag_count) * float(spec.detector_period)
 
@@ -39,6 +65,7 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     dtype='float32',
     prefer_iq_source='aligned',
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
+    validate=validate_cyclic_channel_power,
 )
 def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
     """Evaluate cyclic statistics of channel power across the cycles in a capture.

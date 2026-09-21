@@ -2,6 +2,7 @@
 
 from __future__ import annotations as __
 
+import contextlib
 import functools
 import fractions
 from typing import (
@@ -35,6 +36,8 @@ _V = TypeVar('_V')
 
 if TYPE_CHECKING:
     import typing_extensions
+
+    from . import structs
 
     _P = typing_extensions.ParamSpec('_P')
     _R = TypeVar('_R', covariant=True)
@@ -161,6 +164,50 @@ def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
         # in this case, omit
         extra['units'] = units
     return msgspec.Meta(description=standard_name, extra=extra, **kws)
+
+
+# %% validation of (capture, analysis spec) combinations
+class SpecValidationError(msgspec.ValidationError):
+    """a validation failure that carries a msgspec-style field path.
+
+    Subclassing `msgspec.ValidationError` is what lets the path survive: msgspec
+    re-raises a plain `ValueError` from `__post_init__` as its own
+    `ValidationError` with its own path, but propagates a `ValidationError`
+    subclass untouched.
+    """
+
+    def __init__(self, message: str, path: tuple[str, ...] = ()):
+        self.message = message
+        self.path = tuple(path)
+        super().__init__(str(self))
+
+    def __str__(self) -> str:
+        if not self.path:
+            return self.message
+        return f'{self.message} - at `${"".join(self.path)}`'
+
+    def prepend(self, *parts: str) -> SpecValidationError:
+        return type(self)(self.message, tuple(parts) + self.path)
+
+
+@contextlib.contextmanager
+def validation_path(*parts: str) -> Iterator[None]:
+    """re-raise a validation failure with `parts` prepended to its field path"""
+
+    try:
+        yield
+    except SpecValidationError as ex:
+        raise ex.prepend(*parts) from ex.__cause__
+    except (ValueError, TypeError, msgspec.ValidationError) as ex:
+        raise SpecValidationError(str(ex), parts) from ex
+
+
+@util.lru_cache(1024)
+def to_analysis_capture(capture: structs.Capture) -> structs.AnalysisCapture:
+    """project a capture down to the fields the analysis layer can read"""
+    from . import structs
+
+    return structs.AnalysisCapture.from_spec(capture)
 
 
 @util.lru_cache()

@@ -43,18 +43,10 @@ def cellular_resource_power_bin(
         power_resolution=spec.power_resolution,
     )
 
-    fres = spec.subcarrier_spacing / 2
-
-    if sw.isroundmod(capture.sample_rate, fres):
-        # need capture.sample_rate/resolution to give us a counting number
-        nfft = round(capture.sample_rate / fres)
-    else:
-        raise ValueError('sample_rate/resolution must be a counting number')
-
-    integration_bandwidth = _get_integration_bandwidth(spec)
+    enbw = validate_cellular_resource_power_histogram(capture, spec).enbw
     metadata = {
-        'noise_bandwidth': float(integration_bandwidth),
-        'units': f'dBm/{integration_bandwidth / 1e3:0.0f} kHz',
+        'noise_bandwidth': float(enbw),
+        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
     }
     return bins, metadata
 
@@ -181,6 +173,86 @@ def _get_integration_bandwidth(
         return spec.subcarrier_spacing
 
 
+def _slot_period(spec: specs.CellularResourcePowerHistogram) -> float:
+    return 1e-3 * (15e3 / spec.subcarrier_spacing)
+
+
+@util.lru_cache()
+def _spectrogram_spec(
+    spec: specs.CellularResourcePowerHistogram,
+) -> specs.Spectrogram:
+    """the STFT that lands one bin on each half-subcarrier and one hop on each symbol"""
+    if spec.cyclic_prefix == 'normal':
+        fractional_overlap = Fraction(13, 28)
+        window_fill = Fraction(15, 28)
+    else:
+        # cyclic_prefix is a Literal, so 'extended' is the only other value
+        fractional_overlap = Fraction(11, 24)
+        window_fill = Fraction(13, 24)
+
+    return specs.Spectrogram(
+        window=spec.window,
+        frequency_resolution=spec.subcarrier_spacing / 2,
+        fractional_overlap=fractional_overlap,
+        window_fill=window_fill,
+        integration_bandwidth=_get_integration_bandwidth(spec),
+        lo_bandstop=spec.lo_bandstop,
+    )
+
+
+class ResourceGridSizing(typing.NamedTuple):
+    """the frame layout and STFT sizing implied by a (capture, resource grid spec) pair"""
+
+    frame_slots: str
+    spectrogram: specs.Spectrogram
+    time_bin_averaging: typing.Optional[int]
+    enbw: float
+
+
+def validate_cellular_resource_power_histogram(
+    capture: specs.Capture, spec: specs.CellularResourcePowerHistogram
+) -> ResourceGridSizing:
+    """check the frame configuration and the STFT sizing of the resource grid.
+
+    `tdd_config_from_str` owns the `frame_slots` and `special_symbols` rules. The slot
+    averaging has to land on a whole number of STFT hops, which the spectrogram sizing
+    cannot check for us because `time_aperture` is derived here rather than given.
+    """
+    if (
+        spec.frame_slots is not None
+        and 's' in spec.frame_slots.lower()
+        and spec.special_symbols is None
+    ):
+        raise ValueError(
+            'specify special_symbols that implement the requested "s" special slot'
+        )
+
+    tdd_config = tdd_config_from_str(
+        subcarrier_spacing=spec.subcarrier_spacing,
+        frame_slots=spec.frame_slots,
+        special_symbols=spec.special_symbols,
+    )
+
+    spg_spec = _spectrogram_spec(spec)
+    sizing = shared.validate_spectrogram_sizing(capture, spg_spec)
+
+    if not spec.average_slots:
+        time_bin_averaging = None
+    elif sw.isroundmod(_slot_period(spec), sizing.hop_period):
+        time_bin_averaging = round(_slot_period(spec) / sizing.hop_period)
+    else:
+        raise ValueError(
+            'a slot must span a counting number of STFT hops to average across slots'
+        )
+
+    return ResourceGridSizing(
+        frame_slots=tdd_config.frame_slots,
+        spectrogram=spg_spec,
+        time_bin_averaging=time_bin_averaging,
+        enbw=sizing.enbw,
+    )
+
+
 def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     defaults = spec_type.__struct_defaults__
     fields = spec_type.__struct_fields__
@@ -197,6 +269,7 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     spec_type=specs.CellularResourcePowerHistogram,
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of resource grid'},
+    validate=validate_cellular_resource_power_histogram,
 )
 def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     """Evaluate the spectrograms of a cellular resource grid on each port, and
@@ -215,63 +288,14 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
 
     link_direction = 'downlink', 'uplink'
 
-    integration_bandwidth = _get_integration_bandwidth(spec)
-
-    if spec.average_slots:
-        time_aperture = 1e-3 * (15e3 / spec.subcarrier_spacing)
-    else:
-        time_aperture = None
-
-    slot_count = round(10 * spec.subcarrier_spacing / 15e3)
-    frame_slots = spec.frame_slots
-    if frame_slots is None:
-        frame_slots = slot_count * 'd'
-    elif len(frame_slots) != slot_count:
-        raise ValueError(
-            f'expected a string with {slot_count} characters, but received {len(frame_slots)}'
-        )
-
-    if 's' in frame_slots and spec.special_symbols is None:
-        raise ValueError(
-            'specify special_symbols that implement the requested "s" special slot'
-        )
-
-    # set STFT overlap and the fractional fill in the window
-    if spec.cyclic_prefix == 'normal':
-        fractional_overlap = Fraction(13, 28)
-        window_fill = Fraction(15, 28)
-    elif spec.cyclic_prefix == 'extended':
-        fractional_overlap = Fraction(11, 24)
-        window_fill = Fraction(13, 24)
-    else:
-        raise ValueError('cp_guard_period must be "normal" or "extended"')
-
-    spg_spec = specs.Spectrogram(
-        window=spec.window,
-        frequency_resolution=spec.subcarrier_spacing / 2,
-        fractional_overlap=fractional_overlap,
-        window_fill=window_fill,
-        integration_bandwidth=integration_bandwidth,
-        lo_bandstop=spec.lo_bandstop,
-    )
-
-    if time_aperture is None:
-        time_bin_averaging = None
-    else:
-        nfft = capture.sample_rate / spg_spec.frequency_resolution
-        noverlap = fractional_overlap * nfft
-        hop_size = nfft - noverlap
-        hop_period = float(hop_size / capture.sample_rate)
-        time_bin_averaging = round(time_aperture / hop_period)
-
-        assert sw.isroundmod(time_aperture / hop_period, 1)
+    sizing = validate_cellular_resource_power_histogram(capture, spec)
 
     spg, metadata = shared.evaluate_spectrogram(
-        iq, capture, spg_spec, dtype='float32', dB=False
+        iq, capture, sizing.spectrogram, dtype='float32', dB=False
     )
     del metadata['units']
 
-    freqs = shared.spectrogram_freqs(capture, spg_spec)
+    freqs = shared.spectrogram_freqs(capture, sizing.spectrogram)
     freqs = xp.asarray(freqs)
 
     masked_spgs = apply_mask(
@@ -280,7 +304,7 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
         subcarrier_spacing=spec.subcarrier_spacing,
         link_direction=link_direction,
         channel_bandwidth=capture.analysis_bandwidth,
-        frame_slots=frame_slots,
+        frame_slots=sizing.frame_slots,
         special_symbols=spec.special_symbols,
         guard_left=spec.guard_bandwidths[0],
         guard_right=spec.guard_bandwidths[1],
@@ -289,8 +313,10 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
 
     # apply the time binning only now, to allow for averaging
     # across mask boundaries
-    if time_bin_averaging is not None:
-        masked_spgs = sw.binned_mean(masked_spgs, time_bin_averaging, axis=2, fft=False)
+    if sizing.time_bin_averaging is not None:
+        masked_spgs = sw.binned_mean(
+            masked_spgs, sizing.time_bin_averaging, axis=2, fft=False
+        )
 
     masked_spgs = sw.powtodB(masked_spgs, overwrite_x=True)
     bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(

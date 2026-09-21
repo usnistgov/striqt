@@ -28,6 +28,7 @@ import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis.specs.helpers import (
     Meta,
+    SpecValidationError,
     convert_dict,
     convert_spec,
     freeze,
@@ -36,7 +37,9 @@ from striqt.analysis.specs.helpers import (
     infer_coord_info,
     inspect_freeze_depths,
     json_schema,
+    to_analysis_capture,
     unfreeze,
+    validation_path,
 )
 
 ATTRS_XFAIL = pytest.mark.xfail(
@@ -451,3 +454,151 @@ def test_infer_coord_info_rejects_ambiguous_union():
 def test_infer_coord_info_rejects_unsupported_types():
     with pytest.raises(TypeError, match='unsupported msgspec field type'):
         infer_coord_info(mi.type_info(list[int]))
+
+
+# %% to_analysis_capture
+
+
+def test_to_analysis_capture_drops_sensor_only_fields():
+    capture = ss.specs.SoapyCapture(
+        port=0, center_frequency=3.5e9, gain=10.0, duration=1e-3, sample_rate=1e6
+    )
+    projected = to_analysis_capture(capture)
+
+    assert type(projected) is sa.specs.AnalysisCapture
+    assert set(msgspec.structs.asdict(projected)) == {
+        'duration',
+        'sample_rate',
+        'analysis_bandwidth',
+        'center_frequency',
+    }
+    assert projected.duration == pytest.approx(1e-3)
+    assert projected.sample_rate == pytest.approx(1e6)
+    assert projected.center_frequency == pytest.approx(3.5e9)
+
+
+@pytest.mark.parametrize(
+    ('capture_kws', 'expected'),
+    [
+        ({'center_frequency': 3.5e9}, 3.5e9),
+        ({'center_frequency': (3.5e9, 3.6e9), 'port': (0, 1)}, (3.5e9, 3.6e9)),
+    ],
+    ids=['scalar', 'tuple'],
+)
+def test_to_analysis_capture_preserves_center_frequency(capture_kws, expected):
+    kws = {'port': 0, 'gain': 10.0, **capture_kws}
+    if isinstance(kws['port'], tuple):
+        kws['gain'] = (10.0,) * len(kws['port'])
+    capture = ss.specs.SoapyCapture(duration=1e-3, sample_rate=1e6, **kws)
+
+    assert to_analysis_capture(capture).center_frequency == expected
+
+
+def test_to_analysis_capture_defaults_absent_center_frequency_to_none():
+    capture = ss.specs.NoiseCapture(port=0, duration=1e-3, sample_rate=1e6)
+    assert not hasattr(capture, 'center_frequency')
+    assert to_analysis_capture(capture).center_frequency is None
+
+
+def test_to_analysis_capture_collapses_fields_the_analysis_layer_ignores():
+    """this is the whole point of the projection: a sweep looping over a sensor-only
+    field must not multiply the validator cache keys"""
+    kws = {'port': 0, 'center_frequency': 3.5e9, 'duration': 1e-3, 'sample_rate': 1e6}
+    low = to_analysis_capture(ss.specs.SoapyCapture(gain=0.0, **kws))
+    high = to_analysis_capture(ss.specs.SoapyCapture(gain=30.0, **kws))
+
+    assert low == high
+    assert hash(low) == hash(high)
+
+
+def test_to_analysis_capture_is_idempotent():
+    capture = sa.specs.Capture(duration=1e-3, sample_rate=1e6)
+    once = to_analysis_capture(capture)
+    assert to_analysis_capture(once) == once
+
+
+# %% SpecValidationError and validation_path
+
+
+def test_spec_validation_error_renders_the_msgspec_format():
+    exc = SpecValidationError('bad value', ('.analysis', '.spectrogram'))
+    assert str(exc) == 'bad value - at `$.analysis.spectrogram`'
+
+
+def test_spec_validation_error_without_a_path_is_the_bare_message():
+    assert str(SpecValidationError('bad value')) == 'bad value'
+
+
+def test_spec_validation_error_prepend_composes_outermost_last():
+    exc = SpecValidationError('bad value', ('.spectrogram',))
+    outer = exc.prepend('.captures[4]', '.analysis')
+
+    assert outer.path == ('.captures[4]', '.analysis', '.spectrogram')
+    assert str(outer) == 'bad value - at `$.captures[4].analysis.spectrogram`'
+    assert exc.path == ('.spectrogram',)
+
+
+def test_spec_validation_error_is_a_msgspec_validation_error():
+    assert issubclass(SpecValidationError, msgspec.ValidationError)
+
+
+def test_validation_path_prepends_to_a_spec_validation_error():
+    match = r'at `\$\.captures\[2\]\.nfft`'
+    with (
+        pytest.raises(SpecValidationError, match=match),
+        validation_path('.captures[2]'),
+    ):
+        raise SpecValidationError('too large', ('.nfft',))
+
+
+def test_validation_path_wraps_a_plain_value_error():
+    match = r'too large - at `\$\.spectrogram`'
+    with (
+        pytest.raises(SpecValidationError, match=match),
+        validation_path('.spectrogram'),
+    ):
+        raise ValueError('too large')
+
+
+@pytest.mark.parametrize('exc_type', [ValueError, TypeError, msgspec.ValidationError])
+def test_validation_path_wraps_the_validation_exception_types(exc_type):
+    with pytest.raises(SpecValidationError, match=r'at `\$\.x`'), validation_path('.x'):
+        raise exc_type('nope')
+
+
+def test_validation_path_passes_through_other_exceptions():
+    with pytest.raises(KeyError), validation_path('.x'):
+        raise KeyError('nope')
+
+
+def test_validation_path_is_transparent_when_nothing_raises():
+    with validation_path('.x'):
+        pass
+
+
+class _RaisingSpec(sa.specs.SpecBase, frozen=True, kw_only=True):
+    nfft: int = 8
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.nfft != 8:
+            raise SpecValidationError('nfft must be 8', ('.nfft',))
+
+
+@pytest.mark.parametrize(
+    'decode',
+    [
+        lambda: _RaisingSpec.from_dict({'nfft': 9}),
+        lambda: msgspec.json.decode(b'{"nfft": 9}', type=_RaisingSpec),
+    ],
+    ids=['convert', 'json_decode'],
+)
+def test_spec_validation_error_survives_msgspec_decoding(decode):
+    """msgspec re-raises a plain ValueError from __post_init__ as its own
+    ValidationError, but a ValidationError subclass propagates unchanged, so the
+    path we assembled stays authoritative"""
+    with pytest.raises(SpecValidationError) as excinfo:
+        decode()
+
+    assert excinfo.value.path == ('.nfft',)
+    assert str(excinfo.value) == 'nfft must be 8 - at `$.nfft`'

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 
+import msgspec
 import numpy as np
 import pytest
 from numeric_checks import (
@@ -212,9 +213,25 @@ class TestSpectrogram:
         ids=['time_aperture', 'integration_bandwidth'],
     )
     def test_non_integer_binning_raises(self, kwargs, message):
+        """the sizing validator rejects these before any IQ is touched, so the error
+        is a msgspec.ValidationError carrying the measurement's field path"""
         iq = testing.tone(DURATION, FS)
-        with pytest.raises(ValueError, match=re.escape(message)):
+        with pytest.raises(
+            msgspec.ValidationError, match=re.escape(message)
+        ) as excinfo:
             spg_of(iq, as_xarray=False, **kwargs)
+
+        assert str(excinfo.value).endswith('at `$.spectrogram`')
+
+        # the validator itself raises the bare error; the field path is attached by
+        # whichever caller has the surrounding context
+        with pytest.raises(ValueError, match=re.escape(message)):
+            sa.measurements.shared.validate_spectrogram_sizing(
+                CAPTURE,
+                sa.specs.Spectrogram(
+                    window='boxcar', frequency_resolution=RES, **kwargs
+                ),
+            )
 
 
 # %% power_spectral_density

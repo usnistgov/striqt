@@ -27,25 +27,15 @@ warnings.filterwarnings(
 )
 @util.lru_cache()
 def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
-    import pandas as pd
+    sizing = shared.validate_spectrogram_sizing(capture, spec)
 
-    # validation of these is handled inside striqt.waveform
-    nfft = round(capture.sample_rate / spec.frequency_resolution)
-    hop_size = nfft - round(spec.fractional_overlap * nfft)
-    hop_period = hop_period = hop_size / capture.sample_rate
-    scale = nfft / hop_size
-    size = int(scale * (capture.sample_rate * capture.duration / nfft - 1) + 1)
+    scale = sizing.nfft / sizing.hop_size
+    size = int(scale * (capture.sample_rate * capture.duration / sizing.nfft - 1) + 1)
+    hop_period = sizing.hop_period
 
-    if spec.time_aperture is None:
-        pass
-    elif sw.isroundmod(spec.time_aperture, hop_period):
-        average_bins = round(spec.time_aperture / hop_period)
-        size = size // average_bins
-        hop_period = hop_period * average_bins
-    else:
-        raise ValueError(
-            'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
-        )
+    if sizing.time_bin_averaging is not None:
+        size = size // sizing.time_bin_averaging
+        hop_period = hop_period * sizing.time_bin_averaging
 
     return np.arange(size) * hop_period
 
@@ -59,6 +49,7 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
     prefer_iq_source='pre_filter',
     # typed_kwargs=shared.SpectrogramKeywords,
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
+    validate=shared.validate_spectrogram_sizing,
 )
 def spectrogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs):
     """Evaluate a spectrogram based on an STFT.

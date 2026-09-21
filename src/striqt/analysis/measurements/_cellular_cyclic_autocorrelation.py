@@ -242,6 +242,36 @@ def _get_spec_range(
     return tuple(range(start, stop))
 
 
+def _subcarrier_spacing_tuple(
+    spec: specs.CellularCyclicAutocorrelator,
+) -> tuple[float, ...]:
+    if isinstance(spec.subcarrier_spacings, tuple):
+        return spec.subcarrier_spacings
+    return (spec.subcarrier_spacings,)
+
+
+def validate_cellular_cyclic_autocorrelation(
+    capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
+) -> int:
+    """check the frame configuration and the index ranges, returning the lag axis length.
+
+    `tdd_config_from_str` owns the `frame_slots` rules and `_get_spec_range` the
+    open-ended-range rule; `_get_max_corr_size` warms the `get_3gpp_phy` design for
+    every requested subcarrier spacing.
+    """
+    scs = _subcarrier_spacing_tuple(spec)
+
+    for one_scs in scs:
+        tdd_config_from_str(subcarrier_spacing=one_scs, frame_slots=spec.frame_slots)
+
+    _get_spec_range(spec.frame_range, 'frame_range')
+    _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
+
+    return int(
+        _get_max_corr_size(capture, subcarrier_spacings=scs, generation=spec.generation)
+    )
+
+
 @hint_keywords(specs.CellularCyclicAutocorrelator)
 @registry.measurement(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
@@ -249,6 +279,7 @@ def _get_spec_range(
     prefer_iq_source='pre_align',
     spec_type=specs.CellularCyclicAutocorrelator,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
+    validate=validate_cellular_cyclic_autocorrelation,
 )
 def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwargs):
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
@@ -269,10 +300,7 @@ def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwarg
     spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
 
     xp = sw.array_namespace(iq)
-    if isinstance(spec.subcarrier_spacings, tuple):
-        scs = spec.subcarrier_spacings
-    else:
-        scs = (spec.subcarrier_spacings,)
+    scs = _subcarrier_spacing_tuple(spec)
 
     phy_scs = _get_phy_mapping(
         capture.analysis_bandwidth,

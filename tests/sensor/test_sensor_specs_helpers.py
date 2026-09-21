@@ -45,6 +45,7 @@ from sweep_strategies import (
     sweeps,
 )
 
+import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis.specs.helpers import frozendict
 
@@ -697,21 +698,21 @@ def test_survey_loops_expand(site_survey_sweep):
     assert c.frequency_offset == pytest.approx(-3e6)
 
 
-def test_meta_bounds_are_enforced_at_expansion_not_decode(site_survey_sweep):
+def test_meta_bounds_are_enforced_when_the_sweep_is_constructed(site_survey_sweep):
+    """`validate_sweep_analysis` expands the loops from `Sweep.__post_init__`, so a
+    `Meta` bound that only `_expand_capture_loops` re-checks fails at construction"""
     loops = (
         ss.specs.Range(field='azimuth', start=-45, stop=226, step=2.5),
         ss.specs.Range(field='elevation', start=0, stop=5, step=5),
     )
-    sweep = site_survey_sweep.replace(loops=loops)
     with pytest.raises(msgspec.ValidationError, match='<= 180'):
-        H.loop_captures(sweep, source_id=RADIO_ID)
+        site_survey_sweep.replace(loops=loops)
 
 
-def test_capture_post_init_is_enforced_at_expansion(site_survey_sweep):
+def test_capture_post_init_is_enforced_when_the_sweep_is_constructed(site_survey_sweep):
     loops = (ss.specs.Range(field='azimuth', start=-180, stop=180, step=90),)
-    sweep = site_survey_sweep.replace(loops=loops)
     with pytest.raises(msgspec.ValidationError, match='azimuth and elevation'):
-        H.loop_captures(sweep, source_id=RADIO_ID)
+        site_survey_sweep.replace(loops=loops)
 
 
 def test_range_loop_on_an_int_field_accepts_integral_floats():
@@ -1049,3 +1050,74 @@ def test_adjust_analysis_warns_about_unused_keys(synthetic_sweep, caplog):
         )
     assert result == synthetic_sweep.analysis
     assert any('bogus_key' in record.getMessage() for record in caplog.records)
+
+
+# %% validate_sweep_analysis
+
+# 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
+SPG = ss.specs.BundledAnalysis.from_dict({
+    'spectrogram': {'window': 'hann', 'frequency_resolution': 1e4}
+})
+BAD_RESOLUTION = Remap(
+    key='frequency_offset',
+    lookup={0.0: {'frequency_resolution': 1e4}, 1e5: {'frequency_resolution': 3e4}},
+)
+
+
+def test_validate_sweep_analysis_accepts_the_synthetic_sweep(synthetic_sweep):
+    assert H.validate_sweep_analysis(synthetic_sweep) is None
+
+
+def test_validate_sweep_analysis_reports_a_per_source_override():
+    """`source_id` selects an `adjust_captures` block that `Sweep.__post_init__` cannot
+    reach, since it resolves only the 'defaults' block"""
+    sweep = make_sweep(
+        captures=(make_capture(),),
+        loops=(ss.specs.List(field='frequency_offset', values=(0.0, 1e5)),),
+        adjust_captures={'ab12': {'adjust_analysis': BAD_RESOLUTION}},
+        analysis=SPG,
+    )
+
+    assert H.validate_sweep_analysis(sweep) is None
+
+    with pytest.raises(msgspec.ValidationError) as excinfo:
+        H.validate_sweep_analysis(sweep, 'ab12')
+
+    message = str(excinfo.value)
+    assert 'sample_rate/resolution must be a counting number' in message
+    assert message.endswith('at `$.captures[1].analysis.spectrogram`')
+    assert 'frequency_offset: 100000.0' in message
+
+
+def test_validate_sweep_analysis_ignores_loops_over_sensor_only_fields(monkeypatch):
+    """`snr` is invisible to the analysis layer, so both captures project onto one
+    `AnalysisCapture` and the pair is validated once"""
+    # build before patching: Sweep.__post_init__ validates too, and would be counted
+    sweep = make_sweep(
+        captures=(make_capture(),),
+        loops=(ss.specs.List(field='snr', values=(10.0, 20.0)),),
+        analysis=SPG,
+    )
+    assert len(H.loop_captures(sweep)) == 2
+
+    seen = []
+    monkeypatch.setattr(
+        sa.registry, 'validate', lambda capture, analysis: seen.append(capture)
+    )
+
+    H.validate_sweep_analysis(sweep)
+
+    assert len(seen) == 1
+
+
+def test_validate_sweep_analysis_skips_an_empty_analysis(monkeypatch):
+    sweep = make_sweep(captures=(make_capture(),))
+
+    seen = []
+    monkeypatch.setattr(
+        sa.registry, 'validate', lambda capture, analysis: seen.append(capture)
+    )
+
+    H.validate_sweep_analysis(sweep)
+
+    assert seen == []

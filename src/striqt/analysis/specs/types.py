@@ -42,6 +42,11 @@ CellularAverageRBs = Annotated[
         'True (or "half") to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1 or ½ RBs'
     ),
 ]
+CenterFrequencyScalar = Annotated[float, Meta('RF center frequency', 'Hz', gt=0)]
+CenterFrequency = Annotated[
+    Union[CenterFrequencyScalar, tuple[CenterFrequencyScalar, ...]],
+    Meta('Center frequency for each port', 'Hz'),
+]
 CyclicPeriod = Annotated[
     float,
     Meta(

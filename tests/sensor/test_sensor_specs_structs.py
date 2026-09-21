@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 
 import msgspec
 import pytest
@@ -365,6 +366,50 @@ class TestSweepCaptures:
         match = r"capture fields \('spectrogram',\) conflict with measurements"
         with pytest.raises(AttributeError, match=match):
             make_sweep(captures=(capture,))
+
+
+# %% Sweep: (capture, analysis) validation
+
+# 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
+SPG = ss.specs.BundledAnalysis.from_dict({
+    'spectrogram': {'window': 'hann', 'frequency_resolution': 1e4}
+})
+RESOLUTION_MSG = 'sample_rate/resolution must be a counting number'
+
+
+class TestSweepAnalysisValidation:
+    def test_a_valid_combination_constructs(self):
+        for sweep in construct_both(
+            SweepCls, **make_sweep_kws(captures=(make_capture(),), analysis=SPG)
+        ):
+            assert sweep.analysis == SPG
+
+    def test_an_invalid_looped_capture_names_its_expanded_index(self):
+        loops = (List(field='sample_rate', values=(1e6, 1.005e6)),)
+        kws = make_sweep_kws(captures=(make_capture(),), loops=loops, analysis=SPG)
+        match = re.escape(
+            f'{RESOLUTION_MSG} (sample_rate: 1005000.0) '
+            '- at `$.captures[1].analysis.spectrogram`'
+        )
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_an_adjust_analysis_override_is_caught(self):
+        capture = make_capture(adjust_analysis={'frequency_resolution': 3e4})
+        kws = make_sweep_kws(captures=(capture,), analysis=SPG)
+        match = re.escape(f'{RESOLUTION_MSG} - at `$.captures[0].analysis.spectrogram`')
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_an_analysis_loop_override_is_caught(self):
+        loops = (
+            List(field='frequency_resolution', isin='analysis', values=(1e4, 3e4)),
+        )
+        kws = make_sweep_kws(captures=(make_capture(),), loops=loops, analysis=SPG)
+        match = re.escape(f'{RESOLUTION_MSG} - at `$.captures[1].analysis.spectrogram`')
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_the_warmup_sweep_constructs(self, synthetic_sweep):
+        warmup = ss.lib.compute.gpu.build_warmup_sweep(synthetic_sweep)
+        assert len(warmup.captures) == 1
 
 
 class TestSweepAdjustCaptures:
