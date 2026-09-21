@@ -24,7 +24,7 @@ class ChannelPowerBinning(typing.NamedTuple):
     bin_count: int
 
 
-def validate_detector_period(
+def validated_detector_bin_size(
     capture: specs.Capture,
     spec: typing.Union[specs.ChannelPowerTimeSeries, specs.CyclicChannelPower],
 ) -> int:
@@ -37,15 +37,16 @@ def validate_detector_period(
     return round(float(spec.detector_period) * capture.sample_rate)
 
 
-def validate_channel_power_time_series(
+def validated_channel_power_binning(
     capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
 ) -> ChannelPowerBinning:
-    """check that `detector_period` tiles the capture in whole samples.
+    """check that `detector_period` tiles the capture in whole samples, returning the
+    derived detector binning.
 
     `sw.iq_to_bin_power` and `sw.axis_to_blocks` apply these same two rules once IQ is
     in hand; checking them here moves the failure ahead of the acquisition.
     """
-    bin_size = validate_detector_period(capture, spec)
+    bin_size = validated_detector_bin_size(capture, spec)
 
     if not sw.isroundmod(capture.duration, float(spec.detector_period)):
         raise ValueError(
@@ -63,7 +64,7 @@ def validate_channel_power_time_series(
 )
 @util.lru_cache()
 def time_elapsed(capture: specs.Capture, spec: specs.ChannelPowerTimeSeries):
-    binning = validate_channel_power_time_series(capture, spec)
+    binning = validated_channel_power_binning(capture, spec)
     return pd.RangeIndex(binning.bin_count) * float(spec.detector_period)
 
 
@@ -109,7 +110,7 @@ def evaluate_channel_power_time_series(
     caches=_channel_power_cache,
     prefer_iq_source='aligned',
     attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
-    validate=validate_channel_power_time_series,
+    validate=validated_channel_power_binning,
 )
 def channel_power_time_series(iq, capture: specs.Capture, **kwargs):
     """Compute a binned time series of channel power detector measurements.

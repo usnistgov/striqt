@@ -226,7 +226,7 @@ class TestSpectrogram:
         # the validator itself raises the bare error; the field path is attached by
         # whichever caller has the surrounding context
         with pytest.raises(ValueError, match=re.escape(message)):
-            sa.measurements.shared.validate_spectrogram_sizing(
+            sa.measurements.shared.validated_spectrogram_sizing(
                 CAPTURE,
                 sa.specs.Spectrogram(
                     window='boxcar', frequency_resolution=RES, **kwargs

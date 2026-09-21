@@ -113,7 +113,7 @@ def choose_sync_offsets(
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'SSS Synchronization Delay', 'units': 's'},
-    validate=shared.validate_5g_ssb_sync,
+    validate=shared.validated_5g_ssb_sync_params,
 )
 def cellular_5g_sss_sync(iq, capture: specs.Capture, **kwargs):
     """compute sync index offsets based on correlate_5g_sss"""
@@ -133,7 +133,7 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, **kwargs):
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'SSS Cross-Covariance'},
-    validate=shared.validate_5g_ssb_sync,
+    validate=shared.validated_5g_ssb_sync_params,
 )
 def cellular_5g_sss_correlation(
     iq, capture: specs.Capture, **kwargs

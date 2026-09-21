@@ -250,7 +250,7 @@ def _subcarrier_spacing_tuple(
     return (spec.subcarrier_spacings,)
 
 
-def validate_cellular_cyclic_autocorrelation(
+def validated_autocorrelation_lag_count(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ) -> int:
     """check the frame configuration and the index ranges, returning the lag axis length.
@@ -279,7 +279,7 @@ def validate_cellular_cyclic_autocorrelation(
     prefer_iq_source='pre_align',
     spec_type=specs.CellularCyclicAutocorrelator,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
-    validate=validate_cellular_cyclic_autocorrelation,
+    validate=validated_autocorrelation_lag_count,
 )
 def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwargs):
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular

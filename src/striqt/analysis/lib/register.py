@@ -314,7 +314,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
         Arguments:
             validate: checks the (capture, spec) combination without touching IQ, so
-                that a sweep can reject a bad combination before it acquires
+                that a sweep can reject a bad combination before it acquires. The
+                return value is ignored here, but by convention it is the derived
+                sizing that `func` consumes, so the arithmetic has one home; such a
+                validator is named for what it returns (`validated_*`)
         """
 
         if isinstance(dims, str):

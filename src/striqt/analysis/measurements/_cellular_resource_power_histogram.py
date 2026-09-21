@@ -43,7 +43,7 @@ def cellular_resource_power_bin(
         power_resolution=spec.power_resolution,
     )
 
-    enbw = validate_cellular_resource_power_histogram(capture, spec).enbw
+    enbw = validated_resource_grid_sizing(capture, spec).enbw
     metadata = {
         'noise_bandwidth': float(enbw),
         'units': f'dBm/{enbw / 1e3:0.0f} kHz',
@@ -209,7 +209,7 @@ class ResourceGridSizing(typing.NamedTuple):
     enbw: float
 
 
-def validate_cellular_resource_power_histogram(
+def validated_resource_grid_sizing(
     capture: specs.Capture, spec: specs.CellularResourcePowerHistogram
 ) -> ResourceGridSizing:
     """check the frame configuration and the STFT sizing of the resource grid.
@@ -234,7 +234,7 @@ def validate_cellular_resource_power_histogram(
     )
 
     spg_spec = _spectrogram_spec(spec)
-    sizing = shared.validate_spectrogram_sizing(capture, spg_spec)
+    sizing = shared.validated_spectrogram_sizing(capture, spg_spec)
 
     if not spec.average_slots:
         time_bin_averaging = None
@@ -269,7 +269,7 @@ def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
     spec_type=specs.CellularResourcePowerHistogram,
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of resource grid'},
-    validate=validate_cellular_resource_power_histogram,
+    validate=validated_resource_grid_sizing,
 )
 def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     """Evaluate the spectrograms of a cellular resource grid on each port, and
@@ -288,7 +288,7 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
 
     link_direction = 'downlink', 'uplink'
 
-    sizing = validate_cellular_resource_power_histogram(capture, spec)
+    sizing = validated_resource_grid_sizing(capture, spec)
 
     spg, metadata = shared.evaluate_spectrogram(
         iq, capture, sizing.spectrogram, dtype='float32', dB=False

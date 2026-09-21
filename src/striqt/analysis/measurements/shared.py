@@ -93,10 +93,11 @@ def empty_5g_ssb_correlation(
     return xp.full(new_shape, 0, dtype=dtype)
 
 
-def validate_5g_ssb_sync(
+def validated_5g_ssb_sync_params(
     capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator
 ) -> sw.ofdm.SyncParams:
-    """check the 3GPP sync layout implied by a (capture, SSB correlator spec) pair.
+    """check the 3GPP sync layout implied by a (capture, SSB correlator spec) pair,
+    returning the sync parameters it resolves to.
 
     `sss_params` is the stricter of the two parameter builders and reaches every check
     in `pss_params`, so one validator covers the PSS and SSS measurements alike. It
@@ -163,7 +164,7 @@ class SpectrogramSizing(NamedTuple):
     enbw: float
 
 
-def validate_spectrogram_sizing(
+def validated_spectrogram_sizing(
     capture: specs.Capture, spec: specs.FrequencyAnalysisSpecBase
 ) -> SpectrogramSizing:
     """check that `spec` divides `capture` evenly, returning the derived STFT sizing.
@@ -278,7 +279,7 @@ def _cached_spectrogram(
     spec: specs.Spectrogram,
 ) -> tuple[Array, dict]:
     spec = spec.validate()
-    sizing = validate_spectrogram_sizing(capture, spec)
+    sizing = validated_spectrogram_sizing(capture, spec)
 
     spg = sw.spectrogram(
         iq,
@@ -326,7 +327,7 @@ def _cached_spectrogram(
 
 @util.lru_cache()
 def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
-    sizing = validate_spectrogram_sizing(capture, spec)
+    sizing = validated_spectrogram_sizing(capture, spec)
     nfft = sizing.nfft
 
     # use the striqt.waveform.fourier fftfreq for higher precision, which avoids

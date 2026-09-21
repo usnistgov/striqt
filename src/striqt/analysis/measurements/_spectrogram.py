@@ -27,7 +27,7 @@ warnings.filterwarnings(
 )
 @util.lru_cache()
 def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
-    sizing = shared.validate_spectrogram_sizing(capture, spec)
+    sizing = shared.validated_spectrogram_sizing(capture, spec)
 
     scale = sizing.nfft / sizing.hop_size
     size = int(scale * (capture.sample_rate * capture.duration / sizing.nfft - 1) + 1)
@@ -49,7 +49,7 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
     prefer_iq_source='pre_filter',
     # typed_kwargs=shared.SpectrogramKeywords,
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
-    validate=shared.validate_spectrogram_sizing,
+    validate=shared.validated_spectrogram_sizing,
 )
 def spectrogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs):
     """Evaluate a spectrogram based on an STFT.

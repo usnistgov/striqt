@@ -30,7 +30,7 @@ def spectrogram_power_bin(
         power_resolution=spec.power_resolution,
     )
 
-    enbw = shared.validate_spectrogram_sizing(capture, spec).enbw
+    enbw = shared.validated_spectrogram_sizing(capture, spec).enbw
 
     return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
@@ -43,7 +43,7 @@ def spectrogram_power_bin(
     dtype='float32',
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of counts'},
-    validate=shared.validate_spectrogram_sizing,
+    validate=shared.validated_spectrogram_sizing,
 )
 def spectrogram_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     """Compute a histogram of the power readings on a spectrogram.

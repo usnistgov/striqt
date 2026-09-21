@@ -69,7 +69,7 @@ def channel_power_bin(
     dtype='float32',
     prefer_iq_source='aligned',
     attrs={'standard_name': 'Fraction of channel power readings'},
-    validate=_channel_power_time_series.validate_channel_power_time_series,
+    validate=_channel_power_time_series.validated_channel_power_binning,
 )
 def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.

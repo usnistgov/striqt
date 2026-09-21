@@ -133,57 +133,6 @@ def adjust_analysis(
     return sa.specs.helpers.freeze(structs.BundledAnalysis.from_dict(result))
 
 
-def validate_sweep_analysis(
-    sweep: structs.Sweep[Any, Any, SC],
-    source_id: types.SourceID | None = None,
-) -> None:
-    """validate each unique (capture, analysis) combination that `sweep` will run.
-
-    The chain mirrors the one `iterate_sweep` follows, so what is checked here is what
-    will run. `source_id=None` resolves `adjust_captures` through its 'defaults' block,
-    which needs no hardware but also leaves per-source remaps checked only in their
-    default form.
-
-    Raises:
-        `msgspec.ValidationError` naming the first offending capture and measurement
-    """
-
-    if len(sweep.analysis.to_dict()) == 0:
-        return
-
-    if len(sweep.captures) == 0 and sweep.sensor is None:
-        # loop_captures refuses this combination; leave such a sweep constructible
-        return
-
-    loop_fields = tuple(
-        loop.field
-        for loop in sweep.loops
-        if loop.isin == 'capture' and loop.field is not None
-    )
-
-    seen = set()
-
-    for i, capture in enumerate(loop_captures(sweep, source_id)):
-        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
-        key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        try:
-            with sa.specs.helpers.validation_path(f'.captures[{i}]'):
-                sa.registry.validate(capture, analysis)
-        except sa.specs.helpers.SpecValidationError as ex:
-            if len(loop_fields) == 0:
-                raise
-            # the loop fields themselves, not the adjust_captures fields they drive:
-            # the loop coordinate is what identifies the capture in the sweep
-            desc = describe_capture(capture, loop_fields, source_id=source_id)
-            raise type(ex)(f'{ex.message} ({desc})', ex.path) from ex.__cause__
-
-
 @sa.util.lru_cache()
 def get_capture_type(sweep_cls: type[structs.Sweep]) -> type[structs.SensorCapture]:
     if sweep_cls.sensor is not None:

@@ -88,7 +88,7 @@ def _spectrogram_spec(spec: specs.Cellular5GNRSSBSpectrogram) -> specs.Spectrogr
     )
 
 
-def validate_cellular_5g_ssb_spectrogram(
+def validated_ssb_spectrogram_sizing(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
 ) -> shared.SpectrogramSizing:
     """check the STFT sizing of the symbol-resolved SSB spectrogram.
@@ -97,7 +97,7 @@ def validate_cellular_5g_ssb_spectrogram(
     lays symbols out from `subcarrier_spacing` and `discovery_periodicity` alone, and
     unlike the correlators it has no `symbol_indexes` field to pick a search case with.
     """
-    return shared.validate_spectrogram_sizing(capture, _spectrogram_spec(spec))
+    return shared.validated_spectrogram_sizing(capture, _spectrogram_spec(spec))
 
 
 @hint_keywords(specs.Cellular5GNRSSBSpectrogram)
@@ -108,7 +108,7 @@ def validate_cellular_5g_ssb_spectrogram(
     caches=(shared.spectrogram_cache,),
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'SSB Spectrogram'},
-    validate=validate_cellular_5g_ssb_spectrogram,
+    validate=validated_ssb_spectrogram_sizing,
 )
 def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.

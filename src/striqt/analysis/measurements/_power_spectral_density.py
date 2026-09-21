@@ -44,7 +44,7 @@ def baseband_frequency(
     prefer_iq_source='pre_filter',
     dtype='float32',
     attrs={'standard_name': 'Power spectral density'},
-    validate=shared.validate_spectrogram_sizing,
+    validate=shared.validated_spectrogram_sizing,
 )
 def power_spectral_density(iq, capture, **kwargs):
     """estimate power spectral density using the Welch method.

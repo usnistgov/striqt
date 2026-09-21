@@ -6,7 +6,7 @@ import typing
 from .. import specs
 
 from ..lib import util
-from ._channel_power_time_series import power_detector, validate_detector_period
+from ._channel_power_time_series import power_detector, validated_detector_bin_size
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
@@ -22,7 +22,7 @@ def cyclic_statistic(capture: specs.Capture, spec: specs.CyclicChannelPower):
     return list(spec.cyclic_statistics)
 
 
-def validate_cyclic_channel_power(
+def validated_cyclic_lag_count(
     capture: specs.Capture, spec: specs.CyclicChannelPower
 ) -> int:
     """check that the sample, detector and cycle periods nest evenly.
@@ -33,7 +33,7 @@ def validate_cyclic_channel_power(
     Returns:
         the number of detector bins in one cycle, i.e. the length of `cyclic_lag`
     """
-    validate_detector_period(capture, spec)
+    validated_detector_bin_size(capture, spec)
 
     detector_period = float(spec.detector_period)
 
@@ -53,7 +53,7 @@ def validate_cyclic_channel_power(
 )
 @util.lru_cache()
 def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
-    lag_count = validate_cyclic_channel_power(capture, spec)
+    lag_count = validated_cyclic_lag_count(capture, spec)
 
     return np.arange(lag_count) * float(spec.detector_period)
 
@@ -65,7 +65,7 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     dtype='float32',
     prefer_iq_source='aligned',
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
-    validate=validate_cyclic_channel_power,
+    validate=validated_cyclic_lag_count,
 )
 def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
     """Evaluate cyclic statistics of channel power across the cycles in a capture.
