@@ -183,7 +183,11 @@ def _spectrogram_sizing(
     capture: specs.AnalysisCapture, spec: specs.Spectrogram
 ) -> SpectrogramSizing:
     if not sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
-        raise ValueError('sample_rate/resolution must be a counting number')
+        raise ValueError(
+            'sample_rate/resolution must be a counting number '
+            f'(sample_rate: {capture.sample_rate}, '
+            f'frequency_resolution: {spec.frequency_resolution})'
+        )
     nfft = round(capture.sample_rate / spec.frequency_resolution)
 
     noverlap = round(spec.fractional_overlap * nfft)
@@ -191,7 +195,11 @@ def _spectrogram_sizing(
     nzero = (1 - spec.window_fill) * nfft
     if nzero.denominator != 1:
         raise ValueError(
-            '(1-window_fill) * sample_rate must be a counting-number multiple of frequency_resolution'
+            '(1-window_fill) * sample_rate must be a counting-number multiple of frequency_resolution '
+            f'(window_fill: {spec.window_fill}, '
+            f'sample_rate: {capture.sample_rate}, '
+            f'frequency_resolution: {spec.frequency_resolution}, '
+            f'(1-window_fill)*nfft: {nzero})'
         )
     nzero = nzero.numerator
 
@@ -203,7 +211,9 @@ def _spectrogram_sizing(
         )
     else:
         raise ValueError(
-            'when specified, integration_bandwidth must be a multiple of frequency_resolution'
+            'when specified, integration_bandwidth must be a multiple of frequency_resolution '
+            f'(integration_bandwidth: {spec.integration_bandwidth}, '
+            f'frequency_resolution: {spec.frequency_resolution})'
         )
 
     hop_size = nfft - noverlap
@@ -214,7 +224,11 @@ def _spectrogram_sizing(
         time_bin_averaging = round(spec.time_aperture / hop_period)
     else:
         raise ValueError(
-            'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution'
+            'when specified, time_aperture must be a multiple of (1-fractional_overlap)/frequency_resolution '
+            f'(time_aperture: {spec.time_aperture}, '
+            f'fractional_overlap: {spec.fractional_overlap}, '
+            f'frequency_resolution: {spec.frequency_resolution}, '
+            f'hop_period: {hop_period})'
         )
 
     # the design that `sw.stft` will build for complex64 IQ, so a bad window name or

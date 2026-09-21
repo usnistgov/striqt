@@ -69,7 +69,9 @@ def tdd_config_from_str(
         frame_slots = expect_slot_count * frame_slots
     elif len(frame_slots) != expect_slot_count:
         raise ValueError(
-            f'frame_slots must have length {expect_slot_count} to match the slot count at {round(subcarrier_spacing / 1e3)} kHz'
+            f'frame_slots must have length {expect_slot_count} to match the slot count at {round(subcarrier_spacing / 1e3)} kHz '
+            f'(frame_slots: {frame_slots}, '
+            f'subcarrier_spacing: {subcarrier_spacing})'
         )
     else:
         frame_slots = frame_slots.lower()
@@ -79,13 +81,19 @@ def tdd_config_from_str(
 
     if len(frame_slots.strip('dus')) > 0:
         allowed = set('dus')
-        raise ValueError(f'frame_slots string may only contain {allowed}')
+        raise ValueError(
+            f'frame_slots string may only contain {allowed} '
+            f'(frame_slots: {frame_slots})'
+        )
 
     if special_symbols is None:
         pass
     elif len(special_symbols.strip('duf')) > 0:
         allowed = set('duf')
-        raise ValueError(f'special_symbols string may only contain {allowed}')
+        raise ValueError(
+            f'special_symbols string may only contain {allowed} '
+            f'(special_symbols: {special_symbols})'
+        )
 
     if normal_cp:
         symbols_per_slot = 14

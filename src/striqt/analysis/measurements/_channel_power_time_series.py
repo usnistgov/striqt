@@ -31,7 +31,9 @@ def validated_detector_bin_size(
     """check that `detector_period` spans a whole number of samples, returning that count"""
     if not sw.isroundmod(float(spec.detector_period), 1 / capture.sample_rate):
         raise ValueError(
-            'detector_period must be a counting-number multiple of the sample period'
+            'detector_period must be a counting-number multiple of the sample period '
+            f'(detector_period: {float(spec.detector_period)}, '
+            f'sample_rate: {capture.sample_rate})'
         )
 
     return round(float(spec.detector_period) * capture.sample_rate)
@@ -50,7 +52,9 @@ def validated_channel_power_binning(
 
     if not sw.isroundmod(capture.duration, float(spec.detector_period)):
         raise ValueError(
-            'duration must be a counting-number multiple of detector_period'
+            'duration must be a counting-number multiple of detector_period '
+            f'(duration: {capture.duration}, '
+            f'detector_period: {float(spec.detector_period)})'
         )
 
     return ChannelPowerBinning(

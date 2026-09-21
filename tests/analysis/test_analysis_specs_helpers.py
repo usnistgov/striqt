@@ -520,13 +520,37 @@ def test_to_analysis_capture_is_idempotent():
 # %% SpecValidationError and validation_path
 
 
-def test_spec_validation_error_renders_the_msgspec_format():
-    exc = SpecValidationError('bad value', ('.analysis', '.spectrogram'))
-    assert str(exc) == 'bad value - at `$.analysis.spectrogram`'
+@pytest.mark.parametrize(
+    ('path', 'locations', 'expected'),
+    [
+        ((), (), 'bad value'),
+        (('.analysis', '.spectrogram'), (), 'bad value - $.analysis.spectrogram'),
+        ((), ('a', 'b'), 'bad value - $a $b'),
+        (
+            ('.analysis', '.spectrogram'),
+            ('.captures[0]', ".loops: {'azimuth': 43}"),
+            (
+                'bad value - $.analysis.spectrogram $.captures[0] '
+                "$.loops: {'azimuth': 43}"
+            ),
+        ),
+    ],
+    ids=['bare', 'path_only', 'locations_only', 'path_then_locations'],
+)
+def test_spec_validation_error_renders_the_msgspec_format(path, locations, expected):
+    assert str(SpecValidationError('bad value', path, locations)) == expected
 
 
-def test_spec_validation_error_without_a_path_is_the_bare_message():
-    assert str(SpecValidationError('bad value')) == 'bad value'
+@pytest.mark.parametrize(
+    ('path', 'expected'),
+    [
+        (('.spectrogram',), 'bad value - $.spectrogram $a $b'),
+        ((), 'bad value - $a $b'),
+    ],
+    ids=['with_path', 'without_path'],
+)
+def test_spec_validation_error_at_renders_locations_after_the_path(path, expected):
+    assert str(SpecValidationError('bad value', path).at('a', 'b')) == expected
 
 
 def test_spec_validation_error_prepend_composes_outermost_last():
@@ -534,8 +558,45 @@ def test_spec_validation_error_prepend_composes_outermost_last():
     outer = exc.prepend('.captures[4]', '.analysis')
 
     assert outer.path == ('.captures[4]', '.analysis', '.spectrogram')
-    assert str(outer) == 'bad value - at `$.captures[4].analysis.spectrogram`'
+    assert str(outer) == 'bad value - $.captures[4].analysis.spectrogram'
     assert exc.path == ('.spectrogram',)
+
+
+def test_spec_validation_error_at_composes_outermost_last():
+    exc = SpecValidationError('bad value').at(".loops: {'azimuth': 43}")
+    outer = exc.at('.captures[0]')
+
+    assert outer.locations == ('.captures[0]', ".loops: {'azimuth': 43}")
+
+
+def test_spec_validation_error_at_does_not_mutate_the_original():
+    exc = SpecValidationError('bad value', ('.spectrogram',), ('.captures[0]',))
+    exc.at(".loops: {'repeat': 0}")
+
+    assert exc.locations == ('.captures[0]',)
+    assert str(exc) == 'bad value - $.spectrogram $.captures[0]'
+
+
+def test_spec_validation_error_prepend_carries_the_locations_through():
+    exc = SpecValidationError('bad value', ('.spectrogram',), ('.captures[0]',))
+    outer = exc.prepend('.analysis')
+
+    assert outer.locations == ('.captures[0]',)
+    assert str(outer) == 'bad value - $.analysis.spectrogram $.captures[0]'
+
+
+def test_spec_validation_error_at_and_prepend_are_independent():
+    """the two axes commute, so a validator may interleave them as it unwinds"""
+    exc = SpecValidationError('bad value', ('.spectrogram',))
+    interleaved = exc.prepend('.analysis').at(".loops: {'repeat': 0}")
+    interleaved = interleaved.prepend('.nfft').at('.captures[0]')
+    grouped = exc.prepend('.analysis').prepend('.nfft')
+    grouped = grouped.at(".loops: {'repeat': 0}").at('.captures[0]')
+
+    assert (interleaved.path, interleaved.locations) == (
+        grouped.path,
+        grouped.locations,
+    )
 
 
 def test_spec_validation_error_is_a_msgspec_validation_error():
@@ -543,7 +604,7 @@ def test_spec_validation_error_is_a_msgspec_validation_error():
 
 
 def test_validation_path_prepends_to_a_spec_validation_error():
-    match = r'at `\$\.captures\[2\]\.nfft`'
+    match = r'\$\.captures\[2\]\.nfft'
     with (
         pytest.raises(SpecValidationError, match=match),
         validation_path('.captures[2]'),
@@ -552,7 +613,7 @@ def test_validation_path_prepends_to_a_spec_validation_error():
 
 
 def test_validation_path_wraps_a_plain_value_error():
-    match = r'too large - at `\$\.spectrogram`'
+    match = r'too large - \$\.spectrogram'
     with (
         pytest.raises(SpecValidationError, match=match),
         validation_path('.spectrogram'),
@@ -562,7 +623,7 @@ def test_validation_path_wraps_a_plain_value_error():
 
 @pytest.mark.parametrize('exc_type', [ValueError, TypeError, msgspec.ValidationError])
 def test_validation_path_wraps_the_validation_exception_types(exc_type):
-    with pytest.raises(SpecValidationError, match=r'at `\$\.x`'), validation_path('.x'):
+    with pytest.raises(SpecValidationError, match=r'\$\.x'), validation_path('.x'):
         raise exc_type('nope')
 
 
@@ -585,15 +646,44 @@ class _RaisingSpec(sa.specs.SpecBase, frozen=True, kw_only=True):
             raise SpecValidationError('nfft must be 8', ('.nfft',))
 
 
+class _RaisingLocatedSpec(sa.specs.SpecBase, frozen=True, kw_only=True):
+    nfft: int = 8
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.nfft != 8:
+            raise SpecValidationError('nfft must be 8', ('.nfft',), ('.captures[3]',))
+
+
 @pytest.mark.parametrize(
-    'decode',
+    ('decode', 'expected_locations', 'expected_str'),
     [
-        lambda: _RaisingSpec.from_dict({'nfft': 9}),
-        lambda: msgspec.json.decode(b'{"nfft": 9}', type=_RaisingSpec),
+        (
+            lambda: _RaisingSpec.from_dict({'nfft': 9}),
+            (),
+            'nfft must be 8 - $.nfft',
+        ),
+        (
+            lambda: msgspec.json.decode(b'{"nfft": 9}', type=_RaisingSpec),
+            (),
+            'nfft must be 8 - $.nfft',
+        ),
+        (
+            lambda: _RaisingLocatedSpec.from_dict({'nfft': 9}),
+            ('.captures[3]',),
+            'nfft must be 8 - $.nfft $.captures[3]',
+        ),
+        (
+            lambda: msgspec.json.decode(b'{"nfft": 9}', type=_RaisingLocatedSpec),
+            ('.captures[3]',),
+            'nfft must be 8 - $.nfft $.captures[3]',
+        ),
     ],
-    ids=['convert', 'json_decode'],
+    ids=['convert', 'json_decode', 'convert_located', 'json_decode_located'],
 )
-def test_spec_validation_error_survives_msgspec_decoding(decode):
+def test_spec_validation_error_survives_msgspec_decoding(
+    decode, expected_locations, expected_str
+):
     """msgspec re-raises a plain ValueError from __post_init__ as its own
     ValidationError, but a ValidationError subclass propagates unchanged, so the
     path we assembled stays authoritative"""
@@ -601,4 +691,5 @@ def test_spec_validation_error_survives_msgspec_decoding(decode):
         decode()
 
     assert excinfo.value.path == ('.nfft',)
-    assert str(excinfo.value) == 'nfft must be 8 - at `$.nfft`'
+    assert excinfo.value.locations == expected_locations
+    assert str(excinfo.value) == expected_str

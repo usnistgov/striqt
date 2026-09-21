@@ -745,6 +745,162 @@ def test_remaps_see_loop_values_given_as_yaml_strings(site_sweep):
     assert [c.channel_name for c in captures] == ['3750 MHz', '3900 MHz']
 
 
+# %% loop_capture_origins
+
+
+@given(sweep=sweeps())
+def test_origins_key_the_first_occurrence_of_each_capture(sweep):
+    captures = H.loop_captures(sweep)
+    origins = H.loop_capture_origins(sweep)
+
+    assert isinstance(origins, frozendict)
+    assert tuple(origins) == tuple(dict.fromkeys(captures))
+
+    for capture, origin in origins.items():
+        assert origin.capture_index == captures.index(capture)
+
+
+def test_origin_spec_index_cycles_over_the_capture_entries():
+    """captures are the innermost loop, so each loop point visits every entry"""
+    captures = tuple(make_capture(port=p) for p in (0, 1))
+    loops = (ss.specs.List(field='frequency_offset', values=(1e3, 2e3)),)
+    origins = H.loop_capture_origins(make_sweep(captures=captures, loops=loops))
+    assert [o.spec_index for o in origins.values()] == [0, 1, 0, 1]
+    assert [o.capture_index for o in origins.values()] == [0, 1, 2, 3]
+
+
+def test_origin_spec_index_is_none_without_a_capture_list():
+    loops = (
+        ss.specs.List(field='port', values=(0, 1)),
+        ss.specs.List(field='sample_rate', values=(1e6,)),
+        ss.specs.List(field='duration', values=(1e-3,)),
+    )
+    origins = H.loop_capture_origins(make_sweep(loops=loops))
+    assert [o.spec_index for o in origins.values()] == [None, None]
+
+
+def test_origin_loop_points_coerce_capture_values_but_not_analysis_values():
+    """`_build_loop_points_dict` converts only `isin='capture'` points, so an analysis
+    point reaches the origin as the YAML wrote it"""
+    loops = (
+        ss.specs.List(field='frequency_offset', values=('1e5',)),
+        ss.specs.List(field='window', isin='analysis', values=('hann',)),
+    )
+    sweep = make_sweep(captures=(make_capture(),), loops=loops)
+    (origin,) = H.loop_capture_origins(sweep).values()
+    assert dict(origin.loop_points) == {
+        ('capture', 'frequency_offset'): 1e5,
+        ('analysis', 'window'): 'hann',
+    }
+    assert type(origin.loop_points['capture', 'frequency_offset']) is float
+
+
+def test_origin_loop_points_are_hashable(site_survey_sweep):
+    """the mapping hashes lazily, so an unfrozen loop point would surface late"""
+    origins = H.loop_capture_origins(site_survey_sweep, source_id=RADIO_ID)
+    assert isinstance(hash(origins), int)
+    assert all(isinstance(hash(o.loop_points), int) for o in origins.values())
+
+
+@given(sweep=sweeps(), limit=st.integers(min_value=0, max_value=12))
+def test_origins_stay_aligned_under_limit(sweep, limit):
+    captures = H.loop_captures(sweep, limit=limit)
+    origins = H.loop_capture_origins(sweep, limit=limit)
+    assert tuple(origins) == tuple(dict.fromkeys(captures))
+    for capture, origin in origins.items():
+        assert captures[origin.capture_index] == capture
+
+
+def test_origins_are_renumbered_after_the_nyquist_filter():
+    """`capture_index` is a position in the returned tuple, so dropping the 2e6 point
+    must not leave a gap"""
+    captures = (make_capture(sample_rate=1e6, duration=1e-3),)
+    loops = (
+        ss.specs.List(field='analysis_bandwidth', values=(0.5e6, 1e6, 2e6, math.inf)),
+    )
+    options = ss.specs.SweepOptions(loop_only_nyquist=True)
+    sweep = make_sweep(captures=captures, loops=loops, options=options)
+
+    origins = H.loop_capture_origins(sweep)
+    assert tuple(origins) == H.loop_captures(sweep)
+    assert [o.capture_index for o in origins.values()] == [0, 1, 2]
+    bandwidths = [
+        o.loop_points['capture', 'analysis_bandwidth'] for o in origins.values()
+    ]
+    assert bandwidths == [0.5e6, 1e6, math.inf]
+
+
+def test_a_repeated_loop_value_collapses_onto_the_first_origin():
+    loops = (ss.specs.List(field='snr', values=(10.0, 10.0)),)
+    sweep = make_sweep(captures=(make_capture(),), loops=loops)
+
+    assert len(H.loop_captures(sweep)) == 2
+    (origin,) = H.loop_capture_origins(sweep).values()
+    assert origin.capture_index == 0
+
+
+def test_only_fields_omits_the_filtered_loops_from_loop_points():
+    loops = (
+        ss.specs.List(field='frequency_offset', values=(1.0, 2.0, 3.0)),
+        ss.specs.List(field='snr', values=(10.0, 20.0)),
+        ss.specs.List(field='window', isin='analysis', values=('hann', 'hamming')),
+    )
+    sweep = make_sweep(captures=(make_capture(frequency_offset=7.0),), loops=loops)
+    origins = H.loop_capture_origins(sweep, only_fields=('snr',))
+    assert all(
+        set(o.loop_points) == {('capture', 'snr'), ('analysis', 'window')}
+        for o in origins.values()
+    )
+
+
+# %% describe_capture_origin
+
+
+def test_describe_capture_origin_names_the_entry_and_every_loop():
+    loops = (
+        ss.specs.Repeat(count=3),
+        ss.specs.List(field='frequency_offset', values=('1e5',)),
+        ss.specs.List(field='window', isin='analysis', values=('hann',)),
+    )
+    sweep = make_sweep(captures=(make_capture(),), loops=loops)
+    ((capture, origin),) = H.loop_capture_origins(sweep).items()
+
+    assert H.describe_capture_origin(sweep, capture, origin) == (
+        '.captures[0]',
+        # a Repeat is left to the sweep runner, so only its first pass is validated
+        ".loops: {'repeat': 0, 'frequency_offset': 100000.0, 'window': 'hann'}",
+    )
+
+
+def test_describe_capture_origin_omits_the_entry_without_a_capture_list():
+    loops = (
+        ss.specs.List(field='port', values=(0,)),
+        ss.specs.List(field='sample_rate', values=(1e6,)),
+        ss.specs.List(field='duration', values=(1e-3,)),
+    )
+    sweep = make_sweep(loops=loops)
+    ((capture, origin),) = H.loop_capture_origins(sweep).items()
+
+    assert H.describe_capture_origin(sweep, capture, origin) == (
+        ".loops: {'port': 0, 'sample_rate': 1000000.0, 'duration': 0.001}",
+    )
+
+
+def test_describe_capture_origin_omits_the_loops_dropped_by_only_fields():
+    loops = (
+        ss.specs.List(field='frequency_offset', values=(1.0,)),
+        ss.specs.List(field='snr', values=(10.0,)),
+    )
+    sweep = make_sweep(captures=(make_capture(frequency_offset=7.0),), loops=loops)
+    origins = H.loop_capture_origins(sweep, only_fields=('snr',))
+    ((capture, origin),) = origins.items()
+
+    assert H.describe_capture_origin(sweep, capture, origin) == (
+        '.captures[0]',
+        ".loops: {'snr': 10.0}",
+    )
+
+
 # %% adjust_captures
 
 
@@ -1085,8 +1241,12 @@ def test_validate_sweep_analysis_reports_a_per_source_override():
 
     message = str(excinfo.value)
     assert 'sample_rate/resolution must be a counting number' in message
-    assert message.endswith('at `$.captures[1].analysis.spectrogram`')
-    assert 'frequency_offset: 100000.0' in message
+    # the values the failed rule compared, then the place in the sweep that produced
+    # them: the measurement that rejected it, the `captures:` entry, and the loop point
+    assert '(sample_rate: 1000000.0, frequency_resolution: 30000.0)' in message
+    assert message.endswith(
+        "$.analysis.spectrogram $.captures[0] $.loops: {'frequency_offset': 100000.0}"
+    )
 
 
 def test_validate_sweep_analysis_ignores_loops_over_sensor_only_fields(monkeypatch):

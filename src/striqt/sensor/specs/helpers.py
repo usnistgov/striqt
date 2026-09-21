@@ -16,6 +16,8 @@ from typing import (
     get_type_hints,
     Literal,
     Mapping,
+    NamedTuple,
+    Optional,
     Tuple,
     TYPE_CHECKING,
     Union,
@@ -68,6 +70,64 @@ def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC |
 
     pairwise = zip(*(c1_split, c2_split))
     return list(pairwise)
+
+
+class CaptureOrigin(NamedTuple):
+    """where an expanded capture came from in the sweep specification.
+
+    This is what lets an error name a place in the user's file: the expanded index
+    alone cannot, since `sweep.captures` and `sweep.loops` are both flattened away
+    by the expansion.
+    """
+
+    capture_index: int
+    """position in the expanded capture tuple"""
+
+    spec_index: Optional[int]
+    """index into `sweep.captures`, or None when the sweep lists no captures"""
+
+    loop_points: frozendict
+    """the loop point that produced this capture, keyed by (isin, field)"""
+
+
+def _resolve_capture_cls(sweep: structs.Sweep[Any, Any, SC]) -> type[SC]:
+    if len(sweep.captures) > 0:
+        return type(sweep.captures[0])
+    elif sweep.sensor is None:
+        raise TypeError(
+            'loops may apply only to explicit capture lists unless the sweep '
+            'is bound to a sensor with striqt.sensor.bind_sensor'
+        )
+    else:
+        from .dataclasses import Schema
+
+        assert isinstance(sweep.schema, Schema)
+        return sweep.schema.capture
+
+
+def _expansion_args(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None,
+    only_fields: tuple[str, ...] | None,
+    limit: int | None,
+) -> tuple[tuple, dict]:
+    """marshal `sweep` into arguments for `_expand_capture_loops_with_origins`.
+
+    There is one call site for these keywords because `functools.lru_cache` keys on
+    their insertion order, so passing the same values in two different orders misses
+    the cache: the sweep would expand twice and hand back captures that are equal but
+    not identical. `_expand_capture_loops` forwards them in this order too.
+    """
+
+    args = (sweep.captures, sweep.loops, sweep.adjust_captures)
+    kws = {
+        'source_id': source_id,
+        'cls': _resolve_capture_cls(sweep),
+        'only_fields': only_fields,
+        'loop_only_nyquist': sweep.options.loop_only_nyquist,
+        'limit': limit,
+    }
+    return args, kws
 
 
 def loop_captures(
@@ -131,29 +191,43 @@ def loop_captures(
             its own, or the loops left a required capture field unset.
     """
 
-    if len(sweep.captures) > 0:
-        cls = type(sweep.captures[0])
-    elif sweep.sensor is None:
-        raise TypeError(
-            'loops may apply only to explicit capture lists unless the sweep '
-            'is bound to a sensor with striqt.sensor.bind_sensor'
-        )
-    else:
-        from .dataclasses import Schema
+    args, kws = _expansion_args(sweep, source_id, only_fields, limit)
+    return _expand_capture_loops_with_origins(*args, **kws)[0]
 
-        assert isinstance(sweep.schema, Schema)
-        cls = sweep.schema.capture
 
-    return _expand_capture_loops(
-        sweep.captures,
-        sweep.loops,
-        sweep.adjust_captures,
-        source_id=source_id,
-        cls=cls,
-        loop_only_nyquist=sweep.options.loop_only_nyquist,
-        only_fields=only_fields,
-        limit=limit,
-    )
+def loop_capture_origins(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None = None,
+    *,
+    only_fields: tuple[str, ...] | None = None,
+    limit: int | None = None,
+) -> frozendict[SC, CaptureOrigin]:
+    """map each capture `loop_captures` would return to where it came from.
+
+    The keys are in expansion order, and the arguments mean what they do in
+    `loop_captures`, which shares this function's one cached expansion pass.
+
+    Captures that compare equal collapse onto the first of their origins, since a
+    label only ever needs to name one of them. They are not rare: a `List` may repeat
+    a value, loop points are coerced with ``strict=False`` so `'1e6'` and `1e6` are
+    one point, and an `adjust_captures` fixed value can flatten the field that
+    distinguished two `sweep.captures` entries. Use `loop_captures` wherever the
+    multiplicity matters.
+
+    Raises:
+        TypeError: as `loop_captures`, or an analysis loop point that survived
+            freezing unhashable, which no mapping can key on.
+    """
+    args, kws = _expansion_args(sweep, source_id, only_fields, limit)
+    captures, origins = _expand_capture_loops_with_origins(*args, **kws)
+
+    # not frozendict(zip(...)): dict() from pairs keeps the last value for a repeated
+    # key, and the first origin is the one worth reporting
+    first: dict[SC, CaptureOrigin] = {}
+    for capture, origin in zip(captures, origins):
+        first.setdefault(capture, origin)
+
+    return frozendict(first)
 
 
 @sa.util.lru_cache()
@@ -197,7 +271,9 @@ def validate_sweep_analysis(
     default form.
 
     Raises:
-        `msgspec.ValidationError` naming the first offending capture and measurement
+        `msgspec.ValidationError` locating the first offending capture by the
+        `sweep.captures` entry and the loop points that produced it, and naming the
+        measurement that rejected it
     """
 
     if len(sweep.analysis.to_dict()) == 0:
@@ -207,15 +283,9 @@ def validate_sweep_analysis(
         # loop_captures refuses this combination; leave such a sweep constructible
         return
 
-    loop_fields = tuple(
-        loop.field
-        for loop in sweep.loops
-        if loop.isin == 'capture' and loop.field is not None
-    )
-
     seen = set()
 
-    for i, capture in enumerate(loop_captures(sweep, source_id)):
+    for capture, origin in loop_capture_origins(sweep, source_id).items():
         analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
         key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
 
@@ -225,15 +295,11 @@ def validate_sweep_analysis(
         seen.add(key)
 
         try:
-            with sa.specs.helpers.validation_path(f'.captures[{i}]'):
-                sa.registry.validate(capture, analysis)
+            sa.registry.validate(capture, analysis)
         except sa.specs.helpers.SpecValidationError as ex:
-            if len(loop_fields) == 0:
-                raise
-            # the loop fields themselves, not the adjust_captures fields they drive:
-            # the loop coordinate is what identifies the capture in the sweep
-            desc = describe_capture(capture, loop_fields, source_id=source_id)
-            raise type(ex)(f'{ex.message} ({desc})', ex.path) from ex.__cause__
+            raise ex.at(*describe_capture_origin(sweep, capture, origin)) from (
+                ex.__cause__
+            )
 
 
 @sa.util.lru_cache()
@@ -323,6 +389,43 @@ def describe_capture(
         diffs.append(desc)
 
     return join.join(diffs)
+
+
+def describe_capture_origin(
+    sweep: structs.Sweep[Any, Any, SC],
+    capture: SC,
+    origin: CaptureOrigin,
+) -> tuple[str, ...]:
+    """locate an expanded capture in `sweep`, as sibling paths for an error message.
+
+    The loop point is rendered as one mapping in `sweep.loops` declaration order. Two
+    loops that name the same field in different `isin` blocks therefore collapse onto
+    one entry, keeping the rendering readable at the cost of that distinction.
+    """
+    points = {}
+
+    for loop in sweep.loops:
+        if loop.field is None:
+            # a Repeat is not expanded here, so only its first pass is ever validated
+            points[type(loop).__struct_config__.tag] = 0
+        elif (loop.isin, loop.field) not in origin.loop_points:
+            # dropped by only_fields
+            continue
+        elif loop.isin == 'capture':
+            # from the capture, so that the value is the coerced one that it ran with
+            points[loop.field] = getattr(capture, loop.field)
+        else:
+            points[loop.field] = origin.loop_points[loop.isin, loop.field]
+
+    locations = []
+
+    if origin.spec_index is not None:
+        locations.append(f'.captures[{origin.spec_index}]')
+
+    if len(points) > 0:
+        locations.append(f'.loops: {points!r}')
+
+    return tuple(locations)
 
 
 def adjust_captures(
@@ -722,7 +825,6 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
     return sa.specs.helpers.freeze(fixed, depth)  # type: ignore
 
 
-@sa.util.lru_cache()
 def _expand_capture_loops(
     captures: tuple[SC, ...],
     loops: tuple[structs.LoopSpec, ...],
@@ -735,13 +837,38 @@ def _expand_capture_loops(
     limit: int | None = None,
 ) -> tuple[SC, ...]:
     """evaluate the loop specification, and flatten into one list of loops"""
+    return _expand_capture_loops_with_origins(
+        captures,
+        loops,
+        adjust,
+        source_id=source_id,
+        cls=cls,
+        only_fields=only_fields,
+        loop_only_nyquist=loop_only_nyquist,
+        limit=limit,
+    )[0]
+
+
+@sa.util.lru_cache()
+def _expand_capture_loops_with_origins(
+    captures: tuple[SC, ...],
+    loops: tuple[structs.LoopSpec, ...],
+    adjust: structs.AdjustCapturesType | None = None,
+    *,
+    source_id: types.SourceID | None = None,
+    cls: type[SC] | None = None,
+    only_fields: tuple[str, ...] | None = None,
+    loop_only_nyquist: bool = False,
+    limit: int | None = None,
+) -> tuple[tuple[SC, ...], tuple[CaptureOrigin, ...]]:
+    """evaluate the loop specification into captures paired with their origins"""
     if only_fields is not None:
         loops = tuple(
             l for l in loops if l.isin == 'analysis' or l.field in only_fields
         )
 
     if len(captures) == 0 and len(loops) == 0:
-        return ()
+        return (), ()
     if cls is None:
         assert len(captures) > 0
         cls = type(captures[0])
@@ -753,13 +880,18 @@ def _expand_capture_loops(
     loop_combos = itertools.product(*loop_points.values())
 
     cdicts = cast(tuple[dict, ...], _to_builtins(captures))
+    spec_indexes: list[int | None] = (
+        list(range(len(cdicts))) if len(cdicts) > 0 else [None]
+    )
 
     result = []
+    origins = []
     for i, values in enumerate(loop_combos):
         if limit is not None and i * len(captures) >= limit:
             break
 
-        loop_point = _merge_analysis_loops(dict(zip(loop_points.keys(), values)))
+        point = dict(zip(loop_points.keys(), values))
+        loop_point = _merge_analysis_loops(point)
 
         if len(cdicts) > 0:
             # merge into the specified captures, if any
@@ -779,28 +911,43 @@ def _expand_capture_loops(
                 for c in new
             )
 
+        # analysis loop points skip the coercion in _build_loop_points_dict, so they
+        # can still be a bare list or dict from yaml, which no mapping could key on
+        frozen_point = frozendict({
+            k: sa.specs.helpers.freeze(v) for k, v in point.items()
+        })
+
         result += list(new)
+        origins += [
+            CaptureOrigin(0, spec_index, frozen_point) for spec_index in spec_indexes
+        ]
 
     if limit is not None:
         result = result[:limit]
+        origins = origins[:limit]
 
     if len(result) == 0:
         # there were no loops
-        return tuple()
+        return (), ()
     else:
-        captures = msgspec.convert(
+        expanded = msgspec.convert(
             result, tuple[cls, ...], strict=False, dec_hook=_dec_hook
         )
 
     if loop_only_nyquist:
-        return tuple(
-            c
-            for c in captures
+        keep = [
+            (c, o)
+            for c, o in zip(expanded, origins)
             if not math.isfinite(c.analysis_bandwidth)
             or c.sample_rate >= c.analysis_bandwidth
-        )
-    else:
-        return captures
+        ]
+        expanded = tuple(c for c, _ in keep)
+        origins = [o for _, o in keep]
+
+    # only now is the position in the returned tuple known
+    numbered = tuple(o._replace(capture_index=i) for i, o in enumerate(origins))
+
+    return expanded, numbered
 
 
 @sa.util.lru_cache()

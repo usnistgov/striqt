@@ -39,11 +39,16 @@ def validated_cyclic_lag_count(
 
     if not sw.isroundmod(spec.cyclic_period, detector_period):
         raise ValueError(
-            'cyclic_period must be a counting-number multiple of detector_period'
+            'cyclic_period must be a counting-number multiple of detector_period '
+            f'(cyclic_period: {spec.cyclic_period}, '
+            f'detector_period: {detector_period})'
         )
 
     if not sw.isroundmod(capture.duration, spec.cyclic_period):
-        raise ValueError('duration must be a counting-number multiple of cyclic_period')
+        raise ValueError(
+            'duration must be a counting-number multiple of cyclic_period '
+            f'(duration: {capture.duration}, cyclic_period: {spec.cyclic_period})'
+        )
 
     return round(spec.cyclic_period / detector_period)
 

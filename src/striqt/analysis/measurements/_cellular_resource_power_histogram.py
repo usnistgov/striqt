@@ -224,7 +224,8 @@ def validated_resource_grid_sizing(
         and spec.special_symbols is None
     ):
         raise ValueError(
-            'specify special_symbols that implement the requested "s" special slot'
+            'specify special_symbols that implement the requested "s" special slot '
+            f'(frame_slots: {spec.frame_slots})'
         )
 
     tdd_config = tdd_config_from_str(
@@ -242,7 +243,11 @@ def validated_resource_grid_sizing(
         time_bin_averaging = round(_slot_period(spec) / sizing.hop_period)
     else:
         raise ValueError(
-            'a slot must span a counting number of STFT hops to average across slots'
+            'a slot must span a counting number of STFT hops to average across slots '
+            f'(subcarrier_spacing: {spec.subcarrier_spacing}, '
+            f'sample_rate: {capture.sample_rate}, '
+            f'slot_period: {_slot_period(spec)}, '
+            f'hop_period: {sizing.hop_period})'
         )
 
     return ResourceGridSizing(
