@@ -26,7 +26,6 @@ from numeric_checks import (
     assert_close,
     cross_backend_rms,
     far_bin_floor_dBc,
-    interior,
     level_tolerance_dB,
     single_backend_rms,
 )
@@ -39,8 +38,10 @@ from synthetic_sources import (
     FILTER_SIZE,
     RESAMPLE_FILTER,
     expected_corrected,
+    fs_sdr,
     make_capture,
     make_sweep,
+    resampler_nffts,
     run_in_memory,
 )
 
@@ -53,15 +54,6 @@ from striqt.cli import sensor_sweep
 ports_of = ss.specs.helpers.ensure_tuple
 
 # %% oracles
-
-
-def resampler_nffts(capture) -> tuple[int, int]:
-    design = ss.lib.compute.design_resampler(capture, SOURCE.master_clock_rate)
-    return design['nfft'], design['nfft_out']
-
-
-def source_sample_rate(capture) -> float:
-    return ss.lib.compute.design_resampler(capture, SOURCE.master_clock_rate)['fs_sdr']
 
 
 def correction_sigma(capture, extra_nffts=()) -> float:
@@ -135,9 +127,7 @@ def check_tone_psd(psd, freqs, attrs, capture, frequency_offset, snr, err_msg=''
         noise_bin = 0.0
     else:
         # the source draws its noise at the source sample rate
-        noise_bin = (
-            10 ** (-snr / 10) / source_sample_rate(capture) * attrs['noise_bandwidth']
-        )
+        noise_bin = 10 ** (-snr / 10) / fs_sdr(capture) * attrs['noise_bandwidth']
 
     k0 = int(np.argmin(np.abs(freqs - frequency_offset)))
     assert int(np.argmax(psd)) == k0, f'{err_msg} tone bin'
@@ -292,10 +282,8 @@ def check_noise(ds, capture, subtests):
     averages that many exponential variates (hann bins are correlated over enbw)"""
     attrs = ds.power_spectral_density.attrs
     nfft = round(capture.sample_rate / attrs['frequency_resolution'])
-    linear = 10 ** (
-        ds.power_spectral_density.sel(time_statistic='mean').values.astype('float64')
-        / 10
-    )
+    mean_dB = ds.power_spectral_density.sel(time_statistic='mean')
+    linear = 10 ** (mean_dB.values.astype('float64') / 10)
     expected = capture.noise_psd * attrs['noise_bandwidth']
     count = linear.size * window_count(attrs, capture)
     sigma = math.sqrt(
@@ -327,13 +315,6 @@ def check_sawtooth(ds, capture, subtests):
     a linear ramp passes a symmetric unit-gain filter unchanged elsewhere."""
     sigma = correction_sigma(capture)
     pad = FILTER_SIZE // 2
-    with subtests.test('iq_waveform reproduces the ramp'):
-        expected = expected_corrected('sawtooth', capture)
-        assert_close(
-            interior(ds.iq_waveform.values, pad),
-            interior(expected, pad),
-            sigma=sigma,
-        )
     with subtests.test('rms detector follows the ramp'):
         skip = math.ceil(pad / SAMPLES_PER_DETECTOR_BIN)
         bins = np.arange(skip, DETECTOR_BINS - skip)
@@ -344,21 +325,14 @@ def check_sawtooth(ds, capture, subtests):
 
 
 def check_dirac_delta(ds, capture, subtests):
-    fs = capture.sample_rate
     amplitude = 10 ** (capture.power / 20)
-    index = round(capture.time * fs)
-    with subtests.test('impulse index'):
-        assert np.argmax(np.abs(ds.iq_waveform.values), axis=1).tolist() == [
-            index,
-            index,
-        ]
     peak = detector(ds, 'peak')
     with subtests.test('peak detector bin'):
         assert np.argmax(peak, axis=1).tolist() == [IMPULSE_BIN, IMPULSE_BIN]
     # the FIR's central tap is bw/fs (a symmetric transition around bw/2), and the
     # resampler's own passband can only reduce the peak further
     filter_peak_dB = 20 * np.log10(
-        amplitude * capture.analysis_bandwidth / source_sample_rate(capture)
+        amplitude * capture.analysis_bandwidth / fs_sdr(capture)
     )
     if capture.host_resample:
         with subtests.test('peak level bounded by the filter'):

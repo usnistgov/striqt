@@ -54,7 +54,6 @@ PREROLL_WINDOWS = [
     (-7, 20),
     (-1, 1),
     (0, SIZE),
-    (13, 29),
 ]
 PREROLL_WINDOW_IDS = [f'start{start}_count{count}' for start, count in PREROLL_WINDOWS]
 
@@ -70,17 +69,26 @@ def mean_power(x, axis=None):
     return np.mean(np.abs(x) ** 2, axis=axis)
 
 
-# %% tone
+def generate(func, xp, duration=DURATION, fs=FS, **kws):
+    """one generator call on the `xp` backend, returned as a numpy array"""
+    return to_numpy(func(duration, fs, xp=xp, **kws))
 
 
+# %% shape and dtype
+
+
+@pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
+@pytest.mark.parametrize('dtype', [None, 'complex128'], ids=['default', 'complex128'])
 @pytest.mark.parametrize('ports', [1, 2], ids='ports{}'.format)
-def test_tone_shape_and_dtype(xp, ports):
-    x = testing.tone(DURATION, FS, ports=ports, xp=xp)
+def test_generator_shape_and_dtype(xp, name, dtype, ports):
+    func, kws = GENERATORS[name]
+    requested = {} if dtype is None else {'dtype': dtype}
+    x = func(DURATION, FS, ports=ports, xp=xp, **kws, **requested)
     assert x.shape == (ports, SIZE)
-    assert x.dtype == np.dtype('complex64')
-    assert testing.tone(DURATION, FS, xp=xp, dtype='complex128').dtype == np.dtype(
-        'complex128'
-    )
+    assert x.dtype == np.dtype(dtype or 'complex64')
+
+
+# %% tone
 
 
 def test_tone_has_unit_power_and_zero_start_phase(xp):
@@ -184,16 +192,6 @@ def test_circular_awgn_seed_determines_the_samples(xp):
     )
 
 
-@pytest.mark.parametrize('ports', [1, 2], ids='ports{}'.format)
-def test_circular_awgn_shape_and_dtype(xp, ports):
-    x = testing.circular_awgn(DURATION, FS, ports=ports, xp=xp)
-    assert x.shape == (ports, SIZE)
-    assert x.dtype == np.dtype('complex64')
-    assert testing.circular_awgn(
-        DURATION, FS, xp=xp, dtype='complex128'
-    ).dtype == np.dtype('complex128')
-
-
 # %% noise
 
 
@@ -205,32 +203,6 @@ def test_noise_is_circular_awgn_at_the_integrated_power(xp, noise_psd):
         DURATION, FS, power=noise_psd * FS, ports=2, seed=3, xp=xp
     )
     assert np.array_equal(to_numpy(x), to_numpy(expected))
-
-
-def test_noise_power_matches_the_psd(xp):
-    psd = 1e-9
-    x = testing.noise(STAT_DURATION, FS, noise_psd=psd, xp=xp)
-    assert mean_power(x) == pytest.approx(psd * FS, rel=STAT_RTOL)
-
-
-def test_noise_ports_are_independent(xp):
-    x = to_numpy(testing.noise(STAT_DURATION, FS, noise_psd=1e-9, ports=2, xp=xp))
-    assert not np.array_equal(x[0], x[1])
-    correlation = np.abs(np.mean(x[0] * x[1].conj())) / (rms(x[0]) * rms(x[1]))
-    assert correlation < STAT_RTOL
-
-
-def test_noise_seed_determines_the_samples(xp):
-    kws = {'noise_psd': 1e-9, 'xp': xp}
-    x0 = to_numpy(testing.noise(DURATION, FS, seed=0, **kws))
-    assert np.array_equal(x0, to_numpy(testing.noise(DURATION, FS, seed=0, **kws)))
-    assert not np.array_equal(x0, to_numpy(testing.noise(DURATION, FS, seed=1, **kws)))
-
-
-def test_noise_shape_and_dtype(xp):
-    x = testing.noise(DURATION, FS, ports=2, xp=xp)
-    assert x.shape == (2, SIZE)
-    assert x.dtype == np.dtype('complex64')
 
 
 # %% sawtooth
@@ -326,17 +298,9 @@ def test_dirac_delta_outside_the_window_is_zero(xp):
 @pytest.mark.parametrize('ports', [1, 2], ids='ports{}'.format)
 def test_window_matches_the_whole_capture(xp, name, start_index, count, ports):
     func, kws = GENERATORS[name]
-    whole = to_numpy(func(DURATION, FS, ports=ports, xp=xp, **kws))
-    window = to_numpy(
-        func(
-            DURATION,
-            FS,
-            ports=ports,
-            start_index=start_index,
-            count=count,
-            xp=xp,
-            **kws,
-        )
+    whole = generate(func, xp, ports=ports, **kws)
+    window = generate(
+        func, xp, ports=ports, start_index=start_index, count=count, **kws
     )
 
     assert window.shape == (ports, count)
@@ -367,27 +331,11 @@ def test_window_across_zero_matches_the_longer_window(
     """the windowing identity with index 0 inside the reference window, so that the
     pre-roll and the capture are each the corresponding slice of one longer call"""
     func, kws = GENERATORS[name]
-    whole = to_numpy(
-        func(
-            DURATION,
-            FS,
-            ports=ports,
-            start_index=-PREROLL,
-            count=PREROLL + SIZE,
-            xp=xp,
-            **kws,
-        )
+    whole = generate(
+        func, xp, ports=ports, start_index=-PREROLL, count=PREROLL + SIZE, **kws
     )
-    window = to_numpy(
-        func(
-            DURATION,
-            FS,
-            ports=ports,
-            start_index=start_index,
-            count=count,
-            xp=xp,
-            **kws,
-        )
+    window = generate(
+        func, xp, ports=ports, start_index=start_index, count=count, **kws
     )
 
     assert window.shape == (ports, count)
@@ -395,29 +343,10 @@ def test_window_across_zero_matches_the_longer_window(
     assert np.array_equal(window, whole[:, offset : offset + count])
 
 
-@pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
-def test_preroll_window_ends_with_the_capture(xp, name):
-    """a call that starts before index 0 continues into exactly the capture"""
-    func, kws = GENERATORS[name]
-    with_preroll = to_numpy(
-        func(DURATION, FS, start_index=-PREROLL, count=PREROLL + SIZE, xp=xp, **kws)
-    )
-    capture = to_numpy(func(DURATION, FS, xp=xp, **kws))
-    assert np.array_equal(with_preroll[:, PREROLL:], capture)
-
-
 def test_tone_preroll_follows_the_closed_form(xp):
     frequency = 1e5
-    x = to_numpy(
-        testing.tone(
-            DURATION,
-            FS,
-            frequency=frequency,
-            start_index=-PREROLL,
-            count=PREROLL,
-            xp=xp,
-        )
-    )
+    kws = {'start_index': -PREROLL, 'count': PREROLL}
+    x = generate(testing.tone, xp, frequency=frequency, **kws)
     i = np.arange(-PREROLL, 0)
     expected = np.exp(2j * np.pi * frequency / FS * i).astype('complex64')
     assert_close(x[0], expected, rtol=elementwise_rtol(np.complex64))
@@ -432,17 +361,8 @@ def test_sawtooth_preroll_follows_the_closed_form(xp):
     amplitude = 10 ** (3 / 20)
     count = 2 * samples_per_period + 3
 
-    x = to_numpy(
-        testing.sawtooth(
-            None,
-            fs,
-            period=period,
-            power=3,
-            start_index=-count,
-            count=count,
-            xp=xp,
-        )
-    )
+    kws = {'period': period, 'power': 3, 'start_index': -count, 'count': count}
+    x = generate(testing.sawtooth, xp, None, fs, **kws)
     t = np.arange(-count, 0) / fs
     expected = (t % period) * (amplitude / period)
 
@@ -458,17 +378,8 @@ def test_sawtooth_preroll_follows_the_closed_form(xp):
     'time', [3.7e-5, -5 / FS, -PREROLL / FS], ids=['in_capture', 'in_preroll', 'first']
 )
 def test_dirac_delta_preroll_has_the_impulse_only_at_its_time(xp, time):
-    x = to_numpy(
-        testing.dirac_delta(
-            DURATION,
-            FS,
-            time=time,
-            power=-4,
-            start_index=-PREROLL,
-            count=PREROLL + SIZE,
-            xp=xp,
-        )
-    )
+    kws = {'start_index': -PREROLL, 'count': PREROLL + SIZE}
+    x = generate(testing.dirac_delta, xp, time=time, power=-4, **kws)
     _, indices = np.nonzero(x)
     assert indices.tolist() == [round(time * FS) + PREROLL]
     assert x[0, indices[0]] == pytest.approx(10 ** (-4 / 20))

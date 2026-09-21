@@ -257,7 +257,7 @@ def test_meta_units_key_only_when_given(units):
 
 
 @ATTRS_XFAIL
-def test_capture_type_attrs_units():
+def test_capture_type_attrs():
     attrs = get_capture_type_attrs(ss.specs.SingleToneCapture)
     assert set(attrs) == set(ss.specs.SingleToneCapture.__struct_fields__)
     assert attrs['duration'] == {
@@ -266,11 +266,7 @@ def test_capture_type_attrs_units():
     }
     assert attrs['port'] == {'standard_name': 'Input port indices'}
     assert attrs['host_resample'] == {}
-
-
-@ATTRS_XFAIL
-def test_capture_type_attrs_optional_union():
-    attrs = get_capture_type_attrs(ss.specs.SingleToneCapture)
+    # the Optional[...] alias of a field still has to reach the attrs
     assert attrs['backend_sample_rate']['units'] == 'S/s'
     assert 'standard_name' in attrs['snr']
 

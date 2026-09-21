@@ -6,13 +6,14 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from numeric_checks import ROUNDOFF_SAFETY, assert_close, tone_frequency, unit_roundoff
+from soapy_factories import MCR
+from sweep_strategies import SOURCE
 from synthetic_sources import BINDINGS, LO_SHIFT_CAPTURE, generator
 
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import sources
 
-MCR = 125e6
 SAMPLE_RATE = 15.36e6
 COUNT = 4096
 NOISE_PSD = 1e-17
@@ -120,7 +121,6 @@ SIGNALS = {
 
 
 def _armed_binding(binding, **capture_kws):
-    spec = ss.specs.FunctionSource(master_clock_rate=MCR, num_rx_ports=2)
     capture = BINDINGS[binding].schema.capture(**{
         'port': (0, 1),
         'sample_rate': SAMPLE_RATE,
@@ -129,7 +129,7 @@ def _armed_binding(binding, **capture_kws):
         **SIGNALS[binding],
         **capture_kws,
     })
-    source = BINDINGS[binding].sensor.source_cls(spec)
+    source = BINDINGS[binding].sensor.source_cls(SOURCE)
     source.setup()
     source.arm(capture)
     return source, capture

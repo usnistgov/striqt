@@ -417,10 +417,8 @@ def test_formatter_passes_through_paths_without_fields(synthetic_sweep, monkeypa
         raise AssertionError('lookup.id must not be called')
 
     monkeypatch.setattr(ss.lib.controller.lookup, 'id', fail)
-    assert (
-        H.PathFormatter(synthetic_sweep)('outputs/noformat.zarr')
-        == 'outputs/noformat.zarr'
-    )
+    formatter = H.PathFormatter(synthetic_sweep)
+    assert formatter('outputs/noformat.zarr') == 'outputs/noformat.zarr'
 
 
 def test_formatter_substitutes_fields(
@@ -778,33 +776,40 @@ def test_adjust_captures_missing_required_default_lookup_raises():
         H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None)
 
 
-def test_adjust_captures_omits_optional_misses():
-    remap = Remap(key='frequency_offset', lookup={100: 1.0}, required=False)
+# a remap of snr keyed on frequency_offset, the capture it is applied to, and the
+# adjustment it produces. PER_PORT hits 100 and misses 200.
+SCALAR_HIT = {'frequency_offset': 100.0}
+SCALAR_MISS = {'frequency_offset': 300.0}
+PER_PORT = {'port': (0, 1), 'frequency_offset': (100.0, 200.0)}
+
+REMAP_CASES = {
+    'optional_scalar_hit': (
+        {'lookup': {100: 1.0}, 'required': False},
+        SCALAR_HIT,
+        {'snr': 1.0},
+    ),
+    'optional_scalar_miss': (
+        {'lookup': {100: 1.0}, 'required': False},
+        SCALAR_MISS,
+        {},
+    ),
+    'per_port_hits': ({'lookup': {100: 5.0, 200: 6.0}}, PER_PORT, {'snr': (5.0, 6.0)}),
+    'per_port_miss_default': (
+        {'lookup': {100: 5.0}, 'default': 0.0},
+        PER_PORT,
+        {'snr': (5.0, 0.0)},
+    ),
+    'per_port_miss_optional': ({'lookup': {100: 5.0}, 'required': False}, PER_PORT, {}),
+}
+
+
+@pytest.mark.parametrize('case', list(REMAP_CASES), ids=list(REMAP_CASES))
+def test_adjust_captures_remap(case):
+    remap_kws, capture_kws, expected = REMAP_CASES[case]
+    remap = Remap(key='frequency_offset', **remap_kws)
     spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
-    assert H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None) == {}
-    hit = H.adjust_captures(make_capture_kws(frequency_offset=100.0), spec, None)
-    assert hit == {'snr': 1.0}
-
-
-def test_adjust_captures_per_port_key():
-    remap = Remap(key='frequency_offset', lookup={100: 5.0, 200: 6.0})
-    spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
-    capture = make_capture_kws(port=(0, 1), frequency_offset=(100.0, 200.0))
-    assert H.adjust_captures(capture, spec, None) == {'snr': (5.0, 6.0)}
-
-
-def test_adjust_captures_per_port_miss_uses_the_default():
-    remap = Remap(key='frequency_offset', lookup={100: 5.0}, default=0.0)
-    spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
-    capture = make_capture_kws(port=(0, 1), frequency_offset=(100.0, 200.0))
-    assert H.adjust_captures(capture, spec, None) == {'snr': (5.0, 0.0)}
-
-
-def test_adjust_captures_per_port_miss_omits_optional_field():
-    remap = Remap(key='frequency_offset', lookup={100: 5.0}, required=False)
-    spec = make_sweep(adjust_captures={'defaults': {'snr': remap}}).adjust_captures
-    capture = make_capture_kws(port=(0, 1), frequency_offset=(100.0, 200.0))
-    assert H.adjust_captures(capture, spec, None) == {}
+    capture = make_capture_kws(**capture_kws)
+    assert H.adjust_captures(capture, spec, None) == expected
 
 
 def test_adjust_captures_multi_field_key():

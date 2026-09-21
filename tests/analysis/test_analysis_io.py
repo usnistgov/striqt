@@ -47,11 +47,21 @@ def test_glob_include_merges_in_sorted_filename_order(write_yaml, entries):
     assert load(spec)['sites'] == expected
 
 
-def test_list_include_merges_dicts_with_later_files_winning(write_yaml):
+@pytest.mark.parametrize(
+    'order,expected',
+    [
+        ('[a.yaml, b.yaml]', {'x': 1, 'y': 2}),
+        ('[b.yaml, a.yaml]', {'x': 1, 'y': 1}),
+    ],
+    ids=['a_then_b', 'b_then_a'],
+)
+def test_list_include_merges_dicts_with_later_files_winning(
+    write_yaml, order, expected
+):
     write_yaml('a.yaml', 'x: 1\ny: 1\n')
     write_yaml('b.yaml', 'y: 2\n')
-    spec = write_yaml('spec.yaml', 'source: !include [a.yaml, b.yaml]\n')
-    assert load(spec)['source'] == {'x': 1, 'y': 2}
+    spec = write_yaml('spec.yaml', f'source: !include {order}\n')
+    assert load(spec)['source'] == expected
 
 
 def test_glob_include_merges_only_one_level_deep(write_yaml):
@@ -59,13 +69,6 @@ def test_glob_include_merges_only_one_level_deep(write_yaml):
     write_yaml('sites/b.yaml', 'block:\n  y: 2\n')
     spec = write_yaml('spec.yaml', 'sites: !include "sites/*.yaml"\n')
     assert load(spec)['sites'] == {'block': {'y': 2}}
-
-
-def test_list_include_applies_files_in_listed_order(write_yaml):
-    write_yaml('a.yaml', 'y: 1\n')
-    write_yaml('b.yaml', 'x: 1\ny: 2\n')
-    spec = write_yaml('spec.yaml', 'source: !include [b.yaml, a.yaml]\n')
-    assert load(spec)['source'] == {'x': 1, 'y': 1}
 
 
 def test_list_include_concatenates_sequences(write_yaml):

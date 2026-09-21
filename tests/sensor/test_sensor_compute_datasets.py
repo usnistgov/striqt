@@ -7,22 +7,24 @@ from __future__ import annotations
 import dataclasses
 import functools
 import logging
-from fractions import Fraction
 
 import numpy as np
 import pytest
 from numeric_checks import assert_close, elementwise_rtol
-from synthetic_sources import PSD_RESOLUTION, SCALE_ONLY, make_capture, make_sweep
+from synthetic_sources import (
+    IQ_ONLY,
+    SCALE_ONLY,
+    SPECTROGRAM,
+    make_capture,
+    make_sweep,
+    spectrogram_frames,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import compute
 from striqt.sensor.lib.compute import datasets
 
-IQ_ONLY = ss.specs.BundledAnalysis.from_dict({'iq_waveform': {}})
-SPECTROGRAM = ss.specs.BundledAnalysis.from_dict({
-    'spectrogram': {'window': 'hann', 'frequency_resolution': PSD_RESOLUTION}
-})
 OFFSETS = (1e6, 2e6)
 LO_FREQUENCIES = (10e9, 10.5e9)
 LOOPS = (ss.specs.Repeat(count=1), ss.specs.List(field='snr', values=(None,)))
@@ -33,15 +35,9 @@ WINDOW_LOOP = ss.specs.List(field='window', isin='analysis', values=('hann', 'ha
 
 
 def two_port_captures(**kws):
+    fields = {**SCALE_ONLY, 'snr': None, 'external_lo_frequency': LO_FREQUENCIES}
     return tuple(
-        make_capture(
-            'single_tone',
-            **SCALE_ONLY,
-            frequency_offset=f,
-            snr=None,
-            external_lo_frequency=LO_FREQUENCIES,
-            **kws,
-        )
+        make_capture('single_tone', **fields, frequency_offset=f, **kws)
         for f in OFFSETS
     )
 
@@ -177,13 +173,6 @@ def test_build_capture_coords_rejects_an_unregistered_analysis_loop():
 
 
 # %% concat_time_dim
-
-
-def spectrogram_frames(capture, spec) -> tuple[int, float]:
-    nfft = round(capture.sample_rate / spec.frequency_resolution)
-    hop = nfft - round(Fraction(spec.fractional_overlap) * nfft)
-    count = round(capture.duration * capture.sample_rate)
-    return (count - nfft) // hop + 1, hop / capture.sample_rate
 
 
 def test_concat_time_dim_places_the_frames_back_to_back():

@@ -37,6 +37,7 @@ from synthetic_sources import (
     build_acquired_iq,
     expected_corrected,
     expected_raw,
+    fs_sdr,
     generator,
     make_capture,
 )
@@ -81,6 +82,14 @@ D1_REASON = (
     'pad_end % 2 == 0, which fails whenever round(duration*fs_sdr) is odd, and when '
     'pad_end is 2 mod 4 each half is odd and Controller.read_iq rejects the overlaps '
     'as not even, so most host-resampled (sample_rate, duration) pairs cannot acquire'
+)
+
+
+D90_REASON = (
+    '_get_resampler_overlaps compares its pad against _get_filter_overlap, which is '
+    'FILTER_SIZE//2 + 1 counted at fs_sdr, but correct_iq applies the FIR after '
+    'resampling, so the transient spans FILTER_SIZE//2 samples of capture.sample_rate; '
+    'whenever fs_sdr > sample_rate the lead overlap is short by that ratio'
 )
 
 
@@ -129,6 +138,12 @@ def _impulse_indexes(x):
     return list(np.argmax(np.abs(to_numpy(x)), axis=1))
 
 
+def assert_impulse_at(x, capture, time):
+    """every port of `x` peaks on the output sample of `time`"""
+    index = round(time * capture.sample_rate)
+    assert _impulse_indexes(x) == [index] * to_numpy(x).shape[0]
+
+
 # %% correct_iq: time origin
 
 
@@ -142,7 +157,7 @@ def test_impulse_lands_on_its_output_sample(preset, array_backend, subtests):
         x = getattr(stages.corrected, name)
         with subtests.test(stage=name):
             assert x.shape[1] == round(capture.duration * fs)
-            assert _impulse_indexes(x) == [round(IMPULSE_TIME * fs)] * x.shape[0]
+            assert_impulse_at(x, capture, IMPULSE_TIME)
 
 
 @pytest.mark.parametrize(
@@ -335,7 +350,7 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
     corrected = ss.correct_iq(raw, signal_trigger=trigger)
 
     with subtests.test(stage='pre_align'):
-        assert _impulse_indexes(corrected.pre_align) == [round(IMPULSE_TIME * fs)] * 2
+        assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
     for port, lag in enumerate(TRIGGER_LAGS):
         shift = round(lag * fs)
@@ -372,9 +387,9 @@ def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags
 
     corrected = ss.correct_iq(_build_iq('dirac_delta', capture, overlaps))
 
-    fs = capture.sample_rate
-    assert corrected.pre_align.shape[1] == round(capture.duration * fs)
-    assert _impulse_indexes(corrected.pre_align) == [round(IMPULSE_TIME * fs)] * 2
+    size_out = round(capture.duration * capture.sample_rate)
+    assert corrected.pre_align.shape[1] == size_out
+    assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
 
 @pytest.mark.xfail(
@@ -391,10 +406,7 @@ def test_oaresample_acquisition(preset, corrections_flags):
 
     stages = acquire_corrected('dirac_delta', capture)
 
-    fs = capture.sample_rate
-    assert (
-        _impulse_indexes(stages.corrected.pre_align) == [round(IMPULSE_TIME * fs)] * 2
-    )
+    assert_impulse_at(stages.corrected.pre_align, capture, IMPULSE_TIME)
 
 
 # %% correct_iq: LO shift
@@ -536,16 +548,33 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
     trigger = FakeTrigger(0.0, max_lag=max_lag)
     lag_pad = corrections._get_max_trigger_lag(FUNCTION_SOURCE, capture, trigger)
     lead, tail = _overlaps_or_skip(capture, lag_pad)
-    fs_sdr = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)[
-        'fs_sdr'
-    ]
+    fs = fs_sdr(capture)
 
     assert lead >= 0 and tail >= 0
     if isfinite(capture.analysis_bandwidth):
-        # the FIR transient spans FILTER_SIZE//2 output samples
-        assert lead * capture.sample_rate / fs_sdr >= FILTER_SIZE // 2
+        # the FIR transient spans FILTER_SIZE//2 output samples. Upsampling designs are
+        # short of that by fs/sample_rate (xfail-audit #90), pinned by
+        # test_upsampled_overlap_covers_the_output_rate_filter_pad
+        assume(fs <= capture.sample_rate)
+        assert lead * capture.sample_rate / fs >= FILTER_SIZE // 2
     # a trigger shift of up to max_lag reads that far past the capture
-    assert tail >= max_lag * fs_sdr
+    assert tail >= max_lag * fs
+    # the sum of the two is an overlap that read_iq accepts, and it asks the source
+    # for exactly the padded resampler input
+    read_count = buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=lead + tail)
+    assert read_count == round(capture.duration * fs) + lead + tail
+
+
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=D90_REASON)
+def test_upsampled_overlap_covers_the_output_rate_filter_pad():
+    """a capture whose resampler upsamples: 12.065 MS/s from a 12.5 MS/s fs_sdr, where
+    the (2061, 2061) overlaps buy only 1989 of the 2000 output samples the FIR
+    transient spans, so the trimmed output keeps ~11 samples of edge transient at
+    each end"""
+    capture = _drawn_capture(12065e3, 24977, 0.5)
+    lead, _ = corrections._get_resampler_overlaps(capture, FUNCTION_SOURCE)
+
+    assert lead * capture.sample_rate / fs_sdr(capture) >= FILTER_SIZE // 2
 
 
 @pytest.mark.xfail(strict=True, raises=AssertionError, reason=D1_REASON)
@@ -569,26 +598,6 @@ def test_overlaps_are_even(sample_rate, count, bandwidth_fraction):
     assert lead % 2 == 0 and tail % 2 == 0
 
 
-@settings(report_multiple_bugs=False, max_examples=50)
-@given(
-    sample_rate=sample_rates,
-    count=sample_counts,
-    bandwidth_fraction=bandwidth_fractions,
-)
-def test_read_count_matches_the_padded_resampler_input(
-    sample_rate, count, bandwidth_fraction
-):
-    capture = _drawn_capture(sample_rate, count, bandwidth_fraction)
-    lead, tail = _overlaps_or_skip(capture)
-    fs_sdr = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)[
-        'fs_sdr'
-    ]
-
-    read_count = buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=lead + tail)
-
-    assert read_count == round(capture.duration * fs_sdr) + lead + tail
-
-
 DOCUMENTED_OVERLAPS = {
     'resample_filter': (6250, 6250),
     'resample_only': (350, 350),
@@ -604,13 +613,7 @@ def test_preset_overlaps_are_acquirable(name):
     a harness change rather than as unrelated acquisition failures."""
     capture = make_capture('single_tone', **PRESETS[name])
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
-    fs_sdr = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)[
-        'fs_sdr'
-    ]
-
     assert overlaps == DOCUMENTED_OVERLAPS[name]
-    read_count = buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=sum(overlaps))
-    assert read_count == round(capture.duration * fs_sdr) + sum(overlaps)
 
 
 # %% acquisitions that the overlap defects block
@@ -621,14 +624,21 @@ ODD_OVERLAP_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 6.144e6}
 NONINTEGRAL_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 4e6, 'duration': 1e-3}
 
 
-@pytest.mark.xfail(strict=True, raises=ValueError, reason=D1_REASON)
-def test_odd_overlap_acquisition():
-    capture = make_capture('dirac_delta', **ODD_OVERLAP_CAPTURE, time=IMPULSE_TIME)
+@pytest.mark.parametrize(
+    'preset',
+    [
+        pytest.param(
+            ODD_OVERLAP_CAPTURE,
+            id='odd_overlap',
+            marks=pytest.mark.xfail(strict=True, raises=ValueError, reason=D1_REASON),
+        ),
+        pytest.param(NONINTEGRAL_CAPTURE, id='nonintegral_source_duration'),
+    ],
+)
+def test_impulse_acquisition(preset):
+    capture = make_capture('dirac_delta', **preset, time=IMPULSE_TIME)
     stages = acquire_corrected('dirac_delta', capture)
-    fs = capture.sample_rate
-    assert (
-        _impulse_indexes(stages.corrected.pre_align) == [round(IMPULSE_TIME * fs)] * 2
-    )
+    assert_impulse_at(stages.corrected.pre_align, capture, IMPULSE_TIME)
 
 
 def test_correct_iq_trims_an_odd_lead_pad():
@@ -638,18 +648,8 @@ def test_correct_iq_trims_an_odd_lead_pad():
 
     corrected = ss.correct_iq(_build_iq('dirac_delta', capture, overlaps))
 
-    fs = capture.sample_rate
-    assert corrected.pre_align.shape[1] == round(capture.duration * fs)
-    assert _impulse_indexes(corrected.pre_align) == [round(IMPULSE_TIME * fs)] * 2
-
-
-def test_nonintegral_source_duration_acquisition():
-    capture = make_capture('dirac_delta', **NONINTEGRAL_CAPTURE, time=IMPULSE_TIME)
-    stages = acquire_corrected('dirac_delta', capture)
-    fs = capture.sample_rate
-    assert (
-        _impulse_indexes(stages.corrected.pre_align) == [round(IMPULSE_TIME * fs)] * 2
-    )
+    assert corrected.pre_align.shape[1] == round(capture.duration * capture.sample_rate)
+    assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
 
 # %% get_correction_overlaps: the soapy captures
@@ -662,19 +662,30 @@ def _assert_valid_overlaps(capture):
     assert low > 0 and high > 0
 
 
-@pytest.mark.parametrize('sample_rate', [MCR, 62.5e6, 15.36e6])
-def test_infinite_bandwidth_overlaps(sample_rate):
-    _assert_valid_overlaps(_capture(sample_rate=sample_rate))
-
-
-def test_finite_bandwidth_without_host_resampling():
-    _assert_valid_overlaps(_capture(analysis_bandwidth=40e6, host_resample=False))
-
-
-def test_finite_bandwidth_with_a_large_resampler_fft():
+VALID_OVERLAP_CAPTURES = {
+    'infinite_bandwidth_at_the_clock_rate': {'sample_rate': MCR},
+    'infinite_bandwidth_at_62.5_MHz': {'sample_rate': 62.5e6},
+    'infinite_bandwidth_at_15.36_MHz': {'sample_rate': 15.36e6},
+    'finite_bandwidth_without_host_resampling': {
+        'analysis_bandwidth': 40e6,
+        'host_resample': False,
+    },
     # fs_sdr 15.625 MS/s -> 15.36 MS/s designs a 6250-point FFT, larger than the
     # filter overlap, so the block sizing works out regardless of the ceildiv order
-    _assert_valid_overlaps(_capture(sample_rate=15.36e6, analysis_bandwidth=10e6))
+    'finite_bandwidth_with_a_large_resampler_fft': {
+        'sample_rate': 15.36e6,
+        'analysis_bandwidth': 10e6,
+    },
+}
+
+
+@pytest.mark.parametrize(
+    'kws',
+    list(VALID_OVERLAP_CAPTURES.values()),
+    ids=list(VALID_OVERLAP_CAPTURES),
+)
+def test_soapy_capture_overlaps_cover_the_filter(kws):
+    _assert_valid_overlaps(_capture(**kws))
 
 
 @pytest.mark.xfail(

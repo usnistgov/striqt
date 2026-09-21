@@ -97,13 +97,9 @@ def zarr_iq_file(tmp_path_factory):
     captures at FS, with the coordinates ZarrIQSource.arm reads from a sensor store"""
     import xarray as xr
 
+    fields = {**SCALE_ONLY, 'duration': FILE_DURATION, 'snr': None}
     captures = [
-        make_capture(
-            'single_tone',
-            **{**SCALE_ONLY, 'duration': FILE_DURATION},
-            frequency_offset=f,
-            snr=None,
-        )
+        make_capture('single_tone', **fields, frequency_offset=f)
         for f in TONE_FREQUENCIES
     ]
     ds = xr.concat(run_in_memory(make_sweep('single_tone', captures)), dim='capture')
@@ -281,13 +277,8 @@ def mat_files(tmp_path_factory):
     root = tmp_path_factory.mktemp('mat')
     files = {}
     for rows in (1, 2):
-        waveform = testing.single_tone(
-            None,
-            FS,
-            frequency_offset=TONE_FREQUENCIES[0],
-            ports=rows,
-            count=FILE_SAMPLES,
-        )
+        tone = {'frequency_offset': TONE_FREQUENCIES[0], 'count': FILE_SAMPLES}
+        waveform = testing.single_tone(None, FS, ports=rows, **tone)
         path = root / f'{rows}row.mat'
         savemat(path, {'waveform': waveform})
         files[rows] = SimpleNamespace(path=path, waveform=waveform)
@@ -351,10 +342,10 @@ def test_mat_loop_repeats_file(mat_files):
     """with loop=True a capture longer than the file wraps around to index 0"""
     duration = 1.5 * FILE_DURATION
     capture = file_capture(port=0, duration=duration)
-    source = mat_spec(mat_files[1], loop=True)
-    corrected = acquire_corrected(
-        ss.bindings.mat_file, capture, source=source
-    ).corrected
+    stages = acquire_corrected(
+        ss.bindings.mat_file, capture, source=mat_spec(mat_files[1], loop=True)
+    )
+    corrected = stages.corrected
     file = mat_files[1].waveform
     count = round(duration * FS)
     expected = np.concatenate([file, file[:, : count - FILE_SAMPLES]], axis=1)
@@ -373,13 +364,11 @@ def test_mat_loop_repeats_file(mat_files):
 def test_mat_two_port(mat_files):
     """a two-row file supplies ports 0 and 1 from rows 0 and 1"""
     capture = file_capture()
-    source = mat_spec(mat_files[2])
-    corrected = acquire_corrected(
-        ss.bindings.mat_file, capture, source=source
-    ).corrected
-    np.testing.assert_array_equal(
-        to_numpy(corrected.pre_align), mat_files[2].waveform[:, :READ_SAMPLES]
+    stages = acquire_corrected(
+        ss.bindings.mat_file, capture, source=mat_spec(mat_files[2])
     )
+    expected = mat_files[2].waveform[:, :READ_SAMPLES]
+    np.testing.assert_array_equal(to_numpy(stages.corrected.pre_align), expected)
 
 
 # %% TDMSSource
@@ -402,15 +391,14 @@ def tdms_file(tmp_path_factory):
     q = np.round(tone.imag / amplitude * INT16_FULL_SCALE).astype('int16')
 
     path = tmp_path_factory.mktemp('tdms') / 'iq.tdms'
+    reference_level = np.array([TDMS_REFERENCE_LEVEL_DBM])
     with TdmsWriter(str(path)) as writer:
         writer.write_segment([
             GroupObject('header'),
             ChannelObject('header', 'IQ_samples_per_second', np.array([FS])),
             ChannelObject('header', 'carrier_frequency', np.array([CENTER_FREQUENCY])),
             ChannelObject('header', 'total_samples', np.array([FILE_SAMPLES])),
-            ChannelObject(
-                'header', 'reference_level_dBm', np.array([TDMS_REFERENCE_LEVEL_DBM])
-            ),
+            ChannelObject('header', 'reference_level_dBm', reference_level),
             GroupObject('iq'),
             ChannelObject('iq', 'I', i),
             ChannelObject('iq', 'Q', q),

@@ -12,19 +12,17 @@ import pytest
 from sweep_strategies import SOURCE
 from synthetic_sources import (
     ANALYSIS,
-    SCALE_ONLY,
+    IQ_ONLY,
     acquire_corrected,
-    make_capture,
     make_sweep,
+    tone_captures,
 )
 
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import compute
 
-ONE_PORT = {**SCALE_ONLY, 'port': 0}
-IQ_ONLY = ss.specs.BundledAnalysis.from_dict({'iq_waveform': {}})
-CAPTURE = make_capture('single_tone', **ONE_PORT, frequency_offset=1e6, snr=None)
+(CAPTURE,) = tone_captures((1e6,))
 SWEEP = make_sweep('single_tone', (CAPTURE,), analysis=IQ_ONLY)
 
 PSS = ss.specs.BundledAnalysis.from_dict({

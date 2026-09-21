@@ -10,11 +10,10 @@ import pytest
 from fake_soapy import CONSTANTS, ERROR_NAMES, RX, ArgInfo, Range, StreamResult
 from soapy_factories import MCR, call_names, soapy_capture, source_spec
 from sweep_strategies import BOLTZMANN_MW, receiver_gain
-from synthetic_sources import build_acquired_iq
+from synthetic_sources import build_acquired_iq, fs_sdr
 
 import striqt.sensor as ss
 import striqt.waveform as sw
-from striqt.sensor.lib.compute import design_resampler
 from striqt.sensor.lib.sources import soapy
 from striqt.sensor.lib.sources.base import ReceiveStreamError
 
@@ -90,19 +89,20 @@ def test_device_time_source(time_source, expected):
 validate = soapy.RxStream.validate_stream_read
 
 
-def test_successful_read_returns_count_and_timestamp():
-    assert validate(StreamResult(ret=1024, timeNs=5_000), 'except') == (1024, 5_000)
-
-
-def test_zero_length_read_is_reported_as_success():
-    assert validate(StreamResult(ret=0, timeNs=7), 'except') == (0, 7)
-
-
-def test_timestamp_after_sync_is_accepted():
-    assert validate(StreamResult(ret=8, timeNs=200), 'except', sync_time_ns=100) == (
-        8,
-        200,
-    )
+@pytest.mark.parametrize(
+    'result, sync_time_ns, expected',
+    [
+        pytest.param(
+            StreamResult(ret=1024, timeNs=5_000), None, (1024, 5_000), id='count'
+        ),
+        pytest.param(StreamResult(ret=0, timeNs=7), None, (0, 7), id='zero-length'),
+        pytest.param(
+            StreamResult(ret=8, timeNs=200), 100, (8, 200), id='timestamp-after-sync'
+        ),
+    ],
+)
+def test_validate_stream_read_accepts(result, sync_time_ns, expected):
+    assert validate(result, 'except', sync_time_ns=sync_time_ns) == expected
 
 
 @pytest.mark.parametrize('on_overflow', ['ignore', 'log'])
@@ -182,26 +182,34 @@ def test_no_limits_gives_no_info(xp):
     assert soapy.compute_overload_info(_samples(xp, [1.0]), source, capture) == {}
 
 
-def test_adc_headroom_has_one_entry_per_port(xp):
-    source = source_spec(adc_overload_limit=-1)
-    capture = soapy_capture(port=(0, 1), gain=(0, -10))
-    info = soapy.compute_overload_info(_samples(xp, [1.0, 0.1]), source, capture)
-    assert list(info) == ['adc_headroom']
-    headroom = info['adc_headroom']
+HEADROOM_CASES = {
+    # (source, capture, |x| peak per port)
+    'adc': (
+        source_spec(adc_overload_limit=-1),
+        soapy_capture(port=(0, 1), gain=(0, -10)),
+        [1.0, 0.1],
+    ),
+    'if': (
+        source_spec(adc_overload_limit=None, if_overload_limit=-10),
+        soapy_capture(port=(0, 1), gain=(0, -30)),
+        [1.0, 1.0],
+    ),
+}
+
+
+@pytest.mark.parametrize('limit', list(HEADROOM_CASES), ids=list(HEADROOM_CASES))
+def test_headroom_has_one_int8_entry_per_port(limit, xp):
+    """only the limits the source sets are reported, and port 1 has the more room:
+    a smaller peak below the ADC limit, and 30 dB less gain into the intermod model"""
+    source, capture, peaks = HEADROOM_CASES[limit]
+    info = soapy.compute_overload_info(_samples(xp, peaks), source, capture)
+
+    assert list(info) == [f'{limit}_headroom']
+    headroom = info[f'{limit}_headroom']
     assert headroom.dtype == xp.int8
     assert headroom.shape == (2,)
     assert sw.array_namespace(headroom) is sw.array_namespace(xp.zeros(1))
-    # the port with the smaller peak has more room before the limit
     assert headroom[1] > headroom[0]
-
-
-def test_if_headroom_needs_the_if_limit(xp):
-    source = source_spec(adc_overload_limit=None, if_overload_limit=-10)
-    capture = soapy_capture(port=(0, 1), gain=(0, -30))
-    info = soapy.compute_overload_info(_samples(xp, [1.0, 1.0]), source, capture)
-    assert list(info) == ['if_headroom']
-    assert info['if_headroom'].dtype == xp.int8
-    assert info['if_headroom'].shape == (2,)
 
 
 # %% _assign_iq_calibration
@@ -372,6 +380,13 @@ def _float_buffers(count, ports=1):
     return [np.zeros(2 * count, dtype='float32') for _ in range(ports)]
 
 
+def _read8(stream, device, last_sync_time=None):
+    """an 8-sample read into fresh buffers, at the whole-buffer offset and count"""
+    return stream.read(
+        device, _float_buffers(8), 0, 8, 0.1, last_sync_time=last_sync_time
+    )
+
+
 class TestRxStreamRead:
     def test_read_fills_from_the_offset(self, soapy_device, soapy_stream):
         (buf,) = _float_buffers(64)
@@ -400,30 +415,17 @@ class TestRxStreamRead:
         stale = soapy_device.streams[0].activate_time_ns + 1
 
         with pytest.raises(ReceiveStreamError, match='before last sync'):
-            soapy_stream.read(
-                soapy_device, _float_buffers(8), 0, 8, 0.1, last_sync_time=stale
-            )
+            _read8(soapy_stream, soapy_device, stale)
 
     def test_only_the_first_read_is_checked(self, soapy_device, soapy_stream):
         activation = soapy_device.streams[0].activate_time_ns
 
-        soapy_stream.read(
-            soapy_device, _float_buffers(8), 0, 8, 0.1, last_sync_time=activation
-        )
-        soapy_stream.read(
-            soapy_device,
-            _float_buffers(8),
-            0,
-            8,
-            0.1,
-            last_sync_time=activation + 10**12,
-        )
+        _read8(soapy_stream, soapy_device, activation)
+        _read8(soapy_stream, soapy_device, activation + 10**12)
         assert soapy_stream.checked_timestamp
 
     def test_re_enabling_checks_the_timestamp_again(self, soapy_device, soapy_stream):
-        soapy_stream.read(
-            soapy_device, _float_buffers(8), 0, 8, 0.1, last_sync_time=None
-        )
+        _read8(soapy_stream, soapy_device)
         soapy_stream.enable(soapy_device, False)
         soapy_stream.enable(soapy_device, True)
         assert soapy_stream.checked_timestamp is False
@@ -434,9 +436,7 @@ class TestRxStreamRead:
         stream.enable(soapy_device, True)
         soapy_device.fault_queue = [OVERFLOW]
 
-        count, _ = stream.read(
-            soapy_device, _float_buffers(8), 0, 8, 0.1, last_sync_time=None
-        )
+        count, _ = _read8(stream, soapy_device)
         assert count == 0
 
     @pytest.mark.xfail(
@@ -449,9 +449,7 @@ class TestRxStreamRead:
         stream = _stream(soapy_device, source_spec(rx_enable_delay=None))
         stream.setup(soapy_device, ports=(0,))
         stream.enable(soapy_device, True)
-        count, _ = stream.read(
-            soapy_device, _float_buffers(8), 0, 8, 0.1, last_sync_time=None
-        )
+        count, _ = _read8(stream, soapy_device)
         assert count == 8
 
 
@@ -683,9 +681,9 @@ class TestSoapySourceArm:
         source.setup(rx_ports=(0,))
         capture = soapy_capture(sample_rate=50e6, host_resample=True)
         source.arm(capture)
-        fs_sdr = design_resampler(capture, MCR)['fs_sdr']
-        assert fs_sdr == pytest.approx(62.5e6)
-        assert fake_soapy.devices[0].sample_rate == fs_sdr
+        fs = fs_sdr(capture, source.spec)
+        assert fs == pytest.approx(62.5e6)
+        assert fake_soapy.devices[0].sample_rate == fs
 
     def test_external_lo_tunes_to_the_difference_frequency(self, fake_soapy):
         source = _source()
@@ -756,11 +754,20 @@ class TestSoapySourceAcquire:
         names = call_names(fake_soapy.devices[0], 'activateStream', 'deactivateStream')
         assert names == ['activateStream', 'deactivateStream', 'activateStream']
 
-    def test_package_iq(self, fake_soapy):
+    @pytest.mark.parametrize(
+        'external_lo, keep_timestamp, conjugate',
+        [(11.38e9, True, True), (None, False, False)],
+        ids=['highside_lo', 'no_timestamp'],
+    )
+    def test_package_iq(self, fake_soapy, external_lo, keep_timestamp, conjugate):
+        """a start time is packaged only when the read reported one, and the samples
+        are conjugated only for a high-side external LO (11.38 GHz above 7.35)"""
         source = _source(adc_overload_limit=-1)
         source.setup(rx_ports=(0,))
-        capture = soapy_capture(center_frequency=7.35e9, external_lo_frequency=11.38e9)
-        samples, _, time_ns = self._acquire(source, capture, 4096)
+        capture = soapy_capture(
+            center_frequency=7.35e9, external_lo_frequency=external_lo
+        )
+        samples, _, time_ns = self._acquire(source, capture, 64)
         iq = ss.specs.AcquiredIQ(
             pre_align=samples,
             pre_filter=None,
@@ -772,33 +779,17 @@ class TestSoapySourceAcquire:
             resampler=source.get_resampler(capture),
         )
 
-        iq = source.package_iq(iq, samples, time_ns)
+        iq = source.package_iq(iq, samples, time_ns if keep_timestamp else None)
 
         assert isinstance(iq.info, ss.specs.SoapyAcquisitionInfo)
-        assert iq.info.start_time.value == time_ns
         assert iq.info.backend_sample_rate == MCR
         assert iq.info.source_id == 'x'
-        assert iq.conjugate == (True,)  # high-side LO
+        assert iq.conjugate == (conjugate,)
         assert iq.extra_data['adc_headroom'].dtype == np.int8
-
-    def test_package_iq_without_a_timestamp(self, fake_soapy):
-        source = _source()
-        source.setup(rx_ports=(0,))
-        capture = soapy_capture()
-        samples, _, _ = self._acquire(source, capture, 64)
-        iq = ss.specs.AcquiredIQ(
-            pre_align=samples,
-            pre_filter=None,
-            aligned=None,
-            capture=capture,
-            info=ss.specs.AcquisitionInfo(),
-            extra_data={},
-            source_spec=source.spec,
-            resampler=source.get_resampler(capture),
-        )
-        iq = source.package_iq(iq, samples, None)
-        assert iq.info.start_time is None
-        assert iq.conjugate == (False,)
+        if keep_timestamp:
+            assert iq.info.start_time.value == time_ns
+        else:
+            assert iq.info.start_time is None
 
 
 class TestSoapySourceClose:
@@ -821,74 +812,6 @@ class TestSoapySourceClose:
         device = fake_soapy.devices[0]
         assert device.closed
         assert device.streams == []
-
-
-# %% Controller.acquire through the fake_soapy binding
-
-
-def _dBfs(x):
-    return 10 * np.log10(np.mean(np.abs(np.asarray(x)) ** 2, axis=-1))
-
-
-class TestControllerAcquire:
-    def test_start_time_and_sample_count(self, fake_soapy, fake_controller):
-        capture = soapy_capture(port=(0, 1), gain=(0, 0), duration=2e-3)
-        with fake_controller() as ctrl:
-            ctrl._arm_spec(capture)
-            overlaps = ss.lib.compute.get_correction_overlaps(capture, ctrl.source_spec)
-            iq = ctrl.acquire()
-
-            device = fake_soapy.devices[0]
-            stream = device.streams[0]
-            holdoff = round(2e-3 * MCR)
-            assert iq.pre_align.shape == (2, round(2e-3 * MCR) + sum(overlaps))
-            assert iq.pre_align.dtype == np.complex64
-            assert iq.info.backend_sample_rate == MCR
-            read_sizes = [c[1] for c in device.calls_named('readStream')]
-            assert read_sizes == [iq.pre_align.shape[1], holdoff]
-
-            # the timestamp lies inside the acquisition window
-            window_ns = round(sum(read_sizes) * 1e9 / MCR)
-            assert stream.activate_time_ns <= iq.info.start_time.value
-            assert iq.info.start_time.value <= stream.activate_time_ns + window_ns
-
-    def test_single_port_capture_streams_both_and_keeps_its_own(
-        self, fake_soapy, fake_controller
-    ):
-        fake_soapy.model.tones[1] = (1.505e9, -60.0)
-        with fake_controller() as ctrl:
-            ctrl._arm_spec(soapy_capture(port=1, duration=1e-3))
-            iq = ctrl.acquire()
-            assert fake_soapy.devices[0].streams[0].channels == (0, 1)
-
-        # -60 dBm through 50 dB of gain is -10 dBfs; port 0 would be noise only
-        assert iq.pre_align.shape[0] == 1
-        assert _dBfs(iq.pre_align)[0] == pytest.approx(-10.0, abs=0.05)
-
-    def test_noise_level_matches_the_model(self, fake_soapy, fake_controller):
-        with fake_controller() as ctrl:
-            ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, -10), duration=1e-3))
-            iq = ctrl.acquire()
-
-        expected = [
-            10 * np.log10(fake_soapy.model.noise_variance(0, 0, MCR, 1e9)),
-            10 * np.log10(fake_soapy.model.noise_variance(1, -10, MCR, 1e9)),
-        ]
-        assert _dBfs(iq.pre_align) == pytest.approx(expected, abs=0.05)
-
-    def test_stale_first_timestamp_is_a_stream_error(self, fake_soapy, fake_controller):
-        with fake_controller(receive_retries=0) as ctrl:
-            ctrl._arm_spec(soapy_capture(duration=1e-3))
-            device = fake_soapy.devices[0]
-            activate = device.activateStream
-
-            def activate_in_the_past(stream, **kws):
-                activate(stream, **kws)
-                stream.activate_time_ns = 1
-
-            device.activateStream = activate_in_the_past
-            with pytest.raises(ReceiveStreamError, match='before last sync'):
-                ctrl.acquire()
 
 
 # %% real SoapySDR bindings: the null driver (pixi environments)
@@ -936,12 +859,11 @@ class TestNullDriver:
         with pytest.raises(TypeError):
             info[0]
 
-        span = real_soapy.Range(1.0, 2.0, 0.5)
-        fake_span = Range(1.0, 2.0, 0.5)
-        assert (span.minimum(), span.maximum(), span.step()) == (
-            fake_span.minimum(),
-            fake_span.maximum(),
-            fake_span.step(),
+        def span_values(span):
+            return (span.minimum(), span.maximum(), span.step())
+
+        assert span_values(real_soapy.Range(1.0, 2.0, 0.5)) == span_values(
+            Range(1.0, 2.0, 0.5)
         )
         assert real_soapy.Range(1.0, 2.0).step() == pytest.approx(0.0)
 
@@ -980,76 +902,3 @@ class TestNullDriver:
         source.setup()
         assert source.rx_stream.stream is None
         source.close()
-
-
-# %% real hardware: an Airstack radio (Jetson, STRIQT_TEST_HARDWARE=1)
-
-AIRSTACK_CAPTURE = {
-    'port': (0, 1),
-    'center_frequency': 3.75e9,
-    'gain': (0, 0),
-    'duration': 1e-3,
-    'sample_rate': 125e6,
-    'host_resample': False,
-}
-
-
-@pytest.fixture(scope='module')
-def airstack_source_spec(real_soapy):
-    if not real_soapy.Device.enumerate({'driver': 'SoapyAIRT'}):
-        pytest.skip('no SoapyAIRT device is attached')
-    return ss.bindings.air7101b.schema.source(array_backend='numpy')
-
-
-@pytest.mark.hardware
-class TestAirstackHardware:
-    def test_probe(self, airstack_source_spec):
-        with ss.bindings.air7101b.from_source_spec(airstack_source_spec) as ctrl:
-            info = ctrl.source_info
-            assert info.driver == 'SoapyAIRT'
-            assert info.num_rx_ports == 2
-            assert info.has_timestamps
-            assert 'FPGA' in info.registers
-
-    def test_open_clears_the_sysref_delay_field(self, airstack_source_spec):
-        with ss.bindings.air7101b.from_source_spec(airstack_source_spec) as ctrl:
-            register = ctrl.backend.device.readRegister('FPGA', 0x00040010)
-            assert register & 0x0F00 == 0
-
-    def test_id_is_the_eth0_mac(self, airstack_source_spec):
-        with ss.bindings.air7101b.from_source_spec(airstack_source_spec) as ctrl:
-            assert len(ctrl.source_id) == 12
-            int(ctrl.source_id, 16)
-
-    def test_transceiver_temperature_is_plausible(self, airstack_source_spec):
-        with ss.bindings.air7101b.from_source_spec(airstack_source_spec) as ctrl:
-            temperature = ctrl.backend.read_peripherals()['transceiver']
-            assert 10 < temperature < 90
-
-    def test_host_time_sync_lands_near_the_host_clock(self, airstack_source_spec):
-        spec = airstack_source_spec.replace(time_source='host')
-        with ss.bindings.air7101b.from_source_spec(spec) as ctrl:
-            device = ctrl.backend.device
-            ctrl.backend.sync_time(device)
-            hardware = device.getHardwareTime('now') / 1e9
-            assert hardware == pytest.approx(soapy.time.time(), abs=0.2)
-
-    def test_acquire_two_ports(self, airstack_source_spec):
-        capture = ss.specs.SoapyCapture(**AIRSTACK_CAPTURE)
-        with ss.bindings.air7101b.from_source_spec(
-            airstack_source_spec, rx_ports=(0, 1)
-        ) as ctrl:
-            ctrl._arm_spec(capture)
-            first = ctrl.acquire()
-            second = ctrl.acquire()
-
-        overlaps = ss.lib.compute.get_correction_overlaps(capture, airstack_source_spec)
-        assert first.pre_align.shape == (2, 125_000 + sum(overlaps))
-        assert first.pre_align.dtype == np.complex64
-        assert np.isfinite(first.pre_align).all()
-        assert np.abs(first.pre_align).max() <= 1.0
-        assert first.info.backend_sample_rate == pytest.approx(125e6)
-
-        host_now = soapy.time.time()
-        assert abs(first.info.start_time.timestamp() - host_now) < 5
-        assert second.info.start_time - first.info.start_time >= np.timedelta64(1, 'ms')

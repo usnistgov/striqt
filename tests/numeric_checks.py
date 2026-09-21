@@ -1,5 +1,4 @@
-"""roundoff models, tolerance helpers and comparison assertions shared by the waveform
-tests.
+"""roundoff models, tolerance helpers and comparison assertions shared by the suite.
 
 Every tolerance here is derived from the unit roundoff of the working dtype and a
 count of the roundings the tested code performs, so that a failure means the library

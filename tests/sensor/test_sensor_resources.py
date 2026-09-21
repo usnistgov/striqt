@@ -12,22 +12,12 @@ from pathlib import Path
 import pytest
 import yaml
 from conftest import FAKE_SOAPY_SPEC, assert_source_released
-from synthetic_sources import NO_SINK, SCALE_ONLY, make_capture, make_sweep
+from synthetic_sources import NO_SINK, tone_sweep
 
 import striqt.analysis as sa
 import striqt.sensor as ss
 
-ONE_PORT = {**SCALE_ONLY, 'port': 0}
-IQ_ONLY = ss.specs.BundledAnalysis.from_dict({'iq_waveform': {}})
 OFFSETS = (1e6, 2e6)
-
-
-def tone_sweep(**replace):
-    captures = tuple(
-        make_capture('single_tone', **ONE_PORT, frequency_offset=f, snr=None)
-        for f in OFFSETS
-    )
-    return make_sweep('single_tone', captures, analysis=IQ_ONLY, **replace)
 
 
 # %% working directory
@@ -35,7 +25,7 @@ def tone_sweep(**replace):
 
 def test_cwd_is_unchanged_without_a_spec_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    with ss.open_resources(tone_sweep(), None):
+    with ss.open_resources(tone_sweep(OFFSETS), None):
         assert Path.cwd().resolve() == tmp_path.resolve()
 
 
@@ -44,7 +34,7 @@ def test_cwd_follows_the_spec_directory(tmp_path, monkeypatch):
     monkeypatch.chdir(os.getcwd())
     spec_dir = tmp_path / 'sub'
     spec_dir.mkdir()
-    with ss.open_resources(tone_sweep(), spec_dir / 'sweep.yaml'):
+    with ss.open_resources(tone_sweep(OFFSETS), spec_dir / 'sweep.yaml'):
         assert Path.cwd().resolve() == spec_dir.resolve()
 
 
@@ -53,7 +43,7 @@ def test_cwd_follows_the_spec_directory(tmp_path, monkeypatch):
 
 def test_test_only_omits_the_peripherals():
     """current behaviour, not a contract: the peripherals are not opened"""
-    with ss.open_resources(tone_sweep(), None, test_only=True) as res:
+    with ss.open_resources(tone_sweep(OFFSETS), None, test_only=True) as res:
         assert 'peripherals' not in res
 
 
@@ -64,7 +54,7 @@ def test_test_only_omits_the_peripherals():
     '_acquire_both indexes unconditionally (resources.py:146-151, execute.py:235)',
 )
 def test_test_only_resources_run_a_sweep():
-    sweep = tone_sweep()
+    sweep = tone_sweep(OFFSETS)
     with ss.open_resources(sweep, None, test_only=True) as res:
         results = list(ss.iterate_sweep(res, sink=ss.sinks.NoSink(sweep)))
     assert len([r for r in results if r is not None]) == len(OFFSETS)
@@ -75,7 +65,7 @@ def test_test_only_resources_run_a_sweep():
 
 def test_extensions_sink_dotted_path_selects_the_class():
     assert NO_SINK.sink == 'striqt.sensor.sinks.NoSink'
-    with ss.open_resources(tone_sweep(), None) as res:
+    with ss.open_resources(tone_sweep(OFFSETS), None) as res:
         assert type(res['sink']) is ss.sinks.NoSink
 
 
@@ -94,7 +84,7 @@ class FailingOpenSink(ss.sinks.NoSink):
 )
 def test_sink_failure_surfaces_and_closes_the_source(cls, isolated_lookup):
     extension = ss.specs.Extension(sink=f'{__name__}.{cls.__name__}')
-    sweep = tone_sweep().replace(extensions=extension)
+    sweep = tone_sweep(OFFSETS).replace(extensions=extension)
 
     with (
         pytest.raises(RuntimeError, match='simulated sink failure'),
@@ -124,7 +114,7 @@ def test_calibration_is_loaded_from_the_source_spec(fake_soapy_ext, calibration_
 
 def _run_with_log(tmp_path) -> str:
     log_path = tmp_path / 'logs' / 'sweep.log'
-    sweep = tone_sweep()
+    sweep = tone_sweep(OFFSETS)
     sweep = sweep.replace(sink=sweep.sink.replace(log_path=str(log_path)))
     with ss.open_resources(sweep, None) as res:
         sa.util.get_logger('sweep').info('marker record')
@@ -160,7 +150,7 @@ def test_log_file_is_json(tmp_path):
 
 def test_on_source_opened_is_called_once_with_the_spec_and_id():
     calls = []
-    sweep = tone_sweep()
+    sweep = tone_sweep(OFFSETS)
     with ss.open_resources(sweep, None, on_source_opened=lambda *a: calls.append(a)):
         source_id = ss.lib.controller.lookup.id(sweep.source)
     assert calls == [(sweep, source_id)]

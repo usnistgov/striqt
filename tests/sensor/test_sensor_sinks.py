@@ -5,37 +5,32 @@ archive path, and the Zipper"""
 from __future__ import annotations
 
 import zipfile
-from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 import pytest
 from numeric_checks import assert_close, elementwise_rtol
-from synthetic_sources import PSD_RESOLUTION, SCALE_ONLY, make_capture, make_sweep
+from synthetic_sources import (
+    IQ_ONLY,
+    ONE_PORT,
+    SPECTROGRAM,
+    make_capture,
+    spectrogram_frames,
+    tone_captures,
+    tone_sweep,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import sinks
 
-ONE_PORT = {**SCALE_ONLY, 'port': 0}
-IQ_ONLY = ss.specs.BundledAnalysis.from_dict({'iq_waveform': {}})
-SPECTROGRAM = ss.specs.BundledAnalysis.from_dict({
-    'spectrogram': {'window': 'hann', 'frequency_resolution': PSD_RESOLUTION}
-})
 ZARR_SINK = ss.specs.Extension()
 TIME_APPEND_SINK = ss.specs.Extension(sink='striqt.sensor.sinks.ZarrTimeAppendSink')
 
 
-def tone_captures(offsets):
-    return tuple(
-        make_capture('single_tone', **ONE_PORT, frequency_offset=f, snr=None)
-        for f in offsets
-    )
-
-
 def zarr_sweep(path, offsets, *, analysis=IQ_ONLY, extensions=ZARR_SINK, **sink_kws):
     """a sweep writing to `path` through the binding's default sink (or `extensions`)"""
-    sweep = make_sweep('single_tone', tone_captures(offsets), analysis=analysis)
+    sweep = tone_sweep(offsets, analysis=analysis)
     sink = ss.specs.Sink(path=str(path), **sink_kws)
     return sweep.replace(sink=sink, extensions=extensions)
 
@@ -50,7 +45,7 @@ def run_to_store(sweep):
 
 
 def test_no_sink_append_returns_its_argument(fake_source_id):
-    sink = ss.sinks.NoSink(make_sweep('single_tone', tone_captures((1e6,))))
+    sink = ss.sinks.NoSink(tone_sweep((1e6,)))
     token = object()
     assert sink.append(token) is token
     assert sink.captures_elapsed == 1
@@ -122,14 +117,6 @@ def test_time_append_sink_requires_a_spectrogram(fake_source_id):
     sweep = zarr_sweep('unused.zarr', (1e6,), extensions=TIME_APPEND_SINK)
     with pytest.raises(ValueError, match='spectrogram'):
         ss.sinks.ZarrTimeAppendSink(sweep)
-
-
-def spectrogram_frames(capture, spec) -> tuple[int, float]:
-    """(frame count, hop period) of the spectrogram of `capture` from the spec"""
-    nfft = round(capture.sample_rate / spec.frequency_resolution)
-    hop = nfft - round(Fraction(spec.fractional_overlap) * nfft)
-    count = round(capture.duration * capture.sample_rate)
-    return (count - nfft) // hop + 1, hop / capture.sample_rate
 
 
 def test_time_append_sink_concatenates_the_frames(tmp_path):

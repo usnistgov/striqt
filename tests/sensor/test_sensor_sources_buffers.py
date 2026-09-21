@@ -14,20 +14,21 @@ from hypothesis import strategies as st
 from numeric_checks import assert_close
 from soapy_factories import soapy_capture, source_spec
 from sweep_strategies import SOURCE
-from synthetic_sources import PRESETS, RESAMPLE_FILTER, SCALE_ONLY, make_capture
+from synthetic_sources import (
+    PRESETS,
+    RESAMPLE_FILTER,
+    SCALE_ONLY,
+    fs_sdr,
+    make_capture,
+)
 
 import striqt.sensor as ss
 import striqt.waveform as sw
-from striqt.sensor.lib.compute import design_resampler
 from striqt.sensor.lib.sources import buffers
 
 # exact in binary, so the holdoff sample counts derived here match to the last bit
 HOLDOFF_TIME = 2**-10
 STROBE_TIME = 2**-12
-
-
-def fs_sdr(capture, source=SOURCE) -> float:
-    return float(design_resampler(capture, source.master_clock_rate)['fs_sdr'])
 
 
 def stub_controller(capture, source=SOURCE):
@@ -65,8 +66,8 @@ def test_get_read_count_holdoff_adds_transient_and_two_strobe_periods():
     base = round(capture.duration * capture.sample_rate)
     padding = ceil(fs_sdr(capture, source) * (HOLDOFF_TIME + 2 * STROBE_TIME))
 
-    assert buffers.get_read_count(capture, source, include_holdoff=True) == (
-        base + padding
+    assert (
+        buffers.get_read_count(capture, source, include_holdoff=True) == base + padding
     )
     assert buffers.get_read_count(capture, source, include_holdoff=False) == base
 
@@ -127,9 +128,8 @@ def test_find_trigger_holdoff_without_a_strobe_is_overlap_plus_transient(
     transient = round(HOLDOFF_TIME * fs_sdr(capture, source))
 
     fresh = SimpleNamespace(start_time_ns=None)
-    assert buffers.find_trigger_holdoff(source, capture, fresh, 12345, 40) == (
-        40 + transient
-    )
+    holdoff = buffers.find_trigger_holdoff(source, capture, fresh, 12345, 40)
+    assert holdoff == 40 + transient
     rearmed = SimpleNamespace(start_time_ns=12345)
     assert buffers.find_trigger_holdoff(source, capture, rearmed, 12345, 40) == 40
 
@@ -241,12 +241,10 @@ def test_is_reusable(case):
 
 # %% ReceiveBuffers carryover
 
-GAPLESS = source_spec(gapless=True, time_sync_at='open')
 
-
-def test_carryover_round_trip_copies_the_tail_into_the_next_head():
+def test_carryover_round_trip_copies_the_tail_into_the_next_head(receive_buffers):
     capture = soapy_capture(duration=2e-3)
-    rb = buffers.ReceiveBuffers(stub_controller(capture, GAPLESS))
+    rb = receive_buffers(capture)
     unused = 7
     t0 = 1_000_000_000_123
     previous = (np.arange(2 * 40) * (1 + 2j)).reshape(2, 40).astype('complex64')
@@ -261,9 +259,9 @@ def test_carryover_round_trip_copies_the_tail_into_the_next_head():
     np.testing.assert_array_equal(samples[:, unused:], -1 - 1j)
 
 
-def test_carryover_is_a_copy_of_the_stashed_samples():
+def test_carryover_is_a_copy_of_the_stashed_samples(receive_buffers):
     capture = soapy_capture()
-    rb = buffers.ReceiveBuffers(stub_controller(capture, GAPLESS))
+    rb = receive_buffers(capture)
     previous = np.ones((1, 20), dtype='complex64')
     rb.stash_carryover(previous, 0, unused_sample_count=5, capture=capture)
     previous[:] = 0
@@ -273,17 +271,17 @@ def test_carryover_is_a_copy_of_the_stashed_samples():
     assert (samples[:, :5] == 1).all()
 
 
-def test_carryover_without_a_stash_returns_the_timestamp_only():
-    rb = buffers.ReceiveBuffers(stub_controller(soapy_capture(), GAPLESS))
+def test_carryover_without_a_stash_returns_the_timestamp_only(receive_buffers):
+    rb = receive_buffers(soapy_capture())
     samples = np.zeros((1, 8), dtype='complex64')
     assert rb.apply(samples) == (None, 0)
     rb.start_time_ns = 55
     assert rb.apply(samples) == (55, 0)
 
 
-def test_carryover_is_disabled_when_not_gapless():
+def test_carryover_is_disabled_when_not_gapless(receive_buffers):
     capture = soapy_capture()
-    rb = buffers.ReceiveBuffers(stub_controller(capture, source_spec()))
+    rb = receive_buffers(capture, source_spec())
     previous = np.ones((1, 20), dtype='complex64')
     rb.stash_carryover(previous, 0, unused_sample_count=5, capture=capture)
 
@@ -293,17 +291,17 @@ def test_carryover_is_disabled_when_not_gapless():
     assert not samples.any()
 
 
-def test_carryover_without_a_timestamp_is_an_error():
-    rb = buffers.ReceiveBuffers(stub_controller(soapy_capture(), GAPLESS))
+def test_carryover_without_a_timestamp_is_an_error(receive_buffers):
+    rb = receive_buffers(soapy_capture())
     rb.carryover_samples = np.ones((1, 4), dtype='complex64')
     rb.start_time_ns = None
     with pytest.raises(ValueError, match='timestamp'):
         rb.apply(np.zeros((1, 8), dtype='complex64'))
 
 
-def test_clear_drops_the_carryover():
+def test_clear_drops_the_carryover(receive_buffers):
     capture = soapy_capture()
-    rb = buffers.ReceiveBuffers(stub_controller(capture, GAPLESS))
+    rb = receive_buffers(capture)
     rb.stash_carryover(
         np.ones((1, 20), dtype='complex64'), 0, unused_sample_count=5, capture=capture
     )

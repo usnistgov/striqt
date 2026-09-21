@@ -201,14 +201,16 @@ def _bandwidth_grid():
     )
 
 
-def test_limit_nyquist_bandwidth_keeps_finite_values():
+@pytest.mark.parametrize(
+    'analysis_bandwidth, expected',
+    [(40e6, [40e6, 40e6]), (INF, [125e6, 62.5e6])],
+    ids=['finite', 'infinite'],
+)
+def test_limit_nyquist_bandwidth(analysis_bandwidth, expected):
+    """a finite bandwidth is kept as it is, and an infinite one becomes each
+    backend sample rate"""
     bw = calibration._limit_nyquist_bandwidth(_bandwidth_grid())
-    assert bw.sel(analysis_bandwidth=40e6).values.tolist() == [40e6, 40e6]
-
-
-def test_limit_nyquist_bandwidth_replaces_inf_with_the_sample_rate():
-    bw = calibration._limit_nyquist_bandwidth(_bandwidth_grid())
-    assert bw.sel(analysis_bandwidth=INF).values.tolist() == [125e6, 62.5e6]
+    assert bw.sel(analysis_bandwidth=analysis_bandwidth).values.tolist() == expected
 
 
 # %% summarize_calibration

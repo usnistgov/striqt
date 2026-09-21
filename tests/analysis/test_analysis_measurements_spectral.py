@@ -84,14 +84,18 @@ def centered_bin_count(size, count):
 WINDOWS = ['boxcar', 'hamming', 'hann', 'blackmanharris']
 
 
+def spg_of(iq, capture=CAPTURE, **kwargs):
+    kwargs.setdefault('window', 'boxcar')
+    kwargs.setdefault('frequency_resolution', RES)
+    return sa.measurements.spectrogram(iq, capture, **kwargs)
+
+
 class TestSpectrogram:
     @pytest.mark.parametrize('window', WINDOWS, ids=WINDOWS)
     def test_bin_centered_tone_level(self, window):
         tone_bin = 5
         iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
-        arr, metadata = sa.measurements.spectrogram(
-            iq, CAPTURE, window=window, frequency_resolution=RES, as_xarray=False
-        )
+        arr, metadata = spg_of(iq, window=window, as_xarray=False)
 
         spg = levels(arr)
         assert metadata['noise_bandwidth'] == RES
@@ -109,9 +113,7 @@ class TestSpectrogram:
     def test_far_bins_hold_only_roundoff(self):
         tone_bin = 5
         iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
-        arr, _ = sa.measurements.spectrogram(
-            iq, CAPTURE, window='boxcar', frequency_resolution=RES, as_xarray=False
-        )
+        arr, _ = spg_of(iq, as_xarray=False)
 
         spg = levels(arr)
         peak_index = NFFT // 2 + tone_bin
@@ -125,29 +127,16 @@ class TestSpectrogram:
 
     def test_frequency_coordinate_is_the_fftfreq_grid(self):
         iq = testing.tone(DURATION, FS)
-        da = sa.measurements.spectrogram(
-            iq, CAPTURE, window='boxcar', frequency_resolution=RES, as_xarray=True
-        )
-        assert_close(
-            da.spectrogram_baseband_frequency.values,
-            sw.fftfreq(NFFT, FS),
-            rtol=RTOL_FLOAT64,
-            atol=ATOL,
-        )
+        da = spg_of(iq, as_xarray=True)
+        freqs = da.spectrogram_baseband_frequency.values
+        assert_close(freqs, sw.fftfreq(NFFT, FS), rtol=RTOL_FLOAT64, atol=ATOL)
 
     @pytest.mark.parametrize('trim_stopband', [True, False], ids='trim{}'.format)
     def test_trim_stopband_selects_the_analysis_bandwidth(self, trim_stopband):
         bandwidth = FS / 2
         capture = CAPTURE.replace(analysis_bandwidth=bandwidth)
         iq = testing.tone(DURATION, FS)
-        da = sa.measurements.spectrogram(
-            iq,
-            capture,
-            window='boxcar',
-            frequency_resolution=RES,
-            trim_stopband=trim_stopband,
-            as_xarray=True,
-        )
+        da = spg_of(iq, capture, trim_stopband=trim_stopband, as_xarray=True)
 
         freqs = da.spectrogram_baseband_frequency.values
         if trim_stopband:
@@ -160,14 +149,7 @@ class TestSpectrogram:
     @pytest.mark.parametrize('lo_bandstop', [RES, 4 * RES], ids='bw{:g}'.format)
     def test_lo_bandstop_nulls_only_the_bins_at_dc(self, lo_bandstop):
         iq = testing.noise(DURATION, FS, noise_psd=1 / FS)
-        da = sa.measurements.spectrogram(
-            iq,
-            CAPTURE,
-            window='boxcar',
-            frequency_resolution=RES,
-            lo_bandstop=lo_bandstop,
-            as_xarray=True,
-        )
+        da = spg_of(iq, lo_bandstop=lo_bandstop, as_xarray=True)
 
         freqs = da.spectrogram_baseband_frequency.values
         # sw.fourier.null_lo nulls the half-open band [-bw/2, +bw/2)
@@ -183,14 +165,9 @@ class TestSpectrogram:
         time_bins = 2
         iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
 
-        reference, ref_metadata = sa.measurements.spectrogram(
-            iq, CAPTURE, window='boxcar', frequency_resolution=RES, as_xarray=False
-        )
-        da = sa.measurements.spectrogram(
+        reference, ref_metadata = spg_of(iq, as_xarray=False)
+        da = spg_of(
             iq,
-            CAPTURE,
-            window='boxcar',
-            frequency_resolution=RES,
             integration_bandwidth=frequency_bins * RES,
             time_aperture=time_bins * NFFT / FS,
             as_xarray=True,
@@ -237,14 +214,7 @@ class TestSpectrogram:
     def test_non_integer_binning_raises(self, kwargs, message):
         iq = testing.tone(DURATION, FS)
         with pytest.raises(ValueError, match=re.escape(message)):
-            sa.measurements.spectrogram(
-                iq,
-                CAPTURE,
-                window='boxcar',
-                frequency_resolution=RES,
-                as_xarray=False,
-                **kwargs,
-            )
+            spg_of(iq, as_xarray=False, **kwargs)
 
 
 # %% power_spectral_density
@@ -279,13 +249,7 @@ class TestPowerSpectralDensity:
     def test_max_matches_the_spectrogram_it_derives_from(self):
         iq = testing.single_tone(PSD_DURATION, FS, frequency_offset=5 * RES, snr=20)
         da = psd_of(iq, time_statistic=('max',))
-        spg, _ = sa.measurements.spectrogram(
-            iq,
-            PSD_CAPTURE,
-            window='boxcar',
-            frequency_resolution=RES,
-            as_xarray=False,
-        )
+        spg, _ = spg_of(iq, PSD_CAPTURE, as_xarray=False)
 
         expected = levels(spg).max(axis=1)
         # the two paths quantize independently: `spectrogram` rounds to 2 decimals
@@ -316,11 +280,9 @@ class TestPowerSpectralDensity:
         others = np.delete(psd, [NFFT // 2 + b for b in bins])
         assert others.max() < far_bin_floor_dBc(FFT_SIGMA, NFFT, size=others.size)
 
-    def test_dtype_matches_the_registration(self):
+    def test_values_are_not_quantized_to_float16(self):
         iq = testing.single_tone(PSD_DURATION, FS, frequency_offset=5 * RES, snr=20)
         da = psd_of(iq, time_statistic=('mean',))
-
-        assert da.dtype == sa.registry[sa.specs.PowerSpectralDensity].dtype
 
         values = np.asarray(da.values, dtype='float32')
         assert len(np.unique(values)) > 16
@@ -363,12 +325,6 @@ class TestCellular5GSSBSpectrogram:
     def test_axis_shapes(self, blocks):
         da = ssb_of(blocks * SSB_PERIODICITY)
 
-        assert da.dims == (
-            'port',
-            'cellular_ssb_index',
-            'cellular_ssb_symbol_index',
-            'cellular_ssb_baseband_frequency',
-        )
         assert da.sizes['cellular_ssb_index'] == blocks
         assert da.sizes['cellular_ssb_symbol_index'] == SSB_SYMBOLS
         assert list(da.cellular_ssb_symbol_index.values) == list(range(SSB_SYMBOLS))

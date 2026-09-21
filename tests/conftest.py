@@ -428,6 +428,31 @@ def armed_tone_controller(isolated_lookup):
         yield ctrl
 
 
+@pytest.fixture
+def receive_buffers():
+    """make(capture, source=None) -> a ReceiveBuffers for a controller stub holding
+    only the attributes it reads; `source` defaults to a gapless SoapySource, which
+    is what the carryover path needs"""
+    from types import SimpleNamespace
+
+    from soapy_factories import source_spec
+
+    import striqt.sensor as ss
+    from striqt.sensor.lib.sources import buffers
+
+    def make(capture, source=None):
+        if source is None:
+            source = source_spec(gapless=True, time_sync_at='open')
+        controller = SimpleNamespace(
+            capture_spec=capture,
+            source_spec=source,
+            source_info=ss.specs.SourceInfo(num_rx_ports=None),
+        )
+        return buffers.ReceiveBuffers(controller)
+
+    return make
+
+
 def assert_source_released(lookup, sweep):
     """the controller registry no longer holds an open controller for the sweep's
     source, so the next open does not find a closed one"""

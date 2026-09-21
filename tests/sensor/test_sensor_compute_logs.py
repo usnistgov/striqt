@@ -39,11 +39,8 @@ def test_adc_overload_names_the_port_at_or_below_zero_headroom():
 
 
 def test_adc_overload_zero_headroom_counts():
-    extra = {'adc_headroom': (3.0, 0.0)}
-    assert (
-        logs._adc_overload_message(extra, CAPTURE)
-        == 'adc overload on port 1 (2000 MHz)'
-    )
+    message = logs._adc_overload_message({'adc_headroom': (3.0, 0.0)}, CAPTURE)
+    assert message == 'adc overload on port 1 (2000 MHz)'
 
 
 ADC_SILENT = {

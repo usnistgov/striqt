@@ -5,12 +5,13 @@ NoSource"""
 from __future__ import annotations
 
 import numpy as np
+from soapy_factories import MCR
+from sweep_strategies import SOURCE as FUNCTION_SOURCE
 
 import striqt.sensor as ss
 from striqt.analysis import testing
 from striqt.sensor.lib import sources
 
-MCR = 125e6
 # served by the firmware rate (host_resample=False), so the generator runs at the
 # capture's own sample rate and no design decision enters the expected values
 SAMPLE_RATE = 15.36e6
@@ -20,7 +21,6 @@ OVERLAPS = (512, 256)
 COUNT = 1000
 NOISE_PSD = 1e-17
 
-FUNCTION_SOURCE = ss.specs.FunctionSource(master_clock_rate=MCR, num_rx_ports=2)
 NO_SOURCE = ss.specs.NoSource(master_clock_rate=MCR, num_rx_ports=2)
 
 
@@ -108,12 +108,9 @@ def test_arm_restarts_the_stream():
 
 def test_rows_follow_the_capture_port_order():
     """buffers[i] is the capture's i-th port, which is port 1 for port=(1, 0)"""
+    kws = {'port': (1, 0), 'noise_psd': NOISE_PSD}
     source, _ = _armed(
-        sources.NoiseSource,
-        FUNCTION_SOURCE,
-        ss.specs.NoiseCapture,
-        port=(1, 0),
-        noise_psd=NOISE_PSD,
+        sources.NoiseSource, FUNCTION_SOURCE, ss.specs.NoiseCapture, **kws
     )
     buffers = _buffers(COUNT)
 

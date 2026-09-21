@@ -4,10 +4,12 @@ warmup sweep derived from it"""
 from __future__ import annotations
 
 import pytest
+from soapy_factories import soapy_capture
 from sweep_strategies import SOURCE
 from synthetic_sources import (
     ANALYSIS,
     FILTER_ONLY,
+    IQ_ONLY,
     SCALE_ONLY,
     make_capture,
     make_sweep,
@@ -16,7 +18,6 @@ from synthetic_sources import (
 import striqt.sensor as ss
 from striqt.sensor.lib.compute import gpu
 
-IQ_ONLY = ss.specs.BundledAnalysis.from_dict({'iq_waveform': {}})
 CUPY = SOURCE.replace(array_backend='cupy')
 AIR = ss.bindings.air7101b
 
@@ -32,9 +33,7 @@ def scale_only(**kws):
 
 
 def air_sweep(**source_kws):
-    capture = ss.specs.SoapyCapture(
-        port=0, center_frequency=1e9, gain=0.0, host_resample=False
-    )
+    capture = soapy_capture()
     return AIR.sensor.sweep_spec_cls(
         source=AIR.schema.source(**source_kws), captures=(capture,), analysis=IQ_ONLY
     )
