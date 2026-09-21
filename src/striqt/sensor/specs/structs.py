@@ -9,6 +9,7 @@ import msgspec
 
 import striqt.analysis as sa
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
+from striqt.analysis.specs.helpers import SpecValidationError
 
 from ..lib import util
 from ..lib.typing import TypeVar, SS, SP, SC, SPC
@@ -374,15 +375,19 @@ def _validate_loops(loops: tuple[LoopSpec, ...]):
     if len(loops) == 0:
         return
 
-    if loops[0].field is None:
-        named_loops = loops[1:]
-    else:
-        named_loops = loops
+    # an outermost repeat is legal, so index the rest of the list against the
+    # position the user wrote rather than against the slice
+    offset = 1 if loops[0].field is None else 0
+    fields = [l.field for l in loops[offset:]]
 
-    counts = Counter(l.field for l in named_loops)
+    counts = Counter(fields)
 
     if None in counts:
-        raise msgspec.ValidationError('a repeat may only be the outermost (first) loop')
+        index = offset + fields.index(None)
+        raise SpecValidationError(
+            'Expected a `repeat` loop only as the outermost (first) entry',
+            ('.loops', f'[{index}]'),
+        )
 
     common = counts.most_common(1)
 
@@ -391,8 +396,10 @@ def _validate_loops(loops: tuple[LoopSpec, ...]):
 
     (which, howmany), *_ = common
     if howmany > 1:
-        raise msgspec.ValidationError(
-            f'more than one loop specified for capture field {which!r}'
+        repeated = [i for i, f in enumerate(fields) if f == which]
+        raise SpecValidationError(
+            f'Expected at most one loop over field `{which}`',
+            ('.loops', f'[{offset + repeated[1]}]'),
         )
 
 
@@ -448,8 +455,10 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
         if coord_fields is not None:
             invalid = set(self.analysis.__struct_fields__) & coord_fields
             if len(invalid) > 0:
-                raise AttributeError(
-                    f'capture fields {tuple(invalid)} conflict with measurements of the same name'
+                raise SpecValidationError(
+                    f'Object contains measurement `{sorted(invalid)[0]}`, which '
+                    'shadows a capture field of the same name',
+                    ('.analysis',),
                 )
 
         helpers.validate_sweep_analysis(self)
@@ -474,11 +483,16 @@ class CalibrationSweep(
 
         implied_loops = getattr(self.calibration, 'implied_loops', ())
         if len(self.captures) > 1 and not implied_loops:
-            raise TypeError(
-                'calibration sweeps may only include explicit capture sequences if implied_loops are specified'
+            raise SpecValidationError(
+                'Expected at most one capture in a calibration sweep, unless the '
+                'calibration peripheral declares `implied_loops`',
+                ('.captures',),
             )
         if self.source.calibration is not None:
-            raise ValueError('source.calibration must be None for a calibration sweep')
+            raise SpecValidationError(
+                'Expected `null`, since a calibration sweep cannot itself be calibrated',
+                ('.source', '.calibration'),
+            )
 
 
 # %% Non-Sweep specs

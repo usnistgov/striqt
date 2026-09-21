@@ -28,7 +28,7 @@ from pathlib import Path
 import msgspec
 
 import striqt.analysis as sa
-from striqt.analysis.specs.helpers import _dec_hook, frozendict
+from striqt.analysis.specs.helpers import _dec_hook, frozendict, SpecValidationError
 
 from . import structs
 from . import types
@@ -94,9 +94,10 @@ def _resolve_capture_cls(sweep: structs.Sweep[Any, Any, SC]) -> type[SC]:
     if len(sweep.captures) > 0:
         return type(sweep.captures[0])
     elif sweep.sensor is None:
-        raise TypeError(
-            'loops may apply only to explicit capture lists unless the sweep '
-            'is bound to a sensor with striqt.sensor.bind_sensor'
+        raise SpecValidationError(
+            'Expected a non-empty `captures` list, unless the sweep is bound to a '
+            'sensor with striqt.sensor.bind_sensor',
+            ('.captures',),
         )
     else:
         from .dataclasses import Schema
@@ -182,13 +183,13 @@ def loop_captures(
         and every point has a finite `analysis_bandwidth` above its `sample_rate`.
 
     Raises:
-        TypeError: a loop names a field the capture class does not declare, or the
-            sweep has neither explicit captures nor a sensor binding, leaving no
-            capture class to instantiate.
-        msgspec.ValidationError: a loop point does not convert to the type of its
-            capture field; or an expanded capture is invalid -- it violates a `Meta`
-            bound or a `Capture.__post_init__` rule that no single input violates on
-            its own, or the loops left a required capture field unset.
+        msgspec.ValidationError: a loop names a field the capture class does not
+            declare; the sweep has neither explicit captures nor a sensor binding,
+            leaving no capture class to instantiate; a loop point does not convert to
+            the type of its capture field; or an expanded capture is invalid -- it
+            violates a `Meta` bound or a `Capture.__post_init__` rule that no single
+            input violates on its own, or the loops left a required capture field
+            unset.
     """
 
     args, kws = _expansion_args(sweep, source_id, only_fields, limit)
@@ -215,8 +216,9 @@ def loop_capture_origins(
     multiplicity matters.
 
     Raises:
-        TypeError: as `loop_captures`, or an analysis loop point that survived
-            freezing unhashable, which no mapping can key on.
+        msgspec.ValidationError: as `loop_captures`.
+        TypeError: an analysis loop point that survived freezing unhashable, which no
+            mapping can key on.
     """
     args, kws = _expansion_args(sweep, source_id, only_fields, limit)
     captures, origins = _expand_capture_loops_with_origins(*args, **kws)
@@ -296,7 +298,7 @@ def validate_sweep_analysis(
 
         try:
             sa.registry.validate(capture, analysis)
-        except sa.specs.helpers.SpecValidationError as ex:
+        except SpecValidationError as ex:
             raise ex.at(*describe_capture_origin(sweep, capture, origin)) from (
                 ex.__cause__
             )
@@ -436,7 +438,9 @@ def adjust_captures(
     """evaluate the field values"""
 
     if not isinstance(capture, (dict, frozendict)):
-        raise TypeError('capture must be a dict or mapping')
+        raise TypeError(
+            f'Expected `capture` as a mapping, got `{type(capture).__name__}`'
+        )
 
     fields = _get_capture_adjust_fields(adjust_spec, source_id)
 
@@ -487,9 +491,14 @@ def adjust_captures(
                 elif required:
                     return msgspec.UNSET
                 else:
-                    raise KeyError(
-                        f'adjust_captures[{field!r}] is missing a lookup for key {k!r} '
-                        f'for source {source_id!r}'
+                    raise SpecValidationError(
+                        f'Object missing a lookup entry for key `{k!r}`',
+                        (
+                            '.adjust_captures',
+                            f'[{source_id!r}]',
+                            f'.{field}',
+                            '.lookup',
+                        ),
                     )
 
         if isinstance(key, tuple) and len(key) > 1:
@@ -721,15 +730,30 @@ def _build_loop_points_dict(
 
     available = set(n for owner, n in loop_points.keys() if owner == 'capture')
 
-    if new_instance:
-        required = {f.name for f in fields if f.required}
-        missing = required - available
-        if len(missing) > 0:
-            raise TypeError(f'missing required loop fields {missing!r}')
+    cls_repr = f'{capture_cls.__module__}.{capture_cls.__name__}'
+    field_names = {f.name for f in fields}
 
-    extra = available - {f.name for f in fields}
+    if new_instance:
+        missing = {f.name for f in fields if f.required} - available
+        if len(missing) > 0:
+            raise SpecValidationError(
+                f'Object missing required loop field `{sorted(missing)[0]}` for '
+                f'capture type `{cls_repr}`',
+                ('.loops',),
+            )
+
+    extra = available - field_names
     if len(extra) > 0:
-        raise TypeError(f'invalid capture fields {extra!r} specified in loops')
+        raise SpecValidationError(
+            f'Object contains unknown field `{sorted(extra)[0]}` for capture type '
+            f'`{cls_repr}`',
+            ('.loops',),
+        )
+
+    # only the named loops are indexed, matching the loop_points keys
+    loop_indexes = {
+        (l.isin, l.field): i for i, l in enumerate(loops) if l.field is not None
+    }
 
     field_types = {f.name: f.type for f in fields}
     for (isin, name), points in loop_points.items():
@@ -740,11 +764,37 @@ def _build_loop_points_dict(
                 points, list[field_types[name]], strict=False, dec_hook=_dec_hook
             )
         except msgspec.ValidationError as ex:
-            raise msgspec.ValidationError(
-                f'in loop over capture field {name!r}: {ex}'
+            raise _loop_point_error(
+                loop_indexes[isin, name], name, points, field_types[name], ex
             ) from ex
 
     return loop_points
+
+
+def _loop_point_error(
+    index: int,
+    name: str,
+    points: list,
+    field_type: Any,
+    ex: msgspec.ValidationError,
+) -> SpecValidationError:
+    """re-raise a failed loop point conversion against the point that failed.
+
+    Converting the whole list at once gets msgspec's own message, but with a path
+    rooted at that list rather than at the sweep. Re-converting one point at a time
+    recovers which point it was, and runs only on the failing path.
+    """
+    path = ('.loops', f'[{index}]')
+
+    for point in points:
+        try:
+            msgspec.convert(point, field_type, strict=False, dec_hook=_dec_hook)
+        except msgspec.ValidationError as point_ex:
+            return SpecValidationError(
+                f'{point_ex} for loop point {point!r} over field `{name}`', path
+            )
+
+    return SpecValidationError(str(ex), path)
 
 
 def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesType:
@@ -756,28 +806,31 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
     field_types = {f.name: f.type for f in msgspec.structs.fields(capture_cls)}
     adjust_map = _get_capture_adjust_map(sweep.adjust_captures)
 
+    cls_repr = f'{capture_cls.__module__}.{capture_cls.__name__}'
+
     for source_id, lookup_map in adjust_map.items():
+        at_source = ('.adjust_captures', f'[{source_id!r}]')
+
         if source_id != 'defaults':
             try:
                 bytes.fromhex(source_id)
             except ValueError:
-                raise msgspec.ValidationError(
-                    f'label source key {source_id!r} is not "global" or a hex string'
+                raise SpecValidationError(
+                    'Expected `defaults` or a hex source id', at_source
                 )
 
         result[source_id] = {}
         lookup_types = dict(field_types)
         for field, v in lookup_map.items():
             if field == 'port' or field in structs.Capture.__struct_fields__:
-                raise msgspec.ValidationError(
-                    f'capture field {field!r} is not allowed by adjust_captures'
+                raise SpecValidationError(
+                    f'Object contains reserved capture field `{field}`', at_source
                 )
             if field not in field_types:
-                cls = get_capture_type(type(sweep))
-                cls_repr = f'{cls.__module__}.{cls.__name__}'
-                raise msgspec.ValidationError(
-                    f'adjust_captures field {field!r} was not defined '
-                    f'in capture class {cls_repr!r}'
+                raise SpecValidationError(
+                    f'Object contains unknown field `{field}` for capture type '
+                    f'`{cls_repr}`',
+                    at_source,
                 )
             elif not isinstance(v, structs.CaptureRemap):
                 # defines a fixed value
@@ -810,9 +863,13 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
                     lookup_key = msgspec.convert(k, key_type, strict=False)
                     lookup[lookup_key] = value
             except msgspec.ValidationError as ex:
-                raise msgspec.ValidationError(
-                    f'keys must match type of {v.key!r} field(s) in lookup '
-                    f'for {field!r} in label for {source_id!r} source'
+                keys = v.key if isinstance(v.key, tuple) else (v.key,)
+                names = ', '.join(f'`{k}`' for k in keys)
+                plural = 'fields' if len(keys) > 1 else 'field'
+                raise SpecValidationError(
+                    f'Expected lookup keys matching the type of capture '
+                    f'{plural} {names}',
+                    at_source + (f'.{field}', '.lookup'),
                 ) from ex
 
             result[source_id][field] = structs.CaptureRemap(

@@ -548,7 +548,8 @@ def test_no_loops_and_no_captures():
 def test_unknown_loop_field_raises():
     loops = (ss.specs.List(field='nope', values=(1,)),)
     sweep = make_sweep(captures=(make_capture(),), loops=loops)
-    with pytest.raises(TypeError, match='invalid capture fields'):
+    match = r'\$\.loops: Object contains unknown field `nope`'
+    with pytest.raises(msgspec.ValidationError, match=match):
         H.loop_captures(sweep)
 
 
@@ -724,7 +725,7 @@ def test_range_loop_on_an_int_field_accepts_integral_floats():
 def test_range_loop_on_an_int_field_rejects_fractions():
     loops = (ss.specs.Range(field='azimuth_repeat', start=0, stop=3, step=1.5),)
     sweep = make_site_sweep(cls=SurveySweepCls, loops=loops)
-    match = 'azimuth_repeat.*Expected `int`'
+    match = re.escape('$.loops[0]: Expected `int`') + '.*azimuth_repeat'
     with pytest.raises(msgspec.ValidationError, match=match):
         H.loop_captures(sweep)
 
@@ -917,7 +918,10 @@ def test_adjust_captures_source_overrides_and_falls_back_to_defaults():
 def test_adjust_captures_missing_required_source_lookup_raises():
     adjust = {'ab12': {'snr': Remap(key='frequency_offset', lookup={100: 1.0})}}
     spec = make_sweep(adjust_captures=adjust).adjust_captures
-    with pytest.raises(KeyError, match='is missing a lookup for key'):
+    match = re.escape(
+        "$.adjust_captures['ab12'].snr.lookup: Object missing a lookup entry for key"
+    )
+    with pytest.raises(msgspec.ValidationError, match=match):
         H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, 'ab12')
 
 
@@ -929,7 +933,9 @@ def test_adjust_captures_missing_required_source_lookup_raises():
 def test_adjust_captures_missing_required_default_lookup_raises():
     adjust = {'defaults': {'snr': Remap(key='frequency_offset', lookup={100: 1.0})}}
     spec = make_sweep(adjust_captures=adjust).adjust_captures
-    with pytest.raises(KeyError, match='is missing a lookup for key'):
+    with pytest.raises(
+        msgspec.ValidationError, match='Object missing a lookup entry for key'
+    ):
         H.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None)
 
 
@@ -979,12 +985,14 @@ def test_adjust_captures_multi_field_key():
 
 def test_adjust_captures_requires_a_mapping():
     spec = make_sweep(adjust_captures=ADJUST).adjust_captures
-    with pytest.raises(TypeError, match='capture must be a dict or mapping'):
+    match = 'Expected `capture` as a mapping, got `SingleToneCapture`'
+    with pytest.raises(TypeError, match=re.escape(match)):
         H.adjust_captures(make_capture(), spec, None)
 
 
 def test_port_adjustments_are_rejected_when_the_sweep_is_built():
-    with pytest.raises(msgspec.ValidationError, match='not allowed by adjust_captures'):
+    match = 'Object contains reserved capture field `port`'
+    with pytest.raises(msgspec.ValidationError, match=re.escape(match)):
         make_sweep(adjust_captures={'defaults': {'port': 3}})
 
 
@@ -997,9 +1005,9 @@ def test_yaml_and_direct_adjustments_agree(site_sweep):
 
 
 def test_builtin_binding_rejects_site_fields():
-    match = (
-        "adjust_captures field 'channel_name' was not defined in capture class "
-        "'striqt.sensor.specs.SingleToneCapture'"
+    match = re.escape(
+        "$.adjust_captures['defaults']: Object contains unknown field `channel_name` "
+        'for capture type `striqt.sensor.specs.SingleToneCapture`'
     )
     with pytest.raises(msgspec.ValidationError, match=match):
         make_sweep(adjust_captures={'defaults': {'channel_name': 'x'}})
@@ -1107,11 +1115,6 @@ def test_empty_string_source_key_is_valid_hex():
     assert result == {'radio_name': 'anon'}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='the error text says "global" but the accepted key is "defaults"',
-)
 def test_source_key_error_names_defaults():
     with pytest.raises(msgspec.ValidationError, match='defaults'):
         make_site_sweep(adjust_captures={'zz': {'radio_name': 'x'}})
