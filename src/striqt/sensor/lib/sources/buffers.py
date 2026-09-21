@@ -141,7 +141,8 @@ def get_read_count(
 
     if compute.needs_resample(resampler_design, capture):
         nfft = resampler_design['nfft']
-        min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
+        # round, not ceil: the resampler pad is built from round(duration*fs_sdr)
+        min_samples_in = round(samples_out * nfft / resampler_design['nfft_out'])
         samples_in = min_samples_in + overlap
     else:
         samples_in = round(capture.sample_rate * capture.duration) + overlap
@@ -195,7 +196,8 @@ def _alloc_empty_iq(
     else:
         ports = (capture.port,)
 
-    if prior is None or prior.shape < (len(ports), count):
+    # every row of a reused buffer is returned, but only a slice of its columns
+    if prior is None or prior.shape[0] != len(ports) or prior.shape[1] < count:
         all_samples = empty((len(ports), count), dtype=np.complex64)
         samples = all_samples
     else:

@@ -1,0 +1,68 @@
+# A small sweep over the synthetic single-tone source that exercises the sweep
+# schema: inline source and captures, every loop kind, a capture remap, YAML
+# anchors and merge keys in the analysis block, and a Fraction-valued field.
+# Field reference: doc/reference/schema.rst
+
+sensor_binding: single_tone
+
+source:
+  master_clock_rate: 125e6 # Hz
+  num_rx_ports: 2
+  array_backend: numpy
+
+captures:
+  - port: [0, 1]
+    sample_rate: 6.144e6 # Hz
+    duration: 2e-3 # s
+    analysis_bandwidth: 5e6 # Hz
+    frequency_offset: -1e6 # Hz
+    snr: 80 # dB
+  - port: [0, 1]
+    sample_rate: 6.144e6
+    duration: 2e-3
+    analysis_bandwidth: 5e6
+    frequency_offset: -1e6
+    snr: 80
+    external_lo_frequency: [10.0e9, 10.5e9] # one per port
+    adjust_analysis:
+      time_statistic: [mean, max]
+
+loops:
+  - kind: repeat
+    count: 2
+  - kind: list
+    field: host_resample
+    values: [true, false]
+  - kind: range
+    field: snr
+    start: 60
+    stop: 80
+    step: 20
+
+adjust_captures:
+  defaults:
+    frequency_offset:
+      key: snr
+      lookup:
+        60: -1e6
+        80: 1e6
+
+analysis:
+  iq_waveform: {}
+
+  spectrogram: &spectrogram
+    window: hann
+    frequency_resolution: 8e3 # Hz; -1e6 and 1e6 are bin centers
+
+  power_spectral_density:
+    <<: *spectrogram
+    time_statistic: [mean]
+
+  channel_power_time_series:
+    detector_period: 1/8000 # s
+    power_detectors: [rms, peak]
+
+plot_hint: !include fragments/plot/site.yaml
+
+sink:
+  path: "outputs/{spec_name}-{start_time}.zarr.zip"

@@ -162,6 +162,11 @@ def as_xp(xp, *arrays):
 # Hypothesis strategies for array-based property testing
 # ---------------------------------------------------------------------------
 
+bounded_ints = st.integers(min_value=-(10**6), max_value=10**6)
+finite_floats = st.floats(allow_nan=False, allow_infinity=False)
+short_text = st.text(max_size=8)
+scalars = st.one_of(st.none(), st.booleans(), bounded_ints, finite_floats, short_text)
+
 
 def float_dtypes(dtype=None):
     """float32 and float64, or just `dtype` when given"""
@@ -179,17 +184,15 @@ def _shape_strategy(min_dims, max_dims, min_side, max_side):
 def float_arrays(shape, dtype=np.float64, min_value=-10.0, max_value=10.0):
     """finite values of `dtype` in [min_value, max_value] (rounded to the dtype)"""
     dtype = np.dtype(dtype)
-    return arrays(
-        dtype=dtype,
-        shape=shape,
-        elements=st.floats(
-            min_value=float(dtype.type(min_value)),
-            max_value=float(dtype.type(max_value)),
-            allow_nan=False,
-            allow_infinity=False,
-            width=dtype.itemsize * 8,
-        ),
+    lo, hi = float(dtype.type(min_value)), float(dtype.type(max_value))
+    elements = st.floats(
+        min_value=lo,
+        max_value=hi,
+        allow_nan=False,
+        allow_infinity=False,
+        width=dtype.itemsize * 8,
     )
+    return arrays(dtype=dtype, shape=shape, elements=elements)
 
 
 def bounded_float_arrays(
@@ -333,35 +336,17 @@ def iq_waveforms(
 
 SWEEP_DIR = Path(__file__).parent / 'sensor' / 'sweeps'
 
-CPU_RUNS = (
-    SWEEP_DIR / 'cw-cpu.yaml',
-    SWEEP_DIR / 'dirac_delta-cpu.yaml',
-    SWEEP_DIR / 'noise-cpu.yaml',
-    SWEEP_DIR / 'sawtooth-cpu.yaml',
-    SWEEP_DIR / 'site' / 'site-cpu.yaml',
-)
 
-
-@pytest.fixture(params=CPU_RUNS, ids=[p.name for p in CPU_RUNS])
-def cpu_sweep_file(request):
-    return str(request.param)
+@pytest.fixture(scope='session')
+def synthetic_spec_path() -> Path:
+    return SWEEP_DIR / 'synthetic.yaml'
 
 
 @pytest.fixture(scope='session')
-def spec_dir() -> Path:
-    return SWEEP_DIR
-
-
-@pytest.fixture(scope='session')
-def cw_spec_path() -> Path:
-    return SWEEP_DIR / 'cw-cpu.yaml'
-
-
-@pytest.fixture(scope='session')
-def cw_sweep():
+def synthetic_sweep():
     import striqt.sensor as ss
 
-    return ss.read_yaml_spec(SWEEP_DIR / 'cw-cpu.yaml')
+    return ss.read_yaml_spec(SWEEP_DIR / 'synthetic.yaml')
 
 
 @pytest.fixture(scope='session')
@@ -380,6 +365,100 @@ def fake_source_id(monkeypatch):
         ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: 'beef'
     )
     return 'beef'
+
+
+@pytest.fixture
+def array_backend(xp) -> str:
+    """the Source.array_backend name selecting the `xp` namespace; cupy skips with it"""
+    return 'cupy' if xp.__name__ == 'cupy' else 'numpy'
+
+
+@pytest.fixture
+def isolated_lookup(monkeypatch):
+    """fresh controller registries, so a test can open sources without seeing or
+    disturbing the process-global lookup entries of other tests"""
+    from collections import defaultdict
+    from threading import Event
+
+    import striqt.sensor as ss
+
+    lookup = ss.lib.controller.lookup
+    for name in ('_obj', '_id', '_ready'):
+        monkeypatch.setattr(lookup, name, defaultdict(Event))
+    return lookup
+
+
+@pytest.fixture
+def corrections_flags(monkeypatch):
+    """set(use_oaresample=None, ignore_highside_lo=None) -> None: override the
+    STRIQT_USE_OARESAMPLE / STRIQT_IGNORE_HIGHSIDE_LO switches of
+    striqt.sensor.lib.compute.corrections for one test.
+
+    The resampler and overlap designs are lru-cached on arguments that do not include
+    the flags, so the caches are cleared whenever a flag changes and again on exit.
+    """
+    import striqt.waveform as sw
+    from striqt.sensor.lib.compute import corrections
+
+    def set_flags(use_oaresample=None, ignore_highside_lo=None):
+        flags = {
+            'USE_OARESAMPLE': use_oaresample,
+            'IGNORE_HIGHSIDE_LO': ignore_highside_lo,
+        }
+        sw.util.clear_caches()
+        for name, value in flags.items():
+            if value is not None:
+                monkeypatch.setattr(corrections, name, int(value))
+
+    yield set_flags
+    sw.util.clear_caches()
+
+
+@pytest.fixture
+def armed_tone_controller(isolated_lookup):
+    """a single_tone Controller on the synthetic FunctionSource, armed with the
+    scale-only preset capture"""
+    from sweep_strategies import SOURCE
+    from synthetic_sources import SCALE_ONLY, make_capture
+
+    import striqt.sensor as ss
+
+    with ss.bindings.single_tone.from_source_spec(SOURCE) as ctrl:
+        ctrl._arm_spec(make_capture('single_tone', **SCALE_ONLY))
+        yield ctrl
+
+
+@pytest.fixture
+def receive_buffers():
+    """make(capture, source=None) -> a ReceiveBuffers for a controller stub holding
+    only the attributes it reads; `source` defaults to a gapless SoapySource, which
+    is what the carryover path needs"""
+    from types import SimpleNamespace
+
+    from soapy_factories import source_spec
+
+    import striqt.sensor as ss
+    from striqt.sensor.lib.sources import buffers
+
+    def make(capture, source=None):
+        if source is None:
+            source = source_spec(gapless=True, time_sync_at='open')
+        controller = SimpleNamespace(
+            capture_spec=capture,
+            source_spec=source,
+            source_info=ss.specs.SourceInfo(num_rx_ports=None),
+        )
+        return buffers.ReceiveBuffers(controller)
+
+    return make
+
+
+def assert_source_released(lookup, sweep):
+    """the controller registry no longer holds an open controller for the sweep's
+    source, so the next open does not find a closed one"""
+    import striqt.sensor as ss
+
+    assert not isinstance(lookup._obj.get(sweep.source), ss.lib.controller.Controller)
 
 
 @pytest.fixture
@@ -441,18 +520,14 @@ def _spec_kws_to_builtins(kws: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 SITE_DIR = SWEEP_DIR / 'site'
-
-
-@pytest.fixture(scope='session')
-def site_spec_path() -> Path:
-    return SITE_DIR / 'site-cpu.yaml'
+SITE_SPEC = SITE_DIR / 'site-cpu.yaml'
 
 
 @pytest.fixture(scope='session')
 def site_sweep():
     import striqt.sensor as ss
 
-    return ss.read_yaml_spec(SITE_DIR / 'site-cpu.yaml')
+    return ss.read_yaml_spec(SITE_SPEC)
 
 
 @pytest.fixture(scope='session')
@@ -549,33 +624,22 @@ def fake_soapy_ext(fake_soapy):
     return sys.modules['fake_soapy_bindings']
 
 
-def answer_calibration_prompts(monkeypatch, fake) -> list[str]:
-    """stub blocking_input to answer the calibration prompts: confirm the ENR, and
-    switch the fake noise diode on 'enable|disable noise diode at port N'. Returns
-    the live prompt log."""
-    import re
-
-    import striqt.analysis as sa
-
-    prompts = []
-
-    def blocking_input(prompt=None):
-        prompts.append(prompt)
-        match = re.match(r'(enable|disable) noise diode at port (\d+)', prompt or '')
-        if match:
-            fake.model.diode_on[int(match.group(2))] = match.group(1) == 'enable'
-            return ''
-        return 'y'
-
-    monkeypatch.setattr(sa.util, 'blocking_input', blocking_input)
-    return prompts
-
-
 @pytest.fixture
-def answer_prompts(monkeypatch, fake_soapy):
-    """answer the calibration prompts against the function-scoped fake; returns the
-    prompt log"""
-    return answer_calibration_prompts(monkeypatch, fake_soapy)
+def fake_controller(fake_soapy_ext):
+    """open(**kws) -> a Controller for the fake_soapy binding on rx ports (0, 1), to
+    use as a context manager.
+
+    `reuse_iq` and `rx_ports` go to the controller; every other keyword goes to the
+    source spec.
+    """
+    import striqt.sensor as ss
+
+    def open_controller(*, reuse_iq=False, rx_ports=(0, 1), **spec_kws):
+        ctrl_cls = ss.lib.bindings.get_controller('fake_soapy')
+        spec = fake_soapy_ext.FakeSoapySourceSpec(**spec_kws)
+        return ctrl_cls.from_source_spec(spec, reuse_iq=reuse_iq, rx_ports=rx_ports)
+
+    return open_controller
 
 
 @pytest.fixture
@@ -640,6 +704,9 @@ def fake_sweep_runner(tmp_path_factory):
     SoapySDR module installed for the whole test module, with the calibration prompts
     answered and the source id lookup stubbed to 'beef'.
 
+    The prompts are answered by confirming the ENR and switching the fake noise diode
+    on 'enable|disable noise diode at port N'.
+
     `replace` fields are applied to the sweep spec before it runs; the sink path is
     replaced by `output_name` under a fresh temporary directory. `FakeRun.prompts`
     holds only the prompts of that run and `FakeRun.results` the sink output
@@ -648,16 +715,31 @@ def fake_sweep_runner(tmp_path_factory):
     A module that uses this fixture must not also use the function-scoped
     `fake_soapy` fixture: the second install_fake_soapy would shadow the first.
     """
+    import re
     from pathlib import Path
 
     from fake_soapy import install_fake_soapy
 
+    import striqt.analysis as sa
     import striqt.sensor as ss
     import striqt.waveform as sw
 
+    prompts = []
+
     with pytest.MonkeyPatch.context() as mp:
         fake = install_fake_soapy(mp)
-        prompts = answer_calibration_prompts(mp, fake)
+
+        def blocking_input(prompt=None):
+            prompts.append(prompt)
+            match = re.match(
+                r'(enable|disable) noise diode at port (\d+)', prompt or ''
+            )
+            if match:
+                fake.model.diode_on[int(match.group(2))] = match.group(1) == 'enable'
+                return ''
+            return 'y'
+
+        mp.setattr(sa.util, 'blocking_input', blocking_input)
         mp.setattr(ss.lib.controller.lookup, 'id', lambda spec, timeout=0.5: 'beef')
 
         def run(spec, *, output_name, **replace):

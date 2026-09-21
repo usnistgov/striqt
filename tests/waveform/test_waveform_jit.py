@@ -1,46 +1,24 @@
 """Tests for the JIT kernels in striqt.waveform.lib.jit.
 
 The numba `_corr_at_indices` kernels (CPU and CUDA) are checked against a numpy
-reference, and the `cupy.fuse` kernels in `jit.cuda` are checked against the numexpr
-path of `striqt.waveform.lib.power_analysis` on the same data. The CUDA tests skip when
-cupy is not available.
+reference. The CUDA tests skip when cupy is not available. The `cupy.fuse` dB kernels
+in `jit.cuda` are covered through the public dispatcher by
+`test_power_analysis.TestNumpyCupyCrossComparison`.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from conftest import (
-    dB_arrays,
-    envelope_arrays,
-    gaussian_iq,
-    iq_waveforms,
-    positive_power_arrays,
-)
+from conftest import gaussian_iq, iq_waveforms
 from hypothesis import given
 from hypothesis import strategies as st
-from numeric_checks import (
-    FLOAT_DTYPES,
-    assert_close,
-    by_dtype,
-    corr_atol,
-    dtype_id,
-    envelope_power_rtol,
-    log_conversion_tol,
-    pow_conversion_rtol,
-)
+from numeric_checks import assert_close, corr_atol
 
 from striqt.waveform import ofdm
-from striqt.waveform.lib import power_analysis
-from striqt.waveform.lib.arrays import float_dtype_like
 
 # thread block sizing from ofdm.corr_at_indices
 THREADS_PER_BLOCK = 32
-
-# real and complex float32 envelopes within the range measured for the fused kernels
-COMPLEX_ENVELOPES = envelope_arrays(
-    min_magnitude=1e-4, max_magnitude=1e4, dtype=np.float32, min_dims=1, max_dims=1
-)
 
 
 def corr_reference(inds, x, nfft, ncp, norm):
@@ -175,85 +153,3 @@ class TestCorrAtIndicesDispatcher:
         ret = ofdm.corr_at_indices(inds_2d, x_xp, nfft, norm=norm, out=buffer)
         assert ret is buffer
         assert_matches_reference(ret, inds, x, nfft, ncp, norm)
-
-
-# (kernel name, power_analysis function, its keyword arguments, kernel takes eps)
-FUSED_LOG_KERNELS = [
-    ('powtodB', power_analysis.powtodB, {'abs': True, 'eps': 0}, False),
-    ('powtodB_noabs', power_analysis.powtodB, {'abs': False, 'eps': 0}, False),
-    ('powtodB_eps', power_analysis.powtodB, {'abs': True, 'eps': 1e-6}, True),
-    ('powtodB_eps_noabs', power_analysis.powtodB, {'abs': False, 'eps': 1e-6}, True),
-    ('envtodB', power_analysis.envtodB, {'abs': True, 'eps': 0}, False),
-    ('envtodB_noabs', power_analysis.envtodB, {'abs': False, 'eps': 0}, False),
-    ('envtodB_eps', power_analysis.envtodB, {'abs': True, 'eps': 1e-6}, True),
-    ('envtodB_eps_noabs', power_analysis.envtodB, {'abs': False, 'eps': 1e-6}, True),
-]
-
-
-class TestFusedKernelsCuda:
-    """The cupy.fuse kernels in jit.cuda against the numexpr path on the same data.
-
-    Tolerances are the two-implementation budgets of numeric_checks.
-    """
-
-    @staticmethod
-    def _run(cp, name, x, *args):
-        from striqt.waveform.lib.jit import cuda
-
-        x_cp = cp.asarray(x)
-        out = cp.empty(x.shape, dtype=float_dtype_like(x))
-        ret = getattr(cuda, name)(x_cp, out, *args)
-        cp.cuda.Device().synchronize()
-        return ret
-
-    @pytest.mark.parametrize(
-        'name,func,kws,takes_eps',
-        FUSED_LOG_KERNELS,
-        ids=[k[0] for k in FUSED_LOG_KERNELS],
-    )
-    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
-    @given(data=st.data())
-    def test_log_kernels(self, cupy_available, data, dtype, name, func, kws, takes_eps):
-        scale = 10 if name.startswith('powtodB') else 20
-        lim = by_dtype(dtype, float32=1e4, float64=1e6)
-        powers = positive_power_arrays(
-            min_value=1 / lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
-        )
-        x = data.draw(powers)
-
-        expected = func(x, **kws)
-        args = (kws['eps'],) if takes_eps else ()
-        result = self._run(cupy_available, name, x, *args)
-        assert_close(result, expected, **log_conversion_tol(dtype, scale, n_impl=2))
-
-    @given(env=COMPLEX_ENVELOPES)
-    def test_envtodB_complex(self, cupy_available, env):
-        expected = power_analysis.envtodB(env)
-        result = self._run(cupy_available, 'envtodB', env)
-        tol = log_conversion_tol(
-            np.float32, 20, complex_input=np.iscomplexobj(env), n_impl=2
-        )
-        assert_close(result, np.real(expected), **tol)
-
-    @given(env=COMPLEX_ENVELOPES)
-    def test_envtopow(self, cupy_available, env):
-        expected = power_analysis.envtopow(env)
-        result = self._run(cupy_available, 'envtopow', env)
-        rtol = envelope_power_rtol(
-            np.float32, complex_input=np.iscomplexobj(env), n_impl=2
-        )
-        assert_close(result, expected, rtol=rtol)
-
-    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
-    @given(data=st.data())
-    def test_dBtopow(self, cupy_available, data, dtype):
-        lim = by_dtype(dtype, float32=30, float64=100)
-        levels = dB_arrays(
-            min_value=-lim, max_value=lim, dtype=dtype, min_dims=1, max_dims=1
-        )
-        dB = data.draw(levels)
-
-        expected = power_analysis.dBtopow(dB)
-        result = self._run(cupy_available, 'dBtopow', dB)
-        rtol = pow_conversion_rtol(dtype, np.abs(dB).max(), n_impl=2)
-        assert_close(result, expected, rtol=rtol)

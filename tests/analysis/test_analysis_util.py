@@ -236,10 +236,6 @@ class TestBlockingInput:
 # %% ordered_set_union
 class TestOrderedSetUnion:
     def test_duplicates_across_arguments(self):
-        assert util.ordered_set_union(['b', 'a'], ('a', 'c'), ['c', 'd']) == [
-            'b',
-            'a',
-            'c',
-            'd',
-        ]
+        union = util.ordered_set_union(['b', 'a'], ('a', 'c'), ['c', 'd'])
+        assert union == ['b', 'a', 'c', 'd']
         assert util.ordered_set_union() == []

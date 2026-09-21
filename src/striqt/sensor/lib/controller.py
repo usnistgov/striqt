@@ -58,6 +58,10 @@ class lookup:
         elif isinstance(obj, Controller):
             return obj
         else:
+            # a cancelled open may never register a controller at all; report the
+            # cancellation, which ExceptionStack makes yield to the error that caused
+            # it, rather than a timeout that would mask it
+            util.propagate_thread_interrupts()
             raise TimeoutError('no controller instance initializing given spec')
 
     @classmethod
@@ -563,6 +567,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         """acquire IQ samples needed for the armed capture."""
 
         self.capture_spec  # ensure we are armed
+        signal_trigger = None
 
         if isinstance(overlaps, tuple):
             pass
@@ -607,10 +612,11 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             iq.info = iq.info.replace(signal_trigger=signal_trigger)
 
         else:
+            info = self._prev_iq.info
+            if hasattr(info, 'start_time'):
+                info = info.replace(start_time=None)
             iq = dataclasses.replace(
-                self._prev_iq,
-                capture=self.capture_spec,
-                info=self._prev_iq.info.replace(start_time=None),
+                self._prev_iq, capture=self.capture_spec, info=info
             )
 
         if self._config.reuse_iq:

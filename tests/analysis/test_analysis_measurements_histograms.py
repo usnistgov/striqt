@@ -61,10 +61,21 @@ def populated(fractions, bins):
 # %% channel_power_histogram
 
 
-@pytest.mark.parametrize('level', [-13.0, 0.0, 7.0], ids='level{:g}dB'.format)
-def test_channel_power_histogram_constant_level_fills_one_bin(level):
+@pytest.mark.parametrize(
+    'level,expected_bin',
+    [
+        (-13.0, -13.0),
+        (0.0, 0.0),
+        (7.0, 7.0),
+        (20.0, float('inf')),
+        (-60.0, float('-inf')),
+    ],
+    ids=['level-13dB', 'level0dB', 'level7dB', 'above_power_high', 'below_power_low'],
+)
+def test_channel_power_histogram_constant_level_fills_one_bin(level, expected_bin):
     """every detector reading of a constant-envelope tone is the same level, so the
-    whole normalized fraction lands in the bin centered on it"""
+    whole normalized fraction lands in the bin centered on it, or in the infinite
+    catch-all bin when the level falls outside the grid"""
     iq = sa.testing.tone(DURATION, FS) * 10 ** (level / 20)
 
     da = sa.measurements.channel_power_histogram(
@@ -73,7 +84,7 @@ def test_channel_power_histogram_constant_level_fills_one_bin(level):
 
     bins = da.channel_power_bin.values
     for detector in range(da.sizes['power_detector']):
-        assert populated(da.values[0, detector], bins) == [(level, 1.0)]
+        assert populated(da.values[0, detector], bins) == [(expected_bin, 1.0)]
 
 
 def test_channel_power_histogram_fractions_sum_to_one():
@@ -89,24 +100,6 @@ def test_channel_power_histogram_fractions_sum_to_one():
 
     assert (da.values > 0).sum(axis=-1).min() > 1, 'expected a spread of bins'
     assert_close(da.values.sum(axis=-1), np.ones((2, 2)), rtol=RTOL)
-
-
-@pytest.mark.parametrize(
-    'level,expected_bin',
-    [(20.0, float('inf')), (-60.0, float('-inf'))],
-    ids=['above_power_high', 'below_power_low'],
-)
-def test_channel_power_histogram_catches_out_of_range_levels(level, expected_bin):
-    iq = sa.testing.tone(DURATION, FS) * 10 ** (level / 20)
-
-    da = sa.measurements.channel_power_histogram(
-        iq, CAPTURE, detector_period=DETECTOR_PERIOD, as_xarray=True, **POWER_BINS
-    )
-
-    for detector in range(da.sizes['power_detector']):
-        assert populated(da.values[0, detector], da.channel_power_bin.values) == [
-            (expected_bin, 1.0)
-        ]
 
 
 @pytest.mark.parametrize(
@@ -137,18 +130,23 @@ def test_channel_power_histogram_bin_coordinate(
 # %% spectrogram_histogram
 
 
+def spectrogram_histogram_of(iq, window='hamming', **kwargs):
+    return sa.measurements.spectrogram_histogram(
+        iq,
+        CAPTURE,
+        window=window,
+        frequency_resolution=FREQUENCY_RESOLUTION,
+        as_xarray=True,
+        **POWER_BINS,
+        **kwargs,
+    )
+
+
 def test_spectrogram_histogram_fractions_sum_to_one():
     """both ports are normalized by the count of port 0, which is the same count"""
     iq = sa.testing.noise(DURATION, FS, noise_psd=1e-6, ports=2)
 
-    da = sa.measurements.spectrogram_histogram(
-        iq,
-        CAPTURE,
-        window='hamming',
-        frequency_resolution=FREQUENCY_RESOLUTION,
-        as_xarray=True,
-        **POWER_BINS,
-    )
+    da = spectrogram_histogram_of(iq)
 
     assert (da.values > 0).sum(axis=-1).min() > 1, 'expected a spread of bins'
     assert_close(da.values.sum(axis=-1), np.ones(2), rtol=RTOL)
@@ -169,14 +167,7 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
     """
     iq = sa.testing.tone(DURATION, FS, frequency=2 * FREQUENCY_RESOLUTION)
 
-    da = sa.measurements.spectrogram_histogram(
-        iq,
-        CAPTURE,
-        window='boxcar',
-        frequency_resolution=FREQUENCY_RESOLUTION,
-        as_xarray=True,
-        **POWER_BINS,
-    )
+    da = spectrogram_histogram_of(iq, window='boxcar')
 
     assert da.attrs['noise_bandwidth'] == FREQUENCY_RESOLUTION
     bins, fractions = zip(*populated(da.values[0], da.spectrogram_power_bin.values))
@@ -194,15 +185,7 @@ def test_spectrogram_histogram_bin_coordinate(integration_bandwidth, units):
     bandwidth that the readings are referred to"""
     iq = sa.testing.tone(DURATION, FS)
 
-    da = sa.measurements.spectrogram_histogram(
-        iq,
-        CAPTURE,
-        window='hamming',
-        frequency_resolution=FREQUENCY_RESOLUTION,
-        integration_bandwidth=integration_bandwidth,
-        as_xarray=True,
-        **POWER_BINS,
-    )
+    da = spectrogram_histogram_of(iq, integration_bandwidth=integration_bandwidth)
 
     expected = make_power_bins(**POWER_BINS)
     assert_close(da.spectrogram_power_bin.values, expected, rtol=RTOL)
@@ -236,15 +219,7 @@ def two_ports_offset_by(offset_dB):
     return iq
 
 
-def test_spectrogram_ratio_histogram_identical_ports():
-    da = ratio_histogram(two_ports_offset_by(0.0))
-
-    bins = da.spectrogram_ratio_power_bin.values
-    for port in range(2):
-        assert populated(da.values[port], bins) == [(0.0, 1.0)]
-
-
-@pytest.mark.parametrize('offset_dB', [6.0, -7.0], ids='offset{:g}dB'.format)
+@pytest.mark.parametrize('offset_dB', [0.0, 6.0, -7.0], ids='offset{:g}dB'.format)
 def test_spectrogram_ratio_histogram_offset_ports(offset_dB):
     """row 0 holds spg[0]-spg[1] and row 1 holds spg[1]-spg[0], so a level offset
     between the ports puts the two rows at opposite signs of it"""

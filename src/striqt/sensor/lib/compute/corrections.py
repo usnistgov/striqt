@@ -80,7 +80,13 @@ def correct_iq(
         x_pre_filter, offs = _resample(iq, **resample_kws)
 
     if iq.conjugate and not IGNORE_HIGHSIDE_LO:
-        x_pre_filter = _apply_conj(x_pre_filter, iq.conjugate, overwrite_x=True)
+        # the scale-only path returns the acquisition buffer itself when there is
+        # nothing to scale, so in place is only safe on a fresh array
+        x_pre_filter = _apply_conj(
+            x_pre_filter,
+            iq.conjugate,
+            overwrite_x=overwrite_x or x_pre_filter is not iq.pre_align,
+        )
 
     # apply the filter here and ensure we're working with a copy if needed
     if needs_filter:

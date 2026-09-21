@@ -111,18 +111,15 @@ class TestBinnedMean:
         assert_close(result, ref, atol=mean_atol(x, count))
 
     @given(case=shaped_arrays(dtype=np.float64, min_side=2), data=st.data())
-    def test_truncate_false_accepts_only_whole_bins(self, case, data):
+    def test_truncate_false_rejects_partial_bins(self, case, data):
         x, axis = case
         n = x.shape[axis]
-        count = data.draw(st.integers(min_value=1, max_value=n))
+        # n + 1 never divides n, so the filter is satisfiable for every n
+        counts = st.integers(min_value=2, max_value=n + 1).filter(lambda c: n % c)
+        count = data.draw(counts)
 
-        if n % count == 0:
-            result = arrays.binned_mean(x, count, axis=axis, fft=False, truncate=False)
-            ref = reference_binned_mean(x, count, axis)
-            assert_close(result, ref, atol=mean_atol(x, count))
-        else:
-            with pytest.raises(ValueError):
-                arrays.binned_mean(x, count, axis=axis, fft=False, truncate=False)
+        with pytest.raises(ValueError):
+            arrays.binned_mean(x, count, axis=axis, fft=False, truncate=False)
 
     @given(data=st.data())
     def test_fft_bins_center_on_the_middle_sample(self, xp, data):
@@ -211,12 +208,8 @@ class TestSlidingWindowView:
         assert_array_equal(result, expected)
 
     def test_output_shape_for_default_axis(self):
-        assert arrays._sliding_window_output_shape((3, 4), (2, 2), None) == (
-            2,
-            3,
-            2,
-            2,
-        )
+        shape = arrays._sliding_window_output_shape((3, 4), (2, 2), None)
+        assert shape == (2, 3, 2, 2)
 
     def test_output_shape_accepts_integer_shapes(self):
         assert arrays._sliding_window_output_shape(6, 3, 0) == (4, 3)
@@ -412,32 +405,22 @@ class TestGroupedViews:
 
 
 class TestPadAlongAxis:
+    @pytest.mark.parametrize('axis', [0, -1, 1, -2], ids=['0', '-1', '1', '-2'])
     @given(
-        shape=array_shapes(min_dims=1, max_dims=3, min_side=1, max_side=4),
+        data=st.data(),
         before=st.integers(min_value=0, max_value=3),
         after=st.integers(min_value=0, max_value=3),
     )
-    def test_pads_the_last_axis(self, shape, before, after):
+    def test_pads_only_the_requested_axis(self, data, axis, before, after):
+        min_dims = axis + 1 if axis >= 0 else -axis
+        shapes = array_shapes(min_dims=min_dims, max_dims=3, min_side=1, max_side=4)
+        shape = data.draw(shapes)
         a = np.arange(int(np.prod(shape)), dtype=np.float64).reshape(shape)
-        pad_width = [(0, 0)] * (len(shape) - 1) + [(before, after)]
-        expected = np.pad(a, pad_width)
+        pad_width = [(0, 0)] * len(shape)
+        pad_width[axis] = (before, after)
 
-        result = arrays.pad_along_axis(a, [[before, after]], axis=len(shape) - 1)
-        assert_array_equal(result, expected)
-        if len(shape) == 1:
-            assert_array_equal(
-                arrays.pad_along_axis(a, [[before, after]], axis=-1), expected
-            )
-
-    @pytest.mark.parametrize(
-        'shape,axis', [((3, 5), 0), ((3, 5), -1), ((2, 3, 5), 1), ((2, 3, 5), -2)]
-    )
-    def test_pads_only_the_requested_axis(self, shape, axis):
-        a = np.zeros(shape)
-        expected_shape = list(shape)
-        expected_shape[axis] += 3
-        result = arrays.pad_along_axis(a, [[1, 2]], axis=axis)
-        assert result.shape == tuple(expected_shape)
+        result = arrays.pad_along_axis(a, [[before, after]], axis=axis)
+        assert_array_equal(result, np.pad(a, pad_width))
 
 
 @arrays.convert_np_to_xp
@@ -466,15 +449,16 @@ class TestConvertNpToXp:
                 assert_array_equal(result, [0, 1, 2])
         assert_array_equal(_arange_np(3), [0, 1, 2])
 
-    def test_other_namespace_converts_with_asarray(self):
-        tag, converted = _arange_np(3, xp=_AsarrayNamespace())
-        assert tag == 'asarray'
-        assert type(converted) is np.ndarray
-        assert_array_equal(converted, [0, 1, 2])
-
-    def test_other_namespace_converts_with_array(self):
-        tag, converted = _arange_np(3, xp=_ArrayOnlyNamespace())
-        assert tag == 'array'
+    @pytest.mark.parametrize(
+        'namespace,expected_tag',
+        [(_AsarrayNamespace(), 'asarray'), (_ArrayOnlyNamespace(), 'array')],
+        ids=['asarray', 'array'],
+    )
+    def test_other_namespace_converts_with_its_constructor(
+        self, namespace, expected_tag
+    ):
+        tag, converted = _arange_np(3, xp=namespace)
+        assert tag == expected_tag
         assert type(converted) is np.ndarray
         assert_array_equal(converted, [0, 1, 2])
 

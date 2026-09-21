@@ -18,7 +18,16 @@ import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from numeric_checks import assert_close, corr_atol, numpy_and_cupy, rms, tone_frequency
+from numeric_checks import (
+    assert_close,
+    corr_atol,
+    interior,
+    numpy_and_cupy,
+    reference_power,
+    rms,
+    tone_frequency,
+    unit_tone,
+)
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib import ofdm
@@ -95,6 +104,15 @@ def ofdm_slots(phy, n_slots, seed=0, dtype=np.complex64):
     return np.concatenate(parts).astype(dtype)
 
 
+def cp_case(n_slots=None):
+    """(phy, waveform, cyclic prefix indexes) at 30 kHz over `n_slots` slots, or over
+    every slot of a frame when `n_slots` is None"""
+    phy = phy_5g(30e3)
+    slots = 'all' if n_slots is None else tuple(range(n_slots))
+    n_slots = n_slots or phy.SCS_TO_SLOTS_PER_FRAME[30e3]
+    return phy, ofdm_slots(phy, n_slots), phy.index_cyclic_prefix(slots=slots)
+
+
 def sync_bins(nfft, offset_bins=0):
     """fft bin indices (in fftfreq order) occupied by a 5G NR sync sequence.
 
@@ -128,6 +146,19 @@ def pss_setup(fs=FS):
 def silent_block(params, n_blocks=1, ports=1):
     size = params.frame_size * params.frames_per_sync * n_blocks
     return np.zeros((ports, size), dtype=np.complex64)
+
+
+def embed_pss_ports(embeds, scales=None, n_blocks=1):
+    """(params, pss, iq) for a silent synchronization block carrying one PSS symbol
+    per port, each given as an (n_id2, beam, delay) triple"""
+    params, phy, pss, bodies = pss_setup()
+    scales = scales or [1.0] * len(embeds)
+
+    iq = silent_block(params, n_blocks=n_blocks, ports=len(embeds))
+    for port, ((n_id2, beam, delay), scale) in enumerate(zip(embeds, scales)):
+        symbol = params.symbol_indexes[beam]
+        embed_symbol(iq, phy, bodies[n_id2], symbol, delay, port=port, scale=scale)
+    return params, pss, iq
 
 
 def get_ssb_iq(iq, fs_in=FS, **kws):
@@ -192,10 +223,8 @@ class TestPhy3GPP:
         assert phy.cp_start_idx[0] == 0
         assert_array_equal(np.diff(phy.cp_start_idx), phy.cp_sizes[:-1] + nfft)
         assert phy.cp_idx.size == phy.cp_sizes.sum()
-        assert_array_equal(
-            np.sort(np.concatenate([phy.cp_idx, phy.symbol_idx])),
-            np.arange(phy.contiguous_size),
-        )
+        all_idx = np.sort(np.concatenate([phy.cp_idx, phy.symbol_idx]))
+        assert_array_equal(all_idx, np.arange(phy.contiguous_size))
         # 6 and 100 LTE resource blocks of 12 subcarriers, plus DC
         if nfft == 128:
             assert phy.subcarriers == 73
@@ -337,10 +366,7 @@ class TestCorrAtIndices:
     cellular cyclic autocorrelation measurement does"""
 
     def test_normalized_correlation_peaks_at_zero_lag(self):
-        phy = phy_5g(30e3)
-        slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[30e3]
-        x = ofdm_slots(phy, slots_per_frame)
-        inds = phy.index_cyclic_prefix()
+        phy, x, inds = cp_case()
         ncp = int(phy.cp_sizes[1])
 
         R = np.abs(ofdm.corr_at_indices(inds, x, phy.nfft, norm=True))
@@ -356,12 +382,10 @@ class TestCorrAtIndices:
         assert R[ncp : phy.nfft].max() < 0.1
 
     def test_unnormalized_zero_lag_is_prefix_power(self):
-        phy = phy_5g(30e3)
-        x = ofdm_slots(phy, phy.SCS_TO_SLOTS_PER_FRAME[30e3])
-        inds = phy.index_cyclic_prefix()
+        phy, x, inds = cp_case()
 
         R = ofdm.corr_at_indices(inds, x, phy.nfft, norm=False)
-        power = np.mean(np.abs(x[inds.ravel()].astype(np.complex128)) ** 2)
+        power = reference_power(x[inds.ravel()]).mean()
         assert R[0] == pytest.approx(power, abs=corr_atol(x, inds.size, norm=False))
         assert R.dtype == x.dtype
 
@@ -625,8 +649,7 @@ class TestGet5gSsbIq:
     SIZE = round(4e-3 * 15.36e6)
 
     def _tones(self, f, scales=(1.0, 2.0), dtype=np.complex64):
-        n = np.arange(self.SIZE)
-        x = np.exp(2j * np.pi * f / self.FS_IN * n)
+        x = unit_tone(self.SIZE, self.FS_IN, f, dtype=dtype)
         return np.stack([s * x for s in scales]).astype(dtype)
 
     def _ssb_iq(self, iq, **kws):
@@ -650,11 +673,10 @@ class TestGet5gSsbIq:
 
         assert out.shape == (2, round(self.SIZE * FS / self.FS_IN))
         assert out.dtype == iq.dtype
-        interior = out[:, 2000:-2000]
-        assert tone_frequency(interior[0], FS) == pytest.approx(
-            f0, abs=FS / interior.shape[1]
-        )
-        assert_close(rms(interior, axis=1), [1.0, 2.0], rtol=1e-3)
+        mid = interior(out, 2000, axis=1)
+        f_est = tone_frequency(mid[0], FS)
+        assert f_est == pytest.approx(f0, abs=FS / mid.shape[1])
+        assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
 
     def test_off_grid_frequency_offset(self):
         """a frequency_offset between input FFT bins still recenters the tone"""
@@ -665,13 +687,12 @@ class TestGet5gSsbIq:
         iq = self._tones(f0 + frequency_offset)
         out = self._ssb_iq(iq, frequency_offset=frequency_offset)
 
-        interior = out[:, 2000:-2000]
+        mid = interior(out, 2000, axis=1)
         # the shift is applied in whole input bins, so allow half a bin of
         # quantization beyond the estimator's resolution
-        assert tone_frequency(interior[0], FS) == pytest.approx(
-            f0, abs=grid / 2 + FS / interior.shape[1]
-        )
-        assert_close(rms(interior, axis=1), [1.0, 2.0], rtol=1e-3)
+        f_est = tone_frequency(mid[0], FS)
+        assert f_est == pytest.approx(f0, abs=grid / 2 + FS / mid.shape[1])
+        assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
 
     @pytest.mark.parametrize('oaresample', [False, True])
     def test_block_count_and_delay_crop_the_input(self, oaresample):
@@ -701,9 +722,8 @@ class TestCorrelateSyncSequence:
     def test_peak_locates_cell_beam_and_delay(self, n_id2, beam, delay, scale):
         params, phy, pss, bodies = pss_setup()
         iq = silent_block(params)
-        embed_symbol(
-            iq, phy, bodies[n_id2], params.symbol_indexes[beam], delay, scale=scale
-        )
+        symbol = params.symbol_indexes[beam]
+        embed_symbol(iq, phy, bodies[n_id2], symbol, delay, scale=scale)
 
         R = ofdm.correlate_sync_sequence(iq, pss, params=params)
         assert R.shape == (1, 3, 1, len(params.symbol_indexes), params.lag_count)
@@ -711,7 +731,7 @@ class TestCorrelateSyncSequence:
 
         mag = np.abs(R)
         assert np.unravel_index(mag.argmax(), mag.shape) == (0, n_id2, 0, beam, delay)
-        energy = np.sum(np.abs(bodies[n_id2].astype(np.complex128)) ** 2)
+        energy = reference_power(bodies[n_id2]).sum()
         assert mag.max() == pytest.approx(scale * energy, rel=1e-3)
 
     def test_sync_block_index(self):
@@ -729,10 +749,7 @@ class TestCorrelateSyncSequence:
         assert np.unravel_index(mag.argmax(), mag.shape) == (0, 0, 2, 4, 7)
 
     def test_multiple_ports(self, subtests):
-        params, phy, pss, bodies = pss_setup()
-        iq = silent_block(params, ports=2)
-        embed_symbol(iq, phy, bodies[1], params.symbol_indexes[2], 11, port=0)
-        embed_symbol(iq, phy, bodies[2], params.symbol_indexes[6], 23, port=1)
+        params, pss, iq = embed_pss_ports([(1, 2, 11), (2, 6, 23)])
 
         R = ofdm.correlate_sync_sequence(iq, pss, params=params)
         assert R.shape[0] == 2
@@ -752,20 +769,8 @@ class TestCorrelateSyncSequence:
 
 class TestChooseSsbOffset:
     def _correlate(self, delays, scales=None, beam=3, n_id2=1):
-        params, phy, pss, bodies = pss_setup()
-        scales = scales or [1.0] * len(delays)
-
-        iq = silent_block(params, ports=len(delays))
-        for port, (delay, scale) in enumerate(zip(delays, scales)):
-            embed_symbol(
-                iq,
-                phy,
-                bodies[n_id2],
-                params.symbol_indexes[beam],
-                delay,
-                port=port,
-                scale=scale,
-            )
+        embeds = [(n_id2, beam, delay) for delay in delays]
+        params, pss, iq = embed_pss_ports(embeds, scales=scales)
         return params, ofdm.correlate_sync_sequence(iq, pss, params=params)
 
     @given(
@@ -843,9 +848,7 @@ class TestCupy:
         assert_close(inds, ref.index_cyclic_prefix(slots=(0, 3)))
 
     def test_corr_at_indices(self, cupy_available):
-        phy = phy_5g(30e3)
-        x = ofdm_slots(phy, 4)
-        inds = phy.index_cyclic_prefix(slots=(0, 1, 2, 3))
+        phy, x, inds = cp_case(4)
         R_np, R_cp = numpy_and_cupy(
             cupy_available, ofdm.corr_at_indices, inds, x, phy.nfft, norm=False
         )
@@ -862,9 +865,7 @@ class TestCupy:
         assert_close(sss_cp, sss_np, atol=1e-6)
 
     def test_detection_pipeline(self, cupy_available):
-        params, phy, pss, bodies = pss_setup()
-        iq = silent_block(params)
-        embed_symbol(iq, phy, bodies[1], params.symbol_indexes[3], 77)
+        params, pss, iq = embed_pss_ports([(1, 3, 77)])
 
         ssb_np, ssb_cp = numpy_and_cupy(cupy_available, get_ssb_iq, iq)
         assert_close(ssb_cp, ssb_np, atol=1e-5)

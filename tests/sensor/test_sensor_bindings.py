@@ -27,8 +27,8 @@ def test_tagged_union_arms_match_the_registry():
         assert registry[t.tag].sensor.sweep_spec_cls is t.cls
 
 
-def test_yaml_schema_binding(spec_dir):
-    spec = ss.read_yaml_spec(spec_dir / 'air7101b.yaml')
+def test_yaml_schema_binding():
+    spec = ss.read_yaml_spec(SWEEP_DIR / 'air7101b.yaml')
     ctrl_cls = ss.bindings.air7101b
     schema = ctrl_cls.schema
 

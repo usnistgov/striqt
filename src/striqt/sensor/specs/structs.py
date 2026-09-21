@@ -174,6 +174,7 @@ class MATSource(Source, kw_only=True, frozen=True):
 
 class TDMSSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
+    transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 
 class ZarrIQSource(Source, frozen=True, kw_only=True):

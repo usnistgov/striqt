@@ -36,14 +36,10 @@ _CLASS_ATTRS = (
 )
 
 
-def soapy_capture_kws(**kws) -> dict:
-    """keyword arguments for a SoapyCapture at the fake device's master clock rate,
-    with `kws` overriding the defaults"""
-    return {**CAPTURE_DEFAULTS, **kws}
-
-
 def soapy_capture(**kws) -> ss.specs.SoapyCapture:
-    return ss.specs.SoapyCapture(**soapy_capture_kws(**kws))
+    """a SoapyCapture at the fake device's master clock rate, with `kws` overriding
+    the defaults"""
+    return ss.specs.SoapyCapture(**{**CAPTURE_DEFAULTS, **kws})
 
 
 @functools.cache
@@ -71,14 +67,6 @@ def source_spec(**overrides) -> ss.specs.SoapySource:
     )
     cls = _source_preset_cls(class_attrs) if class_attrs else ss.specs.SoapySource
     return cls(**{'master_clock_rate': MCR, **overrides})
-
-
-def fake_controller(fake_soapy_ext, **spec_kws):
-    """a Controller for the fake_soapy binding on rx ports (0, 1), to use as a context
-    manager"""
-    ctrl_cls = ss.lib.bindings.get_controller('fake_soapy')
-    spec = fake_soapy_ext.FakeSoapySourceSpec(**spec_kws)
-    return ctrl_cls.from_source_spec(spec, rx_ports=(0, 1))
 
 
 def call_names(device, *names) -> list[str]:

@@ -1,14 +1,16 @@
 """striqt.sensor.lib.sources.deepwave: Airstack source specs, their bindings, the JESD
-SYSREF register field, and the MAC-address radio id"""
+SYSREF register field, and the MAC-address radio id, against the fake SoapySDR device
+and (under the `hardware` marker) an attached radio"""
 
 from __future__ import annotations
 
 import types
 
+import numpy as np
 import pytest
 
 import striqt.sensor as ss
-from striqt.sensor.lib.sources import deepwave
+from striqt.sensor.lib.sources import deepwave, soapy
 
 SPECS = {
     'air7101b': deepwave.Air7101BSourceSpec,
@@ -157,3 +159,84 @@ class TestAirstack1Source:
             deepwave.Air7101BSourceSpec(array_backend='numpy')
         )
         assert source.read_peripherals() == {'transceiver': 41.5}
+
+
+# %% real hardware: an Airstack radio (Jetson, STRIQT_TEST_HARDWARE=1)
+
+AIRSTACK_CAPTURE = {
+    'port': (0, 1),
+    'center_frequency': 3.75e9,
+    'gain': (0, 0),
+    'duration': 1e-3,
+    'sample_rate': 125e6,
+    'host_resample': False,
+}
+
+
+@pytest.fixture(scope='module')
+def airstack_source_spec():
+    """the air7101b source spec, skipped unless striqt imported the real SoapySDR
+    and a radio answers the enumeration"""
+    pytest.importorskip('SoapySDR')
+    if (
+        soapy.SoapySDR is None
+        or getattr(soapy.SoapySDR, '__name__', None) != 'SoapySDR'
+    ):
+        pytest.skip('striqt did not import SoapySDR at load time')
+    if not soapy.SoapySDR.Device.enumerate({'driver': 'SoapyAIRT'}):
+        pytest.skip('no SoapyAIRT device is attached')
+    return ss.bindings.air7101b.schema.source(array_backend='numpy')
+
+
+@pytest.mark.hardware
+class TestAirstackHardware:
+    def test_probe(self, airstack_source_spec):
+        with ss.bindings.air7101b.from_source_spec(airstack_source_spec) as ctrl:
+            info = ctrl.source_info
+            assert info.driver == 'SoapyAIRT'
+            assert info.num_rx_ports == 2
+            assert info.has_timestamps
+            assert 'FPGA' in info.registers
+
+    def test_open_clears_the_sysref_delay_field(self, airstack_source_spec):
+        with ss.bindings.air7101b.from_source_spec(airstack_source_spec) as ctrl:
+            register = ctrl.backend.device.readRegister('FPGA', 0x00040010)
+            assert register & 0x0F00 == 0
+
+    def test_id_is_the_eth0_mac(self, airstack_source_spec):
+        with ss.bindings.air7101b.from_source_spec(airstack_source_spec) as ctrl:
+            assert len(ctrl.source_id) == 12
+            int(ctrl.source_id, 16)
+
+    def test_transceiver_temperature_is_plausible(self, airstack_source_spec):
+        with ss.bindings.air7101b.from_source_spec(airstack_source_spec) as ctrl:
+            temperature = ctrl.backend.read_peripherals()['transceiver']
+            assert 10 < temperature < 90
+
+    def test_host_time_sync_lands_near_the_host_clock(self, airstack_source_spec):
+        spec = airstack_source_spec.replace(time_source='host')
+        with ss.bindings.air7101b.from_source_spec(spec) as ctrl:
+            device = ctrl.backend.device
+            ctrl.backend.sync_time(device)
+            hardware = device.getHardwareTime('now') / 1e9
+            assert hardware == pytest.approx(soapy.time.time(), abs=0.2)
+
+    def test_acquire_two_ports(self, airstack_source_spec):
+        capture = ss.specs.SoapyCapture(**AIRSTACK_CAPTURE)
+        with ss.bindings.air7101b.from_source_spec(
+            airstack_source_spec, rx_ports=(0, 1)
+        ) as ctrl:
+            ctrl._arm_spec(capture)
+            first = ctrl.acquire()
+            second = ctrl.acquire()
+
+        overlaps = ss.lib.compute.get_correction_overlaps(capture, airstack_source_spec)
+        assert first.pre_align.shape == (2, 125_000 + sum(overlaps))
+        assert first.pre_align.dtype == np.complex64
+        assert np.isfinite(first.pre_align).all()
+        assert np.abs(first.pre_align).max() <= 1.0
+        assert first.info.backend_sample_rate == pytest.approx(125e6)
+
+        host_now = soapy.time.time()
+        assert abs(first.info.start_time.timestamp() - host_now) < 5
+        assert second.info.start_time - first.info.start_time >= np.timedelta64(1, 'ms')

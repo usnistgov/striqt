@@ -23,6 +23,16 @@ else:
     np = util.lazy_import('numpy')
 
 
+def _split_preroll(start_index: int, count: int) -> tuple[int, int, int]:
+    """(zero-fill count, first file index, file sample count) for a read request.
+
+    File index 0 is corrected sample 0, so the part of the request before it is
+    filled with zeros rather than read.
+    """
+    fill = min(max(-start_index, 0), count)
+    return fill, max(start_index, 0), count - fill
+
+
 class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
     """a source of IQ waveforms from a TDMS file"""
 
@@ -45,11 +55,16 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
             center_frequency=header_fd['carrier_frequency'][0],
         )
 
+    def get_id(self):  # pyright: ignore
+        return str(self.setup_spec.path)
+
+    def get_info(self):
+        return specs.structs.SourceInfo(num_rx_ports=1)
+
     def get_waveform(
         self,
         count: int,
-        start: int,
-        offset: int,
+        start_index: int,
         *,
         port: int = 0,
         xp,
@@ -57,21 +72,23 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
     ):
         size = int(self._handle['header_fd']['total_samples'][0])
         ref_level = self._handle['header_fd']['reference_level_dBm'][0]
+        fill, file_start, file_count = _split_preroll(start_index, count)
 
-        if size < start + count + offset:
+        if size < file_start + file_count:
             raise ValueError(
                 f'requested {count} samples but file capture length is {size} samples'
             )
 
         scale = 10 ** (float(ref_level) / 20.0) / np.iinfo(xp.int16).max
         i, q = self._handle['iq_fd'].channels()
-        iq = xp.empty((2 * count,), dtype=xp.int16)
-        iq[offset * 2 :: 2] = xp.asarray(i[offset : count + offset])
-        iq[1 + offset * 2 :: 2] = xp.asarray(q[offset : count + offset])
+        file_span = slice(file_start, file_start + file_count)
+        iq = xp.zeros((2 * count,), dtype=xp.int16)
+        iq[2 * fill :: 2] = xp.asarray(i[file_span])
+        iq[2 * fill + 1 :: 2] = xp.asarray(q[file_span])
 
         float_dtype = np.finfo(np.dtype(dtype)).dtype
 
-        return (iq * float_dtype(scale)).view(dtype).copy()  # type: ignore
+        return (iq * float_dtype.type(scale)).view(dtype).copy()  # type: ignore
 
     def package_iq(
         self,
@@ -90,6 +107,9 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
             master_clock_rate=self.setup_spec.master_clock_rate,
             backend_sample_rate=self._file_info.backend_sample_rate,
         )
+
+    def close(self):
+        pass
 
 
 class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
@@ -113,7 +133,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
             xp=buffers.get_array_namespace(spec.array_backend),
             loop=spec.loop,
             backend_sample_rate=spec.master_clock_rate,
-            key=spec.key,
+            **({} if spec.key is None else {'key': spec.key}),
             **meta,
         )
 
@@ -138,17 +158,26 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     def get_waveform(
         self,
         count: int,
-        start: int,
-        offset: int,
+        start_index: int,
         *,
         port: int = 0,
         xp,
         dtype='complex64',
     ):
-        self._file_stream.seek(offset - self._sample_start_index)
-        ret = self._file_stream.read(count)
-        assert ret.shape[1] == count
-        return ret.copy()
+        fill, file_start, file_count = _split_preroll(start_index, count)
+
+        # at least one sample, because the stream only reveals its port count by
+        # returning data
+        self._file_stream.seek(file_start)
+        ret = self._file_stream.read(max(file_count, 1))
+        ret = ret[:, :file_count]
+
+        if fill == 0:
+            return ret.copy()
+
+        iq = sw.array_namespace(ret).zeros((ret.shape[0], count), dtype=ret.dtype)
+        iq[:, fill:] = ret
+        return iq
 
     def package_iq(
         self,
@@ -196,6 +225,9 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     def get_info(self):  # pyright: ignore
         return specs.structs.SourceInfo(num_rx_ports=self._waveform.shape[0])
 
+    def close(self):
+        pass
+
     def get_resampler(self, capture) -> sw.ResamplerDesign:
         from ..compute import design_resampler
 
@@ -241,8 +273,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     def get_waveform(
         self,
         count: int,
-        start: int,
-        offset: int,
+        start_index: int,
         *,
         port: int = 0,
         xp,
@@ -250,25 +281,24 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     ):
         assert self._waveform is not None
         iq_size = self._waveform.shape[1]
+        fill, file_start, file_count = _split_preroll(start_index, count)
 
-        if iq_size < start + count + offset:
+        if iq_size < file_start + file_count:
             raise ValueError(
-                f'requested {count + offset} samples but file capture length is {iq_size} samples'
+                f'requested {file_start + file_count} samples but file capture length is {iq_size} samples'
             )
 
-        if port > self._waveform.shape[0]:
+        if port >= self._waveform.shape[0]:
             raise ValueError(
                 f'requested channel exceeds data channel count of {self._waveform.shape[0]}'
             )
 
-        start = offset - self._sample_start_index
-
-        iq = self._waveform.data[[port], start : count + start]
-
-        if dtype is None or self._waveform.dtype == dtype:
-            return iq.copy()
-        else:
-            return iq.astype(dtype)
+        out_dtype = self._waveform.dtype if dtype is None else dtype
+        iq = xp.zeros((1, count), dtype=out_dtype)
+        iq[:, fill:] = xp.asarray(
+            self._waveform.data[[port], file_start : file_start + file_count]
+        )
+        return iq
 
     def package_iq(
         self,

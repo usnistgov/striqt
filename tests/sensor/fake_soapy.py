@@ -16,6 +16,7 @@ import types
 from typing import NamedTuple
 
 import numpy as np
+from soapy_factories import MCR
 from sweep_strategies import (
     T_REF,
     YFACTOR_ENR_DB,
@@ -51,7 +52,6 @@ NUM_RX_PORTS = 2
 GAIN_RANGE = (-30.0, 0.0, 0.5)
 FREQUENCY_RANGE = (300e6, 6e9)
 SAMPLE_RATE_RANGE = (3.9e6, 125e6)
-MASTER_CLOCK_RATE = 125e6
 INT16_FULL_SCALE = 32767
 
 
@@ -157,10 +157,10 @@ class FakeDevice:
         self.gains = {}
         self.gain_modes = {}
         self.frequencies = {}
-        self.sample_rate = MASTER_CLOCK_RATE
+        self.sample_rate = MCR
         self.time_source = 'internal'
         self.clock_source = 'internal'
-        self.master_clock_rate = MASTER_CLOCK_RATE
+        self.master_clock_rate = MCR
         self.streams: list[FakeStream] = []
         self.closed = False
 
@@ -281,7 +281,7 @@ class FakeDevice:
         return [Range(*SAMPLE_RATE_RANGE)]
 
     def getMasterClockRates(self):
-        return [MASTER_CLOCK_RATE]
+        return [MCR]
 
     def getBandwidthRange(self, direction, channel):
         return [Range(*SAMPLE_RATE_RANGE)]
@@ -428,8 +428,8 @@ class FakeSoapySDR:
     ArgInfo = ArgInfo
     StreamResult = StreamResult
 
-    def __init__(self, model: SignalModel | None = None):
-        self.model = model if model is not None else SignalModel()
+    def __init__(self):
+        self.model = SignalModel()
         self.devices: list[FakeDevice] = []
         for name, value in CONSTANTS.items():
             setattr(self, name, value)
@@ -452,9 +452,9 @@ class FakeSoapySDR:
         return ERROR_NAMES.get(code, 'UNKNOWN')
 
 
-def install_fake_soapy(monkeypatch, model: SignalModel | None = None) -> FakeSoapySDR:
+def install_fake_soapy(monkeypatch) -> FakeSoapySDR:
     from striqt.sensor.lib.sources import soapy
 
-    fake = FakeSoapySDR(model)
+    fake = FakeSoapySDR()
     monkeypatch.setattr(soapy, 'SoapySDR', fake)
     return fake

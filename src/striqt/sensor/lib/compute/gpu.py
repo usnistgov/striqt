@@ -2,6 +2,7 @@
 
 from __future__ import annotations as __
 
+import math
 from typing import Any, TYPE_CHECKING
 from ... import specs
 import striqt.analysis as sa
@@ -26,7 +27,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
     # check the inner loop (explicit) values
     for capture in sweep.captures:
-        if capture.host_resample or capture.analysis_bandwidth is not None:
+        if capture.host_resample or math.isfinite(capture.analysis_bandwidth):
             return True
 
     # check any values specified in outer loops
@@ -35,8 +36,10 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
             continue
         if loop.field == 'host_resample' and True in loop.get_points():
             return True
-        elif loop.field == 'analysis_bandwidth' and not all(loop.get_points()):
-            return True
+        elif loop.field == 'analysis_bandwidth':
+            points = loop.get_points()
+            if any(p is not None and math.isfinite(p) for p in points):
+                return True
 
     return False
 
@@ -52,10 +55,10 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> Warmup
         - It contains only one capture, with no loops
     """
 
-    from ..bindings import mock_binding
+    from ..bindings import get_controller, mock_binding
     from ...bindings import warmup
 
-    # introspect the maximum number of ports used in the sweep
+    # ports are numbered from 0, so the source needs max(port) + 1 of them
     ports: list[Any] = [c.port for c in sweep.captures]
     max_rx_ports = 0
     for loop in sweep.loops:
@@ -65,14 +68,14 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> Warmup
         if port is None:
             continue
         if isinstance(port, tuple):
-            n = max(port)
+            n = max(port) + 1
         else:
-            n = port
+            n = port + 1
         if n > max_rx_ports:
             max_rx_ports = n
 
     # then build up the warmup sweep
-    b = mock_binding(sweep.sensor, 'warmup', register=False)
+    b = mock_binding(get_controller(sweep), 'warmup', register=False)
 
     source = warmup.schema.source(
         num_rx_ports=max_rx_ports,

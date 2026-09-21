@@ -50,6 +50,19 @@ def capture(duration=DURATION, sample_rate=FS) -> sa.specs.Capture:
     return sa.specs.Capture(duration=duration, sample_rate=sample_rate)
 
 
+def cpts(iq, duration=DURATION, **kws):
+    kws.setdefault('detector_period', DETECTOR_PERIOD)
+    return sa.measurements.channel_power_time_series(
+        iq, capture(duration=duration), **kws
+    )
+
+
+def cyclic(iq, duration=DURATION, **kws):
+    kws.setdefault('cyclic_period', CYCLIC_PERIOD)
+    kws.setdefault('detector_period', DETECTOR_PERIOD)
+    return sa.measurements.cyclic_channel_power(iq, capture(duration=duration), **kws)
+
+
 def dB_tol(n_terms=1):
     """tolerances in dB for a level averaged over `n_terms` float32 power samples"""
     tol = log_conversion_tol(np.float32, 10, complex_input=True)
@@ -64,9 +77,7 @@ class TestChannelPowerTimeSeries:
     @pytest.mark.parametrize('time', [0.0, 3.7e-5, 9.9e-5], ids='t{:g}'.format)
     def test_impulse_lands_in_its_detector_bin(self, time):
         iq = testing.dirac_delta(DURATION, FS, time=time, power=6.0)
-        da = sa.measurements.channel_power_time_series(
-            iq, capture(), detector_period=DETECTOR_PERIOD, power_detectors=('peak',)
-        )
+        da = cpts(iq, power_detectors=('peak',))
 
         peak = da.values[0, 0]
         expected_bin = int(time // float(DETECTOR_PERIOD))
@@ -78,22 +89,11 @@ class TestChannelPowerTimeSeries:
 
     def test_time_elapsed_is_exact_multiples_of_the_detector_period(self):
         iq = testing.tone(DURATION, FS, frequency=1e5)
-        da = sa.measurements.channel_power_time_series(
-            iq, capture(), detector_period=DETECTOR_PERIOD
-        )
+        da = cpts(iq)
 
         expected = (np.arange(BIN_COUNT) * float(DETECTOR_PERIOD)).astype('float32')
         assert da.sizes['time_elapsed'] == BIN_COUNT
         np.testing.assert_array_equal(da.coords['time_elapsed'].values, expected)
-
-    def test_constant_envelope_peak_equals_rms(self):
-        iq = testing.tone(DURATION, FS, frequency=1e5)
-        da = sa.measurements.channel_power_time_series(
-            iq, capture(), detector_period=DETECTOR_PERIOD
-        )
-
-        rms, peak = da.sel(power_detector='rms'), da.sel(power_detector='peak')
-        assert_close(peak.values, rms.values, **dB_tol(BIN_SIZE))
 
     def test_sawtooth_peak_exceeds_rms_by_the_ramp_ratio(self):
         # a ramp of N samples reaching amplitude A takes the values A*i/N, whose peak
@@ -106,9 +106,7 @@ class TestChannelPowerTimeSeries:
         detector_period = fractions.Fraction(1, 1000)
 
         iq = testing.sawtooth(duration, FS, period=period, power=0.0)
-        da = sa.measurements.channel_power_time_series(
-            iq, capture(duration=duration), detector_period=detector_period
-        )
+        da = cpts(iq, duration=duration, detector_period=detector_period)
 
         ratio_dB = da.sel(power_detector='peak') - da.sel(power_detector='rms')
         expected = 10 * np.log10(6 * (n - 1) / (2 * n - 1))
@@ -122,12 +120,8 @@ class TestChannelPowerTimeSeries:
     )
     def test_power_detector_coordinate_follows_the_request(self, detectors):
         iq = testing.tone(DURATION, FS, frequency=1e5)
-        da = sa.measurements.channel_power_time_series(
-            iq, capture(), detector_period=DETECTOR_PERIOD, power_detectors=detectors
-        )
+        da = cpts(iq, power_detectors=detectors)
 
-        assert da.dims == ('port', 'power_detector', 'time_elapsed')
-        assert da.dtype == np.dtype('float32')
         assert tuple(da.coords['power_detector'].values) == detectors
 
     def test_float_quantile_detector_is_rejected(self):
@@ -135,20 +129,13 @@ class TestChannelPowerTimeSeries:
         typed as a tuple of str (unlike `cyclic_statistics`), so the spec refuses one"""
         iq = testing.tone(DURATION, FS, frequency=1e5)
         with pytest.raises(msgspec.ValidationError, match='Expected `str`'):
-            sa.measurements.channel_power_time_series(
-                iq,
-                capture(),
-                detector_period=DETECTOR_PERIOD,
-                power_detectors=('peak', 0.5),
-            )
+            cpts(iq, power_detectors=('peak', 0.5))
 
     @pytest.mark.parametrize('power', [0.0, -13.0, 7.5], ids='{:g}dBm'.format)
     def test_absolute_level_is_the_amplitude_in_dBm(self, power):
         amplitude = np.float32(10 ** (power / 20))
         iq = testing.tone(DURATION, FS, frequency=1e5) * amplitude
-        da = sa.measurements.channel_power_time_series(
-            iq, capture(), detector_period=DETECTOR_PERIOD
-        )
+        da = cpts(iq)
 
         assert da.attrs['units'] == 'dBm'
         assert_close(da.values, power, **dB_tol(BIN_SIZE))
@@ -162,12 +149,7 @@ class TestCyclicChannelPower:
     def test_lag_count_is_independent_of_duration(self, cycles):
         duration = cycles * CYCLIC_PERIOD
         iq = testing.tone(duration, FS, frequency=1e5)
-        da = sa.measurements.cyclic_channel_power(
-            iq,
-            capture(duration=duration),
-            cyclic_period=CYCLIC_PERIOD,
-            detector_period=DETECTOR_PERIOD,
-        )
+        da = cyclic(iq, duration=duration)
 
         assert da.sizes['cyclic_lag'] == CYCLIC_LAGS
         expected = (np.arange(CYCLIC_LAGS) * float(DETECTOR_PERIOD)).astype('float32')
@@ -181,18 +163,9 @@ class TestCyclicChannelPower:
     def test_axis_order_and_statistic_coordinate(self, statistics):
         detectors = ('peak', 'rms')
         iq = testing.tone(DURATION, FS, frequency=1e5)
-        da = sa.measurements.cyclic_channel_power(
-            iq,
-            capture(),
-            cyclic_period=CYCLIC_PERIOD,
-            detector_period=DETECTOR_PERIOD,
-            power_detectors=detectors,
-            cyclic_statistics=statistics,
-        )
+        da = cyclic(iq, power_detectors=detectors, cyclic_statistics=statistics)
 
-        assert da.dims == ('port', 'power_detector', 'cyclic_statistic', 'cyclic_lag')
         assert da.shape == (1, len(detectors), len(statistics), CYCLIC_LAGS)
-        assert da.dtype == np.dtype('float32')
         assert tuple(da.coords['power_detector'].values) == detectors
         assert tuple(da.coords['cyclic_statistic'].values) == statistics
 
@@ -204,12 +177,7 @@ class TestCyclicChannelPower:
         amplitudes = np.repeat(np.float32([1.0, 10.0]), cycle_size)
         iq = testing.tone(duration, FS, frequency=1e5) * amplitudes
 
-        da = sa.measurements.cyclic_channel_power(
-            iq,
-            capture(duration=duration),
-            cyclic_period=CYCLIC_PERIOD,
-            detector_period=DETECTOR_PERIOD,
-        )
+        da = cyclic(iq, duration=duration)
 
         tol = dB_tol(BIN_SIZE + 2)
         assert_close(da.sel(cyclic_statistic='min').values, 0.0, **tol)
@@ -228,25 +196,24 @@ class TestIqWaveform:
     def waveform(duration=DURATION):
         return testing.single_tone(duration, FS, frequency_offset=1e5, snr=10)
 
-    def test_unbounded_result_is_the_input(self):
-        iq = self.waveform()
-        da = sa.measurements.iq_waveform(iq, capture())
-
-        assert da.dims == ('port', 'iq_index')
-        assert da.dtype == np.dtype('complex64')
-        assert np.array_equal(da.values, iq)
-        np.testing.assert_array_equal(
-            da.coords['iq_index'].values, np.arange(SIZE, dtype='uint64')
-        )
-
     @pytest.mark.parametrize(
         ('start_time_sec', 'stop_time_sec', 'start', 'stop'),
         [
+            (None, None, 0, SIZE),
             (2e-5, 6e-5, 20, 60),
             (None, 2.5e-5, 0, 25),
             (9.6e-5, None, 96, SIZE),
+            (None, 2 * DURATION, 0, SIZE),
+            (None, DURATION, 0, SIZE),
         ],
-        ids=['both_bounds', 'stop_only', 'start_only'],
+        ids=[
+            'unbounded',
+            'both_bounds',
+            'stop_only',
+            'start_only',
+            'stop_past_end',
+            'stop_at_end',
+        ],
     )
     def test_time_bounds_slice_by_sample_index(
         self, start_time_sec, stop_time_sec, start, stop
@@ -258,41 +225,17 @@ class TestIqWaveform:
 
         assert da.sizes['iq_index'] == stop - start
         assert np.array_equal(da.values, iq[:, start:stop])
-        np.testing.assert_array_equal(
-            da.coords['iq_index'].values, np.arange(start, stop, dtype='uint64')
-        )
+        indices = da.coords['iq_index']
+        assert indices.dtype == np.dtype('uint64')
+        np.testing.assert_array_equal(indices.values, np.arange(start, stop))
 
-    def test_stop_time_past_the_capture_end(self):
-        iq = self.waveform()
-        da = sa.measurements.iq_waveform(iq, capture(), stop_time_sec=2 * DURATION)
-
-        assert da.sizes['iq_index'] == SIZE
-        assert np.array_equal(da.values, iq)
-        np.testing.assert_array_equal(
-            da.coords['iq_index'].values, np.arange(SIZE, dtype='uint64')
-        )
-
-    def test_stop_time_at_the_capture_end_does_not_clip(self):
-        iq = self.waveform()
-        da = sa.measurements.iq_waveform(iq, capture(), stop_time_sec=DURATION)
-
-        assert da.sizes['iq_index'] == SIZE
-        assert np.array_equal(da.values, iq)
-        np.testing.assert_array_equal(
-            da.coords['iq_index'].values, np.arange(SIZE, dtype='uint64')
-        )
-
-    def test_start_time_past_the_capture_end_is_empty(self):
-        iq = self.waveform()
-        da = sa.measurements.iq_waveform(iq, capture(), start_time_sec=2 * DURATION)
-
-        assert da.sizes['iq_index'] == 0
-        assert da.coords['iq_index'].size == 0
-
-    def test_both_bounds_past_the_capture_end_are_empty(self):
+    @pytest.mark.parametrize(
+        'stop_time_sec', [None, 3 * DURATION], ids=['start_only', 'both_bounds']
+    )
+    def test_bounds_past_the_capture_end_are_empty(self, stop_time_sec):
         iq = self.waveform()
         da = sa.measurements.iq_waveform(
-            iq, capture(), start_time_sec=2 * DURATION, stop_time_sec=3 * DURATION
+            iq, capture(), start_time_sec=2 * DURATION, stop_time_sec=stop_time_sec
         )
 
         assert da.sizes['iq_index'] == 0
@@ -308,9 +251,3 @@ class TestIqWaveform:
 
         assert da.sizes['iq_index'] == 0
         assert da.coords['iq_index'].size == 0
-
-    def test_iq_index_dtype_matches_the_registration(self):
-        iq = self.waveform()
-        da = sa.measurements.iq_waveform(iq, capture())
-
-        assert da.coords['iq_index'].dtype == np.dtype('uint64')

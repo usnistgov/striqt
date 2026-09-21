@@ -67,7 +67,9 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
 
         fs = float(self.get_resampler(self._capture)['fs_sdr'])
         sample_period_ns = 1_000_000_000 / fs
-        timestamp_ns = self._sync_time_ns + self._samples_elapsed * sample_period_ns
+        timestamp_ns = self._sync_time_ns + round(
+            self._samples_elapsed * sample_period_ns
+        )
 
         self._samples_elapsed += count
 
@@ -97,13 +99,19 @@ class VirtualSource(SourceBackend[SS, SC]):
     def get_waveform(
         self,
         count: int,
-        start: int,
-        offset: int,
+        start_index: int,
         *,
         port: int = 0,
         xp,
         dtype='complex64',
     ) -> Array:
+        """`count` samples of `port` starting at absolute sample `start_index`.
+
+        Indices are at the source sample rate and are referenced to the corrected
+        capture: index 0 is the first sample of the output of `correct_iq`, so
+        negative indices are the leading-overlap pre-roll that it trims. A source
+        that has no samples there (a file) fills them with zeros.
+        """
         raise NotImplementedError
 
     def setup(self, rx_ports: tuple[int, ...] | None = None):
@@ -132,19 +140,19 @@ class VirtualSource(SourceBackend[SS, SC]):
         else:
             ports = self._capture.port
 
+        start_index = self._samples_elapsed - self._overlaps[0]
+
         for port, buf in zip(ports, buffers):
             values = self.get_waveform(
-                count,
-                start=self._overlaps[0],
-                offset=self._samples_elapsed,
-                port=port,
-                xp=getattr(self, 'xp', np),
+                count, start_index, port=port, xp=getattr(self, 'xp', np)
             )
             buf[offset : (offset + count)] = values
 
         fs = float(self.get_resampler(self._capture)['fs_sdr'])
         sample_period_ns = 1_000_000_000 / fs
-        timestamp_ns = self._sync_time_ns + self._samples_elapsed * sample_period_ns
+        timestamp_ns = self._sync_time_ns + round(
+            self._samples_elapsed * sample_period_ns
+        )
 
         self._samples_elapsed += count
 

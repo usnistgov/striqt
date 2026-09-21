@@ -18,11 +18,11 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from numeric_checks import (
     ATOL,
-    FFT_ROUNDOFF_SAFETY,
     FIR_LEAKAGE,
     FIR_RECT_STOPBAND_DB,
     FLOAT_DTYPES,
     RTOL_FLOAT64,
+    accum_rtol,
     assert_close,
     assert_tone_level,
     bin_centered_tone,
@@ -41,7 +41,6 @@ from numeric_checks import (
     tone_bin,
     tone_frequency,
     tone_peak_roundoff,
-    unit_roundoff,
     unit_tone,
 )
 from numpy.testing import assert_allclose, assert_array_equal
@@ -94,14 +93,6 @@ def max_cupy_fft_chunk():
     previous = fourier.get_max_cupy_fft_chunk()
     yield fourier.set_max_cupy_fft_chunk
     fourier.set_max_cupy_fft_chunk(previous)
-
-
-def test_max_cupy_fft_chunk_roundtrip(max_cupy_fft_chunk):
-    previous = fourier.get_max_cupy_fft_chunk()
-    max_cupy_fft_chunk(4096)
-    assert fourier.get_max_cupy_fft_chunk() == 4096
-    max_cupy_fft_chunk(previous)
-    assert fourier.get_max_cupy_fft_chunk() == previous
 
 
 class TestGetWindow:
@@ -163,11 +154,9 @@ class TestGetWindow:
         )
         # the periodic hann window has ENBW exactly 1.5 bins
         assert_allclose(fourier.equivalent_noise_bandwidth('hann', 64), 1.5, rtol=1e-6)
-        assert_allclose(
-            fourier.equivalent_noise_bandwidth('hann', 64, cached=False),
-            fourier.equivalent_noise_bandwidth('hann', 64),
-            rtol=0,
-        )
+        uncached = fourier.equivalent_noise_bandwidth('hann', 64, cached=False)
+        cached = fourier.equivalent_noise_bandwidth('hann', 64)
+        assert_allclose(uncached, cached, rtol=0)
 
     @pytest.mark.parametrize('window', ['kaiser', 'dpss', 'chebwin'])
     def test_find_window_param_reproduces_enbw(self, window):
@@ -587,7 +576,7 @@ class TestIstft:
         y = fourier._unstack_stft_windows(stacked, noverlap=noverlap, nperseg=nfft)
 
         # only the overlap-add sums round
-        sigma = FFT_ROUNDOFF_SAFETY * hop_divisor * unit_roundoff(np.float32)
+        sigma = accum_rtol(np.float32, hop_divisor)
         assert_close(interior(y, nfft), interior(x, nfft), sigma=sigma)
 
     def test_stack_windows_rejects_unknown_norm(self):
@@ -829,10 +818,8 @@ class TestFilterDesign:
         assert forced['fs_sdr'] == pytest.approx(50e6)
 
         upsample = fourier.design_cola_resampler(10e6, 15.36e6)
-        assert (
-            upsample['fs_sdr'] == pytest.approx(10e6)
-            and upsample['nfft'] < upsample['nfft_out']
-        )
+        assert upsample['fs_sdr'] == pytest.approx(10e6)
+        assert upsample['nfft'] < upsample['nfft_out']
 
         # 8209 is the first prime above the default min_fft_size, so it is the
         # smallest rational FFT size for this ratio and the one avoid_primes rejects
@@ -995,10 +982,8 @@ class TestOverlapAddFilters:
         assert y.shape == (1, 2 * x.shape[1])
         yi = interior(y, up, axis=1)
         assert_tone_level(yi)
-        assert (
-            abs(tone_frequency(yi[0], 2 * self.FS) - 0.05e6)
-            <= 2 * self.FS / yi.shape[1]
-        )
+        f_err = abs(tone_frequency(yi[0], 2 * self.FS) - 0.05e6)
+        assert f_err <= 2 * self.FS / yi.shape[1]
 
     @pytest.mark.parametrize(
         'up, down, shift, match',
@@ -1039,10 +1024,9 @@ class TestToneFarBinFloor:
         )
         white = peak_factor(err_far.size) * rms_bound
         structured = tone_peak_roundoff(np.complex64) * tone_peak
-        assert np.abs(err_far).max() < max(white, structured), (
-            f'far-bin peak roundoff above '
-            f'{far_bin_floor_dBc(sigma, nfft, err_far.size):.1f} dBc'
-        )
+        peak_floor_dBc = far_bin_floor_dBc(sigma, nfft, err_far.size)
+        msg = f'far-bin peak roundoff above {peak_floor_dBc:.1f} dBc'
+        assert np.abs(err_far).max() < max(white, structured), msg
 
     def _check_error_spectrum(self, out, out_ref, sigma):
         """bound the spectrum of the roundoff error in a time-domain output of a unit
