@@ -116,8 +116,8 @@ def _index_or_all(inds: tuple[int, ...] | typing.Literal['all'], name, size, xp=
     if x.ndim not in (0, 1):
         raise ValueError(f'{name} argument must be a sequence of indices')
 
-    if x.max() > size:
-        raise ValueError(f'{name} value {inds} exceeds the maximum {size}')
+    if x.max() >= size:
+        raise ValueError(f'{name} value {inds} exceeds the maximum {size - 1}')
     if (-x).max() > size:
         raise ValueError(f'{name} value {inds} is below the minimum {-size}')
 
@@ -458,11 +458,13 @@ def index_pss_symbols(
     elif case == 'd':
         offsets = [4, 8, 16, 20]
         mult = 28
-        nrange = range(19)
+        # TS 38.213 §4.1 skips n = 4, 9, 14 so that L_max = 64
+        nrange = [n for n in range(19) if n % 5 != 4]
     elif case == 'e':
         offsets = [8, 12, 16, 20, 32, 36, 40, 44]
         mult = 56
-        nrange = range(9)
+        # TS 38.213 §4.1 skips n = 4 so that L_max = 64
+        nrange = [n for n in range(9) if n != 4]
     elif case == 'f' or case == 'g':
         offsets = [2, 9]
         mult = 14
@@ -790,12 +792,16 @@ def weighted_ssb_detect(
     rpeak[xp.where(rpeak < threshold)] = 0
 
     # evaluate the sub-symbol IQ offset
-    nfill = round(window_fill * rpeak.shape[FINE_LAG_DIM])
     nfine = rpeak.shape[FINE_LAG_DIM]
+    # an odd window has a single peak sample, so neighbouring lags never tie;
+    # even zero padding keeps that peak at the correlate1d origin
+    nfill = max(1, 2 * ((round(window_fill * nfine) - 1) // 2) + 1)
+    nzero = nfine - nfill
+    nzero -= nzero % 2
     w = fourier.get_window(
         window,
         nwindow=nfill,
-        nzero=nfine - nfill,
+        nzero=nzero,
         norm=False,
         center_zeros=True,
         fftbins=False,
@@ -952,7 +958,6 @@ def _get_3gpp_index_cyclic_prefix(
     # axis 3: cp index
     grid.append(xp.ogrid[0 : phy.cp_sizes[1]])
 
-    grid = [x.squeeze() for x in grid if x.size > 1]
     # pad the axis dimensions so they can be broadcast together
     inds, *offsets = xp.meshgrid(*grid, indexing='ij', copy=False)
 
@@ -961,7 +966,9 @@ def _get_3gpp_index_cyclic_prefix(
     for offset in offsets:
         inds += offset
 
-    return inds
+    # drop singleton axes only after the sum, so that a single non-zero
+    # frame, slot or symbol selection keeps its offset
+    return inds.squeeze()
 
 
 class Phy3GPP(PhyOFDM):

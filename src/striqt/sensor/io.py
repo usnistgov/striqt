@@ -2,6 +2,7 @@ from .lib.io import (
     open_store,
     read_json_spec,
     read_yaml_spec,
+    read_zarr_spec,
     read_calibration,
     save_calibration,
 )

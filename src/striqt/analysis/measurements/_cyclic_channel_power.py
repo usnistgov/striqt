@@ -41,7 +41,28 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
 )
 def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
-    """Compute cyclic measurements of channel power.
+    """Evaluate cyclic statistics of channel power across the cycles in a capture.
+
+    Each power detector bins the capture on `detector_period`; the binned series is
+    folded into cycles of `cyclic_period`, and each cyclic statistic reduces across
+    the cycles, following D.G. Kuester et al., "Cyclic Analysis of Power in Radio
+    Channels". Per capture, the result has
+    dimensions ``(power_detector, cyclic_statistic, cyclic_lag)``. The `cyclic_lag`
+    coordinate runs from 0 to ``cyclic_period - detector_period`` in steps of
+    `detector_period`, so every trace holds ``cyclic_period / detector_period``
+    samples regardless of the capture `duration`.
+
+    Signals whose period divides `cyclic_period` (e.g., 10 ms covers TDD cellular frames,
+    5 ms WiMAX frames and the 1 ms CBRS test ``bin 1'' pulse repetition interval) resolve
+    at fixed lags with little spread between the 'min' and 'max' statistics, so the
+    uplink and downlink levels of a TDD network can be read from disjoint lag
+    windows, while occupancy with an incommensurate period smears across all lags.
+
+    Statistics are evaluated in linear power and converted to dBm afterwards. The
+    capture `duration` must be a whole number of cycles, `cyclic_period` a whole
+    number of detector periods, and `detector_period` a whole number of samples at
+    `sample_rate`; write it as a fraction (``1/28000`` s is one OFDM symbol at
+    30 kHz subcarrier spacing) to keep that exact.
 
     Args:
     {args}

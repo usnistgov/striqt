@@ -133,7 +133,7 @@ def _results_as_arrays(
     """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
 
     if array_api_compat.is_torch_array(obj):
-        array = obj.cpu()  # ty: ignore
+        array = obj.cpu()
     elif sw.is_cupy_array(obj):
         array = obj.get()
     elif array_api_compat.is_numpy_array(obj):
@@ -198,6 +198,22 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
         raise ValueError(problem) from exc
 
 
+def _restore_padded_coord_dtype(da: 'xr.DataArray', info: register.CoordInfo) -> None:
+    """undo the integer dtype promotion caused by the nan fill in `xr.DataArray.pad`.
+
+    The padded region spans the whole coordinate and is overwritten by the
+    coordinate factory, so the fill values themselves need not survive.
+    """
+
+    dtype = np.dtype(info.dtype)
+    coord = da[info.name]
+
+    if dtype.kind not in 'iub' or coord.dtype == dtype:
+        return
+
+    da[info.name] = xr.zeros_like(coord, dtype=dtype)
+
+
 def build_dataarray(
     delayed: DelayedDataArray,
     *,
@@ -239,6 +255,7 @@ def build_dataarray(
 
     for coord_factory in delayed.info.coord_factories:
         factory_info = register.registry.coordinates[coord_factory]
+        _restore_padded_coord_dtype(da, factory_info)
         coord = da[factory_info.name]
 
         ret = coord_factory(delayed.capture, delayed.spec)
@@ -374,7 +391,7 @@ def evaluate_by_spec(
         iq = AcquiredIQ(pre_align=iq, pre_filter=None, aligned=None, capture=None)
 
     if isinstance(spec, dict):
-        spec_dict = spec  # ty: ignore
+        spec_dict = spec
     else:
         spec_dict = spec.to_dict()
     results = {}

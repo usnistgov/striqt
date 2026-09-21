@@ -94,6 +94,6 @@ def power_spectral_density(iq, capture, **kwargs):
         ufunc = stat_ufunc_from_shorthand(spec.time_statistic[i], xp=xp)
         sw.axis_index(psd, i, axis=axis)[:] = ufunc(spg, axis=axis)
 
-    psd = sw.powtodB(psd).astype('float16')
+    psd = sw.powtodB(psd)
 
     return psd, metadata

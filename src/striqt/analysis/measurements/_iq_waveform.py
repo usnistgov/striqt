@@ -18,21 +18,25 @@ def _get_start_stop_index(
     spec: specs.IQWaveform,
     allow_none=True,
 ):
+    # bounds are clamped into the capture so that the index range agrees with the
+    # waveform slice, which numpy clips silently
+    size = round(capture.duration * capture.sample_rate)
+
     if spec.start_time_sec is None:
         if allow_none:
             start = None
         else:
             start = 0
     else:
-        start = int(spec.start_time_sec * capture.sample_rate)
+        start = min(max(int(spec.start_time_sec * capture.sample_rate), 0), size)
 
     if spec.stop_time_sec is None:
         if allow_none:
             stop = None
         else:
-            stop = int(capture.sample_rate * capture.duration)
+            stop = size
     else:
-        stop = int(spec.stop_time_sec * capture.sample_rate)
+        stop = min(max(int(spec.stop_time_sec * capture.sample_rate), 0), size)
 
     return start, stop
 
@@ -62,16 +66,6 @@ def iq_waveform(iq, capture, **kwargs):
     spec = specs.IQWaveform.from_dict(kwargs)
 
     metadata = spec.to_dict()
-
-    if spec.start_time_sec is None:
-        start = None
-    else:
-        start = int(spec.start_time_sec * capture.sample_rate)
-
-    if spec.stop_time_sec is None:
-        stop = None
-    else:
-        stop = int(spec.stop_time_sec * capture.sample_rate)
 
     start, stop = _get_start_stop_index(capture, spec)
 

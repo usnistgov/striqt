@@ -98,7 +98,7 @@ def dump(
     # prefer the variable-length string dtype from numpy 2, if available
     string_dtype = getattr(np.dtype, 'StrDType', 'str')
 
-    from ..measurements.registry import measurements as registry
+    from .register import registry
 
     for name in dict(data.coords).keys():
         if data[name].size == 0:
@@ -726,8 +726,7 @@ def _build_encodings_zarr_v3(
     elif compression:
         from zarr import codecs  # pyright: ignore
 
-        shuffle = codecs.BloscShuffle.shuffle
-        compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle=shuffle)]
+        compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle='shuffle')]
     else:
         compressors = None
 
@@ -806,7 +805,7 @@ def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
         paths = list(str(g.relative_to(root_dir)) for g in rel.glob(s))
         if len(paths) == 0:
             raise FileNotFoundError(s)
-        return paths
+        return sorted(paths)
 
     if isinstance(node.value, str):
         values = glob_path(node.value)
@@ -817,7 +816,7 @@ def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
     else:
         raise TypeError(f'invalid tag type {type(node.value)!r} in !import')
 
-    return sorted(values)
+    return values
 
 
 class _YAMLIncludeConstructor(yaml.Loader):

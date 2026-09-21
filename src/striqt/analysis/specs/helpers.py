@@ -80,7 +80,7 @@ class frozendict(Mapping[_K, _V]):
 
     def __new__(cls, *args: Any, **kwargs: Any) -> frozendict[_K, _V]:
         inst = super().__new__(cls)
-        inst._dict = dict(*args, **kwargs)  # pyright: ignore
+        inst._dict = dict(*args, **kwargs)  # type: ignore
         inst._hash = None
         return inst
 
@@ -206,13 +206,14 @@ def _enc_hook(obj) -> Any:
 
 @util.lru_cache()
 def _enc_hook_no_tuple_keys(obj) -> Any:
-    """convert any dictionary tuple keys to strings"""
+    """like `_enc_hook`, but with dictionary tuple keys encoded as JSON array text"""
 
     out = _enc_hook(obj)
-    if isinstance(out, dict):
-        for k in list(out.keys()):
-            if isinstance(k, tuple):
-                out[repr(list(k))] = out.pop(k)
+    if isinstance(out, dict) and any(isinstance(k, tuple) for k in out):
+        out = {
+            msgspec.json.encode(list(k)).decode() if isinstance(k, tuple) else k: v
+            for k, v in out.items()
+        }
     return out
 
 
@@ -222,6 +223,9 @@ def _dec_hook(type_, obj):
     if issubclass(schema_cls, (int, float)) and hasattr(obj, '__float__'):
         return float(obj)
     elif issubclass(schema_cls, fractions.Fraction):
+        if isinstance(obj, float):
+            # a YAML/JSON float is the author's decimal (.001), not its binary expansion
+            return fractions.Fraction(obj).limit_denominator(10**10)
         return fractions.Fraction(obj)
     else:
         return obj
@@ -266,9 +270,9 @@ def freeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = tuple([freeze(v, nd) for v in obj])
-            return ret  # type: ignore
+            return ret  # pyright: ignore
         else:
-            return tuple(obj)  # type: ignore
+            return tuple(obj)  # pyright: ignore
     elif isinstance(obj, dict):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
@@ -304,15 +308,15 @@ def unfreeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = [unfreeze(v, nd) for v in obj]
-            return ret  # type: ignore
+            return ret  # pyright: ignore # pyrefly: ignore
         else:
-            return list(obj)
+            return list(obj)  # ty: ignore
 
     if isinstance(obj, (dict, frozendict)):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = {k: unfreeze(v, nd) for k, v in obj.items()}
-            return ret  # type: ignore
+            return ret  # pyright: ignore # pyrefly: ignore
         else:
             return dict(obj)
     else:
@@ -402,9 +406,8 @@ def infer_coord_info(
                 name = type_key.cls.__qualname__
                 raise TypeError(f'failed to make default for type {name!r}') from ex
     elif isinstance(type_key, mi.Metadata):
-        return type_key.extra or {}, infer_coord_info(type_key.type, allow_timestamps)[
-            1
-        ]
+        info = infer_coord_info(type_key.type, allow_timestamps)[1]
+        return type_key.extra or {}, info
     elif isinstance(type_key, mi.LiteralType):
         return {}, type(type_key.values[0])
     elif isinstance(type_key, mi.UnionType):

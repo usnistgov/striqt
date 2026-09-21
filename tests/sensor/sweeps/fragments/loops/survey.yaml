@@ -1,0 +1,26 @@
+- kind: repeat
+  count: 2
+- field: azimuth
+  kind: range
+  start: -180
+  stop: 180
+  step: 45
+- field: elevation
+  kind: range
+  start: 0
+  stop: 92
+  step: 30
+- field: switch_input
+  kind: list
+  values: [0, 1]
+- field: azimuth_repeat
+  kind: range
+  start: 0
+  stop: 3
+  step: 1
+- field: frequency_offset
+  isin: analysis
+  kind: frequencybinrange
+  start: -46.08e6
+  stop: 46.08e6
+  step: 11.52e6

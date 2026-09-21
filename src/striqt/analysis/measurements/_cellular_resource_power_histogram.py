@@ -152,7 +152,7 @@ def build_tdd_link_symbol_masks(
         flex_as=flex_as,
     )
 
-    out_shape = (len(link_direction), count)
+    out_shape = (len(link_direction), count or 1)
     out = xp.empty(out_shape, dtype='float32')
     for i, direction in enumerate(link_direction):
         single_mask = [
@@ -292,7 +292,7 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
     if time_bin_averaging is not None:
         masked_spgs = sw.binned_mean(masked_spgs, time_bin_averaging, axis=2, fft=False)
 
-    masked_spgs = sw.powtodB(masked_spgs, out=masked_spgs)
+    masked_spgs = sw.powtodB(masked_spgs, overwrite_x=True)
     bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,

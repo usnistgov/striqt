@@ -5,6 +5,7 @@ from __future__ import annotations as __
 from collections import Counter, defaultdict, ChainMap
 import functools
 import itertools
+import math
 import numbers
 import string
 from typing import (
@@ -259,37 +260,40 @@ def adjust_captures(
         key,
         field_default: str | structs.CaptureRemap | None,
     ):
-        if not isinstance(key, tuple):
-            k = key
-        elif len(key) == 1:
-            k = key[0]
-        else:
-            # per-port value in the capture
-            return tuple(lookup_spec.lookup[k] for k in key)
-        try:
-            return lookup_spec.lookup[k]
-        except KeyError:
-            if lookup_spec.default != msgspec.UNSET:
-                return lookup_spec.default
+        def lookup_one(k):
+            try:
+                return lookup_spec.lookup[k]
+            except KeyError:
+                if lookup_spec.default != msgspec.UNSET:
+                    return lookup_spec.default
 
-            if isinstance(field_default, structs.CaptureRemap):
-                default = field_default.default
-                required = field_default.required
-            else:
-                default = msgspec.UNSET
-                required = False
+                if isinstance(field_default, structs.CaptureRemap):
+                    default = field_default.default
+                    required = field_default.required
+                else:
+                    default = msgspec.UNSET
+                    required = False
 
-            if default != msgspec.UNSET:
-                return default
-            elif not lookup_spec.required:
+                if default != msgspec.UNSET:
+                    return default
+                elif not lookup_spec.required:
+                    return msgspec.UNSET
+                elif required:
+                    return msgspec.UNSET
+                else:
+                    raise KeyError(
+                        f'adjust_captures[{field!r}] is missing a lookup for key {k!r} '
+                        f'for source {source_id!r}'
+                    )
+
+        if isinstance(key, tuple) and len(key) > 1:
+            # per-port value in the capture: the field is a full-length tuple or
+            # absent, so an optional miss on any port omits the whole field
+            values = tuple(lookup_one(k) for k in key)
+            if any(v == msgspec.UNSET for v in values):
                 return msgspec.UNSET
-            elif required:
-                return msgspec.UNSET
-            else:
-                raise KeyError(
-                    f'adjust_captures[{field!r}] is missing a lookup for key {k!r} '
-                    f'for source {source_id!r}'
-                )
+            return values
+        return lookup_one(key[0] if isinstance(key, tuple) else key)
 
     defaults = _get_capture_adjust_map(adjust_spec).get('defaults', {})
     default_fields = {
@@ -320,10 +324,10 @@ def get_path_fields(
 
     assert isinstance(sweep, structs.Sweep)
 
-    if callable(source_id):
-        id_ = source_id()
-    else:
+    if isinstance(source_id, str):
         id_ = source_id
+    else:
+        id_ = source_id()
 
     fields = {}
     fields['start_time'] = datetime.now().strftime('%Y%m%d-%Hh%Mm%S')
@@ -342,9 +346,9 @@ def get_path_fields(
 def ensure_tuple(obj: _T | tuple[_T, ...], size: int | None = None) -> tuple[_T, ...]:
     if isinstance(obj, tuple):
         if size is not None and len(obj) == 1:
-            return obj * size  # ty: ignore
+            return obj * size
         else:
-            return obj  # ty: ignore
+            return obj
     elif size is None:
         return (obj,)
     else:
@@ -498,6 +502,11 @@ def _build_loop_points_dict(
     capture_cls: type[SC],
     new_instance: bool = False,
 ) -> _LoopPointsDict:
+    """map (isin, field) to the loop points.
+
+    Capture loop points are coerced to the capture field type here so that remaps
+    keyed on a looped field see typed values rather than JSON/YAML decoded strings.
+    """
     loop_points: _LoopPointsDict = {
         (l.isin, l.field): l.get_points() for l in loops if l.field is not None
     }
@@ -515,6 +524,19 @@ def _build_loop_points_dict(
     extra = available - {f.name for f in fields}
     if len(extra) > 0:
         raise TypeError(f'invalid capture fields {extra!r} specified in loops')
+
+    field_types = {f.name: f.type for f in fields}
+    for (isin, name), points in loop_points.items():
+        if isin != 'capture':
+            continue
+        try:
+            loop_points[isin, name] = msgspec.convert(
+                points, list[field_types[name]], strict=False, dec_hook=_dec_hook
+            )
+        except msgspec.ValidationError as ex:
+            raise msgspec.ValidationError(
+                f'in loop over capture field {name!r}: {ex}'
+            ) from ex
 
     return loop_points
 
@@ -647,7 +669,12 @@ def _expand_capture_loops(
             # we needed to get a first cut at the loops so that adjust_captures
             # can work on the looped capture. here we adjust the captures, but
             # make sure loops have the highest priority at the end
-            new = (c | adjust_captures(c, adjust, source_id) | loop_point for c in new)
+            new = (
+                _merge_capture_updates(
+                    c, adjust_captures(c, adjust, source_id), loop_point
+                )
+                for c in new
+            )
 
         result += list(new)
 
@@ -663,7 +690,12 @@ def _expand_capture_loops(
         )
 
     if loop_only_nyquist:
-        return tuple(c for c in captures if c.sample_rate >= c.analysis_bandwidth)
+        return tuple(
+            c
+            for c in captures
+            if not math.isfinite(c.analysis_bandwidth)
+            or c.sample_rate >= c.analysis_bandwidth
+        )
     else:
         return captures
 
@@ -689,7 +721,7 @@ def _get_capture_adjust_dependencies(
 @sa.util.lru_cache()
 def _get_capture_adjust_fields(
     spec: structs.AdjustCapturesType, source_id: str | None
-) -> dict[str, str | structs.CaptureRemap]:
+) -> dict[str, str | structs.CaptureRemap | float | None]:
     fields = {}
     map = _get_capture_adjust_map(spec)
 

@@ -260,7 +260,7 @@ def probe_soapy_info(device: SoapySDR.Device, retries: int | None = None) -> Soa
     return SoapyInfo(
         driver=device.getDriverKey(),
         hardware=device.getHardwareKey(),
-        hardware_info=device.getHardwareInfo(),
+        hardware_info=dict(device.getHardwareInfo()),
         num_rx_ports=num_rx,
         num_tx_ports=num_tx,
         has_timestamps=device.hasHardwareTime(),
@@ -593,7 +593,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             raise RuntimeError('SoapySDR instantiated an unexpected type')
 
     def get_id(self) -> str:
-        raise self.device.getHardwareKey()
+        return self.device.getHardwareKey()
 
     def get_info(self) -> SoapyInfo:
         if self._info is not None:

@@ -21,6 +21,7 @@ dependencies = [
     "matplotlib-backend-sixel",
     # schemas for the yaml specs and validation
     "msgspec>=0.19.0",
+    "pyyaml",
     # for built-in debugging
     "ipython>=8.18.1",
     # platform introspection tooling
@@ -31,6 +32,7 @@ dependencies = [
     "eval_type_backport",
     "exceptiongroup>=1.2",
     "typing-extensions",
+    # web frontend
     "fastapi>=0.128.8",
     "uvicorn[standard]>=0.39.0",
     "plotly>=6.9.0",
@@ -53,6 +55,7 @@ dev = [
 doc = [
     "sphinx",
     "sphinx-click",
+    "sphinx-jsonschema",
     "toml",
     "myst_nb"
 ]
@@ -61,9 +64,13 @@ gpu = [
     "cython",
 ]
 test = [
+    "coverage[toml]",
     "pytest",
     "nptdms",
-    "pytest-order"
+    "pytest-cov",
+    "pytest-subtests; python_version < \"3.10\"",
+    "pytest-lazy-fixtures",
+    "hypothesis"
 ]
 
 [project.scripts]
@@ -74,6 +81,7 @@ rechunk-zarr = "striqt.cli.rechunk_zarr:cli"
 convert-spec = "striqt.cli.convert_spec:cli"
 zip-zarr = "striqt.cli.zip_zarr:cli"
 web-plotter = "striqt.cli.web_plotter:cli"
+_warmup_striqt = "striqt.cli.warmup:cli"
 
 [tool.ruff]
 target-version = "py39"
@@ -111,6 +119,16 @@ norecursedirs = [
     "build"
 ]
 
+[tool.coverage.report]
+# numba compiles the decorated python into machine code, so the interpreter never
+# executes those bodies and coverage.py reports them as missed; an excluded decorator
+# line excludes the whole function
+exclude_also = [
+    "^\\s*@(nb|numba)\\.(njit|jit|vectorize|guvectorize)\\b",
+    "^\\s*@(numba\\.)?cuda\\.jit\\b",
+    "^\\s*@(njit|jit|vectorize|guvectorize)\\b",
+]
+
 [tool.ruff.lint.extend-per-file-ignores]
 "**/__init__.py" = [ "F401", "F403", "E402"]
 
@@ -118,3 +136,16 @@ norecursedirs = [
 call-top-callable = "ignore"
 invalid-type-form = "ignore"
 
+[tool.tox]
+# Forces tox to auto-provision the tox-uv plugin if missing
+requires = ["tox-uv"]
+env_list = ["py39", "py314"]
+
+[tool.tox.env_run_base]
+# Dependencies specified JSON-style for TOML compatibility
+package = "editable"
+deps = ["pytest"]
+extras = ["test"]
+commands = [
+    ["pytest"]
+]

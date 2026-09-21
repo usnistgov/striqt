@@ -1,0 +1,18 @@
+sensor_binding: site_survey
+
+extensions:
+  import_path: ../src
+  import_name: extensions
+
+source: !include ../fragments/source/tone.yaml
+
+captures: !include ../fragments/captures/tone.yaml
+
+loops: !include ../fragments/loops/survey.yaml
+
+adjust_captures: !include ["../sites/*.yaml", "../sites_survey/*.yaml"]
+
+analysis: !include ../fragments/analysis/quick.yaml
+
+sink:
+  path: "../outputs/{site_name}/{spec_name}_{parent_name}_{start_time}.zarr.zip"

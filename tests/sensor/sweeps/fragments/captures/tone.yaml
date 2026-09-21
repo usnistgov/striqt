@@ -1,0 +1,14 @@
+- port: [0, 1]
+  center_frequency: 3750e6 # Hz
+  gain: -10 # dB
+  duration: 2e-3 # s
+  sample_rate: 53.76e6 # Hz
+  analysis_bandwidth: 40e6 # Hz
+  frequency_offset: -3e6 # Hz
+  snr: 80 # dB
+  host_resample: true
+  backend_sample_rate: null
+  antenna_polarization: [V, H]
+  adjust_analysis:
+    time_statistic: [mean, max]
+    frame_slots: null

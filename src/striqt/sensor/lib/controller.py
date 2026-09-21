@@ -58,6 +58,10 @@ class lookup:
         elif isinstance(obj, Controller):
             return obj
         else:
+            # a cancelled open may never register a controller at all; report the
+            # cancellation, which ExceptionStack makes yield to the error that caused
+            # it, rather than a timeout that would mask it
+            util.propagate_thread_interrupts()
             raise TimeoutError('no controller instance initializing given spec')
 
     @classmethod
@@ -208,6 +212,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     _capture: SC | None
     _buffers: buffers.ReceiveBuffers
     _timeout: float = 10
+    _closed: bool = False
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
     schema: 'specs.Schema[SS, SP, SC, PS, PC]'
@@ -289,7 +294,10 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             self.backend = self.sensor.source_cls(spec)
             lookup._set_id(spec, self.source_id)
         except BaseException as ex:
-            lookup._raise(spec, ex)
+            try:
+                lookup._raise(spec, ex)
+            finally:
+                self.close()
         else:
             lookup._set_open(spec, self)
         try:
@@ -376,9 +384,19 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
     def close(self):
-        lookup._clear(self.__setup__)
+        if self._closed:
+            return
+        self._closed = True
+
+        # the registry is keyed by spec value, so a stale controller that the
+        # garbage collector finalizes late must not clear the entry of a live
+        # controller that was opened afterward with an equal spec
+        current = lookup._obj.get(self.__setup__)
+        if current is self or isinstance(current, BaseException):
+            lookup._clear(self.__setup__)
+
         try:
-            backend = self.backend
+            backend = getattr(self, 'backend', None)
             if backend is not None:
                 backend.close()
         finally:
@@ -392,10 +410,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         return self
 
     def __exit__(self, *exc_info):
-        if self.is_open():
-            self.close()
-        else:
-            lookup._clear(self.__setup__)
+        self.close()
 
     def target_analysis(self, analysis: specs.AnalysisGroup | None):
         """sets or disables an analysis target to auto-select acquisition overlap"""
@@ -552,6 +567,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         """acquire IQ samples needed for the armed capture."""
 
         self.capture_spec  # ensure we are armed
+        signal_trigger = None
 
         if isinstance(overlaps, tuple):
             pass
@@ -596,10 +612,11 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             iq.info = iq.info.replace(signal_trigger=signal_trigger)
 
         else:
+            info = self._prev_iq.info
+            if hasattr(info, 'start_time'):
+                info = info.replace(start_time=None)
             iq = dataclasses.replace(
-                self._prev_iq,
-                capture=self.capture_spec,
-                info=self._prev_iq.info.replace(start_time=None),
+                self._prev_iq, capture=self.capture_spec, info=info
             )
 
         if self._config.reuse_iq:

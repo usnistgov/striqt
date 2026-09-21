@@ -319,7 +319,7 @@ class ZarrTimeAppendSink(ZarrSinkBase):
         *,
         force: bool = False,
     ):
-        if 'spectrogram' not in sweep_spec.analysis:
+        if getattr(sweep_spec.analysis, 'spectrogram', None) is None:
             raise ValueError(
                 '"analysis" spec must include "spectrogram" to append on spectrogram time axis'
             )

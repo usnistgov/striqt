@@ -156,7 +156,7 @@ def binned_mean(
     x = axis_to_blocks(x, count, axis=axis)
     stat_axis = axis + 1 if axis >= 0 else axis
     if reject_extrema:
-        x = np.sort(x, axis=stat_axis)
+        x = xp.sort(x, axis=stat_axis)
         x = axis_slice(x, 1, -1, axis=stat_axis)
     ret = xp.nanmean(x, axis=stat_axis)
 
@@ -164,8 +164,8 @@ def binned_mean(
 
 
 @util.lru_cache()
-def sliding_window_output_shape(
-    array_shape: tuple[int, ...] | int, window_shape: tuple, axis
+def _sliding_window_output_shape(
+    array_shape: tuple[int, ...] | int, window_shape: tuple[int, ...] | int, axis
 ):
     """return the shape of the output of sliding_window_view, for example
     to pre-create an output buffer."""
@@ -176,8 +176,10 @@ def sliding_window_output_shape(
         # numpy < 2?
         from numpy.lib import stride_tricks
 
-    if not isinstance(array_shape, tuple):
+    if isinstance(array_shape, int):
         array_shape = (array_shape,)
+    if isinstance(window_shape, int):
+        window_shape = (window_shape,)
 
     if min(window_shape) < 0:
         raise ValueError('`window_shape` cannot contain negative values')
@@ -195,7 +197,6 @@ def sliding_window_output_shape(
                 f'Must provide matching length window_shape and axis; got {len(window_shape)} window_shape elements and {len(axis)} axes elements.'
             )
 
-    window_shape = tuple(window_shape) if np.iterable(window_shape) else (window_shape,)
     x_shape_trimmed = list(array_shape)
     for ax, dim in zip(axis, window_shape):
         if x_shape_trimmed[ax] < dim:
@@ -291,8 +292,11 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     # first convert input to array, possibly keeping subclass
     x = xp.array(x, copy=False, subok=subok)
 
-    out_shape = sliding_window_output_shape(x.shape, window_shape, axis)
-    axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # type: ignore
+    out_shape = _sliding_window_output_shape(x.shape, window_shape, axis)
+    if axis is None:
+        axis = tuple(range(x.ndim))
+    else:
+        axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # type: ignore
     out_strides = x.strides + tuple(x.strides[ax] for ax in axis)
 
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
@@ -372,6 +376,7 @@ def histogram_last_axis(
     size = bins.size  # pyright: ignore
     flat = x.reshape(-1, hist_size)
     idx = xp.searchsorted(bins, flat, 'right') - 1
+    idx[flat == bins[-1]] = size - 2
 
     # Some elements would be off limits, so get a mask for those
     bad_mask = (idx == -1) | (idx == size)
@@ -387,7 +392,7 @@ def histogram_last_axis(
 
     # Get the counts and reshape to multi-dim
     counts = xp.bincount(scaled_idx.ravel(), minlength=limit + 1)[:-1]
-    counts.shape = x.shape[:-1] + (size,)
+    counts = counts.reshape(x.shape[:-1] + (size,))
     return counts[..., :-1], bins
 
 
@@ -492,13 +497,16 @@ def _pad_slices_to_dim(ndim: int, axis: int, /):
 
 
 def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
-    if axis >= 0:
-        pre_pad = [[0, 0]] * axis
-    else:
-        pre_pad = [[0, 0]] * (axis + a.ndim - 1)
+    if axis < 0:
+        axis += a.ndim
+
+    # xp.pad broadcasts a pad list shorter than a.ndim onto every axis, so the
+    # untouched axes need explicit zero padding on both sides of `axis`
+    pre_pad = [[0, 0]] * axis
+    post_pad = [[0, 0]] * (a.ndim - axis - 1)
 
     xp = array_namespace(a)
-    return xp.pad(a, pre_pad + pad_width, *args, **kws)
+    return xp.pad(a, pre_pad + list(pad_width) + post_pad, *args, **kws)
 
 
 # %% cupy configuration and memory management
@@ -578,22 +586,7 @@ def array_stream(obj: Array, null=False, non_blocking=False, ptds=False):
 
 
 def array_namespace(a, use_compat=False) -> ModuleType:
-    try:
-        return array_api_compat.array_namespace(a, use_compat=use_compat)
-    except TypeError:
-        pass
-
-    try:
-        import mlx.core as mx  # type: ignore
-
-        if isinstance(a, mx.array):
-            return mx
-        else:
-            raise TypeError
-    except (ImportError, TypeError):
-        pass
-
-    raise TypeError('unrecognized object type')
+    return array_api_compat.array_namespace(a, use_compat=use_compat)
 
 
 def convert_np_to_xp(func: _TC) -> _TC:
@@ -617,6 +610,6 @@ def convert_np_to_xp(func: _TC) -> _TC:
         else:
             raise AttributeError(f'invalid array module {xp}')
 
-        return xp.asarray(x)  # pyright: ignore
+        return x
 
     return cast(_TC, wrapped)

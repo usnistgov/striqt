@@ -1,0 +1,17 @@
+- port: [0, 1]
+  center_frequency: [7350e6, 7350e6]
+  external_lo_frequency: [11.38e9, 11.38e9]
+  gain: 0
+  duration: 10e-3
+  sample_rate: 53.76e6
+  analysis_bandwidth: 40e6
+  channel_name: [7350 MHz, 7350 MHz]
+  antenna_polarization: [V, H]
+  azimuth_offset: .nan
+  adjust_analysis:
+    delay: 50e-6
+    frequency_offset: -40.08e6
+    guard_bandwidths: [875e3, 575e3]
+    frame_slots: dddsuudddddddsuudddd
+    special_symbols: ddddddfffffffu
+    max_beams: 2

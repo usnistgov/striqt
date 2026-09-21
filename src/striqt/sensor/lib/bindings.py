@@ -34,7 +34,7 @@ PC2 = ParamSpec('PC2')
 
 
 class BoundSweep(specs.Sweep[SS, SP, SC], frozen=True, kw_only=True):
-    mock_sensor: specs.types.MockSensor = None
+    mock_source: specs.types.MockSource = None
 
 
 registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any]]'] = {}
@@ -46,7 +46,9 @@ class Sensor(Generic[SS, SP, SC]):
     source_cls: type[SourceBackend[SS, SC]]
     sink_cls: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
     sweep_spec_cls: type[specs.Sweep[SS, SP, SC]] = specs.Sweep
-    peripherals_cls: type[Peripherals[SP, SC]] = NoPeripherals
+    peripherals_cls: type[Peripherals[SP, SC]] | type[NoPeripherals[SP, SC]] = (
+        NoPeripherals
+    )
 
     def __post_init__(self):
         assert issubclass(self.source_cls, SourceBackend)
@@ -58,14 +60,13 @@ class Sensor(Generic[SS, SP, SC]):
 @dataclasses.dataclass()
 class SensorBinding(Sensor[SS, SP, SC]):
     # schema: specs.Schema[SS, SP, SC, PS, PC]
-    sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # pyright: ignore
+    sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # type: ignore
 
     def __post_init__(self):
         super().__post_init__()
-        assert isinstance(self.sweep_spec_cls, type) and (
-            self.sweep_spec_cls,
-            BoundSweep,
-        )
+        assert isinstance(self.sweep_spec_cls, type)
+        if not issubclass(self.sweep_spec_cls, specs.Sweep):
+            raise TypeError(f'sweep_spec_cls is not a Sweep subclass')
 
 
 def bind_sensor(
@@ -90,10 +91,10 @@ def bind_sensor(
         raise TypeError(f'a sensor binding named {key!r} was already registered')
 
     binding = SensorBinding(
-        source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),
+        source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),  # ty: ignore
         sweep_spec_cls=sensor.sweep_spec_cls,  # type: ignore
-        peripherals_cls=sensor.peripherals_cls,  # pyright: ignore
-        sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),
+        peripherals_cls=sensor.peripherals_cls,  # type: ignore
+        sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),  # ty: ignore
     )
 
     schema_ = schema
@@ -128,7 +129,7 @@ def bind_sensor(
     if tagged_sweeps is None:
         tagged_sweeps = BoundSweep
     else:
-        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # pyright: ignore
+        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # type: ignore
 
     cls = bind_controller(cast(SensorBinding[SS, SP, SC], binding), schema)
     cls.__module__ = sys._getframe(1).f_globals.get('__name__') or schema.__module__

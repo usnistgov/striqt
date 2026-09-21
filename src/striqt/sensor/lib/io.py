@@ -5,7 +5,7 @@ from __future__ import annotations as __
 import sys
 import msgspec
 from pathlib import Path
-from typing import Any, Optional, overload, TYPE_CHECKING
+from typing import Optional, overload, TYPE_CHECKING
 
 import striqt.analysis as sa
 
@@ -69,7 +69,7 @@ def read_yaml_spec(
     """
 
     tree = sa.lib.io.decode_from_yaml_file(path)
-    return _convert_dict_spec(
+    return _convert_zarr_attrs_spec(
         tree,
         Path(path).resolve().parent,
         type=type,
@@ -102,7 +102,7 @@ def read_json_spec(
     with open(path, 'rb') as buf:
         tree = msgspec.json.decode(buf.read(), type=dict)
 
-    return _convert_dict_spec(
+    return _convert_zarr_attrs_spec(
         tree,
         Path(path).resolve().parent,
         type=type,
@@ -111,7 +111,52 @@ def read_json_spec(
     )
 
 
-def _convert_dict_spec(
+def read_zarr_spec(
+    path: str | Path,
+    *,
+    type: type[specs.Sweep] | None = None,
+    output_path: Optional[str] = None,
+    store_backend: Optional[str] = None,
+    extension_root: str | Path | None = None,
+) -> specs.Sweep:
+    """Rebuild the Sweep specification that iterate_sweep saved in a zarr store's attrs.
+
+    Only attrs that name Sweep fields are read; other dataset attrs are ignored. As
+    for `read_yaml_spec`, the store's directory is the root for a relative
+    `extensions.import_path` unless `extension_root` is given, and passing the store
+    path to `open_resources` derives the `{spec_name}` and `{parent_name}` path
+    fields from it.
+
+    Args:
+        path: path to the zarr store (a `.zarr` directory or `.zarr.zip` archive)
+        type: the type of sweep specification to load, or None to use specs.Sweep
+        output_path: optional override for the specification's output path
+        store_backend: optional override for the specification's output store backend
+        extension_root: directory that a relative `extensions.import_path` is
+            relative to, or None for the store's directory
+
+    Returns:
+        an instance of specs.Sweep
+    """
+    attrs = sa.lib.io.load_attrs(path)
+    sweep_cls = specs.Sweep if type is None else type
+    fields = set(sweep_cls.__struct_fields__)
+    fields |= {specs.structs.SWEEP_TAG_FIELD, 'mock_source'}
+    tree = {k: v for k, v in attrs.items() if k in fields}
+
+    if extension_root is None:
+        extension_root = Path(path).resolve().parent
+
+    return _convert_zarr_attrs_spec(
+        tree,
+        extension_root,
+        type=type,
+        output_path=output_path,
+        store_backend=store_backend,
+    )
+
+
+def _convert_zarr_attrs_spec(
     tree: dict,
     extension_root: str | Path,
     *,
@@ -146,12 +191,10 @@ def _convert_dict_spec(
     sink = spec.sink
     if store_backend is not None:
         sink = sink.replace(store=store_backend)
-
-    replace: dict[str, Any] = dict(sink=sink)
     if output_path is not None:
-        replace['path'] = output_path
+        sink = sink.replace(path=output_path)
 
-    return spec.replace(**replace)
+    return spec.replace(sink=sink)
 
 
 def read_tdms_iq(
@@ -198,7 +241,10 @@ def read_calibration(
     if format_path is not None:
         path = format_path(path)
 
-    return xr.open_dataset(path)
+    # the result is cached and read from several threads, so leave no open netCDF
+    # handle behind: the HDF5 library is not thread safe in every build
+    with xr.open_dataset(path) as dataset:
+        return dataset.load()
 
 
 def save_calibration(path, corrections: 'xr.Dataset'):
@@ -237,7 +283,12 @@ def _import_extensions_from_spec(
                 raise IOError(f'root_path {root_dir!r} is not a directory')
             p = root / p
 
-        if p != sys.path[0]:
+        if not p.is_dir():
+            raise FileNotFoundError(
+                f'extension import_path {str(p)!r} is not a directory'
+            )
+
+        if p != Path(sys.path[0]):
             assert isinstance(p, (str, Path))
             sys.path.insert(0, str(p))
 

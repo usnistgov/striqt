@@ -17,6 +17,13 @@ import striqt.waveform as sw
 _T = typing.TypeVar('_T')
 _TS = typing.TypeVar('_TS', bound='SpecBase')
 
+# msgspec.structs.replace only calls __post_init__ from 0.21, and 0.21
+# dropped Python 3.9
+_REPLACE_RUNS_POST_INIT = tuple(int(s) for s in msgspec.__version__.split('.')[:2]) >= (
+    0,
+    21,
+)
+
 
 class SpecBase(
     msgspec.Struct,
@@ -40,7 +47,10 @@ class SpecBase(
         """
         if len(attrs) == 0:
             return self
-        return msgspec.structs.replace(self, **attrs).validate()
+        new = msgspec.structs.replace(self, **attrs)
+        if not _REPLACE_RUNS_POST_INIT:
+            new.__post_init__()
+        return new.validate()
 
     def to_dict(self, unfreeze: bool = False, allow_tuple_keys: bool = True) -> dict:
         """return a dictinary representation of `self`"""
@@ -59,7 +69,7 @@ class SpecBase(
         return map
 
     @classmethod
-    def from_dict(cls: type[_T], d: dict) -> _T:
+    def from_dict(cls: type[_T], d: dict | helpers.frozendict) -> _T:
         return helpers.convert_dict(d, type=cls)
 
     @classmethod
@@ -116,7 +126,7 @@ class FilteredCapture(Capture, kw_only=True, frozen=True):
 
 
 class AnalysisKeywords(typing.TypedDict, total=False):
-    as_xarray: Union[bool, typing.Literal['delayed']]
+    as_xarray: types.AsXArray
 
 
 class Analysis(SpecBase, kw_only=True, frozen=True):
@@ -256,6 +266,16 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
     dB = True
 
 
+def _validate_range(name: str, value) -> None:
+    if not isinstance(value, tuple) or value[0] <= 0:
+        return
+    start, stop = value
+    if stop is None:
+        raise msgspec.ValidationError(f'{name} end must be specified when start > 0')
+    if stop < start:
+        raise msgspec.ValidationError(f'{name} end must be >= start')
+
+
 class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
     subcarrier_spacings: types.CellularSubcarrierSpacingTuple = (15e3, 30e3, 60e3)
     frame_range: Union[int, tuple[int, int]] = (0, 1)
@@ -265,13 +285,8 @@ class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
 
     def __post_init__(self):
         super().__post_init__()
-
-        if isinstance(self.frame_range, tuple) and self.frame_range[0] > 0:
-            assert self.frame_range[1] is not None
-            assert self.frame_range[1] >= self.frame_range[0]
-        if isinstance(self.symbol_range, tuple) and self.symbol_range[0] > 0:
-            assert self.symbol_range[1] is not None
-            assert self.symbol_range[1] >= self.symbol_range[0]
+        _validate_range('frame_range', self.frame_range)
+        _validate_range('symbol_range', self.symbol_range)
 
 
 class CellularResourcePowerHistogram(
@@ -299,8 +314,8 @@ class ChannelPowerTimeSeries(
     kw_only=True,
     frozen=True,
 ):
-    detector_period: fractions.Fraction
-    power_detectors: tuple[str, ...] = ('rms', 'peak')
+    detector_period: types.DetectorPeriod
+    power_detectors: types.PowerDetectors = ('rms', 'peak')
 
 
 class ChannelPowerHistogram(
@@ -314,10 +329,10 @@ class ChannelPowerHistogram(
 
 
 class CyclicChannelPower(Analysis, kw_only=True, frozen=True):
-    cyclic_period: float
-    detector_period: fractions.Fraction
-    power_detectors: tuple[str, ...] = ('rms', 'peak')
-    cyclic_statistics: tuple[Union[str, float], ...] = ('min', 'mean', 'max')
+    cyclic_period: types.CyclicPeriod
+    detector_period: types.DetectorPeriod
+    power_detectors: types.PowerDetectors = ('rms', 'peak')
+    cyclic_statistics: types.CyclicStatistics = ('min', 'mean', 'max')
 
 
 class IQWaveform(

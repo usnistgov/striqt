@@ -92,7 +92,7 @@ def set_matplotlib_formats(formats, *args, **kws):
         label = title_to_label(guess_title(fig))
         caption_text = _captions.get(id(fig), '')
 
-        ret = pltt._print_figure(fig, fmt=fmt, *a, **k)
+        ret = pltt._print_figure(fig, fmt=fmt, *a, **k)  # ty: ignore
 
         markup = f'<tt>{label}.{fmt}:</tt>{"<br>" + caption_text if caption_text else " (no caption data)"}'
         display(HTML(markup))

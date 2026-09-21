@@ -2,6 +2,7 @@ from __future__ import annotations as __
 
 import contextlib
 import io
+import itertools
 import logging
 import math
 import sys
@@ -34,7 +35,7 @@ class StriqtLogger(logging.LoggerAdapter):
     }
 
     def __init__(self, name_suffix, extra={}):
-        _logger = logging.getLogger(name_suffix)
+        _logger = logging.getLogger(f'striqt.{name_suffix}')
         super().__init__(_logger, self.EXTRA_DEFAULTS | extra)
         _logger_adapters[name_suffix] = self
 
@@ -84,7 +85,7 @@ def show_messages(
         if level is None:
             logger.setLevel(logging.CRITICAL)
             logger.logger.setLevel(logging.CRITICAL)
-            return
+            continue
 
         logger.setLevel(level)
         logger.logger.setLevel(level)
@@ -93,7 +94,7 @@ def show_messages(
         logger._screen_handler.setLevel(level)
 
         if colors or (colors is None and sys.stderr.isatty()):
-            log_fmt = '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>8s}\x1b[0m \x1b[34m{capture_progress} \x1b[0m {message}'
+            log_fmt = '\x1b[32m{asctime}\x1b[0m \x1b[1;30m{name:>15s}\x1b[0m \x1b[34m{capture_progress} \x1b[0m {message}'
         else:
             log_fmt = '{levelname:^7s} {asctime} • {capture_progress}: {message}'
         formatter = logging.Formatter(log_fmt, style='{', datefmt='%X')
@@ -227,7 +228,4 @@ def ordered_set_union(*args: Iterable[Any]) -> list[Any]:
 
     Maintains ordering in the same way as dict/OrderedDict.
     """
-    union = []
-    for it in args:
-        union += list(dict.fromkeys(it))
-    return union
+    return list(dict.fromkeys(itertools.chain.from_iterable(args)))

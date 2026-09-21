@@ -87,7 +87,7 @@ def run(
         max(1, ncores - 1),
         initializer=worker_init,
         initargs=(zarr_path, opts, interactive, no_save, manager.Lock()),
-    )
+    )  # ty: ignore
 
     # then the heavier data
     dataset = load_data(zarr_path, opts, index=False)
