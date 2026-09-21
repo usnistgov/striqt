@@ -176,13 +176,13 @@ class SpecValidationError(msgspec.ValidationError):
     subclass untouched.
 
     `path` is one nested chain of field accesses within a single document root,
-    which renders as msgspec does it (`$.analysis.spectrogram`). `locations` are
-    additional sibling roots, each rendered with its own `$` after `path`. The
-    split exists because a sweep failure is not located by one chain: the same
-    incompatibility is pinned down jointly by a `captures:` entry, one or more
-    `loops:` entries that generated it, and the measurement key that rejected it.
-    Those are siblings in the document, so collapsing them into `path` would
-    render a field chain that does not exist.
+    which renders as msgspec does it (`$.analysis.spectrogram`) and leads the
+    message. `locations` are additional sibling roots, rendered as an `at ... on ...`
+    trailer in the order given. The split exists because a sweep failure is not
+    located by one chain: the same incompatibility is pinned down jointly by a
+    `captures:` entry, the `loops:` point that generated it, and the measurement key
+    that rejected it. Those are siblings in the document, so collapsing them into
+    `path` would render a field chain that does not exist.
     """
 
     def __init__(
@@ -197,17 +197,18 @@ class SpecValidationError(msgspec.ValidationError):
         super().__init__(str(self))
 
     def __str__(self) -> str:
-        roots = [''.join(self.path)] if self.path else []
-        roots += self.locations
-        if not roots:
-            return self.message
-        return f'{self.message} - ' + ' '.join(f'${r}' for r in roots)
+        text = self.message
+        if self.path:
+            text = f'${"".join(self.path)}: {text}'
+        if self.locations:
+            text += ' - at ' + ' on '.join(f'${loc}' for loc in self.locations)
+        return text
 
     def prepend(self, *parts: str) -> SpecValidationError:
         return type(self)(self.message, tuple(parts) + self.path, self.locations)
 
     def at(self, *locations: str) -> SpecValidationError:
-        """prepend sibling document locations, which render after `path`"""
+        """prepend sibling document locations, which render in an `at ... on ...` trailer"""
         return type(self)(self.message, self.path, tuple(locations) + self.locations)
 
 

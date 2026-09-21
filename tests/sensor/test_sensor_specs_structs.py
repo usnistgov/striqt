@@ -388,10 +388,9 @@ class TestSweepAnalysisValidation:
         loops = (List(field='sample_rate', values=(1e6, 1.005e6)),)
         kws = make_sweep_kws(captures=(make_capture(),), loops=loops, analysis=SPG)
         match = re.escape(
-            f'{RESOLUTION_MSG} '
+            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
             '(sample_rate: 1005000.0, frequency_resolution: 10000.0) '
-            '- $.analysis.spectrogram $.captures[0] '
-            "$.loops: {'sample_rate': 1005000.0}"
+            "- at $.loops: {'sample_rate': 1005000.0} on $.captures[0]"
         )
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
@@ -399,9 +398,9 @@ class TestSweepAnalysisValidation:
         capture = make_capture(adjust_analysis={'frequency_resolution': 3e4})
         kws = make_sweep_kws(captures=(capture,), analysis=SPG)
         match = re.escape(
-            f'{RESOLUTION_MSG} '
+            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
             '(sample_rate: 1000000.0, frequency_resolution: 30000.0) '
-            '- $.analysis.spectrogram $.captures[0]'
+            '- at $.captures[0]'
         )
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
@@ -411,10 +410,9 @@ class TestSweepAnalysisValidation:
         )
         kws = make_sweep_kws(captures=(make_capture(),), loops=loops, analysis=SPG)
         match = re.escape(
-            f'{RESOLUTION_MSG} '
+            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
             '(sample_rate: 1000000.0, frequency_resolution: 30000.0) '
-            '- $.analysis.spectrogram $.captures[0] '
-            "$.loops: {'frequency_resolution': 30000.0}"
+            "- at $.loops: {'frequency_resolution': 30000.0} on $.captures[0]"
         )
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 

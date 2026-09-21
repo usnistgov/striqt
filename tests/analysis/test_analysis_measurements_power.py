@@ -168,7 +168,7 @@ class TestChannelPowerTimeSeries:
         ) as excinfo:
             cpts(iq, duration=duration, as_xarray=False, **kwargs)
 
-        assert str(excinfo.value).endswith('$.channel_power_time_series')
+        assert str(excinfo.value).startswith('$.channel_power_time_series: ')
 
         validate = sa.registry[sa.specs.ChannelPowerTimeSeries].validate
         assert validate is not None
@@ -255,7 +255,7 @@ class TestCyclicChannelPower:
         ) as excinfo:
             cyclic(iq, duration=duration, as_xarray=False, **kwargs)
 
-        assert str(excinfo.value).endswith('$.cyclic_channel_power')
+        assert str(excinfo.value).startswith('$.cyclic_channel_power: ')
 
         spec_kwargs = {
             'cyclic_period': CYCLIC_PERIOD,

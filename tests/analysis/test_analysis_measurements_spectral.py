@@ -256,7 +256,7 @@ class TestSpectrogram:
         ) as excinfo:
             spg_of(iq, as_xarray=False, **kwargs)
 
-        assert str(excinfo.value).endswith('$.spectrogram')
+        assert str(excinfo.value).startswith('$.spectrogram: ')
 
         # the validator itself raises the bare error; the field path is attached by
         # whichever caller has the surrounding context

@@ -866,9 +866,9 @@ def test_describe_capture_origin_names_the_entry_and_every_loop():
     ((capture, origin),) = H.loop_capture_origins(sweep).items()
 
     assert H.describe_capture_origin(sweep, capture, origin) == (
-        '.captures[0]',
         # a Repeat is left to the sweep runner, so only its first pass is validated
         ".loops: {'repeat': 0, 'frequency_offset': 100000.0, 'window': 'hann'}",
+        '.captures[0]',
     )
 
 
@@ -896,8 +896,8 @@ def test_describe_capture_origin_omits_the_loops_dropped_by_only_fields():
     ((capture, origin),) = origins.items()
 
     assert H.describe_capture_origin(sweep, capture, origin) == (
-        '.captures[0]',
         ".loops: {'snr': 10.0}",
+        '.captures[0]',
     )
 
 
@@ -1240,12 +1240,13 @@ def test_validate_sweep_analysis_reports_a_per_source_override():
         H.validate_sweep_analysis(sweep, 'ab12')
 
     message = str(excinfo.value)
+    # the measurement that rejected it, the values the failed rule compared, then the
+    # place in the sweep that produced them: the loop point and the `captures:` entry
+    assert message.startswith('$.analysis.spectrogram: ')
     assert 'sample_rate/resolution must be a counting number' in message
-    # the values the failed rule compared, then the place in the sweep that produced
-    # them: the measurement that rejected it, the `captures:` entry, and the loop point
     assert '(sample_rate: 1000000.0, frequency_resolution: 30000.0)' in message
     assert message.endswith(
-        "$.analysis.spectrogram $.captures[0] $.loops: {'frequency_offset': 100000.0}"
+        " - at $.loops: {'frequency_offset': 100000.0} on $.captures[0]"
     )
 
 

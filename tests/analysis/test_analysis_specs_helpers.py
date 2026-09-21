@@ -524,28 +524,30 @@ def test_to_analysis_capture_is_idempotent():
     ('path', 'locations', 'expected'),
     [
         ((), (), 'bad value'),
-        (('.analysis', '.spectrogram'), (), 'bad value - $.analysis.spectrogram'),
-        ((), ('a', 'b'), 'bad value - $a $b'),
+        (('.analysis', '.spectrogram'), (), '$.analysis.spectrogram: bad value'),
+        ((), ('a', 'b'), 'bad value - at $a on $b'),
         (
             ('.analysis', '.spectrogram'),
-            ('.captures[0]', ".loops: {'azimuth': 43}"),
+            (".loops: {'azimuth': 43}", '.captures[0]'),
             (
-                'bad value - $.analysis.spectrogram $.captures[0] '
-                "$.loops: {'azimuth': 43}"
+                '$.analysis.spectrogram: bad value'
+                " - at $.loops: {'azimuth': 43} on $.captures[0]"
             ),
         ),
     ],
     ids=['bare', 'path_only', 'locations_only', 'path_then_locations'],
 )
-def test_spec_validation_error_renders_the_msgspec_format(path, locations, expected):
+def test_spec_validation_error_renders_the_path_then_the_locations(
+    path, locations, expected
+):
     assert str(SpecValidationError('bad value', path, locations)) == expected
 
 
 @pytest.mark.parametrize(
     ('path', 'expected'),
     [
-        (('.spectrogram',), 'bad value - $.spectrogram $a $b'),
-        ((), 'bad value - $a $b'),
+        (('.spectrogram',), '$.spectrogram: bad value - at $a on $b'),
+        ((), 'bad value - at $a on $b'),
     ],
     ids=['with_path', 'without_path'],
 )
@@ -558,7 +560,7 @@ def test_spec_validation_error_prepend_composes_outermost_last():
     outer = exc.prepend('.captures[4]', '.analysis')
 
     assert outer.path == ('.captures[4]', '.analysis', '.spectrogram')
-    assert str(outer) == 'bad value - $.captures[4].analysis.spectrogram'
+    assert str(outer) == '$.captures[4].analysis.spectrogram: bad value'
     assert exc.path == ('.spectrogram',)
 
 
@@ -574,7 +576,7 @@ def test_spec_validation_error_at_does_not_mutate_the_original():
     exc.at(".loops: {'repeat': 0}")
 
     assert exc.locations == ('.captures[0]',)
-    assert str(exc) == 'bad value - $.spectrogram $.captures[0]'
+    assert str(exc) == '$.spectrogram: bad value - at $.captures[0]'
 
 
 def test_spec_validation_error_prepend_carries_the_locations_through():
@@ -582,7 +584,7 @@ def test_spec_validation_error_prepend_carries_the_locations_through():
     outer = exc.prepend('.analysis')
 
     assert outer.locations == ('.captures[0]',)
-    assert str(outer) == 'bad value - $.analysis.spectrogram $.captures[0]'
+    assert str(outer) == '$.analysis.spectrogram: bad value - at $.captures[0]'
 
 
 def test_spec_validation_error_at_and_prepend_are_independent():
@@ -613,7 +615,7 @@ def test_validation_path_prepends_to_a_spec_validation_error():
 
 
 def test_validation_path_wraps_a_plain_value_error():
-    match = r'too large - \$\.spectrogram'
+    match = r'\$\.spectrogram: too large'
     with (
         pytest.raises(SpecValidationError, match=match),
         validation_path('.spectrogram'),
@@ -661,22 +663,22 @@ class _RaisingLocatedSpec(sa.specs.SpecBase, frozen=True, kw_only=True):
         (
             lambda: _RaisingSpec.from_dict({'nfft': 9}),
             (),
-            'nfft must be 8 - $.nfft',
+            '$.nfft: nfft must be 8',
         ),
         (
             lambda: msgspec.json.decode(b'{"nfft": 9}', type=_RaisingSpec),
             (),
-            'nfft must be 8 - $.nfft',
+            '$.nfft: nfft must be 8',
         ),
         (
             lambda: _RaisingLocatedSpec.from_dict({'nfft': 9}),
             ('.captures[3]',),
-            'nfft must be 8 - $.nfft $.captures[3]',
+            '$.nfft: nfft must be 8 - at $.captures[3]',
         ),
         (
             lambda: msgspec.json.decode(b'{"nfft": 9}', type=_RaisingLocatedSpec),
             ('.captures[3]',),
-            'nfft must be 8 - $.nfft $.captures[3]',
+            '$.nfft: nfft must be 8 - at $.captures[3]',
         ),
     ],
     ids=['convert', 'json_decode', 'convert_located', 'json_decode_located'],

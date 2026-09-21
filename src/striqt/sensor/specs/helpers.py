@@ -419,11 +419,11 @@ def describe_capture_origin(
 
     locations = []
 
-    if origin.spec_index is not None:
-        locations.append(f'.captures[{origin.spec_index}]')
-
     if len(points) > 0:
         locations.append(f'.loops: {points!r}')
+
+    if origin.spec_index is not None:
+        locations.append(f'.captures[{origin.spec_index}]')
 
     return tuple(locations)
 

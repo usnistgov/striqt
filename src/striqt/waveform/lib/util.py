@@ -89,19 +89,49 @@ def lru_cache(
     return wrap
 
 
-@functools.cache
-def _get_cache_shelf():
-    import dbm
-    import glob
+def _cache_shelf_path() -> str:
     import platformdirs
-    import shelve
-    from threading import Lock
 
     dir = Path(platformdirs.user_cache_dir('striqt'))
     dir.mkdir(parents=True, exist_ok=True)
     # Use version-specific cache file to avoid cross-version pickle issues
     pyver = f'{sys.version_info.major}.{sys.version_info.minor}'
-    filename = str(dir / f'calls-py{pyver}.db')  # python 3.9 shelve wants str
+    return str(dir / f'calls-py{pyver}.db')  # python 3.9 shelve wants str
+
+
+_cache_shelf_disabled = False
+
+
+def _discard_cache_shelf(ex: BaseException) -> None:
+    """stop using the disk cache in this process, and delete its files.
+
+    A fault in the shelf must never fail a call that has a working uncached path,
+    and it does happen: the macOS dbm backend corrupts once the cache evicts, and
+    the `UnicodeDecodeError` it then raises subclasses `ValueError`, so letting it
+    propagate gets a machine-local fault mistaken for a bad argument several layers
+    up. The files hold nothing that cannot be recomputed.
+    """
+    global _cache_shelf_disabled
+    import glob
+    import warnings
+
+    _cache_shelf_disabled = True
+    filename = _cache_shelf_path()
+
+    for path in glob.glob(f'{filename}*'):
+        Path(path).unlink(missing_ok=True)
+
+    warnings.warn(f'deleted the unusable disk cache {filename!r} after {ex!r}')
+
+
+@functools.cache
+def _get_cache_shelf():
+    import dbm
+    import glob
+    import shelve
+    from threading import Lock
+
+    filename = _cache_shelf_path()
 
     cache_lock = Lock()
 
@@ -142,25 +172,46 @@ def _make_lru_key(func, args, kwargs) -> str:
 def persistent_lru_cache(
     maxsize=128,
 ) -> Callable[[Callable[P, R]], LRUWrapped[P, R]]:
-    """caches a decorated function persistently on disk"""
+    """caches a decorated function persistently on disk.
+
+    The cache is best-effort: a fault reading or writing the shelf discards it and
+    the call proceeds uncached, so only the wrapped function's own exceptions ever
+    reach its caller.
+    """
 
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            shelf, lock = _get_cache_shelf()
-            access_order = collections.OrderedDict().fromkeys(shelf.keys())
+            if _cache_shelf_disabled:
+                return func(*args, **kwargs)
+
+            try:
+                shelf, lock = _get_cache_shelf()
+            except Exception as ex:
+                _discard_cache_shelf(ex)
+                return func(*args, **kwargs)
 
             key = _make_lru_key(func, args, kwargs)
 
             with lock:
                 try:
+                    access_order = collections.OrderedDict().fromkeys(shelf.keys())
                     if key in shelf:
                         access_order.move_to_end(key)
-                        return shelf[key]
+                        hit = shelf[key]
+                        # a read populates shelve's writeback cache, so skipping the
+                        # sync defers the write to interpreter shutdown, where the
+                        # pickle import it needs is no longer available
+                        shelf.sync()
+                        return hit
+                except Exception as ex:
+                    _discard_cache_shelf(ex)
+                    return func(*args, **kwargs)
 
-                    # If not in cache, compute the result
-                    result = func(*args, **kwargs)
+                # outside the try, so that its exceptions propagate as themselves
+                result = func(*args, **kwargs)
 
+                try:
                     # Add to cache
                     shelf[key] = result
                     access_order[key] = None
@@ -171,8 +222,10 @@ def persistent_lru_cache(
                         oldest_key, _ = access_order.popitem(last=False)
                         del shelf[oldest_key]
 
-                finally:
                     shelf.sync()
+                except Exception as ex:
+                    _discard_cache_shelf(ex)
+
             return result
 
         wrapper.__wrapped__ = func
