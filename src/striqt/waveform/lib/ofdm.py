@@ -376,7 +376,7 @@ def index_pss_symbols(
     subcarrier_spacing: float,
     shared_spectrum: bool = False,
     symbol_indexes: CellSSBIndexes = 'auto',
-    center_frequency: float | None = None,
+    center_frequency: tuple[float, ...] | float | None = None,
 ) -> tuple[int, ...]:
     """returns indexes of PSS symbols relative to frame start.
 
@@ -498,7 +498,7 @@ def pss_params(
     shared_spectrum: bool = False,
     max_lag_symbols: int | None = None,
     symbol_indexes: CellSSBIndexes = 'auto',
-    center_frequency: float | None = None,
+    center_frequency: tuple[float, ...] | float | None = None,
 ) -> SyncParams:
     if not isroundmod(subcarrier_spacing, 15e3):
         raise ValueError('subcarrier_spacing must be multiple of 15000')
@@ -577,7 +577,7 @@ def sss_params(
     shared_spectrum: bool = False,
     max_lag_symbols: int | None = 2,
     symbol_indexes: CellSSBIndexes = 'auto',
-    center_frequency: float | None = None,
+    center_frequency: tuple[float, ...] | float | None = None,
 ) -> SyncParams:
     # Match PSS except that the symbol indexes are incremented by 2
 
