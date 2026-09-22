@@ -1,5 +1,6 @@
 from __future__ import annotations as __
 
+from fractions import Fraction
 from typing import Any, Callable, Literal, NamedTuple, Optional, TYPE_CHECKING, Union
 
 from .. import specs
@@ -149,6 +150,23 @@ def get_5g_ssb_iq(
         # max_block_count=spec.max_block_count,
         oaresample=oaresample,
     )
+
+
+def cellular_stft_window_fractions(
+    cyclic_prefix: Literal['normal', 'extended'],
+) -> tuple[Fraction, Fraction]:
+    """the (fractional_overlap, window_fill) that hop one STFT window per OFDM symbol.
+
+    They hold only at a frequency_resolution of half the subcarrier spacing, where one
+    FFT window spans 2 subcarrier periods and a slot spans 15 of them (3GPP TS 38.211
+    Section 5.3.1), so a `window_fill` of 15/28 is the mean share of the window taken by
+    one of the 14 normal-cyclic-prefix symbols in a slot.
+    """
+    if cyclic_prefix == 'normal':
+        return Fraction(13, 28), Fraction(15, 28)
+    else:
+        # cyclic_prefix is a Literal, so 'extended' is the only other value
+        return Fraction(11, 24), Fraction(13, 24)
 
 
 class SpectrogramSizing(NamedTuple):

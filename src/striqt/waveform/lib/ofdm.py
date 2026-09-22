@@ -480,6 +480,15 @@ def index_pss_symbols(
     return tuple(inds)
 
 
+def slot_period(subcarrier_spacing: float) -> float:
+    """the duration (in s) of one 3GPP slot at the given subcarrier spacing.
+
+    A 10 ms radio frame holds 10 subframes of `subcarrier_spacing/15e3` slots each
+    (3GPP TS 38.211 Section 4.3.2).
+    """
+    return 10e-3 / (10 * subcarrier_spacing / 15e3)
+
+
 @util.lru_cache()
 def pss_params(
     *,
@@ -520,7 +529,7 @@ def pss_params(
             )
 
     slot_count = ceil((symbol_indexes[-1] + max_lag_symbols + 1) / 14)
-    slot_duration = 10e-3 / (10 * subcarrier_spacing / 15e3)
+    slot_duration = slot_period(subcarrier_spacing)
     duration = slot_count * slot_duration
     corr_size = round(duration * sample_rate)
     short_symbol_size = round(slot_duration * sample_rate) // 14

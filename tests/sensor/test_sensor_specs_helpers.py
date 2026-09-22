@@ -530,6 +530,27 @@ def test_only_fields_filters_capture_loops_but_keeps_analysis_loops():
     assert [c.adjust_analysis['window'] for c in result] == ['hann', 'hamming'] * 2
 
 
+@pytest.mark.parametrize(
+    'only_fields',
+    [None, ('analysis_bandwidth',)],
+    ids=['every_loop', 'one_loop_kept'],
+)
+def test_a_bad_loop_point_names_its_position_in_the_declared_loops(only_fields):
+    """`only_fields` drops loops, so the reported index must count the loops the user
+    wrote rather than the ones that survived"""
+    loops = (
+        ss.specs.List(field='snr', values=(1.0,)),
+        ss.specs.List(field='frequency_offset', values=(1.0,)),
+        ss.specs.List(field='analysis_bandwidth', values=('nope',)),
+    )
+    bad_index = len(loops) - 1
+    sweep = make_sweep(captures=(make_capture(),), loops=loops)
+
+    match = re.escape(f'$.loops[{bad_index}]: Expected `float`, got `str`')
+    with pytest.raises(msgspec.ValidationError, match=match):
+        H.loop_captures(sweep, only_fields=only_fields)
+
+
 def test_loops_without_captures_build_new_instances():
     loops = (
         ss.specs.List(field='port', values=(0, 1)),
@@ -543,6 +564,26 @@ def test_loops_without_captures_build_new_instances():
 
 def test_no_loops_and_no_captures():
     assert H.loop_captures(make_sweep()) == ()
+
+
+def test_a_repeat_alone_and_no_captures():
+    """a repeat names no capture field, so it leaves nothing to build a capture from,
+    exactly as an empty `loops:` does"""
+    assert H.loop_captures(make_sweep(loops=(ss.specs.Repeat(count=2),))) == ()
+
+
+def test_loops_that_leave_a_required_field_unset_name_the_loop_point():
+    """without a `captures:` entry the loops must supply every required capture field,
+    so the loop point is the only place the failure can be reported"""
+    loops = (ss.specs.List(field='snr', values=(1.0, 2.0)),)
+
+    with pytest.raises(msgspec.ValidationError) as info:
+        H.loop_captures(make_sweep(loops=loops))
+
+    message = str(info.value)
+    # the expanded tuple index msgspec would report is not a place in the sweep
+    assert '$[0]' not in message
+    assert message == "Object missing required field `port` - at $.loops: {'snr': 1.0}"
 
 
 def test_unknown_loop_field_raises():
@@ -701,7 +742,8 @@ def test_survey_loops_expand(site_survey_sweep):
 
 def test_meta_bounds_are_enforced_when_the_sweep_is_constructed(site_survey_sweep):
     """`validate_sweep_analysis` expands the loops from `Sweep.__post_init__`, so a
-    `Meta` bound that only `_expand_capture_loops` re-checks fails at construction"""
+    `Meta` bound that only `_expand_capture_loops_with_origins` re-checks fails at
+    construction"""
     loops = (
         ss.specs.Range(field='azimuth', start=-45, stop=226, step=2.5),
         ss.specs.Range(field='elevation', start=0, stop=5, step=5),
@@ -866,7 +908,7 @@ def test_describe_capture_origin_names_the_entry_and_every_loop():
     sweep = make_sweep(captures=(make_capture(),), loops=loops)
     ((capture, origin),) = H.loop_capture_origins(sweep).items()
 
-    assert H.describe_capture_origin(sweep, capture, origin) == (
+    assert H.describe_capture_origin(sweep.loops, capture, origin) == (
         # a Repeat is left to the sweep runner, so only its first pass is validated
         ".loops: {'repeat': 0, 'frequency_offset': 100000.0, 'window': 'hann'}",
         '.captures[0]',
@@ -882,7 +924,7 @@ def test_describe_capture_origin_omits_the_entry_without_a_capture_list():
     sweep = make_sweep(loops=loops)
     ((capture, origin),) = H.loop_capture_origins(sweep).items()
 
-    assert H.describe_capture_origin(sweep, capture, origin) == (
+    assert H.describe_capture_origin(sweep.loops, capture, origin) == (
         ".loops: {'port': 0, 'sample_rate': 1000000.0, 'duration': 0.001}",
     )
 
@@ -896,7 +938,7 @@ def test_describe_capture_origin_omits_the_loops_dropped_by_only_fields():
     origins = H.loop_capture_origins(sweep, only_fields=('snr',))
     ((capture, origin),) = origins.items()
 
-    assert H.describe_capture_origin(sweep, capture, origin) == (
+    assert H.describe_capture_origin(sweep.loops, capture, origin) == (
         ".loops: {'snr': 10.0}",
         '.captures[0]',
     )

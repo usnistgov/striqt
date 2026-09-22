@@ -2,7 +2,6 @@ from __future__ import annotations as __
 
 import dataclasses
 import typing
-from fractions import Fraction
 from math import ceil
 
 from .. import specs
@@ -173,22 +172,14 @@ def _get_integration_bandwidth(
         return spec.subcarrier_spacing
 
 
-def _slot_period(spec: specs.CellularResourcePowerHistogram) -> float:
-    return 1e-3 * (15e3 / spec.subcarrier_spacing)
-
-
 @util.lru_cache()
 def _spectrogram_spec(
     spec: specs.CellularResourcePowerHistogram,
 ) -> specs.Spectrogram:
     """the STFT that lands one bin on each half-subcarrier and one hop on each symbol"""
-    if spec.cyclic_prefix == 'normal':
-        fractional_overlap = Fraction(13, 28)
-        window_fill = Fraction(15, 28)
-    else:
-        # cyclic_prefix is a Literal, so 'extended' is the only other value
-        fractional_overlap = Fraction(11, 24)
-        window_fill = Fraction(13, 24)
+    fractional_overlap, window_fill = shared.cellular_stft_window_fractions(
+        spec.cyclic_prefix
+    )
 
     return specs.Spectrogram(
         window=spec.window,
@@ -237,16 +228,17 @@ def validated_resource_grid_sizing(
     spg_spec = _spectrogram_spec(spec)
     sizing = shared.validated_spectrogram_sizing(capture, spg_spec)
 
+    slot_period = sw.ofdm.slot_period(spec.subcarrier_spacing)
     if not spec.average_slots:
         time_bin_averaging = None
-    elif sw.isroundmod(_slot_period(spec), sizing.hop_period):
-        time_bin_averaging = round(_slot_period(spec) / sizing.hop_period)
+    elif sw.isroundmod(slot_period, sizing.hop_period):
+        time_bin_averaging = round(slot_period / sizing.hop_period)
     else:
         raise ValueError(
             'a slot must span a counting number of STFT hops to average across slots '
             f'(subcarrier_spacing: {spec.subcarrier_spacing}, '
             f'sample_rate: {capture.sample_rate}, '
-            f'slot_period: {_slot_period(spec)}, '
+            f'slot_period: {slot_period}, '
             f'hop_period: {sizing.hop_period})'
         )
 

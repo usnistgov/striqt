@@ -192,16 +192,16 @@ class TestCellularCyclicAutocorrelator:
     def test_descending_range_rejected(self, field, range_):
         raises_on_both_paths(
             CCA,
-            msgspec.ValidationError,
-            f'{field} end must be >= start',
+            S.helpers.SpecValidationError,
+            rf'\$\.{field}: Expected an end value at or after `start`',
             **{field: range_},
         )
 
     def test_open_ended_symbol_range_needs_zero_start(self):
         raises_on_both_paths(
             CCA,
-            msgspec.ValidationError,
-            'symbol_range end must be specified when start > 0',
+            S.helpers.SpecValidationError,
+            r'\$\.symbol_range: Expected an end value, since `start` is greater than 0',
             symbol_range=(1, None),
         )
 
@@ -216,7 +216,7 @@ class TestCellularCyclicAutocorrelator:
     def test_descending_range_from_zero_rejected(self, field):
         raises_on_both_paths(
             CCA,
-            msgspec.ValidationError,
-            f'{field} end must be >= start',
+            S.helpers.SpecValidationError,
+            rf'\$\.{field}: Expected an end value at or after `start`',
             **{field: (0, -5)},
         )

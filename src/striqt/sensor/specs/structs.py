@@ -396,11 +396,47 @@ def _validate_loops(loops: tuple[LoopSpec, ...]):
 
     (which, howmany), *_ = common
     if howmany > 1:
-        repeated = [i for i, f in enumerate(fields) if f == which]
+        repeated = [offset + i for i, f in enumerate(fields) if f == which]
+        first = loops[repeated[0]]
         raise SpecValidationError(
-            f'Expected at most one loop over field `{which}`',
-            ('.loops', f'[{offset + repeated[1]}]'),
+            f'Expected at most one loop over field `{which}`, which is already '
+            f'looped in `{first.isin}` at $.loops[{repeated[0]}]',
+            ('.loops', f'[{repeated[1]}]'),
         )
+
+
+_MISSING = object()
+
+
+@sa.util.lru_cache()
+def _validate_loop_capture_collisions(
+    loops: tuple[LoopSpec, ...], captures: tuple[Capture, ...]
+):
+    """reject a loop that erases a distinction written into `captures:`.
+
+    A loop point overrides the same field in every capture, so captures written to
+    differ in a looped field silently become identical copies at each loop point.
+    """
+    if len(captures) < 2:
+        return
+
+    for index, loop in enumerate(loops):
+        if loop.field is None or loop.isin != 'capture':
+            continue
+
+        values = [getattr(c, loop.field, _MISSING) for c in captures]
+        if any(v is _MISSING for v in values):
+            # helpers._build_loop_points_dict reports an unknown loop field later
+            continue
+
+        for j, value in enumerate(values[1:], start=1):
+            if value != values[0]:
+                raise SpecValidationError(
+                    f'Expected field `{loop.field}` to be looped or set per '
+                    'capture, not both',
+                    ('.loops', f'[{index}]'),
+                    ('.captures[0]', f'.captures[{j}]'),
+                )
 
 
 class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
@@ -444,6 +480,7 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
 
         super().__post_init__()
         _validate_loops(self.loops)
+        _validate_loop_capture_collisions(self.loops, self.captures)
 
         if len(self.captures) > 0:
             coord_fields = set(self.captures[0].__struct_fields__)

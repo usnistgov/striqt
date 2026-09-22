@@ -14,6 +14,7 @@ from typing import (
     cast,
     get_args,
     get_type_hints,
+    Iterable,
     Literal,
     Mapping,
     NamedTuple,
@@ -117,7 +118,7 @@ def _expansion_args(
     There is one call site for these keywords because `functools.lru_cache` keys on
     their insertion order, so passing the same values in two different orders misses
     the cache: the sweep would expand twice and hand back captures that are equal but
-    not identical. `_expand_capture_loops` forwards them in this order too.
+    not identical.
     """
 
     args = (sweep.captures, sweep.loops, sweep.adjust_captures)
@@ -299,7 +300,7 @@ def validate_sweep_analysis(
         try:
             sa.registry.validate(capture, analysis)
         except SpecValidationError as ex:
-            raise ex.at(*describe_capture_origin(sweep, capture, origin)) from (
+            raise ex.at(*describe_capture_origin(sweep.loops, capture, origin)) from (
                 ex.__cause__
             )
 
@@ -348,9 +349,9 @@ def max_by_frequency(
     """get the maximum value of a field across looped captures by center frequency"""
 
     map = {}
-    looped_captures = _expand_capture_loops(
+    looped_captures = _expand_capture_loops_with_origins(
         captures, loops, only_fields=(field, 'center_frequency')
-    )
+    )[0]
 
     for c in looped_captures:
         for pc in split_capture_ports(c):
@@ -394,19 +395,22 @@ def describe_capture(
 
 
 def describe_capture_origin(
-    sweep: structs.Sweep[Any, Any, SC],
-    capture: SC,
+    loops: tuple[structs.LoopBase, ...],
+    capture: SC | Mapping[str, Any],
     origin: CaptureOrigin,
 ) -> tuple[str, ...]:
-    """locate an expanded capture in `sweep`, as sibling paths for an error message.
+    """locate an expanded capture in its sweep, as sibling paths for an error message.
 
-    The loop point is rendered as one mapping in `sweep.loops` declaration order. Two
+    `capture` may still be the mapping the expansion assembled, since a capture that
+    fails to convert to its class never becomes an instance.
+
+    The loop point is rendered as one mapping in `loops` declaration order. Two
     loops that name the same field in different `isin` blocks therefore collapse onto
     one entry, keeping the rendering readable at the cost of that distinction.
     """
     points = {}
 
-    for loop in sweep.loops:
+    for loop in loops:
         if loop.field is None:
             # a Repeat is not expanded here, so only its first pass is ever validated
             points[type(loop).__struct_config__.tag] = 0
@@ -415,7 +419,7 @@ def describe_capture_origin(
             continue
         elif loop.isin == 'capture':
             # from the capture, so that the value is the coerced one that it ran with
-            points[loop.field] = getattr(capture, loop.field)
+            points[loop.field] = _read_capture_field(capture, loop.field)
         else:
             points[loop.field] = origin.loop_points[loop.isin, loop.field]
 
@@ -711,51 +715,54 @@ def concat_group_sizes(
 # %% module-local helpers
 
 
+def _read_capture_field(capture: SC | Mapping[str, Any], field: str) -> Any:
+    if isinstance(capture, Mapping):
+        return capture[field]
+    else:
+        return getattr(capture, field)
+
+
 @sa.util.lru_cache()
 def _build_loop_points_dict(
     loops: tuple[structs.LoopBase, ...],
     capture_cls: type[SC],
-    new_instance: bool = False,
+    only_fields: tuple[str, ...] | None = None,
 ) -> _LoopPointsDict:
-    """map (isin, field) to the loop points.
+    """map (isin, field) to the loop points, keeping only `only_fields` if given.
 
     Capture loop points are coerced to the capture field type here so that remaps
     keyed on a looped field see typed values rather than JSON/YAML decoded strings.
+
+    `only_fields` is applied here rather than by the caller so that the indexes in
+    error messages stay positions in the loop list the user wrote.
     """
-    loop_points: _LoopPointsDict = {
-        (l.isin, l.field): l.get_points() for l in loops if l.field is not None
-    }
+    loop_points: _LoopPointsDict = {}
+    loop_indexes: dict[tuple[types.IsIn, str], int] = {}
 
-    fields = msgspec.structs.fields(capture_cls)
+    for index, loop in enumerate(loops):
+        if loop.field is None:
+            continue
+        loop_points[loop.isin, loop.field] = loop.get_points()
+        loop_indexes[loop.isin, loop.field] = index
 
-    available = set(n for owner, n in loop_points.keys() if owner == 'capture')
+    if only_fields is not None:
+        loop_points = {
+            (isin, name): points
+            for (isin, name), points in loop_points.items()
+            if isin == 'analysis' or name in only_fields
+        }
 
-    cls_repr = f'{capture_cls.__module__}.{capture_cls.__name__}'
-    field_names = {f.name for f in fields}
+    field_types = sa.specs.helpers.get_capture_field_types(capture_cls)
+    available = {name for isin, name in loop_points if isin == 'capture'}
 
-    if new_instance:
-        missing = {f.name for f in fields if f.required} - available
-        if len(missing) > 0:
-            raise SpecValidationError(
-                f'Object missing required loop field `{sorted(missing)[0]}` for '
-                f'capture type `{cls_repr}`',
-                ('.loops',),
-            )
-
-    extra = available - field_names
+    extra = available - set(field_types)
     if len(extra) > 0:
         raise SpecValidationError(
             f'Object contains unknown field `{sorted(extra)[0]}` for capture type '
-            f'`{cls_repr}`',
+            f'`{sa.util.qualified_name(capture_cls)}`',
             ('.loops',),
         )
 
-    # only the named loops are indexed, matching the loop_points keys
-    loop_indexes = {
-        (l.isin, l.field): i for i, l in enumerate(loops) if l.field is not None
-    }
-
-    field_types = {f.name: f.type for f in fields}
     for (isin, name), points in loop_points.items():
         if isin != 'capture':
             continue
@@ -771,6 +778,26 @@ def _build_loop_points_dict(
     return loop_points
 
 
+def _locate_conversion_failure(
+    values: Iterable[Any], element_type: Any
+) -> tuple[int, msgspec.ValidationError] | None:
+    """find which element of a bulk conversion failed, as (index, its error).
+
+    Converting a list at once gets msgspec's own message, but with a path rooted at
+    that list rather than at the sweep. Re-converting one element at a time recovers
+    which one it was, and runs only on the already-failing path.
+
+    Returns None when no single element reproduces the failure.
+    """
+    for index, value in enumerate(values):
+        try:
+            msgspec.convert(value, element_type, strict=False, dec_hook=_dec_hook)
+        except msgspec.ValidationError as element_ex:
+            return index, element_ex
+
+    return None
+
+
 def _loop_point_error(
     index: int,
     name: str,
@@ -778,23 +805,44 @@ def _loop_point_error(
     field_type: Any,
     ex: msgspec.ValidationError,
 ) -> SpecValidationError:
-    """re-raise a failed loop point conversion against the point that failed.
-
-    Converting the whole list at once gets msgspec's own message, but with a path
-    rooted at that list rather than at the sweep. Re-converting one point at a time
-    recovers which point it was, and runs only on the failing path.
-    """
+    """re-raise a failed loop point conversion against the point that failed"""
     path = ('.loops', f'[{index}]')
+    located = _locate_conversion_failure(points, field_type)
 
-    for point in points:
-        try:
-            msgspec.convert(point, field_type, strict=False, dec_hook=_dec_hook)
-        except msgspec.ValidationError as point_ex:
-            return SpecValidationError(
-                f'{point_ex} for loop point {point!r} over field `{name}`', path
-            )
+    if located is None:
+        return SpecValidationError(str(ex), path)
 
-    return SpecValidationError(str(ex), path)
+    point_index, point_ex = located
+    point = points[point_index]
+    return SpecValidationError(
+        f'{point_ex} for loop point {point!r} over field `{name}`', path
+    )
+
+
+def _expanded_capture_error(
+    loops: tuple[structs.LoopBase, ...],
+    captures: list[dict],
+    origins: list[CaptureOrigin],
+    capture_cls: type[SC],
+    ex: msgspec.ValidationError,
+) -> msgspec.ValidationError:
+    """re-raise an invalid expanded capture against the sweep that produced it.
+
+    msgspec locates the failure by its index in the expanded tuple, which is not a
+    place in the user's specification; the origin is.
+    """
+    located = _locate_conversion_failure(captures, capture_cls)
+
+    if located is None:
+        return ex
+
+    index, capture_ex = located
+    locations = describe_capture_origin(loops, captures[index], origins[index])
+
+    if isinstance(capture_ex, SpecValidationError):
+        return capture_ex.at(*locations)
+
+    return SpecValidationError(str(capture_ex), locations=locations)
 
 
 def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesType:
@@ -803,10 +851,10 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
     result = {}
     capture_cls = get_capture_type(type(sweep))
 
-    field_types = {f.name: f.type for f in msgspec.structs.fields(capture_cls)}
+    field_types = sa.specs.helpers.get_capture_field_types(capture_cls)
     adjust_map = _get_capture_adjust_map(sweep.adjust_captures)
 
-    cls_repr = f'{capture_cls.__module__}.{capture_cls.__name__}'
+    cls_repr = sa.util.qualified_name(capture_cls)
 
     for source_id, lookup_map in adjust_map.items():
         at_source = ('.adjust_captures', f'[{source_id!r}]')
@@ -882,30 +930,6 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
     return sa.specs.helpers.freeze(fixed, depth)  # type: ignore
 
 
-def _expand_capture_loops(
-    captures: tuple[SC, ...],
-    loops: tuple[structs.LoopSpec, ...],
-    adjust: structs.AdjustCapturesType | None = None,
-    *,
-    source_id: types.SourceID | None = None,
-    cls: type[SC] | None = None,
-    only_fields: tuple[str, ...] | None = None,
-    loop_only_nyquist: bool = False,
-    limit: int | None = None,
-) -> tuple[SC, ...]:
-    """evaluate the loop specification, and flatten into one list of loops"""
-    return _expand_capture_loops_with_origins(
-        captures,
-        loops,
-        adjust,
-        source_id=source_id,
-        cls=cls,
-        only_fields=only_fields,
-        loop_only_nyquist=loop_only_nyquist,
-        limit=limit,
-    )[0]
-
-
 @sa.util.lru_cache()
 def _expand_capture_loops_with_origins(
     captures: tuple[SC, ...],
@@ -919,11 +943,6 @@ def _expand_capture_loops_with_origins(
     limit: int | None = None,
 ) -> tuple[tuple[SC, ...], tuple[CaptureOrigin, ...]]:
     """evaluate the loop specification into captures paired with their origins"""
-    if only_fields is not None:
-        loops = tuple(
-            l for l in loops if l.isin == 'analysis' or l.field in only_fields
-        )
-
     if len(captures) == 0 and len(loops) == 0:
         return (), ()
     if cls is None:
@@ -931,7 +950,12 @@ def _expand_capture_loops_with_origins(
         cls = type(captures[0])
     assert issubclass(cls, structs.Capture)
 
-    loop_points = _build_loop_points_dict(loops, cls, False)
+    loop_points = _build_loop_points_dict(loops, cls, only_fields)
+
+    if len(captures) == 0 and len(loop_points) == 0:
+        # nothing is left to build a capture from, so don't build a default one
+        return (), ()
+
     loop_starts = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
     defaults = _merge_analysis_loops(loop_starts)
     loop_combos = itertools.product(*loop_points.values())
@@ -987,9 +1011,12 @@ def _expand_capture_loops_with_origins(
         # there were no loops
         return (), ()
     else:
-        expanded = msgspec.convert(
-            result, tuple[cls, ...], strict=False, dec_hook=_dec_hook
-        )
+        try:
+            expanded = msgspec.convert(
+                result, tuple[cls, ...], strict=False, dec_hook=_dec_hook
+            )
+        except msgspec.ValidationError as ex:
+            raise _expanded_capture_error(loops, result, origins, cls, ex) from ex
 
     if loop_only_nyquist:
         keep = [

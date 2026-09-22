@@ -8,6 +8,7 @@ from .lib.ofdm import (
     index_pss_symbols,
     pss_5g_nr,
     pss_params,
+    slot_period,
     sss_params,
     sss_5g_nr,
     SyncParams,

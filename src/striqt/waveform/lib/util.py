@@ -239,8 +239,13 @@ def clear_caches():
         cache.cache_clear()
 
 
+def qualified_name(obj: Any) -> str:
+    """return the module-qualified name of a class or function"""
+    return f'{obj.__module__}.{obj.__name__}'
+
+
 def cache_info() -> dict[str, Any]:
-    return {f'{f.__module__}.{f.__name__}': c.cache_info() for f, c in _caches.items()}
+    return {qualified_name(f): c.cache_info() for f, c in _caches.items()}
 
 
 # %% memory management

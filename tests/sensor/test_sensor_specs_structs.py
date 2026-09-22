@@ -55,6 +55,9 @@ RETRIES_MSG = 'receive_retries must be 0 when gapless is enabled'
 TRIGGER_MSG = 'signal_trigger must be one of'
 REPEAT_MSG = re.escape('Expected a `repeat` loop only as the outermost (first) entry')
 DUPLICATE_MSG = 'Expected at most one loop over field'
+COLLISION_MSG = re.escape(
+    'Expected field `frequency_offset` to be looped or set per capture, not both'
+)
 IMPLIED_MSG = re.escape(
     '$.captures: Expected at most one capture in a calibration sweep, unless the '
     'calibration peripheral declares `implied_loops`'
@@ -354,6 +357,64 @@ class TestSweepLoops:
         match = f'{DUPLICATE_MSG} `{dup.field}`'
         kws = make_sweep_kws(loops=tuple(loops))
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_duplicate_loop_message_names_the_first_occurrence(self):
+        loops = (
+            List(field='snr', values=(0.0, 1.0)),
+            List(field='window', isin='analysis', values=('hann',)),
+            List(field='snr', values=(2.0, 3.0)),
+        )
+        match = re.escape(
+            '$.loops[2]: Expected at most one loop over field `snr`, which is '
+            'already looped in `capture` at $.loops[0]'
+        )
+        kws = make_sweep_kws(loops=loops)
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    @pytest.mark.parametrize('lead_repeat', [False, True])
+    def test_loop_over_a_field_that_captures_disagree_on_rejected(self, lead_repeat):
+        captures = (
+            make_capture(frequency_offset=-1e6),
+            make_capture(frequency_offset=1e6),
+        )
+        loops = [List(field='frequency_offset', values=(0.0, 5e5, 1e6))]
+        if lead_repeat:
+            loops.insert(0, Repeat(count=2))
+        index = 1 if lead_repeat else 0
+        match = (
+            re.escape(f'$.loops[{index}]: ')
+            + COLLISION_MSG
+            + re.escape(' - at $.captures[0] on $.captures[1]')
+        )
+        kws = make_sweep_kws(captures=captures, loops=tuple(loops))
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_a_single_capture_may_set_a_looped_field(self):
+        captures = (make_capture(frequency_offset=-1e6),)
+        loops = (List(field='frequency_offset', values=(0.0, 1e6)),)
+        for sweep in construct_both(
+            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
+        ):
+            assert len(sweep.captures) == 1
+
+    def test_captures_agreeing_on_a_looped_field_are_accepted(self):
+        captures = (
+            make_capture(frequency_offset=-1e6, snr=3.0),
+            make_capture(frequency_offset=-1e6, snr=10.0),
+        )
+        loops = (List(field='frequency_offset', values=(0.0, 1e6)),)
+        for sweep in construct_both(
+            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
+        ):
+            assert {c.snr for c in sweep.captures} == {3.0, 10.0}
+
+    def test_an_analysis_loop_does_not_collide_with_captures(self):
+        captures = (make_capture(snr=3.0), make_capture(snr=10.0))
+        loops = (List(field='snr', isin='analysis', values=(0.0, 1.0)),)
+        for sweep in construct_both(
+            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
+        ):
+            assert len(sweep.captures) == 2
 
 
 class TestSweepCaptures:

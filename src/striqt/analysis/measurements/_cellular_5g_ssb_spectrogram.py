@@ -1,7 +1,6 @@
 from __future__ import annotations as __
 
 import typing
-from fractions import Fraction
 
 from .. import specs
 
@@ -77,10 +76,12 @@ _coord_factories = [
 @util.lru_cache()
 def _spectrogram_spec(spec: specs.Cellular5GNRSSBSpectrogram) -> specs.Spectrogram:
     """the STFT that lands one bin on each half-subcarrier and one hop on each symbol"""
+    fractional_overlap, window_fill = shared.cellular_stft_window_fractions('normal')
+
     return specs.Spectrogram(
         frequency_resolution=spec.subcarrier_spacing / 2,
-        fractional_overlap=Fraction(13, 28),
-        window_fill=Fraction(15, 28),
+        fractional_overlap=fractional_overlap,
+        window_fill=window_fill,
         window=spec.window,
         lo_bandstop=spec.lo_bandstop,
         integration_bandwidth=spec.subcarrier_spacing,
@@ -136,7 +137,7 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
         dtype='float16',
     )
 
-    slot_period = 1e-3 * (15e3 / spec.subcarrier_spacing)
+    slot_period = sw.ofdm.slot_period(spec.subcarrier_spacing)
     symbol_period = slot_period / 14  # TODO: this is normal CP; support extended CP?
     discovery_symbols = round(spec.discovery_periodicity / symbol_period)
 

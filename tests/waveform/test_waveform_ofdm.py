@@ -36,6 +36,8 @@ from striqt.waveform.lib import ofdm
 FS = 7.68e6
 SCS_5G = (15e3, 30e3, 60e3)
 SC_COUNT = 127
+# 3GPP TS 38.211 Table 4.3.2-1: 10 * subcarrier_spacing/15e3 slots per 10 ms frame
+SLOT_PERIODS = {15e3: 1e-3, 30e3: 0.5e-3, 60e3: 0.25e-3, 120e3: 125e-6, 240e3: 62.5e-6}
 
 
 def khz_id(scs):
@@ -562,6 +564,19 @@ class TestIndexPssSymbols:
     def test_argument_errors(self, kws, exc, match):
         with pytest.raises(exc, match=match):
             ofdm.index_pss_symbols(**{'subcarrier_spacing': 30e3, **kws})
+
+
+class TestSlotPeriod:
+    @pytest.mark.parametrize('scs', list(SLOT_PERIODS), ids=khz_id)
+    def test_numerology_values_are_exact(self, scs):
+        # sample counts are rounded from this, so a last-bit difference moves a shape
+        assert ofdm.slot_period(scs) == SLOT_PERIODS[scs]
+
+    @pytest.mark.parametrize('scs', SCS_5G, ids=khz_id)
+    def test_slot_spans_15_subcarrier_periods(self, scs):
+        """TS 38.211 5.3.1: the 14 normal-CP symbols of a slot and their cyclic
+        prefixes add up to 15 subcarrier periods"""
+        assert ofdm.slot_period(scs) * FS == 15 * round(FS / scs)
 
 
 class TestSyncParams:
