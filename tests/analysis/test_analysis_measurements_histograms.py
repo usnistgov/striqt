@@ -393,3 +393,40 @@ def test_measurement_without_xarray(spec):
     # the raw array is not held to the registered dtype: power_spectral_density
     # returns float16 where it registers float32
     assert np.array_equal(data.astype(da.dtype), da.values, equal_nan=True)
+
+
+# the only measurement that validates nothing: iq_waveform clamps its start/stop
+# bounds into the capture by design rather than rejecting them
+NO_VALIDATOR = {'iq_waveform'}
+
+
+def test_every_measurement_has_a_validator():
+    """a measurement without a validator silently skips pre-sweep validation, so a
+    new one has to either register `validate=` or be named here"""
+    missing = {
+        info.name for info in sa.registry.values() if info.validate is None
+    } - NO_VALIDATOR
+
+    assert missing == set()
+    assert NO_VALIDATOR <= {info.name for info in sa.registry.values()}
+
+
+VALIDATED_SPECS = [
+    s for s in CONTRACT_SPECS if sa.registry[type(s)].validate is not None
+]
+VALIDATED_IDS = [type(spec).__name__ for spec in VALIDATED_SPECS]
+
+
+@pytest.mark.parametrize('spec', VALIDATED_SPECS, ids=VALIDATED_IDS)
+def test_validators_accept_the_contract_specs(spec):
+    """the pairs the contract tests measure successfully must also pass validation,
+    without IQ"""
+    validate = sa.registry[type(spec)].validate
+    validate(sa.specs.helpers.to_analysis_capture(CONTRACT_CAPTURE), spec)
+
+
+def test_registry_validate_accepts_the_whole_contract_group():
+    group = sa.registry.tospec()(**{
+        sa.registry[type(spec)].name: spec for spec in CONTRACT_SPECS
+    })
+    sa.registry.validate(CONTRACT_CAPTURE, group)

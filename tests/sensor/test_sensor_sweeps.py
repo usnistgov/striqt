@@ -24,9 +24,12 @@ from numeric_checks import (
     COLA_RIPPLE_DB,
     FIR_LEAKAGE,
     assert_close,
+    cross_backend_peak_roundoff,
     cross_backend_rms,
     far_bin_floor_dBc,
+    level_atol_dB,
     level_tolerance_dB,
+    log_conversion_tol,
     single_backend_rms,
 )
 from site_strategies import RADIO_ID
@@ -321,7 +324,7 @@ def check_sawtooth(ds, capture, subtests):
         rms_dB = detector(ds, 'rms')[:, bins]
         assert np.all(np.diff(rms_dB, axis=1) > 0)
         model = np.broadcast_to(sawtooth_rms_model_dB(capture, bins), rms_dB.shape)
-        assert_close(rms_dB, model, atol=level_tolerance_dB(sigma))
+        assert_close(rms_dB, model, atol=level_atol_dB(model, sigma))
 
 
 def check_dirac_delta(ds, capture, subtests):
@@ -374,14 +377,27 @@ def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
     reference = run_in_memory(make_sweep(binding, captures))
     source = SOURCE.replace(array_backend=array_backend)
     datasets = run_in_memory(make_sweep(binding, captures, source=source))
+    # each backend rounds its own log10 and stores the result as float32 dB
+    level_tol = log_conversion_tol(np.float32, 10, complex_input=True, n_impl=2)
     for i, (capture, ds, ref) in enumerate(zip(captures, datasets, reference)):
         sigma = cross_backend_rms(np.complex64, resampler_nffts(capture))
         with subtests.test('iq_waveform', capture=i):
-            assert_close(ds.iq_waveform.values, ref.iq_waveform.values, sigma=sigma)
+            expected = ref.iq_waveform.values
+            assert_close(
+                ds.iq_waveform.values,
+                expected,
+                sigma=sigma,
+                # the resample concentrates its roundoff on the samples that carry the
+                # peak, which an rms-referenced sigma understates by the crest factor -
+                # near 100 for the impulse captures
+                atol=cross_backend_peak_roundoff(np.complex64) * np.abs(expected).max(),
+            )
         for name in ('power_spectral_density', 'channel_power_time_series'):
             with subtests.test(name, capture=i):
+                expected = ref[name].values
                 assert_close(
                     ds[name].values,
-                    ref[name].values,
-                    atol=level_tolerance_dB(sigma, power=True),
+                    expected,
+                    rtol=level_tol['rtol'],
+                    atol=level_tol['atol'] + level_atol_dB(expected, sigma),
                 )

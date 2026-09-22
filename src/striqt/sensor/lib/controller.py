@@ -249,7 +249,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         cls.sensor = sensor
         super().__init_subclass__()
         source_cls = cls.sensor.source_cls
-        backend_name = f'{source_cls.__module__}.{source_cls.__name__}'
+        backend_name = sa.util.qualified_name(source_cls)
 
         # document cls.__init__()
         source_spec = cls.schema.source

@@ -29,7 +29,7 @@ def select_parameter_kws(locals_: dict, omit=(dataarrays.CAPTURE_DIM, 'out')) ->
     return {k: v for k, v in items[1:] if k not in omit}
 
 
-@util.lru_cache(8)
+@specs.helpers.lru_cache_on_converted(specs.Capture, maxsize=8)
 def _generate_iir_lpf(
     capture: specs.Capture,
     *,

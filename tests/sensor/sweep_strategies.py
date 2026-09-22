@@ -143,7 +143,16 @@ def loop_sets(draw, allow_repeat: bool = True, allow_analysis: bool = True):
 @st.composite
 def sweeps(draw, min_captures: int = 1):
     captures = draw(capture_tuples(min_size=min_captures))
-    return make_sweep(captures=captures, loops=draw(loop_sets()))
+    loops = draw(loop_sets())
+
+    # a loop point overwrites its field in every capture, so Sweep rejects captures
+    # that disagree on a looped field; capture_kwargs draws those fields freely
+    looped = {l.field for l in loops if l.isin == 'capture' and l.field is not None}
+    shared = {f: getattr(captures[0], f) for f in looped} if captures else {}
+    if shared:
+        captures = tuple(c.replace(**shared) for c in captures)
+
+    return make_sweep(captures=captures, loops=loops)
 
 
 CAL = ss.bindings.air7101b_calibration

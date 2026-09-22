@@ -3,7 +3,6 @@
 from __future__ import annotations as __
 
 from collections import Counter, defaultdict, ChainMap
-import functools
 import itertools
 import math
 import numbers
@@ -14,8 +13,11 @@ from typing import (
     cast,
     get_args,
     get_type_hints,
+    Iterable,
     Literal,
     Mapping,
+    NamedTuple,
+    Optional,
     Tuple,
     TYPE_CHECKING,
     Union,
@@ -26,7 +28,7 @@ from pathlib import Path
 import msgspec
 
 import striqt.analysis as sa
-from striqt.analysis.specs.helpers import _dec_hook, frozendict
+from striqt.analysis.specs.helpers import _dec_hook, frozendict, SpecValidationError
 
 from . import structs
 from . import types
@@ -34,25 +36,10 @@ from .structs import _AdjustSourceCapturesMap
 
 
 if TYPE_CHECKING:
-    from ..lib.typing import CaptureConverterWrapper, SC, TypeAlias, TypeVar
+    from ..lib.typing import SC, TypeAlias, TypeVar
 
     _T = TypeVar('_T')
     _LoopPointsDict: TypeAlias = dict[tuple[types.IsIn, str], list]
-
-
-def convert_capture_arg(
-    capture_cls: type[structs.SensorCapture],
-) -> CaptureConverterWrapper:
-    """convert the first arg of the decorated function to capture_cls, then call"""
-
-    def wrapper(func):
-        @functools.wraps(func)
-        def wrapped(capture: structs.Capture, *args, **kwargs):
-            return func(capture_cls.from_spec(capture), *args, **kwargs)
-
-        return wrapped
-
-    return wrapper
 
 
 @sa.util.lru_cache()
@@ -70,6 +57,65 @@ def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC |
     return list(pairwise)
 
 
+class CaptureOrigin(NamedTuple):
+    """where an expanded capture came from in the sweep specification.
+
+    This is what lets an error name a place in the user's file: the expanded index
+    alone cannot, since `sweep.captures` and `sweep.loops` are both flattened away
+    by the expansion.
+    """
+
+    capture_index: int
+    """position in the expanded capture tuple"""
+
+    spec_index: Optional[int]
+    """index into `sweep.captures`, or None when the sweep lists no captures"""
+
+    loop_points: frozendict
+    """the loop point that produced this capture, keyed by (isin, field)"""
+
+
+def _resolve_capture_cls(sweep: structs.Sweep[Any, Any, SC]) -> type[SC]:
+    if len(sweep.captures) > 0:
+        return type(sweep.captures[0])
+    elif sweep.sensor is None:
+        raise SpecValidationError(
+            'Expected a non-empty `captures` list, unless the sweep is bound to a '
+            'sensor with striqt.sensor.bind_sensor',
+            ('.captures',),
+        )
+    else:
+        from .dataclasses import Schema
+
+        assert isinstance(sweep.schema, Schema)
+        return sweep.schema.capture
+
+
+def _expansion_args(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None,
+    only_fields: tuple[str, ...] | None,
+    limit: int | None,
+) -> tuple[tuple, dict]:
+    """marshal `sweep` into arguments for `_expand_capture_loops_with_origins`.
+
+    There is one call site for these keywords because `functools.lru_cache` keys on
+    their insertion order, so passing the same values in two different orders misses
+    the cache: the sweep would expand twice and hand back captures that are equal but
+    not identical.
+    """
+
+    args = (sweep.captures, sweep.loops, sweep.adjust_captures)
+    kws = {
+        'source_id': source_id,
+        'cls': _resolve_capture_cls(sweep),
+        'only_fields': only_fields,
+        'loop_only_nyquist': sweep.options.loop_only_nyquist,
+        'limit': limit,
+    }
+    return args, kws
+
+
 def loop_captures(
     sweep: structs.Sweep[Any, Any, SC],
     source_id: types.SourceID | None = None,
@@ -77,31 +123,98 @@ def loop_captures(
     only_fields: tuple[str, ...] | None = None,
     limit: int | None = None,
 ) -> tuple[SC, ...]:
-    """evaluate the loop specification, and flatten into one list of loops"""
+    """expand `sweep.loops` into the flat tuple of captures that the sweep will run.
 
-    if len(sweep.captures) > 0:
-        cls = type(sweep.captures[0])
-    elif sweep.sensor is None:
-        raise TypeError(
-            'loops may apply only to explicit capture lists unless the sweep '
-            'is bound to a sensor with striqt.sensor.bind_sensor'
-        )
-    else:
-        from .dataclasses import Schema
+    The loops are nested in declaration order, outermost first, with `sweep.captures`
+    innermost, so 2 captures under a 3-point loop give 6 captures ordered
+    ``(point0, capture0), (point0, capture1), (point1, capture0), ...``. A leading
+    `Repeat` is not expanded here, since its captures would be identical; the sweep
+    runner multiplies this tuple by `Repeat.count` instead. When `sweep.captures` is
+    empty, each loop point instead builds a new capture, and the loops must then
+    supply every field the capture class requires.
 
-        assert isinstance(sweep.schema, Schema)
-        cls = sweep.schema.capture
+    Each capture is assembled in three passes, the later ones winning:
 
-    return _expand_capture_loops(
-        sweep.captures,
-        sweep.loops,
-        sweep.adjust_captures,
-        source_id=source_id,
-        cls=cls,
-        loop_only_nyquist=sweep.options.loop_only_nyquist,
-        only_fields=only_fields,
-        limit=limit,
-    )
+    1. the entry from `sweep.captures`, with the loop point applied;
+    2. `adjust_captures` for `source_id`, evaluated against that result, so a
+       `CaptureRemap` may key on a looped field;
+    3. the loop point again, which therefore always overrides an adjustment.
+
+    Loops with ``isin='analysis'`` name a measurement parameter rather than a capture
+    field; they accumulate into the capture's `adjust_analysis` mapping, merged with
+    whatever that capture already carries. Loop points are coerced to the capture's
+    field type, so a sweep decoded from YAML strings expands to the same captures as
+    the equivalent numeric one.
+
+    Results are cached on the loop-determining fields rather than on the sweep, so
+    the acquire, analyze and write stages can each call this without recomputing.
+
+    Args:
+        sweep: the sweep to expand. Its capture class is that of `sweep.captures[0]`,
+            or the sensor binding's `schema.capture` when no captures are listed.
+        source_id: hex id of the open source, selecting which `adjust_captures` block
+            applies on top of the `'defaults'` block. `None` uses `'defaults'` alone,
+            which is what lets a sweep be expanded with no hardware open; per-source
+            remaps are then not applied.
+        only_fields: keep only the capture loops naming one of these fields, dropping
+            the rest. Analysis loops are unaffected. Used to expand just the
+            dimensions a lookup depends on, as `max_by_frequency` does.
+        limit: stop expanding after this many captures. Applied before the
+            `options.loop_only_nyquist` filter, so fewer may come back.
+
+    Returns:
+        the expanded captures, as instances of the sweep's capture class. Empty when
+        the sweep has neither captures nor loops, or when `loop_only_nyquist` is set
+        and every point has a finite `analysis_bandwidth` above its `sample_rate`.
+
+    Raises:
+        msgspec.ValidationError: a loop names a field the capture class does not
+            declare; the sweep has neither explicit captures nor a sensor binding,
+            leaving no capture class to instantiate; a loop point does not convert to
+            the type of its capture field; or an expanded capture is invalid -- it
+            violates a `Meta` bound or a `Capture.__post_init__` rule that no single
+            input violates on its own, or the loops left a required capture field
+            unset.
+    """
+
+    args, kws = _expansion_args(sweep, source_id, only_fields, limit)
+    return _expand_capture_loops_with_origins(*args, **kws)[0]
+
+
+def loop_capture_origins(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None = None,
+    *,
+    only_fields: tuple[str, ...] | None = None,
+    limit: int | None = None,
+) -> frozendict[SC, CaptureOrigin]:
+    """map each capture `loop_captures` would return to where it came from.
+
+    The keys are in expansion order, and the arguments mean what they do in
+    `loop_captures`, which shares this function's one cached expansion pass.
+
+    Captures that compare equal collapse onto the first of their origins, since a
+    label only ever needs to name one of them. They are not rare: a `List` may repeat
+    a value, loop points are coerced with ``strict=False`` so `'1e6'` and `1e6` are
+    one point, and an `adjust_captures` fixed value can flatten the field that
+    distinguished two `sweep.captures` entries. Use `loop_captures` wherever the
+    multiplicity matters.
+
+    Raises:
+        msgspec.ValidationError: as `loop_captures`.
+        TypeError: an analysis loop point that survived freezing unhashable, which no
+            mapping can key on.
+    """
+    args, kws = _expansion_args(sweep, source_id, only_fields, limit)
+    captures, origins = _expand_capture_loops_with_origins(*args, **kws)
+
+    # not frozendict(zip(...)): dict() from pairs keeps the last value for a repeated
+    # key, and the first origin is the one worth reporting
+    first: dict[SC, CaptureOrigin] = {}
+    for capture, origin in zip(captures, origins):
+        first.setdefault(capture, origin)
+
+    return frozendict(first)
 
 
 @sa.util.lru_cache()
@@ -131,6 +244,49 @@ def adjust_analysis(
         )
 
     return sa.specs.helpers.freeze(structs.BundledAnalysis.from_dict(result))
+
+
+def validate_sweep_analysis(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None = None,
+) -> None:
+    """validate each unique (capture, analysis) combination that `sweep` will run.
+
+    The chain mirrors the one `iterate_sweep` follows, so what is checked here is what
+    will run. `source_id=None` resolves `adjust_captures` through its 'defaults' block,
+    which needs no hardware but also leaves per-source remaps checked only in their
+    default form.
+
+    Raises:
+        `msgspec.ValidationError` locating the first offending capture by the
+        `sweep.captures` entry and the loop points that produced it, and naming the
+        measurement that rejected it
+    """
+
+    if len(sweep.analysis.to_dict()) == 0:
+        return
+
+    if len(sweep.captures) == 0 and sweep.sensor is None:
+        # loop_captures refuses this combination; leave such a sweep constructible
+        return
+
+    seen = set()
+
+    for capture, origin in loop_capture_origins(sweep, source_id).items():
+        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
+        key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        try:
+            sa.registry.validate(capture, analysis)
+        except SpecValidationError as ex:
+            raise ex.at(*describe_capture_origin(sweep.loops, capture, origin)) from (
+                ex.__cause__
+            )
 
 
 @sa.util.lru_cache()
@@ -177,9 +333,9 @@ def max_by_frequency(
     """get the maximum value of a field across looped captures by center frequency"""
 
     map = {}
-    looped_captures = _expand_capture_loops(
+    looped_captures = _expand_capture_loops_with_origins(
         captures, loops, only_fields=(field, 'center_frequency')
-    )
+    )[0]
 
     for c in looped_captures:
         for pc in split_capture_ports(c):
@@ -222,6 +378,46 @@ def describe_capture(
     return join.join(diffs)
 
 
+def describe_capture_origin(
+    loops: tuple[structs.LoopBase, ...],
+    capture: SC | Mapping[str, Any],
+    origin: CaptureOrigin,
+) -> tuple[str, ...]:
+    """locate an expanded capture in its sweep, as sibling paths for an error message.
+
+    `capture` may still be the mapping the expansion assembled, since a capture that
+    fails to convert to its class never becomes an instance.
+
+    The loop point is rendered as one mapping in `loops` declaration order. Two
+    loops that name the same field in different `isin` blocks therefore collapse onto
+    one entry, keeping the rendering readable at the cost of that distinction.
+    """
+    points = {}
+
+    for loop in loops:
+        if loop.field is None:
+            # a Repeat is not expanded here, so only its first pass is ever validated
+            points[type(loop).__struct_config__.tag] = 0
+        elif (loop.isin, loop.field) not in origin.loop_points:
+            # dropped by only_fields
+            continue
+        elif loop.isin == 'capture':
+            # from the capture, so that the value is the coerced one that it ran with
+            points[loop.field] = _read_capture_field(capture, loop.field)
+        else:
+            points[loop.field] = origin.loop_points[loop.isin, loop.field]
+
+    locations = []
+
+    if len(points) > 0:
+        locations.append(f'.loops: {points!r}')
+
+    if origin.spec_index is not None:
+        locations.append(f'.captures[{origin.spec_index}]')
+
+    return tuple(locations)
+
+
 def adjust_captures(
     capture: Mapping[str, Any],
     adjust_spec: structs.AdjustCapturesType,
@@ -230,7 +426,9 @@ def adjust_captures(
     """evaluate the field values"""
 
     if not isinstance(capture, (dict, frozendict)):
-        raise TypeError('capture must be a dict or mapping')
+        raise TypeError(
+            f'Expected `capture` as a mapping, got `{type(capture).__name__}`'
+        )
 
     fields = _get_capture_adjust_fields(adjust_spec, source_id)
 
@@ -281,9 +479,14 @@ def adjust_captures(
                 elif required:
                     return msgspec.UNSET
                 else:
-                    raise KeyError(
-                        f'adjust_captures[{field!r}] is missing a lookup for key {k!r} '
-                        f'for source {source_id!r}'
+                    raise SpecValidationError(
+                        f'Object missing a lookup entry for key `{k!r}`',
+                        (
+                            '.adjust_captures',
+                            f'[{source_id!r}]',
+                            f'.{field}',
+                            '.lookup',
+                        ),
                     )
 
         if isinstance(key, tuple) and len(key) > 1:
@@ -496,36 +699,54 @@ def concat_group_sizes(
 # %% module-local helpers
 
 
+def _read_capture_field(capture: SC | Mapping[str, Any], field: str) -> Any:
+    if isinstance(capture, Mapping):
+        return capture[field]
+    else:
+        return getattr(capture, field)
+
+
 @sa.util.lru_cache()
 def _build_loop_points_dict(
     loops: tuple[structs.LoopBase, ...],
     capture_cls: type[SC],
-    new_instance: bool = False,
+    only_fields: tuple[str, ...] | None = None,
 ) -> _LoopPointsDict:
-    """map (isin, field) to the loop points.
+    """map (isin, field) to the loop points, keeping only `only_fields` if given.
 
     Capture loop points are coerced to the capture field type here so that remaps
     keyed on a looped field see typed values rather than JSON/YAML decoded strings.
+
+    `only_fields` is applied here rather than by the caller so that the indexes in
+    error messages stay positions in the loop list the user wrote.
     """
-    loop_points: _LoopPointsDict = {
-        (l.isin, l.field): l.get_points() for l in loops if l.field is not None
-    }
+    loop_points: _LoopPointsDict = {}
+    loop_indexes: dict[tuple[types.IsIn, str], int] = {}
 
-    fields = msgspec.structs.fields(capture_cls)
+    for index, loop in enumerate(loops):
+        if loop.field is None:
+            continue
+        loop_points[loop.isin, loop.field] = loop.get_points()
+        loop_indexes[loop.isin, loop.field] = index
 
-    available = set(n for owner, n in loop_points.keys() if owner == 'capture')
+    if only_fields is not None:
+        loop_points = {
+            (isin, name): points
+            for (isin, name), points in loop_points.items()
+            if isin == 'analysis' or name in only_fields
+        }
 
-    if new_instance:
-        required = {f.name for f in fields if f.required}
-        missing = required - available
-        if len(missing) > 0:
-            raise TypeError(f'missing required loop fields {missing!r}')
+    field_types = sa.specs.helpers.get_capture_field_types(capture_cls)
+    available = {name for isin, name in loop_points if isin == 'capture'}
 
-    extra = available - {f.name for f in fields}
+    extra = available - set(field_types)
     if len(extra) > 0:
-        raise TypeError(f'invalid capture fields {extra!r} specified in loops')
+        raise SpecValidationError(
+            f'Object contains unknown field `{sorted(extra)[0]}` for capture type '
+            f'`{sa.util.qualified_name(capture_cls)}`',
+            ('.loops',),
+        )
 
-    field_types = {f.name: f.type for f in fields}
     for (isin, name), points in loop_points.items():
         if isin != 'capture':
             continue
@@ -534,11 +755,78 @@ def _build_loop_points_dict(
                 points, list[field_types[name]], strict=False, dec_hook=_dec_hook
             )
         except msgspec.ValidationError as ex:
-            raise msgspec.ValidationError(
-                f'in loop over capture field {name!r}: {ex}'
+            raise _loop_point_error(
+                loop_indexes[isin, name], name, points, field_types[name], ex
             ) from ex
 
     return loop_points
+
+
+def _locate_conversion_failure(
+    values: Iterable[Any], element_type: Any
+) -> tuple[int, msgspec.ValidationError] | None:
+    """find which element of a bulk conversion failed, as (index, its error).
+
+    Converting a list at once gets msgspec's own message, but with a path rooted at
+    that list rather than at the sweep. Re-converting one element at a time recovers
+    which one it was, and runs only on the already-failing path.
+
+    Returns None when no single element reproduces the failure.
+    """
+    for index, value in enumerate(values):
+        try:
+            msgspec.convert(value, element_type, strict=False, dec_hook=_dec_hook)
+        except msgspec.ValidationError as element_ex:
+            return index, element_ex
+
+    return None
+
+
+def _loop_point_error(
+    index: int,
+    name: str,
+    points: list,
+    field_type: Any,
+    ex: msgspec.ValidationError,
+) -> SpecValidationError:
+    """re-raise a failed loop point conversion against the point that failed"""
+    path = ('.loops', f'[{index}]')
+    located = _locate_conversion_failure(points, field_type)
+
+    if located is None:
+        return SpecValidationError(str(ex), path)
+
+    point_index, point_ex = located
+    point = points[point_index]
+    return SpecValidationError(
+        f'{point_ex} for loop point {point!r} over field `{name}`', path
+    )
+
+
+def _expanded_capture_error(
+    loops: tuple[structs.LoopBase, ...],
+    captures: list[dict],
+    origins: list[CaptureOrigin],
+    capture_cls: type[SC],
+    ex: msgspec.ValidationError,
+) -> msgspec.ValidationError:
+    """re-raise an invalid expanded capture against the sweep that produced it.
+
+    msgspec locates the failure by its index in the expanded tuple, which is not a
+    place in the user's specification; the origin is.
+    """
+    located = _locate_conversion_failure(captures, capture_cls)
+
+    if located is None:
+        return ex
+
+    index, capture_ex = located
+    locations = describe_capture_origin(loops, captures[index], origins[index])
+
+    if isinstance(capture_ex, SpecValidationError):
+        return capture_ex.at(*locations)
+
+    return SpecValidationError(str(capture_ex), locations=locations)
 
 
 def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesType:
@@ -547,31 +835,34 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
     result = {}
     capture_cls = get_capture_type(type(sweep))
 
-    field_types = {f.name: f.type for f in msgspec.structs.fields(capture_cls)}
+    field_types = sa.specs.helpers.get_capture_field_types(capture_cls)
     adjust_map = _get_capture_adjust_map(sweep.adjust_captures)
 
+    cls_repr = sa.util.qualified_name(capture_cls)
+
     for source_id, lookup_map in adjust_map.items():
+        at_source = ('.adjust_captures', f'[{source_id!r}]')
+
         if source_id != 'defaults':
             try:
                 bytes.fromhex(source_id)
             except ValueError:
-                raise msgspec.ValidationError(
-                    f'label source key {source_id!r} is not "global" or a hex string'
+                raise SpecValidationError(
+                    'Expected `defaults` or a hex source id', at_source
                 )
 
         result[source_id] = {}
         lookup_types = dict(field_types)
         for field, v in lookup_map.items():
             if field == 'port' or field in structs.Capture.__struct_fields__:
-                raise msgspec.ValidationError(
-                    f'capture field {field!r} is not allowed by adjust_captures'
+                raise SpecValidationError(
+                    f'Object contains reserved capture field `{field}`', at_source
                 )
             if field not in field_types:
-                cls = get_capture_type(type(sweep))
-                cls_repr = f'{cls.__module__}.{cls.__name__}'
-                raise msgspec.ValidationError(
-                    f'adjust_captures field {field!r} was not defined '
-                    f'in capture class {cls_repr!r}'
+                raise SpecValidationError(
+                    f'Object contains unknown field `{field}` for capture type '
+                    f'`{cls_repr}`',
+                    at_source,
                 )
             elif not isinstance(v, structs.CaptureRemap):
                 # defines a fixed value
@@ -604,9 +895,13 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
                     lookup_key = msgspec.convert(k, key_type, strict=False)
                     lookup[lookup_key] = value
             except msgspec.ValidationError as ex:
-                raise msgspec.ValidationError(
-                    f'keys must match type of {v.key!r} field(s) in lookup '
-                    f'for {field!r} in label for {source_id!r} source'
+                keys = v.key if isinstance(v.key, tuple) else (v.key,)
+                names = ', '.join(f'`{k}`' for k in keys)
+                plural = 'fields' if len(keys) > 1 else 'field'
+                raise SpecValidationError(
+                    f'Expected lookup keys matching the type of capture '
+                    f'{plural} {names}',
+                    at_source + (f'.{field}', '.lookup'),
                 ) from ex
 
             result[source_id][field] = structs.CaptureRemap(
@@ -620,7 +915,7 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
 
 
 @sa.util.lru_cache()
-def _expand_capture_loops(
+def _expand_capture_loops_with_origins(
     captures: tuple[SC, ...],
     loops: tuple[structs.LoopSpec, ...],
     adjust: structs.AdjustCapturesType | None = None,
@@ -630,33 +925,38 @@ def _expand_capture_loops(
     only_fields: tuple[str, ...] | None = None,
     loop_only_nyquist: bool = False,
     limit: int | None = None,
-) -> tuple[SC, ...]:
-    """evaluate the loop specification, and flatten into one list of loops"""
-    if only_fields is not None:
-        loops = tuple(
-            l for l in loops if l.isin == 'analysis' or l.field in only_fields
-        )
-
+) -> tuple[tuple[SC, ...], tuple[CaptureOrigin, ...]]:
+    """evaluate the loop specification into captures paired with their origins"""
     if len(captures) == 0 and len(loops) == 0:
-        return ()
+        return (), ()
     if cls is None:
         assert len(captures) > 0
         cls = type(captures[0])
     assert issubclass(cls, structs.Capture)
 
-    loop_points = _build_loop_points_dict(loops, cls, False)
+    loop_points = _build_loop_points_dict(loops, cls, only_fields)
+
+    if len(captures) == 0 and len(loop_points) == 0:
+        # nothing is left to build a capture from, so don't build a default one
+        return (), ()
+
     loop_starts = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
     defaults = _merge_analysis_loops(loop_starts)
     loop_combos = itertools.product(*loop_points.values())
 
     cdicts = cast(tuple[dict, ...], _to_builtins(captures))
+    spec_indexes: list[int | None] = (
+        list(range(len(cdicts))) if len(cdicts) > 0 else [None]
+    )
 
     result = []
+    origins = []
     for i, values in enumerate(loop_combos):
         if limit is not None and i * len(captures) >= limit:
             break
 
-        loop_point = _merge_analysis_loops(dict(zip(loop_points.keys(), values)))
+        point = dict(zip(loop_points.keys(), values))
+        loop_point = _merge_analysis_loops(point)
 
         if len(cdicts) > 0:
             # merge into the specified captures, if any
@@ -676,28 +976,46 @@ def _expand_capture_loops(
                 for c in new
             )
 
+        # analysis loop points skip the coercion in _build_loop_points_dict, so they
+        # can still be a bare list or dict from yaml, which no mapping could key on
+        frozen_point = frozendict({
+            k: sa.specs.helpers.freeze(v) for k, v in point.items()
+        })
+
         result += list(new)
+        origins += [
+            CaptureOrigin(0, spec_index, frozen_point) for spec_index in spec_indexes
+        ]
 
     if limit is not None:
         result = result[:limit]
+        origins = origins[:limit]
 
     if len(result) == 0:
         # there were no loops
-        return tuple()
+        return (), ()
     else:
-        captures = msgspec.convert(
-            result, tuple[cls, ...], strict=False, dec_hook=_dec_hook
-        )
+        try:
+            expanded = msgspec.convert(
+                result, tuple[cls, ...], strict=False, dec_hook=_dec_hook
+            )
+        except msgspec.ValidationError as ex:
+            raise _expanded_capture_error(loops, result, origins, cls, ex) from ex
 
     if loop_only_nyquist:
-        return tuple(
-            c
-            for c in captures
+        keep = [
+            (c, o)
+            for c, o in zip(expanded, origins)
             if not math.isfinite(c.analysis_bandwidth)
             or c.sample_rate >= c.analysis_bandwidth
-        )
-    else:
-        return captures
+        ]
+        expanded = tuple(c for c, _ in keep)
+        origins = [o for _, o in keep]
+
+    # only now is the position in the returned tuple known
+    numbered = tuple(o._replace(capture_index=i) for i, o in enumerate(origins))
+
+    return expanded, numbered
 
 
 @sa.util.lru_cache()

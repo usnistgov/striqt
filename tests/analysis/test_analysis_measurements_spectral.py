@@ -12,8 +12,10 @@ ENBW to that labeled bandwidth.
 
 from __future__ import annotations
 
+import fractions
 import re
 
+import msgspec
 import numpy as np
 import pytest
 from numeric_checks import (
@@ -195,7 +197,7 @@ class TestSpectrogram:
         )
 
     @pytest.mark.parametrize(
-        'kwargs,message',
+        'kwargs,message,quantities',
         [
             (
                 {'time_aperture': 1.5 * NFFT / FS},
@@ -203,18 +205,71 @@ class TestSpectrogram:
                     'time_aperture must be a multiple of '
                     '(1-fractional_overlap)/frequency_resolution'
                 ),
+                # no overlap, so one hop is the whole window
+                [
+                    f'time_aperture: {1.5 * NFFT / FS}',
+                    'fractional_overlap: 0',
+                    f'frequency_resolution: {RES}',
+                    f'hop_period: {NFFT / FS}',
+                ],
             ),
             (
                 {'integration_bandwidth': 1.5 * RES},
                 'integration_bandwidth must be a multiple of frequency_resolution',
+                [
+                    f'integration_bandwidth: {1.5 * RES}',
+                    f'frequency_resolution: {RES}',
+                ],
+            ),
+            (
+                {'frequency_resolution': 1.5 * RES},
+                'sample_rate/resolution must be a counting number',
+                [f'sample_rate: {FS}', f'frequency_resolution: {1.5 * RES}'],
+            ),
+            (
+                {'window_fill': fractions.Fraction(1, 3)},
+                (
+                    '(1-window_fill) * sample_rate must be a counting-number '
+                    'multiple of frequency_resolution'
+                ),
+                [
+                    'window_fill: 1/3',
+                    f'sample_rate: {FS}',
+                    f'frequency_resolution: {RES}',
+                    f'(1-window_fill)*nfft: {fractions.Fraction(2, 3) * NFFT}',
+                ],
             ),
         ],
-        ids=['time_aperture', 'integration_bandwidth'],
+        ids=[
+            'time_aperture',
+            'integration_bandwidth',
+            'frequency_resolution',
+            'window_fill',
+        ],
     )
-    def test_non_integer_binning_raises(self, kwargs, message):
+    def test_non_integer_binning_raises(self, kwargs, message, quantities):
+        """the sizing validator rejects these before any IQ is touched, so the error
+        is a msgspec.ValidationError carrying the measurement's field path"""
         iq = testing.tone(DURATION, FS)
-        with pytest.raises(ValueError, match=re.escape(message)):
+        with pytest.raises(
+            msgspec.ValidationError, match=re.escape(message)
+        ) as excinfo:
             spg_of(iq, as_xarray=False, **kwargs)
+
+        assert str(excinfo.value).startswith('$.spectrogram: ')
+
+        # the validator itself raises the bare error; the field path is attached by
+        # whichever caller has the surrounding context
+        spec_fields = {'window': 'boxcar', 'frequency_resolution': RES, **kwargs}
+        with pytest.raises(ValueError, match=re.escape(message)) as valueinfo:
+            sa.measurements.shared.validated_spectrogram_sizing(
+                CAPTURE, sa.specs.Spectrogram(**spec_fields)
+            )
+
+        # the validator is the only layer that knows which quantities the rule
+        # compared, so it names them in a parenthetical after the rule text
+        for quantity in quantities:
+            assert quantity in str(valueinfo.value)
 
 
 # %% power_spectral_density

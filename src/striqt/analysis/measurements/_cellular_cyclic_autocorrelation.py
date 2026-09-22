@@ -69,7 +69,9 @@ def tdd_config_from_str(
         frame_slots = expect_slot_count * frame_slots
     elif len(frame_slots) != expect_slot_count:
         raise ValueError(
-            f'frame_slots must have length {expect_slot_count} to match the slot count at {round(subcarrier_spacing / 1e3)} kHz'
+            f'frame_slots must have length {expect_slot_count} to match the slot count at {round(subcarrier_spacing / 1e3)} kHz '
+            f'(frame_slots: {frame_slots}, '
+            f'subcarrier_spacing: {subcarrier_spacing})'
         )
     else:
         frame_slots = frame_slots.lower()
@@ -79,13 +81,19 @@ def tdd_config_from_str(
 
     if len(frame_slots.strip('dus')) > 0:
         allowed = set('dus')
-        raise ValueError(f'frame_slots string may only contain {allowed}')
+        raise ValueError(
+            f'frame_slots string may only contain {allowed} '
+            f'(frame_slots: {frame_slots})'
+        )
 
     if special_symbols is None:
         pass
     elif len(special_symbols.strip('duf')) > 0:
         allowed = set('duf')
-        raise ValueError(f'special_symbols string may only contain {allowed}')
+        raise ValueError(
+            f'special_symbols string may only contain {allowed} '
+            f'(special_symbols: {special_symbols})'
+        )
 
     if normal_cp:
         symbols_per_slot = 14
@@ -133,7 +141,7 @@ def tdd_config_from_str(
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Cyclic sample lag', 'units': 's'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_sample_lag(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ) -> 'pd.Index':
@@ -149,7 +157,7 @@ SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def subcarrier_spacing(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ):
@@ -160,7 +168,7 @@ def subcarrier_spacing(
 
 
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def link_direction(capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator):
     values = np.array(['downlink', 'uplink'], dtype='U8')
     return values, {}
@@ -194,7 +202,7 @@ def _get_phy_mapping(
     return phy
 
 
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def _get_max_corr_size(
     capture: specs.Capture,
     *,
@@ -242,6 +250,36 @@ def _get_spec_range(
     return tuple(range(start, stop))
 
 
+def _subcarrier_spacing_tuple(
+    spec: specs.CellularCyclicAutocorrelator,
+) -> tuple[float, ...]:
+    if isinstance(spec.subcarrier_spacings, tuple):
+        return spec.subcarrier_spacings
+    return (spec.subcarrier_spacings,)
+
+
+def validated_autocorrelation_lag_count(
+    capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
+) -> int:
+    """check the frame configuration and the index ranges, returning the lag axis length.
+
+    `tdd_config_from_str` owns the `frame_slots` rules and `_get_spec_range` the
+    open-ended-range rule; `_get_max_corr_size` warms the `get_3gpp_phy` design for
+    every requested subcarrier spacing.
+    """
+    scs = _subcarrier_spacing_tuple(spec)
+
+    for one_scs in scs:
+        tdd_config_from_str(subcarrier_spacing=one_scs, frame_slots=spec.frame_slots)
+
+    _get_spec_range(spec.frame_range, 'frame_range')
+    _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
+
+    return int(
+        _get_max_corr_size(capture, subcarrier_spacings=scs, generation=spec.generation)
+    )
+
+
 @hint_keywords(specs.CellularCyclicAutocorrelator)
 @registry.measurement(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
@@ -249,6 +287,7 @@ def _get_spec_range(
     prefer_iq_source='pre_align',
     spec_type=specs.CellularCyclicAutocorrelator,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
+    validate=validated_autocorrelation_lag_count,
 )
 def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwargs):
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
@@ -269,10 +308,7 @@ def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwarg
     spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
 
     xp = sw.array_namespace(iq)
-    if isinstance(spec.subcarrier_spacings, tuple):
-        scs = spec.subcarrier_spacings
-    else:
-        scs = (spec.subcarrier_spacings,)
+    scs = _subcarrier_spacing_tuple(spec)
 
     phy_scs = _get_phy_mapping(
         capture.analysis_bandwidth,

@@ -12,7 +12,7 @@ from typing import Any, Generator, Iterable, Literal, TYPE_CHECKING
 
 import striqt.waveform as sw
 
-from striqt.waveform.lib.util import lru_cache, lazy_import
+from striqt.waveform.lib.util import lru_cache, lazy_import, qualified_name
 
 
 _compute_lock = threading.RLock()

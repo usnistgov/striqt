@@ -23,7 +23,6 @@ from .peripherals import NoPeripherals, PeripheralsBase
 from . import sinks, util
 from .. import specs
 from .typing import Peripherals, PC, PS, SC, SS, SP, SourceBackend, TypeVar
-import striqt.waveform as sw
 import msgspec
 
 TC2 = TypeVar('TC2', bound=specs.SensorCapture)
@@ -144,7 +143,10 @@ def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
     return dict(registry)
 
 
-@sw.util.lru_cache()
+# not sw.util.lru_cache: bind_sensor appends to the global tagged_sweeps union, so a
+# cleared cache would re-register the binding and give that union two members with the
+# same tag, which msgspec then refuses to decode
+@functools.lru_cache
 def mock_binding(
     origin: type[Controller], target: str | type[Controller], register: bool = True
 ) -> type[Controller[SS, SP, SC, PS, PC]]:

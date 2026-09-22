@@ -91,6 +91,9 @@ def assert_close(
     given), also require rms(actual - expected) < sigma * scale, and widen `atol` to
     at least the peak that `sigma` implies over the output size,
     peak_factor(size) * sigma * scale.
+
+    `atol` may be an array, for an output whose tolerance varies element by element
+    (`level_atol_dB`); assert_allclose cannot take one, so the comparison is made here.
     """
     actual = to_numpy(actual)
     expected = to_numpy(expected)
@@ -102,8 +105,22 @@ def assert_close(
             f'{err_msg} rms deviation {rms_err:.3e} above {sigma * scale:.3e} '
             f'({level_tolerance_dB(sigma):.1e} dB)'
         )
-        atol = max(atol, peak_factor(expected.size) * sigma * scale)
-    assert_allclose(actual, expected, rtol=rtol, atol=atol, err_msg=err_msg)
+        atol = np.maximum(atol, peak_factor(expected.size) * sigma * scale)
+    if np.ndim(atol) == 0:
+        assert_allclose(actual, expected, rtol=rtol, atol=atol, err_msg=err_msg)
+    else:
+        assert_within(actual, expected, atol + rtol * np.abs(expected), err_msg=err_msg)
+
+
+def assert_within(actual, expected, tolerance, *, err_msg=''):
+    """assert |actual - expected| <= `tolerance`, which may vary per element"""
+    excess = np.abs(to_numpy(actual) - to_numpy(expected)) - tolerance
+    i = tuple(int(j) for j in np.unravel_index(int(np.argmax(excess)), excess.shape))
+    assert excess.max() <= 0, (
+        f'{err_msg} {int((excess > 0).sum())}/{excess.size} elements outside '
+        f'tolerance; worst at {i}: |{actual[i]:.8g} - {expected[i]:.8g}| exceeds '
+        f'{np.broadcast_to(tolerance, excess.shape)[i]:.3e} by {excess.max():.3e}'
+    )
 
 
 # %% FFT roundoff model (fourier, ofdm)
@@ -189,6 +206,35 @@ def level_tolerance_dB(sigma, power=False):
 def tone_peak_roundoff(dtype):
     """bound on structured roundoff in any one bin, relative to a tone's amplitude"""
     return FFT_ROUNDOFF_SAFETY * TONE_PEAK_ROUNDOFF * unit_roundoff(dtype)
+
+
+def cross_backend_peak_roundoff(dtype):
+    """tolerance on the difference between two backends' structured roundoff at a
+    peak, relative to the peak amplitude"""
+    return np.sqrt(2) * tone_peak_roundoff(dtype)
+
+
+def level_atol_dB(expected_dB, sigma, size=None, dtype=np.complex64):
+    """per-element dB tolerance for a level that two backends computed independently.
+
+    Roundoff bounds an element's amplitude error relative to the output's *peak*
+    (`sigma` is relative to its rms, which is smaller still), so as a share of the
+    element's own amplitude the bound grows with its depth below the peak. A relative
+    amplitude error r leaves the power anywhere in [(1-r)**2, (1+r)**2] of its exact
+    value, and the low side is what dominates in dB: -20*log10(1-r), which diverges as
+    r approaches 1. So an element deeper than `rms_tolerance_dBc(err)` below the peak,
+    where roundoff alone could account for all of its amplitude, goes unchecked - the
+    floor falls out of the bound rather than having to be imposed on top of it. Unlike
+    `far_bin_floor_dBc` this assumes nothing about the error spreading over an FFT's
+    bins, so it suits any dB-valued output.
+    """
+    expected_dB = np.asarray(to_numpy(expected_dB), dtype='float64')
+    if size is None:
+        size = expected_dB.size
+    err = peak_factor(size) * sigma + cross_backend_peak_roundoff(dtype)
+    r = err * 10 ** ((expected_dB.max() - expected_dB) / 20)
+    with np.errstate(divide='ignore'):
+        return -20 * np.log10(np.clip(1 - r, 0, None))
 
 
 def far_bin_floor_dBc(sigma, nfft, size=None, dtype=np.complex64):

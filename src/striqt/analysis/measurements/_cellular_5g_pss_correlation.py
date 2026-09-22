@@ -18,9 +18,9 @@ else:
     np = util.lazy_import('numpy')
 
 
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
 def _spec_to_params(
-    capture: specs.Capture,
+    capture: specs.AnalysisCapture,
     spec: specs.Cellular5GNPSSSync | specs.Cellular5GNRPSSCorrelator,
 ):
     return sw.ofdm.pss_params(
@@ -30,13 +30,15 @@ def _spec_to_params(
         shared_spectrum=spec.shared_spectrum,
         max_lag_symbols=spec.max_lag_symbols,
         symbol_indexes=spec.symbol_indexes,
-        center_frequency=getattr(capture, 'center_frequency', None),
+        center_frequency=capture.center_frequency,
     )
 
 
 @registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
-@util.lru_cache()
-def cellular_ssb_lag(capture: specs.Capture, spec: specs.Cellular5GNRPSSCorrelator):
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
+def cellular_ssb_lag(
+    capture: specs.AnalysisCapture, spec: specs.Cellular5GNRPSSCorrelator
+):
     # TODO: this now needs to account for PSS vs SSS
     params = _spec_to_params(capture, spec)
     offs = round(spec.sample_rate * spec.delay)
@@ -49,7 +51,6 @@ _coord_factories = [
     shared.cellular_ssb_beam_index,
     cellular_ssb_lag,
 ]
-dtype = 'complex64'
 
 
 correlator_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
@@ -113,6 +114,7 @@ def choose_sync_offsets(
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
+    validate=shared.validated_5g_ssb_sync_params,
 )
 def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     """compute sync index offsets based on correlate_5g_pss"""
@@ -122,28 +124,17 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     delay = round(spec.delay * spec.sample_rate) / spec.sample_rate
     return delay + offs / spec.sample_rate
 
-    # Args:
-    #     iq: the vector of size (N, M) for N channels and M IQ waveform samples
-    #     capture: capture structure that describes the iq acquisition parameters
-    #     sample_rate (samples/s): downsample to this rate before analysis (or None to follow capture.sample_rate)
-    #     subcarrier_spacing (Hz): OFDM subcarrier spacing
-    #     discovery_periodicity (s): interval between synchronization blocks
-    #     frequency_offset (Hz): baseband center frequency of the synchronization block
-    #     shared_spectrum: whether to assume "shared_spectrum" symbol layout in the SSB
-    #         according to 3GPP TS 138 213: Section 4.1)
-    #     max_block_count: if not None, the number of synchronization blocks to analyze
-    #     as_xarray: if True (default), return an xarray.DataArray, otherwise a ChannelAnalysisResult object
-
 
 @shared.hint_keywords(specs.Cellular5GNRPSSCorrelator)
 @registry.measurement(
     specs.Cellular5GNRPSSCorrelator,
     coord_factories=_coord_factories,
-    dtype=dtype,
+    dtype='complex64',
     caches=(correlator_cache, shared.ssb_iq_cache),
     prefer_iq_source='pre_align',
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance'},
+    validate=shared.validated_5g_ssb_sync_params,
 )
 def cellular_5g_pss_correlation(
     iq, capture: specs.Capture, **kwargs

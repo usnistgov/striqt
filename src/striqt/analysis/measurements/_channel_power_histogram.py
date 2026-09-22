@@ -53,7 +53,7 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Channel power', 'units': 'dBm'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def channel_power_bin(
     capture: specs.Capture, spec: specs.ChannelPowerHistogram
 ) -> dict[str, np.ndarray]:
@@ -69,6 +69,7 @@ def channel_power_bin(
     dtype='float32',
     prefer_iq_source='aligned',
     attrs={'standard_name': 'Fraction of channel power readings'},
+    validate=_channel_power_time_series.validated_channel_power_binning,
 )
 def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.

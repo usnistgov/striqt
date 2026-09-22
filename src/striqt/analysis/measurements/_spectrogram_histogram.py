@@ -19,7 +19,7 @@ else:
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Spectrogram bin power', 'units': 'dBm'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture, specs.SpectrogramHistogram)
 def spectrogram_power_bin(
     capture: specs.Capture, spec: specs.SpectrogramHistogram
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
@@ -30,16 +30,7 @@ def spectrogram_power_bin(
         power_resolution=spec.power_resolution,
     )
 
-    if sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
-        # need capture.sample_rate/resolution to give us a counting number
-        nfft = round(capture.sample_rate / spec.frequency_resolution)
-    else:
-        raise ValueError('sample_rate/resolution must be a counting number')
-
-    if spec.integration_bandwidth is None:
-        enbw = spec.frequency_resolution
-    else:
-        enbw = spec.integration_bandwidth
+    enbw = shared.validated_spectrogram_sizing(capture, spec).enbw
 
     return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
 
@@ -52,6 +43,7 @@ def spectrogram_power_bin(
     dtype='float32',
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of counts'},
+    validate=shared.validated_spectrogram_sizing,
 )
 def spectrogram_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     """Compute a histogram of the power readings on a spectrogram.

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 
 import msgspec
 import pytest
@@ -52,13 +53,19 @@ FILE_RATE_MSG = 'backend_sample_rate is fixed by the file source'
 SYNC_MSG = 'time_sync_at must be "open" when gapless'
 RETRIES_MSG = 'receive_retries must be 0 when gapless is enabled'
 TRIGGER_MSG = 'signal_trigger must be one of'
-REPEAT_MSG = r'a repeat may only be the outermost \(first\) loop'
-DUPLICATE_MSG = 'more than one loop specified for capture field'
-IMPLIED_MSG = (
-    'calibration sweeps may only include explicit capture sequences '
-    'if implied_loops are specified'
+REPEAT_MSG = re.escape('Expected a `repeat` loop only as the outermost (first) entry')
+DUPLICATE_MSG = 'Expected at most one loop over field'
+COLLISION_MSG = re.escape(
+    'Expected field `frequency_offset` to be looped or set per capture, not both'
 )
-SOURCE_CAL_MSG = 'source.calibration must be None for a calibration sweep'
+IMPLIED_MSG = re.escape(
+    '$.captures: Expected at most one capture in a calibration sweep, unless the '
+    'calibration peripheral declares `implied_loops`'
+)
+SOURCE_CAL_MSG = re.escape(
+    '$.source.calibration: Expected `null`, since a calibration sweep cannot '
+    'itself be calibrated'
+)
 
 key_pairs = st.tuples(
     st.integers(min_value=-100, max_value=100),
@@ -347,9 +354,67 @@ class TestSweepLoops:
         loops = data.draw(st.permutations([*base, data.draw(list_loop(dup.field))]))
         if data.draw(st.booleans()):
             loops.insert(0, Repeat(count=1))
-        match = f"{DUPLICATE_MSG} '{dup.field}'"
+        match = f'{DUPLICATE_MSG} `{dup.field}`'
         kws = make_sweep_kws(loops=tuple(loops))
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_duplicate_loop_message_names_the_first_occurrence(self):
+        loops = (
+            List(field='snr', values=(0.0, 1.0)),
+            List(field='window', isin='analysis', values=('hann',)),
+            List(field='snr', values=(2.0, 3.0)),
+        )
+        match = re.escape(
+            '$.loops[2]: Expected at most one loop over field `snr`, which is '
+            'already looped in `capture` at $.loops[0]'
+        )
+        kws = make_sweep_kws(loops=loops)
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    @pytest.mark.parametrize('lead_repeat', [False, True])
+    def test_loop_over_a_field_that_captures_disagree_on_rejected(self, lead_repeat):
+        captures = (
+            make_capture(frequency_offset=-1e6),
+            make_capture(frequency_offset=1e6),
+        )
+        loops = [List(field='frequency_offset', values=(0.0, 5e5, 1e6))]
+        if lead_repeat:
+            loops.insert(0, Repeat(count=2))
+        index = 1 if lead_repeat else 0
+        match = (
+            re.escape(f'$.loops[{index}]: ')
+            + COLLISION_MSG
+            + re.escape(' - at $.captures[0] on $.captures[1]')
+        )
+        kws = make_sweep_kws(captures=captures, loops=tuple(loops))
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_a_single_capture_may_set_a_looped_field(self):
+        captures = (make_capture(frequency_offset=-1e6),)
+        loops = (List(field='frequency_offset', values=(0.0, 1e6)),)
+        for sweep in construct_both(
+            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
+        ):
+            assert len(sweep.captures) == 1
+
+    def test_captures_agreeing_on_a_looped_field_are_accepted(self):
+        captures = (
+            make_capture(frequency_offset=-1e6, snr=3.0),
+            make_capture(frequency_offset=-1e6, snr=10.0),
+        )
+        loops = (List(field='frequency_offset', values=(0.0, 1e6)),)
+        for sweep in construct_both(
+            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
+        ):
+            assert {c.snr for c in sweep.captures} == {3.0, 10.0}
+
+    def test_an_analysis_loop_does_not_collide_with_captures(self):
+        captures = (make_capture(snr=3.0), make_capture(snr=10.0))
+        loops = (List(field='snr', isin='analysis', values=(0.0, 1.0)),)
+        for sweep in construct_both(
+            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
+        ):
+            assert len(sweep.captures) == 2
 
 
 class TestSweepCaptures:
@@ -362,9 +427,65 @@ class TestSweepCaptures:
 
     def test_capture_field_conflicting_with_measurement_name(self):
         capture = _ConflictingCapture(port=0, sample_rate=1e6, duration=1e-3)
-        match = r"capture fields \('spectrogram',\) conflict with measurements"
-        with pytest.raises(AttributeError, match=match):
+        match = re.escape(
+            '$.analysis: Object contains measurement `spectrogram`, which shadows '
+            'a capture field of the same name'
+        )
+        with pytest.raises(msgspec.ValidationError, match=match):
             make_sweep(captures=(capture,))
+
+
+# %% Sweep: (capture, analysis) validation
+
+# 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
+SPG = ss.specs.BundledAnalysis.from_dict({
+    'spectrogram': {'window': 'hann', 'frequency_resolution': 1e4}
+})
+RESOLUTION_MSG = 'sample_rate/resolution must be a counting number'
+
+
+class TestSweepAnalysisValidation:
+    def test_a_valid_combination_constructs(self):
+        for sweep in construct_both(
+            SweepCls, **make_sweep_kws(captures=(make_capture(),), analysis=SPG)
+        ):
+            assert sweep.analysis == SPG
+
+    def test_an_invalid_looped_capture_names_its_captures_entry_and_loop_point(self):
+        loops = (List(field='sample_rate', values=(1e6, 1.005e6)),)
+        kws = make_sweep_kws(captures=(make_capture(),), loops=loops, analysis=SPG)
+        match = re.escape(
+            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
+            '(sample_rate: 1005000.0, frequency_resolution: 10000.0) '
+            "- at $.loops: {'sample_rate': 1005000.0} on $.captures[0]"
+        )
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_an_adjust_analysis_override_is_caught(self):
+        capture = make_capture(adjust_analysis={'frequency_resolution': 3e4})
+        kws = make_sweep_kws(captures=(capture,), analysis=SPG)
+        match = re.escape(
+            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
+            '(sample_rate: 1000000.0, frequency_resolution: 30000.0) '
+            '- at $.captures[0]'
+        )
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_an_analysis_loop_override_is_caught(self):
+        loops = (
+            List(field='frequency_resolution', isin='analysis', values=(1e4, 3e4)),
+        )
+        kws = make_sweep_kws(captures=(make_capture(),), loops=loops, analysis=SPG)
+        match = re.escape(
+            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
+            '(sample_rate: 1000000.0, frequency_resolution: 30000.0) '
+            "- at $.loops: {'frequency_resolution': 30000.0} on $.captures[0]"
+        )
+        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
+
+    def test_the_warmup_sweep_constructs(self, synthetic_sweep):
+        warmup = ss.lib.compute.gpu.build_warmup_sweep(synthetic_sweep)
+        assert len(warmup.captures) == 1
 
 
 class TestSweepAdjustCaptures:
@@ -380,10 +501,13 @@ class TestSweepAdjustCaptures:
     @pytest.mark.parametrize(
         'adjust, match',
         [
-            ({'zz': {'snr': 1.0}}, 'is not "global" or a hex string'),
+            (
+                {'zz': {'snr': 1.0}},
+                re.escape("$.adjust_captures['zz']: Expected `defaults` or a hex"),
+            ),
             (
                 {'defaults': {'duration': 1.0}},
-                "capture field 'duration' is not allowed by adjust_captures",
+                re.escape('Object contains reserved capture field `duration`'),
             ),
         ],
     )
@@ -415,7 +539,7 @@ class TestCalibrationSweep:
     def test_multiple_captures_need_implied_loops(self):
         captures = (make_calibration_capture(), make_calibration_capture(gain=-10))
         kws = make_calibration_sweep_kws(captures=captures)
-        raises_on_both_paths(CalSweepCls, TypeError, IMPLIED_MSG, **kws)
+        raises_on_both_paths(CalSweepCls, msgspec.ValidationError, IMPLIED_MSG, **kws)
 
         peripheral = ss.specs.ManualYFactorPeripheral(
             enr=10, ambient_temperature=290, implied_loops=('gain',)
@@ -426,7 +550,9 @@ class TestCalibrationSweep:
 
     def test_source_calibration_must_be_none(self):
         kws = make_calibration_sweep_kws(source=CalSourceCls(calibration='cal.nc'))
-        raises_on_both_paths(CalSweepCls, ValueError, SOURCE_CAL_MSG, **kws)
+        raises_on_both_paths(
+            CalSweepCls, msgspec.ValidationError, SOURCE_CAL_MSG, **kws
+        )
 
     def test_default_options_loop_only_nyquist(self):
         loops = (List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)

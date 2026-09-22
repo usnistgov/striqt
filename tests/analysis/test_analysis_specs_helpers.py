@@ -26,17 +26,23 @@ from msgspec import inspect as mi
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+import striqt.waveform as sw
 from striqt.analysis.specs.helpers import (
     Meta,
+    SpecValidationError,
     convert_dict,
     convert_spec,
+    convert_spec_cached,
     freeze,
     frozendict,
     get_capture_type_attrs,
     infer_coord_info,
     inspect_freeze_depths,
     json_schema,
+    lru_cache_on_converted,
+    to_analysis_capture,
     unfreeze,
+    validation_path,
 )
 
 ATTRS_XFAIL = pytest.mark.xfail(
@@ -451,3 +457,361 @@ def test_infer_coord_info_rejects_ambiguous_union():
 def test_infer_coord_info_rejects_unsupported_types():
     with pytest.raises(TypeError, match='unsupported msgspec field type'):
         infer_coord_info(mi.type_info(list[int]))
+
+
+# %% convert_spec_cached
+
+SOAPY_KWS = {
+    'port': 0,
+    'center_frequency': 3.5e9,
+    'duration': 1e-3,
+    'sample_rate': 1e6,
+}
+
+
+def test_convert_spec_cached_hands_back_an_exact_match_unchanged():
+    """`lru_cache_on_converted` rests on this: projecting a spec that is already the
+    target type must return the same object, so converting it a second time cannot
+    add a second cache entry for what is one value."""
+    capture = sa.specs.AnalysisCapture(duration=1e-3, sample_rate=1e6)
+    assert convert_spec_cached(sa.specs.AnalysisCapture, capture) is capture
+
+
+# %% to_analysis_capture
+
+
+def test_to_analysis_capture_drops_sensor_only_fields():
+    capture = ss.specs.SoapyCapture(
+        port=0, center_frequency=3.5e9, gain=10.0, duration=1e-3, sample_rate=1e6
+    )
+    projected = to_analysis_capture(capture)
+
+    assert type(projected) is sa.specs.AnalysisCapture
+    assert set(msgspec.structs.asdict(projected)) == {
+        'duration',
+        'sample_rate',
+        'analysis_bandwidth',
+        'center_frequency',
+    }
+    assert projected.duration == pytest.approx(1e-3)
+    assert projected.sample_rate == pytest.approx(1e6)
+    assert projected.center_frequency == pytest.approx(3.5e9)
+
+
+@pytest.mark.parametrize(
+    ('capture_kws', 'expected'),
+    [
+        ({'center_frequency': 3.5e9}, 3.5e9),
+        ({'center_frequency': (3.5e9, 3.6e9), 'port': (0, 1)}, (3.5e9, 3.6e9)),
+    ],
+    ids=['scalar', 'tuple'],
+)
+def test_to_analysis_capture_preserves_center_frequency(capture_kws, expected):
+    kws = {'port': 0, 'gain': 10.0, **capture_kws}
+    if isinstance(kws['port'], tuple):
+        kws['gain'] = (10.0,) * len(kws['port'])
+    capture = ss.specs.SoapyCapture(duration=1e-3, sample_rate=1e6, **kws)
+
+    assert to_analysis_capture(capture).center_frequency == expected
+
+
+def test_to_analysis_capture_defaults_absent_center_frequency_to_none():
+    capture = ss.specs.NoiseCapture(port=0, duration=1e-3, sample_rate=1e6)
+    assert not hasattr(capture, 'center_frequency')
+    assert to_analysis_capture(capture).center_frequency is None
+
+
+def test_to_analysis_capture_collapses_fields_the_analysis_layer_ignores():
+    """this is the whole point of the projection: a sweep looping over a sensor-only
+    field must not multiply the validator cache keys"""
+    kws = {'port': 0, 'center_frequency': 3.5e9, 'duration': 1e-3, 'sample_rate': 1e6}
+    low = to_analysis_capture(ss.specs.SoapyCapture(gain=0.0, **kws))
+    high = to_analysis_capture(ss.specs.SoapyCapture(gain=30.0, **kws))
+
+    assert low == high
+    assert hash(low) == hash(high)
+
+
+def test_to_analysis_capture_is_idempotent():
+    capture = sa.specs.Capture(duration=1e-3, sample_rate=1e6)
+    once = to_analysis_capture(capture)
+    assert to_analysis_capture(once) == once
+
+
+# %% lru_cache_on_converted
+
+
+def test_converted_arguments_that_project_alike_share_one_entry():
+    calls = []
+
+    @lru_cache_on_converted(ss.specs.SensorCapture)
+    def body(capture):
+        calls.append(capture)
+        return len(calls)
+
+    low = ss.specs.SoapyCapture(gain=0.0, **SOAPY_KWS)
+    high = ss.specs.SoapyCapture(gain=30.0, **SOAPY_KWS)
+    assert low != high
+
+    assert body(low) == 1
+    assert body(high) == 1
+    assert len(calls) == 1
+    assert body.cache_info().hits == 1
+
+
+def test_the_body_receives_each_projected_argument_as_the_target_type():
+    @lru_cache_on_converted(sa.specs.Capture, sa.specs.Spectrogram)
+    def body(capture, spec):
+        return type(capture), type(spec), spec.frequency_resolution
+
+    capture = ss.specs.SoapyCapture(gain=10.0, **SOAPY_KWS)
+    spec = sa.specs.SpectrogramHistogram(
+        frequency_resolution=10e3,
+        window='hamming',
+        power_low=-100.0,
+        power_high=0.0,
+        power_resolution=1.0,
+    )
+
+    assert body(capture, spec) == (sa.specs.Capture, sa.specs.Spectrogram, 10e3)
+
+
+@pytest.mark.parametrize(
+    'call',
+    [lambda f, capture, n: f(capture, n), lambda f, capture, n: f(capture, nfft=n)],
+    ids=['positional', 'keyword'],
+)
+def test_arguments_past_the_projected_prefix_still_key_the_cache(call):
+    calls = []
+
+    @lru_cache_on_converted(ss.specs.SensorCapture)
+    def body(capture, nfft):
+        calls.append(nfft)
+        return 2 * nfft
+
+    capture = ss.specs.SoapyCapture(gain=10.0, **SOAPY_KWS)
+
+    assert call(body, capture, 8) == 16
+    assert call(body, capture, 16) == 32
+    assert call(body, capture, 8) == 16
+    assert calls == [8, 16]
+    assert body.cache_info().hits == 1
+
+
+def test_a_projected_argument_passed_by_keyword_raises():
+    @lru_cache_on_converted(ss.specs.SensorCapture)
+    def body(capture):
+        return capture
+
+    with pytest.raises(TypeError, match='passed by position'):
+        body(capture=ss.specs.SoapyCapture(gain=10.0, **SOAPY_KWS))
+
+
+@pytest.mark.parametrize(
+    'clear',
+    [lambda f: sw.util.clear_caches(), lambda f: f.cache_clear()],
+    ids=['clear_caches', 'cache_clear'],
+)
+def test_the_cache_is_reachable_through_the_wrapper(clear):
+    """functools.wraps does not copy cache_clear or cache_info off an lru_cache
+    wrapper, so the decorator re-exposes them by hand. Without that, a decorated
+    function has no reachable cache: it cannot be reset between measurements, and
+    the global sw.util.cache_info() report cannot see it."""
+    calls = []
+
+    @lru_cache_on_converted(ss.specs.SensorCapture)
+    def body(capture):
+        calls.append(capture)
+        return len(calls)
+
+    capture = ss.specs.SoapyCapture(gain=10.0, **SOAPY_KWS)
+
+    assert body(capture) == 1
+    assert body(capture) == 1
+    assert body.cache_info().currsize == 1
+
+    clear(body)
+
+    assert body.cache_info().currsize == 0
+    assert body(capture) == 2
+    assert len(calls) == 2
+
+
+# %% SpecValidationError and validation_path
+
+
+@pytest.mark.parametrize(
+    ('path', 'locations', 'expected'),
+    [
+        ((), (), 'bad value'),
+        (('.analysis', '.spectrogram'), (), '$.analysis.spectrogram: bad value'),
+        ((), ('a', 'b'), 'bad value - at $a on $b'),
+        (
+            ('.analysis', '.spectrogram'),
+            (".loops: {'azimuth': 43}", '.captures[0]'),
+            (
+                '$.analysis.spectrogram: bad value'
+                " - at $.loops: {'azimuth': 43} on $.captures[0]"
+            ),
+        ),
+    ],
+    ids=['bare', 'path_only', 'locations_only', 'path_then_locations'],
+)
+def test_spec_validation_error_renders_the_path_then_the_locations(
+    path, locations, expected
+):
+    assert str(SpecValidationError('bad value', path, locations)) == expected
+
+
+@pytest.mark.parametrize(
+    ('path', 'expected'),
+    [
+        (('.spectrogram',), '$.spectrogram: bad value - at $a on $b'),
+        ((), 'bad value - at $a on $b'),
+    ],
+    ids=['with_path', 'without_path'],
+)
+def test_spec_validation_error_at_renders_locations_after_the_path(path, expected):
+    assert str(SpecValidationError('bad value', path).at('a', 'b')) == expected
+
+
+def test_spec_validation_error_prepend_composes_outermost_last():
+    exc = SpecValidationError('bad value', ('.spectrogram',))
+    outer = exc.prepend('.captures[4]', '.analysis')
+
+    assert outer.path == ('.captures[4]', '.analysis', '.spectrogram')
+    assert str(outer) == '$.captures[4].analysis.spectrogram: bad value'
+    assert exc.path == ('.spectrogram',)
+
+
+def test_spec_validation_error_at_composes_outermost_last():
+    exc = SpecValidationError('bad value').at(".loops: {'azimuth': 43}")
+    outer = exc.at('.captures[0]')
+
+    assert outer.locations == ('.captures[0]', ".loops: {'azimuth': 43}")
+
+
+def test_spec_validation_error_at_does_not_mutate_the_original():
+    exc = SpecValidationError('bad value', ('.spectrogram',), ('.captures[0]',))
+    exc.at(".loops: {'repeat': 0}")
+
+    assert exc.locations == ('.captures[0]',)
+    assert str(exc) == '$.spectrogram: bad value - at $.captures[0]'
+
+
+def test_spec_validation_error_prepend_carries_the_locations_through():
+    exc = SpecValidationError('bad value', ('.spectrogram',), ('.captures[0]',))
+    outer = exc.prepend('.analysis')
+
+    assert outer.locations == ('.captures[0]',)
+    assert str(outer) == '$.analysis.spectrogram: bad value - at $.captures[0]'
+
+
+def test_spec_validation_error_at_and_prepend_are_independent():
+    """the two axes commute, so a validator may interleave them as it unwinds"""
+    exc = SpecValidationError('bad value', ('.spectrogram',))
+    interleaved = exc.prepend('.analysis').at(".loops: {'repeat': 0}")
+    interleaved = interleaved.prepend('.nfft').at('.captures[0]')
+    grouped = exc.prepend('.analysis').prepend('.nfft')
+    grouped = grouped.at(".loops: {'repeat': 0}").at('.captures[0]')
+
+    assert (interleaved.path, interleaved.locations) == (
+        grouped.path,
+        grouped.locations,
+    )
+
+
+def test_spec_validation_error_is_a_msgspec_validation_error():
+    assert issubclass(SpecValidationError, msgspec.ValidationError)
+
+
+def test_validation_path_prepends_to_a_spec_validation_error():
+    match = r'\$\.captures\[2\]\.nfft'
+    with (
+        pytest.raises(SpecValidationError, match=match),
+        validation_path('.captures[2]'),
+    ):
+        raise SpecValidationError('too large', ('.nfft',))
+
+
+def test_validation_path_wraps_a_plain_value_error():
+    match = r'\$\.spectrogram: too large'
+    with (
+        pytest.raises(SpecValidationError, match=match),
+        validation_path('.spectrogram'),
+    ):
+        raise ValueError('too large')
+
+
+@pytest.mark.parametrize('exc_type', [ValueError, TypeError, msgspec.ValidationError])
+def test_validation_path_wraps_the_validation_exception_types(exc_type):
+    with pytest.raises(SpecValidationError, match=r'\$\.x'), validation_path('.x'):
+        raise exc_type('nope')
+
+
+def test_validation_path_passes_through_other_exceptions():
+    with pytest.raises(KeyError), validation_path('.x'):
+        raise KeyError('nope')
+
+
+def test_validation_path_is_transparent_when_nothing_raises():
+    with validation_path('.x'):
+        pass
+
+
+class _RaisingSpec(sa.specs.SpecBase, frozen=True, kw_only=True):
+    nfft: int = 8
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.nfft != 8:
+            raise SpecValidationError('nfft must be 8', ('.nfft',))
+
+
+class _RaisingLocatedSpec(sa.specs.SpecBase, frozen=True, kw_only=True):
+    nfft: int = 8
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.nfft != 8:
+            raise SpecValidationError('nfft must be 8', ('.nfft',), ('.captures[3]',))
+
+
+@pytest.mark.parametrize(
+    ('decode', 'expected_locations', 'expected_str'),
+    [
+        (
+            lambda: _RaisingSpec.from_dict({'nfft': 9}),
+            (),
+            '$.nfft: nfft must be 8',
+        ),
+        (
+            lambda: msgspec.json.decode(b'{"nfft": 9}', type=_RaisingSpec),
+            (),
+            '$.nfft: nfft must be 8',
+        ),
+        (
+            lambda: _RaisingLocatedSpec.from_dict({'nfft': 9}),
+            ('.captures[3]',),
+            '$.nfft: nfft must be 8 - at $.captures[3]',
+        ),
+        (
+            lambda: msgspec.json.decode(b'{"nfft": 9}', type=_RaisingLocatedSpec),
+            ('.captures[3]',),
+            '$.nfft: nfft must be 8 - at $.captures[3]',
+        ),
+    ],
+    ids=['convert', 'json_decode', 'convert_located', 'json_decode_located'],
+)
+def test_spec_validation_error_survives_msgspec_decoding(
+    decode, expected_locations, expected_str
+):
+    """msgspec re-raises a plain ValueError from __post_init__ as its own
+    ValidationError, but a ValidationError subclass propagates unchanged, so the
+    path we assembled stays authoritative"""
+    with pytest.raises(SpecValidationError) as excinfo:
+        decode()
+
+    assert excinfo.value.path == ('.nfft',)
+    assert excinfo.value.locations == expected_locations
+    assert str(excinfo.value) == expected_str
