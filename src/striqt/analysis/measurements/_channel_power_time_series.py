@@ -66,14 +66,14 @@ def validated_channel_power_binning(
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def time_elapsed(capture: specs.Capture, spec: specs.ChannelPowerTimeSeries):
     binning = validated_channel_power_binning(capture, spec)
     return pd.RangeIndex(binning.bin_count) * float(spec.detector_period)
 
 
 @registry.coordinates(dtype=object, attrs={'standard_name': 'Power detector'})
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def power_detector(
     capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
 ) -> 'np.ndarray':

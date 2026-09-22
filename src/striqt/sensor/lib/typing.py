@@ -131,14 +131,6 @@ if typing.TYPE_CHECKING:
         window: str
         min_fft_size: int
 
-    class _CallableWithCaptureArg(Protocol):
-        def __call__(
-            self, capture: specs.SensorCapture, *args, **kws
-        ) -> typing.Any: ...
-
-    _TAC = TypeVar('_TAC', bound=_CallableWithCaptureArg)
-    CaptureConverterWrapper = Callable[[_TAC], _TAC]
-
     # %% compute.py
     WarmupSweep: TypeAlias = specs.Sweep[specs.NoSource, specs.NoPeripherals, SC]
 

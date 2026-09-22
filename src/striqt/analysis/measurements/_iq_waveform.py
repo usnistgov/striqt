@@ -42,7 +42,7 @@ def _get_start_stop_index(
 
 
 @registry.coordinates(dtype='uint64', attrs={'standard_name': 'Sample Index'})
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[int]:
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)
     return pd.RangeIndex(start, stop, name=iq_index.__name__)

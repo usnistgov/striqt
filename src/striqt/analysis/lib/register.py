@@ -484,12 +484,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             specs.helpers.SpecValidationError: on the first invalid combination,
                 with a field path rooted at `$.analysis`
         """
-        _validate_analysis_group(
-            specs.helpers.to_analysis_capture(capture), analysis, self
-        )
+        _validate_analysis_group(capture, analysis, self)
 
 
-@util.lru_cache(1024)
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture, maxsize=1024)
 def _validate_analysis_group(
     capture: specs.AnalysisCapture,
     analysis: specs.AnalysisGroup,

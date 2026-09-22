@@ -17,7 +17,7 @@ else:
 
 
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Time statistic'})
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def time_statistic(
     capture: specs.Capture, spec: specs.PowerSpectralDensity
 ) -> np.ndarray:
@@ -28,12 +28,9 @@ def time_statistic(
 @registry.coordinates(
     dtype='float64', attrs={'standard_name': 'Baseband frequency', 'units': 'Hz'}
 )
-@util.lru_cache()
-def baseband_frequency(
-    capture: specs.Capture, spec: specs.PowerSpectralDensity
-) -> np.ndarray:
-    spg_spec = specs.Spectrogram.from_spec(spec)
-    return shared.spectrogram_baseband_frequency(capture, spg_spec)
+@specs.helpers.lru_cache_on_converted(specs.Capture, specs.Spectrogram)
+def baseband_frequency(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
+    return shared.spectrogram_baseband_frequency(capture, spec)
 
 
 @hint_keywords(specs.PowerSpectralDensity)

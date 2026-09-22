@@ -69,21 +69,6 @@ def first_site_capture(sweep, source_id, **capture_kws):
     return H.loop_captures(sweep, source_id=source_id)[0]
 
 
-# %% convert_capture_arg
-
-
-def test_convert_capture_arg_downcasts_first_argument(synthetic_sweep):
-    @H.convert_capture_arg(ss.specs.SensorCapture)
-    def probe(capture, extra):
-        return capture, extra
-
-    capture, extra = probe(synthetic_sweep.captures[0], 'x')
-    assert type(capture) is ss.specs.SensorCapture
-    assert capture.port == synthetic_sweep.captures[0].port
-    assert extra == 'x'
-    assert probe.__name__ == 'probe'
-
-
 # %% split_capture_ports and pairwise_by_port
 
 

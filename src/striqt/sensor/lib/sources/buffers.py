@@ -114,8 +114,7 @@ def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.Module
     return cast(types.ModuleType, mod)
 
 
-@specs.helpers.convert_capture_arg(specs.SensorCapture)
-@sa.util.lru_cache()
+@sa.specs.helpers.lru_cache_on_converted(specs.SensorCapture)
 def get_read_count(
     capture: specs.SensorCapture,
     setup: specs.Source,

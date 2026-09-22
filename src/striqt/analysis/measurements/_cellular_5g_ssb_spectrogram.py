@@ -17,7 +17,7 @@ else:
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_symbol_index(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
 ):
@@ -28,7 +28,7 @@ def cellular_ssb_symbol_index(
 @registry.coordinates(
     dtype='float64', attrs={'standard_name': 'SSB Baseband Frequency', 'units': 'Hz'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_baseband_frequency(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, xp=np
 ) -> np.ndarray:
@@ -48,7 +48,7 @@ def cellular_ssb_baseband_frequency(
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_index(capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
     # pss_params and sss_params return the same number of symbol indexes
     # params  = iqwaveform.ofdm.pss_params(

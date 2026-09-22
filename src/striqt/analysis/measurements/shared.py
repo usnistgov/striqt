@@ -31,15 +31,15 @@ def hint_keywords(
 @registry.coordinates(
     dtype='uint16', attrs={'standard_name': r'Cell Sector ID ($N_{ID}^\text{(2)}$)'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_cell_id2(capture: specs.Capture, spec: Any):
     values = np.array([0, 1, 2], dtype='uint16')
     return values
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
-@util.lru_cache()
-def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
+def cellular_ssb_beam_index(capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBSync):
     # pss_params and sss_params return the same number of symbol indexes
     params = sw.ofdm.sss_params(
         sample_rate=spec.sample_rate,
@@ -48,7 +48,7 @@ def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
         shared_spectrum=spec.shared_spectrum,
         max_lag_symbols=spec.max_lag_symbols,
         symbol_indexes=spec.symbol_indexes,
-        center_frequency=getattr(capture, 'center_frequency', None),
+        center_frequency=capture.center_frequency,
     )
 
     return list(range(len(params.symbol_indexes)))
@@ -57,7 +57,7 @@ def cellular_ssb_beam_index(capture: specs.Capture, spec: _Cellular5GNRSSBSync):
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_start_time(
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator | specs.Cellular5GNRSSSCorrelator,
@@ -94,8 +94,11 @@ def empty_5g_ssb_correlation(
     return xp.full(new_shape, 0, dtype=dtype)
 
 
+@specs.helpers.lru_cache_on_converted(
+    specs.AnalysisCapture, specs.Cellular5GNRSSSCorrelator
+)
 def validated_5g_ssb_sync_params(
-    capture: specs.Capture, spec: _Cellular5GNRSSBCorrelator
+    capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator
 ) -> sw.ofdm.SyncParams:
     """check the 3GPP sync layout implied by a (capture, SSB correlator spec) pair,
     returning the sync parameters it resolves to.
@@ -105,16 +108,6 @@ def validated_5g_ssb_sync_params(
     also warms the `get_3gpp_phy` design, which the correlators would otherwise pay for
     after the acquisition.
     """
-    return _5g_ssb_sync_params(
-        specs.helpers.to_analysis_capture(capture),
-        specs.Cellular5GNRSSSCorrelator.from_spec(spec),
-    )
-
-
-@util.lru_cache()
-def _5g_ssb_sync_params(
-    capture: specs.AnalysisCapture, spec: specs.Cellular5GNRSSSCorrelator
-) -> sw.ofdm.SyncParams:
     return sw.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
@@ -182,24 +175,18 @@ class SpectrogramSizing(NamedTuple):
     enbw: float
 
 
+@specs.helpers.lru_cache_on_converted(specs.Capture, specs.Spectrogram)
 def validated_spectrogram_sizing(
-    capture: specs.Capture, spec: specs.FrequencyAnalysisSpecBase
+    capture: specs.Capture, spec: specs.Spectrogram
 ) -> SpectrogramSizing:
     """check that `spec` divides `capture` evenly, returning the derived STFT sizing.
 
-    Both arguments are projected onto the fields that determine the sizing, so the
-    result is shared across captures and spectrogram-derived measurements that
-    differ only in fields it does not read.
+    Callers may pass any `FrequencyAnalysisSpecBase`, since both arguments are projected
+    onto the fields that determine the sizing, so the result is shared across captures
+    and spectrogram-derived measurements that differ only in fields it does not read.
+    The capture projection is the base `Capture`, not `AnalysisCapture`: nothing here
+    reads `center_frequency`, so one entry covers a whole frequency sweep.
     """
-    return _spectrogram_sizing(
-        specs.helpers.to_analysis_capture(capture), specs.Spectrogram.from_spec(spec)
-    )
-
-
-@util.lru_cache()
-def _spectrogram_sizing(
-    capture: specs.AnalysisCapture, spec: specs.Spectrogram
-) -> SpectrogramSizing:
     if not sw.isroundmod(capture.sample_rate, spec.frequency_resolution):
         raise ValueError(
             'sample_rate/resolution must be a counting number '
@@ -357,7 +344,7 @@ def _cached_spectrogram(
     return spg, attrs
 
 
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture, specs.Spectrogram)
 def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
     sizing = validated_spectrogram_sizing(capture, spec)
     nfft = sizing.nfft

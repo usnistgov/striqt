@@ -132,8 +132,7 @@ def correct_iq(
     )
 
 
-@specs.helpers.convert_capture_arg(specs.SensorCapture)
-@sa.util.lru_cache(30000)
+@sa.specs.helpers.lru_cache_on_converted(specs.SensorCapture, maxsize=30000)
 def get_correction_overlaps(
     capture: specs.SensorCapture,
     setup: specs.Source,
@@ -148,8 +147,7 @@ def get_correction_overlaps(
     return _get_resampler_overlaps(capture, setup, min_overlap=max_trigger_lag)
 
 
-@specs.helpers.convert_capture_arg(specs.SensorCapture)
-@sa.util.lru_cache(30000)
+@sa.specs.helpers.lru_cache_on_converted(specs.SensorCapture, maxsize=30000)
 def _get_resampler_overlaps(
     capture: specs.SensorCapture, setup: specs.Source, min_overlap: int = 0
 ) -> tuple[int, int]:
@@ -182,8 +180,7 @@ def needs_resample(
 
 
 # %% compute resampling parameters based on a given capture and MCR
-@specs.helpers.convert_capture_arg(specs.SensorCapture)
-@sa.util.lru_cache(30000)
+@sa.specs.helpers.lru_cache_on_converted(specs.SensorCapture, maxsize=30000)
 def design_resampler(
     capture: specs.SensorCapture,
     master_clock_rate: float,
@@ -431,8 +428,7 @@ def _get_oaresample_overlaps(capture: specs.SensorCapture, master_clock_rate: fl
     return (samples_in - min_samples_in) + noverlap + nfft // 2, noverlap
 
 
-@specs.helpers.convert_capture_arg(specs.SensorCapture)
-@sa.util.lru_cache(30000)
+@sa.specs.helpers.lru_cache_on_converted(specs.SensorCapture, maxsize=30000)
 def _get_resample_overlap(
     capture: specs.SensorCapture, setup: specs.Source, min_overlap: int = 0
 ) -> tuple[int, int]:

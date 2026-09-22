@@ -18,9 +18,9 @@ else:
     np = util.lazy_import('numpy')
 
 
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
 def _spec_to_params(
-    capture: specs.Capture,
+    capture: specs.AnalysisCapture,
     spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrelator,
 ):
     return sw.ofdm.sss_params(
@@ -30,13 +30,15 @@ def _spec_to_params(
         shared_spectrum=spec.shared_spectrum,
         max_lag_symbols=spec.max_lag_symbols,
         symbol_indexes=spec.symbol_indexes,
-        center_frequency=getattr(capture, 'center_frequency', None),
+        center_frequency=capture.center_frequency,
     )
 
 
 @registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
-@util.lru_cache()
-def cellular_ssb_lag(capture: specs.Capture, spec: specs.Cellular5GNRSSSCorrelator):
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
+def cellular_ssb_lag(
+    capture: specs.AnalysisCapture, spec: specs.Cellular5GNRSSSCorrelator
+):
     # TODO: this now needs to account for SSS vs SSS
     params = _spec_to_params(capture, spec)
     offs = round(spec.sample_rate * spec.delay)

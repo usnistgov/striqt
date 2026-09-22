@@ -141,7 +141,7 @@ def tdd_config_from_str(
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Cyclic sample lag', 'units': 's'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_sample_lag(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ) -> 'pd.Index':
@@ -157,7 +157,7 @@ SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def subcarrier_spacing(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ):
@@ -168,7 +168,7 @@ def subcarrier_spacing(
 
 
 @registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def link_direction(capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator):
     values = np.array(['downlink', 'uplink'], dtype='U8')
     return values, {}
@@ -202,7 +202,7 @@ def _get_phy_mapping(
     return phy
 
 
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def _get_max_corr_size(
     capture: specs.Capture,
     *,

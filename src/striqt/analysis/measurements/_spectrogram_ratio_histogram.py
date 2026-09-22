@@ -20,16 +20,18 @@ else:
     dtype='float32',
     attrs={'standard_name': 'Spectrogram cross-channel power ratio', 'units': 'dB'},
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def spectrogram_ratio_power_bin(
     capture: specs.Capture, spec: specs.SpectrogramHistogramRatio
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
-    abs_spec = specs.SpectrogramHistogram.from_spec(spec)
-    bins, attrs = _spectrogram_histogram.spectrogram_power_bin(capture, abs_spec)
-    attrs['units'] = attrs['units'].replace('dBm', 'dB')
-    return bins, attrs
+    bins, attrs = _spectrogram_histogram.spectrogram_power_bin(capture, spec)
+
+    # `attrs` is held in a cache that `spectrogram_histogram` shares whenever the two
+    # measurements agree on the spectrogram and power bin fields, so relabeling it in
+    # place would relabel that measurement's absolute powers as ratios
+    return bins, attrs | {'units': attrs['units'].replace('dBm', 'dB')}
 
 
 @hint_keywords(specs.SpectrogramHistogramRatio)

@@ -26,17 +26,20 @@ from msgspec import inspect as mi
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+import striqt.waveform as sw
 from striqt.analysis.specs.helpers import (
     Meta,
     SpecValidationError,
     convert_dict,
     convert_spec,
+    convert_spec_cached,
     freeze,
     frozendict,
     get_capture_type_attrs,
     infer_coord_info,
     inspect_freeze_depths,
     json_schema,
+    lru_cache_on_converted,
     to_analysis_capture,
     unfreeze,
     validation_path,
@@ -456,6 +459,24 @@ def test_infer_coord_info_rejects_unsupported_types():
         infer_coord_info(mi.type_info(list[int]))
 
 
+# %% convert_spec_cached
+
+SOAPY_KWS = {
+    'port': 0,
+    'center_frequency': 3.5e9,
+    'duration': 1e-3,
+    'sample_rate': 1e6,
+}
+
+
+def test_convert_spec_cached_hands_back_an_exact_match_unchanged():
+    """`lru_cache_on_converted` rests on this: projecting a spec that is already the
+    target type must return the same object, so converting it a second time cannot
+    add a second cache entry for what is one value."""
+    capture = sa.specs.AnalysisCapture(duration=1e-3, sample_rate=1e6)
+    assert convert_spec_cached(sa.specs.AnalysisCapture, capture) is capture
+
+
 # %% to_analysis_capture
 
 
@@ -515,6 +536,105 @@ def test_to_analysis_capture_is_idempotent():
     capture = sa.specs.Capture(duration=1e-3, sample_rate=1e6)
     once = to_analysis_capture(capture)
     assert to_analysis_capture(once) == once
+
+
+# %% lru_cache_on_converted
+
+
+def test_converted_arguments_that_project_alike_share_one_entry():
+    calls = []
+
+    @lru_cache_on_converted(ss.specs.SensorCapture)
+    def body(capture):
+        calls.append(capture)
+        return len(calls)
+
+    low = ss.specs.SoapyCapture(gain=0.0, **SOAPY_KWS)
+    high = ss.specs.SoapyCapture(gain=30.0, **SOAPY_KWS)
+    assert low != high
+
+    assert body(low) == 1
+    assert body(high) == 1
+    assert len(calls) == 1
+    assert body.cache_info().hits == 1
+
+
+def test_the_body_receives_each_projected_argument_as_the_target_type():
+    @lru_cache_on_converted(sa.specs.Capture, sa.specs.Spectrogram)
+    def body(capture, spec):
+        return type(capture), type(spec), spec.frequency_resolution
+
+    capture = ss.specs.SoapyCapture(gain=10.0, **SOAPY_KWS)
+    spec = sa.specs.SpectrogramHistogram(
+        frequency_resolution=10e3,
+        window='hamming',
+        power_low=-100.0,
+        power_high=0.0,
+        power_resolution=1.0,
+    )
+
+    assert body(capture, spec) == (sa.specs.Capture, sa.specs.Spectrogram, 10e3)
+
+
+@pytest.mark.parametrize(
+    'call',
+    [lambda f, capture, n: f(capture, n), lambda f, capture, n: f(capture, nfft=n)],
+    ids=['positional', 'keyword'],
+)
+def test_arguments_past_the_projected_prefix_still_key_the_cache(call):
+    calls = []
+
+    @lru_cache_on_converted(ss.specs.SensorCapture)
+    def body(capture, nfft):
+        calls.append(nfft)
+        return 2 * nfft
+
+    capture = ss.specs.SoapyCapture(gain=10.0, **SOAPY_KWS)
+
+    assert call(body, capture, 8) == 16
+    assert call(body, capture, 16) == 32
+    assert call(body, capture, 8) == 16
+    assert calls == [8, 16]
+    assert body.cache_info().hits == 1
+
+
+def test_a_projected_argument_passed_by_keyword_raises():
+    @lru_cache_on_converted(ss.specs.SensorCapture)
+    def body(capture):
+        return capture
+
+    with pytest.raises(TypeError, match='passed by position'):
+        body(capture=ss.specs.SoapyCapture(gain=10.0, **SOAPY_KWS))
+
+
+@pytest.mark.parametrize(
+    'clear',
+    [lambda f: sw.util.clear_caches(), lambda f: f.cache_clear()],
+    ids=['clear_caches', 'cache_clear'],
+)
+def test_the_cache_is_reachable_through_the_wrapper(clear):
+    """functools.wraps does not copy cache_clear or cache_info off an lru_cache
+    wrapper, so the decorator re-exposes them by hand. Without that, a decorated
+    function has no reachable cache: it cannot be reset between measurements, and
+    the global sw.util.cache_info() report cannot see it."""
+    calls = []
+
+    @lru_cache_on_converted(ss.specs.SensorCapture)
+    def body(capture):
+        calls.append(capture)
+        return len(calls)
+
+    capture = ss.specs.SoapyCapture(gain=10.0, **SOAPY_KWS)
+
+    assert body(capture) == 1
+    assert body(capture) == 1
+    assert body.cache_info().currsize == 1
+
+    clear(body)
+
+    assert body.cache_info().currsize == 0
+    assert body(capture) == 2
+    assert len(calls) == 2
 
 
 # %% SpecValidationError and validation_path

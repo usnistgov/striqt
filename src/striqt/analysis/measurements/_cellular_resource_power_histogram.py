@@ -30,7 +30,7 @@ class LinkPair:
     dtype='float32',
     attrs={'standard_name': 'Cellular resource grid bin power', 'units': 'dBm'},
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_resource_power_bin(
     capture: specs.Capture, spec: specs.CellularResourcePowerHistogram
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:

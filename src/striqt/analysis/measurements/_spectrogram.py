@@ -25,7 +25,7 @@ warnings.filterwarnings(
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
     sizing = shared.validated_spectrogram_sizing(capture, spec)
 

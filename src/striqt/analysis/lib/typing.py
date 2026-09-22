@@ -112,11 +112,13 @@ if TYPE_CHECKING:
     ]
 
     class CoordFunc(Protocol[TC, TM, R]):
-        def __call__(self, capture: TC, spec: TM) -> R: ...
+        # positional-only: factories cached with `specs.helpers.lru_cache_on_converted`
+        # convert these arguments before the cache lookup, which needs them by position
+        def __call__(self, capture: TC, spec: TM, /) -> R: ...
 
     class WrappedCoord(CoordFunc[TC, TM, R]):
         __name__: str
 
-        def __wrapped__(self, capture: TC, spec: TM) -> R: ...
+        def __wrapped__(self, capture: TC, spec: TM, /) -> R: ...
 
     CoordFuncWrapper = Callable[[CoordFunc[TC, TM, R]], WrappedCoord[TC, TM, R]]

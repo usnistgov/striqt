@@ -13,6 +13,7 @@ from sweep_strategies import SOURCE
 from synthetic_sources import (
     ANALYSIS,
     IQ_ONLY,
+    SPECTROGRAM,
     acquire_corrected,
     make_sweep,
     tone_captures,
@@ -92,6 +93,31 @@ def test_analyze_rejects_a_bare_capture(stages):
     iq = dataclasses.replace(fresh_raw(stages), capture=sa.specs.Capture())
     with pytest.raises(TypeError, match='SensorCapture'):
         compute.analyze(iq, options(correction=False, as_xarray=True))
+
+
+def test_a_source_only_capture_field_reuses_the_analysis_caches(stages):
+    """the analysis-side caches are keyed on a projection of the capture
+    (`sa.specs.helpers.lru_cache_on_converted`), so a sweep that loops over a field no
+    measurement reads - here the synthetic source's `snr` - pays for them once"""
+    shared = sa.measurements.shared
+    cached = (shared.validated_spectrogram_sizing, shared.spectrogram_freqs)
+    for func in cached:
+        func.cache_clear()
+
+    opts = options(
+        sweep_spec=make_sweep('single_tone', (CAPTURE,), analysis=SPECTROGRAM),
+        correction=True,
+        as_xarray=True,
+    )
+    for snr in (None, 10.0):
+        raw = fresh_raw(stages)
+        iq = dataclasses.replace(raw, capture=raw.capture.replace(snr=snr))
+        compute.analyze(iq, opts)
+
+    for func in cached:
+        info = func.cache_info()
+        assert info.misses == 1, f'{func.__name__} ran again for the second capture'
+        assert info.hits > 0
 
 
 # %% get_trigger_from_spec

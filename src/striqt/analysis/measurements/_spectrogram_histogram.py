@@ -19,7 +19,7 @@ else:
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Spectrogram bin power', 'units': 'dBm'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture, specs.SpectrogramHistogram)
 def spectrogram_power_bin(
     capture: specs.Capture, spec: specs.SpectrogramHistogram
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:

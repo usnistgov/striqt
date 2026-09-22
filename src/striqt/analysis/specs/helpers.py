@@ -36,6 +36,9 @@ _V = TypeVar('_V')
 
 if TYPE_CHECKING:
     import typing_extensions
+    from typing_extensions import Concatenate
+
+    from striqt.waveform.lib.typing import LRUWrapped
 
     from . import structs
 
@@ -224,12 +227,88 @@ def validation_path(*parts: str) -> Iterator[None]:
         raise SpecValidationError(str(ex), parts) from ex
 
 
-@util.lru_cache(1024)
+@util.lru_cache(4096)
+def convert_spec_cached(spec_cls: type[_T], spec: Any) -> _T:
+    """project `spec` onto the fields that `spec_cls` declares.
+
+    msgspec hands back `spec` itself when it is already exactly `spec_cls`, so an
+    argument that was projected already adds no second cache entry.
+    """
+    return convert_spec(spec, type=spec_cls)
+
+
 def to_analysis_capture(capture: structs.Capture) -> structs.AnalysisCapture:
     """project a capture down to the fields the analysis layer can read"""
     from . import structs
 
-    return structs.AnalysisCapture.from_spec(capture)
+    return convert_spec_cached(structs.AnalysisCapture, capture)
+
+
+@overload
+def lru_cache_on_converted(
+    spec_type: type[msgspec.Struct], /, *, maxsize: int | None = 128
+) -> Callable[
+    [Callable[Concatenate[Any, _P], _R]], LRUWrapped[Concatenate[Any, _P], _R]
+]:
+    pass
+
+
+@overload
+def lru_cache_on_converted(
+    capture_type: type[msgspec.Struct],
+    spec_type: type[msgspec.Struct],
+    /,
+    *,
+    maxsize: int | None = 128,
+) -> Callable[
+    [Callable[Concatenate[Any, Any, _P], _R]],
+    LRUWrapped[Concatenate[Any, Any, _P], _R],
+]:
+    pass
+
+
+def lru_cache_on_converted(
+    *spec_types: type[msgspec.Struct], maxsize: int | None = 128
+) -> Callable[[Callable[..., _R]], LRUWrapped[..., _R]]:
+    """cache the decorated function, keyed on projections of its leading arguments.
+
+    Each of the first `len(spec_types)` positional arguments is converted before the
+    cache lookup, so callers that differ only in fields the target types do not declare
+    share one entry. Doing this by hand takes a conversion wrapper stacked over
+    `lru_cache`; in the other order the cache silently keys on the unprojected argument
+    instead.
+
+    The decorated function annotates the projected arguments with the type its *body*
+    receives, while callers may pass anything `convert_spec` accepts, so the overloads
+    above type those positions as `Any`.
+    """
+
+    def wrapper(func: Callable[..., _R]) -> LRUWrapped[..., _R]:
+        cached = util.lru_cache(maxsize)(func)
+
+        @functools.wraps(func)
+        def wrapped(*args, **kwargs):
+            if len(args) < len(spec_types):
+                raise TypeError(
+                    f'{func.__name__} needs its first {len(spec_types)} argument(s) '  # ty: ignore
+                    'passed by position, since they are converted before the cache '
+                    'lookup'
+                )
+
+            converted = tuple(
+                convert_spec_cached(spec_cls, arg)
+                for spec_cls, arg in zip(spec_types, args)
+            )
+
+            return cached(*converted, *args[len(spec_types) :], **kwargs)
+
+        # functools.wraps does not carry these over from the lru_cache wrapper
+        wrapped.cache_clear = cached.cache_clear  # ty: ignore
+        wrapped.cache_info = cached.cache_info  # ty: ignore
+
+        return wrapped  # type: ignore
+
+    return wrapper
 
 
 @util.lru_cache()

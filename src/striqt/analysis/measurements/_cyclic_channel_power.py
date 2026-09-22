@@ -17,7 +17,7 @@ else:
 
 
 @registry.coordinates(dtype=object, attrs={'standard_name': 'Cyclic statistic'})
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_statistic(capture: specs.Capture, spec: specs.CyclicChannelPower):
     return list(spec.cyclic_statistics)
 
@@ -56,7 +56,7 @@ def validated_cyclic_lag_count(
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     lag_count = validated_cyclic_lag_count(capture, spec)
 

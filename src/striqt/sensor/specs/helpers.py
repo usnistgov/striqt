@@ -3,7 +3,6 @@
 from __future__ import annotations as __
 
 from collections import Counter, defaultdict, ChainMap
-import functools
 import itertools
 import math
 import numbers
@@ -37,25 +36,10 @@ from .structs import _AdjustSourceCapturesMap
 
 
 if TYPE_CHECKING:
-    from ..lib.typing import CaptureConverterWrapper, SC, TypeAlias, TypeVar
+    from ..lib.typing import SC, TypeAlias, TypeVar
 
     _T = TypeVar('_T')
     _LoopPointsDict: TypeAlias = dict[tuple[types.IsIn, str], list]
-
-
-def convert_capture_arg(
-    capture_cls: type[structs.SensorCapture],
-) -> CaptureConverterWrapper:
-    """convert the first arg of the decorated function to capture_cls, then call"""
-
-    def wrapper(func):
-        @functools.wraps(func)
-        def wrapped(capture: structs.Capture, *args, **kwargs):
-            return func(capture_cls.from_spec(capture), *args, **kwargs)
-
-        return wrapped
-
-    return wrapper
 
 
 @sa.util.lru_cache()
@@ -288,7 +272,9 @@ def validate_sweep_analysis(
 
     seen = set()
 
-    for capture, origin in loop_capture_origins(sweep, source_id).items():
+    fields = sa.specs.AnalysisCapture.__struct_fields__ + ('adjust_analysis',)
+
+    for capture, origin in loop_capture_origins(sweep, source_id, only_fields=fields).items():
         analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
         key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
 

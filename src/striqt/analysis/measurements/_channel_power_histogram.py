@@ -53,7 +53,7 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Channel power', 'units': 'dBm'}
 )
-@util.lru_cache()
+@specs.helpers.lru_cache_on_converted(specs.Capture)
 def channel_power_bin(
     capture: specs.Capture, spec: specs.ChannelPowerHistogram
 ) -> dict[str, np.ndarray]:
