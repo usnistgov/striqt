@@ -27,9 +27,9 @@ from numeric_checks import (
     cross_backend_peak_roundoff,
     cross_backend_rms,
     far_bin_floor_dBc,
+    level_atol_dB,
     level_tolerance_dB,
     log_conversion_tol,
-    peak_referenced_floor_dBc,
     single_backend_rms,
 )
 from site_strategies import RADIO_ID
@@ -324,7 +324,7 @@ def check_sawtooth(ds, capture, subtests):
         rms_dB = detector(ds, 'rms')[:, bins]
         assert np.all(np.diff(rms_dB, axis=1) > 0)
         model = np.broadcast_to(sawtooth_rms_model_dB(capture, bins), rms_dB.shape)
-        assert_close(rms_dB, model, atol=level_tolerance_dB(sigma))
+        assert_close(rms_dB, model, atol=level_atol_dB(model, sigma))
 
 
 def check_dirac_delta(ds, capture, subtests):
@@ -395,12 +395,9 @@ def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
         for name in ('power_spectral_density', 'channel_power_time_series'):
             with subtests.test(name, capture=i):
                 expected = ref[name].values
-                # a level that holds only roundoff is unbounded below in dB, so hold
-                # both backends to where the floor begins rather than to its shape
-                floor = expected.max() + peak_referenced_floor_dBc(sigma, expected.size)
                 assert_close(
-                    np.maximum(ds[name].values, floor),
-                    np.maximum(expected, floor),
+                    ds[name].values,
+                    expected,
                     rtol=level_tol['rtol'],
-                    atol=level_tol['atol'] + level_tolerance_dB(sigma),
+                    atol=level_tol['atol'] + level_atol_dB(expected, sigma),
                 )
