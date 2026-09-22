@@ -20,6 +20,7 @@ from .arrays import (
     isroundmod,
     pad_along_axis,
     sliding_window_view,
+    unit_roundoff,
 )
 
 from .windows import register_extra_windows
@@ -30,7 +31,15 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
 
-    from .typing import Array, _AT, ShiftType, WindowSpecType, WindowType, XpType
+    from .typing import (
+        Array,
+        _AT,
+        ArrayBackend,
+        ShiftType,
+        WindowSpecType,
+        WindowType,
+        XpType,
+    )
 
 else:
     np = util.lazy_import('numpy')
@@ -53,6 +62,85 @@ _COLA_WINDOW_SIZE_DIVISOR = {
     'blackman': 3,
     'blackmanharris': 5,
 }
+
+
+# %% roundoff model
+#
+# Per FFT pass the rms error relative to the output rms is c*eps*sqrt(log2 N), eps the
+# unit roundoff (Gentleman & Sande 1966; FFTW accuracy notes), and each elementwise
+# rounding adds (eps/sqrt(3))**2 of error variance. c was fitted with
+# chores/tests/measure_fft_accuracy.py per backend: pocketfft gives 0.55-0.65 (1.2 for
+# sizes with a prime factor >= 128); cuFFT on a Jetson TX2i reaches 1.9 at N=512 and
+# 2.1 for Bluestein sizes. A single c=2.2 used to cover both, which left the numpy
+# bounds almost twice as loose as measured. Errors of independent backends add in
+# quadrature (measured 0.83-1.0).
+FFT_ROUNDOFF_C = {'numpy': 1.2, 'cupy': 2.2}
+FFT_ROUNDOFF_SAFETY = 3
+# An FFT of a tone concentrates roundoff in a few bins instead of spreading it evenly:
+# measured up to 6.7 units of roundoff of the tone amplitude at the tone (cuFFT, N=512)
+# and 3.9 in a far bin (cuFFT, N=1024), against ~2 for pocketfft.
+TONE_PEAK_ROUNDOFF = 8
+
+
+def fft_roundoff_rms(
+    dtype, nffts, n_elementwise: int = 0, *, array_backend: ArrayBackend = 'numpy'
+) -> float:
+    """expected rms roundoff error of one backend, relative to the output rms.
+
+    Arguments:
+        dtype: the working dtype (complex dtypes select by their real component)
+        nffts: the size of each FFT pass in the computation
+        n_elementwise: the number of elementwise roundings in the computation
+        array_backend: the backend whose FFT constant applies, named as in a source
+            spec so that a budget can be evaluated where that backend is not installed
+    """
+    c = FFT_ROUNDOFF_C[array_backend]
+    eps = unit_roundoff(dtype)
+    var = n_elementwise * (eps / np.sqrt(3)) ** 2
+    var += sum((c * eps * np.sqrt(np.log2(n))) ** 2 for n in nffts)
+    return float(np.sqrt(var))
+
+
+def fft_tolerance_rms(
+    dtype, nffts, n_elementwise: int = 0, *, array_backend: ArrayBackend = 'numpy'
+) -> float:
+    """rms tolerance on one backend's error against an exact reference, relative to
+    the output rms (see `fft_roundoff_rms` for the arguments)"""
+    return FFT_ROUNDOFF_SAFETY * fft_roundoff_rms(
+        dtype, nffts, n_elementwise, array_backend=array_backend
+    )
+
+
+def peak_factor(size: int) -> float:
+    """max/rms ratio of `size` complex gaussian errors, with 2x margin on the tail"""
+    return float(2 * np.sqrt(np.log(size)))
+
+
+def tone_peak_roundoff(dtype) -> float:
+    """bound on structured roundoff in any one bin, relative to a tone's amplitude"""
+    return FFT_ROUNDOFF_SAFETY * TONE_PEAK_ROUNDOFF * unit_roundoff(dtype)
+
+
+def rms_tolerance_dBc(sigma: float) -> float:
+    """express an rms amplitude tolerance relative to the output rms as error power
+    relative to the signal, in dBc"""
+    return float(20 * np.log10(sigma))
+
+
+def far_bin_floor_dBc(
+    sigma: float, nfft: int, size: int | None = None, dtype='complex64'
+) -> float:
+    """express the roundoff tolerance in bins away from a bin-centered tone, relative
+    to the tone, in dBc.
+
+    The tone occupies one bin while roundoff spreads evenly over all `nfft` bins. With
+    `size`, the result is the peak tolerance over that many far bins, which is the
+    larger of the white-noise tail and the structured `tone_peak_roundoff`.
+    """
+    if size is None:
+        return rms_tolerance_dBc(sigma / np.sqrt(nfft))
+    white = peak_factor(size) * sigma / np.sqrt(nfft)
+    return rms_tolerance_dBc(max(white, tone_peak_roundoff(dtype)))
 
 
 # %% Windowing
@@ -828,6 +916,8 @@ def _unstack_stft_windows(
 
 
 # %% Filters
+
+
 @convert_np_to_xp
 @util.lru_cache()
 @util.persistent_lru_cache()
@@ -1063,6 +1153,8 @@ def design_oafilter(
 
 
 # %% Resamplers
+
+
 class ResamplerDesign(typing.TypedDict):
     fs_sdr: float
     lo_offset: float

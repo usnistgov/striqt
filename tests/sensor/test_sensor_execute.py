@@ -15,7 +15,7 @@ import types
 import numpy as np
 import pytest
 from conftest import assert_source_released
-from numeric_checks import assert_close, cross_backend_rms
+from numeric_checks import assert_close, cross_backend
 from soapy_factories import soapy_capture
 from sweep_strategies import BOLTZMANN_MW, SOURCE, T_REF
 from synthetic_sources import (
@@ -29,6 +29,7 @@ from synthetic_sources import (
 
 import striqt.sensor as ss
 from striqt.sensor.lib import execute, util
+from striqt.waveform.lib import fourier
 
 OFFSETS = (1e6, 2e6, 3e6)
 
@@ -60,7 +61,12 @@ def test_results_follow_the_capture_order_cupy(array_backend, subtests):
     captures = tone_captures(OFFSETS)
     source = SOURCE.replace(array_backend=array_backend)
     datasets = run_in_memory(tone_sweep(OFFSETS, source=source))
-    sigma = cross_backend_rms(np.complex64, [], n_elementwise=4)
+    sigma = cross_backend(
+        fourier.fft_tolerance_rms(np.complex64, [], n_elementwise=4),
+        fourier.fft_tolerance_rms(
+            np.complex64, [], n_elementwise=4, array_backend=array_backend
+        ),
+    )
 
     assert index_values(datasets, 'capture_index') == list(range(len(captures)))
     for i, (capture, ds) in enumerate(zip(captures, datasets)):

@@ -153,6 +153,28 @@ class Analysis(SpecBase, kw_only=True, frozen=True):
     """
 
 
+class Tolerance(SpecBase, kw_only=True, frozen=True):
+    """the roundoff error budget of one measurement output.
+
+    A tolerance function derives this from a (capture, spec) pair alone, so `peak` is
+    the worst case at an element at full scale and `floor_dBc` is relative to the
+    output's own peak; neither can depend on the values actually produced.
+
+    Fields:
+        units: of `rms` and `peak`: 'dB', or the output's linear units
+        rtol: relative tolerance on the output value
+        rms: rms of the absolute error over the output, in `units`
+        peak: worst-case absolute error at one element, in `units`
+        floor_dBc: elements this far below the output's peak are not compared
+    """
+
+    units: str
+    rtol: float
+    rms: float
+    peak: float
+    floor_dBc: Union[float, None] = None
+
+
 class AnalysisGroup(SpecBase, kw_only=True, frozen=True):
     """base class for a defining set of Analysis specs"""
 

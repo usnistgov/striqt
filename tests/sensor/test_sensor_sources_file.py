@@ -13,14 +13,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from numeric_checks import (
-    FIR_LEAKAGE,
-    ROUNDOFF_SAFETY,
-    assert_close,
-    interior,
-    to_numpy,
-    unit_roundoff,
-)
+from numeric_checks import FIR_LEAKAGE, assert_close, interior, to_numpy
 from synthetic_sources import (
     FILTER_SIZE,
     SCALE_ONLY,
@@ -34,6 +27,7 @@ import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis import testing
 from striqt.sensor.lib.sources.file import _split_preroll
+from striqt.waveform.lib.arrays import ROUNDOFF_SAFETY, unit_roundoff
 
 FS = SCALE_ONLY['sample_rate']
 CENTER_FREQUENCY = 3.7e9

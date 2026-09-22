@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from numeric_checks import ROUNDOFF_SAFETY, assert_close, tone_frequency, unit_roundoff
+from numeric_checks import assert_close, tone_frequency
 from soapy_factories import MCR
 from sweep_strategies import SOURCE
 from synthetic_sources import BINDINGS, LO_SHIFT_CAPTURE, generator
@@ -13,6 +13,7 @@ from synthetic_sources import BINDINGS, LO_SHIFT_CAPTURE, generator
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import sources
+from striqt.waveform.lib.arrays import ROUNDOFF_SAFETY, unit_roundoff
 
 SAMPLE_RATE = 15.36e6
 COUNT = 4096

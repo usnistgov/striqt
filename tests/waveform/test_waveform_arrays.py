@@ -14,7 +14,7 @@ from conftest import _cupy, as_xp, float_arrays, shaped_arrays
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import array_shapes
-from numeric_checks import assert_close, mean_atol, reference_binned_mean, to_numpy
+from numeric_checks import assert_close, reference_binned_mean, to_numpy
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib import arrays
@@ -108,7 +108,7 @@ class TestBinnedMean:
         ref = reference_binned_mean(x, count, axis)
 
         assert result.shape == ref.shape
-        assert_close(result, ref, atol=mean_atol(x, count))
+        assert_close(result, ref, atol=arrays.mean_atol(x, count))
 
     @given(case=shaped_arrays(dtype=np.float64, min_side=2), data=st.data())
     def test_truncate_false_rejects_partial_bins(self, case, data):
@@ -140,7 +140,7 @@ class TestBinnedMean:
         assert (nblocks + 2) * count > n
         start = n // 2 - count // 2 - (nblocks // 2) * count
         ref = x[start : start + nblocks * count].reshape(nblocks, count).mean(axis=1)
-        assert_close(result, ref, atol=mean_atol(x, count))
+        assert_close(result, ref, atol=arrays.mean_atol(x, count))
 
     @pytest.mark.xfail(
         strict=True,
@@ -167,7 +167,7 @@ class TestBinnedMean:
         result = arrays.binned_mean(as_xp(xp, x), count, fft=False, reject_extrema=True)
 
         interior = np.sort(x.reshape(nbins, count), axis=1)[:, 1:-1]
-        assert_close(result, interior.mean(axis=1), atol=mean_atol(x, count))
+        assert_close(result, interior.mean(axis=1), atol=arrays.mean_atol(x, count))
 
     def test_nan_samples_are_ignored(self):
         x = np.arange(8, dtype=np.float64)

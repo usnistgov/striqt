@@ -33,6 +33,17 @@ def baseband_frequency(capture: specs.Capture, spec: specs.Spectrogram) -> np.nd
     return shared.spectrogram_baseband_frequency(capture, spec)
 
 
+def power_spectral_density_tolerance(
+    capture: specs.Capture, spec: specs.PowerSpectralDensity, **kwargs
+) -> specs.Tolerance:
+    spg_spec = specs.Spectrogram.from_spec(spec)
+    sizing = shared.validated_spectrogram_sizing(capture, spg_spec)
+    n_windows = shared.spectrogram_window_count(capture, sizing)
+    return shared.spectrogram_tolerance(
+        capture, spg_spec, dtype='float32', statistic_count=n_windows, **kwargs
+    )
+
+
 @hint_keywords(specs.PowerSpectralDensity)
 @registry.measurement(
     depends=_spectrogram.spectrogram,
@@ -42,6 +53,7 @@ def baseband_frequency(capture: specs.Capture, spec: specs.Spectrogram) -> np.nd
     dtype='float32',
     attrs={'standard_name': 'Power spectral density'},
     validate=shared.validated_spectrogram_sizing,
+    tolerance=power_spectral_density_tolerance,
 )
 def power_spectral_density(iq, capture, **kwargs):
     """estimate power spectral density using the Welch method.

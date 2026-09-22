@@ -1,4 +1,6 @@
 from .lib.arrays import (
+    ROUNDOFF_SAFETY,
+    accum_rtol,
     axis_to_blocks,
     axis_index,
     axis_slice,
@@ -10,5 +12,7 @@ from .lib.arrays import (
     histogram_last_axis,
     isroundmod,
     is_cupy_array,
+    mean_atol,
     pinned_array_as_cupy,
+    unit_roundoff,
 )

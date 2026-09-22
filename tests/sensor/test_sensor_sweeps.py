@@ -24,13 +24,7 @@ from numeric_checks import (
     COLA_RIPPLE_DB,
     FIR_LEAKAGE,
     assert_close,
-    cross_backend_peak_roundoff,
-    cross_backend_rms,
-    far_bin_floor_dBc,
-    level_atol_dB,
-    level_tolerance_dB,
-    log_conversion_tol,
-    single_backend_rms,
+    cross_backend,
 )
 from site_strategies import RADIO_ID
 from sweep_strategies import SOURCE
@@ -44,28 +38,21 @@ from synthetic_sources import (
     fs_sdr,
     make_capture,
     make_sweep,
-    resampler_nffts,
     run_in_memory,
 )
 
 import striqt.analysis as sa
 import striqt.sensor as ss
 import striqt.waveform as sw
-from striqt.cli import sensor_sweep
+from striqt.cli import check_sweep, sensor_sweep
+from striqt.sensor.lib.compute import capture_tolerances, correction_error
+from striqt.waveform.lib import fourier
+from striqt.waveform.lib.fourier import far_bin_floor_dBc, tone_peak_roundoff
 
 # the ports of a capture in row order
 ports_of = ss.specs.helpers.ensure_tuple
 
 # %% oracles
-
-
-def correction_sigma(capture, extra_nffts=()) -> float:
-    """rms roundoff bound of correct_iq relative to the signal: the resampler's
-    forward and inverse FFTs plus the FIR's overlap-add pair, sized at the next power
-    of two above the filter"""
-    fir_nfft = 2 ** math.ceil(math.log2(2 * FILTER_SIZE))
-    nffts = [*resampler_nffts(capture), fir_nfft, fir_nfft, *extra_nffts]
-    return single_backend_rms(np.complex64, nffts)
 
 
 def tone_bin_powers(window, nfft, nzero, tone_bin, bin_centers, half_width):
@@ -143,9 +130,11 @@ def check_tone_psd(psd, freqs, attrs, capture, frequency_offset, snr, err_msg=''
 
     others = np.arange(psd.size) != k0
     tail = exponential_mean_bound(window_count(attrs, capture), others.sum())
-    roundoff_dB = far_bin_floor_dBc(
-        correction_sigma(capture, [nfft]), nfft, size=others.sum()
+    sigma = math.hypot(
+        correction_error(capture, SOURCE, ANALYSIS),
+        fourier.fft_tolerance_rms(np.complex64, [nfft]),
     )
+    roundoff_dB = far_bin_floor_dBc(sigma, nfft, size=others.sum())
     with np.errstate(divide='ignore'):
         bound = 10 * np.log10(tone + noise_bin * tail) + COLA_LEVEL_DB
     bound = np.maximum(bound, roundoff_dB)
@@ -220,6 +209,38 @@ def test_cli_run(name, tmp_path, monkeypatch, subtests):
         check_site(ds)
 
 
+def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
+    path = SWEEP_DIR / 'synthetic.yaml'
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(path))
+
+    out = capsys.readouterr().out
+    assert 'Roundoff error budget' in out
+    # the block is the title, a rule, the column header and one row per product
+    block = out.split('Roundoff error budget')[1].split('\n\n')[0]
+    header, *rows = block.splitlines()[2:]
+    table = {row.split()[0]: row.split()[1:] for row in rows}
+
+    spec = ss.read_yaml_spec(path)
+    budgeted = {
+        name
+        for name in spec.analysis.to_dict()
+        if sa.registry[type(getattr(spec.analysis, name))].tolerance is not None
+    }
+    assert budgeted == {
+        'power_spectral_density',
+        'channel_power_time_series',
+        'spectrogram',
+        'iq_waveform',
+    }
+    assert set(table) == budgeted
+    peak = header.split().index('peak')
+    for name, fields in table.items():
+        assert math.isfinite(float(fields[peak])), f'{name} peak'
+
+
 # %% in-memory sweeps against the generators
 
 FS = RESAMPLE_FILTER['sample_rate']
@@ -261,17 +282,17 @@ def detector(ds, kind):
 
 
 def check_single_tone(ds, capture, subtests):
-    sigma = correction_sigma(capture)
     with subtests.test('iq_waveform reproduces the generator'):
         # the tone is continuous through the source pre-roll, so the whole capture
         # is steady state
         assert_close(
             ds.iq_waveform.values,
             expected_corrected('single_tone', capture),
-            sigma=sigma,
+            sigma=correction_error(capture, SOURCE, ANALYSIS),
         )
     with subtests.test('rms detector reads 0 dBm'):
-        assert_close(detector(ds, 'rms'), 0.0, atol=level_tolerance_dB(sigma))
+        tol = capture_tolerances(capture, SOURCE, ANALYSIS)['channel_power_time_series']
+        assert_close(detector(ds, 'rms'), 0.0, rtol=tol.rtol, atol=tol.peak)
     attrs = ds.power_spectral_density.attrs
     for row in range(ds.sizes['capture']):
         with subtests.test('tone in the PSD', row=row):
@@ -296,7 +317,7 @@ def check_noise(ds, capture, subtests):
         assert_close(
             10 * np.log10(linear.mean()),
             10 * np.log10(expected),
-            atol=level_tolerance_dB(5 * sigma, power=True) + COLA_LEVEL_DB,
+            atol=sw.level_tolerance_dB(5 * sigma, power=True) + COLA_LEVEL_DB,
         )
 
 
@@ -316,7 +337,7 @@ def check_sawtooth(ds, capture, subtests):
     """a single ramp over the capture. The source pre-roll ends at full scale, so the
     ramp start is a step whose FIR ringing spans FILTER_SIZE//2 samples at each end;
     a linear ramp passes a symmetric unit-gain filter unchanged elsewhere."""
-    sigma = correction_sigma(capture)
+    tol = capture_tolerances(capture, SOURCE, ANALYSIS)['channel_power_time_series']
     pad = FILTER_SIZE // 2
     with subtests.test('rms detector follows the ramp'):
         skip = math.ceil(pad / SAMPLES_PER_DETECTOR_BIN)
@@ -324,7 +345,9 @@ def check_sawtooth(ds, capture, subtests):
         rms_dB = detector(ds, 'rms')[:, bins]
         assert np.all(np.diff(rms_dB, axis=1) > 0)
         model = np.broadcast_to(sawtooth_rms_model_dB(capture, bins), rms_dB.shape)
-        assert_close(rms_dB, model, atol=level_atol_dB(model, sigma))
+        assert_close(
+            rms_dB, model, rtol=tol.rtol, atol=sa.util.elementwise_atol(tol, model)
+        )
 
 
 def check_dirac_delta(ds, capture, subtests):
@@ -345,7 +368,7 @@ def check_dirac_delta(ds, capture, subtests):
             assert_close(
                 peak[:, IMPULSE_BIN],
                 filter_peak_dB,
-                atol=level_tolerance_dB(FIR_LEAKAGE),
+                atol=sw.level_tolerance_dB(FIR_LEAKAGE),
             )
 
 
@@ -377,27 +400,36 @@ def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
     reference = run_in_memory(make_sweep(binding, captures))
     source = SOURCE.replace(array_backend=array_backend)
     datasets = run_in_memory(make_sweep(binding, captures, source=source))
-    # each backend rounds its own log10 and stores the result as float32 dB
-    level_tol = log_conversion_tol(np.float32, 10, complex_input=True, n_impl=2)
+    backends = ('numpy', 'cupy')
     for i, (capture, ds, ref) in enumerate(zip(captures, datasets, reference)):
-        sigma = cross_backend_rms(np.complex64, resampler_nffts(capture))
+        budget = {
+            b: capture_tolerances(capture, SOURCE, ANALYSIS, array_backend=b)
+            for b in backends
+        }
+        err = {
+            b: correction_error(capture, SOURCE, ANALYSIS, array_backend=b)
+            for b in backends
+        }
         with subtests.test('iq_waveform', capture=i):
             expected = ref.iq_waveform.values
+            peak_roundoff = tone_peak_roundoff(np.complex64)
             assert_close(
                 ds.iq_waveform.values,
                 expected,
-                sigma=sigma,
+                sigma=cross_backend(err['numpy'], err['cupy']),
                 # the resample concentrates its roundoff on the samples that carry the
                 # peak, which an rms-referenced sigma understates by the crest factor -
                 # near 100 for the impulse captures
-                atol=cross_backend_peak_roundoff(np.complex64) * np.abs(expected).max(),
+                atol=cross_backend(peak_roundoff, peak_roundoff)
+                * np.abs(expected).max(),
             )
         for name in ('power_spectral_density', 'channel_power_time_series'):
             with subtests.test(name, capture=i):
                 expected = ref[name].values
+                tol = cross_backend(budget['numpy'][name], budget['cupy'][name])
                 assert_close(
                     ds[name].values,
                     expected,
-                    rtol=level_tol['rtol'],
-                    atol=level_tol['atol'] + level_atol_dB(expected, sigma),
+                    rtol=tol.rtol,
+                    atol=sa.util.elementwise_atol(tol, expected),
                 )

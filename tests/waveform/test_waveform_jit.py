@@ -13,7 +13,7 @@ import pytest
 from conftest import gaussian_iq, iq_waveforms
 from hypothesis import given
 from hypothesis import strategies as st
-from numeric_checks import assert_close, corr_atol
+from numeric_checks import assert_close
 
 from striqt.waveform import ofdm
 
@@ -83,7 +83,9 @@ def corr_cases(
 
 def assert_matches_reference(out, inds, x, nfft, ncp, norm):
     expected = corr_reference(inds, x, nfft, ncp, norm)
-    assert_close(out, expected, atol=corr_atol(x, inds.size, norm))
+    scale = float(np.abs(x).max() ** 2)
+    atol = ofdm.corr_atol(x.dtype, inds.size, norm, scale=scale)
+    assert_close(out, expected, atol=atol)
 
 
 class TestCorrAtIndicesKernels:

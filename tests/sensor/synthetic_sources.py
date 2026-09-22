@@ -164,12 +164,6 @@ def fs_sdr(capture, source=SOURCE) -> float:
     )
 
 
-def resampler_nffts(capture, source=SOURCE) -> tuple[int, int]:
-    """the (input, output) FFT sizes of the resampler design for `capture`"""
-    design = ss.lib.compute.design_resampler(capture, source.master_clock_rate)
-    return design['nfft'], design['nfft_out']
-
-
 def spectrogram_frames(capture, spec) -> tuple[int, float]:
     """(frame count, hop period) of the spectrogram of `capture` under `spec`"""
     nfft = round(capture.sample_rate / spec.frequency_resolution)

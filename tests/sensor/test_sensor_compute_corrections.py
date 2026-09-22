@@ -17,10 +17,8 @@ from numeric_checks import (
     assert_close,
     assert_tone_level,
     rms,
-    single_backend_rms,
     to_numpy,
     tone_frequency,
-    tone_peak_roundoff,
 )
 from soapy_factories import MCR, soapy_capture, source_spec
 from sweep_strategies import SOURCE as FUNCTION_SOURCE
@@ -44,8 +42,9 @@ from synthetic_sources import (
 
 import striqt.sensor as ss
 import striqt.waveform as sw
-from striqt.sensor.lib.compute import corrections
+from striqt.sensor.lib.compute import correction_error, corrections
 from striqt.sensor.lib.sources import buffers
+from striqt.waveform.lib.fourier import tone_peak_roundoff
 
 SOAPY_SOURCE = source_spec()
 
@@ -104,14 +103,19 @@ def _capture(**kws):
     })
 
 
-def _resample_tol(preset, raw) -> dict:
-    """assert_close keywords for one float32 FFT resample of the acquisition `raw`,
-    or exact equality for a preset that the firmware rate serves without resampling"""
+def _resample_tol(preset, raw, stage='pre_filter') -> dict:
+    """assert_close keywords for the correction of the acquisition `raw` up to `stage`
+    of the corrected AcquiredIQ, or exact equality for a preset that the firmware rate
+    serves without resampling"""
     if not preset.get('host_resample', True):
         return {}
-    n_in = raw.pre_align.shape[1]
-    n_out = round(n_in * raw.capture.sample_rate / raw.resampler['fs_sdr'])
-    return {'sigma': single_backend_rms(np.complex64, (n_in, n_out))}
+    # _build_iq wraps an array of any namespace in the numpy-backed SOURCE spec, so
+    # the backend follows the array
+    backend = 'cupy' if sw.is_cupy_array(raw.pre_align) else 'numpy'
+    sigma = correction_error(
+        raw.capture, raw.source_spec, array_backend=backend, stage=stage
+    )
+    return {'sigma': sigma}
 
 
 def _build_iq(binding, capture, overlaps, xp=np):
@@ -344,7 +348,7 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
     raw = _build_iq_for_trigger('dirac_delta', capture, trigger, xp)
     fs = capture.sample_rate
     size_out = round(capture.duration * fs)
-    tol = _resample_tol(preset, raw)
+    tol = _resample_tol(preset, raw, stage='pre_align')
     ratio = fs / raw.resampler['fs_sdr']
     if tol:
         # the resample concentrates its roundoff on the impulse's own sample, which

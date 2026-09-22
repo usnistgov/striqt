@@ -101,6 +101,14 @@ def validated_ssb_spectrogram_sizing(
     return shared.validated_spectrogram_sizing(capture, _spectrogram_spec(spec))
 
 
+def ssb_spectrogram_tolerance(
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, **kwargs
+) -> specs.Tolerance:
+    return shared.spectrogram_tolerance(
+        capture, _spectrogram_spec(spec), dtype='float16', limit_digits=3, **kwargs
+    )
+
+
 @hint_keywords(specs.Cellular5GNRSSBSpectrogram)
 @registry.measurement(
     specs.Cellular5GNRSSBSpectrogram,
@@ -110,6 +118,7 @@ def validated_ssb_spectrogram_sizing(
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'SSB Spectrogram'},
     validate=validated_ssb_spectrogram_sizing,
+    tolerance=ssb_spectrogram_tolerance,
 )
 def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.

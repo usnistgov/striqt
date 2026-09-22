@@ -22,30 +22,41 @@ from numeric_checks import (
     FIR_RECT_STOPBAND_DB,
     FLOAT_DTYPES,
     RTOL_FLOAT64,
-    accum_rtol,
     assert_close,
     assert_tone_level,
     bin_centered_tone,
-    cross_backend_rms,
+    cross_backend,
     dtype_id,
     elementwise_rtol,
-    far_bin_floor_dBc,
     interior,
     level_error_dB,
-    level_tolerance_dB,
     numpy_and_cupy,
-    peak_factor,
     rms,
-    single_backend_rms,
     to_numpy,
     tone_bin,
     tone_frequency,
-    tone_peak_roundoff,
     unit_tone,
 )
 from numpy.testing import assert_allclose, assert_array_equal
 
+from striqt.waveform import level_tolerance_dB
 from striqt.waveform.lib import fourier
+from striqt.waveform.lib.arrays import accum_rtol
+from striqt.waveform.lib.fourier import (
+    far_bin_floor_dBc,
+    peak_factor,
+    tone_peak_roundoff,
+)
+
+
+def cross_backend_sigma(dtype, nffts, n_elementwise=0):
+    """rms tolerance on the difference between the numpy and cupy results, each within
+    its own backend's FFT roundoff budget"""
+    return cross_backend(
+        fourier.fft_tolerance_rms(dtype, nffts, n_elementwise),
+        fourier.fft_tolerance_rms(dtype, nffts, n_elementwise, array_backend='cupy'),
+    )
+
 
 FAR_BIN_NFFTS = [64, 256, 1024, 4096]
 WINDOW_NAMES = ['hann', 'hamming', 'blackman', 'blackmanharris', 'bartlett', 'nuttall']
@@ -93,6 +104,57 @@ def max_cupy_fft_chunk():
     previous = fourier.get_max_cupy_fft_chunk()
     yield fourier.set_max_cupy_fft_chunk
     fourier.set_max_cupy_fft_chunk(previous)
+
+
+class TestRoundoffModels:
+    ARGS = (np.complex64, [256, 256], 2)
+
+    @pytest.mark.parametrize(
+        'smaller, larger',
+        [
+            ((np.complex64, [256]), (np.complex64, [4096])),
+            ((np.complex64, [256]), (np.complex64, [256, 256])),
+            ((np.complex64, [256], 1), (np.complex64, [256], 4)),
+            ((np.complex64, [256]), (np.complex64, [256], 1)),
+        ],
+    )
+    def test_fft_roundoff_rms_monotonic(self, smaller, larger):
+        assert fourier.fft_roundoff_rms(*smaller) < fourier.fft_roundoff_rms(*larger)
+
+    @pytest.mark.parametrize('dtype', [np.complex64, np.complex128], ids=dtype_id)
+    def test_fft_roundoff_rms_scales_with_unit_roundoff(self, dtype):
+        eps = np.finfo(dtype).eps / 2
+        c = fourier.FFT_ROUNDOFF_C['numpy']
+        expected = eps * np.sqrt(2 * (c**2 * np.log2(256)) + 2 / 3)
+        assert fourier.fft_roundoff_rms(dtype, [256, 256], 2) == pytest.approx(expected)
+
+    def test_fft_roundoff_rms_defaults_to_numpy(self):
+        by_default = fourier.fft_roundoff_rms(*self.ARGS)
+        assert by_default == fourier.fft_roundoff_rms(*self.ARGS, array_backend='numpy')
+
+    def test_cupy_constant_is_looser_than_numpy(self):
+        assert fourier.FFT_ROUNDOFF_C['cupy'] > fourier.FFT_ROUNDOFF_C['numpy']
+
+    def test_cupy_bound_is_looser_than_numpy(self):
+        by_numpy = fourier.fft_roundoff_rms(*self.ARGS, array_backend='numpy')
+        by_cupy = fourier.fft_roundoff_rms(*self.ARGS, array_backend='cupy')
+        assert by_cupy > by_numpy
+
+    @pytest.mark.parametrize('array_backend', ['numpy', 'cupy'])
+    def test_fft_tolerance_rms_applies_safety(self, array_backend):
+        roundoff = fourier.fft_roundoff_rms(*self.ARGS, array_backend=array_backend)
+        tolerance = fourier.fft_tolerance_rms(*self.ARGS, array_backend=array_backend)
+        assert tolerance == fourier.FFT_ROUNDOFF_SAFETY * roundoff
+
+    def test_far_bin_floor_peak_covers_rms(self):
+        sigma = fourier.fft_tolerance_rms(np.complex64, [1024], 2)
+        assert far_bin_floor_dBc(sigma, 1024, size=1023) >= far_bin_floor_dBc(
+            sigma, 1024
+        )
+
+    def test_tone_peak_roundoff_ignores_complexness(self):
+        assert tone_peak_roundoff(np.complex64) == tone_peak_roundoff(np.float32)
+        assert tone_peak_roundoff(np.complex128) < tone_peak_roundoff(np.complex64)
 
 
 class TestGetWindow:
@@ -340,7 +402,7 @@ class TestResample:
         y_time = fourier.resample(x, num)
         y_freq = fourier.resample(X.copy(), num, domain='freq')
         y_freq_inplace = fourier.resample(X, num, domain='freq', overwrite_x=True)
-        sigma = cross_backend_rms(x.dtype, [x.size], n_elementwise=1)
+        sigma = cross_backend_sigma(x.dtype, [x.size], n_elementwise=1)
         assert_close(y_freq, y_time, sigma=sigma)
         assert_array_equal(y_freq_inplace, y_freq)
 
@@ -357,7 +419,7 @@ class TestResample:
         assert abs(tone_frequency(y, 1.0) - expected) <= 1 / nfft_out
         # a bin-centered unit tone comes back as a unit tone; fftshift multiply,
         # fft(N), ifft(N/2), ifftshift multiply
-        sigma = single_backend_rms(x.dtype, [nfft_in, nfft_out], n_elementwise=2)
+        sigma = fourier.fft_tolerance_rms(x.dtype, [nfft_in, nfft_out], n_elementwise=2)
         assert_close(np.abs(y), np.ones(y.size), sigma=sigma)
 
     @pytest.mark.parametrize(
@@ -444,7 +506,7 @@ class TestStft:
         _, _, X_array = fourier.stft(x, fs=1.0, window=w, nperseg=64)
 
         # the two paths differ only in the order of the window and 1/nfft multiplies
-        sigma = single_backend_rms(np.complex64, [64], n_elementwise=2)
+        sigma = fourier.fft_tolerance_rms(np.complex64, [64], n_elementwise=2)
         assert_close(X_array, X_named, sigma=sigma)
 
     def test_variants(self):
@@ -501,7 +563,7 @@ class TestIstft:
 
     def _roundtrip_sigma(self, dtype):
         # window multiply, fft, ifft, fftshift multiply and the overlap-add
-        return single_backend_rms(dtype, [self.NFFT, self.NFFT], n_elementwise=3)
+        return fourier.fft_tolerance_rms(dtype, [self.NFFT, self.NFFT], n_elementwise=3)
 
     @settings(max_examples=30)
     @given(
@@ -1049,7 +1111,7 @@ class TestToneFarBinFloor:
         nfft=st.sampled_from(FAR_BIN_NFFTS),
         bin_fraction=st.floats(min_value=0, max_value=1),
     )
-    def test_stft_far_bins(self, xp, nfft, bin_fraction):
+    def test_stft_far_bins(self, xp, array_backend, nfft, bin_fraction):
         k = tone_bin(nfft, bin_fraction)
         x = bin_centered_tone(nfft, k, self.NSEG)
         X_ref = self._stft(x.astype(np.complex128), nfft)
@@ -1069,7 +1131,9 @@ class TestToneFarBinFloor:
         far[peak_bin] = False
 
         # window/nfft and the window multiply, then fft(nfft)
-        sigma = single_backend_rms(np.complex64, [nfft], n_elementwise=2)
+        sigma = fourier.fft_tolerance_rms(
+            np.complex64, [nfft], n_elementwise=2, array_backend=array_backend
+        )
         rms_bound = sigma * rms(X_ref)
         self._assert_far_bins((X - X_ref)[:, far], rms_bound, tone_peak, nfft, sigma)
 
@@ -1077,13 +1141,18 @@ class TestToneFarBinFloor:
         nfft=st.sampled_from(FAR_BIN_NFFTS),
         bin_fraction=st.floats(min_value=0, max_value=1),
     )
-    def test_resample_far_bins(self, xp, nfft, bin_fraction):
+    def test_resample_far_bins(self, xp, array_backend, nfft, bin_fraction):
         # keep the tone inside the half band that survives downsampling by 2
         k = tone_bin(nfft, 0.3 + 0.4 * bin_fraction)
         x = bin_centered_tone(nfft, k, self.NSEG)
         num_out = x.size // 2
         # fftshift multiply, fft(N), ifft(N/2), ifftshift multiply
-        sigma = single_backend_rms(np.complex64, [x.size, num_out], n_elementwise=2)
+        sigma = fourier.fft_tolerance_rms(
+            np.complex64,
+            [x.size, num_out],
+            n_elementwise=2,
+            array_backend=array_backend,
+        )
         out_ref = fourier.resample(x.astype(np.complex128), num_out)
         out = fourier.resample(xp.asarray(x), num_out)
         self._check_error_spectrum(out, out_ref, sigma)
@@ -1092,14 +1161,16 @@ class TestToneFarBinFloor:
         nfft=st.sampled_from(FAR_BIN_NFFTS),
         bin_fraction=st.floats(min_value=0, max_value=1),
     )
-    def test_oaconvolve_far_bins(self, xp, nfft, bin_fraction):
+    def test_oaconvolve_far_bins(self, xp, array_backend, nfft, bin_fraction):
         x = bin_centered_tone(nfft, tone_bin(nfft, bin_fraction), self.NSEG)
         # a unit-gain lowpass; the tone may land in its stopband, so bounds are
         # anchored to the input tone rather than the output
         kernel = np.hanning(self.KERNEL_TAPS).astype(np.float32)
         kernel /= kernel.sum()
         # the overlap-add block is at most x.size long
-        sigma = single_backend_rms(np.complex64, [x.size, x.size], n_elementwise=1)
+        sigma = fourier.fft_tolerance_rms(
+            np.complex64, [x.size, x.size], n_elementwise=1, array_backend=array_backend
+        )
         out_ref = fourier.oaconvolve(
             x.astype(np.complex128), kernel.astype(np.float64), mode='same'
         )
@@ -1151,7 +1222,7 @@ class TestNumpyCupyCrossComparison:
         num_out = len(x) // 2
         y_np, y_cp = numpy_and_cupy(cupy_available, fourier.resample, x, num_out)
         # fftshift multiply, fft(N), ifft(N/2), ifftshift multiply
-        sigma = cross_backend_rms(x.dtype, [len(x), num_out], n_elementwise=2)
+        sigma = cross_backend_sigma(x.dtype, [len(x), num_out], n_elementwise=2)
         assert_close(y_cp, y_np, sigma=sigma)
 
     @pytest.mark.parametrize(
@@ -1183,7 +1254,7 @@ class TestNumpyCupyCrossComparison:
         # adds the |X|**2 rounding. For noise-like input the relative rms error of
         # power equals that of amplitude, but the error in one bin grows with
         # sqrt(Sxx), so rtol covers the large bins and atol the small ones.
-        sigma = cross_backend_rms(x.dtype, [64], n_elementwise=n_elementwise)
+        sigma = cross_backend_sigma(x.dtype, [64], n_elementwise=n_elementwise)
         assert_close(X_cp, X_np, rtol=4 * sigma if power else 0, sigma=sigma)
 
     @given(x=noise_waveforms(64, 256, dtype=[np.float32, np.float64]))
@@ -1194,7 +1265,7 @@ class TestNumpyCupyCrossComparison:
         )
         # overlap-add blocks are at most len(x) long; anchoring to the input rms
         # accounts for the kernel's gain
-        sigma = cross_backend_rms(x.dtype, [len(x), len(x)], n_elementwise=1)
+        sigma = cross_backend_sigma(x.dtype, [len(x), len(x)], n_elementwise=1)
         assert_close(y_cp, y_np, sigma=sigma, scale=rms(x))
 
     @given(x=iq_waveforms(min_size=8 * NFFT, max_size=16 * NFFT, multiple_of=NFFT))
@@ -1208,7 +1279,7 @@ class TestNumpyCupyCrossComparison:
             return fourier.istft(X, nfft=nfft, noverlap=nfft // 2)
 
         y_np, y_cp = numpy_and_cupy(cupy_available, roundtrip, x)
-        sigma = cross_backend_rms(x.dtype, [nfft, nfft], n_elementwise=3)
+        sigma = cross_backend_sigma(x.dtype, [nfft, nfft], n_elementwise=3)
         assert_close(y_cp, y_np, sigma=sigma)
 
     @given(x=iq_waveforms(min_size=8, max_size=64, multiple_of=2, channels=3))
@@ -1260,7 +1331,7 @@ class TestNumpyCupyCrossComparison:
         kws = {'fs': fs, 'nfft': nfft, 'window': 'hamming', 'passband': (-0.2e6, 0.2e6)}
         y_np, y_cp = numpy_and_cupy(cupy_available, fourier.oafilter, x[0], **kws)
         # window multiply, fft(nfft), zeroing, ifft(nfft), window multiply, overlap add
-        sigma = cross_backend_rms(x.dtype, [nfft, nfft], n_elementwise=3)
+        sigma = cross_backend_sigma(x.dtype, [nfft, nfft], n_elementwise=3)
         assert_close(y_cp, y_np, sigma=sigma, err_msg='oafilter')
 
         shift = 8 * fs / nfft
@@ -1268,7 +1339,7 @@ class TestNumpyCupyCrossComparison:
         resample = functools.partial(fourier.oaresample, frequency_shift=shift, **kws)
         y_np, y_cp = numpy_and_cupy(cupy_available, resample, x, nfft // 2, nfft, fs)
         # as oafilter, plus the FIR multiply and the output scaling
-        sigma = cross_backend_rms(x.dtype, [nfft, nfft // 2], n_elementwise=5)
+        sigma = cross_backend_sigma(x.dtype, [nfft, nfft // 2], n_elementwise=5)
         assert_close(y_cp, y_np, sigma=sigma, err_msg='oaresample')
 
     @given(x=iq_waveforms(min_size=256, max_size=1024, multiple_of=64, channels=4))
@@ -1285,6 +1356,7 @@ class TestNumpyCupyCrossComparison:
         x_cp_back = fourier.ifft(X_cp, axis=1, out=cupy_available.empty_like(x_cp))
 
         n = x.shape[1]
-        assert_close(X_cp, X_np, sigma=cross_backend_rms(x.dtype, [n]), err_msg='fft')
-        sigma = cross_backend_rms(x.dtype, [n, n])
+        sigma = cross_backend_sigma(x.dtype, [n])
+        assert_close(X_cp, X_np, sigma=sigma, err_msg='fft')
+        sigma = cross_backend_sigma(x.dtype, [n, n])
         assert_close(x_cp_back, x_np_back, sigma=sigma, err_msg='ifft')

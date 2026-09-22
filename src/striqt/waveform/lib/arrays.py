@@ -111,6 +111,32 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
     return dtype
 
 
+# %% roundoff model
+#
+# Every tolerance in striqt.waveform is derived from the unit roundoff of the working
+# dtype and a count of the roundings a routine performs, so that a violation means the
+# routine rounds worse than its model rather than worse than a hand-picked number.
+# ROUNDOFF_SAFETY is the margin applied to the elementwise budgets.
+ROUNDOFF_SAFETY = 2
+
+
+def unit_roundoff(dtype) -> float:
+    """u = eps / 2 of the real dtype underlying `dtype` (complex dtypes included)"""
+    return float(np.finfo(dtype).eps / 2)
+
+
+def accum_rtol(dtype, n: int, n_impl: int = 1) -> float:
+    """rtol on a sum or reduction over `n` terms of `dtype`, against exact arithmetic
+    (n_impl=1) or against a second implementation (n_impl=2)"""
+    return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
+
+
+def mean_atol(x: Array, count: int) -> float:
+    """absolute roundoff bound on the mean of `count` samples drawn from `x`"""
+    xp = array_namespace(x)
+    return count * float(np.finfo(x.dtype).eps) * float(xp.abs(x).max())
+
+
 # %% sliding or binned window operations
 def binned_mean(
     x: Array,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations as __
 
+import math
 import re
 import typing
 
@@ -14,11 +15,14 @@ from typing import Any, Optional, overload, Sequence
 from . import util
 
 from .arrays import (
+    ROUNDOFF_SAFETY,
+    accum_rtol,
     array_namespace,
     float_dtype_like,
     is_cupy_array,
     isroundmod,
     axis_to_blocks,
+    unit_roundoff,
 )
 
 if typing.TYPE_CHECKING:
@@ -104,6 +108,123 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
         raise ValueError(f'invalid statistic ufunc "{kind}"')
 
     return ufunc
+
+
+# %% roundoff model
+#
+# Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
+# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (log10f 2,
+# powf 8, hypotf 3 ulp) as well as libm (~1 ulp), so the tolerances below hold on both
+# backends and take no array namespace. Measured with
+# chores/tests/measure_db_accuracy.py: libm log10 1.1-1.9 ulp; CUDA libdevice on a
+# Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
+LOG10_ULP = 2
+POW_ULP = 8
+HYPOT_ULP = 3
+DB_PER_NEPER = 10 / math.log(10)
+
+
+def log_conversion_tol(
+    dtype, scale: float, complex_input: bool = False, n_impl: int = 1
+) -> dict[str, float]:
+    """tolerances for scale*log10(|x|), against exact math (n_impl=1) or a second
+    implementation (n_impl=2).
+
+    Roundoff on the input side of the log becomes an absolute dB error, which is what
+    bounds the result near 0 dB where ulps of the output are meaningless.
+    """
+    u = unit_roundoff(dtype)
+    rtol = 2 * u * (LOG10_ULP + 0.5)
+    input_ulp = (HYPOT_ULP if complex_input else 0) + 0.5
+    atol = (scale / math.log(10)) * 2 * u * input_ulp
+    return {
+        'rtol': ROUNDOFF_SAFETY * n_impl * rtol,
+        'atol': ROUNDOFF_SAFETY * n_impl * atol,
+    }
+
+
+def pow_conversion_rtol(dtype, max_abs_dB: float, n_impl: int = 1) -> float:
+    """rtol for 10**(x/10) with |x| <= max_abs_dB.
+
+    Rounding x/10 perturbs the exponent, so its effect scales with |x|.
+    """
+    u = unit_roundoff(dtype)
+    rtol = u * (math.log(10) * max_abs_dB / 10 + 2 * POW_ULP)
+    return ROUNDOFF_SAFETY * n_impl * rtol
+
+
+def envelope_power_rtol(dtype, complex_input: bool = False, n_impl: int = 1) -> float:
+    """rtol for |x|**2"""
+    u = unit_roundoff(dtype)
+    rtol = 2 * u * (0.5 + (2 * HYPOT_ULP if complex_input else 0))
+    return ROUNDOFF_SAFETY * n_impl * rtol
+
+
+def linear_stat_tol(
+    dtype, max_abs_dB: float, n: int, n_impl: int = 1
+) -> dict[str, float]:
+    """tolerances in dB for dBlinmean/dBlinsum over n terms with |x| <= max_abs_dB"""
+    u = unit_roundoff(dtype)
+    rel_linear = pow_conversion_rtol(dtype, max_abs_dB) + ROUNDOFF_SAFETY * n * u
+    tol = log_conversion_tol(dtype, 10)
+    return {
+        'rtol': n_impl * tol['rtol'],
+        'atol': n_impl * (tol['atol'] + DB_PER_NEPER * rel_linear),
+    }
+
+
+def roundtrip_power_rtol(dtype, max_abs_dB: float) -> float:
+    """rtol for dBtopow(powtodB(x)) with |powtodB(x)| <= max_abs_dB"""
+    tol = log_conversion_tol(dtype, 10)
+    dB_err = tol['rtol'] * max_abs_dB + tol['atol']
+    return math.log(10) / 10 * dB_err + pow_conversion_rtol(dtype, max_abs_dB)
+
+
+def roundtrip_dB_tol(dtype, max_abs_dB: float) -> dict[str, float]:
+    """tolerances for powtodB(dBtopow(x)) with |x| <= max_abs_dB"""
+    tol = log_conversion_tol(dtype, 10)
+    return {
+        'rtol': tol['rtol'],
+        'atol': tol['atol'] + DB_PER_NEPER * pow_conversion_rtol(dtype, max_abs_dB),
+    }
+
+
+def level_tolerance_dB(sigma, power: bool = False):
+    """express a relative tolerance on an output as the uncertainty of its level in dB.
+
+    `sigma` bounds an amplitude ratio (level 20*log10|x|) unless `power` is True
+    (level 10*log10 x, e.g. spectrogram bins).
+    """
+    return (10 if power else 20) * np.log10(1 + sigma)
+
+
+def linear_tolerance_dB(rtol):
+    """express a relative tolerance on a linear power as a tolerance in dB"""
+    return 10 * np.log10(1 + rtol)
+
+
+def dB_tolerance(rtol: float, atol: float, max_abs_dB: float) -> float:
+    """express (rtol, atol) on a dB-valued output as its worst-case tolerance in dB"""
+    return atol + rtol * max_abs_dB
+
+
+def dB_tolerance_below_peak(depth_dBc, err):
+    """two-sided dB tolerance on a level `depth_dBc` (>= 0) below the peak of its
+    output, given a relative amplitude error `err` at the peak.
+
+    Roundoff bounds an element's amplitude error relative to the output's *peak*, so
+    as a share of the element's own amplitude the bound grows with its depth below the
+    peak. A relative amplitude error r leaves the power anywhere in
+    [(1-r)**2, (1+r)**2] of its exact value, and the low side is what dominates in dB:
+    -20*log10(1-r), which diverges as r approaches 1. So an element deeper than
+    -20*log10(err) below the peak, where roundoff alone could account for all of its
+    amplitude, gets an infinite tolerance and goes unchecked - the floor falls out of
+    the bound rather than having to be imposed on top of it. This assumes nothing about
+    the error spreading over an FFT's bins, so it suits any dB-valued output.
+    """
+    r = err * 10 ** (np.asarray(depth_dBc, dtype='float64') / 20)
+    with np.errstate(divide='ignore'):
+        return -20 * np.log10(np.clip(1 - r, 0, None))
 
 
 def powtodB(
@@ -367,6 +488,12 @@ def dBlinsum(
     x_lin = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
     x_sum = x_lin.sum(axis)  # type: ignore
     return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
+
+
+def bin_power_rtol(dtype, size: int, n_impl: int = 1) -> float:
+    """rtol for a statistic of |x|**2 over `size` samples against exact arithmetic"""
+    envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
+    return envelope + accum_rtol(dtype, size, n_impl)
 
 
 def iq_to_bin_power(

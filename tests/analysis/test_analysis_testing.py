@@ -12,13 +12,13 @@ import pytest
 from numeric_checks import (
     assert_close,
     elementwise_rtol,
-    mean_atol,
     rms,
     to_numpy,
     tone_frequency,
 )
 
 from striqt.analysis import testing
+from striqt.waveform.lib.arrays import mean_atol
 
 FS = 1e6
 DURATION = 1e-4

@@ -1,9 +1,11 @@
-"""roundoff models, tolerance helpers and comparison assertions shared by the suite.
+"""comparison assertions, reference helpers and test-only tolerance policy shared by
+the suite.
 
-Every tolerance here is derived from the unit roundoff of the working dtype and a
-count of the roundings the tested code performs, so that a failure means the library
-rounds worse than its model rather than worse than a hand-picked number. The `*_tol`
-helpers return ``{'rtol': ..., 'atol': ...}`` for splatting into `assert_close`.
+The roundoff models themselves live in the library beside the functions they describe
+(`striqt.waveform.fourier`, `striqt.waveform.lib.power_analysis`,
+`striqt.waveform.lib.arrays`, `striqt.waveform.ofdm`) and the per-measurement budgets
+are registered with `striqt.analysis.registry`; tests take their pass criteria from
+there, so the model the suite enforces is the one the library reports.
 
 Not a conftest: importable by bare name from every test module.
 """
@@ -13,14 +15,12 @@ from __future__ import annotations
 import numpy as np
 from numpy.testing import assert_allclose
 
+from striqt.waveform import level_tolerance_dB
+from striqt.waveform.lib.fourier import peak_factor
+
 # %% dtype helpers
 
 FLOAT_DTYPES = (np.float32, np.float64)
-
-
-def unit_roundoff(dtype):
-    """u = eps / 2 of the real dtype underlying `dtype` (complex dtypes included)"""
-    return np.finfo(dtype).eps / 2
 
 
 def dtype_id(dtype):
@@ -93,7 +93,8 @@ def assert_close(
     peak_factor(size) * sigma * scale.
 
     `atol` may be an array, for an output whose tolerance varies element by element
-    (`level_atol_dB`); assert_allclose cannot take one, so the comparison is made here.
+    (`striqt.analysis.util.elementwise_atol`); assert_allclose cannot take one, so the
+    comparison is made here.
     """
     actual = to_numpy(actual)
     expected = to_numpy(expected)
@@ -123,21 +124,17 @@ def assert_within(actual, expected, tolerance, *, err_msg=''):
     )
 
 
-# %% FFT roundoff model (fourier, ofdm)
-#
-# Roundoff model for the cross-backend and far-bin tests. Per FFT pass the rms error
-# relative to the output rms is c*eps*sqrt(log2 N), eps the unit roundoff (Gentleman &
-# Sande 1966; FFTW accuracy notes), and each elementwise rounding adds (eps/sqrt(3))**2
-# of error variance. c was fitted with chores/tests/measure_fft_accuracy.py: pocketfft
-# gives 0.55-0.65 (1.2 for sizes with a prime factor >= 128); cuFFT on a Jetson TX2i
-# reaches 1.9 at N=512 and 2.1 for Bluestein sizes. Errors of independent backends add
-# in quadrature (measured 0.83-1.0).
-FFT_ROUNDOFF_C = 2.2
-FFT_ROUNDOFF_SAFETY = 3
-# An FFT of a tone concentrates roundoff in a few bins instead of spreading it evenly:
-# measured up to 6.7 units of roundoff of the tone amplitude at the tone (cuFFT, N=512)
-# and 3.9 in a far bin (cuFFT, N=1024), against ~2 for pocketfft.
-TONE_PEAK_ROUNDOFF = 8
+def level_error_dB(x, ref=1.0):
+    return 20 * np.log10(np.abs(x) / ref)
+
+
+def assert_tone_level(y, ref=1.0):
+    """check the rms level and per-sample envelope of a reconstructed unit tone"""
+    assert abs(level_error_dB(rms(y), ref)) < COLA_LEVEL_DB
+    assert np.abs(level_error_dB(y, ref)).max() < COLA_RIPPLE_DB
+
+
+# %% test-only tolerance policy
 
 # elementwise tolerances for the deterministic outputs (windows, frequency axes)
 RTOL_FLOAT32 = 1e-5
@@ -164,91 +161,31 @@ def elementwise_rtol(dtype):
     return by_dtype(dtype, float32=RTOL_FLOAT32, float64=RTOL_FLOAT64)
 
 
-def roundoff_rms(dtype, nffts, n_elementwise=0):
-    """expected rms roundoff error of one backend, relative to the output rms"""
-    eps = unit_roundoff(dtype)
-    var = n_elementwise * (eps / np.sqrt(3)) ** 2
-    var += sum((FFT_ROUNDOFF_C * eps * np.sqrt(np.log2(n))) ** 2 for n in nffts)
-    return float(np.sqrt(var))
+def cross_backend(numpy_budget, cupy_budget):
+    """the tolerance on the difference between a numpy and a cupy evaluation, each
+    within its own exact-math budget: independent roundoff adds in quadrature
+    (measured 0.83-1.0 of it, chores/tests/measure_fft_accuracy.py).
 
-
-def single_backend_rms(dtype, nffts, n_elementwise=0):
-    """rms tolerance on one backend's error against an exact reference, relative to
-    the output rms"""
-    return FFT_ROUNDOFF_SAFETY * roundoff_rms(dtype, nffts, n_elementwise)
-
-
-def cross_backend_rms(dtype, nffts, n_elementwise=0):
-    """rms tolerance on the difference between two backends, relative to output rms"""
-    return np.sqrt(2) * single_backend_rms(dtype, nffts, n_elementwise)
-
-
-def peak_factor(size):
-    """max/rms ratio of `size` complex gaussian errors, with 2x margin on the tail"""
-    return 2 * np.sqrt(np.log(size))
-
-
-def rms_tolerance_dBc(sigma):
-    """express an rms amplitude tolerance relative to the output rms as error power
-    relative to the signal, in dBc"""
-    return 20 * np.log10(sigma)
-
-
-def level_tolerance_dB(sigma, power=False):
-    """express a relative tolerance on an output as the uncertainty of its level in dB.
-
-    `sigma` bounds an amplitude ratio (level 20*log10|x|) unless `power` is True
-    (level 10*log10 x, e.g. spectrogram bins).
+    Takes two floats, or two `striqt.analysis.specs.Tolerance` of the same units, whose
+    `floor_dBc` combine as the amplitude errors they encode.
     """
-    return (10 if power else 20) * np.log10(1 + sigma)
+    if isinstance(numpy_budget, (int, float)):
+        return float(np.hypot(numpy_budget, cupy_budget))
+    assert numpy_budget.units == cupy_budget.units
+    floors = (numpy_budget.floor_dBc, cupy_budget.floor_dBc)
+    if None in floors:
+        floor = next((f for f in floors if f is not None), None)
+    else:
+        floor = 20 * np.log10(np.hypot(*(10 ** (f / 20) for f in floors)))
+    return numpy_budget.replace(
+        rtol=float(np.hypot(numpy_budget.rtol, cupy_budget.rtol)),
+        rms=float(np.hypot(numpy_budget.rms, cupy_budget.rms)),
+        peak=float(np.hypot(numpy_budget.peak, cupy_budget.peak)),
+        floor_dBc=None if floor is None else float(floor),
+    )
 
 
-def tone_peak_roundoff(dtype):
-    """bound on structured roundoff in any one bin, relative to a tone's amplitude"""
-    return FFT_ROUNDOFF_SAFETY * TONE_PEAK_ROUNDOFF * unit_roundoff(dtype)
-
-
-def cross_backend_peak_roundoff(dtype):
-    """tolerance on the difference between two backends' structured roundoff at a
-    peak, relative to the peak amplitude"""
-    return np.sqrt(2) * tone_peak_roundoff(dtype)
-
-
-def level_atol_dB(expected_dB, sigma, size=None, dtype=np.complex64):
-    """per-element dB tolerance for a level that two backends computed independently.
-
-    Roundoff bounds an element's amplitude error relative to the output's *peak*
-    (`sigma` is relative to its rms, which is smaller still), so as a share of the
-    element's own amplitude the bound grows with its depth below the peak. A relative
-    amplitude error r leaves the power anywhere in [(1-r)**2, (1+r)**2] of its exact
-    value, and the low side is what dominates in dB: -20*log10(1-r), which diverges as
-    r approaches 1. So an element deeper than `rms_tolerance_dBc(err)` below the peak,
-    where roundoff alone could account for all of its amplitude, goes unchecked - the
-    floor falls out of the bound rather than having to be imposed on top of it. Unlike
-    `far_bin_floor_dBc` this assumes nothing about the error spreading over an FFT's
-    bins, so it suits any dB-valued output.
-    """
-    expected_dB = np.asarray(to_numpy(expected_dB), dtype='float64')
-    if size is None:
-        size = expected_dB.size
-    err = peak_factor(size) * sigma + cross_backend_peak_roundoff(dtype)
-    r = err * 10 ** ((expected_dB.max() - expected_dB) / 20)
-    with np.errstate(divide='ignore'):
-        return -20 * np.log10(np.clip(1 - r, 0, None))
-
-
-def far_bin_floor_dBc(sigma, nfft, size=None, dtype=np.complex64):
-    """express the roundoff tolerance in bins away from a bin-centered tone, relative
-    to the tone, in dBc.
-
-    The tone occupies one bin while roundoff spreads evenly over all `nfft` bins. With
-    `size`, the result is the peak tolerance over that many far bins, which is the
-    larger of the white-noise tail and the structured `tone_peak_roundoff`.
-    """
-    if size is None:
-        return rms_tolerance_dBc(sigma / np.sqrt(nfft))
-    white = peak_factor(size) * sigma / np.sqrt(nfft)
-    return rms_tolerance_dBc(max(white, tone_peak_roundoff(dtype)))
+# %% reference signals and layouts
 
 
 def tone_bin(nfft, bin_fraction):
@@ -279,115 +216,6 @@ def interior(x, pad, axis=-1):
     return np.moveaxis(np.moveaxis(np.asarray(x), axis, 0)[pad:-pad], 0, axis)
 
 
-def level_error_dB(x, ref=1.0):
-    return 20 * np.log10(np.abs(x) / ref)
-
-
-def assert_tone_level(y, ref=1.0):
-    """check the rms level and per-sample envelope of a reconstructed unit tone"""
-    assert abs(level_error_dB(rms(y), ref)) < COLA_LEVEL_DB
-    assert np.abs(level_error_dB(y, ref)).max() < COLA_RIPPLE_DB
-
-
-# %% ulp budgets for the dB conversions (power_analysis, jit)
-#
-# Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
-# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (log10f 2,
-# powf 8, hypotf 3 ulp) as well as libm (~1 ulp). Measured with
-# chores/tests/measure_db_accuracy.py: libm log10 1.1-1.9 ulp; CUDA libdevice on a
-# Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
-LOG10_ULP = 2
-POW_ULP = 8
-HYPOT_ULP = 3
-ROUNDOFF_SAFETY = 2
-DB_PER_NEPER = 10 / np.log(10)
-
-
-def log_conversion_tol(dtype, scale, complex_input=False, n_impl=1):
-    """tolerances for scale*log10(|x|), against exact math (n_impl=1) or a second
-    implementation (n_impl=2).
-
-    Roundoff on the input side of the log becomes an absolute dB error, which is what
-    bounds the result near 0 dB where ulps of the output are meaningless.
-    """
-    u = unit_roundoff(dtype)
-    rtol = 2 * u * (LOG10_ULP + 0.5)
-    input_ulp = (HYPOT_ULP if complex_input else 0) + 0.5
-    atol = (scale / np.log(10)) * 2 * u * input_ulp
-    return {
-        'rtol': ROUNDOFF_SAFETY * n_impl * rtol,
-        'atol': ROUNDOFF_SAFETY * n_impl * atol,
-    }
-
-
-def pow_conversion_rtol(dtype, max_abs_dB, n_impl=1):
-    """rtol for 10**(x/10) with |x| <= max_abs_dB.
-
-    Rounding x/10 perturbs the exponent, so its effect scales with |x|.
-    """
-    u = unit_roundoff(dtype)
-    rtol = u * (np.log(10) * max_abs_dB / 10 + 2 * POW_ULP)
-    return ROUNDOFF_SAFETY * n_impl * rtol
-
-
-def envelope_power_rtol(dtype, complex_input=False, n_impl=1):
-    """rtol for |x|**2"""
-    u = unit_roundoff(dtype)
-    rtol = 2 * u * (0.5 + (2 * HYPOT_ULP if complex_input else 0))
-    return ROUNDOFF_SAFETY * n_impl * rtol
-
-
-def linear_stat_tol(dtype, max_abs_dB, n, n_impl=1):
-    """tolerances in dB for dBlinmean/dBlinsum over n terms with |x| <= max_abs_dB"""
-    u = unit_roundoff(dtype)
-    rel_linear = pow_conversion_rtol(dtype, max_abs_dB) + ROUNDOFF_SAFETY * n * u
-    tol = log_conversion_tol(dtype, 10)
-    return {
-        'rtol': n_impl * tol['rtol'],
-        'atol': n_impl * (tol['atol'] + DB_PER_NEPER * rel_linear),
-    }
-
-
-def roundtrip_power_rtol(dtype, max_abs_dB):
-    """rtol for dBtopow(powtodB(x)) with |powtodB(x)| <= max_abs_dB"""
-    tol = log_conversion_tol(dtype, 10)
-    dB_err = tol['rtol'] * max_abs_dB + tol['atol']
-    return np.log(10) / 10 * dB_err + pow_conversion_rtol(dtype, max_abs_dB)
-
-
-def roundtrip_dB_tol(dtype, max_abs_dB):
-    """tolerances for powtodB(dBtopow(x)) with |x| <= max_abs_dB"""
-    tol = log_conversion_tol(dtype, 10)
-    return {
-        'rtol': tol['rtol'],
-        'atol': tol['atol'] + DB_PER_NEPER * pow_conversion_rtol(dtype, max_abs_dB),
-    }
-
-
-def linear_tolerance_dB(rtol):
-    """express a relative tolerance on a linear power as a tolerance in dB"""
-    return 10 * np.log10(1 + rtol)
-
-
-def dB_tolerance(rtol, atol, max_abs_dB):
-    """express (rtol, atol) on a dB-valued output as its worst-case tolerance in dB"""
-    return atol + rtol * max_abs_dB
-
-
-# %% binned statistics (arrays, power_analysis)
-
-
-def accum_rtol(dtype, n, n_impl=1):
-    """rtol on a sum or reduction over `n` terms of `dtype`, against exact arithmetic
-    (n_impl=1) or against a second implementation (n_impl=2)"""
-    return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
-
-
-def mean_atol(x, count):
-    """absolute roundoff bound on the mean of `count` samples drawn from `x`"""
-    return count * np.finfo(x.dtype).eps * float(np.abs(x).max())
-
-
 def reference_binned_mean(x, count, axis):
     """mean over contiguous, left-aligned bins of `count` along `axis`"""
     moved = np.moveaxis(x, axis, -1)
@@ -402,25 +230,3 @@ def blocks(x, size, axis):
     n_blocks = x.shape[-1] // size
     x = x[..., : n_blocks * size].reshape(x.shape[:-1] + (n_blocks, size))
     return np.moveaxis(x, (-2, -1), (axis, axis + 1))
-
-
-# %% cyclic-prefix correlation (jit, ofdm)
-
-
-def corr_atol(x, n_inds, norm, n_impl=1):
-    """absolute tolerance on _corr_at_indices against exact arithmetic.
-
-    Each of the n_inds products a*conj(b) and the power terms are rounded at the input
-    precision before the complex128 accumulation, and the result is rounded once more
-    on output. With norm=True the Cauchy-Schwarz bound sum|a||b| <= sqrt(Pa*Pb) makes
-    the error relative to a unit-scale output; with norm=False it is relative to the
-    largest product magnitude.
-    """
-    from striqt.waveform.lib.arrays import float_dtype_like
-
-    u = unit_roundoff(float_dtype_like(x))
-    if norm:
-        scale = 1.0
-    else:
-        scale = float(np.abs(x).max() ** 2)
-    return ROUNDOFF_SAFETY * n_impl * (n_inds + 3) * u * scale
