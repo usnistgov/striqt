@@ -272,9 +272,7 @@ def validate_sweep_analysis(
 
     seen = set()
 
-    fields = sa.specs.AnalysisCapture.__struct_fields__ + ('adjust_analysis',)
-
-    for capture, origin in loop_capture_origins(sweep, source_id, only_fields=fields).items():
+    for capture, origin in loop_capture_origins(sweep, source_id).items():
         analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
         key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
 
