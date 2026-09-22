@@ -346,6 +346,11 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
     size_out = round(capture.duration * fs)
     tol = _resample_tol(preset, raw)
     ratio = fs / raw.resampler['fs_sdr']
+    if tol:
+        # the resample concentrates its roundoff on the impulse's own sample, which
+        # the rms model of _resample_tol instead spreads over the whole window
+        # (as in test_impulse_level_through_the_stages)
+        tol['atol'] = tone_peak_roundoff(np.complex64) * ratio
 
     corrected = ss.correct_iq(raw, signal_trigger=trigger)
 

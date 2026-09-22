@@ -37,6 +37,7 @@ matplotlib-base = ">=3.7"
 
 # hardware 
 soapysdr = ">=0.8.1"
+tokei = "*"
 
 [pypi-dependencies]
 striqt = {path = ".", editable = true, extras = ["dev"]}

@@ -191,6 +191,23 @@ def tone_peak_roundoff(dtype):
     return FFT_ROUNDOFF_SAFETY * TONE_PEAK_ROUNDOFF * unit_roundoff(dtype)
 
 
+def cross_backend_peak_roundoff(dtype):
+    """tolerance on the difference between two backends' structured roundoff at a
+    peak, relative to the peak amplitude"""
+    return np.sqrt(2) * tone_peak_roundoff(dtype)
+
+
+def peak_referenced_floor_dBc(sigma, size, dtype=np.complex64):
+    """the level, relative to an output's own peak, below which its dB value is
+    unbounded because it holds only roundoff.
+
+    `sigma` bounds an amplitude error relative to the output rms, which is at most its
+    peak, so unlike `far_bin_floor_dBc` this assumes nothing about the error spreading
+    over an FFT's bins and applies to any dB-valued output.
+    """
+    return rms_tolerance_dBc(peak_factor(size) * sigma + tone_peak_roundoff(dtype))
+
+
 def far_bin_floor_dBc(sigma, nfft, size=None, dtype=np.complex64):
     """express the roundoff tolerance in bins away from a bin-centered tone, relative
     to the tone, in dBc.

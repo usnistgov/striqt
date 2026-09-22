@@ -380,7 +380,9 @@ INT16_FULL_SCALE = np.iinfo(np.int16).max
 @pytest.fixture(scope='module')
 def tdms_file(tmp_path_factory):
     """a TDMS file in the header + interleaved int16 I/Q layout TDMSSource reads,
-    quantized from a tone: full scale int16 is the reference level in dBm"""
+    quantized from a tone: full scale int16 is the reference level in dBm; skipped
+    where nptdms is not installed"""
+    pytest.importorskip('nptdms')
     from nptdms import ChannelObject, GroupObject, TdmsWriter
 
     tone = testing.single_tone(
