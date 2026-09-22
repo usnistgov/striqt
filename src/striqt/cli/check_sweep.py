@@ -79,13 +79,24 @@ def run(yaml_path: str):
         afields_repr = pformat(afields, indent=2, sort_dicts=False)
         print(f' {afields_repr[1:-1]}')
 
-        print('\n\nRoundoff error budget (worst case over captures):')
+        print('\n\nNumerical tolerance (worst case over captures):')
         print(80 * '▀')
         budget = ss.lib.compute.worst_case_tolerances(
             ss.lib.compute.sweep_tolerances(spec, source_id=source_id)
         )
-        table = pd.DataFrame({name: tol.to_dict() for name, tol in budget.items()}).T
-        print(table.to_string())
+        rows = {}
+        for name, tol in budget.items():
+            off = tol.off_peak_dBc
+            rows[name] = {
+                ('rtol', ''): tol.rtol,
+                (f'On-peak tolerance ({tol.units})', 'rms'): tol.on_peak.rms,
+                (f'On-peak tolerance ({tol.units})', 'peak'): tol.on_peak.peak,
+                ('Off-peak (dBc)', 'rms'): None if off is None else off.rms,
+                ('Off-peak (dBc)', 'peak'): None if off is None else off.peak,
+            }
+        table = pd.DataFrame.from_dict(rows, orient='index')
+        table.columns = pd.MultiIndex.from_tuples(table.columns)
+        print(table.to_string(float_format='{:.4g}'.format))
 
         print('\n\nUnique capture field coordinates in output:')
         labels = ss.specs.helpers.list_capture_adjustments(spec, source_id)

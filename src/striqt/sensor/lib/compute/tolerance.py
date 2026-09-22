@@ -143,13 +143,20 @@ def sweep_tolerances(
     return result
 
 
+def _loosest(bounds) -> sa.specs.ErrorBound:
+    bounds = list(bounds)
+    return sa.specs.ErrorBound(
+        rms=max(b.rms for b in bounds), peak=max(b.peak for b in bounds)
+    )
+
+
 def worst_case_tolerances(
     entries: list[tuple[specs.SensorCapture, dict[str, sa.specs.Tolerance]]],
 ) -> dict[str, sa.specs.Tolerance]:
     """the loosest budget of each analysis product over the captures of a sweep.
 
-    `floor_dBc` takes the shallowest floor, since a floor closer to the peak leaves
-    more of the output unchecked; None (no floor) is the strictest and loses to any.
+    `off_peak_dBc` takes the value closest to the peak, since that leaves more of the
+    output unchecked; None (everything resolved) is the strictest and loses to any.
     """
     by_name: dict[str, list[sa.specs.Tolerance]] = {}
     for _, tolerances in entries:
@@ -158,12 +165,11 @@ def worst_case_tolerances(
 
     result = {}
     for name, tols in by_name.items():
-        floors = [t.floor_dBc for t in tols if t.floor_dBc is not None]
+        depths = [t.off_peak_dBc for t in tols if t.off_peak_dBc is not None]
         result[name] = sa.specs.Tolerance(
             units=tols[0].units,
             rtol=max(t.rtol for t in tols),
-            rms=max(t.rms for t in tols),
-            peak=max(t.peak for t in tols),
-            floor_dBc=max(floors) if floors else None,
+            on_peak=_loosest(t.on_peak for t in tols),
+            off_peak_dBc=_loosest(depths) if depths else None,
         )
     return result

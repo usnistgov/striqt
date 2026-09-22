@@ -41,7 +41,6 @@ from striqt.waveform.lib.power_analysis import (
     _arraylike_with_buffer,
     bin_power_rtol,
     dB_tolerance,
-    dB_tolerance_below_peak,
     dBlinmean,
     dBlinsum,
     dBtopow,
@@ -54,6 +53,7 @@ from striqt.waveform.lib.power_analysis import (
     linear_stat_tol,
     linear_tolerance_dB,
     log_conversion_tol,
+    off_peak_dB_tolerance,
     pow_conversion_rtol,
     powtodB,
     roundtrip_dB_tol,
@@ -542,21 +542,21 @@ class TestRoundoffModels:
     def test_pow_conversion_rtol_grows_with_level(self, dtype):
         assert pow_conversion_rtol(dtype, 100) > pow_conversion_rtol(dtype, 10)
 
-    def test_dB_tolerance_below_peak_at_peak(self):
+    def test_off_peak_dB_tolerance_at_peak(self):
         r = 1e-3
-        assert dB_tolerance_below_peak(0, r) == pytest.approx(-20 * np.log10(1 - r))
+        assert off_peak_dB_tolerance(0, r) == pytest.approx(-20 * np.log10(1 - r))
 
-    def test_dB_tolerance_below_peak_unbounded_past_floor(self):
+    def test_off_peak_dB_tolerance_unbounded_past_floor(self):
         err = 1e-3
-        floor_dBc = -20 * np.log10(err)
-        assert np.isposinf(dB_tolerance_below_peak(floor_dBc, err))
-        assert np.isposinf(dB_tolerance_below_peak(floor_dBc + 10, err))
-        assert np.isfinite(dB_tolerance_below_peak(floor_dBc - 1, err))
+        depth_dBc = -20 * np.log10(err)
+        assert np.isposinf(off_peak_dB_tolerance(depth_dBc, err))
+        assert np.isposinf(off_peak_dB_tolerance(depth_dBc + 10, err))
+        assert np.isfinite(off_peak_dB_tolerance(depth_dBc - 1, err))
 
     @pytest.mark.parametrize('r', [1e-5, 0.1, 0.9])
-    def test_dB_tolerance_below_peak_bounds_one_sided_expansion(self, r):
+    def test_off_peak_dB_tolerance_bounds_one_sided_expansion(self, r):
         """-20*log10(1-r) is at least the one-sided series DB_PER_NEPER*(2r + r**2)."""
-        assert dB_tolerance_below_peak(0, r) >= DB_PER_NEPER * (2 * r + r**2)
+        assert off_peak_dB_tolerance(0, r) >= DB_PER_NEPER * (2 * r + r**2)
 
     def test_bin_power_rtol_grows_with_bin_size(self):
         assert bin_power_rtol(np.float32, 16) > bin_power_rtol(np.float32, 1)

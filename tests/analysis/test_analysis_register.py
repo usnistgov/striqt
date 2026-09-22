@@ -234,7 +234,9 @@ def test_validator_errors_are_msgspec_validation_errors():
 
 # %% tolerance= on measurement registration
 
-TOY_TOLERANCE = sa.specs.Tolerance(units='dB', rtol=1e-6, rms=1e-3, peak=1e-2)
+TOY_TOLERANCE = sa.specs.Tolerance(
+    units='dB', rtol=1e-6, on_peak=sa.specs.ErrorBound(rms=1e-3, peak=1e-2)
+)
 
 
 class WideCapture(sa.specs.Capture, frozen=True, kw_only=True):

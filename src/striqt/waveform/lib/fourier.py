@@ -76,10 +76,11 @@ _COLA_WINDOW_SIZE_DIVISOR = {
 # quadrature (measured 0.83-1.0).
 FFT_ROUNDOFF_C = {'numpy': 1.2, 'cupy': 2.2}
 FFT_ROUNDOFF_SAFETY = 3
-# An FFT of a tone concentrates roundoff in a few bins instead of spreading it evenly:
+# Roundoff is not spread evenly: it lands on the matched-filter bin of the matched input
+# - the tone's bin for an FFT, the impulse's sample for a resampler. An FFT of a tone
 # measured up to 6.7 units of roundoff of the tone amplitude at the tone (cuFFT, N=512)
 # and 3.9 in a far bin (cuFFT, N=1024), against ~2 for pocketfft.
-TONE_PEAK_ROUNDOFF = 8
+ON_PEAK_ROUNDOFF = 8
 
 
 def fft_roundoff_rms(
@@ -116,9 +117,14 @@ def peak_factor(size: int) -> float:
     return float(2 * np.sqrt(np.log(size)))
 
 
-def tone_peak_roundoff(dtype) -> float:
-    """bound on structured roundoff in any one bin, relative to a tone's amplitude"""
-    return FFT_ROUNDOFF_SAFETY * TONE_PEAK_ROUNDOFF * unit_roundoff(dtype)
+def on_peak_roundoff(dtype) -> float:
+    """bound on structured roundoff in the matched-filter bin of the matched input,
+    relative to that peak's amplitude.
+
+    This is where roundoff concentrates: the bin of a tone in the frequency domain
+    (an FFT), or the sample of an impulse in the time domain (a resampler or detector).
+    """
+    return FFT_ROUNDOFF_SAFETY * ON_PEAK_ROUNDOFF * unit_roundoff(dtype)
 
 
 def rms_tolerance_dBc(sigma: float) -> float:
@@ -127,20 +133,20 @@ def rms_tolerance_dBc(sigma: float) -> float:
     return float(20 * np.log10(sigma))
 
 
-def far_bin_floor_dBc(
+def off_peak_floor_dBc(
     sigma: float, nfft: int, size: int | None = None, dtype='complex64'
 ) -> float:
-    """express the roundoff tolerance in bins away from a bin-centered tone, relative
-    to the tone, in dBc.
+    """express the roundoff floor in bins away from the matched-filter bin of the
+    matched input (a bin-centered tone), relative to the peak, in dBc.
 
-    The tone occupies one bin while roundoff spreads evenly over all `nfft` bins. With
-    `size`, the result is the peak tolerance over that many far bins, which is the
-    larger of the white-noise tail and the structured `tone_peak_roundoff`.
+    The input occupies one bin while roundoff spreads evenly over all `nfft` bins. With
+    `size`, the result is the peak tolerance over that many off-peak bins, which is the
+    larger of the white-noise tail and the structured `on_peak_roundoff`.
     """
     if size is None:
         return rms_tolerance_dBc(sigma / np.sqrt(nfft))
     white = peak_factor(size) * sigma / np.sqrt(nfft)
-    return rms_tolerance_dBc(max(white, tone_peak_roundoff(dtype)))
+    return rms_tolerance_dBc(max(white, on_peak_roundoff(dtype)))
 
 
 # %% Windowing

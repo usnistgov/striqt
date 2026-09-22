@@ -411,25 +411,31 @@ def level_tolerance(
     (`sw.log_conversion_tol`); `quantization` the storage rounding (`quantization_dB`).
 
     The peak amplitude error over `size` output elements adds the structured roundoff
-    that an FFT concentrates on a strong component. The resampler's error arrives the
-    same way, so the term applies whenever there is any amplitude error at all.
-    `floor_dBc` is the depth at which that peak error equals an element's own
-    amplitude, where `util.elementwise_atol` diverges.
+    that lands on the matched-filter bin of the matched input: a tone's FFT bin, or an
+    impulse's sample after the resampler. Both arrive the same way, so the term applies
+    whenever there is any amplitude error at all.
+    `off_peak_dBc` holds the depths at which the rms and the peak amplitude errors
+    equal an element's own amplitude; `util.elementwise_atol` diverges at the latter.
     """
     peak_amplitude = sw.fourier.peak_factor(size) * amplitude_rms
     if amplitude_rms > 0:
-        peak_amplitude += sw.fourier.tone_peak_roundoff(dtype)
+        peak_amplitude += sw.fourier.on_peak_roundoff(dtype)
     additive = sw.linear_tolerance_dB(power_rtol) + log_tol['atol'] + quantization
-    if peak_amplitude > 0:
-        floor_dBc = float(sw.fourier.rms_tolerance_dBc(peak_amplitude))
+    if amplitude_rms > 0:
+        off_peak_dBc = specs.ErrorBound(
+            rms=float(sw.fourier.rms_tolerance_dBc(amplitude_rms)),
+            peak=float(sw.fourier.rms_tolerance_dBc(peak_amplitude)),
+        )
     else:
-        floor_dBc = None
+        off_peak_dBc = None
     return specs.Tolerance(
         units='dB',
         rtol=log_tol['rtol'],
-        rms=float(sw.level_tolerance_dB(amplitude_rms) + additive),
-        peak=float(sw.level_tolerance_dB(peak_amplitude) + additive),
-        floor_dBc=floor_dBc,
+        on_peak=specs.ErrorBound(
+            rms=float(sw.level_tolerance_dB(amplitude_rms) + additive),
+            peak=float(sw.level_tolerance_dB(peak_amplitude) + additive),
+        ),
+        off_peak_dBc=off_peak_dBc,
     )
 
 

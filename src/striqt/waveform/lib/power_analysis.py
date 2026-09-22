@@ -208,9 +208,12 @@ def dB_tolerance(rtol: float, atol: float, max_abs_dB: float) -> float:
     return atol + rtol * max_abs_dB
 
 
-def dB_tolerance_below_peak(depth_dBc, err):
-    """two-sided dB tolerance on a level `depth_dBc` (>= 0) below the peak of its
+def off_peak_dB_tolerance(depth_dBc, err):
+    """two-sided dB tolerance on an element `depth_dBc` (>= 0) below the peak of its
     output, given a relative amplitude error `err` at the peak.
+
+    The peak here is the matched-filter bin of the matched input, so the same bound
+    serves a tone's FFT bin and an impulse's detector bin.
 
     Roundoff bounds an element's amplitude error relative to the output's *peak*, so
     as a share of the element's own amplitude the bound grows with its depth below the

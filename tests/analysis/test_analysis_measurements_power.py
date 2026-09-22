@@ -99,7 +99,7 @@ class TestChannelPowerTimeSeries:
         expected_bin = int(time // float(DETECTOR_PERIOD))
         assert np.argmax(peak) == expected_bin
         tol = tolerance(CPTS_SPEC.replace(power_detectors=('peak',)))
-        assert_close(peak[expected_bin], 6.0, rtol=tol.rtol, atol=tol.peak)
+        assert_close(peak[expected_bin], 6.0, rtol=tol.rtol, atol=tol.on_peak.peak)
 
         empty = np.delete(peak, expected_bin)
         assert np.isneginf(empty).all()
@@ -131,7 +131,9 @@ class TestChannelPowerTimeSeries:
         tol = tolerance(
             CPTS_SPEC.replace(detector_period=detector_period), duration=duration
         )
-        assert_close(ratio_dB.values, expected, rtol=tol.rtol, atol=2 * tol.peak)
+        assert_close(
+            ratio_dB.values, expected, rtol=tol.rtol, atol=2 * tol.on_peak.peak
+        )
         assert abs(expected - 10 * np.log10(3)) < 5e-3
 
     @pytest.mark.parametrize(
@@ -202,7 +204,7 @@ class TestChannelPowerTimeSeries:
 
         assert da.attrs['units'] == 'dBm'
         tol = tolerance(CPTS_SPEC)
-        assert_close(da.values, power, rtol=tol.rtol, atol=tol.peak)
+        assert_close(da.values, power, rtol=tol.rtol, atol=tol.on_peak.peak)
 
     def test_tolerance_accumulates_over_the_detector_bin_not_the_capture(self):
         """each level averages `detector_period * sample_rate` power samples, so the
@@ -212,7 +214,7 @@ class TestChannelPowerTimeSeries:
         longer_bin = tolerance(CPTS_SPEC.replace(detector_period=5 * DETECTOR_PERIOD))
         longer_capture = tolerance(CPTS_SPEC, duration=10 * DURATION)
 
-        assert longer_bin.peak > base.peak
+        assert longer_bin.on_peak.peak > base.on_peak.peak
         assert longer_capture == base
 
 
@@ -314,7 +316,7 @@ class TestCyclicChannelPower:
         da = cyclic(iq, duration=duration)
 
         tol = tolerance(CYCLIC_SPEC, duration=duration)
-        kws = {'rtol': tol.rtol, 'atol': tol.peak}
+        kws = {'rtol': tol.rtol, 'atol': tol.on_peak.peak}
         assert_close(da.sel(cyclic_statistic='min').values, 0.0, **kws)
         assert_close(da.sel(cyclic_statistic='max').values, 20.0, **kws)
 
@@ -329,8 +331,8 @@ class TestCyclicChannelPower:
         one_cycle = tolerance(CYCLIC_SPEC)
         many_cycles = tolerance(CYCLIC_SPEC, duration=10 * CYCLIC_PERIOD)
 
-        assert many_cycles.peak > one_cycle.peak
-        assert one_cycle.peak > tolerance(CPTS_SPEC).peak
+        assert many_cycles.on_peak.peak > one_cycle.on_peak.peak
+        assert one_cycle.on_peak.peak > tolerance(CPTS_SPEC).on_peak.peak
 
 
 # %% registered tolerances
@@ -351,16 +353,16 @@ def test_registered_tolerance_is_a_dB_budget_that_grows_with_input_error(spec):
     assert exact == tolerance(spec)
     assert isinstance(exact, sa.specs.Tolerance)
     assert exact.units == 'dB'
-    assert exact.peak >= exact.rms > 0
-    assert exact.floor_dBc is None
+    assert exact.on_peak.peak >= exact.on_peak.rms > 0
+    assert exact.off_peak_dBc is None
 
     noisy = sa.registry.tolerances(capture(), group, input_error=1e-4)[name]
-    assert noisy.peak > noisy.rms > exact.rms
-    assert noisy.floor_dBc is not None and noisy.floor_dBc < 0
+    assert noisy.on_peak.peak > noisy.on_peak.rms > exact.on_peak.rms
+    assert noisy.off_peak_dBc is not None and noisy.off_peak_dBc.peak < 0
 
     noisier = sa.registry.tolerances(capture(), group, input_error=1e-3)[name]
-    assert noisier.rms > noisy.rms
-    assert noisier.peak > noisy.peak
+    assert noisier.on_peak.rms > noisy.on_peak.rms
+    assert noisier.on_peak.peak > noisy.on_peak.peak
 
 
 # %% iq_waveform
@@ -433,16 +435,18 @@ class TestIqWaveform:
         ``20*log10|iq|`` as an rms of ``20*log10(1 + r)`` dB with a larger peak over
         the slice"""
         exact = tolerance(sa.specs.IQWaveform())
-        assert exact == sa.specs.Tolerance(units='dB', rtol=0.0, rms=0.0, peak=0.0)
+        assert exact == sa.specs.Tolerance(
+            units='dB', rtol=0.0, on_peak=sa.specs.ErrorBound(rms=0.0, peak=0.0)
+        )
 
         r = 1e-4
         noisy = tolerance(sa.specs.IQWaveform(), input_error=r)
         assert noisy.units == 'dB'
         assert noisy.rtol == exact.rtol
-        assert noisy.rms == pytest.approx(sw.level_tolerance_dB(r))
-        assert noisy.peak > noisy.rms
-        assert noisy.floor_dBc is not None and noisy.floor_dBc < 0
+        assert noisy.on_peak.rms == pytest.approx(sw.level_tolerance_dB(r))
+        assert noisy.on_peak.peak > noisy.on_peak.rms
+        assert noisy.off_peak_dBc is not None and noisy.off_peak_dBc.peak < 0
 
         shorter = tolerance(sa.specs.IQWaveform(stop_time_sec=1e-5), input_error=r)
-        assert shorter.rms == noisy.rms
-        assert shorter.peak < noisy.peak
+        assert shorter.on_peak.rms == noisy.on_peak.rms
+        assert shorter.on_peak.peak < noisy.on_peak.peak

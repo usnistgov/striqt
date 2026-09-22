@@ -44,7 +44,7 @@ import striqt.sensor as ss
 import striqt.waveform as sw
 from striqt.sensor.lib.compute import correction_error, corrections
 from striqt.sensor.lib.sources import buffers
-from striqt.waveform.lib.fourier import tone_peak_roundoff
+from striqt.waveform.lib.fourier import on_peak_roundoff
 
 SOAPY_SOURCE = source_spec()
 
@@ -210,12 +210,12 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
     with subtests.test(stage='pre_filter'):
         # a brick-wall resample keeps the N_out central bins of the flat spectrum
         # and scales by N_out/N_in, so the on-sample impulse becomes fs/fs_sdr;
-        # the inverse FFT of a flat spectrum concentrates roundoff at the peak the
-        # way a tone's FFT does in its bin
+        # the inverse FFT of a flat spectrum concentrates roundoff on the impulse's
+        # on-peak sample the way a tone's FFT does in its on-peak bin
         ratio = fs / fs_sdr
         tol = _resample_tol(preset, stages.raw)
         if tol:
-            tol['atol'] = tone_peak_roundoff(np.complex64) * amplitude * ratio
+            tol['atol'] = on_peak_roundoff(np.complex64) * amplitude * ratio
         assert_close(stages.corrected.pre_filter, ratio * impulse, **tol)
 
     with subtests.test(stage='pre_align'):
@@ -351,10 +351,10 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
     tol = _resample_tol(preset, raw, stage='pre_align')
     ratio = fs / raw.resampler['fs_sdr']
     if tol:
-        # the resample concentrates its roundoff on the impulse's own sample, which
-        # the rms model of _resample_tol instead spreads over the whole window
+        # the resample concentrates its roundoff on the impulse's own on-peak sample,
+        # which the rms model of _resample_tol instead spreads over the whole window
         # (as in test_impulse_level_through_the_stages)
-        tol['atol'] = tone_peak_roundoff(np.complex64) * ratio
+        tol['atol'] = on_peak_roundoff(np.complex64) * ratio
 
     corrected = ss.correct_iq(raw, signal_trigger=trigger)
 

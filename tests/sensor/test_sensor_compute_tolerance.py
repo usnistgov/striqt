@@ -117,8 +117,8 @@ def test_capture_tolerances_feed_the_correction_error_into_each_measurement():
     assert set(with_correction) <= set(ANALYSIS.to_dict())
     for name, tol in with_correction.items():
         assert isinstance(tol, sa.specs.Tolerance)
-        assert tol.rms > exact_input[name].rms
-        assert tol.peak > exact_input[name].peak
+        assert tol.on_peak.rms > exact_input[name].on_peak.rms
+        assert tol.on_peak.peak > exact_input[name].on_peak.peak
 
 
 def test_sweep_tolerances_follow_the_looped_captures():
@@ -131,31 +131,45 @@ def test_sweep_tolerances_follow_the_looped_captures():
         assert tols == tolerance.capture_tolerances(capture, sweep.source, ANALYSIS)
     # iq_waveform passes the correction error straight through, so it alone orders the
     # captures; the spectral products also differ in nfft between the two presets
-    assert entries[1][1]['iq_waveform'].rms < entries[0][1]['iq_waveform'].rms
+    assert (
+        entries[1][1]['iq_waveform'].on_peak.rms
+        < entries[0][1]['iq_waveform'].on_peak.rms
+    )
 
 
 # %% worst_case_tolerances
 
 
-def _tol(rms, peak, floor_dBc=None, rtol=1e-6):
+def _tol(rms, peak, off_peak_dBc=None, rtol=1e-6):
+    bound = sa.specs.ErrorBound
     return sa.specs.Tolerance(
-        units='dB', rtol=rtol, rms=rms, peak=peak, floor_dBc=floor_dBc
+        units='dB',
+        rtol=rtol,
+        on_peak=bound(rms=rms, peak=peak),
+        off_peak_dBc=None
+        if off_peak_dBc is None
+        else bound(rms=off_peak_dBc[0], peak=off_peak_dBc[1]),
     )
 
 
 def test_worst_case_takes_the_loosest_field_of_each_product():
     entries = [
-        (None, {'a': _tol(1e-3, 2e-3, -100.0), 'b': _tol(1e-4, 1e-4)}),
-        (None, {'a': _tol(2e-3, 1e-3, -90.0, rtol=2e-6), 'b': _tol(5e-5, 2e-4)}),
+        (None, {'a': _tol(1e-3, 2e-3, (-110.0, -100.0)), 'b': _tol(1e-4, 1e-4)}),
+        (
+            None,
+            {'a': _tol(2e-3, 1e-3, (-120.0, -90.0), rtol=2e-6), 'b': _tol(5e-5, 2e-4)},
+        ),
     ]
     worst = tolerance.worst_case_tolerances(entries)
-    assert worst['a'] == _tol(2e-3, 2e-3, -90.0, rtol=2e-6)
+    assert worst['a'] == _tol(2e-3, 2e-3, (-110.0, -90.0), rtol=2e-6)
     assert worst['b'] == _tol(1e-4, 2e-4)
 
 
-def test_worst_case_floor_ignores_captures_without_one():
-    entries = [(None, {'a': _tol(1e-3, 1e-3)}), (None, {'a': _tol(1e-3, 1e-3, -80.0)})]
-    assert tolerance.worst_case_tolerances(entries)['a'].floor_dBc == pytest.approx(
-        -80.0
-    )
-    assert tolerance.worst_case_tolerances(entries[:1])['a'].floor_dBc is None
+def test_worst_case_off_peak_depth_ignores_captures_without_one():
+    entries = [
+        (None, {'a': _tol(1e-3, 1e-3)}),
+        (None, {'a': _tol(1e-3, 1e-3, (-90.0, -80.0))}),
+    ]
+    worst = tolerance.worst_case_tolerances(entries)['a']
+    assert worst.off_peak_dBc == sa.specs.ErrorBound(rms=-90.0, peak=-80.0)
+    assert tolerance.worst_case_tolerances(entries[:1])['a'].off_peak_dBc is None

@@ -167,21 +167,32 @@ def cross_backend(numpy_budget, cupy_budget):
     (measured 0.83-1.0 of it, chores/tests/measure_fft_accuracy.py).
 
     Takes two floats, or two `striqt.analysis.specs.Tolerance` of the same units, whose
-    `floor_dBc` combine as the amplitude errors they encode.
+    `off_peak_dBc` combine as the amplitude errors they encode.
     """
     if isinstance(numpy_budget, (int, float)):
         return float(np.hypot(numpy_budget, cupy_budget))
     assert numpy_budget.units == cupy_budget.units
-    floors = (numpy_budget.floor_dBc, cupy_budget.floor_dBc)
-    if None in floors:
-        floor = next((f for f in floors if f is not None), None)
+
+    def in_quadrature(a, b):
+        return a.replace(
+            rms=float(np.hypot(a.rms, b.rms)), peak=float(np.hypot(a.peak, b.peak))
+        )
+
+    def depth_dBc(a, b):
+        return float(20 * np.log10(np.hypot(10 ** (a / 20), 10 ** (b / 20))))
+
+    depths = (numpy_budget.off_peak_dBc, cupy_budget.off_peak_dBc)
+    if None in depths:
+        off_peak = next((d for d in depths if d is not None), None)
     else:
-        floor = 20 * np.log10(np.hypot(*(10 ** (f / 20) for f in floors)))
+        off_peak = depths[0].replace(
+            rms=depth_dBc(depths[0].rms, depths[1].rms),
+            peak=depth_dBc(depths[0].peak, depths[1].peak),
+        )
     return numpy_budget.replace(
         rtol=float(np.hypot(numpy_budget.rtol, cupy_budget.rtol)),
-        rms=float(np.hypot(numpy_budget.rms, cupy_budget.rms)),
-        peak=float(np.hypot(numpy_budget.peak, cupy_budget.peak)),
-        floor_dBc=None if floor is None else float(floor),
+        on_peak=in_quadrature(numpy_budget.on_peak, cupy_budget.on_peak),
+        off_peak_dBc=off_peak,
     )
 
 

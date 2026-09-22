@@ -47,7 +47,7 @@ import striqt.waveform as sw
 from striqt.cli import check_sweep, sensor_sweep
 from striqt.sensor.lib.compute import capture_tolerances, correction_error
 from striqt.waveform.lib import fourier
-from striqt.waveform.lib.fourier import far_bin_floor_dBc, tone_peak_roundoff
+from striqt.waveform.lib.fourier import off_peak_floor_dBc, on_peak_roundoff
 
 # the ports of a capture in row order
 ports_of = ss.specs.helpers.ensure_tuple
@@ -134,7 +134,7 @@ def check_tone_psd(psd, freqs, attrs, capture, frequency_offset, snr, err_msg=''
         correction_error(capture, SOURCE, ANALYSIS),
         fourier.fft_tolerance_rms(np.complex64, [nfft]),
     )
-    roundoff_dB = far_bin_floor_dBc(sigma, nfft, size=others.sum())
+    roundoff_dB = off_peak_floor_dBc(sigma, nfft, size=others.sum())
     with np.errstate(divide='ignore'):
         bound = 10 * np.log10(tone + noise_bin * tail) + COLA_LEVEL_DB
     bound = np.maximum(bound, roundoff_dB)
@@ -217,10 +217,12 @@ def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
     check_sweep.run(str(path))
 
     out = capsys.readouterr().out
-    assert 'Roundoff error budget' in out
+    assert 'Numerical tolerance' in out
     # the block is the title, a rule, the column header and one row per product
-    block = out.split('Roundoff error budget')[1].split('\n\n')[0]
-    header, *rows = block.splitlines()[2:]
+    block = out.split('Numerical tolerance')[1].split('\n\n')[0]
+    groups, header, *rows = block.splitlines()[2:]
+    assert 'On-peak tolerance (dB)' in groups and 'Off-peak (dBc)' in groups
+    assert header.split() == ['rms', 'peak', 'rms', 'peak']
     table = {row.split()[0]: row.split()[1:] for row in rows}
 
     spec = ss.read_yaml_spec(path)
@@ -236,9 +238,9 @@ def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
         'iq_waveform',
     }
     assert set(table) == budgeted
-    peak = header.split().index('peak')
     for name, fields in table.items():
-        assert math.isfinite(float(fields[peak])), f'{name} peak'
+        # rtol, then the on-peak and off-peak pairs
+        assert len(fields) == 5 and all(math.isfinite(float(f)) for f in fields), name
 
 
 # %% in-memory sweeps against the generators
@@ -292,7 +294,7 @@ def check_single_tone(ds, capture, subtests):
         )
     with subtests.test('rms detector reads 0 dBm'):
         tol = capture_tolerances(capture, SOURCE, ANALYSIS)['channel_power_time_series']
-        assert_close(detector(ds, 'rms'), 0.0, rtol=tol.rtol, atol=tol.peak)
+        assert_close(detector(ds, 'rms'), 0.0, rtol=tol.rtol, atol=tol.on_peak.peak)
     attrs = ds.power_spectral_density.attrs
     for row in range(ds.sizes['capture']):
         with subtests.test('tone in the PSD', row=row):
@@ -412,7 +414,7 @@ def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
         }
         with subtests.test('iq_waveform', capture=i):
             expected = ref.iq_waveform.values
-            peak_roundoff = tone_peak_roundoff(np.complex64)
+            peak_roundoff = on_peak_roundoff(np.complex64)
             assert_close(
                 ds.iq_waveform.values,
                 expected,

@@ -4,7 +4,7 @@ Covers windowing, fftfreq, frequency slicing, oaconvolve, resample, stft/istft a
 spectrogram, STFT frequency editing, the filter and resampler designs, and the
 overlap-add filters: identities, linearity, dtype and shape properties,
 numpy/cupy/dask compatibility, and roundoff bounds derived from an FFT error model
-(numpy vs cupy, and the floor far from a tone).
+(numpy vs cupy, and the off-peak floor around a tone).
 """
 
 from __future__ import annotations
@@ -43,9 +43,9 @@ from striqt.waveform import level_tolerance_dB
 from striqt.waveform.lib import fourier
 from striqt.waveform.lib.arrays import accum_rtol
 from striqt.waveform.lib.fourier import (
-    far_bin_floor_dBc,
+    off_peak_floor_dBc,
+    on_peak_roundoff,
     peak_factor,
-    tone_peak_roundoff,
 )
 
 
@@ -58,7 +58,7 @@ def cross_backend_sigma(dtype, nffts, n_elementwise=0):
     )
 
 
-FAR_BIN_NFFTS = [64, 256, 1024, 4096]
+OFF_PEAK_NFFTS = [64, 256, 1024, 4096]
 WINDOW_NAMES = ['hann', 'hamming', 'blackman', 'blackmanharris', 'bartlett', 'nuttall']
 
 
@@ -146,15 +146,15 @@ class TestRoundoffModels:
         tolerance = fourier.fft_tolerance_rms(*self.ARGS, array_backend=array_backend)
         assert tolerance == fourier.FFT_ROUNDOFF_SAFETY * roundoff
 
-    def test_far_bin_floor_peak_covers_rms(self):
+    def test_off_peak_floor_peak_covers_rms(self):
         sigma = fourier.fft_tolerance_rms(np.complex64, [1024], 2)
-        assert far_bin_floor_dBc(sigma, 1024, size=1023) >= far_bin_floor_dBc(
+        assert off_peak_floor_dBc(sigma, 1024, size=1023) >= off_peak_floor_dBc(
             sigma, 1024
         )
 
-    def test_tone_peak_roundoff_ignores_complexness(self):
-        assert tone_peak_roundoff(np.complex64) == tone_peak_roundoff(np.float32)
-        assert tone_peak_roundoff(np.complex128) < tone_peak_roundoff(np.complex64)
+    def test_on_peak_roundoff_ignores_complexness(self):
+        assert on_peak_roundoff(np.complex64) == on_peak_roundoff(np.float32)
+        assert on_peak_roundoff(np.complex128) < on_peak_roundoff(np.complex64)
 
 
 class TestGetWindow:
@@ -1062,56 +1062,59 @@ class TestOverlapAddFilters:
             fourier.oaresample(x, up, down, self.FS, axis=1, frequency_shift=shift)
 
 
-class TestToneFarBinFloor:
-    """Roundoff in the bins away from a unit, bin-centered complex64 tone, on each
+class TestOffPeakFloor:
+    """Roundoff in the off-peak bins of a unit, bin-centered complex64 tone, on each
     array namespace.
 
     With an integer number of cycles per segment (and a rectangular window for the
-    STFT) the exact spectrum occupies one bin, so every other bin measures roundoff
-    alone against a float64 reference of the same float32-quantized input. For the
-    time-domain outputs of resample and oaconvolve the bins are those of the error
-    spectrum, taken in float64 so the analysis adds no roundoff of its own.
+    STFT) the exact spectrum occupies one bin, the on-peak bin, so every other bin
+    measures roundoff alone against a float64 reference of the same float32-quantized
+    input. For the time-domain outputs of resample and oaconvolve the bins are those
+    of the error spectrum, taken in float64 so the analysis adds no roundoff of its
+    own.
     """
 
     NSEG = 4
     KERNEL_TAPS = 400
 
     @staticmethod
-    def _assert_far_bins(err_far, rms_bound, tone_peak, nfft, sigma):
-        """`err_far`: the roundoff in the far bins; `rms_bound`: the rms error model
-        in the same units; `tone_peak`: the tone's own bin value, which anchors the
-        structured roundoff bound"""
-        assert rms(err_far) < rms_bound, (
-            f'far-bin rms roundoff above {far_bin_floor_dBc(sigma, nfft):.1f} dBc'
+    def _assert_off_peak_bins(err_off_peak, rms_bound, tone_peak, nfft, sigma):
+        """`err_off_peak`: the roundoff in the off-peak bins; `rms_bound`: the rms
+        error model in the same units; `tone_peak`: the tone's own on-peak bin value,
+        which anchors the structured roundoff bound"""
+        assert rms(err_off_peak) < rms_bound, (
+            f'off-peak rms roundoff above {off_peak_floor_dBc(sigma, nfft):.1f} dBc'
         )
-        white = peak_factor(err_far.size) * rms_bound
-        structured = tone_peak_roundoff(np.complex64) * tone_peak
-        peak_floor_dBc = far_bin_floor_dBc(sigma, nfft, err_far.size)
-        msg = f'far-bin peak roundoff above {peak_floor_dBc:.1f} dBc'
-        assert np.abs(err_far).max() < max(white, structured), msg
+        white = peak_factor(err_off_peak.size) * rms_bound
+        structured = on_peak_roundoff(np.complex64) * tone_peak
+        off_peak_floor = off_peak_floor_dBc(sigma, nfft, err_off_peak.size)
+        msg = f'off-peak peak roundoff above {off_peak_floor:.1f} dBc'
+        assert np.abs(err_off_peak).max() < max(white, structured), msg
 
-    def _check_error_spectrum(self, out, out_ref, sigma):
+    def _assert_off_peak_error_spectrum(self, out, out_ref, sigma):
         """bound the spectrum of the roundoff error in a time-domain output of a unit
-        tone, excluding the tone's own bin; `sigma` is the rms error model relative to
-        the unit input"""
+        tone, excluding the tone's own on-peak bin; `sigma` is the rms error model
+        relative to the unit input"""
         err = np.fft.fft(to_numpy(out).astype(np.complex128) - out_ref)
         size = err.size
-        far = np.ones(size, dtype=bool)
-        far[int(np.argmax(np.abs(np.fft.fft(out_ref))))] = False
+        off_peak = np.ones(size, dtype=bool)
+        off_peak[int(np.argmax(np.abs(np.fft.fft(out_ref))))] = False
 
         # unnormalized fft: bin rms is sqrt(size) times the sample rms, and the unit
         # tone peaks at size
-        self._assert_far_bins(err[far], np.sqrt(size) * sigma, size, size, sigma)
+        self._assert_off_peak_bins(
+            err[off_peak], np.sqrt(size) * sigma, size, size, sigma
+        )
 
     @staticmethod
     def _stft(x, nfft):
         return fourier.stft(x, fs=1.0, window='rect', nperseg=nfft, noverlap=0)[2]
 
     @given(
-        nfft=st.sampled_from(FAR_BIN_NFFTS),
+        nfft=st.sampled_from(OFF_PEAK_NFFTS),
         bin_fraction=st.floats(min_value=0, max_value=1),
     )
-    def test_stft_far_bins(self, xp, array_backend, nfft, bin_fraction):
+    def test_stft_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         k = tone_bin(nfft, bin_fraction)
         x = bin_centered_tone(nfft, k, self.NSEG)
         X_ref = self._stft(x.astype(np.complex128), nfft)
@@ -1122,26 +1125,26 @@ class TestToneFarBinFloor:
         peak_bin = k + nfft // 2
         assert np.all(np.argmax(np.abs(X), axis=1) == peak_bin)
         tone_peak = np.abs(X_ref[0, peak_bin])
-        assert abs(tone_peak - 1) < tone_peak_roundoff(np.complex64)
-        assert np.abs(np.abs(X[:, peak_bin]) - 1).max() < tone_peak_roundoff(
-            np.complex64
-        )
+        assert abs(tone_peak - 1) < on_peak_roundoff(np.complex64)
+        assert np.abs(np.abs(X[:, peak_bin]) - 1).max() < on_peak_roundoff(np.complex64)
 
-        far = np.ones(nfft, dtype=bool)
-        far[peak_bin] = False
+        off_peak = np.ones(nfft, dtype=bool)
+        off_peak[peak_bin] = False
 
         # window/nfft and the window multiply, then fft(nfft)
         sigma = fourier.fft_tolerance_rms(
             np.complex64, [nfft], n_elementwise=2, array_backend=array_backend
         )
         rms_bound = sigma * rms(X_ref)
-        self._assert_far_bins((X - X_ref)[:, far], rms_bound, tone_peak, nfft, sigma)
+        self._assert_off_peak_bins(
+            (X - X_ref)[:, off_peak], rms_bound, tone_peak, nfft, sigma
+        )
 
     @given(
-        nfft=st.sampled_from(FAR_BIN_NFFTS),
+        nfft=st.sampled_from(OFF_PEAK_NFFTS),
         bin_fraction=st.floats(min_value=0, max_value=1),
     )
-    def test_resample_far_bins(self, xp, array_backend, nfft, bin_fraction):
+    def test_resample_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         # keep the tone inside the half band that survives downsampling by 2
         k = tone_bin(nfft, 0.3 + 0.4 * bin_fraction)
         x = bin_centered_tone(nfft, k, self.NSEG)
@@ -1155,13 +1158,13 @@ class TestToneFarBinFloor:
         )
         out_ref = fourier.resample(x.astype(np.complex128), num_out)
         out = fourier.resample(xp.asarray(x), num_out)
-        self._check_error_spectrum(out, out_ref, sigma)
+        self._assert_off_peak_error_spectrum(out, out_ref, sigma)
 
     @given(
-        nfft=st.sampled_from(FAR_BIN_NFFTS),
+        nfft=st.sampled_from(OFF_PEAK_NFFTS),
         bin_fraction=st.floats(min_value=0, max_value=1),
     )
-    def test_oaconvolve_far_bins(self, xp, array_backend, nfft, bin_fraction):
+    def test_oaconvolve_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         x = bin_centered_tone(nfft, tone_bin(nfft, bin_fraction), self.NSEG)
         # a unit-gain lowpass; the tone may land in its stopband, so bounds are
         # anchored to the input tone rather than the output
@@ -1175,7 +1178,7 @@ class TestToneFarBinFloor:
             x.astype(np.complex128), kernel.astype(np.float64), mode='same'
         )
         out = fourier.oaconvolve(xp.asarray(x), xp.asarray(kernel), mode='same')
-        self._check_error_spectrum(out, out_ref, sigma)
+        self._assert_off_peak_error_spectrum(out, out_ref, sigma)
 
 
 class TestNumpyCupyCrossComparison:

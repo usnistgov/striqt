@@ -235,18 +235,18 @@ def elementwise_atol(tolerance, expected_dB):
     """the per-element absolute tolerance on a dB-valued output, from its
     `specs.Tolerance` and the numpy array of values expected of it.
 
-    `tolerance.peak` holds at the output's own peak; deeper elements get the two-sided
-    bound of `sw.dB_tolerance_below_peak`, which reaches +inf at `floor_dBc` below the
-    peak. Without a `floor_dBc` there is no amplitude error to grow with depth, and
-    `peak` holds everywhere.
+    `tolerance.on_peak.peak` holds at the output's own peak; deeper elements get the
+    two-sided bound of `sw.off_peak_dB_tolerance`, which reaches +inf at
+    `off_peak_dBc.peak` below the peak. Without an `off_peak_dBc` there is no amplitude
+    error to grow with depth, and `on_peak.peak` holds everywhere.
     """
     import numpy as np
 
     expected_dB = np.asarray(expected_dB, dtype='float64')
-    if tolerance.floor_dBc is None:
-        return np.full(expected_dB.shape, tolerance.peak)
+    if tolerance.off_peak_dBc is None:
+        return np.full(expected_dB.shape, tolerance.on_peak.peak)
     # the amplitude error at the peak, which `peak` expressed as 20*log10(1 + err)
-    err = 10 ** (tolerance.floor_dBc / 20)
-    additive = tolerance.peak - 20 * math.log10(1 + err)
+    err = 10 ** (tolerance.off_peak_dBc.peak / 20)
+    additive = tolerance.on_peak.peak - 20 * math.log10(1 + err)
     depth = np.nanmax(expected_dB) - expected_dB
-    return additive + sw.dB_tolerance_below_peak(depth, err)
+    return additive + sw.off_peak_dB_tolerance(depth, err)

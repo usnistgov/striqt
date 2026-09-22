@@ -244,27 +244,30 @@ class TestOrderedSetUnion:
 # %% elementwise_atol
 
 
-def test_elementwise_atol_without_a_floor_is_flat():
-    tol = sa.specs.Tolerance(units='dB', rtol=0.0, rms=1e-3, peak=2e-3)
+def test_elementwise_atol_without_an_off_peak_depth_is_flat():
+    tol = sa.specs.Tolerance(
+        units='dB', rtol=0.0, on_peak=sa.specs.ErrorBound(rms=1e-3, peak=2e-3)
+    )
     atol = util.elementwise_atol(tol, [-10.0, -60.0, -120.0])
     assert atol.tolist() == [2e-3, 2e-3, 2e-3]
 
 
-def test_elementwise_atol_grows_with_depth_and_diverges_at_the_floor():
+def test_elementwise_atol_grows_with_depth_and_diverges_at_off_peak_dBc():
     """the bound equals `peak` at the peak element, widens below it, and is infinite
-    from `floor_dBc` down"""
+    from `off_peak_dBc.peak` down"""
     err = 1e-4
     additive = 5e-4
     tol = sa.specs.Tolerance(
         units='dB',
         rtol=0.0,
-        rms=1e-3,
-        peak=additive + 20 * np.log10(1 + err),
-        floor_dBc=20 * np.log10(err),
+        on_peak=sa.specs.ErrorBound(rms=1e-3, peak=additive + 20 * np.log10(1 + err)),
+        off_peak_dBc=sa.specs.ErrorBound(
+            rms=20 * np.log10(err) - 10, peak=20 * np.log10(err)
+        ),
     )
-    expected = np.array([-3.0, -43.0, -73.0, -3.0 + tol.floor_dBc, -150.0])
+    expected = np.array([-3.0, -43.0, -73.0, -3.0 + tol.off_peak_dBc.peak, -150.0])
     atol = util.elementwise_atol(tol, expected)
-    assert atol[0] >= tol.peak
+    assert atol[0] >= tol.on_peak.peak
     assert atol[0] == pytest.approx(additive - 20 * np.log10(1 - err))
     assert np.all(np.diff(atol[:3]) > 0)
     assert np.isinf(atol[3]) and np.isinf(atol[4])
