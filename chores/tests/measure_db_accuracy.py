@@ -33,6 +33,18 @@ Gaussian noise and a unit tone against a float64 reference):
 The measurements ground REDUCTION_RUN and REDUCTION_SAFETY in
 striqt.waveform.lib.arrays; the printed cupy accelerators tell whether CUB handled the
 reduction.
+
+Columns (binned power quantile, float32, `iq_to_bin_power(kind=q)` over complex64
+samples whose |x|**2 is log-normal with sigma 3, against a float64 `np.quantile` of the
+exact powers):
+    max/u, rms/u  relative error in units of u = 2**-24 as above, worst over the draws
+    model/u       `stat_rtol(float32, q)` (or `bin_power_rtol` when it is not shipped
+                  yet): squaring the envelope plus one rounding of the interpolation
+                  between the two neighbouring order statistics
+The heavy tail makes that neighbour gap large at q=0.999. A max/u far above model/u on
+one backend means its `quantile` interpolates in float32 (numpy < 2.3 casts a Python
+float q to the array dtype, which errs by about n*2**-25 of the gap); the fix passes
+q as a float64 array, so the result dtype printed under the table must stay float32.
 """
 
 from __future__ import annotations
@@ -54,6 +66,10 @@ getcontext().prec = 40
 # bin sizes for the float32 power mean; the largest is 4 x 4e6 complex64 = 128 MB
 REDUCE_SIZES = (1_000, 10_000, 100_000, 1_000_000, 4_000_000)
 STRIDED_SIZE = 1_000_000
+
+# bin sizes and quantiles for the float32 power quantile; 4 x 1e6 complex64 = 32 MB
+QUANTILE_SIZES = (1_000, 100_000, 1_000_000)
+QUANTILES = (0.5, 0.999)
 
 
 def _u(dtype):
@@ -184,6 +200,62 @@ def report_binned_power_mean(backends, rng, draws=5):
             print(f'{name:>28} {n:>9} {cells} {model:11.1f} {naive:12.1f}')
 
 
+def _lognormal_iq_draws(rng, n, draws):
+    """complex64 of shape (4, n) whose |x|**2 is log-normal with sigma 3"""
+    for _ in range(draws):
+        power = np.exp(3 * rng.standard_normal((4, n)))
+        phase = rng.uniform(0, 2 * math.pi, (4, n))
+        yield (np.sqrt(power) * np.exp(1j * phase)).astype(np.complex64)
+
+
+def _bin_power_quantile_errors(xp, iq, q):
+    """(per-row relative error, result dtype) of the float32 binned power quantile
+    against a float64 quantile of the exact powers"""
+    from striqt.waveform.lib import power_analysis as pa
+
+    ref = np.quantile(np.abs(iq.astype(np.complex128)) ** 2, q, axis=1)
+    y = pa.iq_to_bin_power(xp.asarray(iq), Ts=1, Tbin=iq.shape[1], kind=q, axis=1)
+    y = _to_numpy(y[:, 0])
+    return np.abs(y.astype(np.float64) - ref) / ref, y.dtype
+
+
+def report_binned_power_quantile(backends, rng, draws=3):
+    from striqt.waveform.lib import power_analysis as pa
+
+    # stat_rtol is the intended model; bin_power_rtol is its predecessor
+    stat_rtol = getattr(pa, 'stat_rtol', None)
+    if stat_rtol is None:
+
+        def stat_rtol(dtype, kind):
+            return pa.bin_power_rtol(dtype, kind=kind)
+
+    u = _u(np.float32)
+    hdr = ' '.join(f'{b + " max/u":>10} {b + " rms/u":>10}' for b in backends)
+    print(
+        f'\n{"binned power quantile (float32)":>32} {"n":>9} {"q":>6} {hdr}'
+        f' {"model/u":>8}'
+    )
+    dtypes = {}
+    for n in QUANTILE_SIZES:
+        worst = {(b, q): [0.0, 0.0] for b in backends for q in QUANTILES}
+        for iq in _lognormal_iq_draws(rng, n, draws):
+            for q in QUANTILES:
+                for b, (xp, _) in backends.items():
+                    rel, dtypes[b] = _bin_power_quantile_errors(xp, iq, q)
+                    rel = rel / u
+                    cell = worst[b, q]
+                    cell[0] = max(cell[0], rel.max())
+                    cell[1] = max(cell[1], math.sqrt(np.mean(rel**2)))
+        for q in QUANTILES:
+            model = stat_rtol(np.float32, q) / u
+            cells = ' '.join(
+                f'{worst[b, q][0]:10.2f} {worst[b, q][1]:10.2f}' for b in backends
+            )
+            print(f'{"log-normal":>32} {n:>9} {q:>6} {cells} {model:8.2f}')
+    dtype_cells = ', '.join(f'{b}={np.dtype(dt).name}' for b, dt in dtypes.items())
+    print(f'{"result dtype":>32} {dtype_cells}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--points', type=int, default=5000)
@@ -310,6 +382,7 @@ def main():
         )
 
     report_binned_power_mean(backends, rng)
+    report_binned_power_quantile(backends, rng)
 
     print(
         '\nInterpretation: rel ulp should stay within the per-function ulp budget of the'
@@ -318,7 +391,10 @@ def main():
         ' budget for complex inputs. Reductions report absolute dB error in units of u.'
         ' In the binned power mean table, rms/u should stay below rms model/u and max/u'
         ' below a few times it on both backends; if a backend grows faster than sqrt(n),'
-        ' lower REDUCTION_RUN rather than raising REDUCTION_SAFETY.'
+        ' lower REDUCTION_RUN rather than raising REDUCTION_SAFETY. In the binned power'
+        ' quantile table, max/u should stay within model/u on both backends and the'
+        ' result dtype float32; a max/u far above model/u at q=0.999 means that'
+        " backend's quantile interpolates in float32 and needs q passed as float64."
     )
 
 

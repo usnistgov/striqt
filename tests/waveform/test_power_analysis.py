@@ -36,6 +36,7 @@ from numeric_checks import (
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib.arrays import (
+    ROUNDOFF_SAFETY,
     accum_rms,
     accum_rtol,
     float_dtype_like,
@@ -66,6 +67,7 @@ from striqt.waveform.lib.power_analysis import (
     roundtrip_dB_tol,
     roundtrip_power_rtol,
     sample_ccdf,
+    stat_rtol,
     stat_ufunc_from_shorthand,
     unit_dB_to_linear,
     unit_dB_to_wave,
@@ -568,6 +570,16 @@ class TestRoundoffModels:
     def test_bin_power_rms_grows_with_bin_size(self):
         assert bin_power_rms(np.float32, 16) > bin_power_rms(np.float32, 1) > 0
 
+    def test_stat_rtol_is_one_rounding_for_quantiles_only(self):
+        for kind in ('mean', 'rms', 'min', 'max', 'peak'):
+            assert stat_rtol(np.float32, kind) == 0
+        one_rounding = ROUNDOFF_SAFETY * unit_roundoff(np.float32)
+        assert stat_rtol(np.float32, 0.5) == one_rounding
+        assert stat_rtol(np.float32, 'median') == one_rounding
+        assert stat_rtol(np.float32, 0.5, n_impl=2) == 2 * one_rounding
+        with pytest.raises(ValueError, match='bogus'):
+            stat_rtol(np.float32, 'bogus')
+
     def test_level_tolerance_dB_power_is_half_of_amplitude(self):
         sigma = np.array([1e-6, 1e-3, 0.1, 1.0])
         np.testing.assert_allclose(
@@ -621,6 +633,24 @@ class TestIqToBinPower:
             reference_power(iq, axis=1),
             rtol=bin_power_bound(np.float32, size, outputs=result.size),
         )
+
+    def test_quantile_of_a_long_heavy_tailed_bin_is_exact_on_every_numpy(self):
+        """numpy < 2.3 casts a scalar q to float32 (numpy.lib._function_base_impl,
+        quantile), which shifts the virtual index (n-1)*q by ~n*2**-25 samples before
+        interpolating between the two neighbouring order statistics. On a heavy-tailed
+        bin of 2**20 samples that read 124 u against a budget of 28 u."""
+        n, q = 2**20, 0.999
+        rng = np.random.default_rng(0)
+        power = np.exp(3 * rng.standard_normal((2, n)))
+        phase = rng.uniform(0, 2 * np.pi, size=(2, n))
+        iq = (np.sqrt(power) * np.exp(1j * phase)).astype(np.complex64)
+
+        result = iq_to_bin_power(iq, Ts=1, Tbin=n, kind=q, axis=1)
+
+        assert result.dtype == np.float32
+        expected = np.quantile(reference_power(iq), q, axis=1, keepdims=True)
+        rtol = bin_power_bound(np.float32, n, outputs=result.size, kind=q)
+        assert_close(result, expected, rtol=rtol)
 
     @for_each_bin_size
     @pytest.mark.parametrize('kind', ['mean', 'max', 0.9])
@@ -757,6 +787,7 @@ class TestIqToCyclicPower:
             for stat in self.CYCLE_STATS:
                 value = result[detector][stat]
                 assert value.shape == (channels, bins_per_cycle)
+                assert value.dtype == float_dtype_like(iq)
                 expected = BIN_STATS[stat](by_cycle, axis=1)
                 assert_close(value, expected, rtol=rtol)
 

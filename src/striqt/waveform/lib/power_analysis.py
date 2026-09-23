@@ -99,7 +99,14 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
         ufunc = partial(NAMED_UFUNCS[kind], axis=axis)
 
     elif isinstance(kind, Number):
-        ufunc = partial(xp.quantile, q=kind, axis=axis)
+        # numpy < 2.3 casts a scalar q to a float32 input's dtype
+        # (numpy.lib._function_base_impl.quantile), which misplaces the virtual
+        # index (n-1)*q by ~n*2**-25 samples in the interpolation. An array q
+        # is not cast, but promotes the result, so it is cast back
+        q = xp.asarray(kind, dtype='float64')
+
+        def ufunc(x, axis=axis):
+            return xp.quantile(x, q, axis=axis).astype(x.dtype, copy=False)
 
     elif callable(kind):
         ufunc = partial(kind, axis=axis)
@@ -493,16 +500,23 @@ def dBlinsum(
     return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
 
 
-def bin_power_rtol(dtype, n_impl: int = 1, kind: str | float = 'mean') -> float:
-    """worst-case rtol of the `kind` statistic of |x|**2 (as `stat_ufunc_from_shorthand`)
-    before any accumulation: squaring the envelope, and for a quantile one interpolation
-    between two samples. The mean's accumulation roundoff is `bin_power_rms`."""
-    envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
+def stat_rtol(dtype, kind: str | float, n_impl: int = 1) -> float:
+    """worst-case rtol of applying the `kind` statistic (as `stat_ufunc_from_shorthand`)
+    to exact samples: one interpolation rounding for a quantile or the median, nothing
+    for a selection or a mean, whose accumulation roundoff is `bin_power_rms`"""
     if kind in ('mean', 'rms', 'min', 'max', 'peak'):
-        return envelope
+        return 0.0
     elif isinstance(kind, str) and kind != 'median':
         raise ValueError(f'unknown statistic {kind!r}')
-    return envelope + ROUNDOFF_SAFETY * n_impl * unit_roundoff(dtype)
+    return ROUNDOFF_SAFETY * n_impl * unit_roundoff(dtype)
+
+
+def bin_power_rtol(dtype, n_impl: int = 1, kind: str | float = 'mean') -> float:
+    """worst-case rtol of the `kind` statistic of |x|**2 (as `stat_ufunc_from_shorthand`)
+    before any accumulation: squaring the envelope, and `stat_rtol` for the statistic.
+    The mean's accumulation roundoff is `bin_power_rms`."""
+    envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
+    return envelope + stat_rtol(dtype, kind, n_impl)
 
 
 def bin_power_rms(

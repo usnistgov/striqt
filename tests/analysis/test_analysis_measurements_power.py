@@ -339,6 +339,18 @@ class TestCyclicChannelPower:
         assert many_cycles.on_peak.peak > one_cycle.on_peak.peak
         assert one_cycle.on_peak.peak > tolerance(CPTS_SPEC).on_peak.peak
 
+    def test_quantile_statistic_adds_an_interpolation_rounding(self):
+        """a quantile interpolates between two cycle samples where a selection returns
+        one exactly. The tuples have equal length because the peak term also grows
+        with the number of output elements."""
+        selections = tolerance(
+            CYCLIC_SPEC.replace(cyclic_statistics=('min', 'max', 'peak'))
+        )
+        quantile = tolerance(CYCLIC_SPEC.replace(cyclic_statistics=('min', 'max', 0.9)))
+
+        assert quantile.on_peak.rms > selections.on_peak.rms
+        assert quantile.on_peak.peak > selections.on_peak.peak
+
 
 # %% registered tolerances
 

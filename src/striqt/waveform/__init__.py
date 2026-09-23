@@ -44,5 +44,6 @@ from .lib.power_analysis import (
     roundtrip_dB_tol,
     roundtrip_power_rtol,
     sample_ccdf,
+    stat_rtol,
 )
 from .arrays import *

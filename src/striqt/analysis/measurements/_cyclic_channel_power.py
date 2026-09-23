@@ -73,6 +73,7 @@ def cyclic_channel_power_tolerance(
     power_rms = max(
         sw.bin_power_rms(np.float32, bin_size, kind=d) for d in spec.power_detectors
     )
+    power_rtol += max(sw.stat_rtol(np.float32, kind=s) for s in spec.cyclic_statistics)
     if any(s in ('mean', 'rms') for s in spec.cyclic_statistics):
         # the cycle axis sits ahead of the lag axis, so the reduction is strided
         power_rtol += sw.arrays.accum_rtol(np.float32, cycle_count)
