@@ -42,7 +42,11 @@ from decimal import Decimal, getcontext
 from functools import partial
 
 import numpy as np
-
+try:
+    # workaround a library linkage bug
+    import numba.cuda
+except ImportError:
+    pass
 getcontext().prec = 40
 
 # bin sizes for the float32 power mean; the largest is 4 x 4e6 complex64 = 128 MB
