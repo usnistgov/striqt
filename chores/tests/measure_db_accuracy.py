@@ -25,11 +25,12 @@ Columns (binned power mean, float32, the production `iq_to_bin_power` path over
 Gaussian noise and a unit tone against a float64 reference):
     max/u        max relative error in units of the float32 unit roundoff u = 2**-24
     rms/u        rms relative error over the rows and draws, same units
-    model/u      the shipped `accum_rtol(float32, n)` bound, which assumes a
-                 reordered (pairwise or blocked) reduction on a contiguous axis
-    n·u model/u  `accum_rtol(float32, n, sequential=True)`, the recursive-summation
-                 bound that applies to the strided-axis row
-The measurements ground REDUCTION_LEAF_DEPTH and REDUCTION_THREADS in
+    rms model/u  `accum_rms(float32, n)`, the shipped rms model (with its safety
+                 factor) for a reduction over a contiguous axis; the worst element
+                 over k outputs is peak_factor(k) times it
+    n·u model/u  `accum_rtol(float32, n)`, the recursive-summation bound that applies
+                 to the strided-axis row
+The measurements ground REDUCTION_RUN and REDUCTION_SAFETY in
 striqt.waveform.lib.arrays; the printed cupy accelerators tell whether CUB handled the
 reduction.
 """
@@ -42,9 +43,10 @@ from decimal import Decimal, getcontext
 from functools import partial
 
 import numpy as np
+
 try:
     # workaround a library linkage bug
-    import numba.cuda
+    import numba.cuda  # noqa: F401
 except ImportError:
     pass
 getcontext().prec = 40
@@ -157,7 +159,7 @@ def report_binned_power_mean(backends, rng, draws=5):
     u = _u(np.float32)
     hdr = ' '.join(f'{b + " max/u":>10} {b + " rms/u":>10}' for b in backends)
     print(
-        f'\n{"binned power mean (float32)":>28} {"n":>9} {hdr} {"model/u":>9}'
+        f'\n{"binned power mean (float32)":>28} {"n":>9} {hdr} {"rms model/u":>11}'
         f' {"n·u model/u":>12}'
     )
     cases = [(n, False) for n in REDUCE_SIZES] + [(STRIDED_SIZE, True)]
@@ -171,15 +173,15 @@ def report_binned_power_mean(backends, rng, draws=5):
                 cell = worst[b, label]
                 cell[0] = max(cell[0], rel.max())
                 cell[1] = max(cell[1], math.sqrt(np.mean(rel**2)))
-        model = arrays_lib.accum_rtol(np.float32, n) / u
-        naive = arrays_lib.accum_rtol(np.float32, n, sequential=True) / u
+        model = arrays_lib.accum_rms(np.float32, n) / u
+        naive = arrays_lib.accum_rtol(np.float32, n) / u
         for label in ('gaussian', 'tone'):
             name = f'{label} strided (naive)' if strided else label
             cells = ' '.join(
                 f'{worst[b, label][0]:10.2f} {worst[b, label][1]:10.2f}'
                 for b in backends
             )
-            print(f'{name:>28} {n:>9} {cells} {model:9.1f} {naive:12.1f}')
+            print(f'{name:>28} {n:>9} {cells} {model:11.1f} {naive:12.1f}')
 
 
 def main():
@@ -314,10 +316,9 @@ def main():
         ' tests (library log10/pow/hypot error plus one rounding for the scale factor);'
         ' abs/u_in should stay within a few units for real inputs and within the hypot'
         ' budget for complex inputs. Reductions report absolute dB error in units of u.'
-        ' In the binned power mean table, max/u should stay below model/u on both'
-        ' backends; if the cupy max/u tracks n/REDUCTION_THREADS with a different slope,'
-        ' adjust REDUCTION_THREADS (or REDUCTION_LEAF_DEPTH) rather than the safety'
-        ' factor.'
+        ' In the binned power mean table, rms/u should stay below rms model/u and max/u'
+        ' below a few times it on both backends; if a backend grows faster than sqrt(n),'
+        ' lower REDUCTION_RUN rather than raising REDUCTION_SAFETY.'
     )
 
 

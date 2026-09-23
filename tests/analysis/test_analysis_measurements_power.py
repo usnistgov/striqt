@@ -208,14 +208,19 @@ class TestChannelPowerTimeSeries:
 
     def test_tolerance_accumulates_over_the_detector_bin_not_the_capture(self):
         """each level averages `detector_period * sample_rate` power samples, so the
-        exact-input budget grows with the detector period and, at a fixed detector
-        period, is the same for a capture of any duration"""
+        rms budget grows with the detector period; a longer capture at the same
+        detector period only adds levels, which widens the worst case but not the rms"""
         base = tolerance(CPTS_SPEC)
-        longer_bin = tolerance(CPTS_SPEC.replace(detector_period=5 * DETECTOR_PERIOD))
+        longer_bin = tolerance(
+            CPTS_SPEC.replace(detector_period=1000 * DETECTOR_PERIOD),
+            duration=1000 * DURATION,
+        )
         longer_capture = tolerance(CPTS_SPEC, duration=10 * DURATION)
 
+        assert longer_bin.on_peak.rms > base.on_peak.rms
         assert longer_bin.on_peak.peak > base.on_peak.peak
-        assert longer_capture == base
+        assert longer_capture.on_peak.rms == pytest.approx(base.on_peak.rms)
+        assert longer_capture.on_peak.peak > base.on_peak.peak
 
 
 # %% cyclic_channel_power

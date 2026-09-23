@@ -400,14 +400,18 @@ def level_tolerance(
     power_rtol: float,
     log_tol: dict[str, float],
     quantization: float = 0.0,
+    power_rms: float = 0.0,
     dtype='complex64',
 ) -> specs.Tolerance:
     """the `specs.Tolerance` of a dB power output, from its error terms.
 
     `amplitude_rms` is the relative rms error of the amplitude the power is taken from
     (input roundoff and any FFT passes, added in quadrature by the caller);
-    `power_rtol` the relative error of squaring and averaging it (`sw.bin_power_rtol`,
-    `sw.arrays.accum_rtol`); `log_tol` the dB conversion budget
+    `power_rtol` the worst-case relative error of squaring it and of any reduction
+    summed in order (`sw.bin_power_rtol`, `sw.arrays.accum_rtol`); `power_rms` the rms
+    relative error of a reduction over a contiguous axis (`sw.bin_power_rms`), whose
+    worst element over `size` outputs is `peak_factor` times it; `log_tol` the dB
+    conversion budget
     (`sw.log_conversion_tol`); `quantization` the storage rounding (`quantization_dB`).
 
     The peak amplitude error over `size` output elements adds the structured roundoff
@@ -432,8 +436,16 @@ def level_tolerance(
         units='dB',
         rtol=log_tol['rtol'],
         on_peak=specs.ErrorBound(
-            rms=float(sw.level_tolerance_dB(amplitude_rms) + additive),
-            peak=float(sw.level_tolerance_dB(peak_amplitude) + additive),
+            rms=float(
+                sw.level_tolerance_dB(amplitude_rms)
+                + sw.linear_tolerance_dB(power_rms)
+                + additive
+            ),
+            peak=float(
+                sw.level_tolerance_dB(peak_amplitude)
+                + sw.linear_tolerance_dB(sw.fourier.peak_factor(size) * power_rms)
+                + additive
+            ),
         ),
         off_peak_dBc=off_peak_dBc,
     )
@@ -471,17 +483,16 @@ def spectrogram_tolerance(
     bins = sizing.nfft
 
     power_rtol = sw.envelope_power_rtol(np.float32, complex_input=True)
+    power_rms = 0.0
     if sizing.frequency_bin_averaging is not None:
-        power_rtol += sw.arrays.accum_rtol(np.float32, sizing.frequency_bin_averaging)
+        power_rms = sw.arrays.accum_rms(np.float32, sizing.frequency_bin_averaging)
         bins //= sizing.frequency_bin_averaging
     # the frequency bins are the contiguous axis; the window axis is strided
     if sizing.time_bin_averaging is not None:
-        power_rtol += sw.arrays.accum_rtol(
-            np.float32, sizing.time_bin_averaging, sequential=True
-        )
+        power_rtol += sw.arrays.accum_rtol(np.float32, sizing.time_bin_averaging)
         n_windows //= sizing.time_bin_averaging
     if statistic_count > 1:
-        power_rtol += sw.arrays.accum_rtol(np.float32, statistic_count, sequential=True)
+        power_rtol += sw.arrays.accum_rtol(np.float32, statistic_count)
 
     fft_error = sw.fourier.fft_tolerance_rms(
         np.complex64, [sizing.nfft], array_backend=array_backend
@@ -491,6 +502,7 @@ def spectrogram_tolerance(
         amplitude_rms=math.hypot(input_error, fft_error),
         size=max(bins * n_windows, 1),
         power_rtol=power_rtol,
+        power_rms=power_rms,
         log_tol=sw.log_conversion_tol(np.float32, 10, complex_input=True),
         quantization=quantization_dB(dtype, limit_digits),
     )

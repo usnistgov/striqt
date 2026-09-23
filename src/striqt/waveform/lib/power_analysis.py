@@ -16,7 +16,7 @@ from . import util
 
 from .arrays import (
     ROUNDOFF_SAFETY,
-    accum_rtol,
+    accum_rms,
     array_namespace,
     float_dtype_like,
     is_cupy_array,
@@ -493,22 +493,27 @@ def dBlinsum(
     return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
 
 
-def bin_power_rtol(
+def bin_power_rtol(dtype, n_impl: int = 1, kind: str | float = 'mean') -> float:
+    """worst-case rtol of the `kind` statistic of |x|**2 (as `stat_ufunc_from_shorthand`)
+    before any accumulation: squaring the envelope, and for a quantile one interpolation
+    between two samples. The mean's accumulation roundoff is `bin_power_rms`."""
+    envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
+    if kind in ('mean', 'rms', 'min', 'max', 'peak'):
+        return envelope
+    elif isinstance(kind, str) and kind != 'median':
+        raise ValueError(f'unknown statistic {kind!r}')
+    return envelope + ROUNDOFF_SAFETY * n_impl * unit_roundoff(dtype)
+
+
+def bin_power_rms(
     dtype, size: int, n_impl: int = 1, kind: str | float = 'mean'
 ) -> float:
-    """rtol for the `kind` statistic of |x|**2 over `size` samples against exact
-    arithmetic, `kind` as in `stat_ufunc_from_shorthand`.
-
-    Only the mean accumulates ('rms' is the same mean of power); 'min', 'max' and
-    'peak' select a sample exactly, and a quantile interpolates once between two.
-    """
-    envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
+    """rms accumulation roundoff of the `kind` statistic of |x|**2 over `size` samples
+    of a contiguous axis, relative to the result: `accum_rms` for the mean ('rms' is
+    the same mean of power), nothing for a selection or a quantile"""
     if kind in ('mean', 'rms'):
-        return envelope + accum_rtol(dtype, size, n_impl)
-    elif kind in ('min', 'max', 'peak'):
-        return envelope
-    else:
-        return envelope + ROUNDOFF_SAFETY * n_impl * unit_roundoff(dtype)
+        return accum_rms(dtype, size, n_impl)
+    return 0.0
 
 
 def iq_to_bin_power(

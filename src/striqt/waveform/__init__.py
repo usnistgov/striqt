@@ -23,6 +23,7 @@ from .lib.power_analysis import (
     HYPOT_ULP,
     LOG10_ULP,
     POW_ULP,
+    bin_power_rms,
     bin_power_rtol,
     dBlinmean,
     dBlinsum,

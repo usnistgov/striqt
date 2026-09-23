@@ -35,10 +35,17 @@ from numeric_checks import (
 )
 from numpy.testing import assert_array_equal
 
-from striqt.waveform.lib.arrays import accum_rtol, float_dtype_like, unit_roundoff
+from striqt.waveform.lib.arrays import (
+    accum_rms,
+    accum_rtol,
+    float_dtype_like,
+    unit_roundoff,
+)
+from striqt.waveform.lib.fourier import peak_factor
 from striqt.waveform.lib.power_analysis import (
     DB_PER_NEPER,
     _arraylike_with_buffer,
+    bin_power_rms,
     bin_power_rtol,
     dB_tolerance,
     dBlinmean,
@@ -558,8 +565,8 @@ class TestRoundoffModels:
         """-20*log10(1-r) is at least the one-sided series DB_PER_NEPER*(2r + r**2)."""
         assert off_peak_dB_tolerance(0, r) >= DB_PER_NEPER * (2 * r + r**2)
 
-    def test_bin_power_rtol_grows_with_bin_size(self):
-        assert bin_power_rtol(np.float32, 16) > bin_power_rtol(np.float32, 1)
+    def test_bin_power_rms_grows_with_bin_size(self):
+        assert bin_power_rms(np.float32, 16) > bin_power_rms(np.float32, 1) > 0
 
     def test_level_tolerance_dB_power_is_half_of_amplitude(self):
         sigma = np.array([1e-6, 1e-3, 0.1, 1.0])
@@ -591,6 +598,15 @@ def cyclic_power_cases(draw, channels=(1, 2)):
     return iq, size, bins_per_cycle, n_cycles
 
 
+def bin_power_bound(dtype, size, outputs, n_impl=1, kind='mean'):
+    """worst-case rtol over `outputs` binned statistics of `size` samples: the
+    deterministic part plus the peak of the rms accumulation model"""
+    peak = max(peak_factor(outputs), 1.0)
+    return bin_power_rtol(dtype, n_impl, kind) + peak * bin_power_rms(
+        dtype, size, n_impl, kind
+    )
+
+
 class TestIqToBinPower:
     @pytest.mark.parametrize('size', [2**14, 2**17])
     def test_mean_over_a_long_bin_stays_within_the_reduction_model(self, size):
@@ -601,7 +617,9 @@ class TestIqToBinPower:
         iq = (iq / np.sqrt(2)).astype(np.complex64)
         result = iq_to_bin_power(iq, Ts=1, Tbin=size, kind='mean', axis=1)[:, 0]
         assert_close(
-            result, reference_power(iq, axis=1), rtol=bin_power_rtol(np.float32, size)
+            result,
+            reference_power(iq, axis=1),
+            rtol=bin_power_bound(np.float32, size, outputs=result.size),
         )
 
     @for_each_bin_size
@@ -627,7 +645,8 @@ class TestIqToBinPower:
         assert result.dtype == float_dtype_like(iq)
         expected = bin_power_reference(iq, size, kind, axis)
         assert result.shape == expected.shape
-        assert_close(result, expected, rtol=bin_power_rtol(float_dtype_like(iq), size))
+        rtol = bin_power_bound(float_dtype_like(iq), size, result.size, kind=kind)
+        assert_close(result, expected, rtol=rtol)
 
     @pytest.mark.parametrize('size', BIN_SIZES[1:])
     @given(data=st.data(), remainder=st.integers(min_value=1, max_value=4))
@@ -644,7 +663,8 @@ class TestIqToBinPower:
         result = iq_to_bin_power(iq, Ts, size * Ts, truncate=True)
         expected = bin_power_reference(iq, size, 'mean', 0)
         assert result.shape == (iq.shape[0] // size,)
-        assert_close(result, expected, rtol=bin_power_rtol(float_dtype_like(iq), size))
+        rtol = bin_power_bound(float_dtype_like(iq), size, result.size)
+        assert_close(result, expected, rtol=rtol)
 
     @given(ratio=st.floats(min_value=1.1, max_value=9.9).filter(lambda r: r % 1 > 0.01))
     def test_bin_period_must_be_multiple(self, ratio):
@@ -677,7 +697,7 @@ class TestIqToBinPower:
         matches = np.isclose(
             result[:, np.newaxis],
             windows[np.newaxis, :],
-            rtol=bin_power_rtol(float_dtype_like(iq), size),
+            rtol=bin_power_bound(float_dtype_like(iq), size, result.size),
         )
         assert np.all(matches.any(axis=1))
 
@@ -1021,7 +1041,7 @@ class TestNumpyCupyCrossComparison:
         )
 
         assert result_cp.dtype == result_np.dtype
-        rtol = bin_power_rtol(float_dtype_like(iq), size, 2)
+        rtol = bin_power_bound(float_dtype_like(iq), size, result_np.size, 2, kind)
         assert_close(result_cp, result_np, rtol=rtol)
 
     @given(case=cyclic_power_cases(channels=(2,)))
@@ -1036,7 +1056,8 @@ class TestNumpyCupyCrossComparison:
         result_cp = iq_to_cyclic_power(cupy_available.asarray(iq), Ts, axis=1, **kws)
 
         dtype = float_dtype_like(iq)
-        rtol = bin_power_rtol(dtype, size, 2) + accum_rtol(dtype, n_cycles, 2)
+        outputs = iq.shape[1] // size
+        rtol = bin_power_bound(dtype, size, outputs, 2) + accum_rtol(dtype, n_cycles, 2)
         for detector, stats in result_np.items():
             for stat, value in stats.items():
                 assert_close(result_cp[detector][stat], value, rtol=rtol)
@@ -1050,18 +1071,25 @@ class TestNumpyCupyCrossComparison:
         )
         assert_array_equal(result_cp, result_np)
 
-    def test_accum_rtol_is_sublinear_for_a_contiguous_reduction(self):
-        """numpy sums a contiguous axis pairwise and cupy by block tree, so the bound
-        must not grow like the n roundings of recursive summation"""
+    def test_accum_rms_grows_as_the_root_of_the_bin(self):
+        """numpy sums a contiguous axis pairwise and cupy by block tree, so the rms
+        model grows as sqrt(n) and stays far below the n roundings of a strided axis"""
         n = 1_000_000
-        contiguous = accum_rtol(np.float32, n)
-        strided = accum_rtol(np.float32, n, sequential=True)
-        assert strided == pytest.approx(2 * n * unit_roundoff(np.float32))
-        assert contiguous < strided / 100
-        assert accum_rtol(np.float32, 2 * n) > contiguous > accum_rtol(np.float32, 1)
+        assert accum_rtol(np.float32, n) == pytest.approx(
+            2 * n * unit_roundoff(np.float32)
+        )
+        assert accum_rms(np.float32, n) < accum_rtol(np.float32, n) / 1000
+        assert accum_rms(np.float32, 4 * n) == pytest.approx(
+            2 * accum_rms(np.float32, n), rel=0.02
+        )
+
+    def test_bin_power_rtol_rejects_an_unknown_statistic(self):
+        with pytest.raises(ValueError, match='bogus'):
+            bin_power_rtol(np.float32, kind='bogus')
 
     @pytest.mark.parametrize('kind', ['min', 'max', 'peak', 0.5], ids=str)
-    def test_bin_power_rtol_only_accumulates_for_the_mean(self, kind):
-        selection = bin_power_rtol(np.float32, 10_000, kind=kind)
-        assert selection < bin_power_rtol(np.float32, 10_000, kind='mean')
-        assert selection == bin_power_rtol(np.float32, 10, kind=kind)
+    def test_bin_power_rms_is_zero_for_selections(self, kind):
+        assert bin_power_rms(np.float32, 10_000, kind=kind) == 0
+        assert bin_power_rtol(np.float32, kind=kind) <= bin_power_rtol(
+            np.float32, kind=0.5
+        )

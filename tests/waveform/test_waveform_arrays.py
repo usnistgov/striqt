@@ -18,6 +18,7 @@ from numeric_checks import assert_close, reference_binned_mean, to_numpy
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib import arrays
+from striqt.waveform.lib.fourier import peak_factor
 
 
 class TestIsRoundMod:
@@ -97,6 +98,18 @@ class TestFloatDtypeLike:
 
 
 class TestBinnedMean:
+    def test_strided_axis_reduction_needs_the_in_order_bound(self):
+        """numpy sums a strided axis in order, so a bin that straddles two levels lands
+        outside the contiguous-axis model and inside `accum_rtol`; this is why the
+        tolerance functions pick the bound by the axis a measurement reduces"""
+        n = 1_000_000
+        x = np.full((2, n, 8), 3e-4, dtype=np.float32)
+        x[:, : n // 2] = 1.0
+        result = arrays.binned_mean(x, n, axis=1, fft=False)
+        err = float(np.abs(result / ((1.0 + 3e-4) / 2) - 1).max())
+        assert err > peak_factor(result.size) * arrays.accum_rms(np.float32, n)
+        assert err < arrays.accum_rtol(np.float32, n)
+
     """each case runs on every array namespace against the numpy reference"""
 
     @given(case=shaped_arrays(dtype=np.float64), data=st.data())

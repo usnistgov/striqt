@@ -120,17 +120,20 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
 ROUNDOFF_SAFETY = 2
 
 # A reduction over a contiguous axis is not summed in order. numpy sums it pairwise
-# (numpy/_core/src/umath/loops_utils.h.src: 8 interleaved accumulators over blocks of
-# 128, then a binary tree; before numpy 2.3 the tree is rebuilt per 8192-element buffer
-# and the buffers are summed sequentially), and cupy has each thread of a block sum a
-# strided subset sequentially before a shared-memory tree (cupy/_core/_reduction.pyx,
-# 512 threads by default; CUB's segmented reduce, the default accelerator, does the
-# same over 2048-element tiles). Higham, Accuracy and Stability of Numerical
-# Algorithms, 2nd ed., section 4.2: recursive summation rounds n times, pairwise
-# log2(n) times. The first-order worst case over all of these is log2(n) tree levels,
-# the leaf accumulators, and the longest sequential run, n / REDUCTION_THREADS.
-REDUCTION_LEAF_DEPTH = 16
-REDUCTION_THREADS = 512
+# (numpy/_core/src/umath/loops_utils.h.src; before numpy 2.3 per 8192-element buffer,
+# with the buffers summed in order), and cupy has each thread of a block sum a strided
+# subset in order before a shared-memory tree (cupy/_core/_reduction.pyx). The
+# sequential runs make the rms error grow as sqrt(n), from a floor of about one
+# roundoff for the tree (Higham, Accuracy and Stability of Numerical Algorithms, 2nd
+# ed., section 4.2). Measured with chores/tests/measure_db_accuracy.py as the float32
+# mean of |x|**2 over n gaussian samples, rms error in units of u at n = 1e3, 1e4, 1e5,
+# 1e6, 4e6: numpy 1.23 gives 0.8, 1.5, 1.1, 4.4, 5.7; numpy 2.5 stays near 0.7; cupy
+# 12.3 on a Tegra X2 gives 1.0, 1.5, 1.1, 1.8, 2.4. REDUCTION_RUN fits the numpy 1.23
+# curve, the worst of the three, and REDUCTION_SAFETY matches the FFT model's margin.
+# A reduction over a strided axis is summed in order on numpy (measured 1600 u rms and
+# 2000 u max at n = 1e6), which keeps the n-rounding worst case.
+REDUCTION_RUN = 50_000
+REDUCTION_SAFETY = 3
 
 
 def unit_roundoff(dtype) -> float:
@@ -138,19 +141,17 @@ def unit_roundoff(dtype) -> float:
     return float(np.finfo(dtype).eps / 2)
 
 
-def accum_rtol(dtype, n: int, n_impl: int = 1, *, sequential: bool = False) -> float:
-    """rtol on a sum or mean over `n` terms of `dtype`, against exact arithmetic
-    (n_impl=1) or against a second implementation (n_impl=2).
+def accum_rms(dtype, n: int, n_impl: int = 1) -> float:
+    """rms roundoff of a sum or mean over `n` terms of `dtype` along a contiguous axis,
+    relative to the result; `n_impl` independent implementations add in quadrature"""
+    u = unit_roundoff(dtype)
+    return REDUCTION_SAFETY * math.sqrt(n_impl * (1 + n / REDUCTION_RUN)) * u
 
-    The default bounds a reduction over a contiguous axis, which numpy and cupy both
-    reorder (see the comment above). `sequential` is for a reduction over a strided
-    axis, which numpy accumulates in order: n roundings.
-    """
-    if sequential:
-        roundings = n
-    else:
-        roundings = math.log2(max(n, 1)) + REDUCTION_LEAF_DEPTH + n / REDUCTION_THREADS
-    return ROUNDOFF_SAFETY * n_impl * roundings * unit_roundoff(dtype)
+
+def accum_rtol(dtype, n: int, n_impl: int = 1) -> float:
+    """rtol on a sum or mean over `n` terms of `dtype` along a strided axis, which
+    numpy accumulates in order: n roundings"""
+    return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
 
 
 def mean_atol(x: Array, count: int) -> float:
