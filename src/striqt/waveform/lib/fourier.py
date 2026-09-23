@@ -1455,6 +1455,7 @@ def resample(
     x: _AT,
     num: int,
     axis: int = 0,
+    window: None = None,
     domain: typing.Literal['time', 'frequency'] = 'time',
     overwrite_x=False,
     scale: Array | float = 1,
@@ -1482,6 +1483,9 @@ def resample(
 
     if nfft_in % 2 != 0:
         raise ValueError('x.shape[axis] must be even')
+
+    if window is not None:
+        raise ValueError('window argument is not supported')
 
     if shift == 0:
         # no frequency shift
