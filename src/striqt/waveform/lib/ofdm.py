@@ -555,8 +555,10 @@ def pss_params(
             # interference observed in 6th symbol (Case C)
             max_lag_symbols = 5
         else:
-            raise AssertionError(
-                'file an issue; this max_lag_symbol case should never happen'
+            raise ValueError(
+                f'symbol_indexes {tuple(symbol_indexes)} are spaced only '
+                f'{ssb_spacing} symbols apart, closer than the 4-symbol synchronization '
+                'block; pass max_lag_symbols explicitly to search fewer lag symbols'
             )
 
     slot_count = ceil((symbol_indexes[-1] + max_lag_symbols + 1) / 14)
@@ -702,6 +704,45 @@ def get_5g_ssb_iq(
     return out
 
 
+def sync_frame_count(sample_count: int, params: SyncParams) -> int:
+    """the number of 10 ms frames in a synchronization block of `sample_count` samples.
+
+    Raises `ValueError` where `correlate_sync_sequence` could not proceed: when the
+    block does not hold a whole number of frames, or when the correlation span
+    that `params` calls for would leave fewer than `params.lag_count` correlation
+    samples in a frame.
+    """
+    frame_count, remainder = divmod(sample_count, params.frame_size)
+    if remainder != 0 or frame_count == 0:
+        raise ValueError(
+            f'the synchronization block ({sample_count} samples) must hold a whole '
+            f'number of 10 ms frames ({params.frame_size} samples each at '
+            f'{params.sample_rate!r} S/s)'
+        )
+
+    span = (
+        f'the {params.slot_count}-slot correlation span ({params.corr_size} samples) '
+        f'for symbol_indexes {tuple(params.symbol_indexes)} with '
+        f'max_lag_symbols={params.max_lag_symbols}'
+    )
+    if params.corr_size > params.frame_size:
+        raise ValueError(
+            f'{span} does not fit in a 10 ms frame ({params.frame_size} samples)'
+        )
+
+    # the correlator splits the span into slots and trims each slot's excess cyclic
+    # prefix before the lag search
+    per_slot = params.corr_size // params.slot_count - max(params.cp_offsets)
+    available = params.slot_count * per_slot
+    if available < params.lag_count:
+        raise ValueError(
+            f'{span} leaves {available} correlation samples, fewer than the '
+            f'{params.lag_count} lags searched'
+        )
+
+    return frame_count
+
+
 def correlate_sync_sequence(
     ssb_iq: Array, sync_seq: Array, *, params: SyncParams, cell_id_split: int | None = 1
 ) -> Array:
@@ -717,6 +758,8 @@ def correlate_sync_sequence(
             (..., port index, cell Nid, sync block index, beam index, IQ sample index)
     """
     xp = array_namespace(ssb_iq)
+
+    sync_frame_count(ssb_iq.shape[-1], params)
 
     slot_count = params.slot_count
     corr_size = params.corr_size
@@ -1106,8 +1149,8 @@ class Phy3GPP(PhyOFDM):
             cp_fractions = [T * fs_MHz for T in Tcp_us]
             if any(cp.denominator != 1 for cp in cp_fractions):
                 raise ValueError(
-                    'this {sample rate, subcarrier spacing} produces '
-                    'non-integer cyclic prefixes'
+                    f'sample_rate {sample_rate!r} with subcarrier_spacing '
+                    f'{subcarrier_spacing!r} produces non-integer cyclic prefixes'
                 )
             cp_sizes = xp.array([cp.numerator for cp in cp_fractions], dtype=int)
         else:

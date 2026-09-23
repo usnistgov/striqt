@@ -42,7 +42,7 @@ class _MemoryShelf(UserDict):
 
 @pytest.fixture(autouse=True, scope='session')
 def isolated_persistent_cache():
-    """Back util.persistent_lru_cache with an in-memory dict for the test session.
+    """Back util.persistent_cache with an in-memory dict for the test session.
 
     The on-disk shelf is dbm.ndbm on macOS, which corrupts once the cache evicts
     past its size limit (the window-parameter searches alone write dozens of

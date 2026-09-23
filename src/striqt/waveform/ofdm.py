@@ -12,6 +12,7 @@ from .lib.ofdm import (
     slot_period,
     sss_params,
     sss_5g_nr,
+    sync_frame_count,
     SyncParams,
     Phy3GPP,
     Phy802_16,

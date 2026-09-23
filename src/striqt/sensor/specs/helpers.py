@@ -28,7 +28,12 @@ from pathlib import Path
 import msgspec
 
 import striqt.analysis as sa
-from striqt.analysis.specs.helpers import _dec_hook, frozendict, SpecValidationError
+from striqt.analysis.specs.helpers import (
+    _dec_hook,
+    frozendict,
+    SpecValidationError,
+    validation_path,
+)
 
 from . import structs
 from . import types
@@ -246,47 +251,33 @@ def adjust_analysis(
     return sa.specs.helpers.freeze(structs.BundledAnalysis.from_dict(result))
 
 
-def validate_sweep_analysis(
+def validate_sweep(
     sweep: structs.Sweep[Any, Any, SC],
     source_id: types.SourceID | None = None,
 ) -> None:
-    """validate each unique (capture, analysis) combination that `sweep` will run.
+    """raise on anything in `sweep` that would fail once it started to run.
 
-    The chain mirrors the one `iterate_sweep` follows, so what is checked here is what
-    will run. `source_id=None` resolves `adjust_captures` through its 'defaults' block,
-    which needs no hardware but also leaves per-source remaps checked only in their
-    default form.
+    `Sweep.__post_init__` calls this, so a constructed `Sweep` is a validated one.
+    The checks, in order: the `loops` entries (a `repeat` only outermost, at most one
+    loop per field) and their collisions with fields set per entry in `captures`; a
+    measurement name that shadows a capture field; each unique (capture, analysis)
+    combination against the registered measurements; and each unique capture against
+    the signal path of `correct_iq` (trigger lookup, resampler design, analysis
+    filter and resampler length). The capture chain mirrors the one `iterate_sweep`
+    follows, so what is checked here is what will run. `source_id=None` resolves
+    `adjust_captures` through its 'defaults' block, which needs no hardware but also
+    leaves per-source remaps checked only in their default form.
 
     Raises:
-        `msgspec.ValidationError` locating the first offending capture by the
-        `sweep.captures` entry and the loop points that produced it, and naming the
-        measurement that rejected it
+        `SpecValidationError` (a `msgspec.ValidationError`) at the offending path,
+        locating a capture by its `sweep.captures` entry and the loop points that
+        produced it
     """
-
-    if len(sweep.analysis.to_dict()) == 0:
-        return
-
-    if len(sweep.captures) == 0 and sweep.sensor is None:
-        # loop_captures refuses this combination; leave such a sweep constructible
-        return
-
-    seen = set()
-
-    for capture, origin in loop_capture_origins(sweep, source_id).items():
-        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
-        key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        try:
-            sa.registry.validate(capture, analysis)
-        except SpecValidationError as ex:
-            raise ex.at(*describe_capture_origin(sweep.loops, capture, origin)) from (
-                ex.__cause__
-            )
+    _validate_loops(sweep.loops)
+    _validate_loop_capture_collisions(sweep.loops, sweep.captures)
+    _validate_measurement_names(sweep)
+    _validate_sweep_analysis(sweep, source_id)
+    _validate_sweep_corrections(sweep, source_id)
 
 
 @sa.util.lru_cache()
@@ -697,6 +688,214 @@ def concat_group_sizes(
 
 
 # %% module-local helpers
+
+
+def _capture_field_path(origin: CaptureOrigin, field: str) -> tuple[str, ...]:
+    """the path of `field` in the `captures:` entry behind `origin`, if there is one.
+
+    A capture built from loops alone has no entry to point at; the loop point in
+    the `at ...` trailer then locates it on its own.
+    """
+    if origin.spec_index is None:
+        return ()
+    return ('.captures', f'[{origin.spec_index}]', f'.{field}')
+
+
+@sa.util.lru_cache()
+def _validate_loops(loops: tuple[structs.LoopSpec, ...]) -> None:
+    if len(loops) == 0:
+        return
+
+    # an outermost repeat is legal, so index the rest of the list against the
+    # position the user wrote rather than against the slice
+    offset = 1 if loops[0].field is None else 0
+    fields = [l.field for l in loops[offset:]]
+
+    counts = Counter(fields)
+
+    if None in counts:
+        index = offset + fields.index(None)
+        raise SpecValidationError(
+            'Expected a `repeat` loop only as the outermost (first) entry',
+            ('.loops', f'[{index}]'),
+        )
+
+    common = counts.most_common(1)
+
+    if len(common) == 0:
+        return
+
+    (which, howmany), *_ = common
+    if howmany > 1:
+        repeated = [offset + i for i, f in enumerate(fields) if f == which]
+        first = loops[repeated[0]]
+        raise SpecValidationError(
+            f'Expected at most one loop over field `{which}`, which is already '
+            f'looped in `{first.isin}` at $.loops[{repeated[0]}]',
+            ('.loops', f'[{repeated[1]}]'),
+        )
+
+
+_MISSING = object()
+
+
+@sa.util.lru_cache()
+def _validate_loop_capture_collisions(
+    loops: tuple[structs.LoopSpec, ...], captures: tuple[structs.SensorCapture, ...]
+) -> None:
+    """reject a loop that erases a distinction written into `captures:`.
+
+    A loop point overrides the same field in every capture, so captures written to
+    differ in a looped field silently become identical copies at each loop point.
+    """
+    if len(captures) < 2:
+        return
+
+    for index, loop in enumerate(loops):
+        if loop.field is None or loop.isin != 'capture':
+            continue
+
+        values = [getattr(c, loop.field, _MISSING) for c in captures]
+        if any(v is _MISSING for v in values):
+            # _build_loop_points_dict reports an unknown loop field later
+            continue
+
+        for j, value in enumerate(values[1:], start=1):
+            if value != values[0]:
+                raise SpecValidationError(
+                    f'Expected field `{loop.field}` to be looped or set per '
+                    'capture, not both',
+                    ('.loops', f'[{index}]'),
+                    ('.captures[0]', f'.captures[{j}]'),
+                )
+
+
+def _validate_measurement_names(sweep: structs.Sweep) -> None:
+    """reject a measurement named like a capture field, which would collide with the
+    capture coordinate of the same name in the saved dataset"""
+    if len(sweep.captures) > 0:
+        coord_fields = set(sweep.captures[0].__struct_fields__)
+    elif sweep.schema is not None:
+        coord_fields = set(sweep.schema.capture.__struct_fields__)
+    else:
+        return
+
+    invalid = set(sweep.analysis.__struct_fields__) & coord_fields
+    if len(invalid) > 0:
+        raise SpecValidationError(
+            f'Object contains measurement `{min(invalid)}`, which '
+            'shadows a capture field of the same name',
+            ('.analysis',),
+        )
+
+
+def _validate_sweep_analysis(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None = None,
+) -> None:
+    """validate each unique (capture, analysis) combination that `sweep` will run.
+
+    Raises:
+        `msgspec.ValidationError` locating the first offending capture by the
+        `sweep.captures` entry and the loop points that produced it, and naming the
+        measurement that rejected it
+    """
+
+    if len(sweep.analysis.to_dict()) == 0:
+        return
+
+    if len(sweep.captures) == 0 and sweep.sensor is None:
+        # loop_captures refuses this combination; leave such a sweep constructible
+        return
+
+    seen = set()
+
+    for capture, origin in loop_capture_origins(sweep, source_id).items():
+        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
+        key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        try:
+            sa.registry.validate(capture, analysis)
+        except SpecValidationError as ex:
+            raise ex.at(*describe_capture_origin(sweep.loops, capture, origin)) from (
+                ex.__cause__
+            )
+
+
+def _validate_sweep_corrections(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None = None,
+) -> None:
+    """reject each unique capture that `correct_iq` could not process for `sweep`.
+
+    This raises at load what the trigger lookup, `design_resampler`, `design_fir_lpf`
+    and `oaresample`'s LO shift check would otherwise raise on the first acquisition.
+    The resampler design is skipped for `FileCapture` sweeps, whose source rate comes
+    from the file rather than from `sweep.source.master_clock_rate`; the analysis
+    filter, which depends only on the capture, is still checked. The parity of the
+    padded acquisition that `resample` requires is left to acquisition time: sizing it
+    here would import scipy at spec load, and no design from a hamming COLA pads to an
+    odd length.
+
+    Raises:
+        `SpecValidationError` at `$.source.signal_trigger` when `sweep.analysis` lacks
+        the measurement the trigger runs, or otherwise at the field of the first
+        offending capture, located by its `sweep.captures` entry and the loop points
+        that produced it
+    """
+    from ..lib import compute
+    from ..lib.compute import corrections
+
+    if sweep.source.signal_trigger is not None:
+        with validation_path('.source', '.signal_trigger'):
+            compute.get_trigger_from_spec(sweep.source, sweep.analysis)
+
+    if len(sweep.captures) == 0 and sweep.sensor is None:
+        # loop_captures refuses this combination; leave such a sweep constructible
+        return
+
+    rate_from_file = issubclass(_resolve_capture_cls(sweep), structs.FileCapture)
+    seen = set()
+
+    for capture, origin in loop_capture_origins(sweep, source_id).items():
+        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
+        key = (
+            sa.specs.helpers.convert_spec_cached(structs.SensorCapture, capture),
+            analysis,
+        )
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        try:
+            if math.isfinite(capture.analysis_bandwidth):
+                with validation_path(
+                    *_capture_field_path(origin, 'analysis_bandwidth')
+                ):
+                    corrections.validate_fir_band(capture)
+
+            if rate_from_file:
+                continue
+
+            with validation_path(*_capture_field_path(origin, 'sample_rate')):
+                design = compute.design_resampler(
+                    capture, sweep.source.master_clock_rate
+                )
+
+            if compute.needs_resample(design, capture) and corrections.USE_OARESAMPLE:
+                with validation_path(*_capture_field_path(origin, 'lo_shift')):
+                    corrections.validate_oaresample_shift(design)
+        except SpecValidationError as ex:
+            raise ex.at(*describe_capture_origin(sweep.loops, capture, origin)) from (
+                ex.__cause__
+            )
 
 
 def _read_capture_field(capture: SC | Mapping[str, Any], field: str) -> Any:

@@ -34,6 +34,8 @@ def validated_cyclic_lag_count(
     Returns:
         the number of detector bins in one cycle, i.e. the length of `cyclic_lag`
     """
+    shared.check_statistics('power_detectors', spec.power_detectors)
+    shared.check_statistics('cyclic_statistics', spec.cyclic_statistics)
     validated_detector_bin_size(capture, spec)
 
     detector_period = float(spec.detector_period)

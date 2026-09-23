@@ -183,8 +183,17 @@ class TestStatUfuncFromShorthand:
             ('rms2', 'kind argument'),
             ('', 'kind argument'),
             (('mean',), 'invalid statistic'),
+            (1.5, r'quantile 1\.5 is outside'),
+            (-0.1, r'quantile -0\.1 is outside'),
         ],
-        ids=['average', 'rms2', 'empty', 'tuple'],
+        ids=[
+            'average',
+            'rms2',
+            'empty',
+            'tuple',
+            'quantile_above_1',
+            'quantile_below_0',
+        ],
     )
     def test_invalid_kind_raises(self, kind, match):
         with pytest.raises(ValueError, match=match):
@@ -895,19 +904,31 @@ class TestIqToCyclicPower:
                 iq, 1.0, 4.0, **{'cyclic_period': 16.0, 'axis': 1, **kws}
             )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='iq_to_cyclic_power truncates axis 0 (channels) instead of the bin axis',
-    )
     def test_misaligned_length_with_truncate(self):
         iq = np.random.default_rng(0).normal(size=(2, 4 * 7)).astype(np.complex64)
         result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, truncate=True, axis=1)
         assert result['rms']['mean'].shape == (2, 4)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='iq_to_cyclic_power indexes power_shape[1], which a 1-D waveform lacks',
-    )
+    def test_truncate_drops_trailing_bins_of_the_time_axis(self, subtests):
+        """A two-port capture at 107.52 MS/s with 1/28 ms detector bins (3840
+        samples) holds 25 bins, which truncate=True folds into 2 cycles of 10 lags
+        and drops the last 5. A unit-envelope input has power exactly 1 in every
+        bin, so each statistic is exactly 1 at every lag."""
+        Ts = 1 / 107.52e6
+        detector_period = 1 / 28000
+        kws = {'cyclic_period': 10 * detector_period, 'axis': 1}
+        iq = np.ones((2, 96000), dtype=np.complex64)
+
+        with pytest.raises(ValueError, match='truncate'):
+            iq_to_cyclic_power(iq, Ts, detector_period, truncate=False, **kws)
+
+        result = iq_to_cyclic_power(iq, Ts, detector_period, truncate=True, **kws)
+        for detector, stats in result.items():
+            for stat, value in stats.items():
+                with subtests.test(detector=detector, stat=stat):
+                    assert value.shape == (2, 10)
+                    assert_array_equal(value, 1.0)
+
     def test_1d_input(self):
         """The paper defines the input as a single power time series, and axis=0 is
         the default."""

@@ -5,7 +5,7 @@ extensions:
   import_name: extensions
 
 # the synthetic source has no default master clock rate
-source: !include ../fragments/source/tone.yaml
+source: !include [../fragments/source/tone.yaml, ../fragments/source/tone_unsync.yaml]
 
 loops:
   - kind: list

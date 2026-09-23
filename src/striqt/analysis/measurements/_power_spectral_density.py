@@ -33,6 +33,15 @@ def baseband_frequency(capture: specs.Capture, spec: specs.Spectrogram) -> np.nd
     return shared.spectrogram_baseband_frequency(capture, spec)
 
 
+def validated_psd_sizing(
+    capture: specs.Capture, spec: specs.PowerSpectralDensity
+) -> shared.SpectrogramSizing:
+    """check the STFT sizing and the statistic names, returning the sizing"""
+    sizing = shared.validated_spectrogram_sizing(capture, spec)
+    shared.check_statistics('time_statistic', spec.time_statistic)
+    return sizing
+
+
 def power_spectral_density_tolerance(
     capture: specs.Capture, spec: specs.PowerSpectralDensity, **kwargs
 ) -> specs.Tolerance:
@@ -55,7 +64,7 @@ def power_spectral_density_tolerance(
     prefer_iq_source='pre_filter',
     dtype='float32',
     attrs={'standard_name': 'Power spectral density'},
-    validate=shared.validated_spectrogram_sizing,
+    validate=validated_psd_sizing,
     tolerance=power_spectral_density_tolerance,
 )
 def power_spectral_density(iq, capture, **kwargs):

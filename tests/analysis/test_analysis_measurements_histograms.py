@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from fractions import Fraction
 
+import msgspec
 import numpy as np
 import pytest
 from numeric_checks import assert_close, elementwise_rtol
@@ -125,6 +126,28 @@ def test_channel_power_histogram_bin_coordinate(
     assert_close(da.channel_power_bin.values, expected, rtol=RTOL)
     assert da.channel_power_bin.values[0] == float('-inf')
     assert da.channel_power_bin.values[-1] == float('inf')
+
+
+def test_channel_power_histogram_shares_the_time_series_validator():
+    """the histogram bins the time series, so the detector names and the tiling
+    rules that reject one must reject the other, at the histogram's own path"""
+    assert (
+        sa.registry[sa.specs.ChannelPowerHistogram].validate
+        is sa.registry[sa.specs.ChannelPowerTimeSeries].validate
+    )
+
+    iq = sa.testing.tone(DURATION, FS)
+    with pytest.raises(
+        msgspec.ValidationError, match="power_detectors entry 'bogus'"
+    ) as ex:
+        sa.measurements.channel_power_histogram(
+            iq,
+            CAPTURE,
+            detector_period=DETECTOR_PERIOD,
+            power_detectors=('rms', 'bogus'),
+            **POWER_BINS,
+        )
+    assert str(ex.value).startswith('$.channel_power_histogram: ')
 
 
 # %% spectrogram_histogram
@@ -302,6 +325,48 @@ def test_cellular_resource_power_histogram_guard_bandwidths():
         retained.append(round(1 / downlink[downlink > 0].min()))
 
     assert retained[0] > retained[1] > retained[2]
+
+
+@pytest.mark.parametrize(
+    'capture,kwargs,message',
+    [
+        (
+            CELL_CAPTURE.replace(analysis_bandwidth=1.5 * CELL_FS),
+            {},
+            'analysis_bandwidth must select a band of whole bins',
+        ),
+        (
+            # a whole resource block spans 24 half-subcarrier bins, but the 105 kHz
+            # analysis band keeps only 14 of the 28
+            CELL_CAPTURE.replace(analysis_bandwidth=CELL_FS / 2),
+            {'average_rbs': True},
+            'integration_bandwidth must not exceed the analyzed bandwidth',
+        ),
+        (
+            # 13 symbols: one short of the slot that average_slots reduces over
+            CELL_CAPTURE.replace(duration=1e-3),
+            {'average_slots': True},
+            'duration must span at least one slot to average across slots',
+        ),
+    ],
+    ids=[
+        'analysis_bandwidth_above_sample_rate',
+        'resource_block_wider_than_analysis_band',
+        'capture_shorter_than_a_slot',
+    ],
+)
+def test_cellular_resource_power_histogram_rejects_undersized_grids(
+    capture, kwargs, message
+):
+    """`truncate_freqs` and both `binned_mean` calls fail on these grids with
+    array-shape errors; the validator rejects them first at the measurement path"""
+    iq = sa.testing.tone(capture.duration, CELL_FS)
+    with pytest.raises(msgspec.ValidationError, match=message) as ex:
+        sa.measurements.cellular_resource_power_histogram(
+            iq, capture, frame_slots='d' * CELL_SLOTS, **CELL_KWS, **kwargs
+        )
+
+    assert str(ex.value).startswith('$.cellular_resource_power_histogram: ')
 
 
 # %% the contract shared by every measurement

@@ -67,6 +67,9 @@ def capture_kwargs(draw, ports=port_values):
         'sample_rate': sample_rate,
         # an integer sample count keeps Capture.__post_init__ satisfied
         'duration': count / sample_rate,
+        # finite, since Sweep construction rejects an lo_shift loop over an infinite
+        # bandwidth; 0.5 MHz clears the FIR transition band at every SAMPLE_RATES entry
+        'analysis_bandwidth': 0.5e6,
         'frequency_offset': draw(st.floats(min_value=0, max_value=1e5)),
         'snr': draw(st.one_of(st.none(), st.floats(min_value=0, max_value=60))),
     }

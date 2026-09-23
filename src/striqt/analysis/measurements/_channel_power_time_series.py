@@ -49,6 +49,7 @@ def validated_channel_power_binning(
     `sw.iq_to_bin_power` and `sw.axis_to_blocks` apply these same two rules once IQ is
     in hand; checking them here moves the failure ahead of the acquisition.
     """
+    shared.check_statistics('power_detectors', spec.power_detectors)
     bin_size = validated_detector_bin_size(capture, spec)
 
     if not sw.isroundmod(capture.duration, float(spec.detector_period)):

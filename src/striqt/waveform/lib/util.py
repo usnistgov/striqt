@@ -169,10 +169,15 @@ def _make_lru_key(func, args, kwargs) -> str:
     return base64.b64encode(p).decode('ascii')
 
 
-def persistent_lru_cache(
+def persistent_cache(
     maxsize=128,
 ) -> Callable[[Callable[P, R]], LRUWrapped[P, R]]:
-    """caches a decorated function persistently on disk.
+    """memoize a function's results in a shelf that survives across processes.
+
+    The shelf holds at most `maxsize` entries; which entry is evicted past that
+    limit is unspecified, since the access order is rebuilt from the shelf's key
+    iteration on every call rather than tracked. This is normally stacked under
+    `lru_cache`, which supplies the in-memory LRU behaviour.
 
     The cache is best-effort: a fault reading or writing the shelf discards it and
     the call proceeds uncached, so only the wrapped function's own exceptions ever

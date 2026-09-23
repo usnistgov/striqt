@@ -163,13 +163,23 @@ class TestChannelPowerTimeSeries:
                 10.5 * float(DETECTOR_PERIOD),
                 'duration must be a counting-number multiple of detector_period',
             ),
+            (
+                {'power_detectors': ('rms', 'bogus')},
+                DURATION,
+                "power_detectors entry 'bogus' is not a supported statistic",
+            ),
         ],
-        ids=['detector_period_3.33_samples', 'duration_10.5_detector_periods'],
+        ids=[
+            'detector_period_3.33_samples',
+            'duration_10.5_detector_periods',
+            'unknown_detector',
+        ],
     )
     def test_unevenly_tiled_capture_is_rejected(self, kwargs, duration, message):
         """`detector_period` is 10/3 samples at `sample_rate`, then the capture is 10.5
-        detector periods long. `iq_to_bin_power` and `axis_to_blocks` reject both once
-        they have IQ; the validator rejects them before any is acquired."""
+        detector periods long, then a detector `stat_ufunc_from_shorthand` does not
+        know. `iq_to_bin_power` and `axis_to_blocks` reject all three once they have
+        IQ; the validator rejects them before any is acquired."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(
             msgspec.ValidationError, match=re.escape(message)
@@ -262,17 +272,30 @@ class TestCyclicChannelPower:
                 DURATION,
                 'detector_period must be a counting-number multiple of the sample period',
             ),
+            (
+                {'power_detectors': ('bogus',)},
+                DURATION,
+                "power_detectors entry 'bogus' is not a supported statistic",
+            ),
+            (
+                {'cyclic_statistics': ('min', 1.5)},
+                DURATION,
+                'cyclic_statistics entry 1.5 is not a supported statistic',
+            ),
         ],
         ids=[
             'duration_1.5_cycles',
             'cyclic_period_2.5_detector_periods',
             'detector_period_3.33_samples',
+            'unknown_detector',
+            'quantile_above_one',
         ],
     )
     def test_unevenly_nested_periods_are_rejected(self, kwargs, duration, message):
         """the three couplings the docstring states: `duration` is 1.5 cycles,
         `cyclic_period` is 2.5 detector periods, and `detector_period` is 10/3 samples
-        at `sample_rate`. Each is caught before any IQ is touched, so the error carries
+        at `sample_rate`; then a detector and a quantile that the statistic table does
+        not implement. Each is caught before any IQ is touched, so the error carries
         the measurement's field path."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(

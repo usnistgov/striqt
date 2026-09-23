@@ -5,6 +5,7 @@ import typing
 from .. import specs
 
 from ..lib import util
+from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
@@ -265,15 +266,54 @@ def validated_autocorrelation_lag_count(
 
     `tdd_config_from_str` owns the `frame_slots` rules and `_get_spec_range` the
     open-ended-range rule; `_get_max_corr_size` warms the `get_3gpp_phy` design for
-    every requested subcarrier spacing.
+    every requested subcarrier spacing. The index bounds are those of
+    `Phy3GPP.index_cyclic_prefix`, whose frame axis is not bounds-checked against the
+    waveform: a frame past the end of the capture reads zeros into the correlation.
     """
     scs = _subcarrier_spacing_tuple(spec)
 
     for one_scs in scs:
-        tdd_config_from_str(subcarrier_spacing=one_scs, frame_slots=spec.frame_slots)
+        tdd_config = tdd_config_from_str(
+            subcarrier_spacing=one_scs, frame_slots=spec.frame_slots
+        )
+        if len(tdd_config.downlink_slot_indexes) == 0:
+            raise ValueError(
+                "frame_slots must include at least one downlink slot 'd' "
+                f'(frame_slots: {spec.frame_slots!r}, subcarrier_spacing: {one_scs})'
+            )
 
-    _get_spec_range(spec.frame_range, 'frame_range')
-    _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
+    frame_range = _get_spec_range(spec.frame_range, 'frame_range')
+    if frame_range == 'all' or len(frame_range) == 0:
+        raise ValueError(
+            'frame_range must select at least one frame '
+            f'(frame_range: {spec.frame_range!r})'
+        )
+    frame_size = round(capture.sample_rate * 10e-3)
+    samples = shared.capture_sample_count(capture)
+    if min(frame_range) < 0 or (max(frame_range) + 1) * frame_size > samples:
+        raise ValueError(
+            'frame_range must index whole 10 ms frames inside the capture '
+            f'(frame_range: {spec.frame_range!r}, duration: {capture.duration}, '
+            f'frames in capture: {samples / frame_size})'
+        )
+
+    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
+    if symbol_range != 'all':
+        symbols_per_slot = sw.ofdm.Phy3GPP.FFT_PER_SLOT
+        if len(symbol_range) == 0:
+            raise ValueError(
+                'symbol_range must select at least one symbol '
+                f'(symbol_range: {spec.symbol_range!r})'
+            )
+        if (
+            min(symbol_range) < -symbols_per_slot
+            or max(symbol_range) >= symbols_per_slot
+        ):
+            raise ValueError(
+                f'symbol_range must index the {symbols_per_slot} symbols of a slot, '
+                f'within [{-symbols_per_slot}, {symbols_per_slot - 1}] '
+                f'(symbol_range: {spec.symbol_range!r})'
+            )
 
     return int(
         _get_max_corr_size(capture, subcarrier_spacings=scs, generation=spec.generation)
@@ -325,10 +365,17 @@ def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwarg
     frame_range = _get_spec_range(spec.frame_range, 'frame_range')
     symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
 
-    def index_cp_for_slot(slots):
-        return phy.index_cyclic_prefix(
+    def corr_for_slots(phy, x, slots):
+        cp_inds = phy.index_cyclic_prefix(
             frames=frame_range, symbols=symbol_range, slots=slots
         )
+        # the kernel zero-fills reads past the end rather than raising
+        if int(cp_inds.max()) >= x.shape[-1]:
+            raise ValueError(
+                f'cyclic prefix index {int(cp_inds.max())} lies past the '
+                f'{x.shape[-1]} samples of the waveform'
+            )
+        return sw.ofdm.corr_at_indices(cp_inds, x, phy.nfft, norm=False)
 
     max_len = _get_max_corr_size(
         capture, subcarrier_spacings=scs, generation=spec.generation
@@ -341,15 +388,13 @@ def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwarg
                 subcarrier_spacing=phy.subcarrier_spacing, frame_slots=spec.frame_slots
             )
 
-            cp_inds = index_cp_for_slot(tdd_config.downlink_slot_indexes)
-            R = sw.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
+            R = corr_for_slots(phy, iq[chan], tdd_config.downlink_slot_indexes)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
             if len(tdd_config.uplink_slot_indexes) == 0:
                 continue
 
-            cp_inds = index_cp_for_slot(tdd_config.uplink_slot_indexes)
-            R = sw.ofdm.corr_at_indices(cp_inds, iq[chan], phy.nfft, norm=False)
+            R = corr_for_slots(phy, iq[chan], tdd_config.uplink_slot_indexes)
             result[chan][1][iscs][: R.size] = xp.abs(R)
 
     return result, metadata

@@ -18,6 +18,7 @@ from .arrays import (
     ROUNDOFF_SAFETY,
     accum_rms,
     array_namespace,
+    axis_slice,
     float_dtype_like,
     is_cupy_array,
     isroundmod,
@@ -99,6 +100,9 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
         ufunc = partial(NAMED_UFUNCS[kind], axis=axis)
 
     elif isinstance(kind, Number):
+        if not 0 <= kind <= 1:
+            raise ValueError(f'quantile {kind!r} is outside the range [0, 1]')
+
         # numpy < 2.3 casts a scalar q to a float32 input's dtype
         # (numpy.lib._function_base_impl.quantile), which misplaces the virtual
         # index (n-1)*q by ~n*2**-25 samples in the interpolation. An array q
@@ -660,19 +664,20 @@ def iq_to_cyclic_power(
             'cyclic period must be positive integer multiple of the detector period'
         )
 
+    if axis < 0:
+        axis = x.ndim + axis
+
     power_shape = power[detectors[0]].shape
 
-    if power_shape[1] % cyclic_detector_bins != 0:
+    if power_shape[axis] % cyclic_detector_bins != 0:
         if truncate:
-            N = (power_shape[1] // cyclic_detector_bins) * cyclic_detector_bins
-            power = {d: x[:N] for d, x in power.items()}
+            N = (power_shape[axis] // cyclic_detector_bins) * cyclic_detector_bins
+            power = {d: axis_slice(x, 0, N, axis=axis) for d, x in power.items()}
+            power_shape = power[detectors[0]].shape
         else:
             raise ValueError(
                 'pass truncate=True to allow truncation to align with cyclic windows'
             )
-
-    if axis < 0:
-        axis = x.ndim + axis
 
     shape_by_cycle = (
         power_shape[:axis]

@@ -229,12 +229,31 @@ class TestSpectrogram:
                     f'(1-window_fill)*nfft: {fractions.Fraction(2, 3) * NFFT}',
                 ],
             ),
+            (
+                {'frequency_resolution': FS / 7, 'lo_bandstop': FS / 7},
+                'lo_bandstop must select a band of whole bins centered at baseband DC',
+                # an odd nfft puts DC between two bins
+                [f'lo_bandstop: {FS / 7}', f'sample_rate: {FS}', '7-bin'],
+            ),
+            (
+                {'integration_bandwidth': 2 * FS},
+                'integration_bandwidth must not exceed the analyzed bandwidth',
+                [f'integration_bandwidth: {2 * FS}', f'frequency bins: {NFFT}'],
+            ),
+            (
+                {'time_aperture': 2 * DURATION},
+                'duration must span at least one time_aperture of STFT windows',
+                [f'time_aperture: {2 * DURATION}', f'STFT windows: {NWINDOW}'],
+            ),
         ],
         ids=[
             'time_aperture',
             'integration_bandwidth',
             'frequency_resolution',
             'window_fill',
+            'lo_bandstop_on_odd_nfft',
+            'integration_bandwidth_above_sample_rate',
+            'time_aperture_longer_than_capture',
         ],
     )
     def test_non_integer_binning_raises(self, kwargs, message, quantities):
@@ -260,6 +279,41 @@ class TestSpectrogram:
         # compared, so it names them in a parenthetical after the rule text
         for quantity in quantities:
             assert quantity in str(valueinfo.value)
+
+    @pytest.mark.parametrize(
+        'capture,message',
+        [
+            (
+                sa.specs.Capture(duration=(NFFT - 1) / FS, sample_rate=FS),
+                'duration must span at least one FFT window',
+            ),
+            (
+                CAPTURE.replace(analysis_bandwidth=1.5 * FS),
+                'analysis_bandwidth must select a band of whole bins',
+            ),
+        ],
+        ids=['shorter_than_nfft', 'analysis_bandwidth_above_sample_rate'],
+    )
+    def test_incompatible_capture_raises(self, capture, message):
+        """`sw.stft` and `sw.fourier.truncate_freqs` reject these with array-shape
+        messages once IQ is in hand; the validator names the capture field"""
+        iq = testing.tone(capture.duration, FS)
+        with pytest.raises(msgspec.ValidationError, match=message) as excinfo:
+            spg_of(iq, capture, as_xarray=False)
+
+        assert str(excinfo.value).startswith('$.spectrogram: ')
+
+    def test_odd_nfft_cannot_be_trimmed_to_the_analysis_bandwidth(self):
+        """with 7 bins, DC falls between two of them, so the half-open band that
+        `trim_stopband` keeps has no whole-bin edges"""
+        capture = CAPTURE.replace(analysis_bandwidth=FS / 2)
+        iq = testing.tone(DURATION, FS)
+        with pytest.raises(msgspec.ValidationError, match='analysis_bandwidth'):
+            spg_of(iq, capture, frequency_resolution=FS / 7, as_xarray=False)
+
+        # the same nfft passes once the band is not cut
+        da = spg_of(iq, capture, frequency_resolution=FS / 7, trim_stopband=False)
+        assert da.sizes['spectrogram_baseband_frequency'] == 7
 
 
 # %% power_spectral_density
@@ -348,6 +402,20 @@ class TestPowerSpectralDensity:
         values = np.asarray(da.values, dtype='float32')
         assert len(np.unique(values)) > 16
         assert not np.array_equal(values, values.astype('float16').astype('float32'))
+
+    @pytest.mark.parametrize(
+        'statistic', ['bogus', 1.5, -0.1], ids=['unknown_name', 'above_one', 'negative']
+    )
+    def test_unsupported_time_statistic_is_rejected(self, statistic):
+        """`stat_ufunc_from_shorthand` and `xp.quantile` would raise on these mid-
+        measurement; the validator rejects them at the field before any IQ"""
+        iq = testing.tone(PSD_DURATION, FS)
+        with pytest.raises(
+            msgspec.ValidationError, match=f'time_statistic entry {statistic!r}'
+        ) as excinfo:
+            psd_of(iq, time_statistic=('mean', statistic))
+
+        assert str(excinfo.value).startswith('$.power_spectral_density: ')
 
 
 # %% cellular_5g_ssb_spectrogram
@@ -441,6 +509,40 @@ class TestCellular5GSSBSpectrogram:
             rtol=tol.rtol,
             atol=tol.on_peak.peak,
         )
+
+    @pytest.mark.parametrize(
+        'duration,kwargs,message',
+        [
+            (
+                SSB_PERIODICITY,
+                {'frequency_offset': SSB_SCS / 2},
+                'sample_rate must select a band of whole bins centered at frequency_offset',
+            ),
+            (
+                SSB_PERIODICITY,
+                {'sample_rate': 2 * SSB_FS},
+                'sample_rate must select a band of whole bins',
+            ),
+            (
+                # half a burst set (one slot) past the discovery period
+                SSB_PERIODICITY + sw.ofdm.slot_period(SSB_SCS),
+                {},
+                'duration must end on a whole discovery_periodicity or after a complete burst set of 56 symbols',
+            ),
+        ],
+        ids=[
+            'frequency_offset_off_the_subcarrier_grid',
+            'sample_rate_above_capture',
+            'partial_burst_set',
+        ],
+    )
+    def test_incompatible_burst_layout_is_rejected(self, duration, kwargs, message):
+        """the frequency cut and the per-block reshape at the end of the measurement
+        would fail on these; the validator names the field first"""
+        with pytest.raises(msgspec.ValidationError, match=re.escape(message)) as ex:
+            ssb_of(duration, **kwargs)
+
+        assert str(ex.value).startswith('$.cellular_5g_ssb_spectrogram: ')
 
 
 # %% tolerance

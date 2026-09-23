@@ -233,6 +233,13 @@ def validated_resource_grid_sizing(
         time_bin_averaging = None
     elif sw.isroundmod(slot_period, sizing.hop_period):
         time_bin_averaging = round(slot_period / sizing.hop_period)
+        window_count = shared.spectrogram_window_count(capture, sizing)
+        if time_bin_averaging > window_count:
+            raise ValueError(
+                'duration must span at least one slot to average across slots '
+                f'(duration: {capture.duration}, slot_period: {slot_period}, '
+                f'symbols in capture: {window_count})'
+            )
     else:
         raise ValueError(
             'a slot must span a counting number of STFT hops to average across slots '

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import msgspec
 import pytest
-from conftest import SITE_SPEC, scalars
+from conftest import SITE_SPEC, SWEEP_DIR, scalars
 from hypothesis import given
 from hypothesis import strategies as st
 from pytest_lazy_fixtures import lf
@@ -32,6 +32,7 @@ from site_strategies import (
     make_site_sweep,
 )
 from sweep_strategies import (
+    SOURCE,
     CaptureCls,
     capture_tuples,
     frequency_bin_range_loop,
@@ -47,7 +48,7 @@ from sweep_strategies import (
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-from striqt.analysis.specs.helpers import frozendict
+from striqt.analysis.specs.helpers import SpecValidationError, frozendict
 
 H = ss.specs.helpers
 Remap = ss.specs.CaptureRemap
@@ -61,6 +62,11 @@ ADJUST = {
 }
 MODEL_FROM_NAME = Remap(key='antenna_name', lookup=ANTENNA_MODELS)
 NAME_FROM_PORT = Remap(key='port', lookup={0: 'Omni'})
+
+
+def shiftable_capture(**kws):
+    """make_capture with the finite analysis_bandwidth that an lo_shift design needs"""
+    return make_capture(analysis_bandwidth=0.5e6, **kws)
 
 
 def first_site_capture(sweep, source_id, **capture_kws):
@@ -529,11 +535,13 @@ def test_a_bad_loop_point_names_its_position_in_the_declared_loops(only_fields):
         ss.specs.List(field='analysis_bandwidth', values=('nope',)),
     )
     bad_index = len(loops) - 1
-    sweep = make_sweep(captures=(make_capture(),), loops=loops)
 
     match = re.escape(f'$.loops[{bad_index}]: Expected `float`, got `str`')
+    # the expansion rather than a Sweep, which no longer constructs with a bad point
     with pytest.raises(msgspec.ValidationError, match=match):
-        H.loop_captures(sweep, only_fields=only_fields)
+        H._expand_capture_loops_with_origins(
+            (make_capture(),), loops, only_fields=only_fields
+        )
 
 
 def test_loops_without_captures_build_new_instances():
@@ -573,10 +581,9 @@ def test_loops_that_leave_a_required_field_unset_name_the_loop_point():
 
 def test_unknown_loop_field_raises():
     loops = (ss.specs.List(field='nope', values=(1,)),)
-    sweep = make_sweep(captures=(make_capture(),), loops=loops)
     match = r'\$\.loops: Object contains unknown field `nope`'
     with pytest.raises(msgspec.ValidationError, match=match):
-        H.loop_captures(sweep)
+        make_sweep(captures=(make_capture(),), loops=loops)
 
 
 def test_analysis_loops_populate_adjust_analysis():
@@ -600,7 +607,7 @@ def test_analysis_loop_merges_with_the_captures_adjust_analysis():
 @pytest.mark.parametrize(
     'bandwidths, expected',
     [
-        ((0.5e6, 1e6, 2e6, math.inf), [0.5e6, 1e6, math.inf]),
+        ((0.5e6, 0.7e6, 2e6, math.inf), [0.5e6, 0.7e6, math.inf]),
         ((math.inf, 2e6, 0.5e6), [math.inf, 0.5e6]),
         ((2e6,), []),
     ],
@@ -641,13 +648,17 @@ def test_calibration_fixture_expansion(calibration_sweep):
 def test_adjustments_apply_before_loops_take_priority():
     loops = (ss.specs.List(field='lo_shift', values=('right',)),)
     adjust = {'defaults': {'lo_shift': 'left'}}
-    sweep = make_sweep(captures=(make_capture(),), loops=loops, adjust_captures=adjust)
+    sweep = make_sweep(
+        captures=(shiftable_capture(),), loops=loops, adjust_captures=adjust
+    )
     assert H.loop_captures(sweep)[0].lo_shift == 'right'
     assert H.loop_captures(sweep.replace(loops=()))[0].lo_shift == 'left'
 
 
 def test_source_specific_adjustments_in_loop_captures():
-    captures = tuple(make_capture(frequency_offset=fo) for fo in (100.0, 200.0, 300.0))
+    captures = tuple(
+        shiftable_capture(frequency_offset=fo) for fo in (100.0, 200.0, 300.0)
+    )
     sweep = make_sweep(captures=captures, adjust_captures=ADJUST)
 
     def summary(source_id):
@@ -726,7 +737,7 @@ def test_survey_loops_expand(site_survey_sweep):
 
 
 def test_meta_bounds_are_enforced_when_the_sweep_is_constructed(site_survey_sweep):
-    """`validate_sweep_analysis` expands the loops from `Sweep.__post_init__`, so a
+    """`validate_sweep` expands the loops from `Sweep.__post_init__`, so a
     `Meta` bound that only `_expand_capture_loops_with_origins` re-checks fails at
     construction"""
     loops = (
@@ -751,10 +762,9 @@ def test_range_loop_on_an_int_field_accepts_integral_floats():
 
 def test_range_loop_on_an_int_field_rejects_fractions():
     loops = (ss.specs.Range(field='azimuth_repeat', start=0, stop=3, step=1.5),)
-    sweep = make_site_sweep(cls=SurveySweepCls, loops=loops)
     match = re.escape('$.loops[0]: Expected `int`') + '.*azimuth_repeat'
     with pytest.raises(msgspec.ValidationError, match=match):
-        H.loop_captures(sweep)
+        make_site_sweep(cls=SurveySweepCls, loops=loops)
 
 
 def test_remaps_see_loop_values_given_as_numbers(site_sweep):
@@ -844,7 +854,7 @@ def test_origins_are_renumbered_after_the_nyquist_filter():
     must not leave a gap"""
     captures = (make_capture(sample_rate=1e6, duration=1e-3),)
     loops = (
-        ss.specs.List(field='analysis_bandwidth', values=(0.5e6, 1e6, 2e6, math.inf)),
+        ss.specs.List(field='analysis_bandwidth', values=(0.5e6, 0.7e6, 2e6, math.inf)),
     )
     options = ss.specs.SweepOptions(loop_only_nyquist=True)
     sweep = make_sweep(captures=captures, loops=loops, options=options)
@@ -855,7 +865,7 @@ def test_origins_are_renumbered_after_the_nyquist_filter():
     bandwidths = [
         o.loop_points['capture', 'analysis_bandwidth'] for o in origins.values()
     ]
-    assert bandwidths == [0.5e6, 1e6, math.inf]
+    assert bandwidths == [0.5e6, 0.7e6, math.inf]
 
 
 def test_a_repeated_loop_value_collapses_onto_the_first_origin():
@@ -1152,7 +1162,9 @@ def test_source_key_error_names_defaults():
 
 def test_list_capture_adjustments_by_source():
     loops = (ss.specs.List(field='frequency_offset', values=(100, 200, 300)),)
-    sweep = make_sweep(captures=(make_capture(),), loops=loops, adjust_captures=ADJUST)
+    sweep = make_sweep(
+        captures=(shiftable_capture(),), loops=loops, adjust_captures=ADJUST
+    )
     assert H.list_capture_adjustments(sweep, 'ffff') == {
         'lo_shift': ('left',),
         'snr': (1.0, 2.0, -1.0),
@@ -1186,7 +1198,9 @@ def test_list_capture_adjustments_of_the_synthetic_sweep(synthetic_sweep):
 )
 def test_list_capture_adjustments_are_unique_in_first_seen_order(offsets, expected):
     loops = (ss.specs.List(field='frequency_offset', values=offsets),)
-    sweep = make_sweep(captures=(make_capture(),), loops=loops, adjust_captures=ADJUST)
+    sweep = make_sweep(
+        captures=(shiftable_capture(),), loops=loops, adjust_captures=ADJUST
+    )
     assert H.list_capture_adjustments(sweep, 'ffff')['snr'] == expected
 
 
@@ -1238,7 +1252,7 @@ def test_adjust_analysis_warns_about_unused_keys(synthetic_sweep, caplog):
     assert any('bogus_key' in record.getMessage() for record in caplog.records)
 
 
-# %% validate_sweep_analysis
+# %% validate_sweep
 
 # 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
 SPG = ss.specs.BundledAnalysis.from_dict({
@@ -1248,13 +1262,25 @@ BAD_RESOLUTION = Remap(
     key='frequency_offset',
     lookup={0.0: {'frequency_resolution': 1e4}, 1e5: {'frequency_resolution': 3e4}},
 )
+IN_TREE_SWEEPS = sorted([
+    SWEEP_DIR / 'synthetic.yaml',
+    SWEEP_DIR / 'air7101b.yaml',
+    *SWEEP_DIR.glob('fake_soapy-*.yaml'),
+    *SWEEP_DIR.glob('site/*.yaml'),
+])
+DOWNSTREAM_SWEEP = (
+    Path(__file__).parents[2]
+    / '_training_material'
+    / 'downstream test acquisition'
+    / 'basic.yaml'
+)
 
 
-def test_validate_sweep_analysis_accepts_the_synthetic_sweep(synthetic_sweep):
-    assert H.validate_sweep_analysis(synthetic_sweep) is None
+def test_validate_sweep_accepts_the_synthetic_sweep(synthetic_sweep):
+    assert H.validate_sweep(synthetic_sweep) is None
 
 
-def test_validate_sweep_analysis_reports_a_per_source_override():
+def test_validate_sweep_reports_a_per_source_override():
     """`source_id` selects an `adjust_captures` block that `Sweep.__post_init__` cannot
     reach, since it resolves only the 'defaults' block"""
     sweep = make_sweep(
@@ -1264,10 +1290,10 @@ def test_validate_sweep_analysis_reports_a_per_source_override():
         analysis=SPG,
     )
 
-    assert H.validate_sweep_analysis(sweep) is None
+    assert H.validate_sweep(sweep) is None
 
     with pytest.raises(msgspec.ValidationError) as excinfo:
-        H.validate_sweep_analysis(sweep, 'ab12')
+        H.validate_sweep(sweep, 'ab12')
 
     message = str(excinfo.value)
     # the measurement that rejected it, the values the failed rule compared, then the
@@ -1280,7 +1306,7 @@ def test_validate_sweep_analysis_reports_a_per_source_override():
     )
 
 
-def test_validate_sweep_analysis_ignores_loops_over_sensor_only_fields(monkeypatch):
+def test_validate_sweep_ignores_loops_over_sensor_only_fields(monkeypatch):
     """`snr` is invisible to the analysis layer, so both captures project onto one
     `AnalysisCapture` and the pair is validated once"""
     # build before patching: Sweep.__post_init__ validates too, and would be counted
@@ -1296,12 +1322,12 @@ def test_validate_sweep_analysis_ignores_loops_over_sensor_only_fields(monkeypat
         sa.registry, 'validate', lambda capture, analysis: seen.append(capture)
     )
 
-    H.validate_sweep_analysis(sweep)
+    H.validate_sweep(sweep)
 
     assert len(seen) == 1
 
 
-def test_validate_sweep_analysis_skips_an_empty_analysis(monkeypatch):
+def test_validate_sweep_skips_an_empty_analysis(monkeypatch):
     sweep = make_sweep(captures=(make_capture(),))
 
     seen = []
@@ -1309,6 +1335,70 @@ def test_validate_sweep_analysis_skips_an_empty_analysis(monkeypatch):
         sa.registry, 'validate', lambda capture, analysis: seen.append(capture)
     )
 
-    H.validate_sweep_analysis(sweep)
+    H.validate_sweep(sweep)
 
     assert seen == []
+
+
+def test_fir_band_errors_name_the_analysis_bandwidth():
+    capture = make_capture(sample_rate=1e6, analysis_bandwidth=0.9e6)
+    match = re.escape('$.captures[0].analysis_bandwidth: analysis_bandwidth')
+    with pytest.raises(SpecValidationError, match=match):
+        make_sweep(captures=(capture,))
+
+
+def test_design_resampler_errors_name_the_sample_rate():
+    capture = make_capture(
+        host_resample=False, sample_rate=2 * SOURCE.master_clock_rate
+    )
+    match = re.escape('$.captures[0].sample_rate: upsampling requires host_resample')
+    with pytest.raises(SpecValidationError, match=match):
+        make_sweep(captures=(capture,))
+
+
+def test_a_looped_capture_is_located_by_its_loop_point():
+    loops = (ss.specs.List(field='lo_shift', values=('none', 'left')),)
+    capture = make_capture(analysis_bandwidth=math.inf)
+    match = (
+        re.escape('frequency shifting may only be applied')
+        + '.*'
+        + re.escape("at $.loops: {'lo_shift': 'left'} on $.captures[0]")
+    )
+    with pytest.raises(SpecValidationError, match=match):
+        make_sweep(captures=(capture,), loops=loops)
+
+
+def test_a_trigger_without_its_measurement_is_rejected_at_the_source():
+    source = SOURCE.replace(signal_trigger='cellular_5g_pss_sync')
+    match = re.escape('$.source.signal_trigger: signal_trigger')
+    with pytest.raises(SpecValidationError, match=match):
+        make_sweep(captures=(make_capture(),), source=source)
+
+
+def test_file_sources_skip_the_resampler_design_but_not_the_filter():
+    """the file, not `master_clock_rate`, sets the rate the design would run from"""
+    source = ss.specs.MATSource(path='absent.mat', master_clock_rate=1e6)
+    capture = ss.specs.FileCapture(
+        port=0, sample_rate=2e6, duration=1e-3, host_resample=False
+    )
+    with pytest.raises(ValueError, match='upsampling requires host_resample'):
+        ss.lib.compute.design_resampler(capture, source.master_clock_rate)
+
+    cls = ss.bindings.mat_file.sensor.sweep_spec_cls
+    assert cls(source=source, captures=(capture,)).captures == (capture,)
+
+    filtered = capture.replace(analysis_bandwidth=capture.sample_rate - 1e3)
+    with pytest.raises(SpecValidationError, match='analysis_bandwidth'):
+        cls(source=source, captures=(filtered,))
+
+
+@pytest.mark.parametrize('path', IN_TREE_SWEEPS, ids=lambda p: p.name)
+def test_in_tree_sweeps_still_load(path):
+    sweep = ss.read_yaml_spec(path)
+    assert len(H.loop_captures(sweep)) > 0
+
+
+@pytest.mark.skipif(not DOWNSTREAM_SWEEP.exists(), reason='not checked in')
+def test_downstream_sweep_still_loads():
+    sweep = ss.read_yaml_spec(DOWNSTREAM_SWEEP)
+    assert len(H.loop_captures(sweep)) > 0

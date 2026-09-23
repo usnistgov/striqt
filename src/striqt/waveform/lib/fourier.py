@@ -149,10 +149,7 @@ def off_peak_floor_dBc(
 
 
 # %% Windowing
-@convert_np_to_xp
-@util.lru_cache()
-@util.persistent_lru_cache()
-def get_window(
+def _design_window(
     name_or_tuple: WindowType,
     nwindow: int,
     nzero: int = 0,
@@ -162,15 +159,8 @@ def get_window(
     fftbins=True,
     norm=True,
     dtype='float32',
-    xp: 'XpType' = None,
 ) -> Array:
-    """build an window function with optional zero-padding or parameter finding.
-
-    Arguments:
-
-    See also:
-        `scipy.signal.get_window`
-    """
+    """the uncached numpy implementation of `get_window`"""
 
     from scipy import signal
 
@@ -213,13 +203,57 @@ def get_window(
     return w
 
 
+_cached_design_window = util.lru_cache()(util.persistent_cache()(_design_window))
+
+
+@convert_np_to_xp
+def get_window(
+    name_or_tuple: WindowType,
+    nwindow: int,
+    nzero: int = 0,
+    *,
+    fftshift: bool = False,
+    center_zeros=False,
+    fftbins=True,
+    norm=True,
+    dtype='float32',
+    xp: 'XpType' = None,
+) -> Array:
+    """build an window function with optional zero-padding or parameter finding.
+
+    The design is cached in memory and on disk. Equivalent spellings of the
+    arguments (a dtype given as a string or a `numpy.dtype`, `xp` given or omitted,
+    positional or keyword `nzero`) share one cache entry.
+
+    See also:
+        `scipy.signal.get_window`
+    """
+    if dtype is not None:
+        dtype = np.dtype(dtype)
+
+    return _cached_design_window(
+        name_or_tuple,
+        nwindow,
+        nzero,
+        fftshift=bool(fftshift),
+        center_zeros=bool(center_zeros),
+        fftbins=bool(fftbins),
+        norm=bool(norm),
+        dtype=dtype,
+    )
+
+
+get_window.cache_info = _cached_design_window.cache_info  # ty: ignore
+get_window.cache_clear = _cached_design_window.cache_clear  # ty: ignore
+
+
 @util.lru_cache()
 def equivalent_noise_bandwidth(window: WindowSpecType, N, fftbins=True, cached=True):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
     if cached:
         w = get_window(window, N, fftbins=fftbins)
     else:
-        w = get_window.__wrapped__(window, N, fftbins=fftbins)
+        w = _design_window(window, N, fftbins=fftbins)
     return len(w) * np.sum(w**2) / np.sum(w) ** 2
 
 
@@ -298,7 +332,7 @@ def truncate_freqs(
 ):
     """trim an array outside of the specified bandwidth on a frequency axis"""
 
-    s = _slice_freqs(nfft, fs, bandwidth, offset=offset)
+    s = slice_freqs(nfft, fs, bandwidth, offset=offset)
     return axis_slice(x, s.start, s.stop, axis=axis)
 
 
@@ -314,7 +348,7 @@ def null_lo(
     """sets samples within the specified bandwidth on a frequency axis to nan in-place"""
     # to make the top bound inclusive
     nfft = x.shape[axis]
-    s = _slice_freqs(nfft, fs, bandwidth, offset=offset)
+    s = slice_freqs(nfft, fs, bandwidth, offset=offset)
     view = axis_slice(x, s.start, s.stop, axis=axis)
     view[:] = float('nan')
 
@@ -495,10 +529,14 @@ def _prime_fft_sizes(min=2, max=OLA_MAX_FFT_SIZE):
 
 
 @util.lru_cache()
-def _slice_freqs(
+def slice_freqs(
     nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0
 ) -> slice:
-    """trim an array outside of the specified bandwidth on a frequency axis"""
+    """the slice of an `nfft`-bin frequency axis that spans `bandwidth` about `offset`.
+
+    Raises `ValueError` for an `offset` off the `fs/nfft` grid or a band outside
+    `±fs/2`, which is why validators call it.
+    """
     if bandwidth < 0:
         raise ValueError('invalid negative bandwidth')
 
@@ -925,7 +963,7 @@ def _unstack_stft_windows(
 
 @convert_np_to_xp
 @util.lru_cache()
-@util.persistent_lru_cache()
+@util.persistent_cache()
 def design_fir_lpf(
     bw, fs, *, numtaps=4001, transition_bw=250e3, dtype='float32', xp=None
 ):
@@ -1123,7 +1161,7 @@ def design_oafilter(
         divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
     except KeyError:
         raise TypeError(
-            'ola_filter argument "window" must be one of ("hamming", "blackman", or "blackmanharris")'
+            f'window must be one of {tuple(_COLA_WINDOW_SIZE_DIVISOR)}, not {window!r}'
         )
 
     if nfft_out % divisor != 0:
@@ -1133,14 +1171,16 @@ def design_oafilter(
 
     if window is None or window == 'rect':
         overlap_scale = 1
-    if window == 'hamming':
+    elif window == 'hamming':
         overlap_scale = 1 / 2
     elif window == 'blackman':
         overlap_scale = 2 / 3
     elif window == 'blackmanharris':
         overlap_scale = 4 / 5
     else:
-        raise ValueError('unexpected matching error')
+        raise ValueError(
+            f'window must be one of {tuple(_COLA_WINDOW_SIZE_DIVISOR)}, not {window!r}'
+        )
 
     noverlap = round(nfft_out * overlap_scale)
 
@@ -1205,6 +1245,11 @@ def design_cola_resampler(
     if bw == inf and shift:
         raise ValueError(
             'frequency shifting may only be applied when an analysis bandwidth is specified'
+        )
+
+    if window not in _COLA_WINDOW_SIZE_DIVISOR:
+        raise ValueError(
+            f'window must be one of {tuple(_COLA_WINDOW_SIZE_DIVISOR)}, not {window!r}'
         )
 
     if shift:
@@ -1451,6 +1496,34 @@ def oaconvolve(x1, x2, mode='full', axes=-1):
     return func(x1, x2, mode=mode, axes=axes)
 
 
+def resample_edges(
+    nfft_in: int, nfft_out: int, shift: int = 0
+) -> tuple[int, int] | None:
+    """the frequency bin range `[edge_low, edge_high)` that `resample` copies from
+    an `nfft_in`-sample input into `nfft_out` samples, or None for an unshifted band.
+
+    Raises `ValueError` when `nfft_in` is odd, when a nonzero `shift` is requested
+    while upsampling, or when the shifted band runs outside the input spectrum.
+    """
+    if nfft_in % 2 != 0:
+        raise ValueError(f'the input length must be even, not {nfft_in}')
+
+    if shift == 0:
+        return None
+    if nfft_out > nfft_in:
+        raise ValueError('shift is only supported when downsampling')
+
+    edge_low = nfft_in // 2 - nfft_out // 2 + shift
+    edge_high = edge_low + nfft_out
+
+    if edge_low < 0:
+        raise ValueError('shift is too small')
+    if edge_high > nfft_in:
+        raise ValueError('shift is too large')
+
+    return edge_low, edge_high
+
+
 def resample(
     x: _AT,
     num: int,
@@ -1459,15 +1532,15 @@ def resample(
     domain: typing.Literal['time', 'frequency'] = 'time',
     overwrite_x=False,
     scale: Array | float = 1,
-    shift: float = 0,
+    shift: int = 0,
 ) -> _AT:
     """partial reimplementation of scipy.signal.resample optimized for reduced memory.
 
     No new buffers are allocated when downsampling if `overwrite_x` is `False`.
     """
-    if domain not in ('time', 'freq'):
+    if domain not in ('time', 'freq', 'frequency'):
         raise ValueError(
-            "Acceptable domain flags are 'time' or 'freq', not domain={}".format(domain)
+            f"Acceptable domain flags are 'time' or 'frequency', not domain={domain!r}"
         )
 
     if x.shape[axis] == num:
@@ -1478,28 +1551,15 @@ def resample(
     x = xp.asarray(x)
     nfft_in = x.shape[axis]
     nfft_out = num
-    newshape = list(x.shape)
-    newshape[axis] = nfft_out
-
-    if nfft_in % 2 != 0:
-        raise ValueError('x.shape[axis] must be even')
 
     if window is not None:
         raise ValueError('window argument is not supported')
 
-    if shift == 0:
-        # no frequency shift
+    edges = resample_edges(nfft_in, nfft_out, shift)
+    if edges is None:
         edge_low = edge_high = None
-    elif nfft_out > nfft_in:
-        raise ValueError('shift is only supported when downsampling')
     else:
-        edge_low = nfft_in // 2 - nfft_out // 2 + shift
-        edge_high = edge_low + nfft_out
-
-        if edge_low < 0:
-            raise ValueError('shift is too small')
-        if edge_high > nfft_in:
-            raise ValueError('shift is too large')
+        edge_low, edge_high = edges
 
     resample_scale = float(nfft_out) / float(nfft_in) * scale
 
@@ -1508,7 +1568,7 @@ def resample(
         # the fftshift is needed to enable clean slice-driven downsampling
         x = time_fftshift(x, resample_scale, overwrite_x=overwrite_x, axis=axis)
         y = fft(x, axis=axis, overwrite_x=True, out=x)
-    else:  # domain == 'freq'
+    else:
         if overwrite_x:
             out = x
         else:
@@ -1584,7 +1644,7 @@ def oaresample(
         if edge_high > nfft:
             raise ValueError('frequency_shift is too large')
     else:
-        raise ValueError('frequency_shift must be a multiple of fs/up')
+        raise ValueError('frequency_shift must be a multiple of fs/down')
 
     y = stft(
         x,

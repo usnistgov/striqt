@@ -51,13 +51,13 @@ def shelf(monkeypatch, tmp_path):
     return fake
 
 
-# %% persistent_lru_cache
+# %% persistent_cache
 
 
 def test_a_hit_returns_the_cached_value_without_recomputing(shelf):
     calls = []
 
-    @util.persistent_lru_cache()
+    @util.persistent_cache()
     def square(x):
         calls.append(x)
         return x * x
@@ -70,7 +70,7 @@ def test_a_hit_returns_the_cached_value_without_recomputing(shelf):
 
 
 def test_eviction_drops_the_oldest_entry(shelf):
-    @util.persistent_lru_cache(maxsize=2)
+    @util.persistent_cache(maxsize=2)
     def square(x):
         return x * x
 
@@ -85,7 +85,7 @@ def test_an_unreadable_shelf_falls_back_to_computing(shelf, tmp_path):
     corrupt = tmp_path / 'calls.db'
     corrupt.write_bytes(b'\x80 not a dbm file')
 
-    @util.persistent_lru_cache()
+    @util.persistent_cache()
     def square(x):
         return x * x
 
@@ -102,7 +102,7 @@ def test_an_unreadable_shelf_falls_back_to_computing(shelf, tmp_path):
 def test_a_failing_write_still_returns_the_result(shelf):
     shelf.faults.add('setitem')
 
-    @util.persistent_lru_cache()
+    @util.persistent_cache()
     def square(x):
         return x * x
 
@@ -116,7 +116,7 @@ def test_a_failing_open_falls_back_to_computing(monkeypatch, shelf):
 
     monkeypatch.setattr(util, '_get_cache_shelf', boom)
 
-    @util.persistent_lru_cache()
+    @util.persistent_cache()
     def square(x):
         return x * x
 
@@ -129,7 +129,7 @@ def test_the_wrapped_functions_own_error_propagates_unchanged(shelf):
     for a bad window name, which callers label as a specification error, so a cache
     fault must never arrive as one of those and vice versa"""
 
-    @util.persistent_lru_cache()
+    @util.persistent_cache()
     def get_window(name):
         raise ValueError('Unknown window type.')
 

@@ -377,7 +377,7 @@ def axis_to_blocks(y: Array, size: int, truncate=False, axis=0) -> Array:
     if ax_size % size != 0:
         if not truncate:
             raise ValueError(
-                f'axis 0 size {ax_size} is not a factor of block size {size}'
+                f'axis {axis} size {ax_size} is not a multiple of block size {size}'
             )
 
         slices = len(y.shape) * [slice(None, None)]

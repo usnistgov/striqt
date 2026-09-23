@@ -98,7 +98,54 @@ def validated_ssb_spectrogram_sizing(
     lays symbols out from `subcarrier_spacing` and `discovery_periodicity` alone, and
     unlike the correlators it has no `symbol_indexes` field to pick a search case with.
     """
-    return shared.validated_spectrogram_sizing(capture, _spectrogram_spec(spec))
+    sizing = shared.validated_spectrogram_sizing(capture, _spectrogram_spec(spec))
+
+    # the frequency axis is binned to one bin per subcarrier before the band is cut
+    shared.check_frequency_band(
+        'sample_rate',
+        round(capture.sample_rate / spec.subcarrier_spacing),
+        capture.sample_rate,
+        spec.sample_rate,
+        offset=spec.frequency_offset,
+    )
+
+    symbol_count = _burst_symbol_count(spec)
+    discovery_symbols = _discovery_symbol_count(spec)
+    window_count = shared.spectrogram_window_count(capture, sizing)
+    full_periods, trailing = divmod(window_count, discovery_symbols)
+    kept = full_periods * min(discovery_symbols, symbol_count)
+    kept += min(trailing, symbol_count)
+    if kept == 0 or kept % symbol_count != 0:
+        raise ValueError(
+            'duration must end on a whole discovery_periodicity or after a complete '
+            f'burst set of {symbol_count} symbols '
+            f'(duration: {capture.duration}, '
+            f'discovery_periodicity: {spec.discovery_periodicity}, '
+            f'subcarrier_spacing: {spec.subcarrier_spacing}, '
+            f'symbols in capture: {window_count}, '
+            f'symbols per discovery period: {discovery_symbols}, '
+            f'burst symbols kept: {kept})'
+        )
+
+    return sizing
+
+
+def _burst_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
+    """the symbols in the first two slots of a frame, which hold the SSB burst set"""
+    return round(28 * spec.subcarrier_spacing / 15e3)
+
+
+def _discovery_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
+    # TODO: this is normal CP; support extended CP?
+    symbol_period = sw.ofdm.slot_period(spec.subcarrier_spacing) / 14
+    discovery_symbols = round(spec.discovery_periodicity / symbol_period)
+    if discovery_symbols < 1:
+        raise ValueError(
+            'discovery_periodicity must span at least one OFDM symbol '
+            f'(discovery_periodicity: {spec.discovery_periodicity}, '
+            f'symbol_period: {symbol_period})'
+        )
+    return discovery_symbols
 
 
 def ssb_spectrogram_tolerance(
@@ -135,8 +182,8 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
 
     spec = specs.Cellular5GNRSSBSpectrogram.from_dict(kwargs).validate()
 
-    # TODO: compute this with the striqt.waveform.ofdm
-    symbol_count = round(28 * spec.subcarrier_spacing / 15e3)  # per burst set
+    symbol_count = _burst_symbol_count(spec)
+    discovery_symbols = _discovery_symbol_count(spec)
 
     spg, attrs = shared.evaluate_spectrogram(
         iq,
@@ -145,10 +192,6 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
         limit_digits=3,
         dtype='float16',
     )
-
-    slot_period = sw.ofdm.slot_period(spec.subcarrier_spacing)
-    symbol_period = slot_period / 14  # TODO: this is normal CP; support extended CP?
-    discovery_symbols = round(spec.discovery_periodicity / symbol_period)
 
     # keep only the first two slots in the frame
     symbol_index = np.arange(spg.shape[1])

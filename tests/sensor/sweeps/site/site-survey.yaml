@@ -4,7 +4,7 @@ extensions:
   import_path: ../src
   import_name: extensions
 
-source: !include ../fragments/source/tone.yaml
+source: !include [../fragments/source/tone.yaml, ../fragments/source/tone_unsync.yaml]
 
 captures: !include ../fragments/captures/tone.yaml
 

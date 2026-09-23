@@ -21,4 +21,5 @@ from .lib.power_analysis import (
     roundtrip_power_rtol,
     sample_ccdf,
     stat_rtol,
+    stat_ufunc_from_shorthand,
 )

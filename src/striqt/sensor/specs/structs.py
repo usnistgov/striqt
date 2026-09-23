@@ -368,77 +368,6 @@ AdjustCapturesType = dict[
 ]
 
 
-@sa.util.lru_cache()
-def _validate_loops(loops: tuple[LoopSpec, ...]):
-    from collections import Counter
-
-    if len(loops) == 0:
-        return
-
-    # an outermost repeat is legal, so index the rest of the list against the
-    # position the user wrote rather than against the slice
-    offset = 1 if loops[0].field is None else 0
-    fields = [l.field for l in loops[offset:]]
-
-    counts = Counter(fields)
-
-    if None in counts:
-        index = offset + fields.index(None)
-        raise SpecValidationError(
-            'Expected a `repeat` loop only as the outermost (first) entry',
-            ('.loops', f'[{index}]'),
-        )
-
-    common = counts.most_common(1)
-
-    if len(common) == 0:
-        return
-
-    (which, howmany), *_ = common
-    if howmany > 1:
-        repeated = [offset + i for i, f in enumerate(fields) if f == which]
-        first = loops[repeated[0]]
-        raise SpecValidationError(
-            f'Expected at most one loop over field `{which}`, which is already '
-            f'looped in `{first.isin}` at $.loops[{repeated[0]}]',
-            ('.loops', f'[{repeated[1]}]'),
-        )
-
-
-_MISSING = object()
-
-
-@sa.util.lru_cache()
-def _validate_loop_capture_collisions(
-    loops: tuple[LoopSpec, ...], captures: tuple[Capture, ...]
-):
-    """reject a loop that erases a distinction written into `captures:`.
-
-    A loop point overrides the same field in every capture, so captures written to
-    differ in a looped field silently become identical copies at each loop point.
-    """
-    if len(captures) < 2:
-        return
-
-    for index, loop in enumerate(loops):
-        if loop.field is None or loop.isin != 'capture':
-            continue
-
-        values = [getattr(c, loop.field, _MISSING) for c in captures]
-        if any(v is _MISSING for v in values):
-            # helpers._build_loop_points_dict reports an unknown loop field later
-            continue
-
-        for j, value in enumerate(values[1:], start=1):
-            if value != values[0]:
-                raise SpecValidationError(
-                    f'Expected field `{loop.field}` to be looped or set per '
-                    'capture, not both',
-                    ('.loops', f'[{index}]'),
-                    ('.captures[0]', f'.captures[{j}]'),
-                )
-
-
 class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     # sweep bindings also accept the following tag field in input files, which
     # msgspec uses to determine the Sweep subclass to instantiate from e.g.
@@ -479,26 +408,7 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
         msgspec.structs.force_setattr(self, 'adjust_captures', fixed_labels)
 
         super().__post_init__()
-        _validate_loops(self.loops)
-        _validate_loop_capture_collisions(self.loops, self.captures)
-
-        if len(self.captures) > 0:
-            coord_fields = set(self.captures[0].__struct_fields__)
-        elif self.schema is not None:
-            coord_fields = set(self.schema.capture.__struct_fields__)
-        else:
-            coord_fields = None
-
-        if coord_fields is not None:
-            invalid = set(self.analysis.__struct_fields__) & coord_fields
-            if len(invalid) > 0:
-                raise SpecValidationError(
-                    f'Object contains measurement `{sorted(invalid)[0]}`, which '
-                    'shadows a capture field of the same name',
-                    ('.analysis',),
-                )
-
-        helpers.validate_sweep_analysis(self)
+        helpers.validate_sweep(self)
 
 
 class CalibrationSweep(

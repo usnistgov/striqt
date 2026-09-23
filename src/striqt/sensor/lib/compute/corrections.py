@@ -10,6 +10,7 @@ from .. import sources, util
 from ... import specs
 
 import striqt.analysis as sa
+from striqt.analysis.lib.dataarrays import format_units
 
 if TYPE_CHECKING:
     import striqt.waveform as sw
@@ -20,6 +21,7 @@ else:
     sw = util.lazy_import('striqt.waveform')
 
 FILTER_SIZE = 4001
+FIR_TRANSITION_BW = 250e3
 MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 
@@ -93,7 +95,7 @@ def correct_iq(
         h = sw.design_fir_lpf(
             bw=capture.analysis_bandwidth,
             fs=capture.sample_rate,
-            transition_bw=250e3,
+            transition_bw=FIR_TRANSITION_BW,
             numtaps=FILTER_SIZE,
             xp=xp,
         )
@@ -260,6 +262,61 @@ def design_resampler(
         )
 
 
+def validate_fir_band(capture: specs.SensorCapture) -> None:
+    """raise what `scipy.signal.firls` rejects inside `design_fir_lpf` for `capture`:
+    every band needs a positive width, so the transition band must fit strictly
+    inside (0, fs/2)
+
+    Raises:
+        ValueError: on `capture.analysis_bandwidth`, in capture vocabulary
+    """
+    bw = capture.analysis_bandwidth
+    fs = capture.sample_rate
+    transition = format_units(FIR_TRANSITION_BW, unit='Hz')
+
+    if not bw / 2 - FIR_TRANSITION_BW / 2 > 0:
+        raise ValueError(
+            f'analysis_bandwidth {format_units(bw, unit="Hz")} leaves no passband '
+            f'below the {transition} FIR transition band'
+        )
+    if not bw / 2 + FIR_TRANSITION_BW / 2 < fs / 2:
+        raise ValueError(
+            f'analysis_bandwidth {format_units(bw, unit="Hz")} leaves no room for '
+            f'the {transition} FIR transition band below the '
+            f'{format_units(fs, unit="S/s")} sample_rate'
+        )
+
+
+def validate_oaresample_shift(design: sw.ResamplerDesign) -> None:
+    """raise what `striqt.waveform.oaresample` rejects in `correct_iq` for the LO
+    offset of `design`
+
+    Raises:
+        ValueError: on `capture.lo_shift`, in capture vocabulary
+    """
+    shift = design['lo_offset']
+    nfft = design['nfft']
+    nfft_out = design['nfft_out']
+    bin_size = design['fs_sdr'] / nfft
+
+    if shift == 0:
+        return
+    if nfft < nfft_out:
+        raise ValueError('lo_shift is only supported when downsampling')
+    if not sw.isroundmod(shift, bin_size):
+        raise ValueError(
+            f'the LO offset {format_units(shift, unit="Hz")} is not a multiple of '
+            f'the {format_units(bin_size, unit="Hz")} resampler bin'
+        )
+
+    edge_low = nfft // 2 - nfft_out // 2 + round(shift / bin_size)
+    if edge_low < 0 or edge_low + nfft_out > nfft:
+        raise ValueError(
+            f'the LO offset {format_units(shift, unit="Hz")} shifts the passband '
+            'outside the source bandwidth'
+        )
+
+
 def _apply_trigger_shifts(x: Array, shifts: Array, size_out: int) -> Array:
     if x.shape[1] < shifts.max() + size_out:
         raise ValueError('waveform is too short to align')
@@ -335,7 +392,11 @@ def _resample(
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
-    assert sw.isroundmod(x.shape[1] * capture.sample_rate, fs)
+    if not sw.isroundmod(x.shape[1] * capture.sample_rate, fs):
+        raise ValueError(
+            f'{x.shape[1]} samples at {fs} S/s do not resample to a whole number '
+            f'of samples at {capture.sample_rate} S/s'
+        )
     ny = round(x.shape[1] * capture.sample_rate / fs)
     padx = _get_resample_overlap(capture, source_spec, min_overlap)[0]
     pady = round(padx * capture.sample_rate / fs)
@@ -366,7 +427,7 @@ def _oaresample(
         axis=axis,
         frequency_shift=iq.resampler['lo_offset'],
         filter_bandwidth=capture.analysis_bandwidth,
-        transition_bandwidth=250e3,
+        transition_bandwidth=FIR_TRANSITION_BW,
         scale=1 if iq.voltage_scale is None else iq.voltage_scale,
     )
     scale = iq.resampler['nfft_out'] / iq.resampler['nfft']

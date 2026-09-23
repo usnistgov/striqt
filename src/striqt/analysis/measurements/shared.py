@@ -95,6 +95,59 @@ def empty_5g_ssb_correlation(
     return xp.full(new_shape, 0, dtype=dtype)
 
 
+def capture_sample_count(capture: specs.Capture) -> int:
+    return round(capture.duration * capture.sample_rate)
+
+
+def check_statistics(field: str, statistics: Sequence[str | float]) -> None:
+    """raise ValueError unless each entry of the spec field names a statistic that
+    `stat_ufunc_from_shorthand` implements"""
+    from striqt.waveform.lib.power_analysis import stat_ufunc_from_shorthand
+
+    for statistic in statistics:
+        try:
+            stat_ufunc_from_shorthand(statistic)
+        except ValueError as ex:
+            raise ValueError(
+                f'{field} entry {statistic!r} is not a supported statistic: {ex} '
+                f'({field}: {tuple(statistics)})'
+            ) from ex
+
+
+def check_frequency_band(
+    field: str,
+    nfft: int,
+    sample_rate: float,
+    bandwidth: float,
+    *,
+    offset: float = 0.0,
+    offset_field: str = 'frequency_offset',
+) -> int:
+    """check that the band `field` selects lands on an `nfft`-bin frequency grid,
+    returning the number of bins it spans.
+
+    `sw.fourier.slice_freqs` applies the same rules to the array; only the vocabulary
+    changes here, because an odd `nfft` reads as an off-grid DC bin there.
+    """
+    try:
+        band = sw.fourier.slice_freqs(nfft, sample_rate, bandwidth, offset=offset)
+    except ValueError as ex:
+        if offset == 0:
+            about = 'centered at baseband DC'
+            quantities = f'{field}: {bandwidth}'
+        else:
+            about = f'centered at {offset_field}'
+            quantities = f'{field}: {bandwidth}, {offset_field}: {offset}'
+        raise ValueError(
+            f'{field} must select a band of whole bins {about} on the '
+            f'{nfft}-bin frequency grid: {ex} '
+            f'({quantities}, sample_rate: {sample_rate}, '
+            f'frequency_resolution: {sample_rate / nfft})'
+        ) from ex
+
+    return band.stop - band.start
+
+
 @specs.helpers.lru_cache_on_converted(
     specs.AnalysisCapture, specs.Cellular5GNRSSSCorrelator
 )
@@ -108,8 +161,11 @@ def validated_5g_ssb_sync_params(
     in `pss_params`, so one validator covers the PSS and SSS measurements alike. It
     also warms the `get_3gpp_phy` design, which the correlators would otherwise pay for
     after the acquisition.
+
+    The resampling arithmetic mirrors `get_5g_ssb_iq` on the whole capture, the way
+    `get_5g_ssb_iq` here calls it.
     """
-    return sw.ofdm.sss_params(
+    params = sw.ofdm.sss_params(
         sample_rate=spec.sample_rate,
         subcarrier_spacing=spec.subcarrier_spacing,
         discovery_periodicity=spec.discovery_periodicity,
@@ -118,6 +174,43 @@ def validated_5g_ssb_sync_params(
         symbol_indexes=spec.symbol_indexes,
         center_frequency=capture.center_frequency,
     )
+
+    size_in = capture_sample_count(capture)
+    frequency_step = capture.sample_rate / size_in
+    if not sw.isroundmod(spec.frequency_offset, frequency_step):
+        raise ValueError(
+            'frequency_offset must be a counting-number multiple of '
+            'sample_rate/duration, the frequency step of the resampler '
+            f'(frequency_offset: {spec.frequency_offset}, '
+            f'sample_rate: {capture.sample_rate}, duration: {capture.duration}, '
+            f'frequency step: {frequency_step})'
+        )
+
+    size_out = round(size_in * spec.sample_rate / capture.sample_rate)
+    shift = round(size_in * spec.frequency_offset / capture.sample_rate)
+    try:
+        sw.fourier.resample_edges(size_in, size_out, shift)
+    except ValueError as ex:
+        raise ValueError(
+            f'the capture cannot be resampled to the synchronization block: {ex} '
+            f'(duration: {capture.duration}, capture sample_rate: '
+            f'{capture.sample_rate}, sample_rate: {spec.sample_rate}, '
+            f'frequency_offset: {spec.frequency_offset}, '
+            f'capture samples: {size_in}, block samples: {size_out})'
+        ) from ex
+
+    try:
+        sw.ofdm.sync_frame_count(size_out, params)
+    except ValueError as ex:
+        raise ValueError(
+            f'duration must hold whole 10 ms frames for the correlator: {ex} '
+            f'(duration: {capture.duration}, sample_rate: {spec.sample_rate}, '
+            f'subcarrier_spacing: {spec.subcarrier_spacing}, '
+            f'symbol_indexes: {spec.symbol_indexes!r}, '
+            f'max_lag_symbols: {spec.max_lag_symbols})'
+        ) from ex
+
+    return params
 
 
 ssb_iq_cache = register.KwArgCache([dataarrays.CAPTURE_DIM, 'spec'])
@@ -196,6 +289,25 @@ def validated_spectrogram_sizing(
         )
     nfft = round(capture.sample_rate / spec.frequency_resolution)
 
+    samples = capture_sample_count(capture)
+    if samples < nfft:
+        raise ValueError(
+            'duration must span at least one FFT window of 1/frequency_resolution '
+            f'(duration: {capture.duration}, sample_rate: {capture.sample_rate}, '
+            f'frequency_resolution: {spec.frequency_resolution}, '
+            f'samples: {samples}, nfft: {nfft})'
+        )
+
+    if spec.lo_bandstop is not None:
+        check_frequency_band('lo_bandstop', nfft, capture.sample_rate, spec.lo_bandstop)
+
+    if spec.trim_stopband and math.isfinite(capture.analysis_bandwidth):
+        kept_bins = check_frequency_band(
+            'analysis_bandwidth', nfft, capture.sample_rate, capture.analysis_bandwidth
+        )
+    else:
+        kept_bins = nfft
+
     noverlap = round(spec.fractional_overlap * nfft)
 
     nzero = (1 - spec.window_fill) * nfft
@@ -222,6 +334,16 @@ def validated_spectrogram_sizing(
             f'frequency_resolution: {spec.frequency_resolution})'
         )
 
+    if frequency_bin_averaging is not None and frequency_bin_averaging > kept_bins:
+        raise ValueError(
+            'integration_bandwidth must not exceed the analyzed bandwidth '
+            f'(integration_bandwidth: {spec.integration_bandwidth}, '
+            f'sample_rate: {capture.sample_rate}, '
+            f'analysis_bandwidth: {capture.analysis_bandwidth}, '
+            f'trim_stopband: {spec.trim_stopband}, '
+            f'frequency bins: {kept_bins})'
+        )
+
     hop_size = nfft - noverlap
     hop_period = hop_size / capture.sample_rate
     if spec.time_aperture is None:
@@ -237,10 +359,24 @@ def validated_spectrogram_sizing(
             f'hop_period: {hop_period})'
         )
 
-    # the design that `sw.stft` will build for complex64 IQ, so a bad window name or
-    # parameter fails here and the disk-cached search is paid before acquisition
+    window_count = (samples - nfft) // hop_size + 1
+    if time_bin_averaging is not None and time_bin_averaging > window_count:
+        raise ValueError(
+            'duration must span at least one time_aperture of STFT windows '
+            f'(duration: {capture.duration}, time_aperture: {spec.time_aperture}, '
+            f'hop_period: {hop_period}, STFT windows: {window_count})'
+        )
+
+    # the design that `sw.spectrogram` will build for complex64 IQ, so a bad window
+    # name or parameter fails here and the disk-cached search is paid before
+    # acquisition
     sw.get_window(
-        spec.window, nfft - nzero, nzero=nzero, dtype='complex64', fftshift=True
+        spec.window,
+        nfft - nzero,
+        nzero=nzero,
+        dtype=np.dtype('complex64'),
+        norm=True,
+        fftshift=True,
     )
 
     if spec.integration_bandwidth is None:
