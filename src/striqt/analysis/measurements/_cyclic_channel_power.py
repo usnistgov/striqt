@@ -7,6 +7,7 @@ from .. import specs
 
 from ..lib import util
 from ._channel_power_time_series import power_detector, validated_detector_bin_size
+from . import shared
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
@@ -53,6 +54,45 @@ def validated_cyclic_lag_count(
     return round(spec.cyclic_period / detector_period)
 
 
+def cyclic_channel_power_tolerance(
+    capture: specs.Capture,
+    spec: specs.CyclicChannelPower,
+    *,
+    array_backend: sw.typing.ArrayBackend = 'numpy',
+    input_error: float = 0.0,
+) -> specs.Tolerance:
+    """the roundoff budget of `cyclic_channel_power` in dB, from the detector binning,
+    the number of cycles each statistic reduces over, and the relative rms amplitude
+    error `input_error` already in the IQ"""
+    lag_count = validated_cyclic_lag_count(capture, spec)
+    bin_size = validated_detector_bin_size(capture, spec)
+    cycle_count = round(capture.duration / spec.cyclic_period)
+    power_rtol = max(
+        sw.power_analysis.bin_power_rtol(np.float32, kind=d)
+        for d in spec.power_detectors
+    )
+    power_rms = max(
+        sw.power_analysis.bin_power_rms(np.float32, bin_size, kind=d)
+        for d in spec.power_detectors
+    )
+    power_rtol += max(
+        sw.power_analysis.stat_rtol(np.float32, kind=s) for s in spec.cyclic_statistics
+    )
+    if any(s in ('mean', 'rms') for s in spec.cyclic_statistics):
+        # the cycle axis sits ahead of the lag axis, so the reduction is strided
+        power_rtol += sw.arrays.accum_rtol(np.float32, cycle_count)
+    return shared.level_tolerance(
+        amplitude_rms=input_error,
+        size=lag_count * len(spec.power_detectors) * len(spec.cyclic_statistics),
+        power_rtol=power_rtol,
+        power_rms=power_rms,
+        log_tol=sw.power_analysis.log_conversion_tol(
+            np.float32, 10, complex_input=True
+        ),
+        quantization=shared.quantization_dB('float32'),
+    )
+
+
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
 )
@@ -71,6 +111,7 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     prefer_iq_source='aligned',
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
     validate=validated_cyclic_lag_count,
+    tolerance=cyclic_channel_power_tolerance,
 )
 def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
     """Evaluate cyclic statistics of channel power across the cycles in a capture.

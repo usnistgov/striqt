@@ -153,6 +153,39 @@ class Analysis(SpecBase, kw_only=True, frozen=True):
     """
 
 
+class ErrorBound(SpecBase, kw_only=True, frozen=True):
+    """an rms and a worst-case bound on the same quantity"""
+
+    rms: float
+    peak: float
+
+
+class Tolerance(SpecBase, kw_only=True, frozen=True):
+    """the roundoff error budget of one measurement output.
+
+    A tolerance function derives this from a (capture, spec) pair alone, so `on_peak`
+    holds at an element at full scale and `off_peak_dBc` is relative to the output's
+    own peak; neither can depend on the values actually produced.
+
+    Fields:
+        units: of `on_peak`: 'dB', or the output's linear units
+        rtol: relative tolerance on the output value
+        on_peak: the absolute error, in `units`, of elements at the output's peak
+            level: its rms over them and its worst case at any one. The peak is the
+            matched-filter bin of the matched input, e.g. a tone's FFT bin or an
+            impulse's detector sample.
+        off_peak_dBc: the depth below the output's peak at which the rms, and the
+            worst-case, amplitude error equals an element's own amplitude; elements
+            deeper than `off_peak_dBc.peak` are not resolved by the budget. This
+            governs the other bins, away from the matched-filter bin.
+    """
+
+    units: str
+    rtol: float
+    on_peak: ErrorBound
+    off_peak_dBc: Union[ErrorBound, None] = None
+
+
 class AnalysisGroup(SpecBase, kw_only=True, frozen=True):
     """base class for a defining set of Analysis specs"""
 

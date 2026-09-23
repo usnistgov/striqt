@@ -9,7 +9,7 @@ from threading import Event
 
 import numpy as np
 import pytest
-from numeric_checks import assert_close, level_tolerance_dB, rms, to_numpy
+from numeric_checks import assert_close, rms, to_numpy
 from soapy_factories import MCR, soapy_capture
 from sweep_strategies import SOURCE
 from synthetic_sources import (
@@ -399,7 +399,7 @@ class TestControllerAcquire:
         # the mean of N exponentially distributed sample powers, at 3 sigma
         sigma = 3 / np.sqrt(iq.pre_align.shape[1])
         assert dBfs(iq.pre_align) == pytest.approx(
-            expected, abs=level_tolerance_dB(sigma, power=True)
+            expected, abs=sw.power_analysis.level_tolerance_dB(sigma, power=True)
         )
 
     def test_stale_first_timestamp_is_a_stream_error(self, fake_soapy, fake_controller):

@@ -11,9 +11,10 @@ Inputs are the closed-form generators in `striqt.analysis.testing`, whose levels
 ``|x|**2 == 1``, so the measurements' dBm scale is ``10*log10(mean |x|**2)`` with no
 offset, and an amplitude of ``10**(power/20)`` reads `power` dBm.
 
-Tolerances come from `dB_tol`: the float32 dB conversion budget of `numeric_checks`
-plus the roundoff of the linear averaging that precedes it. They land near 1e-5 dB,
-which is far below any level a measurement is read at.
+Tolerances are the `sa.specs.Tolerance` each measurement registers with
+`tolerance=`, fetched through `sa.registry.tolerances`: the float32 dB conversion
+budget plus the roundoff of squaring, averaging and storing the level. They land near
+2e-5 dB, which is far below any level a measurement is read at.
 """
 
 from __future__ import annotations
@@ -24,15 +25,11 @@ import re
 import msgspec
 import numpy as np
 import pytest
-from numeric_checks import (
-    DB_PER_NEPER,
-    ROUNDOFF_SAFETY,
-    assert_close,
-    log_conversion_tol,
-    unit_roundoff,
-)
+from analysis_strategies import registered_tolerance
+from numeric_checks import assert_close
 
 import striqt.analysis as sa
+import striqt.waveform as sw
 from striqt.analysis import testing
 
 FS = 1e6
@@ -71,11 +68,15 @@ def validate_cyclic(capture: sa.specs.Capture, spec: sa.specs.CyclicChannelPower
     return validate(sa.specs.helpers.to_analysis_capture(capture), spec)
 
 
-def dB_tol(n_terms=1):
-    """tolerances in dB for a level averaged over `n_terms` float32 power samples"""
-    tol = log_conversion_tol(np.float32, 10, complex_input=True)
-    accum = DB_PER_NEPER * ROUNDOFF_SAFETY * n_terms * unit_roundoff(np.float32)
-    return {'rtol': tol['rtol'], 'atol': tol['atol'] + accum}
+def tolerance(spec, duration=DURATION, **kws) -> sa.specs.Tolerance:
+    """the tolerance registered for `spec` on a capture of `duration`"""
+    return registered_tolerance(capture(duration=duration), spec, **kws)
+
+
+CPTS_SPEC = sa.specs.ChannelPowerTimeSeries(detector_period=DETECTOR_PERIOD)
+CYCLIC_SPEC = sa.specs.CyclicChannelPower(
+    cyclic_period=CYCLIC_PERIOD, detector_period=DETECTOR_PERIOD
+)
 
 
 # %% channel_power_time_series
@@ -90,7 +91,8 @@ class TestChannelPowerTimeSeries:
         peak = da.values[0, 0]
         expected_bin = int(time // float(DETECTOR_PERIOD))
         assert np.argmax(peak) == expected_bin
-        assert_close(peak[expected_bin], 6.0, **dB_tol())
+        tol = tolerance(CPTS_SPEC.replace(power_detectors=('peak',)))
+        assert_close(peak[expected_bin], 6.0, rtol=tol.rtol, atol=tol.on_peak.peak)
 
         empty = np.delete(peak, expected_bin)
         assert np.isneginf(empty).all()
@@ -118,7 +120,13 @@ class TestChannelPowerTimeSeries:
 
         ratio_dB = da.sel(power_detector='peak') - da.sel(power_detector='rms')
         expected = 10 * np.log10(6 * (n - 1) / (2 * n - 1))
-        assert_close(ratio_dB.values, expected, **dB_tol(n))
+        # the ratio subtracts two levels that each carry the registered budget
+        tol = tolerance(
+            CPTS_SPEC.replace(detector_period=detector_period), duration=duration
+        )
+        assert_close(
+            ratio_dB.values, expected, rtol=tol.rtol, atol=2 * tol.on_peak.peak
+        )
         assert abs(expected - 10 * np.log10(3)) < 5e-3
 
     @pytest.mark.parametrize(
@@ -188,7 +196,24 @@ class TestChannelPowerTimeSeries:
         da = cpts(iq)
 
         assert da.attrs['units'] == 'dBm'
-        assert_close(da.values, power, **dB_tol(BIN_SIZE))
+        tol = tolerance(CPTS_SPEC)
+        assert_close(da.values, power, rtol=tol.rtol, atol=tol.on_peak.peak)
+
+    def test_tolerance_accumulates_over_the_detector_bin_not_the_capture(self):
+        """each level averages `detector_period * sample_rate` power samples, so the
+        rms budget grows with the detector period; a longer capture at the same
+        detector period only adds levels, which widens the worst case but not the rms"""
+        base = tolerance(CPTS_SPEC)
+        longer_bin = tolerance(
+            CPTS_SPEC.replace(detector_period=1000 * DETECTOR_PERIOD),
+            duration=1000 * DURATION,
+        )
+        longer_capture = tolerance(CPTS_SPEC, duration=10 * DURATION)
+
+        assert longer_bin.on_peak.rms > base.on_peak.rms
+        assert longer_bin.on_peak.peak > base.on_peak.peak
+        assert longer_capture.on_peak.rms == pytest.approx(base.on_peak.rms)
+        assert longer_capture.on_peak.peak > base.on_peak.peak
 
 
 # %% cyclic_channel_power
@@ -288,13 +313,73 @@ class TestCyclicChannelPower:
 
         da = cyclic(iq, duration=duration)
 
-        tol = dB_tol(BIN_SIZE + 2)
-        assert_close(da.sel(cyclic_statistic='min').values, 0.0, **tol)
-        assert_close(da.sel(cyclic_statistic='max').values, 20.0, **tol)
+        tol = tolerance(CYCLIC_SPEC, duration=duration)
+        kws = {'rtol': tol.rtol, 'atol': tol.on_peak.peak}
+        assert_close(da.sel(cyclic_statistic='min').values, 0.0, **kws)
+        assert_close(da.sel(cyclic_statistic='max').values, 20.0, **kws)
 
         linear_mean_dB = 10 * np.log10((1.0 + 100.0) / 2)
-        assert_close(da.sel(cyclic_statistic='mean').values, linear_mean_dB, **tol)
+        assert_close(da.sel(cyclic_statistic='mean').values, linear_mean_dB, **kws)
         assert abs(linear_mean_dB - (0.0 + 20.0) / 2) > 7
+
+    def test_tolerance_accumulates_over_the_cycles_in_the_capture(self):
+        """a cyclic statistic reduces `duration / cyclic_period` detector samples on
+        top of the detector's own averaging, so unlike `channel_power_time_series` the
+        exact-input budget grows with the capture duration"""
+        one_cycle = tolerance(CYCLIC_SPEC)
+        many_cycles = tolerance(CYCLIC_SPEC, duration=10 * CYCLIC_PERIOD)
+
+        assert many_cycles.on_peak.peak > one_cycle.on_peak.peak
+        assert one_cycle.on_peak.peak > tolerance(CPTS_SPEC).on_peak.peak
+
+    def test_quantile_statistic_adds_an_interpolation_rounding(self):
+        """a quantile interpolates between two cycle samples where a selection returns
+        one exactly. The tuples have equal length because the peak term also grows
+        with the number of output elements."""
+        selections = tolerance(
+            CYCLIC_SPEC.replace(cyclic_statistics=('min', 'max', 'peak'))
+        )
+        quantile = tolerance(CYCLIC_SPEC.replace(cyclic_statistics=('min', 'max', 0.9)))
+
+        assert quantile.on_peak.rms > selections.on_peak.rms
+        assert quantile.on_peak.peak > selections.on_peak.peak
+
+
+# %% registered tolerances
+
+POWER_SPECS = [CPTS_SPEC, CYCLIC_SPEC]
+POWER_IDS = [type(spec).__name__ for spec in POWER_SPECS]
+
+
+@pytest.mark.parametrize('spec', POWER_SPECS, ids=POWER_IDS)
+def test_registered_tolerance_is_a_dB_budget_that_grows_with_input_error(spec):
+    """with exact input the budget is a pure roundoff bound with no floor, and an
+    amplitude error in the IQ adds a peak term over the output and a floor below
+    which elements go unchecked"""
+    exact = tolerance(spec)
+    assert isinstance(exact, sa.specs.Tolerance)
+    assert exact.units == 'dB'
+    assert exact.on_peak.peak >= exact.on_peak.rms > 0
+    assert exact.off_peak_dBc is None
+
+    noisy = tolerance(spec, input_error=1e-4)
+    assert noisy.on_peak.peak > noisy.on_peak.rms > exact.on_peak.rms
+    assert noisy.off_peak_dBc is not None and noisy.off_peak_dBc.peak < 0
+
+    noisier = tolerance(spec, input_error=1e-3)
+    assert noisier.on_peak.rms > noisy.on_peak.rms
+    assert noisier.on_peak.peak > noisy.on_peak.peak
+
+
+@pytest.mark.parametrize('spec', POWER_SPECS, ids=POWER_IDS)
+@pytest.mark.parametrize('input_error', [0.0, 1e-4], ids=['exact', 'noisy'])
+def test_tolerance_is_backend_independent_since_no_fft_is_involved(spec, input_error):
+    """the detectors square, bin and take a log elementwise on either backend, so the
+    budget has no backend term of its own; the FFT roundoff that separates cupy from
+    numpy reaches these measurements only through the caller's `input_error`"""
+    numpy_tol = tolerance(spec, input_error=input_error, array_backend='numpy')
+    cupy_tol = tolerance(spec, input_error=input_error, array_backend='cupy')
+    assert cupy_tol == numpy_tol
 
 
 # %% iq_waveform
@@ -360,3 +445,36 @@ class TestIqWaveform:
 
         assert da.sizes['iq_index'] == 0
         assert da.coords['iq_index'].size == 0
+
+    def test_tolerance_accumulates_only_for_the_averaging_detectors(self):
+        """peak and min select one sample exactly, so their budget does not grow with
+        the detector period the way the rms mean's does"""
+        rms = tolerance(CPTS_SPEC.replace(power_detectors=('rms',)))
+        peak = tolerance(CPTS_SPEC.replace(power_detectors=('peak',)))
+        longer = CPTS_SPEC.replace(detector_period=5 * DETECTOR_PERIOD)
+        assert peak.on_peak.peak < rms.on_peak.peak
+        assert tolerance(longer.replace(power_detectors=('peak',))) == peak
+
+    def test_tolerance_is_the_input_error_on_the_envelope_level(self):
+        """the slice adds no error of its own, so exact IQ passes through with a zero
+        budget, and an rms amplitude error `r` in the IQ reads on the envelope level
+        ``20*log10|iq|`` as an rms of ``20*log10(1 + r)`` dB with a larger peak over
+        the slice"""
+        exact = tolerance(sa.specs.IQWaveform())
+        assert exact == sa.specs.Tolerance(
+            units='dB', rtol=0.0, on_peak=sa.specs.ErrorBound(rms=0.0, peak=0.0)
+        )
+
+        r = 1e-4
+        noisy = tolerance(sa.specs.IQWaveform(), input_error=r)
+        assert noisy.units == 'dB'
+        assert noisy.rtol == exact.rtol
+        assert noisy.on_peak.rms == pytest.approx(
+            sw.power_analysis.level_tolerance_dB(r)
+        )
+        assert noisy.on_peak.peak > noisy.on_peak.rms
+        assert noisy.off_peak_dBc is not None and noisy.off_peak_dBc.peak < 0
+
+        shorter = tolerance(sa.specs.IQWaveform(stop_time_sec=1e-5), input_error=r)
+        assert shorter.on_peak.rms == noisy.on_peak.rms
+        assert shorter.on_peak.peak < noisy.on_peak.peak

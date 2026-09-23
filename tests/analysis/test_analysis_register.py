@@ -1,5 +1,6 @@
-"""striqt.analysis.lib.register: the `validate=` hook on measurement registration
-and the `AnalysisRegistry.validate` walk over an analysis group.
+"""striqt.analysis.lib.register: the `validate=` and `tolerance=` hooks on measurement
+registration and the `AnalysisRegistry.validate`/`.tolerances` walks over an analysis
+group.
 
 Everything here builds its own `AnalysisRegistry`; mutating the live
 `register.registry` would leak a measurement into every other test module. The
@@ -28,11 +29,17 @@ class OtherToySpec(sa.specs.Analysis, frozen=True, kw_only=True):
     scale: float = 1.0
 
 
-def build_registry(validate=None, *, spec_type=ToySpec, calls=None):
+def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=None):
     """a registry holding one measurement that records its (capture, spec) calls"""
     registry = register.AnalysisRegistry()
 
-    @registry.measurement(spec_type, dtype='float32', dims=('toy',), validate=validate)
+    @registry.measurement(
+        spec_type,
+        dtype='float32',
+        dims=('toy',),
+        validate=validate,
+        tolerance=tolerance,
+    )
     def toy(iq, capture, **kwargs):
         if calls is not None:
             calls.append(('body', capture, kwargs))
@@ -119,19 +126,28 @@ def test_validate_defaults_to_none_and_the_measurement_still_runs():
 # %% AnalysisRegistry.validate
 
 
-def build_group_registry(*validators):
-    """a registry of two measurements, each with the given validator"""
+def build_group_registry(*validators, tolerances=(None, None)):
+    """a registry of two measurements, each with the given validator and tolerance"""
     registry = register.AnalysisRegistry()
     toy_validate, other_validate = validators
+    toy_tolerance, other_tolerance = tolerances
 
     @registry.measurement(
-        ToySpec, dtype='float32', dims=('toy',), validate=toy_validate
+        ToySpec,
+        dtype='float32',
+        dims=('toy',),
+        validate=toy_validate,
+        tolerance=toy_tolerance,
     )
     def toy(iq, capture, **kwargs):
         return np.zeros((1, 2), dtype='float32')
 
     @registry.measurement(
-        OtherToySpec, dtype='float32', dims=('other',), validate=other_validate
+        OtherToySpec,
+        dtype='float32',
+        dims=('other',),
+        validate=other_validate,
+        tolerance=other_tolerance,
     )
     def other_toy(iq, capture, **kwargs):
         return np.zeros((1, 2), dtype='float32')
@@ -214,3 +230,96 @@ def test_validator_errors_are_msgspec_validation_errors():
 
     with pytest.raises(msgspec.ValidationError):
         registry.validate(CAPTURE, group)
+
+
+# %% tolerance= on measurement registration
+
+TOY_TOLERANCE = sa.specs.Tolerance(
+    units='dB', rtol=1e-6, on_peak=sa.specs.ErrorBound(rms=1e-3, peak=1e-2)
+)
+
+
+class WideCapture(sa.specs.Capture, frozen=True, kw_only=True):
+    """a sensor-style capture with a field the analysis layer never reads"""
+
+    gain: float = 0.0
+
+
+def recording_tolerance(seen):
+    def tolerance(capture, spec, **kwargs):
+        seen.append((capture, spec, kwargs))
+        return TOY_TOLERANCE
+
+    return tolerance
+
+
+def test_tolerance_is_stored_on_the_info_and_defaults_to_none():
+    registry, _ = build_registry()
+    assert registry[ToySpec].tolerance is None
+
+    tolerance = recording_tolerance([])
+    registry, _ = build_registry(tolerance=tolerance)
+    assert registry[ToySpec].tolerance is tolerance
+
+
+def test_registry_tolerances_is_empty_when_nothing_declares_one():
+    registry = build_group_registry(None, None)
+    group = registry.tospec()(toy=ToySpec(), other_toy=OtherToySpec())
+
+    assert registry.tolerances(CAPTURE, group) == {}
+
+
+def test_registry_tolerances_keys_declared_measurements_by_name():
+    registry = build_group_registry(
+        None, None, tolerances=(None, recording_tolerance([]))
+    )
+    group = registry.tospec()(toy=ToySpec(), other_toy=OtherToySpec())
+
+    result = registry.tolerances(CAPTURE, group)
+
+    assert result == {'other_toy': TOY_TOLERANCE}
+    assert isinstance(result['other_toy'], sa.specs.Tolerance)
+
+
+def test_registry_tolerances_skips_measurements_not_in_the_group():
+    seen = []
+    registry = build_group_registry(
+        None, None, tolerances=(recording_tolerance(seen), recording_tolerance(seen))
+    )
+    group = registry.tospec()(toy=ToySpec(nfft=4))
+
+    registry.tolerances(CAPTURE, group)
+
+    ((capture, spec, _),) = seen
+    assert capture == sa.specs.helpers.to_analysis_capture(CAPTURE)
+    assert spec == ToySpec(nfft=4)
+
+
+def test_registry_tolerances_forwards_backend_and_input_error_as_keywords():
+    seen = []
+    registry = build_group_registry(
+        None, None, tolerances=(recording_tolerance(seen), None)
+    )
+    group = registry.tospec()(toy=ToySpec())
+
+    registry.tolerances(CAPTURE, group)
+    registry.tolerances(CAPTURE, group, array_backend='cupy', input_error=1e-4)
+
+    assert [kws for *_, kws in seen] == [
+        {'array_backend': 'numpy', 'input_error': 0.0},
+        {'array_backend': 'cupy', 'input_error': 1e-4},
+    ]
+
+
+def test_registry_tolerances_is_cached_on_the_projected_capture():
+    seen = []
+    registry = build_group_registry(
+        None, None, tolerances=(recording_tolerance(seen), None)
+    )
+    group = registry.tospec()(toy=ToySpec())
+
+    registry.tolerances(WideCapture(duration=1e-4, sample_rate=1e6, gain=0.0), group)
+    registry.tolerances(WideCapture(duration=1e-4, sample_rate=1e6, gain=10.0), group)
+    registry.tolerances(CAPTURE.replace(analysis_bandwidth=5e5), group)
+
+    assert len(seen) == 2

@@ -11,7 +11,14 @@ from . import fourier
 
 from . import arrays, power_analysis, util
 from .typing import CellSSBIndexes
-from .arrays import array_namespace, is_cupy_array, isroundmod, pad_along_axis
+from .arrays import (
+    ROUNDOFF_SAFETY,
+    array_namespace,
+    is_cupy_array,
+    isroundmod,
+    pad_along_axis,
+    unit_roundoff,
+)
 
 if typing.TYPE_CHECKING:
     import array_api_compat
@@ -148,6 +155,30 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
     func(flat_inds, x, int(nfft), int(ncp), bool(norm), out)
 
     return out
+
+
+def corr_atol(
+    dtype, n_inds: int, norm: bool, scale: float = 1.0, n_impl: int = 1
+) -> float:
+    """absolute roundoff bound on `corr_at_indices` against exact arithmetic.
+
+    Each of the n_inds products a*conj(b) and the power terms are rounded at the input
+    precision before the complex128 accumulation, and the result is rounded once more
+    on output. With norm=True the Cauchy-Schwarz bound sum|a||b| <= sqrt(Pa*Pb) makes
+    the error relative to a unit-scale output, and `scale` is ignored; with norm=False
+    it is relative to the largest product magnitude, which the caller passes as
+    `scale` = max|x|**2.
+
+    Args:
+        dtype: the input dtype (real or complex)
+        n_inds: the number of index pairs summed at each lag
+        norm: the `corr_at_indices` normalization flag
+        scale: max|x|**2 when norm is False
+        n_impl: 1 against exact arithmetic, 2 against a second implementation
+    """
+    u = unit_roundoff(dtype)
+    scale = 1.0 if norm else scale
+    return ROUNDOFF_SAFETY * n_impl * (n_inds + 3) * u * scale
 
 
 @dataclasses.dataclass

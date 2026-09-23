@@ -48,6 +48,7 @@ if typing.TYPE_CHECKING:
     WindowType: TypeAlias = Union[Array, WindowSpecType]
 
     XpType: TypeAlias = ModuleType | None
+    ArrayBackend: TypeAlias = typing.Literal['numpy', 'cupy']
 
     _ALN = TypeVar('_ALN', bound=Union[ArrayLike, Number])
     _AL = TypeVar('_AL', bound=ArrayLike)

@@ -17,6 +17,7 @@ from .. import specs
 from . import util
 
 if TYPE_CHECKING:
+    from striqt.waveform.lib.typing import ArrayBackend
     import inspect
     from .typing import (
         AnalysisFunc,
@@ -245,6 +246,12 @@ PreferIQSource = Literal['aligned', 'pre_filter', 'pre_align']
 
 AnalysisValidator = Callable[['specs.AnalysisCapture', Any], Any]
 
+# func(capture: AnalysisCapture, spec, *, array_backend: ArrayBackend = 'numpy',
+#      input_error: float = 0.0) -> Tolerance
+# `input_error` is the relative rms amplitude error already present in the IQ handed
+# to the measurement; the sensor's correction stage supplies it.
+AnalysisTolerance = Callable[..., 'specs.Tolerance']
+
 
 class AnalysisInfo(NamedTuple):
     name: str
@@ -258,6 +265,7 @@ class AnalysisInfo(NamedTuple):
     store_compressed: bool
     dims: tuple[str, ...] | None = None
     validate: AnalysisValidator | None = None
+    tolerance: AnalysisTolerance | None = None
 
 
 class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
@@ -309,6 +317,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         store_compressed=True,
         attrs={},
         validate: AnalysisValidator | None = None,
+        tolerance: AnalysisTolerance | None = None,
     ) -> AnalysisFuncWrapper:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema.
 
@@ -318,6 +327,11 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 return value is ignored here, but by convention it is the derived
                 sizing that `func` consumes, so the arithmetic has one home; such a
                 validator is named for what it returns (`validated_*`)
+            tolerance: derives the roundoff error budget of the output from the
+                (capture, spec) combination without touching IQ, as a
+                `specs.Tolerance`, so that a test or a consumer can decide how
+                closely two evaluations of `func` must agree. It is called with the
+                keywords `array_backend` and `input_error` (see `AnalysisTolerance`)
         """
 
         if isinstance(dims, str):
@@ -332,6 +346,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             store_compressed=store_compressed,
             dims=dims,
             validate=validate,
+            tolerance=tolerance,
         )
 
         if coord_factories is None:
@@ -486,6 +501,24 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         """
         _validate_analysis_group(capture, analysis, self)
 
+    def tolerances(
+        self,
+        capture: specs.Capture,
+        analysis: specs.AnalysisGroup,
+        *,
+        array_backend: ArrayBackend = 'numpy',
+        input_error: float = 0.0,
+    ) -> dict[str, specs.Tolerance]:
+        """the error budget of each measurement in `analysis` that declares one.
+
+        Returns:
+            a dict keyed by measurement name; measurements registered without a
+            `tolerance=` function are omitted
+        """
+        return _analysis_group_tolerances(
+            capture, analysis, self, array_backend, input_error
+        )
+
 
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture, maxsize=1024)
 def _validate_analysis_group(
@@ -503,6 +536,32 @@ def _validate_analysis_group(
             continue
         with specs.helpers.validation_path('.analysis', f'.{name}'):
             info.validate(capture, getattr(analysis, name))
+
+
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture, maxsize=1024)
+def _analysis_group_tolerances(
+    capture: specs.AnalysisCapture,
+    analysis: specs.AnalysisGroup,
+    registry: AnalysisRegistry,
+    array_backend: ArrayBackend,
+    input_error: float,
+) -> dict[str, specs.Tolerance]:
+    result: dict[str, specs.Tolerance] = {}
+    for name, kwargs in analysis.to_dict().items():
+        if not kwargs:
+            # mirror the skip in dataarrays.evaluate_by_spec: a measurement with no
+            # parameters set does not run
+            continue
+        info = registry[type(getattr(analysis, name))]
+        if info.tolerance is None:
+            continue
+        result[info.name] = info.tolerance(
+            capture,
+            getattr(analysis, name),
+            array_backend=array_backend,
+            input_error=input_error,
+        )
+    return result
 
 
 @contextlib.contextmanager

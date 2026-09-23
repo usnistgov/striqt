@@ -18,17 +18,13 @@ import re
 import msgspec
 import numpy as np
 import pytest
-from numeric_checks import (
-    ATOL,
-    RTOL_FLOAT64,
-    assert_close,
-    far_bin_floor_dBc,
-    single_backend_rms,
-)
+from analysis_strategies import registered_tolerance
+from numeric_checks import ATOL, RTOL_FLOAT64, assert_close
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis import testing
+from striqt.waveform.lib.fourier import fft_tolerance_rms, off_peak_floor_dBc
 
 # a 64-point FFT over 8 non-overlapping windows: 512 samples, 500 us
 FS = 1.024e6
@@ -40,29 +36,13 @@ DURATION = NWINDOW * NFFT / FS
 CAPTURE = sa.specs.Capture(duration=DURATION, sample_rate=FS)
 
 # roundoff of the one FFT that separates the IQ from the reported spectrum
-FFT_SIGMA = single_backend_rms(np.complex64, [NFFT])
+FFT_SIGMA = fft_tolerance_rms(np.complex64, [NFFT])
 
 
 def levels(result) -> np.ndarray:
     """the dB values of a measurement result, widened to float64 for comparison"""
     values = result.values if hasattr(result, 'values') else result
     return np.asarray(values, dtype='float64')
-
-
-def float16_step(level_dB):
-    """the float16 spacing at `level_dB`, the resolution of every dB output here"""
-    return float(np.spacing(np.float16(np.max(np.abs(level_dB)))))
-
-
-def quantization_atol(level_dB, limit_digits=2):
-    """dB budget for one `evaluate_spectrogram` output value.
-
-    `evaluate_spectrogram` rounds to `limit_digits` decimals when asked and then casts
-    to float16, so a value is off by at most half a decimal step plus half a float16
-    step at its own magnitude.
-    """
-    decimal = 0 if limit_digits is None else 0.5 * 10.0 ** (-limit_digits)
-    return decimal + 0.5 * float16_step(level_dB)
 
 
 def bin_centered_tone_level_dB(window, nfft=NFFT):
@@ -86,6 +66,12 @@ def centered_bin_count(size, count):
 WINDOWS = ['boxcar', 'hamming', 'hann', 'blackmanharris']
 
 
+def spg_spec(**kwargs) -> sa.specs.Spectrogram:
+    kwargs.setdefault('window', 'boxcar')
+    kwargs.setdefault('frequency_resolution', RES)
+    return sa.specs.Spectrogram(**kwargs)
+
+
 def spg_of(iq, capture=CAPTURE, **kwargs):
     kwargs.setdefault('window', 'boxcar')
     kwargs.setdefault('frequency_resolution', RES)
@@ -104,15 +90,17 @@ class TestSpectrogram:
         expected = bin_centered_tone_level_dB(window)
         peak_index = NFFT // 2 + tone_bin
 
+        tol = registered_tolerance(CAPTURE, spg_spec(window=window))
         assert_close(
             spg[:, :, peak_index],
             expected,
-            atol=quantization_atol(expected),
+            rtol=tol.rtol,
+            atol=tol.on_peak.peak,
             err_msg=f'{window} peak bin level',
         )
         assert np.argmax(spg, axis=-1).tolist() == [[peak_index] * NWINDOW]
 
-    def test_far_bins_hold_only_roundoff(self):
+    def test_off_peak_bins_hold_only_roundoff(self):
         tone_bin = 5
         iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
         arr, _ = spg_of(iq, as_xarray=False)
@@ -121,11 +109,12 @@ class TestSpectrogram:
         peak_index = NFFT // 2 + tone_bin
         others = np.delete(spg, peak_index, axis=-1)
 
-        # a boxcar window puts the whole tone in one bin, so its immediate neighbors
-        # hold only FFT roundoff referred to the 0 dB tone, like every other bin
-        floor_dBc = far_bin_floor_dBc(FFT_SIGMA, NFFT, size=others.shape[-1])
-        assert spg[:, :, [peak_index - 1, peak_index + 1]].max() < floor_dBc
-        assert others.max() < floor_dBc
+        # a boxcar window puts the whole tone in its on-peak bin, so its immediate
+        # neighbors hold only FFT roundoff referred to the 0 dB tone, like every
+        # other off-peak bin
+        off_peak_floor = off_peak_floor_dBc(FFT_SIGMA, NFFT, size=others.shape[-1])
+        assert spg[:, :, [peak_index - 1, peak_index + 1]].max() < off_peak_floor
+        assert others.max() < off_peak_floor
 
     def test_frequency_coordinate_is_the_fftfreq_grid(self):
         iq = testing.tone(DURATION, FS)
@@ -167,13 +156,12 @@ class TestSpectrogram:
         time_bins = 2
         iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
 
+        binning = {
+            'integration_bandwidth': frequency_bins * RES,
+            'time_aperture': time_bins * NFFT / FS,
+        }
         reference, ref_metadata = spg_of(iq, as_xarray=False)
-        da = spg_of(
-            iq,
-            integration_bandwidth=frequency_bins * RES,
-            time_aperture=time_bins * NFFT / FS,
-            as_xarray=True,
-        )
+        da = spg_of(iq, as_xarray=True, **binning)
 
         assert da.sizes['spectrogram_time'] == NWINDOW // time_bins
         assert da.sizes['spectrogram_baseband_frequency'] == centered_bin_count(
@@ -191,10 +179,12 @@ class TestSpectrogram:
         assert da.attrs['noise_bandwidth'] == frequency_bins * RES
         assert da.attrs['units'] == 'dBm/64 kHz'
 
-        expected = levels(reference).max()
-        assert_close(
-            levels(da).max(), expected, atol=2 * quantization_atol(expected, 2)
+        # each side carries its own quantization and roundoff budget
+        atol = (
+            registered_tolerance(CAPTURE, spg_spec()).on_peak.peak
+            + registered_tolerance(CAPTURE, spg_spec(**binning)).on_peak.peak
         )
+        assert_close(levels(da).max(), levels(reference).max(), atol=atol)
 
     @pytest.mark.parametrize(
         'kwargs,message,quantities',
@@ -280,6 +270,12 @@ PSD_DURATION = 16 * NFFT / FS
 PSD_CAPTURE = sa.specs.Capture(duration=PSD_DURATION, sample_rate=FS)
 
 
+def psd_spec(**kwargs) -> sa.specs.PowerSpectralDensity:
+    kwargs.setdefault('window', 'boxcar')
+    kwargs.setdefault('frequency_resolution', RES)
+    return sa.specs.PowerSpectralDensity(**kwargs)
+
+
 def psd_of(iq, capture=PSD_CAPTURE, **kwargs):
     kwargs.setdefault('window', 'boxcar')
     kwargs.setdefault('frequency_resolution', RES)
@@ -295,11 +291,13 @@ class TestPowerSpectralDensity:
         assert names == [str(s) for s in PSD_STATISTICS]
 
         sel = {name: levels(da.sel(time_statistic=name)) for name in names}
-        step = float16_step(levels(da))
-        assert np.all(sel['0.5'] >= sel['min'] - step)
-        assert np.all(sel['0.5'] <= sel['max'] + step)
-        assert np.all(sel['mean'] >= sel['min'] - step)
-        assert np.all(sel['mean'] <= sel['max'] + step)
+        slack = registered_tolerance(
+            PSD_CAPTURE, psd_spec(time_statistic=PSD_STATISTICS)
+        ).on_peak.peak
+        assert np.all(sel['0.5'] >= sel['min'] - slack)
+        assert np.all(sel['0.5'] <= sel['max'] + slack)
+        assert np.all(sel['mean'] >= sel['min'] - slack)
+        assert np.all(sel['mean'] <= sel['max'] + slack)
 
     def test_max_matches_the_spectrogram_it_derives_from(self):
         iq = testing.single_tone(PSD_DURATION, FS, frequency_offset=5 * RES, snr=20)
@@ -309,7 +307,12 @@ class TestPowerSpectralDensity:
         expected = levels(spg).max(axis=1)
         # the two paths quantize independently: `spectrogram` rounds to 2 decimals
         # before its float16 cast, `power_spectral_density` only casts
-        atol = quantization_atol(expected) + 0.5 * float16_step(expected)
+        atol = (
+            registered_tolerance(PSD_CAPTURE, spg_spec()).on_peak.peak
+            + registered_tolerance(
+                PSD_CAPTURE, psd_spec(time_statistic=('max',))
+            ).on_peak.peak
+        )
         assert_close(levels(da)[:, 0], expected, atol=atol)
 
     def test_two_tones_keep_their_own_bins_and_levels(self):
@@ -323,17 +326,20 @@ class TestPowerSpectralDensity:
 
         psd = levels(da)[0, 0]
         freqs = da.baseband_frequency.values
-        for b, level in zip(bins, levels_dB):
+        tol = registered_tolerance(PSD_CAPTURE, psd_spec(time_statistic=('mean',)))
+        atol = sa.util.elementwise_atol(tol, levels_dB)
+        for b, level, tone_atol in zip(bins, levels_dB, atol):
             index = int(np.argmin(np.abs(freqs - b * RES)))
             assert_close(
                 psd[index],
                 level,
-                atol=quantization_atol(level, limit_digits=None),
+                rtol=tol.rtol,
+                atol=tone_atol,
                 err_msg=f'tone at bin {b}',
             )
 
         others = np.delete(psd, [NFFT // 2 + b for b in bins])
-        assert others.max() < far_bin_floor_dBc(FFT_SIGMA, NFFT, size=others.size)
+        assert others.max() < off_peak_floor_dBc(FFT_SIGMA, NFFT, size=others.size)
 
     def test_values_are_not_quantized_to_float16(self):
         iq = testing.single_tone(PSD_DURATION, FS, frequency_offset=5 * RES, snr=20)
@@ -357,22 +363,40 @@ SSB_PERIODICITY = 20e-3
 SSB_SYMBOLS = round(28 * SSB_SCS / 15e3)
 
 
+SSB_SPEC = sa.specs.Cellular5GNRSSBSpectrogram(
+    subcarrier_spacing=SSB_SCS,
+    sample_rate=SSB_SAMPLE_RATE,
+    discovery_periodicity=SSB_PERIODICITY,
+    window='boxcar',
+)
+
+
+def ssb_capture(duration) -> sa.specs.Capture:
+    return sa.specs.Capture(duration=duration, sample_rate=SSB_FS)
+
+
 def ssb_of(duration, frequency=None, **kwargs):
-    capture = sa.specs.Capture(duration=duration, sample_rate=SSB_FS)
     if frequency is None:
         iq = testing.noise(duration, SSB_FS, noise_psd=1 / SSB_FS)
     else:
         iq = testing.tone(duration, SSB_FS, frequency=frequency)
     return sa.measurements.cellular_5g_ssb_spectrogram(
-        iq,
-        capture,
-        subcarrier_spacing=SSB_SCS,
-        sample_rate=SSB_SAMPLE_RATE,
-        discovery_periodicity=SSB_PERIODICITY,
-        window='boxcar',
-        as_xarray=True,
-        **kwargs,
+        iq, ssb_capture(duration), as_xarray=True, **(SSB_SPEC.to_dict() | kwargs)
     )
+
+
+def ssb_tone_level_dB() -> float:
+    """level of a tone centered on a 15 kHz bin after integration to one 30 kHz bin.
+
+    The STFT window is a boxcar of `window_fill` * nfft samples zero-padded to nfft,
+    whose ENBW is nfft/L bins, so the tone bin alone reads 10*log10(L/nfft). Its
+    Dirichlet kernel is not zero on the neighboring bins, and the integration sums
+    the tone bin with one neighbor holding sinc(L/nfft)**2 of the tone's power.
+    """
+    _, window_fill = sa.measurements.shared.cellular_stft_window_fractions('normal')
+    nfft = round(2 * SSB_FS / SSB_SCS)
+    L = round(window_fill * nfft)
+    return 10 * np.log10(L / nfft * (1 + np.sinc(L / nfft) ** 2))
 
 
 class TestCellular5GSSBSpectrogram:
@@ -403,3 +427,52 @@ class TestCellular5GSSBSpectrogram:
         # a stationary tone reads the same in every symbol of every block
         peak = spg[..., expected]
         assert peak.max() == peak.min()
+
+    def test_tone_level_sums_the_tone_bin_with_its_leaking_neighbor(self):
+        duration = 2 * SSB_PERIODICITY
+        da = ssb_of(duration, frequency=SSB_SCS)
+
+        freqs = da.cellular_ssb_baseband_frequency.values
+        index = int(np.argmin(np.abs(freqs - SSB_SCS)))
+        tol = registered_tolerance(ssb_capture(duration), SSB_SPEC)
+        assert_close(
+            levels(da)[..., index],
+            ssb_tone_level_dB(),
+            rtol=tol.rtol,
+            atol=tol.on_peak.peak,
+        )
+
+
+# %% tolerance
+
+TOLERANCE_CASES = [
+    (CAPTURE, spg_spec()),
+    (PSD_CAPTURE, psd_spec()),
+    (ssb_capture(SSB_PERIODICITY), SSB_SPEC),
+]
+TOLERANCE_IDS = ['spectrogram', 'power_spectral_density', 'cellular_5g_ssb_spectrogram']
+
+
+@pytest.mark.parametrize('capture,spec', TOLERANCE_CASES, ids=TOLERANCE_IDS)
+def test_tolerance_is_a_dB_budget_with_peak_above_rms(capture, spec):
+    tol = registered_tolerance(capture, spec)
+    assert isinstance(tol, sa.specs.Tolerance)
+    assert tol.units == 'dB'
+    assert tol.on_peak.peak >= tol.on_peak.rms > 0
+    assert tol.off_peak_dBc.rms < tol.off_peak_dBc.peak < 0
+
+
+@pytest.mark.parametrize('capture,spec', TOLERANCE_CASES, ids=TOLERANCE_IDS)
+def test_tolerance_grows_with_the_input_error(capture, spec):
+    exact = registered_tolerance(capture, spec, input_error=0.0)
+    perturbed = registered_tolerance(capture, spec, input_error=1e-4)
+    assert perturbed.on_peak.rms > exact.on_peak.rms
+    assert perturbed.on_peak.peak > exact.on_peak.peak
+
+
+@pytest.mark.parametrize('capture,spec', TOLERANCE_CASES, ids=TOLERANCE_IDS)
+def test_tolerance_is_looser_for_cupy_than_numpy(capture, spec):
+    numpy_tol = registered_tolerance(capture, spec, array_backend='numpy')
+    cupy_tol = registered_tolerance(capture, spec, array_backend='cupy')
+    assert cupy_tol.on_peak.rms > numpy_tol.on_peak.rms
+    assert cupy_tol.on_peak.peak > numpy_tol.on_peak.peak

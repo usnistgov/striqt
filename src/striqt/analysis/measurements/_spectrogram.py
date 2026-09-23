@@ -40,6 +40,14 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
     return np.arange(size) * hop_period
 
 
+def spectrogram_tolerance(
+    capture: specs.Capture, spec: specs.Spectrogram, **kwargs
+) -> specs.Tolerance:
+    return shared.spectrogram_tolerance(
+        capture, spec, dtype='float16', limit_digits=2, **kwargs
+    )
+
+
 @hint_keywords(specs.Spectrogram)
 @registry.measurement(
     coord_factories=[spectrogram_time, shared.spectrogram_baseband_frequency],
@@ -50,6 +58,7 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
     # typed_kwargs=shared.SpectrogramKeywords,
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
     validate=shared.validated_spectrogram_sizing,
+    tolerance=spectrogram_tolerance,
 )
 def spectrogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs):
     """Evaluate a spectrogram based on an STFT.

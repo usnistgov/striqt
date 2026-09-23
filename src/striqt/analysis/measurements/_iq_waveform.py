@@ -3,12 +3,14 @@ from __future__ import annotations as __
 import typing
 
 from .. import specs
-
 from ..lib import util
-from .shared import registry, hint_keywords
+from . import shared
+from .shared import hint_keywords, registry
 
 if typing.TYPE_CHECKING:
     import pandas as pd
+
+    from striqt.waveform.lib.typing import ArrayBackend
 else:
     pd = util.lazy_import('pandas')
 
@@ -41,6 +43,26 @@ def _get_start_stop_index(
     return start, stop
 
 
+def iq_waveform_tolerance(
+    capture: specs.Capture,
+    spec: specs.IQWaveform,
+    *,
+    array_backend: ArrayBackend = 'numpy',
+    input_error: float = 0.0,
+) -> specs.Tolerance:
+    """the error budget on the IQ envelope level ``20*log10|iq|`` in dB, which is
+    the pass-through of `input_error` since the slice itself is exact"""
+    start, stop = _get_start_stop_index(capture, spec, allow_none=False)
+    # the slice may be empty, where peak_factor's log is undefined
+    size = max(stop - start, 1)
+    return shared.level_tolerance(
+        amplitude_rms=input_error,
+        size=size,
+        power_rtol=0.0,
+        log_tol={'rtol': 0.0, 'atol': 0.0},
+    )
+
+
 @registry.coordinates(dtype='uint64', attrs={'standard_name': 'Sample Index'})
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[int]:
@@ -55,6 +77,7 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     dtype='complex64',
     attrs={'standard_name': 'IQ waveform', 'units': 'V/√Ω'},
     store_compressed=False,
+    tolerance=iq_waveform_tolerance,
 )
 def iq_waveform(iq, capture, **kwargs):
     """package the IQ waveform as a measurement result.

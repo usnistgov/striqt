@@ -2,14 +2,17 @@
 """Measure ulp errors of the striqt.waveform.power_analysis conversions per backend.
 
 Run on a machine with a GPU to ground the ulp budgets used by
-tests/waveform/test_power_analysis.py. References are computed with `decimal` at 40
-digits from the exact float inputs, so the reported errors are those of the
-implementation alone (numexpr/libm on CPU, cupy.fuse/CUDA libdevice on GPU).
+tests/waveform/test_power_analysis.py and the reduction roundoff model in
+striqt.waveform.lib.arrays. References for the elementwise conversions are computed
+with `decimal` at 40 digits from the exact float inputs, so the reported errors are
+those of the implementation alone (numexpr/libm on CPU, cupy.fuse/CUDA libdevice on
+GPU).
 
 Usage:
-    uv run --extra test --extra gpu python chores/tests/measure_db_accuracy.py [--points 5000]
+    pixi run -e cupy python chores/tests/measure_db_accuracy.py [--points 5000]
+    pixi run -e test39 python chores/tests/measure_db_accuracy.py   # CPU only
 
-Columns:
+Columns (elementwise conversions):
     rel ulp   max error in ulps of the output dtype, over outputs with |y| >= 1 (dB) or
               all outputs (linear); this is the number to compare against a per-function
               ulp budget
@@ -17,6 +20,31 @@ Columns:
               (scale/ln 10) * u, i.e. in units of the dB error caused by a one-unit-
               roundoff error of the *input*; this is what bounds the error near 0 dB
               where ulps of the output are meaningless
+
+Columns (binned power mean, float32, the production `iq_to_bin_power` path over
+Gaussian noise and a unit tone against a float64 reference):
+    max/u        max relative error in units of the float32 unit roundoff u = 2**-24
+    rms/u        rms relative error over the rows and draws, same units
+    rms model/u  `accum_rms(float32, n)`, the shipped rms model (with its safety
+                 factor) for a reduction over a contiguous axis; the worst element
+                 over k outputs is peak_factor(k) times it
+    n·u model/u  `accum_rtol(float32, n)`, the recursive-summation bound that applies
+                 to the strided-axis row
+The measurements ground the fitted run length and safety factor of `accum_rms` in
+striqt.waveform.lib.arrays; the printed cupy accelerators tell whether CUB handled the
+reduction.
+
+Columns (binned power quantile, float32, `iq_to_bin_power(kind=q)` over complex64
+samples whose |x|**2 is log-normal with sigma 3, against a float64 `np.quantile` of the
+exact powers):
+    max/u, rms/u  relative error in units of u = 2**-24 as above, worst over the draws
+    model/u       `stat_rtol(float32, q)` (or `bin_power_rtol` when it is not shipped
+                  yet): squaring the envelope plus one rounding of the interpolation
+                  between the two neighbouring order statistics
+The heavy tail makes that neighbour gap large at q=0.999. A max/u far above model/u on
+one backend means its `quantile` interpolates in float32 (numpy < 2.3 casts a Python
+float q to the array dtype, which errs by about n*2**-25 of the gap); the fix passes
+q as a float64 array, so the result dtype printed under the table must stay float32.
 """
 
 from __future__ import annotations
@@ -28,7 +56,20 @@ from functools import partial
 
 import numpy as np
 
+try:
+    # workaround a library linkage bug
+    import numba.cuda  # noqa: F401
+except ImportError:
+    pass
 getcontext().prec = 40
+
+# bin sizes for the float32 power mean; the largest is 4 x 4e6 complex64 = 128 MB
+REDUCE_SIZES = (1_000, 10_000, 100_000, 1_000_000, 4_000_000)
+STRIDED_SIZE = 1_000_000
+
+# bin sizes and quantiles for the float32 power quantile; 4 x 1e6 complex64 = 32 MB
+QUANTILE_SIZES = (1_000, 100_000, 1_000_000)
+QUANTILES = (0.5, 0.999)
 
 
 def _u(dtype):
@@ -95,6 +136,126 @@ def report_elementwise(name, backends, func, x, ref, dtype, db_scale=None):
     print(f'{name:>28} {np.dtype(dtype).name:>8} ' + ' '.join(cells))
 
 
+def _iq_draws(rng, n, draws):
+    """(label, iq) pairs of complex64 shape (4, n): circular Gaussian, then a unit
+    tone at a frequency that is not bin-centred"""
+    t = np.arange(n)
+    for _ in range(draws):
+        iq = (
+            rng.standard_normal((4, n)) + 1j * rng.standard_normal((4, n))
+        ) / math.sqrt(2)
+        yield 'gaussian', iq.astype(np.complex64)
+        f = (rng.integers(1, 5) + 1 / 3) / n
+        phase = rng.uniform(0, 2 * math.pi, (4, 1))
+        yield 'tone', np.exp(2j * math.pi * f * t + 1j * phase).astype(np.complex64)
+
+
+def _bin_power_mean_errors(xp, iq, strided):
+    """per-row relative error of the float32 binned power mean against a float64
+    reference, reducing along a contiguous axis (or a strided one, the naive path)"""
+    from striqt.waveform.lib import power_analysis as pa
+
+    ref = (np.abs(iq.astype(np.complex128)) ** 2).mean(axis=1)
+    if strided:
+        x = xp.asarray(np.ascontiguousarray(iq.T))
+        y = pa.iq_to_bin_power(x, Ts=1, Tbin=iq.shape[1], kind='mean', axis=0)[0, :]
+    else:
+        y = pa.iq_to_bin_power(
+            xp.asarray(iq), Ts=1, Tbin=iq.shape[1], kind='mean', axis=1
+        )
+        y = y[:, 0]
+    y = _to_numpy(y)
+    assert y.dtype == np.float32, y.dtype
+    return np.abs(y.astype(np.float64) - ref) / ref
+
+
+def report_binned_power_mean(backends, rng, draws=5):
+    from striqt.waveform.lib import arrays as arrays_lib
+
+    u = _u(np.float32)
+    hdr = ' '.join(f'{b + " max/u":>10} {b + " rms/u":>10}' for b in backends)
+    print(
+        f'\n{"binned power mean (float32)":>28} {"n":>9} {hdr} {"rms model/u":>11}'
+        f' {"n·u model/u":>12}'
+    )
+    cases = [(n, False) for n in REDUCE_SIZES] + [(STRIDED_SIZE, True)]
+    for n, strided in cases:
+        worst = {
+            (b, label): [0.0, 0.0] for b in backends for label in ('gaussian', 'tone')
+        }
+        for label, iq in _iq_draws(rng, n, draws):
+            for b, (xp, _) in backends.items():
+                rel = _bin_power_mean_errors(xp, iq, strided) / u
+                cell = worst[b, label]
+                cell[0] = max(cell[0], rel.max())
+                cell[1] = max(cell[1], math.sqrt(np.mean(rel**2)))
+        model = arrays_lib.accum_rms(np.float32, n) / u
+        naive = arrays_lib.accum_rtol(np.float32, n) / u
+        for label in ('gaussian', 'tone'):
+            name = f'{label} strided (naive)' if strided else label
+            cells = ' '.join(
+                f'{worst[b, label][0]:10.2f} {worst[b, label][1]:10.2f}'
+                for b in backends
+            )
+            print(f'{name:>28} {n:>9} {cells} {model:11.1f} {naive:12.1f}')
+
+
+def _lognormal_iq_draws(rng, n, draws):
+    """complex64 of shape (4, n) whose |x|**2 is log-normal with sigma 3"""
+    for _ in range(draws):
+        power = np.exp(3 * rng.standard_normal((4, n)))
+        phase = rng.uniform(0, 2 * math.pi, (4, n))
+        yield (np.sqrt(power) * np.exp(1j * phase)).astype(np.complex64)
+
+
+def _bin_power_quantile_errors(xp, iq, q):
+    """(per-row relative error, result dtype) of the float32 binned power quantile
+    against a float64 quantile of the exact powers"""
+    from striqt.waveform.lib import power_analysis as pa
+
+    ref = np.quantile(np.abs(iq.astype(np.complex128)) ** 2, q, axis=1)
+    y = pa.iq_to_bin_power(xp.asarray(iq), Ts=1, Tbin=iq.shape[1], kind=q, axis=1)
+    y = _to_numpy(y[:, 0])
+    return np.abs(y.astype(np.float64) - ref) / ref, y.dtype
+
+
+def report_binned_power_quantile(backends, rng, draws=3):
+    from striqt.waveform.lib import power_analysis as pa
+
+    # stat_rtol is the intended model; bin_power_rtol is its predecessor
+    stat_rtol = getattr(pa, 'stat_rtol', None)
+    if stat_rtol is None:
+
+        def stat_rtol(dtype, kind):
+            return pa.bin_power_rtol(dtype, kind=kind)
+
+    u = _u(np.float32)
+    hdr = ' '.join(f'{b + " max/u":>10} {b + " rms/u":>10}' for b in backends)
+    print(
+        f'\n{"binned power quantile (float32)":>32} {"n":>9} {"q":>6} {hdr}'
+        f' {"model/u":>8}'
+    )
+    dtypes = {}
+    for n in QUANTILE_SIZES:
+        worst = {(b, q): [0.0, 0.0] for b in backends for q in QUANTILES}
+        for iq in _lognormal_iq_draws(rng, n, draws):
+            for q in QUANTILES:
+                for b, (xp, _) in backends.items():
+                    rel, dtypes[b] = _bin_power_quantile_errors(xp, iq, q)
+                    rel = rel / u
+                    cell = worst[b, q]
+                    cell[0] = max(cell[0], rel.max())
+                    cell[1] = max(cell[1], math.sqrt(np.mean(rel**2)))
+        for q in QUANTILES:
+            model = stat_rtol(np.float32, q) / u
+            cells = ' '.join(
+                f'{worst[b, q][0]:10.2f} {worst[b, q][1]:10.2f}' for b in backends
+            )
+            print(f'{"log-normal":>32} {n:>9} {q:>6} {cells} {model:8.2f}')
+    dtype_cells = ', '.join(f'{b}={np.dtype(dt).name}' for b, dt in dtypes.items())
+    print(f'{"result dtype":>32} {dtype_cells}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--points', type=int, default=5000)
@@ -102,6 +263,7 @@ def main():
 
     from striqt.waveform.lib import power_analysis as pa
 
+    print(f'numpy {np.__version__}')
     backends = {'numpy': (np, None)}
     try:
         import cupy as cp  # type: ignore
@@ -110,6 +272,13 @@ def main():
         backends['cupy'] = (cp, None)
         name = cp.cuda.runtime.getDeviceProperties(0)['name'].decode()
         print(f'cupy {cp.__version__} on {name}')
+        try:
+            print(
+                f'cupy routine accelerators {cp._core.get_routine_accelerators()},'
+                f' reduction accelerators {cp._core.get_reduction_accelerators()}'
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f'cupy accelerators unknown ({exc!r})')
     except Exception as exc:  # noqa: BLE001
         print(f'cupy unavailable ({exc!r}); measuring the CPU backend only')
 
@@ -212,11 +381,21 @@ def main():
             + ' '.join(f'{worst[b]:18.1f}' for b in backends)
         )
 
+    report_binned_power_mean(backends, rng)
+    report_binned_power_quantile(backends, rng)
+
     print(
         '\nInterpretation: rel ulp should stay within the per-function ulp budget of the'
         ' tests (library log10/pow/hypot error plus one rounding for the scale factor);'
         ' abs/u_in should stay within a few units for real inputs and within the hypot'
         ' budget for complex inputs. Reductions report absolute dB error in units of u.'
+        ' In the binned power mean table, rms/u should stay below rms model/u and max/u'
+        ' below a few times it on both backends; if a backend grows faster than sqrt(n),'
+        ' shorten the fitted run length in accum_rms rather than raising its safety factor.'
+        ' In the binned power'
+        ' quantile table, max/u should stay within model/u on both backends and the'
+        ' result dtype float32; a max/u far above model/u at q=0.999 means that'
+        " backend's quantile interpolates in float32 and needs q passed as float64."
     )
 
 

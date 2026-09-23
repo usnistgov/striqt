@@ -20,7 +20,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from numeric_checks import (
     assert_close,
-    corr_atol,
     interior,
     numpy_and_cupy,
     reference_power,
@@ -38,6 +37,12 @@ SCS_5G = (15e3, 30e3, 60e3)
 SC_COUNT = 127
 # 3GPP TS 38.211 Table 4.3.2-1: 10 * subcarrier_spacing/15e3 slots per 10 ms frame
 SLOT_PERIODS = {15e3: 1e-3, 30e3: 0.5e-3, 60e3: 0.25e-3, 120e3: 125e-6, 240e3: 62.5e-6}
+
+
+def corr_atol_for(x, n_inds, norm, n_impl=1):
+    """ofdm.corr_atol with the dtype and scale taken from the waveform `x`"""
+    scale = float(np.abs(x).max() ** 2)
+    return ofdm.corr_atol(x.dtype, n_inds, norm, scale=scale, n_impl=n_impl)
 
 
 def khz_id(scs):
@@ -375,7 +380,7 @@ class TestCorrAtIndices:
         assert R.shape == (phy.nfft + ncp,)
 
         # the cyclic prefix is an exact copy of the symbol tail
-        assert R[0] == pytest.approx(1, abs=corr_atol(x, inds.size, norm=True))
+        assert R[0] == pytest.approx(1, abs=corr_atol_for(x, inds.size, norm=True))
 
         # partial overlap decays linearly over the prefix length; the remaining
         # pairs are independent QPSK products that average out
@@ -388,8 +393,24 @@ class TestCorrAtIndices:
 
         R = ofdm.corr_at_indices(inds, x, phy.nfft, norm=False)
         power = reference_power(x[inds.ravel()]).mean()
-        assert R[0] == pytest.approx(power, abs=corr_atol(x, inds.size, norm=False))
+        assert R[0] == pytest.approx(power, abs=corr_atol_for(x, inds.size, norm=False))
         assert R.dtype == x.dtype
+
+    def test_corr_atol_model(self):
+        atol = functools.partial(ofdm.corr_atol, np.float32)
+        # one rounding per summed product on top of a fixed count of power roundings
+        assert atol(8, norm=False) > atol(4, norm=False)
+        assert atol(16, norm=False) - atol(8, norm=False) == pytest.approx(
+            atol(8, norm=False) - atol(0, norm=False)
+        )
+        # a normalized correlation is bounded by 1 regardless of the input scale
+        assert atol(4, norm=True, scale=100.0) == atol(4, norm=True)
+        assert atol(4, norm=False, scale=100.0) == pytest.approx(
+            100 * atol(4, norm=False)
+        )
+        # roundoff follows the real dtype underlying the complex input
+        assert ofdm.corr_atol(np.complex64, 4, norm=True) == atol(4, norm=True)
+        assert ofdm.corr_atol(np.complex128, 4, norm=True) < atol(4, norm=True)
 
 
 class TestSyncSequences:
@@ -867,7 +888,7 @@ class TestCupy:
         R_np, R_cp = numpy_and_cupy(
             cupy_available, ofdm.corr_at_indices, inds, x, phy.nfft, norm=False
         )
-        assert_close(R_cp, R_np, atol=corr_atol(x, inds.size, norm=False, n_impl=2))
+        assert_close(R_cp, R_np, atol=corr_atol_for(x, inds.size, norm=False, n_impl=2))
 
     def test_sync_sequences(self, cupy_available):
         pss_np, pss_cp = numpy_and_cupy(

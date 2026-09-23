@@ -1,4 +1,4 @@
-from . import arrays, fourier, ofdm
+from . import arrays, fourier, ofdm, power_analysis
 from .lib import typing, util
 
 from .fourier import (
@@ -18,7 +18,7 @@ from .fourier import (
     spectrogram,
     stft,
 )
-from .lib.power_analysis import (
+from .power_analysis import (
     dBlinmean,
     dBlinsum,
     dBtopow,

@@ -16,6 +16,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 import striqt.analysis as sa
+import striqt.waveform as sw
 from striqt.analysis.lib import util
 
 
@@ -239,3 +240,40 @@ class TestOrderedSetUnion:
         union = util.ordered_set_union(['b', 'a'], ('a', 'c'), ['c', 'd'])
         assert union == ['b', 'a', 'c', 'd']
         assert util.ordered_set_union() == []
+
+
+# %% elementwise_atol
+
+
+def test_elementwise_atol_without_an_off_peak_depth_is_flat():
+    tol = sa.specs.Tolerance(
+        units='dB', rtol=0.0, on_peak=sa.specs.ErrorBound(rms=1e-3, peak=2e-3)
+    )
+    atol = util.elementwise_atol(tol, [-10.0, -60.0, -120.0])
+    assert atol.tolist() == [2e-3, 2e-3, 2e-3]
+
+
+def test_elementwise_atol_grows_with_depth_and_diverges_at_off_peak_dBc():
+    """the bound equals `peak` at the peak element, widens below it, and is infinite
+    from `off_peak_dBc.peak` down"""
+    err = 1e-4
+    additive = 5e-4
+    tol = sa.specs.Tolerance(
+        units='dB',
+        rtol=0.0,
+        on_peak=sa.specs.ErrorBound(
+            rms=1e-3, peak=additive + sw.power_analysis.level_tolerance_dB(err)
+        ),
+        off_peak_dBc=sa.specs.ErrorBound(
+            rms=sw.fourier.rms_tolerance_dBc(err) - 10,
+            peak=sw.fourier.rms_tolerance_dBc(err),
+        ),
+    )
+    expected = np.array([-3.0, -43.0, -73.0, -3.0 + tol.off_peak_dBc.peak, -150.0])
+    atol = util.elementwise_atol(tol, expected)
+    assert atol[0] >= tol.on_peak.peak
+    assert atol[0] == pytest.approx(
+        additive + sw.power_analysis.off_peak_dB_tolerance(0, err)
+    )
+    assert np.all(np.diff(atol[:3]) > 0)
+    assert np.isinf(atol[3]) and np.isinf(atol[4])

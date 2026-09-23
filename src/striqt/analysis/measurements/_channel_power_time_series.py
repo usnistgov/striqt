@@ -5,6 +5,7 @@ import typing
 from .. import specs
 
 from ..lib import dataarrays, register, util
+from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
@@ -63,6 +64,34 @@ def validated_channel_power_binning(
     )
 
 
+def channel_power_tolerance(
+    capture: specs.Capture,
+    spec: specs.ChannelPowerTimeSeries,
+    *,
+    array_backend: sw.typing.ArrayBackend = 'numpy',
+    input_error: float = 0.0,
+) -> specs.Tolerance:
+    """the roundoff budget of `channel_power_time_series` in dB, from the detector
+    binning and the relative rms amplitude error `input_error` already in the IQ"""
+    binning = validated_channel_power_binning(capture, spec)
+    return shared.level_tolerance(
+        amplitude_rms=input_error,
+        size=binning.bin_count * len(spec.power_detectors),
+        power_rtol=max(
+            sw.power_analysis.bin_power_rtol(np.float32, kind=d)
+            for d in spec.power_detectors
+        ),
+        power_rms=max(
+            sw.power_analysis.bin_power_rms(np.float32, binning.bin_size, kind=d)
+            for d in spec.power_detectors
+        ),
+        log_tol=sw.power_analysis.log_conversion_tol(
+            np.float32, 10, complex_input=True
+        ),
+        quantization=shared.quantization_dB('float32'),
+    )
+
+
 @registry.coordinates(
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
@@ -115,6 +144,7 @@ def evaluate_channel_power_time_series(
     prefer_iq_source='aligned',
     attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
     validate=validated_channel_power_binning,
+    tolerance=channel_power_tolerance,
 )
 def channel_power_time_series(iq, capture: specs.Capture, **kwargs):
     """Compute a binned time series of channel power detector measurements.

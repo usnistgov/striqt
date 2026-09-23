@@ -24,38 +24,43 @@ from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 from numeric_checks import (
     FLOAT_DTYPES,
-    accum_rtol,
     assert_close,
     blocks,
     by_dtype,
-    dB_tolerance,
     dtype_id,
-    envelope_power_rtol,
     func_id,
-    linear_stat_tol,
-    linear_tolerance_dB,
-    log_conversion_tol,
     numpy_and_cupy,
-    pow_conversion_rtol,
     reference_power,
-    roundtrip_dB_tol,
-    roundtrip_power_rtol,
     to_numpy,
 )
 from numpy.testing import assert_array_equal
 
-from striqt.waveform.lib.arrays import float_dtype_like
+from striqt.waveform.lib.arrays import accum_rtol, float_dtype_like
+from striqt.waveform.lib.fourier import peak_factor
 from striqt.waveform.lib.power_analysis import (
     _arraylike_with_buffer,
+    bin_power_rms,
+    bin_power_rtol,
+    dB_tolerance,
     dBlinmean,
     dBlinsum,
     dBtopow,
+    envelope_power_rtol,
     envtodB,
     envtopow,
     iq_to_bin_power,
     iq_to_cyclic_power,
+    level_tolerance_dB,
+    linear_stat_tol,
+    linear_tolerance_dB,
+    log_conversion_tol,
+    off_peak_dB_tolerance,
+    pow_conversion_rtol,
     powtodB,
+    roundtrip_dB_tol,
+    roundtrip_power_rtol,
     sample_ccdf,
+    stat_rtol,
     stat_ufunc_from_shorthand,
     unit_dB_to_linear,
     unit_dB_to_wave,
@@ -514,16 +519,77 @@ class TestArrayLikeHandling:
             powtodB(Container())
 
 
+class TestRoundoffModels:
+    """The tolerance models that the rest of this module measures the library against."""
+
+    @for_each_float_dtype
+    def test_log_conversion_tol_scales_with_n_impl_and_scale(self, dtype):
+        one = log_conversion_tol(dtype, 10)
+        two = log_conversion_tol(dtype, 10, n_impl=2)
+        assert two['rtol'] == 2 * one['rtol']
+        assert two['atol'] == 2 * one['atol']
+
+        double_scale = log_conversion_tol(dtype, 20)
+        assert double_scale['atol'] == 2 * one['atol']
+        assert double_scale['rtol'] == one['rtol']
+
+    @for_each_float_dtype
+    def test_log_conversion_tol_complex_input_raises_atol(self, dtype):
+        real = log_conversion_tol(dtype, 20)
+        complex_ = log_conversion_tol(dtype, 20, complex_input=True)
+        assert complex_['atol'] > real['atol']
+        assert complex_['rtol'] == real['rtol']
+
+    @for_each_float_dtype
+    def test_pow_conversion_rtol_grows_with_level(self, dtype):
+        assert pow_conversion_rtol(dtype, 100) > pow_conversion_rtol(dtype, 10)
+
+    @pytest.mark.parametrize('r', [1e-5, 0.1, 0.9])
+    def test_off_peak_dB_tolerance_at_peak(self, r):
+        """the low side of a relative error costs at least as much dB as the high side"""
+        at_peak = off_peak_dB_tolerance(0, r)
+        assert at_peak == pytest.approx(-20 * np.log10(1 - r))
+        assert at_peak >= level_tolerance_dB(r)
+
+    def test_off_peak_dB_tolerance_unbounded_past_floor(self):
+        err = 1e-3
+        depth_dBc = -20 * np.log10(err)
+        assert np.isposinf(off_peak_dB_tolerance(depth_dBc, err))
+        assert np.isposinf(off_peak_dB_tolerance(depth_dBc + 10, err))
+        assert np.isfinite(off_peak_dB_tolerance(depth_dBc - 1, err))
+
+    def test_bin_power_rms_grows_with_bin_size(self):
+        assert bin_power_rms(np.float32, 16) > bin_power_rms(np.float32, 1) > 0
+
+    @pytest.mark.parametrize('kind', ['min', 'max', 'peak', 0.5], ids=str)
+    def test_bin_power_rms_is_zero_for_selections_and_quantiles(self, kind):
+        assert bin_power_rms(np.float32, 10_000, kind=kind) == 0
+
+    @pytest.mark.parametrize('kind', ['mean', 'rms', 'min', 'max', 'peak'])
+    def test_stat_rtol_is_zero_for_selections_and_the_mean(self, kind):
+        assert stat_rtol(np.float32, kind) == 0
+
+    def test_stat_rtol_is_one_rounding_for_quantiles(self):
+        quantile = stat_rtol(np.float32, 0.5)
+        assert quantile == accum_rtol(np.float32, 1)
+        assert stat_rtol(np.float32, 'median') == quantile
+        assert stat_rtol(np.float32, 0.5, n_impl=2) == 2 * quantile
+
+    @pytest.mark.parametrize('func', [stat_rtol, bin_power_rtol], ids=func_id)
+    def test_unknown_statistic_raises(self, func):
+        with pytest.raises(ValueError, match='bogus'):
+            func(np.float32, kind='bogus')
+
+    def test_level_tolerance_dB_power_is_half_of_amplitude(self):
+        sigma = np.array([1e-6, 1e-3, 0.1, 1.0])
+        np.testing.assert_allclose(
+            level_tolerance_dB(sigma, power=True), level_tolerance_dB(sigma) / 2
+        )
+
+
 def bin_power_reference(iq, size, kind, axis):
     power = reference_power(iq)
     return BIN_STATS[kind](blocks(power, size, axis), axis=axis + 1)
-
-
-def bin_power_rtol(iq, size, n_impl=1):
-    """rtol for a statistic of |x|**2 over `size` samples against exact arithmetic"""
-    dtype = float_dtype_like(iq)
-    envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
-    return envelope + accum_rtol(dtype, size, n_impl)
 
 
 BIN_SIZES = [1, 5, 16]
@@ -544,7 +610,48 @@ def cyclic_power_cases(draw, channels=(1, 2)):
     return iq, size, bins_per_cycle, n_cycles
 
 
+def bin_power_bound(dtype, size, outputs, n_impl=1, kind='mean'):
+    """worst-case rtol over `outputs` binned statistics of `size` samples: the
+    deterministic part plus the peak of the rms accumulation model"""
+    peak = max(peak_factor(outputs), 1.0)
+    return bin_power_rtol(dtype, n_impl, kind) + peak * bin_power_rms(
+        dtype, size, n_impl, kind
+    )
+
+
 class TestIqToBinPower:
+    @pytest.mark.parametrize('size', [2**14, 2**17])
+    def test_mean_over_a_long_bin_stays_within_the_reduction_model(self, size):
+        """a mean over 1e5 float32 samples rounds a few units, where the n*u bound of
+        recursive summation would have allowed 1e-2"""
+        rng = np.random.default_rng(size)
+        iq = rng.standard_normal((4, size)) + 1j * rng.standard_normal((4, size))
+        iq = (iq / np.sqrt(2)).astype(np.complex64)
+        result = iq_to_bin_power(iq, Ts=1, Tbin=size, kind='mean', axis=1)[:, 0]
+        assert_close(
+            result,
+            reference_power(iq, axis=1),
+            rtol=bin_power_bound(np.float32, size, outputs=result.size),
+        )
+
+    def test_quantile_of_a_long_heavy_tailed_bin_is_exact_on_every_numpy(self):
+        """numpy < 2.3 casts a scalar q to float32 (numpy.lib._function_base_impl,
+        quantile), which shifts the virtual index (n-1)*q by ~n*2**-25 samples before
+        interpolating between the two neighbouring order statistics. On a heavy-tailed
+        bin of 2**20 samples that read 124 u against a budget of 28 u."""
+        n, q = 2**20, 0.999
+        rng = np.random.default_rng(0)
+        power = np.exp(3 * rng.standard_normal((2, n)))
+        phase = rng.uniform(0, 2 * np.pi, size=(2, n))
+        iq = (np.sqrt(power) * np.exp(1j * phase)).astype(np.complex64)
+
+        result = iq_to_bin_power(iq, Ts=1, Tbin=n, kind=q, axis=1)
+
+        assert result.dtype == np.float32
+        expected = np.quantile(reference_power(iq), q, axis=1, keepdims=True)
+        rtol = bin_power_bound(np.float32, n, outputs=result.size, kind=q)
+        assert_close(result, expected, rtol=rtol)
+
     @for_each_bin_size
     @pytest.mark.parametrize('kind', ['mean', 'max', 0.9])
     @pytest.mark.parametrize('channels', [None, 3])
@@ -568,7 +675,8 @@ class TestIqToBinPower:
         assert result.dtype == float_dtype_like(iq)
         expected = bin_power_reference(iq, size, kind, axis)
         assert result.shape == expected.shape
-        assert_close(result, expected, rtol=bin_power_rtol(iq, size))
+        rtol = bin_power_bound(float_dtype_like(iq), size, result.size, kind=kind)
+        assert_close(result, expected, rtol=rtol)
 
     @pytest.mark.parametrize('size', BIN_SIZES[1:])
     @given(data=st.data(), remainder=st.integers(min_value=1, max_value=4))
@@ -585,7 +693,8 @@ class TestIqToBinPower:
         result = iq_to_bin_power(iq, Ts, size * Ts, truncate=True)
         expected = bin_power_reference(iq, size, 'mean', 0)
         assert result.shape == (iq.shape[0] // size,)
-        assert_close(result, expected, rtol=bin_power_rtol(iq, size))
+        rtol = bin_power_bound(float_dtype_like(iq), size, result.size)
+        assert_close(result, expected, rtol=rtol)
 
     @given(ratio=st.floats(min_value=1.1, max_value=9.9).filter(lambda r: r % 1 > 0.01))
     def test_bin_period_must_be_multiple(self, ratio):
@@ -616,7 +725,9 @@ class TestIqToBinPower:
         power = reference_power(iq)
         windows = np.lib.stride_tricks.sliding_window_view(power, size).mean(axis=1)
         matches = np.isclose(
-            result[:, np.newaxis], windows[np.newaxis, :], rtol=bin_power_rtol(iq, size)
+            result[:, np.newaxis],
+            windows[np.newaxis, :],
+            rtol=bin_power_bound(float_dtype_like(iq), size, result.size),
         )
         assert np.all(matches.any(axis=1))
 
@@ -676,6 +787,7 @@ class TestIqToCyclicPower:
             for stat in self.CYCLE_STATS:
                 value = result[detector][stat]
                 assert value.shape == (channels, bins_per_cycle)
+                assert value.dtype == float_dtype_like(iq)
                 expected = BIN_STATS[stat](by_cycle, axis=1)
                 assert_close(value, expected, rtol=rtol)
 
@@ -857,8 +969,8 @@ class TestSampleCcdf:
 class TestNumpyCupyCrossComparison:
     """Cross-comparison tests validating numpy and cupy produce close results.
 
-    Tolerances come from the ulp budgets in numeric_checks, so a difference larger
-    than the two libraries' rounding bounds fails the test.
+    Tolerances come from the ulp budgets in striqt.waveform.lib.power_analysis, so a
+    difference larger than the two libraries' rounding bounds fails the test.
     """
 
     @pytest.mark.parametrize(
@@ -960,7 +1072,8 @@ class TestNumpyCupyCrossComparison:
         )
 
         assert result_cp.dtype == result_np.dtype
-        assert_close(result_cp, result_np, rtol=bin_power_rtol(iq, size, 2))
+        rtol = bin_power_bound(float_dtype_like(iq), size, result_np.size, 2, kind)
+        assert_close(result_cp, result_np, rtol=rtol)
 
     @given(case=cyclic_power_cases(channels=(2,)))
     def test_iq_to_cyclic_power(self, cupy_available, case):
@@ -974,7 +1087,8 @@ class TestNumpyCupyCrossComparison:
         result_cp = iq_to_cyclic_power(cupy_available.asarray(iq), Ts, axis=1, **kws)
 
         dtype = float_dtype_like(iq)
-        rtol = bin_power_rtol(iq, size, 2) + accum_rtol(dtype, n_cycles, 2)
+        outputs = iq.shape[1] // size
+        rtol = bin_power_bound(dtype, size, outputs, 2) + accum_rtol(dtype, n_cycles, 2)
         for detector, stats in result_np.items():
             for stat, value in stats.items():
                 assert_close(result_cp[detector][stat], value, rtol=rtol)

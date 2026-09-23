@@ -21,7 +21,6 @@ def run(yaml_path: str):
     from pprint import pformat
     from pathlib import Path
     import pandas as pd
-    import itertools
 
     spec = ss.read_yaml_spec(yaml_path)
     print(f'Opened a bound specification for {type(spec).__name__!r} bindings')
@@ -71,21 +70,6 @@ def run(yaml_path: str):
                 pf = p
             print('  Exists: ', 'yes' if Path(pf).exists() else 'no')
 
-        kws = {
-            'sweep': spec,
-            'source_id': source_id,
-            'spec_name': Path(yaml_path).stem,
-        }
-        field_sets = {}
-        splits = (
-            ss.specs.helpers.split_capture_ports(c)
-            for c in ss.specs.helpers.loop_captures(spec, source_id=source_id)
-        )
-        for c in itertools.chain(*splits):
-            items = kws | c.to_dict()
-            for k, v in items.items():
-                field_sets.setdefault(k, set()).add(v)
-
         print('\n\nFormat fields available for use in paths:')
         print(80 * '▀')
         afields = ss.specs.helpers.get_path_fields(
@@ -94,6 +78,25 @@ def run(yaml_path: str):
         afields = {f'{{{k}}}': v for k, v in afields.items()}
         afields_repr = pformat(afields, indent=2, sort_dicts=False)
         print(f' {afields_repr[1:-1]}')
+
+        print('\n\nNumerical tolerance (worst case over captures):')
+        print(80 * '▀')
+        budget = ss.lib.compute.worst_case_tolerances(
+            ss.lib.compute.sweep_tolerances(spec, source_id=source_id)
+        )
+        rows = {}
+        for name, tol in budget.items():
+            off = tol.off_peak_dBc
+            rows[name] = {
+                ('rtol', ''): tol.rtol,
+                (f'On-peak tolerance ({tol.units})', 'rms'): tol.on_peak.rms,
+                (f'On-peak tolerance ({tol.units})', 'peak'): tol.on_peak.peak,
+                ('Off-peak (dBc)', 'rms'): None if off is None else off.rms,
+                ('Off-peak (dBc)', 'peak'): None if off is None else off.peak,
+            }
+        table = pd.DataFrame.from_dict(rows, orient='index')
+        table.columns = pd.MultiIndex.from_tuples(table.columns)
+        print(table.to_string(float_format='{:.4g}'.format))
 
         print('\n\nUnique capture field coordinates in output:')
         labels = ss.specs.helpers.list_capture_adjustments(spec, source_id)

@@ -20,6 +20,7 @@ from .arrays import (
     isroundmod,
     pad_along_axis,
     sliding_window_view,
+    unit_roundoff,
 )
 
 from .windows import register_extra_windows
@@ -30,7 +31,15 @@ if typing.TYPE_CHECKING:
     import numpy as np
     import scipy
 
-    from .typing import Array, _AT, ShiftType, WindowSpecType, WindowType, XpType
+    from .typing import (
+        Array,
+        _AT,
+        ArrayBackend,
+        ShiftType,
+        WindowSpecType,
+        WindowType,
+        XpType,
+    )
 
 else:
     np = util.lazy_import('numpy')
@@ -53,6 +62,90 @@ _COLA_WINDOW_SIZE_DIVISOR = {
     'blackman': 3,
     'blackmanharris': 5,
 }
+
+
+# %% roundoff model
+#
+# The FFT roundoff models below are rms models with fitted constants (see the functions
+# for their provenance); FFT_ROUNDOFF_SAFETY is the margin the tolerances built on them
+# carry, and independent backends' errors add in quadrature (measured 0.83-1.0).
+FFT_ROUNDOFF_SAFETY = 3
+
+
+def fft_roundoff_rms(
+    dtype, nffts, n_elementwise: int = 0, *, array_backend: ArrayBackend = 'numpy'
+) -> float:
+    """expected rms roundoff error of one backend, relative to the output rms.
+
+    Arguments:
+        dtype: the working dtype (complex dtypes select by their real component)
+        nffts: the size of each FFT pass in the computation
+        n_elementwise: the number of elementwise roundings in the computation
+        array_backend: the backend whose FFT constant applies, named as in a source
+            spec so that a budget can be evaluated where that backend is not installed
+    """
+    # Per FFT pass the rms error relative to the output rms is c*eps*sqrt(log2 N), eps
+    # the unit roundoff (Gentleman & Sande 1966; FFTW accuracy notes), and each
+    # elementwise rounding adds (eps/sqrt(3))**2 of error variance. c was fitted with
+    # chores/tests/measure_fft_accuracy.py per backend: pocketfft gives 0.55-0.65 (1.2
+    # for sizes with a prime factor >= 128); cuFFT on a Jetson TX2i reaches 1.9 at
+    # N=512 and 2.1 for Bluestein sizes.
+    c = {'numpy': 1.2, 'cupy': 2.2}[array_backend]
+    eps = unit_roundoff(dtype)
+    var = n_elementwise * (eps / np.sqrt(3)) ** 2
+    var += sum((c * eps * np.sqrt(np.log2(n))) ** 2 for n in nffts)
+    return float(np.sqrt(var))
+
+
+def fft_tolerance_rms(
+    dtype, nffts, n_elementwise: int = 0, *, array_backend: ArrayBackend = 'numpy'
+) -> float:
+    """rms tolerance on one backend's error against an exact reference, relative to
+    the output rms (see `fft_roundoff_rms` for the arguments)"""
+    return FFT_ROUNDOFF_SAFETY * fft_roundoff_rms(
+        dtype, nffts, n_elementwise, array_backend=array_backend
+    )
+
+
+def peak_factor(size: int) -> float:
+    """max/rms ratio of `size` complex gaussian errors, with 2x margin on the tail"""
+    return float(2 * np.sqrt(np.log(size)))
+
+
+def on_peak_roundoff(dtype) -> float:
+    """bound on structured roundoff in the matched-filter bin of the matched input,
+    relative to that peak's amplitude.
+
+    This is where roundoff concentrates: the bin of a tone in the frequency domain
+    (an FFT), or the sample of an impulse in the time domain (a resampler or detector).
+    """
+    # an FFT of a tone measured up to 6.7 units of roundoff of the tone amplitude at
+    # the tone (cuFFT, N=512) and 3.9 in a far bin (cuFFT, N=1024), against ~2 for
+    # pocketfft
+    on_peak_roundings = 8
+    return FFT_ROUNDOFF_SAFETY * on_peak_roundings * unit_roundoff(dtype)
+
+
+def rms_tolerance_dBc(sigma: float) -> float:
+    """express an rms amplitude tolerance relative to the output rms as error power
+    relative to the signal, in dBc"""
+    return float(20 * np.log10(sigma))
+
+
+def off_peak_floor_dBc(
+    sigma: float, nfft: int, size: int | None = None, dtype='complex64'
+) -> float:
+    """express the roundoff floor in bins away from the matched-filter bin of the
+    matched input (a bin-centered tone), relative to the peak, in dBc.
+
+    The input occupies one bin while roundoff spreads evenly over all `nfft` bins. With
+    `size`, the result is the peak tolerance over that many off-peak bins, which is the
+    larger of the white-noise tail and the structured `on_peak_roundoff`.
+    """
+    if size is None:
+        return rms_tolerance_dBc(sigma / np.sqrt(nfft))
+    white = peak_factor(size) * sigma / np.sqrt(nfft)
+    return rms_tolerance_dBc(max(white, on_peak_roundoff(dtype)))
 
 
 # %% Windowing
@@ -828,6 +921,8 @@ def _unstack_stft_windows(
 
 
 # %% Filters
+
+
 @convert_np_to_xp
 @util.lru_cache()
 @util.persistent_lru_cache()
@@ -1063,6 +1158,8 @@ def design_oafilter(
 
 
 # %% Resamplers
+
+
 class ResamplerDesign(typing.TypedDict):
     fs_sdr: float
     lo_offset: float

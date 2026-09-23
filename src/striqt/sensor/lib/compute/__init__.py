@@ -7,6 +7,12 @@ from .corrections import (
     get_correction_overlaps,
     needs_resample,
 )
+from .tolerance import (
+    capture_tolerances,
+    correction_error,
+    sweep_tolerances,
+    worst_case_tolerances,
+)
 from .datasets import (
     concat_time_dim,
     DelayedDataset,

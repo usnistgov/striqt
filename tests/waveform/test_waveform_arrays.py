@@ -14,10 +14,11 @@ from conftest import _cupy, as_xp, float_arrays, shaped_arrays
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import array_shapes
-from numeric_checks import assert_close, mean_atol, reference_binned_mean, to_numpy
+from numeric_checks import assert_close, reference_binned_mean, to_numpy
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib import arrays
+from striqt.waveform.lib.fourier import peak_factor
 
 
 class TestIsRoundMod:
@@ -96,7 +97,39 @@ class TestFloatDtypeLike:
         assert arrays.float_dtype_like(x, min_dtype=min_dtype) == expected
 
 
+# %% roundoff model
+class TestRoundoffModels:
+    N = 1_000_000
+
+    def test_accum_rms_grows_as_the_root_of_the_bin(self):
+        """numpy sums a contiguous axis pairwise and cupy by block tree, so the rms
+        model grows as sqrt(n) and stays far below the n roundings of a strided axis"""
+        n = self.N
+        assert arrays.accum_rms(np.float32, 4 * n) == pytest.approx(
+            2 * arrays.accum_rms(np.float32, n), rel=0.02
+        )
+        assert arrays.accum_rms(np.float32, n) < arrays.accum_rtol(np.float32, n) / 1000
+
+    def test_accum_rtol_is_linear_in_the_term_count(self):
+        n = self.N
+        assert arrays.accum_rtol(np.float32, 2 * n) == 2 * arrays.accum_rtol(
+            np.float32, n
+        )
+
+
 class TestBinnedMean:
+    def test_strided_axis_reduction_needs_the_in_order_bound(self):
+        """numpy sums a strided axis in order, so a bin that straddles two levels lands
+        outside the contiguous-axis model and inside `accum_rtol`; this is why the
+        tolerance functions pick the bound by the axis a measurement reduces"""
+        n = 1_000_000
+        x = np.full((2, n, 8), 3e-4, dtype=np.float32)
+        x[:, : n // 2] = 1.0
+        result = arrays.binned_mean(x, n, axis=1, fft=False)
+        err = float(np.abs(result / ((1.0 + 3e-4) / 2) - 1).max())
+        assert err > peak_factor(result.size) * arrays.accum_rms(np.float32, n)
+        assert err < arrays.accum_rtol(np.float32, n)
+
     """each case runs on every array namespace against the numpy reference"""
 
     @given(case=shaped_arrays(dtype=np.float64), data=st.data())
@@ -108,7 +141,7 @@ class TestBinnedMean:
         ref = reference_binned_mean(x, count, axis)
 
         assert result.shape == ref.shape
-        assert_close(result, ref, atol=mean_atol(x, count))
+        assert_close(result, ref, atol=arrays.mean_atol(x, count))
 
     @given(case=shaped_arrays(dtype=np.float64, min_side=2), data=st.data())
     def test_truncate_false_rejects_partial_bins(self, case, data):
@@ -140,7 +173,7 @@ class TestBinnedMean:
         assert (nblocks + 2) * count > n
         start = n // 2 - count // 2 - (nblocks // 2) * count
         ref = x[start : start + nblocks * count].reshape(nblocks, count).mean(axis=1)
-        assert_close(result, ref, atol=mean_atol(x, count))
+        assert_close(result, ref, atol=arrays.mean_atol(x, count))
 
     @pytest.mark.xfail(
         strict=True,
@@ -167,7 +200,7 @@ class TestBinnedMean:
         result = arrays.binned_mean(as_xp(xp, x), count, fft=False, reject_extrema=True)
 
         interior = np.sort(x.reshape(nbins, count), axis=1)[:, 1:-1]
-        assert_close(result, interior.mean(axis=1), atol=mean_atol(x, count))
+        assert_close(result, interior.mean(axis=1), atol=arrays.mean_atol(x, count))
 
     def test_nan_samples_are_ignored(self):
         x = np.arange(8, dtype=np.float64)

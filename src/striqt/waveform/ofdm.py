@@ -1,6 +1,7 @@
 from .lib.ofdm import (
     choose_ssb_offset,
     corr_at_indices,
+    corr_atol,
     correlate_sync_sequence,
     get_3gpp_phy,
     get_802_16_phy,

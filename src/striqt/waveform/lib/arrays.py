@@ -111,6 +111,54 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
     return dtype
 
 
+# %% roundoff model
+#
+# Every tolerance in striqt.waveform is derived from the unit roundoff of the working
+# dtype and a count of the roundings a routine performs, so that a violation means the
+# routine rounds worse than its model rather than worse than a hand-picked number.
+# ROUNDOFF_SAFETY is the margin applied to the elementwise budgets.
+ROUNDOFF_SAFETY = 2
+
+
+def unit_roundoff(dtype) -> float:
+    """u = eps / 2 of the real dtype underlying `dtype` (complex dtypes included)"""
+    return float(np.finfo(dtype).eps / 2)
+
+
+def accum_rms(dtype, n: int, n_impl: int = 1) -> float:
+    """rms roundoff of a sum or mean over `n` terms of `dtype` along a contiguous axis,
+    relative to the result; `n_impl` independent implementations add in quadrature"""
+    # A reduction over a contiguous axis is not summed in order. numpy sums it pairwise
+    # (numpy/_core/src/umath/loops_utils.h.src; before numpy 2.3 per 8192-element
+    # buffer, with the buffers summed in order), and cupy has each thread of a block sum
+    # a strided subset in order before a shared-memory tree
+    # (cupy/_core/_reduction.pyx). The sequential runs make the rms error grow as
+    # sqrt(n), from a floor of about one roundoff for the tree (Higham, Accuracy and
+    # Stability of Numerical Algorithms, 2nd ed., section 4.2). Measured with
+    # chores/tests/measure_db_accuracy.py as the float32 mean of |x|**2 over n gaussian
+    # samples, rms error in units of u at n = 1e3, 1e4, 1e5, 1e6, 4e6: numpy 1.23 gives
+    # 0.8, 1.5, 1.1, 4.4, 5.7; numpy 2.5 stays near 0.7; cupy 12.3 on a Tegra X2 gives
+    # 1.0, 1.5, 1.1, 1.8, 2.4. `run` fits the numpy 1.23 curve, the worst of the three,
+    # and `safety` matches the FFT model's margin.
+    run = 50_000
+    safety = 3
+    u = unit_roundoff(dtype)
+    return safety * math.sqrt(n_impl * (1 + n / run)) * u
+
+
+def accum_rtol(dtype, n: int, n_impl: int = 1) -> float:
+    """rtol on a sum or mean over `n` terms of `dtype` along a strided axis, which
+    numpy accumulates in order: n roundings (measured 1600 u rms and 2000 u max at
+    n = 1e6, against the 2e6 u of this bound)"""
+    return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
+
+
+def mean_atol(x: Array, count: int) -> float:
+    """absolute roundoff bound on the mean of `count` samples drawn from `x`"""
+    xp = array_namespace(x)
+    return count * float(np.finfo(x.dtype).eps) * float(xp.abs(x).max())
+
+
 # %% sliding or binned window operations
 def binned_mean(
     x: Array,

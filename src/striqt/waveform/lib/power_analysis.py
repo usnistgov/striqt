@@ -2,6 +2,7 @@
 
 from __future__ import annotations as __
 
+import math
 import re
 import typing
 
@@ -14,11 +15,14 @@ from typing import Any, Optional, overload, Sequence
 from . import util
 
 from .arrays import (
+    ROUNDOFF_SAFETY,
+    accum_rms,
     array_namespace,
     float_dtype_like,
     is_cupy_array,
     isroundmod,
     axis_to_blocks,
+    unit_roundoff,
 )
 
 if typing.TYPE_CHECKING:
@@ -95,7 +99,14 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
         ufunc = partial(NAMED_UFUNCS[kind], axis=axis)
 
     elif isinstance(kind, Number):
-        ufunc = partial(xp.quantile, q=kind, axis=axis)
+        # numpy < 2.3 casts a scalar q to a float32 input's dtype
+        # (numpy.lib._function_base_impl.quantile), which misplaces the virtual
+        # index (n-1)*q by ~n*2**-25 samples in the interpolation. An array q
+        # is not cast, but promotes the result, so it is cast back
+        q = xp.asarray(kind, dtype='float64')
+
+        def ufunc(x, axis=axis):
+            return xp.quantile(x, q, axis=axis).astype(x.dtype, copy=False)
 
     elif callable(kind):
         ufunc = partial(kind, axis=axis)
@@ -104,6 +115,126 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
         raise ValueError(f'invalid statistic ufunc "{kind}"')
 
     return ufunc
+
+
+# %% roundoff model
+#
+# Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
+# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (log10f 2,
+# powf 8, hypotf 3 ulp) as well as libm (~1 ulp), so the tolerances below hold on both
+# backends and take no array namespace. Measured with
+# chores/tests/measure_db_accuracy.py: libm log10 1.1-1.9 ulp; CUDA libdevice on a
+# Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
+HYPOT_ULP = 3
+DB_PER_NEPER = 10 / math.log(10)
+
+
+def log_conversion_tol(
+    dtype, scale: float, complex_input: bool = False, n_impl: int = 1
+) -> dict[str, float]:
+    """tolerances for scale*log10(|x|), against exact math (n_impl=1) or a second
+    implementation (n_impl=2).
+
+    Roundoff on the input side of the log becomes an absolute dB error, which is what
+    bounds the result near 0 dB where ulps of the output are meaningless.
+    """
+    log10_ulp = 2
+    u = unit_roundoff(dtype)
+    rtol = 2 * u * (log10_ulp + 0.5)
+    input_ulp = (HYPOT_ULP if complex_input else 0) + 0.5
+    atol = (scale / math.log(10)) * 2 * u * input_ulp
+    return {
+        'rtol': ROUNDOFF_SAFETY * n_impl * rtol,
+        'atol': ROUNDOFF_SAFETY * n_impl * atol,
+    }
+
+
+def pow_conversion_rtol(dtype, max_abs_dB: float, n_impl: int = 1) -> float:
+    """rtol for 10**(x/10) with |x| <= max_abs_dB.
+
+    Rounding x/10 perturbs the exponent, so its effect scales with |x|.
+    """
+    pow_ulp = 8
+    u = unit_roundoff(dtype)
+    rtol = u * (math.log(10) * max_abs_dB / 10 + 2 * pow_ulp)
+    return ROUNDOFF_SAFETY * n_impl * rtol
+
+
+def envelope_power_rtol(dtype, complex_input: bool = False, n_impl: int = 1) -> float:
+    """rtol for |x|**2"""
+    u = unit_roundoff(dtype)
+    rtol = 2 * u * (0.5 + (2 * HYPOT_ULP if complex_input else 0))
+    return ROUNDOFF_SAFETY * n_impl * rtol
+
+
+def linear_stat_tol(
+    dtype, max_abs_dB: float, n: int, n_impl: int = 1
+) -> dict[str, float]:
+    """tolerances in dB for dBlinmean/dBlinsum over n terms with |x| <= max_abs_dB"""
+    u = unit_roundoff(dtype)
+    rel_linear = pow_conversion_rtol(dtype, max_abs_dB) + ROUNDOFF_SAFETY * n * u
+    tol = log_conversion_tol(dtype, 10)
+    return {
+        'rtol': n_impl * tol['rtol'],
+        'atol': n_impl * (tol['atol'] + DB_PER_NEPER * rel_linear),
+    }
+
+
+def roundtrip_power_rtol(dtype, max_abs_dB: float) -> float:
+    """rtol for dBtopow(powtodB(x)) with |powtodB(x)| <= max_abs_dB"""
+    tol = log_conversion_tol(dtype, 10)
+    dB_err = tol['rtol'] * max_abs_dB + tol['atol']
+    return math.log(10) / 10 * dB_err + pow_conversion_rtol(dtype, max_abs_dB)
+
+
+def roundtrip_dB_tol(dtype, max_abs_dB: float) -> dict[str, float]:
+    """tolerances for powtodB(dBtopow(x)) with |x| <= max_abs_dB"""
+    tol = log_conversion_tol(dtype, 10)
+    return {
+        'rtol': tol['rtol'],
+        'atol': tol['atol'] + DB_PER_NEPER * pow_conversion_rtol(dtype, max_abs_dB),
+    }
+
+
+def level_tolerance_dB(sigma, power: bool = False):
+    """express a relative tolerance on an output as the uncertainty of its level in dB.
+
+    `sigma` bounds an amplitude ratio (level 20*log10|x|) unless `power` is True
+    (level 10*log10 x, e.g. spectrogram bins).
+    """
+    return (10 if power else 20) * np.log10(1 + sigma)
+
+
+def linear_tolerance_dB(rtol):
+    """express a relative tolerance on a linear power as a tolerance in dB"""
+    return 10 * np.log10(1 + rtol)
+
+
+def dB_tolerance(rtol: float, atol: float, max_abs_dB: float) -> float:
+    """express (rtol, atol) on a dB-valued output as its worst-case tolerance in dB"""
+    return atol + rtol * max_abs_dB
+
+
+def off_peak_dB_tolerance(depth_dBc, err):
+    """two-sided dB tolerance on an element `depth_dBc` (>= 0) below the peak of its
+    output, given a relative amplitude error `err` at the peak.
+
+    The peak here is the matched-filter bin of the matched input, so the same bound
+    serves a tone's FFT bin and an impulse's detector bin.
+
+    Roundoff bounds an element's amplitude error relative to the output's *peak*, so
+    as a share of the element's own amplitude the bound grows with its depth below the
+    peak. A relative amplitude error r leaves the power anywhere in
+    [(1-r)**2, (1+r)**2] of its exact value, and the low side is what dominates in dB:
+    -20*log10(1-r), which diverges as r approaches 1. So an element deeper than
+    -20*log10(err) below the peak, where roundoff alone could account for all of its
+    amplitude, gets an infinite tolerance and goes unchecked - the floor falls out of
+    the bound rather than having to be imposed on top of it. This assumes nothing about
+    the error spreading over an FFT's bins, so it suits any dB-valued output.
+    """
+    r = err * 10 ** (np.asarray(depth_dBc, dtype='float64') / 20)
+    with np.errstate(divide='ignore'):
+        return -20 * np.log10(np.clip(1 - r, 0, None))
 
 
 def powtodB(
@@ -367,6 +498,36 @@ def dBlinsum(
     x_lin = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
     x_sum = x_lin.sum(axis)  # type: ignore
     return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
+
+
+def stat_rtol(dtype, kind: str | float, n_impl: int = 1) -> float:
+    """worst-case rtol of applying the `kind` statistic (as `stat_ufunc_from_shorthand`)
+    to exact samples: one interpolation rounding for a quantile or the median, nothing
+    for a selection or a mean, whose accumulation roundoff is `bin_power_rms`"""
+    if kind in ('mean', 'rms', 'min', 'max', 'peak'):
+        return 0.0
+    elif isinstance(kind, str) and kind != 'median':
+        raise ValueError(f'unknown statistic {kind!r}')
+    return ROUNDOFF_SAFETY * n_impl * unit_roundoff(dtype)
+
+
+def bin_power_rtol(dtype, n_impl: int = 1, kind: str | float = 'mean') -> float:
+    """worst-case rtol of the `kind` statistic of |x|**2 (as `stat_ufunc_from_shorthand`)
+    before any accumulation: squaring the envelope, and `stat_rtol` for the statistic.
+    The mean's accumulation roundoff is `bin_power_rms`."""
+    envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
+    return envelope + stat_rtol(dtype, kind, n_impl)
+
+
+def bin_power_rms(
+    dtype, size: int, n_impl: int = 1, kind: str | float = 'mean'
+) -> float:
+    """rms accumulation roundoff of the `kind` statistic of |x|**2 over `size` samples
+    of a contiguous axis, relative to the result: `accum_rms` for the mean ('rms' is
+    the same mean of power), nothing for a selection or a quantile"""
+    if kind in ('mean', 'rms'):
+        return accum_rms(dtype, size, n_impl)
+    return 0.0
 
 
 def iq_to_bin_power(
