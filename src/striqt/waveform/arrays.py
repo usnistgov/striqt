@@ -1,4 +1,6 @@
 from .lib.arrays import (
+    REDUCTION_LEAF_DEPTH,
+    REDUCTION_THREADS,
     ROUNDOFF_SAFETY,
     accum_rtol,
     axis_to_blocks,

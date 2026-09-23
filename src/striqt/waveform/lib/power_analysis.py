@@ -493,10 +493,22 @@ def dBlinsum(
     return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
 
 
-def bin_power_rtol(dtype, size: int, n_impl: int = 1) -> float:
-    """rtol for a statistic of |x|**2 over `size` samples against exact arithmetic"""
+def bin_power_rtol(
+    dtype, size: int, n_impl: int = 1, kind: str | float = 'mean'
+) -> float:
+    """rtol for the `kind` statistic of |x|**2 over `size` samples against exact
+    arithmetic, `kind` as in `stat_ufunc_from_shorthand`.
+
+    Only the mean accumulates ('rms' is the same mean of power); 'min', 'max' and
+    'peak' select a sample exactly, and a quantile interpolates once between two.
+    """
     envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
-    return envelope + accum_rtol(dtype, size, n_impl)
+    if kind in ('mean', 'rms'):
+        return envelope + accum_rtol(dtype, size, n_impl)
+    elif kind in ('min', 'max', 'peak'):
+        return envelope
+    else:
+        return envelope + ROUNDOFF_SAFETY * n_impl * unit_roundoff(dtype)
 
 
 def iq_to_bin_power(

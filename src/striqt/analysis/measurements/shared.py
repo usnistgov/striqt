@@ -460,7 +460,8 @@ def spectrogram_tolerance(
 
     `dtype` and `limit_digits` are those the measurement hands to
     `evaluate_spectrogram`; `statistic_count` is the number of windows a derived
-    measurement reduces over afterward (the PSD), 1 when it keeps them.
+    measurement *averages* afterward (the PSD's mean statistic), 1 when it keeps them
+    or only selects among them.
 
     The argument projections match `validated_spectrogram_sizing`, so any
     `FrequencyAnalysisSpecBase` may be passed as `spec`.
@@ -473,11 +474,14 @@ def spectrogram_tolerance(
     if sizing.frequency_bin_averaging is not None:
         power_rtol += sw.arrays.accum_rtol(np.float32, sizing.frequency_bin_averaging)
         bins //= sizing.frequency_bin_averaging
+    # the frequency bins are the contiguous axis; the window axis is strided
     if sizing.time_bin_averaging is not None:
-        power_rtol += sw.arrays.accum_rtol(np.float32, sizing.time_bin_averaging)
+        power_rtol += sw.arrays.accum_rtol(
+            np.float32, sizing.time_bin_averaging, sequential=True
+        )
         n_windows //= sizing.time_bin_averaging
     if statistic_count > 1:
-        power_rtol += sw.arrays.accum_rtol(np.float32, statistic_count)
+        power_rtol += sw.arrays.accum_rtol(np.float32, statistic_count, sequential=True)
 
     fft_error = sw.fourier.fft_tolerance_rms(
         np.complex64, [sizing.nfft], array_backend=array_backend

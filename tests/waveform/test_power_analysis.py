@@ -35,7 +35,7 @@ from numeric_checks import (
 )
 from numpy.testing import assert_array_equal
 
-from striqt.waveform.lib.arrays import accum_rtol, float_dtype_like
+from striqt.waveform.lib.arrays import accum_rtol, float_dtype_like, unit_roundoff
 from striqt.waveform.lib.power_analysis import (
     DB_PER_NEPER,
     _arraylike_with_buffer,
@@ -592,6 +592,18 @@ def cyclic_power_cases(draw, channels=(1, 2)):
 
 
 class TestIqToBinPower:
+    @pytest.mark.parametrize('size', [2**14, 2**17])
+    def test_mean_over_a_long_bin_stays_within_the_reduction_model(self, size):
+        """a mean over 1e5 float32 samples rounds a few units, where the n*u bound of
+        recursive summation would have allowed 1e-2"""
+        rng = np.random.default_rng(size)
+        iq = rng.standard_normal((4, size)) + 1j * rng.standard_normal((4, size))
+        iq = (iq / np.sqrt(2)).astype(np.complex64)
+        result = iq_to_bin_power(iq, Ts=1, Tbin=size, kind='mean', axis=1)[:, 0]
+        assert_close(
+            result, reference_power(iq, axis=1), rtol=bin_power_rtol(np.float32, size)
+        )
+
     @for_each_bin_size
     @pytest.mark.parametrize('kind', ['mean', 'max', 0.9])
     @pytest.mark.parametrize('channels', [None, 3])
@@ -1037,3 +1049,19 @@ class TestNumpyCupyCrossComparison:
             cupy_available, sample_ccdf, a, edges, density=density
         )
         assert_array_equal(result_cp, result_np)
+
+    def test_accum_rtol_is_sublinear_for_a_contiguous_reduction(self):
+        """numpy sums a contiguous axis pairwise and cupy by block tree, so the bound
+        must not grow like the n roundings of recursive summation"""
+        n = 1_000_000
+        contiguous = accum_rtol(np.float32, n)
+        strided = accum_rtol(np.float32, n, sequential=True)
+        assert strided == pytest.approx(2 * n * unit_roundoff(np.float32))
+        assert contiguous < strided / 100
+        assert accum_rtol(np.float32, 2 * n) > contiguous > accum_rtol(np.float32, 1)
+
+    @pytest.mark.parametrize('kind', ['min', 'max', 'peak', 0.5], ids=str)
+    def test_bin_power_rtol_only_accumulates_for_the_mean(self, kind):
+        selection = bin_power_rtol(np.float32, 10_000, kind=kind)
+        assert selection < bin_power_rtol(np.float32, 10_000, kind='mean')
+        assert selection == bin_power_rtol(np.float32, 10, kind=kind)

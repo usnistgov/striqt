@@ -67,9 +67,12 @@ def cyclic_channel_power_tolerance(
     lag_count = validated_cyclic_lag_count(capture, spec)
     bin_size = validated_detector_bin_size(capture, spec)
     cycle_count = round(capture.duration / spec.cyclic_period)
-    power_rtol = sw.bin_power_rtol(np.float32, bin_size) + sw.arrays.accum_rtol(
-        np.float32, cycle_count
+    power_rtol = max(
+        sw.bin_power_rtol(np.float32, bin_size, kind=d) for d in spec.power_detectors
     )
+    if any(s in ('mean', 'rms') for s in spec.cyclic_statistics):
+        # the cycle axis sits ahead of the lag axis, so the reduction is strided
+        power_rtol += sw.arrays.accum_rtol(np.float32, cycle_count, sequential=True)
     return shared.level_tolerance(
         amplitude_rms=input_error,
         size=lag_count * len(spec.power_detectors) * len(spec.cyclic_statistics),

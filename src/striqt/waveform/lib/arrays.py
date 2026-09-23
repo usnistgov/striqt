@@ -119,16 +119,38 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
 # ROUNDOFF_SAFETY is the margin applied to the elementwise budgets.
 ROUNDOFF_SAFETY = 2
 
+# A reduction over a contiguous axis is not summed in order. numpy sums it pairwise
+# (numpy/_core/src/umath/loops_utils.h.src: 8 interleaved accumulators over blocks of
+# 128, then a binary tree; before numpy 2.3 the tree is rebuilt per 8192-element buffer
+# and the buffers are summed sequentially), and cupy has each thread of a block sum a
+# strided subset sequentially before a shared-memory tree (cupy/_core/_reduction.pyx,
+# 512 threads by default; CUB's segmented reduce, the default accelerator, does the
+# same over 2048-element tiles). Higham, Accuracy and Stability of Numerical
+# Algorithms, 2nd ed., section 4.2: recursive summation rounds n times, pairwise
+# log2(n) times. The first-order worst case over all of these is log2(n) tree levels,
+# the leaf accumulators, and the longest sequential run, n / REDUCTION_THREADS.
+REDUCTION_LEAF_DEPTH = 16
+REDUCTION_THREADS = 512
+
 
 def unit_roundoff(dtype) -> float:
     """u = eps / 2 of the real dtype underlying `dtype` (complex dtypes included)"""
     return float(np.finfo(dtype).eps / 2)
 
 
-def accum_rtol(dtype, n: int, n_impl: int = 1) -> float:
-    """rtol on a sum or reduction over `n` terms of `dtype`, against exact arithmetic
-    (n_impl=1) or against a second implementation (n_impl=2)"""
-    return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
+def accum_rtol(dtype, n: int, n_impl: int = 1, *, sequential: bool = False) -> float:
+    """rtol on a sum or mean over `n` terms of `dtype`, against exact arithmetic
+    (n_impl=1) or against a second implementation (n_impl=2).
+
+    The default bounds a reduction over a contiguous axis, which numpy and cupy both
+    reorder (see the comment above). `sequential` is for a reduction over a strided
+    axis, which numpy accumulates in order: n roundings.
+    """
+    if sequential:
+        roundings = n
+    else:
+        roundings = math.log2(max(n, 1)) + REDUCTION_LEAF_DEPTH + n / REDUCTION_THREADS
+    return ROUNDOFF_SAFETY * n_impl * roundings * unit_roundoff(dtype)
 
 
 def mean_atol(x: Array, count: int) -> float:

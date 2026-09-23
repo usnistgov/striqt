@@ -429,6 +429,15 @@ class TestIqWaveform:
         assert da.sizes['iq_index'] == 0
         assert da.coords['iq_index'].size == 0
 
+    def test_tolerance_accumulates_only_for_the_averaging_detectors(self):
+        """peak and min select one sample exactly, so their budget does not grow with
+        the detector period the way the rms mean's does"""
+        rms = tolerance(CPTS_SPEC.replace(power_detectors=('rms',)))
+        peak = tolerance(CPTS_SPEC.replace(power_detectors=('peak',)))
+        longer = CPTS_SPEC.replace(detector_period=5 * DETECTOR_PERIOD)
+        assert peak.on_peak.peak < rms.on_peak.peak
+        assert tolerance(longer.replace(power_detectors=('peak',))) == peak
+
     def test_tolerance_is_the_input_error_on_the_envelope_level(self):
         """the slice adds no error of its own, so exact IQ passes through with a zero
         budget, and an rms amplitude error `r` in the IQ reads on the envelope level

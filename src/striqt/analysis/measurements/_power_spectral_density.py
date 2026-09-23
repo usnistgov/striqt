@@ -38,9 +38,12 @@ def power_spectral_density_tolerance(
 ) -> specs.Tolerance:
     spg_spec = specs.Spectrogram.from_spec(spec)
     sizing = shared.validated_spectrogram_sizing(capture, spg_spec)
-    n_windows = shared.spectrogram_window_count(capture, sizing)
+    if any(s in ('mean', 'rms') for s in spec.time_statistic):
+        statistic_count = shared.spectrogram_window_count(capture, sizing)
+    else:
+        statistic_count = 1
     return shared.spectrogram_tolerance(
-        capture, spg_spec, dtype='float32', statistic_count=n_windows, **kwargs
+        capture, spg_spec, dtype='float32', statistic_count=statistic_count, **kwargs
     )
 
 
