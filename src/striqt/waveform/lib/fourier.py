@@ -1455,17 +1455,14 @@ def resample(
     x: _AT,
     num: int,
     axis: int = 0,
-    window: WindowType = None,
     domain: typing.Literal['time', 'frequency'] = 'time',
     overwrite_x=False,
     scale: Array | float = 1,
     shift: float = 0,
 ) -> _AT:
-    """limited reimplementation of scipy.signal.resample optimized for reduced memory.
+    """partial reimplementation of scipy.signal.resample optimized for reduced memory.
 
     No new buffers are allocated when downsampling if `overwrite_x` is `False`.
-
-    The window argument is not supported.
     """
     if domain not in ('time', 'freq'):
         raise ValueError(
@@ -1485,9 +1482,6 @@ def resample(
 
     if nfft_in % 2 != 0:
         raise ValueError('x.shape[axis] must be even')
-
-    if window is not None:
-        raise ValueError('window argument is not supported')
 
     if shift == 0:
         # no frequency shift
