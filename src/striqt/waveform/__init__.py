@@ -1,4 +1,4 @@
-from . import arrays, fourier, ofdm
+from . import arrays, fourier, ofdm, power_analysis
 from .lib import typing, util
 
 from .fourier import (
@@ -18,32 +18,15 @@ from .fourier import (
     spectrogram,
     stft,
 )
-from .lib.power_analysis import (
-    DB_PER_NEPER,
-    HYPOT_ULP,
-    LOG10_ULP,
-    POW_ULP,
-    bin_power_rms,
-    bin_power_rtol,
+from .power_analysis import (
     dBlinmean,
     dBlinsum,
-    dB_tolerance,
     dBtopow,
-    envelope_power_rtol,
     envtodB,
     envtopow,
     iq_to_bin_power,
     iq_to_cyclic_power,
-    level_tolerance_dB,
-    linear_stat_tol,
-    linear_tolerance_dB,
-    log_conversion_tol,
-    off_peak_dB_tolerance,
-    pow_conversion_rtol,
     powtodB,
-    roundtrip_dB_tol,
-    roundtrip_power_rtol,
     sample_ccdf,
-    stat_rtol,
 )
 from .arrays import *

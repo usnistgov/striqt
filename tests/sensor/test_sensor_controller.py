@@ -399,7 +399,7 @@ class TestControllerAcquire:
         # the mean of N exponentially distributed sample powers, at 3 sigma
         sigma = 3 / np.sqrt(iq.pre_align.shape[1])
         assert dBfs(iq.pre_align) == pytest.approx(
-            expected, abs=sw.level_tolerance_dB(sigma, power=True)
+            expected, abs=sw.power_analysis.level_tolerance_dB(sigma, power=True)
         )
 
     def test_stale_first_timestamp_is_a_stream_error(self, fake_soapy, fake_controller):

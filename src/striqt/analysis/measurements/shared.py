@@ -378,17 +378,15 @@ def spectrogram_baseband_frequency(
 
 
 # %% tolerance
-#
-# A tolerance function never sees output values, so the rounding of a dB level into its
-# storage dtype and to `limit_digits` decimals is bounded over |level| <= LEVEL_RANGE_DB
-# rather than at the level actually produced
-LEVEL_RANGE_DB = 200.0
 
 
 def quantization_dB(dtype, limit_digits: int | None = None) -> float:
     """worst-case error from rounding a dB level to `limit_digits` decimals and storing
-    it as `dtype`, for |level| <= LEVEL_RANGE_DB"""
-    step = float(np.spacing(np.asarray(LEVEL_RANGE_DB, dtype=dtype)))
+    it as `dtype`, for levels within 200 dB of 0 dB"""
+    # a tolerance function never sees output values, so the storage rounding is bounded
+    # over the level range rather than at the level actually produced
+    level_range_dB = 200.0
+    step = float(np.spacing(np.asarray(level_range_dB, dtype=dtype)))
     decimal = 0.0 if limit_digits is None else 10.0 ** (-limit_digits)
     return (decimal + step) / 2
 
@@ -408,11 +406,11 @@ def level_tolerance(
     `amplitude_rms` is the relative rms error of the amplitude the power is taken from
     (input roundoff and any FFT passes, added in quadrature by the caller);
     `power_rtol` the worst-case relative error of squaring it and of any reduction
-    summed in order (`sw.bin_power_rtol`, `sw.arrays.accum_rtol`); `power_rms` the rms
-    relative error of a reduction over a contiguous axis (`sw.bin_power_rms`), whose
+    summed in order (`sw.power_analysis.bin_power_rtol`, `sw.arrays.accum_rtol`); `power_rms` the rms
+    relative error of a reduction over a contiguous axis (`sw.power_analysis.bin_power_rms`), whose
     worst element over `size` outputs is `peak_factor` times it; `log_tol` the dB
     conversion budget
-    (`sw.log_conversion_tol`); `quantization` the storage rounding (`quantization_dB`).
+    (`sw.power_analysis.log_conversion_tol`); `quantization` the storage rounding (`quantization_dB`).
 
     The peak amplitude error over `size` output elements adds the structured roundoff
     that lands on the matched-filter bin of the matched input: a tone's FFT bin, or an
@@ -424,7 +422,11 @@ def level_tolerance(
     peak_amplitude = sw.fourier.peak_factor(size) * amplitude_rms
     if amplitude_rms > 0:
         peak_amplitude += sw.fourier.on_peak_roundoff(dtype)
-    additive = sw.linear_tolerance_dB(power_rtol) + log_tol['atol'] + quantization
+    additive = (
+        sw.power_analysis.linear_tolerance_dB(power_rtol)
+        + log_tol['atol']
+        + quantization
+    )
     if amplitude_rms > 0:
         off_peak_dBc = specs.ErrorBound(
             rms=float(sw.fourier.rms_tolerance_dBc(amplitude_rms)),
@@ -437,13 +439,15 @@ def level_tolerance(
         rtol=log_tol['rtol'],
         on_peak=specs.ErrorBound(
             rms=float(
-                sw.level_tolerance_dB(amplitude_rms)
-                + sw.linear_tolerance_dB(power_rms)
+                sw.power_analysis.level_tolerance_dB(amplitude_rms)
+                + sw.power_analysis.linear_tolerance_dB(power_rms)
                 + additive
             ),
             peak=float(
-                sw.level_tolerance_dB(peak_amplitude)
-                + sw.linear_tolerance_dB(sw.fourier.peak_factor(size) * power_rms)
+                sw.power_analysis.level_tolerance_dB(peak_amplitude)
+                + sw.power_analysis.linear_tolerance_dB(
+                    sw.fourier.peak_factor(size) * power_rms
+                )
                 + additive
             ),
         ),
@@ -482,7 +486,7 @@ def spectrogram_tolerance(
     n_windows = spectrogram_window_count(capture, sizing)
     bins = sizing.nfft
 
-    power_rtol = sw.envelope_power_rtol(np.float32, complex_input=True)
+    power_rtol = sw.power_analysis.envelope_power_rtol(np.float32, complex_input=True)
     power_rms = 0.0
     if sizing.frequency_bin_averaging is not None:
         power_rms = sw.arrays.accum_rms(np.float32, sizing.frequency_bin_averaging)
@@ -503,6 +507,8 @@ def spectrogram_tolerance(
         size=max(bins * n_windows, 1),
         power_rtol=power_rtol,
         power_rms=power_rms,
-        log_tol=sw.log_conversion_tol(np.float32, 10, complex_input=True),
+        log_tol=sw.power_analysis.log_conversion_tol(
+            np.float32, 10, complex_input=True
+        ),
         quantization=quantization_dB(dtype, limit_digits),
     )

@@ -1,5 +1,6 @@
-"""strategies and oracles for the analysis spec tests: the capture/delay/range
-domains that __post_init__ validates, and the freeze/unfreeze and frozendict trees.
+"""strategies and oracles for the analysis tests: the capture/delay/range domains
+that __post_init__ validates, the freeze/unfreeze and frozendict trees, and the
+registry walk that fetches a measurement's tolerance.
 
 Not a conftest: a second rootless conftest would shadow the root one that other test
 directories import by name.
@@ -10,7 +11,19 @@ from __future__ import annotations
 from conftest import scalars
 from hypothesis import strategies as st
 
+import striqt.analysis as sa
 from striqt.analysis.specs.helpers import frozendict
+
+# %% registered tolerances
+
+
+def registered_tolerance(capture, spec, **kwargs) -> sa.specs.Tolerance:
+    """the tolerance registered for the measurement that `spec` selects, fetched
+    through the registry walk a consumer would use"""
+    name = sa.registry[type(spec)].name
+    group = sa.registry.tospec()(**{name: spec})
+    return sa.registry.tolerances(capture, group, **kwargs)[name]
+
 
 # %% capture, delay and range domains
 

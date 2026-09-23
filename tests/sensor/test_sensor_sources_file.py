@@ -27,7 +27,7 @@ import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis import testing
 from striqt.sensor.lib.sources.file import _split_preroll
-from striqt.waveform.lib.arrays import ROUNDOFF_SAFETY, unit_roundoff
+from striqt.waveform.arrays import accum_rtol
 
 FS = SCALE_ONLY['sample_rate']
 CENTER_FREQUENCY = 3.7e9
@@ -410,7 +410,7 @@ def tdms_spec(tdms_file, **kws):
 
 
 # int16 -> float32 is exact; the scale and the product each round once
-TDMS_SCALING_TOL = {'rtol': ROUNDOFF_SAFETY * 2 * unit_roundoff(np.float32)}
+TDMS_SCALING_TOL = {'rtol': accum_rtol(np.float32, 2)}
 
 
 def test_tdms_file_info(tdms_file):

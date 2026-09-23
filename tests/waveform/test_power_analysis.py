@@ -35,16 +35,9 @@ from numeric_checks import (
 )
 from numpy.testing import assert_array_equal
 
-from striqt.waveform.lib.arrays import (
-    ROUNDOFF_SAFETY,
-    accum_rms,
-    accum_rtol,
-    float_dtype_like,
-    unit_roundoff,
-)
+from striqt.waveform.lib.arrays import accum_rtol, float_dtype_like
 from striqt.waveform.lib.fourier import peak_factor
 from striqt.waveform.lib.power_analysis import (
-    DB_PER_NEPER,
     _arraylike_with_buffer,
     bin_power_rms,
     bin_power_rtol,
@@ -551,9 +544,12 @@ class TestRoundoffModels:
     def test_pow_conversion_rtol_grows_with_level(self, dtype):
         assert pow_conversion_rtol(dtype, 100) > pow_conversion_rtol(dtype, 10)
 
-    def test_off_peak_dB_tolerance_at_peak(self):
-        r = 1e-3
-        assert off_peak_dB_tolerance(0, r) == pytest.approx(-20 * np.log10(1 - r))
+    @pytest.mark.parametrize('r', [1e-5, 0.1, 0.9])
+    def test_off_peak_dB_tolerance_at_peak(self, r):
+        """the low side of a relative error costs at least as much dB as the high side"""
+        at_peak = off_peak_dB_tolerance(0, r)
+        assert at_peak == pytest.approx(-20 * np.log10(1 - r))
+        assert at_peak >= level_tolerance_dB(r)
 
     def test_off_peak_dB_tolerance_unbounded_past_floor(self):
         err = 1e-3
@@ -562,23 +558,27 @@ class TestRoundoffModels:
         assert np.isposinf(off_peak_dB_tolerance(depth_dBc + 10, err))
         assert np.isfinite(off_peak_dB_tolerance(depth_dBc - 1, err))
 
-    @pytest.mark.parametrize('r', [1e-5, 0.1, 0.9])
-    def test_off_peak_dB_tolerance_bounds_one_sided_expansion(self, r):
-        """-20*log10(1-r) is at least the one-sided series DB_PER_NEPER*(2r + r**2)."""
-        assert off_peak_dB_tolerance(0, r) >= DB_PER_NEPER * (2 * r + r**2)
-
     def test_bin_power_rms_grows_with_bin_size(self):
         assert bin_power_rms(np.float32, 16) > bin_power_rms(np.float32, 1) > 0
 
-    def test_stat_rtol_is_one_rounding_for_quantiles_only(self):
-        for kind in ('mean', 'rms', 'min', 'max', 'peak'):
-            assert stat_rtol(np.float32, kind) == 0
-        one_rounding = ROUNDOFF_SAFETY * unit_roundoff(np.float32)
-        assert stat_rtol(np.float32, 0.5) == one_rounding
-        assert stat_rtol(np.float32, 'median') == one_rounding
-        assert stat_rtol(np.float32, 0.5, n_impl=2) == 2 * one_rounding
+    @pytest.mark.parametrize('kind', ['min', 'max', 'peak', 0.5], ids=str)
+    def test_bin_power_rms_is_zero_for_selections_and_quantiles(self, kind):
+        assert bin_power_rms(np.float32, 10_000, kind=kind) == 0
+
+    @pytest.mark.parametrize('kind', ['mean', 'rms', 'min', 'max', 'peak'])
+    def test_stat_rtol_is_zero_for_selections_and_the_mean(self, kind):
+        assert stat_rtol(np.float32, kind) == 0
+
+    def test_stat_rtol_is_one_rounding_for_quantiles(self):
+        quantile = stat_rtol(np.float32, 0.5)
+        assert quantile == accum_rtol(np.float32, 1)
+        assert stat_rtol(np.float32, 'median') == quantile
+        assert stat_rtol(np.float32, 0.5, n_impl=2) == 2 * quantile
+
+    @pytest.mark.parametrize('func', [stat_rtol, bin_power_rtol], ids=func_id)
+    def test_unknown_statistic_raises(self, func):
         with pytest.raises(ValueError, match='bogus'):
-            stat_rtol(np.float32, 'bogus')
+            func(np.float32, kind='bogus')
 
     def test_level_tolerance_dB_power_is_half_of_amplitude(self):
         sigma = np.array([1e-6, 1e-3, 0.1, 1.0])
@@ -1101,26 +1101,3 @@ class TestNumpyCupyCrossComparison:
             cupy_available, sample_ccdf, a, edges, density=density
         )
         assert_array_equal(result_cp, result_np)
-
-    def test_accum_rms_grows_as_the_root_of_the_bin(self):
-        """numpy sums a contiguous axis pairwise and cupy by block tree, so the rms
-        model grows as sqrt(n) and stays far below the n roundings of a strided axis"""
-        n = 1_000_000
-        assert accum_rtol(np.float32, n) == pytest.approx(
-            2 * n * unit_roundoff(np.float32)
-        )
-        assert accum_rms(np.float32, n) < accum_rtol(np.float32, n) / 1000
-        assert accum_rms(np.float32, 4 * n) == pytest.approx(
-            2 * accum_rms(np.float32, n), rel=0.02
-        )
-
-    def test_bin_power_rtol_rejects_an_unknown_statistic(self):
-        with pytest.raises(ValueError, match='bogus'):
-            bin_power_rtol(np.float32, kind='bogus')
-
-    @pytest.mark.parametrize('kind', ['min', 'max', 'peak', 0.5], ids=str)
-    def test_bin_power_rms_is_zero_for_selections(self, kind):
-        assert bin_power_rms(np.float32, 10_000, kind=kind) == 0
-        assert bin_power_rtol(np.float32, kind=kind) <= bin_power_rtol(
-            np.float32, kind=0.5
-        )

@@ -66,21 +66,10 @@ _COLA_WINDOW_SIZE_DIVISOR = {
 
 # %% roundoff model
 #
-# Per FFT pass the rms error relative to the output rms is c*eps*sqrt(log2 N), eps the
-# unit roundoff (Gentleman & Sande 1966; FFTW accuracy notes), and each elementwise
-# rounding adds (eps/sqrt(3))**2 of error variance. c was fitted with
-# chores/tests/measure_fft_accuracy.py per backend: pocketfft gives 0.55-0.65 (1.2 for
-# sizes with a prime factor >= 128); cuFFT on a Jetson TX2i reaches 1.9 at N=512 and
-# 2.1 for Bluestein sizes. A single c=2.2 used to cover both, which left the numpy
-# bounds almost twice as loose as measured. Errors of independent backends add in
-# quadrature (measured 0.83-1.0).
-FFT_ROUNDOFF_C = {'numpy': 1.2, 'cupy': 2.2}
+# The FFT roundoff models below are rms models with fitted constants (see the functions
+# for their provenance); FFT_ROUNDOFF_SAFETY is the margin the tolerances built on them
+# carry, and independent backends' errors add in quadrature (measured 0.83-1.0).
 FFT_ROUNDOFF_SAFETY = 3
-# Roundoff is not spread evenly: it lands on the matched-filter bin of the matched input
-# - the tone's bin for an FFT, the impulse's sample for a resampler. An FFT of a tone
-# measured up to 6.7 units of roundoff of the tone amplitude at the tone (cuFFT, N=512)
-# and 3.9 in a far bin (cuFFT, N=1024), against ~2 for pocketfft.
-ON_PEAK_ROUNDOFF = 8
 
 
 def fft_roundoff_rms(
@@ -95,7 +84,13 @@ def fft_roundoff_rms(
         array_backend: the backend whose FFT constant applies, named as in a source
             spec so that a budget can be evaluated where that backend is not installed
     """
-    c = FFT_ROUNDOFF_C[array_backend]
+    # Per FFT pass the rms error relative to the output rms is c*eps*sqrt(log2 N), eps
+    # the unit roundoff (Gentleman & Sande 1966; FFTW accuracy notes), and each
+    # elementwise rounding adds (eps/sqrt(3))**2 of error variance. c was fitted with
+    # chores/tests/measure_fft_accuracy.py per backend: pocketfft gives 0.55-0.65 (1.2
+    # for sizes with a prime factor >= 128); cuFFT on a Jetson TX2i reaches 1.9 at
+    # N=512 and 2.1 for Bluestein sizes.
+    c = {'numpy': 1.2, 'cupy': 2.2}[array_backend]
     eps = unit_roundoff(dtype)
     var = n_elementwise * (eps / np.sqrt(3)) ** 2
     var += sum((c * eps * np.sqrt(np.log2(n))) ** 2 for n in nffts)
@@ -124,7 +119,11 @@ def on_peak_roundoff(dtype) -> float:
     This is where roundoff concentrates: the bin of a tone in the frequency domain
     (an FFT), or the sample of an impulse in the time domain (a resampler or detector).
     """
-    return FFT_ROUNDOFF_SAFETY * ON_PEAK_ROUNDOFF * unit_roundoff(dtype)
+    # an FFT of a tone measured up to 6.7 units of roundoff of the tone amplitude at
+    # the tone (cuFFT, N=512) and 3.9 in a far bin (cuFFT, N=1024), against ~2 for
+    # pocketfft
+    on_peak_roundings = 8
+    return FFT_ROUNDOFF_SAFETY * on_peak_roundings * unit_roundoff(dtype)
 
 
 def rms_tolerance_dBc(sigma: float) -> float:

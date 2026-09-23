@@ -236,7 +236,7 @@ def elementwise_atol(tolerance, expected_dB):
     `specs.Tolerance` and the numpy array of values expected of it.
 
     `tolerance.on_peak.peak` holds at the output's own peak; deeper elements get the
-    two-sided bound of `sw.off_peak_dB_tolerance`, which reaches +inf at
+    two-sided bound of `sw.power_analysis.off_peak_dB_tolerance`, which reaches +inf at
     `off_peak_dBc.peak` below the peak. Without an `off_peak_dBc` there is no amplitude
     error to grow with depth, and `on_peak.peak` holds everywhere.
     """
@@ -249,4 +249,4 @@ def elementwise_atol(tolerance, expected_dB):
     err = 10 ** (tolerance.off_peak_dBc.peak / 20)
     additive = tolerance.on_peak.peak - 20 * math.log10(1 + err)
     depth = np.nanmax(expected_dB) - expected_dB
-    return additive + sw.off_peak_dB_tolerance(depth, err)
+    return additive + sw.power_analysis.off_peak_dB_tolerance(depth, err)

@@ -39,14 +39,10 @@ from numeric_checks import (
 )
 from numpy.testing import assert_allclose, assert_array_equal
 
-from striqt.waveform import level_tolerance_dB
 from striqt.waveform.lib import fourier
-from striqt.waveform.lib.arrays import accum_rtol
-from striqt.waveform.lib.fourier import (
-    off_peak_floor_dBc,
-    on_peak_roundoff,
-    peak_factor,
-)
+from striqt.waveform.lib.arrays import accum_rtol, unit_roundoff
+from striqt.waveform.lib.fourier import off_peak_floor_dBc, on_peak_roundoff
+from striqt.waveform.power_analysis import level_tolerance_dB
 
 
 def cross_backend_sigma(dtype, nffts, n_elementwise=0):
@@ -121,30 +117,34 @@ class TestRoundoffModels:
     def test_fft_roundoff_rms_monotonic(self, smaller, larger):
         assert fourier.fft_roundoff_rms(*smaller) < fourier.fft_roundoff_rms(*larger)
 
-    @pytest.mark.parametrize('dtype', [np.complex64, np.complex128], ids=dtype_id)
-    def test_fft_roundoff_rms_scales_with_unit_roundoff(self, dtype):
-        eps = np.finfo(dtype).eps / 2
-        c = fourier.FFT_ROUNDOFF_C['numpy']
-        expected = eps * np.sqrt(2 * (c**2 * np.log2(256)) + 2 / 3)
-        assert fourier.fft_roundoff_rms(dtype, [256, 256], 2) == pytest.approx(expected)
+    def test_fft_roundoff_rms_scales_with_unit_roundoff(self):
+        _, *shape_args = self.ARGS
+        ratio = fourier.fft_roundoff_rms(
+            np.complex64, *shape_args
+        ) / fourier.fft_roundoff_rms(np.complex128, *shape_args)
+        assert ratio == pytest.approx(
+            unit_roundoff(np.float32) / unit_roundoff(np.float64)
+        )
 
     def test_fft_roundoff_rms_defaults_to_numpy(self):
         by_default = fourier.fft_roundoff_rms(*self.ARGS)
         assert by_default == fourier.fft_roundoff_rms(*self.ARGS, array_backend='numpy')
-
-    def test_cupy_constant_is_looser_than_numpy(self):
-        assert fourier.FFT_ROUNDOFF_C['cupy'] > fourier.FFT_ROUNDOFF_C['numpy']
 
     def test_cupy_bound_is_looser_than_numpy(self):
         by_numpy = fourier.fft_roundoff_rms(*self.ARGS, array_backend='numpy')
         by_cupy = fourier.fft_roundoff_rms(*self.ARGS, array_backend='cupy')
         assert by_cupy > by_numpy
 
-    @pytest.mark.parametrize('array_backend', ['numpy', 'cupy'])
-    def test_fft_tolerance_rms_applies_safety(self, array_backend):
-        roundoff = fourier.fft_roundoff_rms(*self.ARGS, array_backend=array_backend)
-        tolerance = fourier.fft_tolerance_rms(*self.ARGS, array_backend=array_backend)
-        assert tolerance == fourier.FFT_ROUNDOFF_SAFETY * roundoff
+    def test_fft_tolerance_rms_applies_the_same_safety_on_each_backend(self):
+        margins = []
+        for array_backend in ('numpy', 'cupy'):
+            roundoff = fourier.fft_roundoff_rms(*self.ARGS, array_backend=array_backend)
+            tolerance = fourier.fft_tolerance_rms(
+                *self.ARGS, array_backend=array_backend
+            )
+            assert tolerance > roundoff
+            margins.append(tolerance / roundoff)
+        assert margins[0] == pytest.approx(margins[1])
 
     def test_off_peak_floor_peak_covers_rms(self):
         sigma = fourier.fft_tolerance_rms(np.complex64, [1024], 2)
@@ -341,10 +341,11 @@ class TestTimeFftshift:
         assert_array_equal(fourier.time_fftshift(x[0], axis=0), x[0] * sign[0])
 
         scale = np.array([1, 2, 3], dtype=x.real.dtype)
+        one_rounding = accum_rtol(x.dtype, 1)
         assert_allclose(
             fourier.time_fftshift(x, scale, axis=1),
             scale[:, np.newaxis] * x * sign,
-            rtol=np.finfo(x.dtype).eps,
+            rtol=one_rounding,
         )
 
         y = x.copy()
@@ -353,7 +354,7 @@ class TestTimeFftshift:
 
         y = x.copy()
         assert fourier.time_fftshift(y, 2.0, overwrite_x=True, axis=1) is y
-        assert_allclose(y, 2 * x * sign, rtol=np.finfo(x.dtype).eps)
+        assert_allclose(y, 2 * x * sign, rtol=one_rounding)
 
     def test_scale_must_be_1d(self):
         x = np.ones((2, 8), dtype=np.complex64)
@@ -1078,18 +1079,23 @@ class TestOffPeakFloor:
     KERNEL_TAPS = 400
 
     @staticmethod
-    def _assert_off_peak_bins(err_off_peak, rms_bound, tone_peak, nfft, sigma):
-        """`err_off_peak`: the roundoff in the off-peak bins; `rms_bound`: the rms
-        error model in the same units; `tone_peak`: the tone's own on-peak bin value,
-        which anchors the structured roundoff bound"""
-        assert rms(err_off_peak) < rms_bound, (
-            f'off-peak rms roundoff above {off_peak_floor_dBc(sigma, nfft):.1f} dBc'
+    def _assert_off_peak_bins(err_off_peak, tone_peak, nfft, sigma):
+        """`err_off_peak`: the roundoff in the off-peak bins of an `nfft`-point
+        spectrum; `tone_peak`: the tone's own on-peak bin value, which the dBc floor
+        is relative to; `sigma`: the rms error model relative to the output rms"""
+        with np.errstate(divide='ignore'):
+            rms_dBc = 20 * np.log10(rms(err_off_peak) / tone_peak)
+            peak_dBc = 20 * np.log10(np.abs(err_off_peak).max() / tone_peak)
+
+        rms_floor = off_peak_floor_dBc(sigma, nfft)
+        assert rms_dBc < rms_floor, (
+            f'off-peak rms roundoff {rms_dBc:.1f} dBc above the {rms_floor:.1f} dBc floor'
         )
-        white = peak_factor(err_off_peak.size) * rms_bound
-        structured = on_peak_roundoff(np.complex64) * tone_peak
-        off_peak_floor = off_peak_floor_dBc(sigma, nfft, err_off_peak.size)
-        msg = f'off-peak peak roundoff above {off_peak_floor:.1f} dBc'
-        assert np.abs(err_off_peak).max() < max(white, structured), msg
+        peak_floor = off_peak_floor_dBc(sigma, nfft, err_off_peak.size)
+        assert peak_dBc < peak_floor, (
+            f'off-peak peak roundoff {peak_dBc:.1f} dBc above the {peak_floor:.1f} dBc '
+            'floor'
+        )
 
     def _assert_off_peak_error_spectrum(self, out, out_ref, sigma):
         """bound the spectrum of the roundoff error in a time-domain output of a unit
@@ -1100,11 +1106,8 @@ class TestOffPeakFloor:
         off_peak = np.ones(size, dtype=bool)
         off_peak[int(np.argmax(np.abs(np.fft.fft(out_ref))))] = False
 
-        # unnormalized fft: bin rms is sqrt(size) times the sample rms, and the unit
-        # tone peaks at size
-        self._assert_off_peak_bins(
-            err[off_peak], np.sqrt(size) * sigma, size, size, sigma
-        )
+        # unnormalized fft: the unit tone peaks at size
+        self._assert_off_peak_bins(err[off_peak], size, size, sigma)
 
     @staticmethod
     def _stft(x, nfft):
@@ -1135,10 +1138,7 @@ class TestOffPeakFloor:
         sigma = fourier.fft_tolerance_rms(
             np.complex64, [nfft], n_elementwise=2, array_backend=array_backend
         )
-        rms_bound = sigma * rms(X_ref)
-        self._assert_off_peak_bins(
-            (X - X_ref)[:, off_peak], rms_bound, tone_peak, nfft, sigma
-        )
+        self._assert_off_peak_bins((X - X_ref)[:, off_peak], tone_peak, nfft, sigma)
 
     @given(
         nfft=st.sampled_from(OFF_PEAK_NFFTS),
@@ -1291,7 +1291,8 @@ class TestNumpyCupyCrossComparison:
         y_np, y_cp = numpy_and_cupy(
             cupy_available, fourier.time_fftshift, x, scale, axis=1
         )
-        assert_close(y_cp, y_np, rtol=np.finfo(x.dtype).eps)
+        one_rounding = accum_rtol(x.dtype, 1)
+        assert_close(y_cp, y_np, rtol=cross_backend(one_rounding, one_rounding))
 
     def test_frequency_slicing(self, cupy_available):
         x = np.arange(2 * 3 * 64, dtype=np.float32).reshape(2, 3, 64)

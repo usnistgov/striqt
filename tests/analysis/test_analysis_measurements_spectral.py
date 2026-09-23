@@ -18,6 +18,7 @@ import re
 import msgspec
 import numpy as np
 import pytest
+from analysis_strategies import registered_tolerance
 from numeric_checks import ATOL, RTOL_FLOAT64, assert_close
 
 import striqt.analysis as sa
@@ -37,21 +38,11 @@ CAPTURE = sa.specs.Capture(duration=DURATION, sample_rate=FS)
 # roundoff of the one FFT that separates the IQ from the reported spectrum
 FFT_SIGMA = fft_tolerance_rms(np.complex64, [NFFT])
 
-REGISTRY = sa.register.registry
-
 
 def levels(result) -> np.ndarray:
     """the dB values of a measurement result, widened to float64 for comparison"""
     values = result.values if hasattr(result, 'values') else result
     return np.asarray(values, dtype='float64')
-
-
-def registered_tolerance(capture, spec, **kwargs) -> sa.specs.Tolerance:
-    """the tolerance registered for the measurement that `spec` selects, fetched
-    through the registry walk a consumer would use"""
-    name = REGISTRY[type(spec)].name
-    group = REGISTRY.tospec()(**{name: spec})
-    return REGISTRY.tolerances(capture, group, **kwargs)[name]
 
 
 def bin_centered_tone_level_dB(window, nfft=NFFT):

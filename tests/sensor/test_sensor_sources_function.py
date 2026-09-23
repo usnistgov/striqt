@@ -13,7 +13,7 @@ from synthetic_sources import BINDINGS, LO_SHIFT_CAPTURE, generator
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import sources
-from striqt.waveform.lib.arrays import ROUNDOFF_SAFETY, unit_roundoff
+from striqt.waveform.arrays import accum_rtol
 
 SAMPLE_RATE = 15.36e6
 COUNT = 4096
@@ -212,7 +212,7 @@ def test_single_tone_sits_at_the_lo_shifted_frequency():
     # the source multiplies two complex64 tones, each within one unit roundoff, and
     # the product rounds twice more
     expected = sa.testing.tone(None, fs_sdr, frequency=frequency, count=count)
-    assert_close(row, expected, atol=ROUNDOFF_SAFETY * 4 * unit_roundoff(np.float32))
+    assert_close(row, expected, atol=accum_rtol(np.float32, 4))
 
 
 def test_dirac_delta_index_is_not_compensated():

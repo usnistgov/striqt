@@ -97,6 +97,26 @@ class TestFloatDtypeLike:
         assert arrays.float_dtype_like(x, min_dtype=min_dtype) == expected
 
 
+# %% roundoff model
+class TestRoundoffModels:
+    N = 1_000_000
+
+    def test_accum_rms_grows_as_the_root_of_the_bin(self):
+        """numpy sums a contiguous axis pairwise and cupy by block tree, so the rms
+        model grows as sqrt(n) and stays far below the n roundings of a strided axis"""
+        n = self.N
+        assert arrays.accum_rms(np.float32, 4 * n) == pytest.approx(
+            2 * arrays.accum_rms(np.float32, n), rel=0.02
+        )
+        assert arrays.accum_rms(np.float32, n) < arrays.accum_rtol(np.float32, n) / 1000
+
+    def test_accum_rtol_is_linear_in_the_term_count(self):
+        n = self.N
+        assert arrays.accum_rtol(np.float32, 2 * n) == 2 * arrays.accum_rtol(
+            np.float32, n
+        )
+
+
 class TestBinnedMean:
     def test_strided_axis_reduction_needs_the_in_order_bound(self):
         """numpy sums a strided axis in order, so a bin that straddles two levels lands

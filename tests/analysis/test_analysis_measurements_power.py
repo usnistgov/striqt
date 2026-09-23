@@ -12,9 +12,9 @@ Inputs are the closed-form generators in `striqt.analysis.testing`, whose levels
 offset, and an amplitude of ``10**(power/20)`` reads `power` dBm.
 
 Tolerances are the `sa.specs.Tolerance` each measurement registers with
-`tolerance=`, evaluated the way `sa.registry.tolerances` does: the float32 dB
-conversion budget plus the roundoff of squaring, averaging and storing the level. They
-land near 2e-5 dB, which is far below any level a measurement is read at.
+`tolerance=`, fetched through `sa.registry.tolerances`: the float32 dB conversion
+budget plus the roundoff of squaring, averaging and storing the level. They land near
+2e-5 dB, which is far below any level a measurement is read at.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ import re
 import msgspec
 import numpy as np
 import pytest
+from analysis_strategies import registered_tolerance
 from numeric_checks import assert_close
 
 import striqt.analysis as sa
@@ -67,17 +68,9 @@ def validate_cyclic(capture: sa.specs.Capture, spec: sa.specs.CyclicChannelPower
     return validate(sa.specs.helpers.to_analysis_capture(capture), spec)
 
 
-def tolerance(
-    spec: sa.specs.Analysis, duration=DURATION, input_error=0.0
-) -> sa.specs.Tolerance:
-    """call the registered tolerance function the way `registry.tolerances` does"""
-    func = sa.registry[type(spec)].tolerance
-    assert func is not None
-    return func(
-        sa.specs.helpers.to_analysis_capture(capture(duration=duration)),
-        spec,
-        input_error=input_error,
-    )
+def tolerance(spec, duration=DURATION, **kws) -> sa.specs.Tolerance:
+    """the tolerance registered for `spec` on a capture of `duration`"""
+    return registered_tolerance(capture(duration=duration), spec, **kws)
 
 
 CPTS_SPEC = sa.specs.ChannelPowerTimeSeries(detector_period=DETECTOR_PERIOD)
@@ -360,26 +353,33 @@ POWER_IDS = [type(spec).__name__ for spec in POWER_SPECS]
 
 @pytest.mark.parametrize('spec', POWER_SPECS, ids=POWER_IDS)
 def test_registered_tolerance_is_a_dB_budget_that_grows_with_input_error(spec):
-    """`registry.tolerances` finds the budget by measurement name; with exact input
-    it is a pure roundoff bound with no floor, and an amplitude error in the IQ adds
-    a peak term over the output and a floor below which elements go unchecked"""
-    name = sa.registry[type(spec)].name
-    group = sa.registry.tospec()(**{name: spec})
-
-    exact = sa.registry.tolerances(capture(), group)[name]
-    assert exact == tolerance(spec)
+    """with exact input the budget is a pure roundoff bound with no floor, and an
+    amplitude error in the IQ adds a peak term over the output and a floor below
+    which elements go unchecked"""
+    exact = tolerance(spec)
     assert isinstance(exact, sa.specs.Tolerance)
     assert exact.units == 'dB'
     assert exact.on_peak.peak >= exact.on_peak.rms > 0
     assert exact.off_peak_dBc is None
 
-    noisy = sa.registry.tolerances(capture(), group, input_error=1e-4)[name]
+    noisy = tolerance(spec, input_error=1e-4)
     assert noisy.on_peak.peak > noisy.on_peak.rms > exact.on_peak.rms
     assert noisy.off_peak_dBc is not None and noisy.off_peak_dBc.peak < 0
 
-    noisier = sa.registry.tolerances(capture(), group, input_error=1e-3)[name]
+    noisier = tolerance(spec, input_error=1e-3)
     assert noisier.on_peak.rms > noisy.on_peak.rms
     assert noisier.on_peak.peak > noisy.on_peak.peak
+
+
+@pytest.mark.parametrize('spec', POWER_SPECS, ids=POWER_IDS)
+@pytest.mark.parametrize('input_error', [0.0, 1e-4], ids=['exact', 'noisy'])
+def test_tolerance_is_backend_independent_since_no_fft_is_involved(spec, input_error):
+    """the detectors square, bin and take a log elementwise on either backend, so the
+    budget has no backend term of its own; the FFT roundoff that separates cupy from
+    numpy reaches these measurements only through the caller's `input_error`"""
+    numpy_tol = tolerance(spec, input_error=input_error, array_backend='numpy')
+    cupy_tol = tolerance(spec, input_error=input_error, array_backend='cupy')
+    assert cupy_tol == numpy_tol
 
 
 # %% iq_waveform
@@ -469,7 +469,9 @@ class TestIqWaveform:
         noisy = tolerance(sa.specs.IQWaveform(), input_error=r)
         assert noisy.units == 'dB'
         assert noisy.rtol == exact.rtol
-        assert noisy.on_peak.rms == pytest.approx(sw.level_tolerance_dB(r))
+        assert noisy.on_peak.rms == pytest.approx(
+            sw.power_analysis.level_tolerance_dB(r)
+        )
         assert noisy.on_peak.peak > noisy.on_peak.rms
         assert noisy.off_peak_dBc is not None and noisy.off_peak_dBc.peak < 0
 

@@ -1,7 +1,4 @@
 from .lib.fourier import (
-    FFT_ROUNDOFF_C,
-    FFT_ROUNDOFF_SAFETY,
-    ON_PEAK_ROUNDOFF,
     design_cola_resampler,
     design_fir_lpf,
     design_oafilter,

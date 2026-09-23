@@ -1,7 +1,4 @@
 from .lib.arrays import (
-    REDUCTION_RUN,
-    REDUCTION_SAFETY,
-    ROUNDOFF_SAFETY,
     accum_rms,
     accum_rtol,
     axis_to_blocks,
@@ -19,3 +16,20 @@ from .lib.arrays import (
     pinned_array_as_cupy,
     unit_roundoff,
 )
+
+# the roundoff models stay reachable as `arrays.accum_rms` etc. but are kept out of
+# the root namespace, which star-imports this module
+__all__ = [
+    'array_namespace',
+    'axis_index',
+    'axis_slice',
+    'axis_to_blocks',
+    'binned_mean',
+    'configure_cupy',
+    'cp',
+    'free_cupy_mempool',
+    'histogram_last_axis',
+    'is_cupy_array',
+    'isroundmod',
+    'pinned_array_as_cupy',
+]

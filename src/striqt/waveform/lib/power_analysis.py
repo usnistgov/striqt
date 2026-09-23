@@ -125,8 +125,6 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
 # backends and take no array namespace. Measured with
 # chores/tests/measure_db_accuracy.py: libm log10 1.1-1.9 ulp; CUDA libdevice on a
 # Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
-LOG10_ULP = 2
-POW_ULP = 8
 HYPOT_ULP = 3
 DB_PER_NEPER = 10 / math.log(10)
 
@@ -140,8 +138,9 @@ def log_conversion_tol(
     Roundoff on the input side of the log becomes an absolute dB error, which is what
     bounds the result near 0 dB where ulps of the output are meaningless.
     """
+    log10_ulp = 2
     u = unit_roundoff(dtype)
-    rtol = 2 * u * (LOG10_ULP + 0.5)
+    rtol = 2 * u * (log10_ulp + 0.5)
     input_ulp = (HYPOT_ULP if complex_input else 0) + 0.5
     atol = (scale / math.log(10)) * 2 * u * input_ulp
     return {
@@ -155,8 +154,9 @@ def pow_conversion_rtol(dtype, max_abs_dB: float, n_impl: int = 1) -> float:
 
     Rounding x/10 perturbs the exponent, so its effect scales with |x|.
     """
+    pow_ulp = 8
     u = unit_roundoff(dtype)
-    rtol = u * (math.log(10) * max_abs_dB / 10 + 2 * POW_ULP)
+    rtol = u * (math.log(10) * max_abs_dB / 10 + 2 * pow_ulp)
     return ROUNDOFF_SAFETY * n_impl * rtol
 
 

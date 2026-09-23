@@ -2,7 +2,7 @@
 the suite.
 
 The roundoff models themselves live in the library beside the functions they describe
-(`striqt.waveform.fourier`, `striqt.waveform.lib.power_analysis`,
+(`striqt.waveform.fourier`, `striqt.waveform.power_analysis`,
 `striqt.waveform.lib.arrays`, `striqt.waveform.ofdm`) and the per-measurement budgets
 are registered with `striqt.analysis.registry`; tests take their pass criteria from
 there, so the model the suite enforces is the one the library reports.
@@ -15,8 +15,8 @@ from __future__ import annotations
 import numpy as np
 from numpy.testing import assert_allclose
 
-from striqt.waveform import level_tolerance_dB
 from striqt.waveform.lib.fourier import peak_factor
+from striqt.waveform.power_analysis import level_tolerance_dB
 
 # %% dtype helpers
 

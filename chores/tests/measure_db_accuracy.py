@@ -30,7 +30,7 @@ Gaussian noise and a unit tone against a float64 reference):
                  over k outputs is peak_factor(k) times it
     n·u model/u  `accum_rtol(float32, n)`, the recursive-summation bound that applies
                  to the strided-axis row
-The measurements ground REDUCTION_RUN and REDUCTION_SAFETY in
+The measurements ground the fitted run length and safety factor of `accum_rms` in
 striqt.waveform.lib.arrays; the printed cupy accelerators tell whether CUB handled the
 reduction.
 
@@ -391,7 +391,8 @@ def main():
         ' budget for complex inputs. Reductions report absolute dB error in units of u.'
         ' In the binned power mean table, rms/u should stay below rms model/u and max/u'
         ' below a few times it on both backends; if a backend grows faster than sqrt(n),'
-        ' lower REDUCTION_RUN rather than raising REDUCTION_SAFETY. In the binned power'
+        ' shorten the fitted run length in accum_rms rather than raising its safety factor.'
+        ' In the binned power'
         ' quantile table, max/u should stay within model/u on both backends and the'
         ' result dtype float32; a max/u far above model/u at q=0.999 means that'
         " backend's quantile interpolates in float32 and needs q passed as float64."

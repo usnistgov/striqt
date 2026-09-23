@@ -319,7 +319,8 @@ def check_noise(ds, capture, subtests):
         assert_close(
             10 * np.log10(linear.mean()),
             10 * np.log10(expected),
-            atol=sw.level_tolerance_dB(5 * sigma, power=True) + COLA_LEVEL_DB,
+            atol=sw.power_analysis.level_tolerance_dB(5 * sigma, power=True)
+            + COLA_LEVEL_DB,
         )
 
 
@@ -370,7 +371,7 @@ def check_dirac_delta(ds, capture, subtests):
             assert_close(
                 peak[:, IMPULSE_BIN],
                 filter_peak_dB,
-                atol=sw.level_tolerance_dB(FIR_LEAKAGE),
+                atol=sw.power_analysis.level_tolerance_dB(FIR_LEAKAGE),
             )
 
 

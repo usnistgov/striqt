@@ -78,13 +78,16 @@ def channel_power_tolerance(
         amplitude_rms=input_error,
         size=binning.bin_count * len(spec.power_detectors),
         power_rtol=max(
-            sw.bin_power_rtol(np.float32, kind=d) for d in spec.power_detectors
-        ),
-        power_rms=max(
-            sw.bin_power_rms(np.float32, binning.bin_size, kind=d)
+            sw.power_analysis.bin_power_rtol(np.float32, kind=d)
             for d in spec.power_detectors
         ),
-        log_tol=sw.log_conversion_tol(np.float32, 10, complex_input=True),
+        power_rms=max(
+            sw.power_analysis.bin_power_rms(np.float32, binning.bin_size, kind=d)
+            for d in spec.power_detectors
+        ),
+        log_tol=sw.power_analysis.log_conversion_tol(
+            np.float32, 10, complex_input=True
+        ),
         quantization=shared.quantization_dB('float32'),
     )
 
