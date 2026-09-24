@@ -19,7 +19,19 @@ import typing
 from contextlib import asynccontextmanager
 import functools
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Set, Tuple, TypedDict, Union, cast
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Set,
+    Tuple,
+    TypedDict,
+    Union,
+    cast,
+)
 
 import click
 import msgspec
@@ -32,12 +44,14 @@ from fastapi.responses import HTMLResponse
 _json_encoder = msgspec.json.Encoder()
 _json_decoder = msgspec.json.Decoder()
 
+
 def _to_numpy(arr: Any) -> np.ndarray:
     """Convert array to numpy, handling cupy arrays transparently."""
     if hasattr(arr, 'get'):
         # cupy array - transfer to CPU
         return arr.get()
     return np.asarray(arr)
+
 
 if typing.TYPE_CHECKING:
     import striqt.sensor as ss
@@ -80,7 +94,7 @@ class CoordinatesData(TypedDict, total=False):
     extra_coords: Dict[str, List[ExtraCoordDict]]
 
 
-class AppState(TypedDict, total=False):
+class AppState(TypedDict):
     """Type definition for the global application state."""
 
     delayed_dataset: Optional['ss.lib.compute.DelayedDataset']
@@ -189,7 +203,7 @@ class WebPlotBackend:
                 dim = coord.dims[0]
                 # Only use if the dimension exists in data and has multiple values
                 if dim in data.dims and len(data[dim]) > 1:
-                    return dim
+                    return cast(str, dim)
 
         return None
 
@@ -439,14 +453,18 @@ class WebPlotBackend:
         # For ymax: track the maximum (expand upward)
 
         # Handle ymin - use caller-specified value if provided, otherwise use data min
-        candidate_ymin = ylim[0] if (ylim is not None and ylim[0] is not None) else current_ymin
+        candidate_ymin = (
+            ylim[0] if (ylim is not None and ylim[0] is not None) else current_ymin
+        )
         if self._remembered_ymin is None:
             self._remembered_ymin = candidate_ymin
         else:
             self._remembered_ymin = min(self._remembered_ymin, candidate_ymin)
 
         # Handle ymax - use caller-specified value if provided, otherwise use data max
-        candidate_ymax = ylim[1] if (ylim is not None and ylim[1] is not None) else current_ymax
+        candidate_ymax = (
+            ylim[1] if (ylim is not None and ylim[1] is not None) else current_ymax
+        )
         if self._remembered_ymax is None:
             self._remembered_ymax = candidate_ymax
         else:
@@ -457,7 +475,9 @@ class WebPlotBackend:
         result = {
             'type': 'line',
             'traces': traces,
-            'layout': self._make_line_layout(data, x, yscale, n_subplots, ylim=effective_ylim),
+            'layout': self._make_line_layout(
+                data, x, yscale, n_subplots, ylim=effective_ylim
+            ),
             'variable': str(data.name),
         }
         self._pending_traces.append(result)
@@ -491,7 +511,7 @@ class WebPlotBackend:
         # Check if hue is a dimension or coordinate we can iterate over
         hue_is_dim = hue and hue in data.dims
         hue_is_coord = hue and hue in data.coords and hue not in data.dims
-        
+
         if hue_is_dim:
             # hue is a dimension - iterate over its values
             hue_values = data[hue].values
@@ -552,7 +572,7 @@ class WebPlotBackend:
                 hue_values = [hue_values.item()]
             else:
                 hue_values = np.unique(hue_values)
-            
+
             for hue_idx, hue_val in enumerate(hue_values):
                 # For non-dimension coordinates, we can't select - just use the data
                 y_data = _to_numpy(data.values).squeeze()
@@ -731,8 +751,12 @@ class WebPlotBackend:
             # Apply ylim if provided for single subplot
             if ylim is not None and (ylim[0] is not None or ylim[1] is not None):
                 y_range_single: list[Optional[float]] = [
-                    ylim[0] if (ylim[0] is not None and not np.isinf(ylim[0])) else None,
-                    ylim[1] if (ylim[1] is not None and not np.isinf(ylim[1])) else None,
+                    ylim[0]
+                    if (ylim[0] is not None and not np.isinf(ylim[0]))
+                    else None,
+                    ylim[1]
+                    if (ylim[1] is not None and not np.isinf(ylim[1]))
+                    else None,
                 ]
                 y_axis_config['range'] = y_range_single
             layout['yaxis'] = y_axis_config
@@ -805,7 +829,9 @@ class WebPlotBackend:
             layout['shapes'] = []
 
         # Add noise level lines for each port
-        noise_values = _to_numpy(noise.values).flat if hasattr(noise, 'values') else [noise]
+        noise_values = (
+            _to_numpy(noise.values).flat if isinstance(noise, xr.DataArray) else [noise]
+        )
 
         for i, noise_val in enumerate(noise_values):
             noise_float = float(noise_val)
@@ -898,7 +924,7 @@ class WebPlotBackend:
 
 
 def _to_json_serializable(
-    arr: Union[np.ndarray, Any], preserve_inf: bool = False
+    arr: Any, preserve_inf: bool = False
 ) -> Union[np.ndarray, list, float, int, str, None]:
     """Convert arrays to a format suitable for Plotly graph objects.
 
@@ -934,7 +960,7 @@ def _to_json_serializable(
 
     def _sanitize_list(lst):
         """Recursively sanitize a list."""
-        result = []
+        result: list[Any] = []
         for item in lst:
             if isinstance(item, list):
                 result.append(_sanitize_list(item))
@@ -946,7 +972,7 @@ def _to_json_serializable(
 
     # Handle cupy arrays by converting to numpy first
     if hasattr(arr, 'get'):
-        arr = arr.get()  # ty: ignore[call-non-callable]
+        arr = arr.get()
 
     if isinstance(arr, np.ndarray):
         # String types - must use list format
@@ -1173,6 +1199,7 @@ _app_state: AppState = {
     'spec_filename': '',
 }
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI app startup/shutdown."""
@@ -1211,19 +1238,27 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if msg['type'] == 'get_state':
                 # Extract coordinates on demand (deferred from update_dataset)
-                coordinates: CoordinatesData = {'num_ports': 1, 'groups': {}, 'extra_coords': {}}
+                coordinates: CoordinatesData = {
+                    'num_ports': 1,
+                    'groups': {},
+                    'extra_coords': {},
+                }
                 if _app_state['delayed_dataset'] is not None:
-                    coordinates = _extract_capture_coordinates(_app_state['delayed_dataset'])
+                    coordinates = _extract_capture_coordinates(
+                        _app_state['delayed_dataset']
+                    )
                 # msgspec encodes to bytes; decode to str so the frame is sent as
                 # text and the browser's JSON.parse(event.data) works unchanged.
-                await websocket.send_text(_json_encoder.encode({
-                    'type': 'state',
-                    'available_variables': _app_state['available_variables'],
-                    'variable_labels': _app_state['variable_labels'],
-                    'selected_variable': _app_state['selected_variable'],
-                    'coordinates': coordinates,
-                    'spec_filename': _app_state['spec_filename'],
-                }).decode())
+                await websocket.send_text(
+                    _json_encoder.encode({
+                        'type': 'state',
+                        'available_variables': _app_state['available_variables'],
+                        'variable_labels': _app_state['variable_labels'],
+                        'selected_variable': _app_state['selected_variable'],
+                        'coordinates': coordinates,
+                        'spec_filename': _app_state['spec_filename'],
+                    }).decode()
+                )
                 # If we have data, also trigger a plot update for this client
                 if _app_state['delayed_dataset'] is not None:
                     await broadcast_plot_update()
@@ -1336,7 +1371,7 @@ def _prepare_plot_data_sync(
 
     # Call the striqt.figures.data_vars function with our WebPlotBackend
     # The function will call plotter.heatmap/line and plotter.finish
-    plot_func(ds, plotter)
+    plot_func(ds, cast('sf.backend.PlotBackend', plotter))
 
     plot_data = plotter.get_plot_data()
 
@@ -1364,7 +1399,7 @@ def _serialize_plot_message(
         traces = plot.get('traces', [])
         layout = plot.get('layout', {})
 
-        go_traces = []
+        go_traces: list[Any] = []
         for trace in traces:
             trace_type = trace.get('type', 'scatter')
             if trace_type == 'heatmap':
@@ -1377,7 +1412,7 @@ def _serialize_plot_message(
                 go_traces.append(trace)
 
         fig = go.Figure(data=go_traces, layout=layout)
-        serialized_plots.append(_json_decoder.decode(fig.to_json()))
+        serialized_plots.append(_json_decoder.decode(cast(str, fig.to_json())))
 
     # msgspec encodes to bytes; decode to str so callers can send it as a text
     # WebSocket frame (keeps the browser's JSON.parse(event.data) path unchanged).
@@ -1649,11 +1684,14 @@ def _extract_capture_coordinates(
     # Extract extra_coords (AcquisitionInfo fields)
     extra_coords_groups = _extract_extra_coords(result)
 
-    return cast(CoordinatesData, {
-        'num_ports': port_count,
-        'groups': grouped,
-        'extra_coords': extra_coords_groups,
-    })
+    return cast(
+        CoordinatesData,
+        {
+            'num_ports': port_count,
+            'groups': grouped,
+            'extra_coords': extra_coords_groups,
+        },
+    )
 
 
 def _get_si_prefix_for_values(values: List[float], unit: str) -> tuple[int, str]:
@@ -1720,6 +1758,8 @@ def _format_coord_value(value: Any) -> str:
     if isinstance(value, bytes):
         return value.decode('utf-8', errors='replace')
     return str(value)
+
+
 import re
 
 
@@ -1853,11 +1893,11 @@ def run_server(
         plot_opts = sf.specs.PlotOptions(
             data=sf.specs.DataOptions(
                 sweep_index=-1,
-                select= {
+                select={
                     # 'channel_power_bin': slice(-100, -15),
                     # 'spectrogram_power_bin': slice(-130, -50),
                     'spectrogram_time': slice(0, 5e-3),
-                }
+                },
             ),
             plotter=sf.specs.SharedPlotOptions(
                 col='port',
@@ -1898,7 +1938,7 @@ def run_server(
 
         with ctx as resources:
             # the sink's result is discarded here, so the callback need not return it
-            resources['sink'].append = on_data  # ty: ignore[invalid-assignment]
+            cast(Any, resources['sink']).append = on_data
             while True:
                 sweep = ss.iterate_sweep(
                     resources, yield_values=True, always_yield=True

@@ -50,7 +50,10 @@ def cli(zarr_path: str, yaml_path: str, interactive=None, no_save=False):
 
 
 def run(
-    zarr_path: str, yaml_path: str | None, interactive: str | None = None, no_save=False
+    zarr_path: str,
+    yaml_path: str | None,
+    interactive: sf.backend.TerminalGraphics | None = None,
+    no_save=False,
 ):
     import msgspec
     import multiprocessing
@@ -87,7 +90,7 @@ def run(
         max(1, ncores - 1),
         initializer=worker_init,
         initargs=(zarr_path, opts, interactive, no_save, manager.Lock()),
-    )  # ty: ignore
+    )
 
     # then the heavier data
     dataset = load_data(zarr_path, opts, index=False)
@@ -149,7 +152,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
 def worker_init(
     zarr_path,
     opts: 'sf.specs.PlotOptions',
-    interactive: typing.Literal['sixel', 'kitcat'] | None,
+    interactive: sf.backend.TerminalGraphics | None,
     no_save: bool,
     lock,
 ):

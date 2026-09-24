@@ -275,7 +275,7 @@ def label_legend(
         obj = data[coord_name]
     standard_name = obj.attrs.get('standard_name', None)
     units = obj.attrs.get('units', None)
-    data = obj.data
+    values = obj.data
 
     if standard_name is not None:
         if units is not None and not tick_units:
@@ -283,9 +283,9 @@ def label_legend(
     if units is not None:
         # TODO: implement tick_units
         formatter = ticker.EngFormatter(unit=units, unitInTick=True)
-        legend_data = [formatter(v) for v in data]
+        legend_data = [formatter(v) for v in values]
     else:
-        legend_data = [str(v) for v in data]
+        legend_data = [str(v) for v in values]
 
     return ax.legend(legend_data, title=standard_name)
 

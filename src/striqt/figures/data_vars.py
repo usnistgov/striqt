@@ -9,6 +9,7 @@ from . import util
 if _typing.TYPE_CHECKING:
     from pathlib import Path as _Path
 
+    from xarray import DataArray as _DA
     from xarray import Dataset as _DS
     from xarray.core.types import ScaleOptions as _ScaleOptions
     from .backend import PlotBackend as _PlotBackend
@@ -55,7 +56,7 @@ def cellular_cyclic_autocorrelation(
     sub = backend.coerce_column(data[name], plotter)
     if hue == 'link_direction':
         scs_peaks = sub.max([n for n in sub.dims if n != 'subcarrier_spacing'])
-        iscs = int(scs_peaks.argmax())
+        iscs = int(_typing.cast('_DA', scs_peaks.argmax()))
         sub = sub.isel(subcarrier_spacing=iscs)
     elif hue == 'subcarrier_spacing':
         sub = sub.sel(link_direction='downlink')
