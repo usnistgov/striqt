@@ -5,7 +5,7 @@ import typing
 from .. import specs
 
 from ..lib.util import np
-from . import _channel_power_histogram, _spectrogram, shared
+from . import _spectrogram, power, shared
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
@@ -21,7 +21,7 @@ def spectrogram_power_bin(
     capture: specs.Capture, spec: specs.SpectrogramHistogram
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
-    bins = _channel_power_histogram.make_power_bins(
+    bins = power.make_power_bins(
         power_low=spec.power_low,
         power_high=spec.power_high,
         power_resolution=spec.power_resolution,
@@ -65,7 +65,7 @@ def spectrogram_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     metadata.pop('units')
 
     xp = sw.array_namespace(iq)
-    bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
+    bin_edges = power.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,
         power_resolution=spec.power_resolution,

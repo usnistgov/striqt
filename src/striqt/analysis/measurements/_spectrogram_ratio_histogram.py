@@ -5,7 +5,7 @@ import typing
 from .. import specs
 
 from ..lib.util import np
-from . import _channel_power_histogram, _spectrogram, _spectrogram_histogram, shared
+from . import _spectrogram, _spectrogram_histogram, power, shared
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
@@ -69,7 +69,7 @@ def spectrogram_ratio_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
     metadata.pop('units')
 
     xp = sw.array_namespace(iq)
-    bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
+    bin_edges = power.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,
         power_resolution=spec.power_resolution,

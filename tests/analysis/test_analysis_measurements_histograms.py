@@ -20,7 +20,7 @@ import pytest
 from numeric_checks import assert_close, elementwise_rtol
 
 import striqt.analysis as sa
-from striqt.analysis.measurements._channel_power_histogram import make_power_bins
+from striqt.analysis.measurements.power import make_power_bins
 
 FS = 1e6
 DURATION = 1e-3

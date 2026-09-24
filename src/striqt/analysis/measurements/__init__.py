@@ -6,9 +6,11 @@ from ._cellular_5g_ssb_spectrogram import cellular_5g_ssb_spectrogram
 from ._cellular_5g_sss_correlation import cellular_5g_sss_correlation
 from ._cellular_cyclic_autocorrelation import cellular_cyclic_autocorrelation
 from ._cellular_resource_power_histogram import cellular_resource_power_histogram
-from ._channel_power_histogram import channel_power_histogram
-from ._channel_power_time_series import channel_power_time_series
-from ._cyclic_channel_power import cyclic_channel_power
+from .power import (
+    channel_power_histogram,
+    channel_power_time_series,
+    cyclic_channel_power,
+)
 from .waveforms import iq_waveform
 from ._power_spectral_density import power_spectral_density
 from ._spectrogram import spectrogram

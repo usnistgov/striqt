@@ -7,7 +7,7 @@ from .. import specs
 
 from ..lib import util
 from ..lib.util import np
-from . import _channel_power_histogram, _spectrogram, shared
+from . import _spectrogram, power, shared
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
 from .shared import registry, hint_keywords
 
@@ -27,7 +27,7 @@ def cellular_resource_power_bin(
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """returns a dictionary of coordinate values, keyed by axis dimension name"""
 
-    bins = _channel_power_histogram.make_power_bins(
+    bins = power.make_power_bins(
         power_low=spec.power_low,
         power_high=spec.power_high,
         power_resolution=spec.power_resolution,
@@ -305,7 +305,7 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
         )
 
     masked_spgs = sw.powtodB(masked_spgs, overwrite_x=True)
-    bin_edges = _channel_power_histogram.make_power_histogram_bin_edges(
+    bin_edges = power.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,
         power_resolution=spec.power_resolution,
