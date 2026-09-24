@@ -8,7 +8,7 @@ from .. import specs
 from ..lib import util
 from ..lib.util import np
 from . import power, shared, spectrum
-from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
+from .cellular import link_direction, tdd_config_from_str
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
