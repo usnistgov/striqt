@@ -15,7 +15,7 @@ pixi run -e test39 pytest tests/waveform/test_fourier.py -q      # one file
 pixi run -e test39 pytest -k test_stft_linearity                 # one test by name
 pixi run -e test39 ruff format src tests                         # format (single quotes, 88 cols)
 pixi run -e test39 ruff check src tests
-pixi run -e test314 ty check src                                  # type check
+pixi run -e test314 ty check src                                  # type check (must pass; py39 has a known baseline)
 pixi run -e doc sphinx-build -E -a -b html doc doc/html          # docs (see chores/push-docs.sh to deploy)
 pixi run -e cupy pytest                                          # GPU path, Jetson only
 ```
@@ -72,7 +72,7 @@ def time_elapsed(capture, spec): ...
 def channel_power_time_series(iq, capture, **kwargs): ...
 ```
 
-The decorator wraps the function so it accepts the spec's fields as keyword arguments, validates them, and returns a `DelayedDataArray` (see `analysis/lib/dataarrays.py`). Materialization to xarray is deferred so the GPU can queue several measurements before anything is pulled back to the CPU. `evaluate_by_spec` runs every measurement in the `analysis:` block under a `stopwatch`, then calls `sw.arrays.free_cupy_mempool()` when the input was cupy.
+The decorator wraps the function so it accepts the spec's fields as keyword arguments, validates them, and returns a `DelayedDataArray` (see `analysis/lib/dataarrays.py`). The `@hint_keywords(spec_type)` stacked above it is an identity at runtime that gives the type checker the spec's fields as keyword parameters (see Typing under Conventions). Materialization to xarray is deferred so the GPU can queue several measurements before anything is pulled back to the CPU. `evaluate_by_spec` runs every measurement in the `analysis:` block under a `stopwatch`, then calls `sw.arrays.free_cupy_mempool()` when the input was cupy.
 
 `registry.tospec()` then synthesizes the `Analysis` struct via `msgspec.defstruct`, one optional field per registered measurement. This is why the `analysis:` block of a sweep YAML validates against the set of registered measurements: adding a measurement adds a YAML key. Registration happens as an import side effect of `analysis/measurements/__init__.py`, so a new measurement module must be imported there to exist.
 
@@ -127,8 +127,11 @@ Library defects that need a design decision rather than a local fix are written 
 - **Array-namespace agnostic numerics.** Use `sw.array_namespace(x)` to get the namespace and dispatch; don't hard-code `numpy`. Everything must work on numpy and cupy, in 32-bit float.
 - Formatting is ruff with single quotes and `line-length = 88`. Docstring code is formatted too.
 - For functions that need to return structured data based on named fields, prefer use of `dataclasses` or `msgspec.Struct` over `typing.TypedDict` or named tuples
-- New functions and methods include type hints for all arguments and return types. When
-defining each type, reuse type hint definitions in `striqt.sensor.lib.typing`, `striqt.analysis.lib.typing`, `striqt.waveform.lib.typing` where applicable. 
+- **Typing.** Every new or edited function, method and closure carries hints for all parameters and the return; only `self`/`cls` and lambdas are exempt. Wrapper catch-alls are `*args: P.args, **kwargs: P.kwargs`. Reuse the aliases in `striqt.waveform.lib.typing` (`Array`, `ArrayLike`, `XpType`, `ArrayBackend`, `WindowType`, `DTypeLike`, `LRUWrapped`), `striqt.analysis.lib.typing` (`Measurement`, `AnalysisFunc`, `WrappedAnalysis`, `CoordFunc`, `ZarrStore`) and `striqt.sensor.lib.typing` (`PS`/`PC`, `ResamplerKws`, `PassThroughWrapper`); `xp` is `ModuleType` when required and `XpType` when `None` means "infer"; `dtype` is `DTypeLike`. A decorator that returns a wrapper names its type variables in the return annotation (`-> CoordFuncWrapper[TC, TM, R]`, not the bare alias), otherwise ty erases the wrapped signature to `Unknown`.
+  - `**kwargs` forwarded to a fixed target are `**kwargs: Unpack[<Name>Kws]` with the `TypedDict` defined in that package's `lib/typing.py` (`ResamplerKws` is the model); anything else is `**kwargs: Any`. `TypedDict` is for keyword sets only; structured return values stay `dataclasses`/`msgspec.Struct`. ty 0.0.81 does not flag unknown keywords through `Unpack` (strict xfail in `tests/test_typing.py`).
+  - Measurement signatures are typed through `@hint_keywords(spec_type)`; a measurement body is `(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement`. `tests/test_typing.py` runs ty over probes generated from `sa.registry` and asserts that every registered measurement exposes its spec fields statically, and over hand-written probes for the other keyword-unpacking sites.
+  - `pixi run -e test314 ty check src` must report no diagnostics. `pixi run -e test39 ty check src` carries a baseline from its older dependency stubs (zarr 2, IPython 8, matplotlib 3.9, pandas 2) that must not grow; ty applies the 3.9 rules in both (`[tool.ty.environment]` in `pyproject.toml`). `tests/test_typing.py` enforces the test314 gate.
+  - Suppress with `# ty: ignore[rule-name]` on the offending line, never a blanket `# ty: ignore` or `# type: ignore`; `# pyright: ignore` means nothing to ty. An ignore that is unused in one environment is a warning there, so on version-gated branches (zarr 2/3) suppress only what the test314 stubs reject.
 - **Comments:** only write one if a competent engineer (or a future Claude) reading the code cold would be surprised or misled without it. Worth writing: a non-obvious *why* (constraint, workaround, domain rule, performance trade-off); something that looks wrong but is intentional; external context that can't be inferred from the code (section from a technical standard, peer-reviewed publication, government report, public documentation, upstream bug/issue number); an invariant or precondition the types don't enforce. Do not write:
   - changelog or progress notes (`# added null check`, `# refactored from previous version`) — the diff is already in git. Progress notes belong in the chat response, the commit message, or the PR description, never in a source file comment;
   - narration of the obvious (`# loop over captures`, `# return the result`);

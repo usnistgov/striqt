@@ -132,6 +132,11 @@ exclude_also = [
 [tool.ruff.lint.extend-per-file-ignores]
 "**/__init__.py" = [ "F401", "F403", "E402"]
 
+[tool.ty.environment]
+# the 3.9 floor governs the rules in every environment; test314 differs only through
+# its newer dependency stubs
+python-version = "3.9"
+
 [tool.ty.rules]
 call-top-callable = "ignore"
 invalid-type-form = "ignore"
