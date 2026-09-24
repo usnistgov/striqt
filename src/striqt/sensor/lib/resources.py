@@ -20,7 +20,7 @@ from .. import specs
 import striqt.analysis as sa
 
 if TYPE_CHECKING:
-    from .typing import PassThroughWrapper, SourceOpenCallback
+    from .typing import P, PassThroughWrapper, R, SourceOpenCallback
     import xarray as xr
 
     # python < 3.10 workaround
@@ -76,7 +76,7 @@ else:
         format_path: specs.helpers.PathFormatter | None
 
 
-def _timeit(desc: str = '') -> PassThroughWrapper:
+def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
     return sa.util.stopwatch(
         desc, 'sweep', threshold=0.5, logger_level=util.logging.INFO
     )
@@ -112,7 +112,7 @@ class ConnectionManager(
         super().__init__()
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
-    def __enter__(self):  # pyright: ignore
+    def __enter__(self):
         return self.resources
 
     @util.cached_property
@@ -158,7 +158,9 @@ def _open_devices(
         with exc.defer():
             if peripherals is not None:
                 peripherals = conn._resources['peripherals'] = peripherals.result()
-                conn.enter_context(peripherals)
+                # ty 0.0.81 does not accept a Protocol with __enter__/__exit__ as an
+                # AbstractContextManager
+                conn.enter_context(peripherals)  # ty: ignore[invalid-argument-type]
 
     # the peripherals wait until both the source and the
     if peripherals is not None:

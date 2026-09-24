@@ -1,6 +1,7 @@
 from __future__ import annotations as __
 
 import typing
+from typing import Any
 
 from .. import specs
 from ..lib.util import pd
@@ -9,6 +10,8 @@ from .shared import hint_keywords, registry
 
 if typing.TYPE_CHECKING:
     from striqt.waveform.lib.typing import ArrayBackend
+
+    from ..lib.typing import Array, Measurement
 
 
 # %% iq_waveform
@@ -76,7 +79,7 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     store_compressed=False,
     tolerance=iq_waveform_tolerance,
 )
-def iq_waveform(iq, capture, **kwargs):
+def iq_waveform(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """package the IQ waveform as a measurement result.
 
     Args:

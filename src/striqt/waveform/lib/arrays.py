@@ -225,7 +225,7 @@ def _sliding_window_output_shape(
                 f'Since axis is `None`, must provide window_shape for all dimensions of `x`; got {len(window_shape)} window_shape elements and `x.ndim` is {ndim}.'
             )
     else:
-        axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True)  # type: ignore
+        axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True)  # ty: ignore[unresolved-attribute]
         if len(window_shape) != len(axis):
             raise ValueError(
                 f'Must provide matching length window_shape and axis; got {len(window_shape)} window_shape elements and {len(axis)} axes elements.'
@@ -330,7 +330,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     if axis is None:
         axis = tuple(range(x.ndim))
     else:
-        axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # type: ignore
+        axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # ty: ignore[unresolved-attribute]
     out_strides = x.strides + tuple(x.strides[ax] for ax in axis)
 
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
@@ -407,7 +407,7 @@ def histogram_last_axis(
     else:
         bins = xp.asarray(bins)
 
-    size = bins.size  # pyright: ignore
+    size = bins.size
     flat = x.reshape(-1, hist_size)
     idx = xp.searchsorted(bins, flat, 'right') - 1
     idx[flat == bins[-1]] = size - 2
@@ -553,23 +553,23 @@ def pinned_array_as_cupy(x, stream=None):
 
 def sync_if_cupy(x: Array):
     if is_cupy_array(x) and cp is not None:
-        stream = cp.cuda.get_current_stream()  # pyright: ignore
+        stream = cp.cuda.get_current_stream()
         stream.synchronize()
 
 
 @functools.cache
 def configure_cupy():
     if cp is not None:
-        import cupy.fft as fft  # type: ignore
+        import cupy.fft as fft  # ty: ignore[unresolved-import]
 
         # the FFT plan sets up large caches that don't help us
-        fft.config.get_plan_cache().set_size(0)  # pyright: ignore
-        cp.cuda.set_pinned_memory_allocator(None)  # pyright: ignore
+        fft.config.get_plan_cache().set_size(0)
+        cp.cuda.set_pinned_memory_allocator(None)
 
 
 def free_cupy_mempool():
     if cp is not None:
-        mempool = cp.get_default_memory_pool()  # pyright: ignore
+        mempool = cp.get_default_memory_pool()
         if mempool is not None:
             mempool.free_all_blocks()
 
@@ -579,7 +579,7 @@ def set_cuda_mem_limit(fraction=0.75):
     if cp is None:
         return
 
-    cp.get_default_memory_pool().set_limit(fraction=fraction)  # pyright: ignore
+    cp.get_default_memory_pool().set_limit(fraction=fraction)
 
     # Alternative: select an absolute amount of memory
     #
@@ -614,7 +614,7 @@ class NonStreamContext:
 def array_stream(obj: Array, null=False, non_blocking=False, ptds=False):
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
     if is_cupy_array(obj) and cp is not None:
-        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)  # pyright: ignore
+        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)
     else:
         return NonStreamContext()
 
@@ -625,7 +625,7 @@ def array_namespace(a, use_compat=False) -> ModuleType:
 
 def convert_np_to_xp(func: _TC) -> _TC:
     @functools.wraps(func)
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
         import array_api_compat.numpy as anp
 
         xp = kwargs.get('xp', anp)
@@ -638,9 +638,9 @@ def convert_np_to_xp(func: _TC) -> _TC:
         kwargs_with_np = dict(kwargs, xp=anp)
         x = func(*args, **kwargs_with_np)
         if hasattr(xp, 'asarray'):
-            x = xp.asarray(x)  # pyright: ignore
+            x = xp.asarray(x)
         elif hasattr(xp, 'array'):
-            x = xp.array(x)  # pyright: ignore
+            x = xp.array(x)
         else:
             raise AttributeError(f'invalid array module {xp}')
 

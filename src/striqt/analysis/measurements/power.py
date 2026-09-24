@@ -1,6 +1,7 @@
 from __future__ import annotations as __
 
 import typing
+from typing import Any
 
 from .. import specs
 
@@ -10,6 +11,9 @@ from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
+
+if typing.TYPE_CHECKING:
+    from ..lib.typing import Array, Measurement
 
 
 # %% channel_power_time_series
@@ -142,7 +146,9 @@ def evaluate_channel_power_time_series(
     validate=validated_channel_power_binning,
     tolerance=channel_power_tolerance,
 )
-def channel_power_time_series(iq, capture: specs.Capture, **kwargs):
+def channel_power_time_series(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """Compute a binned time series of channel power detector measurements.
 
     Args:
@@ -212,7 +218,9 @@ def channel_power_bin(
     attrs={'standard_name': 'Fraction of channel power readings'},
     validate=validated_channel_power_binning,
 )
-def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
+def channel_power_histogram(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.
 
     The outputs correspond to bin centers.
@@ -356,7 +364,9 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     validate=validated_cyclic_lag_count,
     tolerance=cyclic_channel_power_tolerance,
 )
-def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
+def cyclic_channel_power(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """Evaluate cyclic statistics of channel power across the cycles in a capture.
 
     Each power detector bins the capture on `detector_period`; the binned series is

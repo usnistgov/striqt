@@ -16,7 +16,7 @@ if typing.TYPE_CHECKING:
     # bury this type checking in here to avoid lengthening the import time of iqwaveform
     # if cupy isn't installed
     try:
-        import cupy as cp  # type: ignore
+        import cupy as cp  # ty: ignore[unresolved-import]
 
         TypeIsCupy = TypeIs[cp.ndarray]
     except ModuleNotFoundError:
@@ -57,6 +57,7 @@ if typing.TYPE_CHECKING:
     R = TypeVar('R')
 
     class LRUWrapped(Protocol[P, R]):
+        __name__: str
         __wrapped__: Callable[P, R]
 
         def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...

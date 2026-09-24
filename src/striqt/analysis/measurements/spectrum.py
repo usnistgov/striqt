@@ -2,7 +2,7 @@ from __future__ import annotations as __
 
 import math
 import typing
-from typing import Literal, NamedTuple, Optional, Union
+from typing import Any, Literal, NamedTuple, Optional, Union
 
 from .. import specs
 
@@ -14,7 +14,7 @@ from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    from ..lib.typing import Array
+    from ..lib.typing import Array, Measurement
 
 
 # %% STFT sizing and the shared spectrogram cache
@@ -374,7 +374,7 @@ def spectrogram_tolerance(
     validate=validated_spectrogram_sizing,
     tolerance=spectrogram_tolerance,
 )
-def spectrogram(iq: 'Array', capture: specs.Capture, **kwargs):
+def spectrogram(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """Evaluate a spectrogram based on an STFT.
 
     The analysis parameters are in physical time and frequency units
@@ -452,7 +452,9 @@ def power_spectral_density_tolerance(
     validate=validated_psd_sizing,
     tolerance=power_spectral_density_tolerance,
 )
-def power_spectral_density(iq, capture, **kwargs):
+def power_spectral_density(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """estimate power spectral density using the Welch method.
 
     A list of statistics can be supplied to evaluate across the frequency axis,
@@ -536,7 +538,9 @@ def spectrogram_power_bin(
     attrs={'standard_name': 'Fraction of counts'},
     validate=validated_spectrogram_sizing,
 )
-def spectrogram_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
+def spectrogram_histogram(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """Compute a histogram of the power readings on a spectrogram.
 
     The histogram is evaluated on the flattened array of all pixels on
@@ -606,7 +610,9 @@ def spectrogram_ratio_power_bin(
     attrs={'standard_name': 'Fraction of counts'},
     validate=validated_spectrogram_sizing,
 )
-def spectrogram_ratio_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
+def spectrogram_ratio_histogram(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """Compute the ratio of spectrogram readings across two channels, and return its
     its histogram.
 

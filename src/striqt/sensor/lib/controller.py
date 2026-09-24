@@ -164,12 +164,12 @@ def read_retries(source: Controller) -> Generator[None]:
 
     initial = source.read_iq
     retry = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retrigger)
-    source.read_iq = retry(source.read_iq)  # ty: ignore
+    source.read_iq = retry(source.read_iq)  # ty: ignore[invalid-assignment]
 
     try:
         yield
     finally:
-        source.read_iq = initial  # ty: ignore
+        source.read_iq = initial  # ty: ignore[invalid-assignment]
 
 
 @dataclasses.dataclass
@@ -227,7 +227,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         config = ControllerConfig(
             init_rx_ports=None, reuse_iq=False, analysis=None, format_path=None
         )
-        spec = self.schema.source(*args, **kwargs)  # type: ignore
+        spec = self.schema.source(*args, **kwargs)  # ty: ignore[invalid-argument-type]
         self._setup(spec, config)
 
     def __init_subclass__(
@@ -274,7 +274,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         sig = inspect.signature(cls.schema.capture).replace(
             return_annotation=cls.schema.capture
         )
-        cls.arm.__signature__ = sig  # ty: ignore
+        cls.arm.__signature__ = sig  # ty: ignore[unresolved-attribute]
         return cls
 
     def _setup(self, spec: SS, config: ControllerConfig) -> 'Self':
@@ -344,7 +344,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
     def arm(self, *args: PC.args, **kwargs: PC.kwargs) -> SC | None:
         assert self._buffers is not None
-        spec = self.schema.capture(*args, **kwargs)  # type: ignore
+        spec = self.schema.capture(*args, **kwargs)  # ty: ignore[invalid-argument-type]
         return self._arm_spec(spec)
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)
