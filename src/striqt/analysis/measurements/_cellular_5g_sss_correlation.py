@@ -4,7 +4,7 @@ import typing
 
 from .. import specs
 
-from ..lib import register, util
+from ..lib import register
 from ..lib.dataarrays import CAPTURE_DIM
 from . import shared
 from .shared import registry
@@ -12,44 +12,14 @@ from .shared import registry
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    import numpy as np
     from ..lib.typing import Array
-else:
-    np = util.lazy_import('numpy')
-
-
-@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
-def _spec_to_params(
-    capture: specs.AnalysisCapture,
-    spec: specs.Cellular5GNSSSSync | specs.Cellular5GNRSSSCorrelator,
-):
-    return sw.ofdm.sss_params(
-        sample_rate=spec.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
-        discovery_periodicity=spec.discovery_periodicity,
-        shared_spectrum=spec.shared_spectrum,
-        max_lag_symbols=spec.max_lag_symbols,
-        symbol_indexes=spec.symbol_indexes,
-        center_frequency=capture.center_frequency,
-    )
-
-
-@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
-@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
-def cellular_ssb_lag(
-    capture: specs.AnalysisCapture, spec: specs.Cellular5GNRSSSCorrelator
-):
-    # TODO: this now needs to account for SSS vs SSS
-    params = _spec_to_params(capture, spec)
-    offs = round(spec.sample_rate * spec.delay)
-    return np.arange(offs, offs + params.lag_count) / spec.sample_rate
 
 
 _coord_factories = [
     shared.cellular_cell_id2,
     shared.cellular_ssb_start_time,
     shared.cellular_ssb_beam_index,
-    cellular_ssb_lag,
+    shared.cellular_ssb_lag,
 ]
 dtype = 'complex64'
 
@@ -67,12 +37,7 @@ def correlate_5g_sss(
 
     ssb_iq = shared.get_5g_ssb_iq(iq, capture=capture, spec=spec)
 
-    if ssb_iq is None:
-        return shared.empty_5g_ssb_correlation(
-            iq, capture=capture, spec=spec, coord_factories=_coord_factories
-        )
-
-    params = _spec_to_params(capture, spec)
+    params = shared.sync_params(capture, spec, 'sss')
     sss_seq = sw.ofdm.sss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
     return sw.ofdm.correlate_sync_sequence(
@@ -95,7 +60,7 @@ def choose_sync_offsets(
     corr_spec = specs.Cellular5GNRSSSCorrelator.from_spec(spec).validate()
 
     r = correlate_5g_sss(iq, capture=capture, spec=corr_spec)
-    params = _spec_to_params(capture, spec)
+    params = shared.sync_params(capture, spec, 'sss')
     return sw.ofdm.choose_ssb_offset(
         r,
         params,
@@ -106,7 +71,9 @@ def choose_sync_offsets(
 
 
 @shared.hint_keywords(specs.Cellular5GNSSSSync)
-@registry.signal_trigger(specs.Cellular5GNSSSSync, lag_coord_func=cellular_ssb_lag)
+@registry.signal_trigger(
+    specs.Cellular5GNSSSSync, lag_coord_func=shared.cellular_ssb_lag
+)
 @registry.measurement(
     specs.Cellular5GNSSSSync,
     coord_factories=[],

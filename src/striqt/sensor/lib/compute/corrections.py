@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from ..typing import Array, ResamplerKws, Unpack
 
 else:
-    array_api_compat = util.lazy_import('array_api_compat')
     sw = util.lazy_import('striqt.waveform')
 
 FILTER_SIZE = 4001

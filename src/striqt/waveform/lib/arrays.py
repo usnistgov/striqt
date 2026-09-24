@@ -8,28 +8,14 @@ from typing import Any, Callable, cast, Generator, TypeVar, TYPE_CHECKING
 import array_api_compat
 
 from . import util
+from .util import cp, np
 
 _TC = TypeVar('_TC', bound=Callable)
 
 
 if TYPE_CHECKING:
     from types import ModuleType
-    from typing import cast
     from .typing import ArrayLike, Array, TypeIsCupy
-    import numpy as np
-
-    try:
-        import cupy as cp  # type: ignore
-    except ModuleNotFoundError:
-        cp = None
-    cp = cast(ModuleType | None, cp)
-
-else:
-    np = util.lazy_import('numpy')
-    try:
-        cp = util.lazy_import('cupy')
-    except ImportError:
-        cp = None
 
 
 # %% rounding

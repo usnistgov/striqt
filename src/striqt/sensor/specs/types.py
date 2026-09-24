@@ -1,17 +1,10 @@
 from __future__ import annotations as __
 
 from pathlib import Path
-from typing import TYPE_CHECKING as _TYPE_CHECKING
 from typing import Annotated, Any, Literal, Mapping, Optional, Union
+from striqt.analysis.lib.util import pd
 from striqt.analysis.specs import frozendict
 from striqt.analysis.specs.types import *
-
-if _TYPE_CHECKING:
-    import pandas as pd
-else:
-    from ..lib import util as _util
-
-    pd = _util.lazy_import('pandas')
 
 
 AliasCandidateMatches = Annotated[

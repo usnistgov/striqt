@@ -9,13 +9,12 @@ from . import compute, controller, io, util
 from .. import specs as specs
 
 import striqt.analysis as sa
+from striqt.analysis.lib.util import xr
 
 if TYPE_CHECKING:
-    import xarray as xr
     import shutil
     import zipfile
 else:
-    xr = sa.util.lazy_import('xarray')
     shutil = sa.util.lazy_import('shutil')
     zipfile = sa.util.lazy_import('zipfile')
 

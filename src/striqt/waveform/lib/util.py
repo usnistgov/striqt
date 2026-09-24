@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 import threading
 from types import ModuleType
-from typing import Any, Callable, cast, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 
 _lazy_import_locks = collections.defaultdict(threading.RLock)
@@ -44,27 +44,29 @@ def lazy_import(module_name: str, package=None):
 
 
 if TYPE_CHECKING:
-    import typing_extensions
     from .typing import LRUWrapped, P, R
 
     try:
         import cupy as cp  # type: ignore
-
-        TypeIsCupy = typing_extensions.TypeIs[cp.ndarray]
     except ModuleNotFoundError:
         cp = None
 
+    import array_api_compat
     import numpy as np
-
-    from .typing import ArrayLike, Array
+    import pandas as pd
+    import scipy
+    import xarray as xr
 
 else:
     np = lazy_import('numpy')
+    pd = lazy_import('pandas')
+    xr = lazy_import('xarray')
+    scipy = lazy_import('scipy')
+    array_api_compat = lazy_import('array_api_compat')
     try:
         cp = lazy_import('cupy')
     except ImportError:
         cp = None
-    pickle = lazy_import('pickle')
 
 
 # %% function call caching
@@ -251,16 +253,6 @@ def qualified_name(obj: Any) -> str:
 
 def cache_info() -> dict[str, Any]:
     return {qualified_name(f): c.cache_info() for f, c in _caches.items()}
-
-
-# %% memory management
-def except_on_low_memory(threshold_bytes=500_000_000):
-    import psutil
-
-    if psutil.virtual_memory().available >= threshold_bytes:
-        return
-
-    raise MemoryError('too little memory to proceed')
 
 
 # %% numbers

@@ -9,18 +9,14 @@ from math import ceil
 
 import striqt.analysis as sa
 import striqt.waveform as sw
+from striqt.analysis.lib.util import np
 
 from ... import specs
-from .. import util
 from ..typing import SC
 
 if TYPE_CHECKING:
-    import numpy as np
     from ..typing import Array
     from ..controller import Controller
-
-else:
-    np = util.lazy_import('numpy')
 
 
 class ReceiveBuffers(typing.Generic[SC]):

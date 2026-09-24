@@ -12,15 +12,24 @@ from typing import Any, Generator, Iterable, Literal, TYPE_CHECKING
 
 import striqt.waveform as sw
 
-from striqt.waveform.lib.util import lru_cache, lazy_import, qualified_name
-
+from striqt.waveform.lib.util import (
+    array_api_compat,
+    cp,
+    lazy_import,
+    lru_cache,
+    np,
+    pd,
+    qualified_name,
+    scipy,
+    xr,
+)
 
 _compute_lock = threading.RLock()
 _logger_adapters = {}
 
 
 # additional logging levels
-from logging import WARNING, INFO, DEBUG
+from logging import INFO
 
 PERFORMANCE_INFO = 15
 PERFORMANCE_DETAIL = 12

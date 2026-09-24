@@ -1,19 +1,13 @@
 from __future__ import annotations as __
 
-import typing
-
 from .. import specs
 
 from ..lib import util
+from ..lib.util import np
 from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
-
-if typing.TYPE_CHECKING:
-    import numpy as np
-else:
-    np = util.lazy_import('numpy')
 
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
@@ -50,20 +44,8 @@ def cellular_ssb_baseband_frequency(
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_index(capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
-    # pss_params and sss_params return the same number of symbol indexes
-    # params  = iqwaveform.ofdm.pss_params(
-    #     sample_rate=spec.sample_rate,
-    #     subcarrier_spacing=spec.subcarrier_spacing,
-    #     discovery_periodicity=spec.discovery_periodicity,
-    #     shared_spectrum=spec.shared_spectrum,
-    # )
-    total_blocks = round(capture.duration / spec.discovery_periodicity)
-    if spec.max_block_count is None:
-        count = total_blocks
-    else:
-        count = min(spec.max_block_count, total_blocks)
-
-    return np.arange(max(count, 1), dtype='uint16')
+    count = shared.ssb_block_count(capture.duration, spec)
+    return np.arange(count, dtype='uint16')
 
 
 _coord_factories = [

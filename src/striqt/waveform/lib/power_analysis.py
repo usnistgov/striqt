@@ -11,8 +11,9 @@ import warnings
 from functools import partial
 from numbers import Number
 from types import ModuleType
-from typing import Any, Optional, overload, Sequence
+from typing import Any, Literal, Optional, Sequence
 from . import util
+from .util import np, pd, xr
 
 from .arrays import (
     ROUNDOFF_SAFETY,
@@ -27,18 +28,16 @@ from .arrays import (
 )
 
 if typing.TYPE_CHECKING:
-    import numpy as np
     import numexpr as ne
-    import pandas as pd
-    import xarray as xr
 
-    from .typing import ArrayLike, Array, _AL, _ALN, _AT, Dims, DTypeLike
+    from typing import TypeVar, Union
+
+    from .typing import ArrayLike, Array, _ALN, _AT, Dims, DTypeLike
+
+    _ALD = TypeVar('_ALD', bound=Union[ArrayLike, xr.Dataset])
 
 else:
-    pd = util.lazy_import('pandas')
     ne = util.lazy_import('numexpr')
-    xr = util.lazy_import('xarray')
-    np = util.lazy_import('numpy')
 
 warnings.filterwarnings('ignore', message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
@@ -241,15 +240,38 @@ def off_peak_dB_tolerance(depth_dBc, err):
         return -20 * np.log10(np.clip(1 - r, 0, None))
 
 
-def powtodB(
+# fused kernel in `.jit.cuda` for each dB scale, keyed by (abs, eps != 0)
+_LOG_KERNELS = {
+    10: {
+        (True, False): 'powtodB',
+        (False, False): 'powtodB_noabs',
+        (True, True): 'powtodB_eps',
+        (False, True): 'powtodB_eps_noabs',
+    },
+    20: {
+        (True, False): 'envtodB',
+        (False, False): 'envtodB_noabs',
+        (True, True): 'envtodB_eps',
+        (False, True): 'envtodB_eps_noabs',
+    },
+}
+_LOG_UNITS = {10: unit_linear_to_dB, 20: unit_wave_to_dB}
+
+
+def _lin_to_dB(
     x: _ALN,
     *,
-    abs: bool = True,
-    eps: float = 0,
-    overwrite_x: bool = False,
-    min_dtype: 'DTypeLike' = 'float32',
+    scale: Literal[10, 20],
+    abs: bool,
+    eps: float,
+    overwrite_x: bool,
+    min_dtype: DTypeLike,
 ) -> _ALN:
-    """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
+    """compute `scale*log10(abs(x) + eps)` or `scale*log10(x + eps)`.
+
+    The numexpr expression is one of eight constant strings so its compile cache
+    still hits, and `values`/`eps` are looked up from this frame by name.
+    """
 
     eps_str = '' if eps == 0 else '+eps'
 
@@ -257,20 +279,19 @@ def powtodB(
 
     if xp is np:
         if abs:
-            expr = f'real(10*log10(abs(values){eps_str}))'
+            expr = f'real({scale}*log10(abs(values){eps_str}))'
         else:
-            expr = f'real(10*log10(values{eps_str}))'
+            expr = f'real({scale}*log10(values{eps_str}))'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif _use_cuda_kernels(values):
         from .jit import cuda
 
         out = _real_buffer(out)
         use_abs = abs or xp.iscomplexobj(values)
+        kernel = getattr(cuda, _LOG_KERNELS[scale][use_abs, eps != 0])
         if eps == 0:
-            kernel = cuda.powtodB if use_abs else cuda.powtodB_noabs
             kernel(values, out)
         else:
-            kernel = cuda.powtodB_eps if use_abs else cuda.powtodB_eps_noabs
             kernel(values, out, eps)
         values = out
     else:
@@ -280,9 +301,23 @@ def powtodB(
         if eps != 0:
             values += eps
         values = xp.log10(values, out=out)
-        values *= 10
+        values *= scale
 
-    return _repackage_arraylike(values, x, unit_transform=unit_linear_to_dB)
+    return _repackage_arraylike(values, x, unit_transform=_LOG_UNITS[scale])
+
+
+def powtodB(
+    x: _ALN,
+    *,
+    abs: bool = True,
+    eps: float = 0,
+    overwrite_x: bool = False,
+    min_dtype: 'DTypeLike' = 'float32',
+) -> _ALN:
+    """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
+    return _lin_to_dB(
+        x, scale=10, abs=abs, eps=eps, overwrite_x=overwrite_x, min_dtype=min_dtype
+    )
 
 
 def dBtopow(
@@ -350,88 +385,17 @@ def envtodB(
     min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
     """compute `20*log10(abs(x) + eps)` or `20*log10(x + eps)` with speed optimizations"""
-
-    eps_str = '' if eps == 0 else '+eps'
-
-    values, out, xp = _arraylike_with_buffer(
-        x, overwrite_x=overwrite_x, min_dtype=min_dtype
+    return _lin_to_dB(
+        x, scale=20, abs=abs, eps=eps, overwrite_x=overwrite_x, min_dtype=min_dtype
     )
 
-    if xp is np:
-        if abs:
-            expr = f'real(20*log10(abs(values){eps_str}))'
-        else:
-            expr = f'real(20*log10(values{eps_str}))'
-        values = ne.evaluate(expr, out=out, casting='unsafe')
-    elif _use_cuda_kernels(values):
-        from .jit import cuda
-
-        out = _real_buffer(out)
-        use_abs = abs or xp.iscomplexobj(values)
-        if eps == 0:
-            kernel = cuda.envtodB if use_abs else cuda.envtodB_noabs
-            kernel(values, out)
-        else:
-            kernel = cuda.envtodB_eps if use_abs else cuda.envtodB_eps_noabs
-            kernel(values, out, eps)
-        values = out
-    else:
-        # torch, dask, ...
-        if abs:
-            values = xp.abs(values, out=out)
-        if eps != 0:
-            values += eps
-        values = xp.log10(values, out=out)
-        values *= 20
-
-    return _repackage_arraylike(values, x, unit_transform=unit_wave_to_dB)
-
-
-@overload
-def dBlinmean(
-    x_dB: 'xr.Dataset', axis: 'Dims|None' = None, overwrite_x=...
-) -> 'xr.Dataset': ...
-
-
-@overload
-def dBlinmean(
-    x_dB: 'xr.DataArray', axis: 'Dims|None' = None, overwrite_x=..., min_dtype=...
-) -> 'xr.DataArray': ...
-
-
-@overload
-def dBlinmean(
-    x_dB: 'np.ndarray',
-    axis: 'int|Sequence[int]|None' = None,
-    overwrite_x=...,
-    min_dtype=...,
-) -> 'np.ndarray': ...
-
-
-@overload
-def dBlinmean(
-    x_dB: 'pd.Series',
-    axis: 'int|Sequence[int]|None' = None,
-    overwrite_x=...,
-    min_dtype=...,
-) -> 'pd.Series': ...
-
-
-@overload
-def dBlinmean(
-    x_dB: 'pd.DataFrame',
-    axis: 'int|Sequence[int]|None' = None,
-    overwrite_x=...,
-    min_dtype=...,
-) -> 'pd.DataFrame': ...
-
 
 def dBlinmean(
-    x_dB: _AL,
+    x_dB: _ALD,
     axis: 'Dims|int|Sequence[int]|None' = None,
     overwrite_x: bool = False,
     min_dtype: 'DTypeLike' = 'float32',
-) -> _AL:
+) -> _ALD:
     """evaluate the mean in linear power space given power in dB.
 
     This is equivalent to:
@@ -447,48 +411,12 @@ def dBlinmean(
     return powtodB(linmean, overwrite_x=True, min_dtype=min_dtype)  # pyright: ignore
 
 
-@overload
 def dBlinsum(
-    x_dB: 'xr.Dataset', axis: 'Dims|None' = None, overwrite_x=...
-) -> 'xr.Dataset': ...
-
-
-@overload
-def dBlinsum(
-    x_dB: 'xr.DataArray', axis: 'Dims|None' = None, overwrite_x=...
-) -> 'xr.DataArray': ...
-
-
-@overload
-def dBlinsum(
-    x_dB: 'np.ndarray',
-    axis: 'int|Sequence[int]|None' = None,
-    overwrite_x=...,
-    min_dtype=...,
-) -> 'np.ndarray': ...
-
-
-@overload
-def dBlinsum(
-    x_dB: 'pd.Series',
-    axis: 'int|Sequence[int]|None' = None,
-    overwrite_x=...,
-    min_dtype=...,
-) -> 'pd.Series': ...
-
-
-@overload
-def dBlinsum(
-    x_dB: 'pd.DataFrame',
-    axis: 'int|Sequence[int]|None' = None,
-    overwrite_x=...,
-    min_dtype=...,
-) -> 'pd.DataFrame': ...
-
-
-def dBlinsum(
-    x_dB: _AL, axis=None, overwrite_x=False, min_dtype: 'DTypeLike' = 'float32'
-) -> _AL:
+    x_dB: _ALD,
+    axis: 'Dims|int|Sequence[int]|None' = None,
+    overwrite_x: bool = False,
+    min_dtype: 'DTypeLike' = 'float32',
+) -> _ALD:
     """evaluate the sum in linear power space given power in dB.
 
     This is equivalent to:

@@ -8,10 +8,12 @@ from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKIN
 import msgspec
 
 import striqt.analysis as sa
+
+# pd must be bound here for msgspec to resolve the 'pd.Timestamp' types in `types`
+from striqt.analysis.lib.util import pd  # noqa: F401
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
 from striqt.analysis.specs.helpers import SpecValidationError
 
-from ..lib import util
 from ..lib.typing import TypeVar, SS, SP, SC, SPC
 from . import types
 
@@ -20,11 +22,7 @@ if TYPE_CHECKING:
     _T = TypeVar('_T')
     from typing_extensions import Self as _Self
 
-    # pd imports need to be here for msgspec to resolve timestamp types
-    import pandas as pd
     import SoapySDR  # type: ignore
-else:
-    pd = util.lazy_import('pandas')
 
 
 @sa.util.lru_cache()

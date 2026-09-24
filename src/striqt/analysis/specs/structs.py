@@ -132,13 +132,6 @@ class AnalysisFilter(SpecBase, kw_only=True, frozen=True):
 class FilteredCapture(Capture, kw_only=True, frozen=True):
     # filtering and resampling
     analysis_filter: AnalysisFilter = msgspec.field(default_factory=AnalysisFilter)
-    # analysis_filter: dict = msgspec.field(
-    #     default_factory=lambda: {'nfft': 8192, 'window': 'hamming'}
-    # )
-
-
-class AnalysisKeywords(typing.TypedDict, total=False):
-    as_xarray: types.AsXArray
 
 
 class Analysis(SpecBase, kw_only=True, frozen=True):
@@ -227,8 +220,6 @@ class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     discovery_periodicity (float): time period between synchronization blocks (s)
     frequency_offset (float or dict[float, float]):
         center frequency offset (see notes)
-    shared_spectrum:
-        whether to follow the 3GPP "shared spectrum" synchronizatio block layout
     max_block_count: number of synchronization blocks to evaluate
     """
 
@@ -243,9 +234,6 @@ class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
     # spectrogram info
     window: types.WindowType = 'blackmanharris'
     lo_bandstop: typing.Optional[float] = None
-
-    # hard-coded for re-use by PSS/SSS functions
-    shared_spectrum = False
 
 
 # %% Cellular 5G NR synchronizatino
@@ -304,11 +292,9 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
     time_aperture (float):
         if specified, binned RMS averaging is applied along time axis in the
         spectrogram to yield this coarser resolution (s)
-    dB (bool): if True, returned power is transformed into dB units
     """
 
     time_aperture: typing.Optional[float] = None
-    dB = True
 
 
 def _validate_range(name: str, value, path: tuple[str, ...] = ()) -> None:

@@ -5,18 +5,14 @@ import typing
 from .. import specs
 
 from ..lib import util
+from ..lib.util import np, pd
 from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    import numpy as np
-    import pandas as pd
     from ..lib.typing import Array
-else:
-    np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')
 
 
 class SlotBySymbol(typing.TypedDict):
@@ -149,10 +145,6 @@ def cyclic_sample_lag(
     max_len = _get_max_corr_size(capture, subcarrier_spacings=spec.subcarrier_spacings)
     name = cyclic_sample_lag.__name__
     return pd.RangeIndex(0, max_len, name=name) / capture.sample_rate
-
-
-### Subcarrier spacing label axis
-SubcarrierSpacingAxis = typing.Literal['subcarrier_spacing']
 
 
 @registry.coordinates(

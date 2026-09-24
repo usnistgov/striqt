@@ -5,19 +5,16 @@ import math
 import typing
 
 import striqt.analysis as sa
+from striqt.analysis.lib.util import np, xr
 
 
 if typing.TYPE_CHECKING:
     import matplotlib.axes
     import matplotlib.legend
     import matplotlib.figure
-    import numpy as np
-    import xarray as xr
     import dask.array as dask_array
 else:
     dask_array = sa.util.lazy_import('dask.array')
-    xr = sa.util.lazy_import('xarray')
-    np = sa.util.lazy_import('numpy')
 
 
 @functools.cache

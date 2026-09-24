@@ -6,16 +6,16 @@ import warnings
 from .. import specs
 
 from ..lib import util
+from ..lib.util import np
 from . import shared
 from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
-    import numpy as np
-
     import striqt.waveform as sw
+
+    from ..lib.typing import Array
 else:
     sw = util.lazy_import('striqt.waveform')
-    np = util.lazy_import('numpy')
 
 warnings.filterwarnings(
     'ignore', '.*Mean of empty slice.*', category=RuntimeWarning, module=__name__
@@ -55,12 +55,11 @@ def spectrogram_tolerance(
     dtype='float16',
     caches=shared.spectrogram_cache,
     prefer_iq_source='pre_filter',
-    # typed_kwargs=shared.SpectrogramKeywords,
     attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
     validate=shared.validated_spectrogram_sizing,
     tolerance=spectrogram_tolerance,
 )
-def spectrogram(iq: 'sw.util.Array', capture: specs.Capture, **kwargs):
+def spectrogram(iq: 'Array', capture: specs.Capture, **kwargs):
     """Evaluate a spectrogram based on an STFT.
 
     The analysis parameters are in physical time and frequency units

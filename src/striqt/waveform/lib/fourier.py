@@ -6,7 +6,7 @@ from math import inf, isfinite
 from os import cpu_count
 
 from . import power_analysis, util
-
+from .util import np, scipy
 
 from .arrays import (
     array_namespace,
@@ -28,9 +28,6 @@ from .windows import register_extra_windows
 import array_api_compat
 
 if typing.TYPE_CHECKING:
-    import numpy as np
-    import scipy
-
     from .typing import (
         Array,
         _AT,
@@ -40,10 +37,6 @@ if typing.TYPE_CHECKING:
         WindowType,
         XpType,
     )
-
-else:
-    np = util.lazy_import('numpy')
-    scipy = util.lazy_import('scipy')
 
 
 CPU_COUNT = cpu_count() or 1
@@ -500,7 +493,6 @@ def _cupy_fftn_helper(
 
     # TODO: see about upstream question on this
     if out is None:
-        args = (None,), (axis,), None, direction
         return _fft._fftn(x, out=out, *args, **kws)
     else:
         out = out.reshape(x.shape)
@@ -642,21 +634,6 @@ def stft(
     """
 
     xp = array_namespace(x)
-
-    # # For reference: this is probably the same
-    # freqs, times, X = signal.spectral._spectral_helper(
-    #     x,
-    #     x,
-    #     fs,
-    #     window,
-    #     nperseg,
-    #     noverlap,
-    #     nperseg,
-    #     scaling="spectrum",
-    #     axis=axis,
-    #     mode="stft",
-    #     padded=True,
-    # )
 
     nfft = nperseg
     dtype = typing.cast(str, x.dtype)
@@ -891,7 +868,7 @@ def _stack_stft_windows(
 
 
 def _unstack_stft_windows(
-    y: Array, noverlap: int, nperseg: int, axis=0, out=None, extra=0
+    y: Array, noverlap: int, nperseg: int, axis=0, out=None
 ) -> Array:
     """reconstruct the time-domain waveform from its STFT representation.
 
@@ -903,7 +880,6 @@ def _unstack_stft_windows(
         noverlap: the overlap size that was used to generate the STFT (see scipy.signal.stft)
         axis: the axis of the first dimension of the STFT (the second is at axis+1)
         out: if specified, the output array that will receive the result. it must have at least the same allocated size as y
-        extra: total number of extra samples to include at the edges
     """
 
     xp = array_namespace(y)
@@ -955,7 +931,7 @@ def _unstack_stft_windows(
         else:
             xr_slice += yslice[: xr_slice.size]
 
-    return xr  # axis_slice(xr, start=noverlap-extra//2, stop=(-noverlap+extra//2) or None, axis=axis)
+    return xr
 
 
 # %% Filters
@@ -1471,15 +1447,6 @@ def _find_downsample_copy_range(
     assert copy_out_end <= nfft_out
 
     return (copy_out_start, copy_out_end), (copy_in_start, copy_in_end), passband_center
-
-
-def upfirdn(h, x, up=1, down=1, axis=-1, mode='constant', cval=0, overwrite_x=False):
-    if is_cupy_array(x):
-        raise NotImplementedError
-
-    from scipy import signal
-
-    return signal.upfirdn(h, x, up=up, down=down, axis=axis, mode=mode, cval=cval)
 
 
 def oaconvolve(x1, x2, mode='full', axes=-1):

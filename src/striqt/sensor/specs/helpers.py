@@ -3,6 +3,7 @@
 from __future__ import annotations as __
 
 from collections import Counter, defaultdict, ChainMap
+import contextlib
 import itertools
 import math
 import numbers
@@ -14,6 +15,7 @@ from typing import (
     get_args,
     get_type_hints,
     Iterable,
+    Iterator,
     Literal,
     Mapping,
     NamedTuple,
@@ -571,16 +573,14 @@ def get_unique_ports(
 
 
 @sa.util.lru_cache()
-def get_format_fields(s: str):
-    """
-    Extracts and returns a list of formatting field names from a given format string.
-    """
+def get_format_fields(s: str, exclude: tuple[str, ...] = ()) -> list[str]:
+    """list the field names in a `str.format` template in order, skipping `exclude`"""
     formatter = string.Formatter()
-    fields = []
-    for _, field_name, *_ in formatter.parse(s):
-        if field_name is not None:
-            fields.append(field_name)
-    return fields
+    return [
+        name
+        for _, name, *_ in formatter.parse(s)
+        if name is not None and name not in exclude
+    ]
 
 
 @sa.util.lru_cache()
@@ -789,6 +789,40 @@ def _validate_measurement_names(sweep: structs.Sweep) -> None:
         )
 
 
+def _unique_capture_origins(
+    sweep: structs.Sweep[Any, Any, SC],
+    source_id: types.SourceID | None,
+    key: Callable[[SC], Any],
+) -> Iterator[tuple[SC, structs.AnalysisGroup, CaptureOrigin]]:
+    """yield (capture, adjusted analysis, origin) once per distinct (key(capture), analysis)"""
+    if len(sweep.captures) == 0 and sweep.sensor is None:
+        # loop_captures refuses this combination; leave such a sweep constructible
+        return
+
+    seen = set()
+
+    for capture, origin in loop_capture_origins(sweep, source_id).items():
+        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
+        dedupe = (key(capture), analysis)
+
+        if dedupe in seen:
+            continue
+
+        seen.add(dedupe)
+        yield capture, analysis, origin
+
+
+@contextlib.contextmanager
+def _located_in_sweep(
+    loops: tuple[structs.LoopSpec, ...], capture: SC, origin: CaptureOrigin
+) -> Iterator[None]:
+    """re-raise a validation failure at the entry and loop points that made `capture`"""
+    try:
+        yield
+    except SpecValidationError as ex:
+        raise ex.at(*describe_capture_origin(loops, capture, origin)) from ex.__cause__
+
+
 def _validate_sweep_analysis(
     sweep: structs.Sweep[Any, Any, SC],
     source_id: types.SourceID | None = None,
@@ -804,27 +838,12 @@ def _validate_sweep_analysis(
     if len(sweep.analysis.to_dict()) == 0:
         return
 
-    if len(sweep.captures) == 0 and sweep.sensor is None:
-        # loop_captures refuses this combination; leave such a sweep constructible
-        return
-
-    seen = set()
-
-    for capture, origin in loop_capture_origins(sweep, source_id).items():
-        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
-        key = (sa.specs.helpers.to_analysis_capture(capture), analysis)
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        try:
+    origins = _unique_capture_origins(
+        sweep, source_id, sa.specs.helpers.to_analysis_capture
+    )
+    for capture, analysis, origin in origins:
+        with _located_in_sweep(sweep.loops, capture, origin):
             sa.registry.validate(capture, analysis)
-        except SpecValidationError as ex:
-            raise ex.at(*describe_capture_origin(sweep.loops, capture, origin)) from (
-                ex.__cause__
-            )
 
 
 def _validate_sweep_corrections(
@@ -855,33 +874,18 @@ def _validate_sweep_corrections(
         with validation_path('.source', '.signal_trigger'):
             compute.get_trigger_from_spec(sweep.source, sweep.analysis)
 
-    if len(sweep.captures) == 0 and sweep.sensor is None:
-        # loop_captures refuses this combination; leave such a sweep constructible
-        return
+    def key(capture: SC) -> structs.SensorCapture:
+        return sa.specs.helpers.convert_spec_cached(structs.SensorCapture, capture)
 
-    rate_from_file = issubclass(_resolve_capture_cls(sweep), structs.FileCapture)
-    seen = set()
-
-    for capture, origin in loop_capture_origins(sweep, source_id).items():
-        analysis = adjust_analysis(sweep.analysis, capture.adjust_analysis)
-        key = (
-            sa.specs.helpers.convert_spec_cached(structs.SensorCapture, capture),
-            analysis,
-        )
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        try:
+    for capture, _, origin in _unique_capture_origins(sweep, source_id, key):
+        with _located_in_sweep(sweep.loops, capture, origin):
             if math.isfinite(capture.analysis_bandwidth):
                 with validation_path(
                     *_capture_field_path(origin, 'analysis_bandwidth')
                 ):
                     corrections.validate_fir_band(capture)
 
-            if rate_from_file:
+            if isinstance(capture, structs.FileCapture):
                 continue
 
             with validation_path(*_capture_field_path(origin, 'sample_rate')):
@@ -892,10 +896,6 @@ def _validate_sweep_corrections(
             if compute.needs_resample(design, capture) and corrections.USE_OARESAMPLE:
                 with validation_path(*_capture_field_path(origin, 'lo_shift')):
                     corrections.validate_oaresample_shift(design)
-        except SpecValidationError as ex:
-            raise ex.at(*describe_capture_origin(sweep.loops, capture, origin)) from (
-                ex.__cause__
-            )
 
 
 def _read_capture_field(capture: SC | Mapping[str, Any], field: str) -> Any:
@@ -1094,7 +1094,7 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
                     lookup_key = msgspec.convert(k, key_type, strict=False)
                     lookup[lookup_key] = value
             except msgspec.ValidationError as ex:
-                keys = v.key if isinstance(v.key, tuple) else (v.key,)
+                keys = ensure_tuple(v.key)
                 names = ', '.join(f'`{k}`' for k in keys)
                 plural = 'fields' if len(keys) > 1 else 'field'
                 raise SpecValidationError(
@@ -1226,11 +1226,7 @@ def _get_capture_adjust_dependencies(
     for name, s in adjust_specs.items():
         if not isinstance(s, structs.CaptureRemap):
             continue
-        if isinstance(s.key, str):
-            keys = ((s.key),)
-        else:
-            keys = s.key
-        for k in keys:
+        for k in ensure_tuple(s.key):
             deps.setdefault(k, name)
     return deps
 
@@ -1287,12 +1283,7 @@ def _list_capture_adjustments(
         if not isinstance(lookup_spec, structs.CaptureRemap):
             continue
 
-        if isinstance(lookup_spec.key, tuple):
-            names = lookup_spec.key
-        else:
-            names = (lookup_spec.key,)
-
-        for name in names:
+        for name in ensure_tuple(lookup_spec.key):
             if name not in fields:
                 ret.add(name)
 

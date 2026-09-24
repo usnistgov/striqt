@@ -1,12 +1,12 @@
 from __future__ import annotations as __
 
-import dataclasses
 import typing
 from math import ceil
 
 from .. import specs
 
 from ..lib import util
+from ..lib.util import np
 from . import _channel_power_histogram, _spectrogram, shared
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
 from .shared import registry, hint_keywords
@@ -15,15 +15,6 @@ import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
     from ..lib.typing import Array
-    import numpy as np
-else:
-    np = util.lazy_import('numpy')
-
-
-@dataclasses.dataclass
-class LinkPair:
-    downlink: typing.Any
-    uplink: typing.Any
 
 
 @registry.coordinates(
@@ -257,14 +248,6 @@ def validated_resource_grid_sizing(
     )
 
 
-def _struct_defaults(spec_type: type[specs.SpecBase]) -> dict[str, typing.Any]:
-    defaults = spec_type.__struct_defaults__
-    fields = spec_type.__struct_fields__
-
-    # defaults specify only the end of the fields list
-    return dict(zip(fields[-len(defaults) :], defaults))
-
-
 @hint_keywords(specs.CellularResourcePowerHistogram)
 @registry.measurement(
     coord_factories=[link_direction, cellular_resource_power_bin],
@@ -286,7 +269,6 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
         `xarray.DataArray` or `(array, dict)` based on `as_xarray`
     """
     spec = specs.CellularResourcePowerHistogram.from_dict(kwargs)
-    spec_defaults = _struct_defaults(specs.CellularResourcePowerHistogram)
 
     xp = sw.array_namespace(iq)
 

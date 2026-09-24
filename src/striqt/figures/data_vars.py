@@ -20,9 +20,6 @@ if _typing.TYPE_CHECKING:
 
     _TVP = _typing.TypeVar('_TVP', bound=_DataVariablePlotter)
 
-else:
-    xr = _sw.util.lazy_import('xarray')
-
 
 _data_plots: dict[str, _DataVariablePlotter] = {}
 

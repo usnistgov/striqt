@@ -22,8 +22,6 @@ else:
     except ImportError:
         SoapySDR = None
 
-    pd = util.lazy_import('pandas')
-
 
 SS = typing.TypeVar('SS', bound='specs.SoapySource')
 SC = typing.TypeVar('SC', bound='specs.SoapyCapture')

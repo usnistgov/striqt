@@ -7,20 +7,16 @@ from pathlib import Path
 from typing import Any, Literal, overload, TYPE_CHECKING
 
 from ... import specs
-from .. import util
 
 import striqt.analysis as sa
 import striqt.waveform as sw
+from striqt.analysis.lib.util import np, xr
 
 from . import base, buffers
 from ..typing import PS, PC
 
 if TYPE_CHECKING:
-    import numpy as np
-    import xarray as xr
     from ..typing import Array, FileStream
-else:
-    np = util.lazy_import('numpy')
 
 
 def _split_preroll(start_index: int, count: int) -> tuple[int, int, int]:

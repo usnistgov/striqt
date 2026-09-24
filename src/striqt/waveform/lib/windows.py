@@ -2,12 +2,7 @@
 
 import typing
 
-from .util import lazy_import
-
-if typing.TYPE_CHECKING:
-    import numpy as np
-else:
-    np = lazy_import('numpy')
+from .util import np
 
 
 def _len_guards(M):

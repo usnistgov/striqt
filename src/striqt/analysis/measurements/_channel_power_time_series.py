@@ -4,18 +4,12 @@ import typing
 
 from .. import specs
 
-from ..lib import dataarrays, register, util
+from ..lib import dataarrays, register
+from ..lib.util import np, pd
 from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
-
-if typing.TYPE_CHECKING:
-    import numpy as np
-    import pandas as pd
-else:
-    np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')
 
 
 class ChannelPowerBinning(typing.NamedTuple):

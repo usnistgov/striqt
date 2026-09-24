@@ -6,26 +6,19 @@ import contextlib
 import functools
 import fractions
 from typing import (
-    Annotated,
     Any,
     Callable,
     Iterator,
     ItemsView,
     Iterable,
     KeysView,
-    Literal,
     Mapping,
     TYPE_CHECKING,
     TypeVar,
     ValuesView,
-    cast,
-    get_args,
     get_origin,
-    get_type_hints,
     overload,
 )
-import types
-import warnings
 import msgspec
 from striqt.waveform.lib import util
 
@@ -337,13 +330,6 @@ def get_capture_type_attrs(capture_cls: type[msgspec.Struct]) -> dict[str, Any]:
 def get_capture_field_types(capture_cls: type[msgspec.Struct]) -> dict[str, Any]:
     """return the annotated type of each field in `capture_cls`"""
     return {field.name: field.type for field in msgspec.structs.fields(capture_cls)}
-
-
-@functools.cache
-def _warn_on_capture_lookup_miss(capture_value, capture_attr, error_label, default):
-    warnings.warn(
-        f'{error_label} is missing key {capture_attr}=={capture_value!r}; using default {default}'
-    )
 
 
 @util.lru_cache()

@@ -1,20 +1,12 @@
 from __future__ import annotations as __
 
-import fractions
-import typing
-
 from .. import specs
 
-from ..lib import util
+from ..lib.util import np
 from ._channel_power_time_series import power_detector, validated_detector_bin_size
 from . import shared
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
-
-if typing.TYPE_CHECKING:
-    import numpy as np
-else:
-    np = util.lazy_import('numpy')
 
 
 @registry.coordinates(dtype=object, attrs={'standard_name': 'Cyclic statistic'})

@@ -1,5 +1,4 @@
 from __future__ import annotations as __
-from ast import Assert
 
 import dataclasses
 from fractions import Fraction
@@ -11,6 +10,7 @@ from . import fourier
 
 from . import arrays, power_analysis, util
 from .typing import CellSSBIndexes
+from .util import array_api_compat, np
 from .arrays import (
     ROUNDOFF_SAFETY,
     array_namespace,
@@ -21,13 +21,7 @@ from .arrays import (
 )
 
 if typing.TYPE_CHECKING:
-    import array_api_compat
-    import numpy as np
-
     from .typing import Array, WindowSpecType
-else:
-    np = util.lazy_import('numpy')
-    array_api_compat = util.lazy_import('array_api_compat')
 
 
 def _min_diff(x: typing.Sequence[int]) -> int | None:
@@ -42,69 +36,6 @@ def _min_diff(x: typing.Sequence[int]) -> int | None:
 def _isclosetoint(v, atol=1e-6):
     xp = array_namespace(v)
     return xp.isclose(v % 1, (0, 1), atol=atol).any()
-
-
-def correlate_along_axis(a, b, axis=0):
-    """cross-correlate `a` and `b` along the specified axis.
-    this implementation is optimized for small sequences to replace for
-    loop across scipy.signal.correlate.
-    """
-    xp = array_namespace(a)
-    if axis == 0:
-        # xp.vdot conjugates b for us
-        return xp.array([xp.vdot(a[:, i], b[:, i]) for i in range(a.shape[1])])
-    else:
-        return xp.array([xp.vdot(a[i], b[i]) for i in range(a.shape[0])])
-
-
-def indexsum2d(ix, iy):
-    """take 2 1-D arrays of shape (M,) and (N,) and return a
-    2-D array of shape (M,N) with elements (m,n) equal to ix[m,:] + iy[:,n]
-    """
-    return ix[:, np.newaxis] + iy[np.newaxis, :]
-
-
-def call_by_block(func, x, size, *args, **kws):
-    """repeatedly call `func` on the 1d array `x`, with arguments and keyword arguments args, and kws,
-    and concatenate the result
-    """
-    xp = array_namespace(x)
-
-    out_chunks = []
-    input_chunks = xp.split(x, xp.mgrid[: x.size : size][1:])
-
-    if len(input_chunks[-1]) != len(input_chunks[0]):
-        input_chunks = input_chunks[:-1]
-    for i, chunk in enumerate(input_chunks):
-        out_chunks.append(func(chunk, *args, **kws))
-
-    return xp.concatenate(out_chunks)
-
-
-def subsample_shift(x, shift):
-    """FFT-based subsample shift in x"""
-    xp = array_namespace(x)
-
-    N = len(x)
-
-    f = xp.fft.fftshift(xp.arange(x.size))
-    z = xp.exp((-2j * np.pi * shift / N) * f)
-    return xp.fft.ifft(xp.fft.fft(x) * z)
-
-
-def to_blocks(y, size, truncate=False):
-    size = int(size)
-    if not truncate and y.shape[-1] % size != 0:
-        raise ValueError(
-            'last axis size {} is not integer multiple of block size {}'.format(
-                y.shape[-1], size
-            )
-        )
-
-    new_size = size * (y.shape[-1] // size)
-    new_shape = y.shape[:-1] + (y.shape[-1] // size, size)
-
-    return y[..., :new_size].reshape(new_shape)
 
 
 def _index_or_all(inds: tuple[int, ...] | typing.Literal['all'], name, size, xp=None):
@@ -788,7 +719,6 @@ def correlate_sync_sequence(
             iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
         )
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
-    R = R[..., :corr_size]
 
     # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
     excess_cp = [params.cp_offsets[i % 14] for i in params.symbol_indexes]
@@ -985,7 +915,7 @@ class PhyOFDM:
         ])
 
         # indices in the contiguous range that are not CP
-        self.symbol_idx = np.setdiff1d(idx_range, self.cp_idx)
+        self.symbol_idx = xp.setdiff1d(idx_range, self.cp_idx)
 
     def index_cyclic_prefix(self) -> Array:
         raise NotImplementedError
@@ -1067,7 +997,6 @@ class Phy3GPP(PhyOFDM):
 
     # the remaining 1 "slot" worth of samples per slot are for cyclic prefixes
     FFT_PER_SLOT = 14
-    SUBFRAMES_PER_PRB = 12
 
     FFT_SIZE_TO_SUBCARRIERS = {
         128: 73,
@@ -1123,8 +1052,6 @@ class Phy3GPP(PhyOFDM):
 
         if sample_rate is None:
             sample_rate = self.BW_TO_SAMPLE_RATE[channel_bandwidth]
-        else:
-            sample_rate = sample_rate
 
         if isroundmod(sample_rate, subcarrier_spacing):
             nfft = round(sample_rate / subcarrier_spacing)

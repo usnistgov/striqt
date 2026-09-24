@@ -1,18 +1,12 @@
 from __future__ import annotations as __
 
-import typing
-
 from .. import specs
 
 from ..lib import util
+from ..lib.util import np
 from . import _channel_power_time_series
 from .shared import registry, hint_keywords
 import striqt.waveform as sw
-
-if typing.TYPE_CHECKING:
-    import numpy as np
-else:
-    np = util.lazy_import('numpy')
 
 
 @util.lru_cache()

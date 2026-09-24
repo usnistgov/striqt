@@ -17,14 +17,10 @@ from __future__ import annotations as __
 
 import typing
 
-from . import util
+from .util import np
 
 if typing.TYPE_CHECKING:
-    import numpy as np
-
     from .typing import Array
-else:
-    np = util.lazy_import('numpy')
 
 
 def _resolve_count(duration, sample_rate, start_index, count, ports) -> int:

@@ -6,20 +6,16 @@ from typing import Any, Callable, Literal, NamedTuple, Optional, TYPE_CHECKING, 
 
 from .. import specs
 
-from ..lib import dataarrays, register, util
+from ..lib import dataarrays, register
 from ..lib.register import registry
+from ..lib.util import np
 
 import striqt.waveform as sw
 
 if TYPE_CHECKING:
     from ..specs.structs import _Cellular5GNRSSBSync, _Cellular5GNRSSBCorrelator
-    import numpy as np
-    from ..lib.typing import Array, CoordFunc, P, R, WrappedAnalysis, WrappedCoord
+    from ..lib.typing import Array, P, R, WrappedAnalysis
     from typing import Sequence
-
-else:
-    np = util.lazy_import('numpy')
-    array_api_compat = util.lazy_import('array_api_compat')
 
 
 def hint_keywords(
@@ -27,6 +23,47 @@ def hint_keywords(
 ) -> Callable[[WrappedAnalysis[..., R]], WrappedAnalysis[P, R]]:
     """fill in type hints for the analysis parameters"""
     return lambda f: f  # pyright: ignore
+
+
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
+def sync_params(
+    capture: specs.AnalysisCapture,
+    spec: _Cellular5GNRSSBCorrelator,
+    kind: Literal['pss', 'sss'],
+) -> sw.ofdm.SyncParams:
+    """the 3GPP synchronization layout implied by `spec`, from `sw.ofdm.pss_params`
+    or `sw.ofdm.sss_params` according to `kind`"""
+    if kind == 'pss':
+        build = sw.ofdm.pss_params
+    else:
+        build = sw.ofdm.sss_params
+
+    return build(
+        sample_rate=spec.sample_rate,
+        subcarrier_spacing=spec.subcarrier_spacing,
+        discovery_periodicity=spec.discovery_periodicity,
+        shared_spectrum=spec.shared_spectrum,
+        max_lag_symbols=spec.max_lag_symbols,
+        symbol_indexes=spec.symbol_indexes,
+        center_frequency=capture.center_frequency,
+    )
+
+
+def ssb_block_count(
+    duration: float,
+    spec: specs.Cellular5GNRPSSCorrelator
+    | specs.Cellular5GNRSSSCorrelator
+    | specs.Cellular5GNRSSBSpectrogram,
+) -> int:
+    """the number of synchronization blocks in `duration`, limited to
+    `spec.max_block_count` and never fewer than 1"""
+    total_blocks = round(duration / spec.discovery_periodicity)
+    if spec.max_block_count is None:
+        count = total_blocks
+    else:
+        count = min(spec.max_block_count, total_blocks)
+
+    return max(count, 1)
 
 
 @registry.coordinates(
@@ -42,15 +79,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: Any):
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
 def cellular_ssb_beam_index(capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBSync):
     # pss_params and sss_params return the same number of symbol indexes
-    params = sw.ofdm.sss_params(
-        sample_rate=spec.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
-        discovery_periodicity=spec.discovery_periodicity,
-        shared_spectrum=spec.shared_spectrum,
-        max_lag_symbols=spec.max_lag_symbols,
-        symbol_indexes=spec.symbol_indexes,
-        center_frequency=capture.center_frequency,
-    )
+    params = sync_params(capture, spec, 'sss')
 
     return list(range(len(params.symbol_indexes)))
 
@@ -63,36 +92,21 @@ def cellular_ssb_start_time(
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator | specs.Cellular5GNRSSSCorrelator,
 ):
-    # pss_params and sss_params return the same number of symbol indexes
-    params = sw.ofdm.pss_params(
-        sample_rate=spec.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
-        discovery_periodicity=spec.discovery_periodicity,
-        shared_spectrum=spec.shared_spectrum,
-        max_lag_symbols=spec.max_lag_symbols,
-        symbol_indexes=spec.symbol_indexes,
-    )
-    total_blocks = round(params.duration / spec.discovery_periodicity)
-    if spec.max_block_count is None:
-        count = total_blocks
-    else:
-        count = min(spec.max_block_count, total_blocks)
+    # the bare Capture projection carries no center_frequency, so the cell search
+    # case is resolved here as for an unknown band
+    params = sync_params(capture, spec, 'pss')
+    count = ssb_block_count(params.duration, spec)
 
-    return np.arange(max(count, 1)).astype('float32') * spec.discovery_periodicity
+    return np.arange(count).astype('float32') * spec.discovery_periodicity
 
 
-def empty_5g_ssb_correlation(
-    iq,
-    *,
-    capture: specs.Capture,
-    spec: _Cellular5GNRSSBCorrelator,
-    coord_factories: Sequence[CoordFunc | WrappedCoord],
-    dtype='complex64',
-):
-    xp = sw.array_namespace(iq)
-    meas_ax_shape = [len(f(capture, spec)) for f in coord_factories]
-    new_shape = iq.shape[:-1] + tuple(meas_ax_shape)
-    return xp.full(new_shape, 0, dtype=dtype)
+@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
+@specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
+def cellular_ssb_lag(capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator):
+    # pss_params and sss_params agree on lag_count
+    params = sync_params(capture, spec, 'pss')
+    offs = round(spec.sample_rate * spec.delay)
+    return np.arange(offs, offs + params.lag_count) / spec.sample_rate
 
 
 def capture_sample_count(capture: specs.Capture) -> int:
@@ -165,15 +179,7 @@ def validated_5g_ssb_sync_params(
     The resampling arithmetic mirrors `get_5g_ssb_iq` on the whole capture, the way
     `get_5g_ssb_iq` here calls it.
     """
-    params = sw.ofdm.sss_params(
-        sample_rate=spec.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
-        discovery_periodicity=spec.discovery_periodicity,
-        shared_spectrum=spec.shared_spectrum,
-        max_lag_symbols=spec.max_lag_symbols,
-        symbol_indexes=spec.symbol_indexes,
-        center_frequency=capture.center_frequency,
-    )
+    params = sync_params(capture, spec, 'sss')
 
     size_in = capture_sample_count(capture)
     frequency_step = capture.sample_rate / size_in
