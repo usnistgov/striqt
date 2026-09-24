@@ -11,6 +11,7 @@ if typing.TYPE_CHECKING:
     from striqt.waveform.lib.typing import ArrayBackend
 
 
+# %% iq_waveform
 def _get_start_stop_index(
     capture: specs.Capture,
     spec: specs.IQWaveform,
