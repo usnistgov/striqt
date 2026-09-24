@@ -6,7 +6,7 @@ from typing import Any
 from .. import specs
 
 from ..lib import dataarrays, register, util
-from ..lib.util import np, pd
+from ..lib.util import np
 from . import shared
 from .shared import registry, hint_keywords
 
@@ -96,9 +96,11 @@ def channel_power_tolerance(
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
-def time_elapsed(capture: specs.Capture, spec: specs.ChannelPowerTimeSeries):
+def time_elapsed(
+    capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
+) -> np.ndarray:
     binning = validated_channel_power_binning(capture, spec)
-    return pd.RangeIndex(binning.bin_count) * float(spec.detector_period)
+    return np.arange(binning.bin_count) * float(spec.detector_period)
 
 
 @registry.coordinates(dtype=object, attrs={'standard_name': 'Power detector'})
@@ -348,7 +350,7 @@ def cyclic_channel_power_tolerance(
     dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
-def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
+def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.ndarray:
     lag_count = validated_cyclic_lag_count(capture, spec)
 
     return np.arange(lag_count) * float(spec.detector_period)

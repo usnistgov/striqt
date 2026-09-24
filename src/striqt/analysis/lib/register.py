@@ -182,7 +182,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
         return wrapper
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(frozenset(self.items()))
 
 
@@ -295,8 +295,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         depends: Iterable[Callable] | Callable = [],
         caches: Iterable[KwArgCache] | KwArgCache | None = None,
         prefer_iq_source: PreferIQSource = 'aligned',
-        store_compressed=True,
-        attrs={},
+        store_compressed: bool = True,
+        attrs: dict[str, Any] = {},
         validate: AnalysisValidator | None = None,
         tolerance: AnalysisTolerance | None = None,
     ) -> AnalysisFuncWrapper[P]:
@@ -468,7 +468,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     ) -> type[specs.AnalysisGroup]:
         return to_analysis_spec_type(self, base)
 
-    def cache_context(self, capture: specs.Capture, callback: Callable | None = None):
+    def cache_context(
+        self, capture: specs.Capture, callback: Callable | None = None
+    ) -> contextlib.AbstractContextManager[contextlib.ExitStack]:
         return cached_registry_context(self, capture, callback)
 
     def validate(self, capture: specs.Capture, analysis: specs.AnalysisGroup) -> None:

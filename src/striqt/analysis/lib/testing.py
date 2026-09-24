@@ -20,14 +20,26 @@ import typing
 from .util import np
 
 if typing.TYPE_CHECKING:
+    from types import ModuleType
+
+    from striqt.waveform.lib.typing import DTypeLike
+
     from .typing import Array
 
 
-def _resolve_count(duration, sample_rate, start_index, count, ports) -> int:
+def _resolve_count(
+    duration: float | None,
+    sample_rate: float,
+    start_index: int,
+    count: int | None,
+    ports: int,
+) -> int:
     if ports < 1:
         raise ValueError(f'ports must be at least 1, not {ports}')
 
     if count is None:
+        if duration is None:
+            raise ValueError('either duration or count must be given')
         count = round(duration * sample_rate) - start_index
 
     if count < 0:
@@ -36,11 +48,11 @@ def _resolve_count(duration, sample_rate, start_index, count, ports) -> int:
     return int(count)
 
 
-def _sample_indices(start_index, count, xp):
+def _sample_indices(start_index: int, count: int, xp: ModuleType) -> Array:
     return xp.arange(start_index, start_index + count, dtype='int64')
 
 
-def _expand_ports(x: Array, ports: int, xp) -> Array:
+def _expand_ports(x: Array, ports: int, xp: ModuleType) -> Array:
     # a broadcast view would be read-only, which is surprising for a waveform
     return xp.broadcast_to(x, (ports, x.shape[-1])).copy()
 
@@ -50,7 +62,7 @@ def _expand_ports(x: Array, ports: int, xp) -> Array:
 PREROLL_SEED_OFFSET = 2**31
 
 
-def _complex_normal_draws(*, ports, size, seed, xp) -> Array:
+def _complex_normal_draws(*, ports: int, size: int, seed: int, xp: ModuleType) -> Array:
     """complex64 draws of shape (ports, size) with standard normal components.
 
     The draws are interleaved port-by-port within each sample, so the first `size`
@@ -63,7 +75,9 @@ def _complex_normal_draws(*, ports, size, seed, xp) -> Array:
     return values.view('complex64').reshape(size, ports).T
 
 
-def _windowed_normal_draws(*, ports, start_index, count, seed, xp) -> Array:
+def _windowed_normal_draws(
+    *, ports: int, start_index: int, count: int, seed: int, xp: ModuleType
+) -> Array:
     """complex64 standard normal draws at absolute indices
     ``[start_index, start_index + count)``.
 
@@ -88,15 +102,15 @@ def _windowed_normal_draws(*, ports, start_index, count, seed, xp) -> Array:
 
 
 def tone(
-    duration,
-    sample_rate,
+    duration: float | None,
+    sample_rate: float,
     *,
-    frequency=0.0,
-    ports=1,
-    start_index=0,
-    count=None,
-    xp=np,
-    dtype='complex64',
+    frequency: float = 0.0,
+    ports: int = 1,
+    start_index: int = 0,
+    count: int | None = None,
+    xp: ModuleType = np,
+    dtype: DTypeLike = 'complex64',
 ) -> Array:
     """a unit-amplitude complex tone, ``exp(2j*pi*frequency/sample_rate * i)``.
 
@@ -125,18 +139,18 @@ def tone(
 
 
 def single_tone(
-    duration,
-    sample_rate,
+    duration: float | None,
+    sample_rate: float,
     *,
-    frequency_offset=0.0,
-    snr=None,
-    lo_offset=0.0,
-    ports=1,
-    start_index=0,
-    count=None,
-    seed=0,
-    xp=np,
-    dtype='complex64',
+    frequency_offset: float = 0.0,
+    snr: float | None = None,
+    lo_offset: float = 0.0,
+    ports: int = 1,
+    start_index: int = 0,
+    count: int | None = None,
+    seed: int = 0,
+    xp: ModuleType = np,
+    dtype: DTypeLike = 'complex64',
 ) -> Array:
     """a unit-amplitude tone at `frequency_offset`, shifted by an LO offset and
     optionally summed with noise.
@@ -182,16 +196,16 @@ def single_tone(
 
 
 def circular_awgn(
-    duration,
-    sample_rate,
+    duration: float | None,
+    sample_rate: float,
     *,
-    power=1.0,
-    ports=1,
-    start_index=0,
-    count=None,
-    seed=0,
-    xp=np,
-    dtype='complex64',
+    power: float = 1.0,
+    ports: int = 1,
+    start_index: int = 0,
+    count: int | None = None,
+    seed: int = 0,
+    xp: ModuleType = np,
+    dtype: DTypeLike = 'complex64',
 ) -> Array:
     """circularly-symmetric complex gaussian noise of total power `power`.
 
@@ -232,16 +246,16 @@ def circular_awgn(
 
 
 def noise(
-    duration,
-    sample_rate,
+    duration: float | None,
+    sample_rate: float,
     *,
-    noise_psd=1e-17,
-    ports=1,
-    start_index=0,
-    count=None,
-    seed=0,
-    xp=np,
-    dtype='complex64',
+    noise_psd: float = 1e-17,
+    ports: int = 1,
+    start_index: int = 0,
+    count: int | None = None,
+    seed: int = 0,
+    xp: ModuleType = np,
+    dtype: DTypeLike = 'complex64',
 ) -> Array:
     """additive white gaussian noise of the specified power spectral density.
 
@@ -277,16 +291,16 @@ def noise(
 
 
 def sawtooth(
-    duration,
-    sample_rate,
+    duration: float | None,
+    sample_rate: float,
     *,
-    period=0.01,
-    power=0.0,
-    ports=1,
-    start_index=0,
-    count=None,
-    xp=np,
-    dtype='complex64',
+    period: float = 0.01,
+    power: float = 0.0,
+    ports: int = 1,
+    start_index: int = 0,
+    count: int | None = None,
+    xp: ModuleType = np,
+    dtype: DTypeLike = 'complex64',
 ) -> Array:
     """a real-valued sawtooth ramp, ``(t % period) * 10**(power/20) / period``.
 
@@ -319,16 +333,16 @@ def sawtooth(
 
 
 def dirac_delta(
-    duration,
-    sample_rate,
+    duration: float | None,
+    sample_rate: float,
     *,
-    time=0.0,
-    power=0.0,
-    ports=1,
-    start_index=0,
-    count=None,
-    xp=np,
-    dtype='complex64',
+    time: float = 0.0,
+    power: float = 0.0,
+    ports: int = 1,
+    start_index: int = 0,
+    count: int | None = None,
+    xp: ModuleType = np,
+    dtype: DTypeLike = 'complex64',
 ) -> Array:
     """a single impulse of amplitude ``10**(power/20)`` in a field of zeros.
 

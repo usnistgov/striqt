@@ -297,7 +297,9 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
     time_aperture: typing.Optional[float] = None
 
 
-def _validate_range(name: str, value, path: tuple[str, ...] = ()) -> None:
+def _validate_range(
+    name: str, value: int | tuple[int, int | None], path: tuple[str, ...] = ()
+) -> None:
     if not isinstance(value, tuple) or value[0] <= 0:
         return
     start, stop = value
@@ -319,7 +321,7 @@ class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
     symbol_range: Union[int, tuple[int, Union[int, None]]] = (0, None)
     generation: typing.Literal['4G', '5G'] = '5G'
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()
         _validate_range('frame_range', self.frame_range)
         _validate_range('symbol_range', self.symbol_range)

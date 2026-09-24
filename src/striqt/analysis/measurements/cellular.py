@@ -16,7 +16,9 @@ from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    from ..lib.typing import Array, Measurement
+    from typing_extensions import Unpack
+
+    from ..lib.typing import Array, Measurement, ToleranceKws
     from ..specs.structs import _Cellular5GNRSSBCorrelator, _Cellular5GNRSSBSync
 
 
@@ -73,7 +75,9 @@ def cellular_cell_id2(capture: specs.Capture, spec: Any):
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
-def cellular_ssb_beam_index(capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBSync):
+def cellular_ssb_beam_index(
+    capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBSync
+) -> list[int]:
     # pss_params and sss_params return the same number of symbol indexes
     params = sync_params(capture, spec, 'sss')
 
@@ -87,7 +91,7 @@ def cellular_ssb_beam_index(capture: specs.AnalysisCapture, spec: _Cellular5GNRS
 def cellular_ssb_start_time(
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator | specs.Cellular5GNRSSSCorrelator,
-):
+) -> np.ndarray:
     # the bare Capture projection carries no center_frequency, so the cell search
     # case is resolved here as for an unknown band
     params = sync_params(capture, spec, 'pss')
@@ -98,7 +102,9 @@ def cellular_ssb_start_time(
 
 @registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
-def cellular_ssb_lag(capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator):
+def cellular_ssb_lag(
+    capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator
+) -> np.ndarray:
     # pss_params and sss_params agree on lag_count
     params = sync_params(capture, spec, 'pss')
     offs = round(spec.sample_rate * spec.delay)
@@ -465,7 +471,9 @@ def cellular_ssb_baseband_frequency(
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
 @specs.helpers.lru_cache_on_converted(specs.Capture)
-def cellular_ssb_index(capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
+def cellular_ssb_index(
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
+) -> np.ndarray:
     count = ssb_block_count(capture.duration, spec)
     return np.arange(count, dtype='uint16')
 
@@ -553,7 +561,9 @@ def _discovery_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
 
 
 def ssb_spectrogram_tolerance(
-    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, **kwargs
+    capture: specs.Capture,
+    spec: specs.Cellular5GNRSSBSpectrogram,
+    **kwargs: Unpack[ToleranceKws],
 ) -> specs.Tolerance:
     return spectrum.spectrogram_level_tolerance(
         capture, _ssb_spectrogram_spec(spec), dtype='float16', limit_digits=3, **kwargs
@@ -971,7 +981,7 @@ def cellular_cyclic_autocorrelation(
     frame_range = _get_spec_range(spec.frame_range, 'frame_range')
     symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore[no-matching-overload]
 
-    def corr_for_slots(phy, x, slots):
+    def corr_for_slots(phy: sw.ofdm.Phy3GPP, x: Array, slots: tuple[int, ...]) -> Array:
         cp_inds = phy.index_cyclic_prefix(
             frames=frame_range, symbols=symbol_range, slots=slots
         )

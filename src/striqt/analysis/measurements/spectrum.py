@@ -14,7 +14,9 @@ from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    from ..lib.typing import Array, Measurement
+    from typing_extensions import Unpack
+
+    from ..lib.typing import Array, Measurement, ToleranceKws
 
 
 # %% STFT sizing and the shared spectrogram cache
@@ -356,7 +358,7 @@ def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndar
 
 
 def spectrogram_tolerance(
-    capture: specs.Capture, spec: specs.Spectrogram, **kwargs
+    capture: specs.Capture, spec: specs.Spectrogram, **kwargs: Unpack[ToleranceKws]
 ) -> specs.Tolerance:
     return spectrogram_level_tolerance(
         capture, spec, dtype='float16', limit_digits=2, **kwargs
@@ -428,7 +430,9 @@ def validated_psd_sizing(
 
 
 def power_spectral_density_tolerance(
-    capture: specs.Capture, spec: specs.PowerSpectralDensity, **kwargs
+    capture: specs.Capture,
+    spec: specs.PowerSpectralDensity,
+    **kwargs: Unpack[ToleranceKws],
 ) -> specs.Tolerance:
     spg_spec = specs.Spectrogram.from_spec(spec)
     sizing = validated_spectrogram_sizing(capture, spg_spec)

@@ -1,7 +1,7 @@
 from __future__ import annotations as __
 
 import typing
-from typing import Any
+from typing import Any, Literal
 
 from .. import specs
 from ..lib.util import pd
@@ -15,11 +15,23 @@ if typing.TYPE_CHECKING:
 
 
 # %% iq_waveform
+@typing.overload
+def _get_start_stop_index(
+    capture: specs.Capture, spec: specs.IQWaveform, allow_none: Literal[False]
+) -> tuple[int, int]: ...
+
+
+@typing.overload
+def _get_start_stop_index(
+    capture: specs.Capture, spec: specs.IQWaveform, allow_none: Literal[True] = ...
+) -> tuple[int | None, int | None]: ...
+
+
 def _get_start_stop_index(
     capture: specs.Capture,
     spec: specs.IQWaveform,
-    allow_none=True,
-):
+    allow_none: bool = True,
+) -> tuple[int | None, int | None]:
     # bounds are clamped into the capture so that the index range agrees with the
     # waveform slice, which numpy clips silently
     size = round(capture.duration * capture.sample_rate)

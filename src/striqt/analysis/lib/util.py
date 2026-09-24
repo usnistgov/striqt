@@ -24,6 +24,11 @@ from striqt.waveform.lib.util import (
     xr,
 )
 
+if TYPE_CHECKING:
+    from striqt.waveform.lib.typing import ArrayLike
+
+    from .. import specs
+
 _compute_lock = threading.RLock()
 _logger_adapters = {}
 
@@ -43,7 +48,7 @@ class StriqtLogger(logging.LoggerAdapter):
         'capture': None,
     }
 
-    def __init__(self, name_suffix, extra={}):
+    def __init__(self, name_suffix: str, extra: dict[str, Any] = {}) -> None:
         _logger = logging.getLogger(f'striqt.{name_suffix}')
         super().__init__(_logger, self.EXTRA_DEFAULTS | extra)
         _logger_adapters[name_suffix] = self
@@ -240,7 +245,7 @@ def ordered_set_union(*args: Iterable[Any]) -> list[Any]:
     return list(dict.fromkeys(itertools.chain.from_iterable(args)))
 
 
-def elementwise_atol(tolerance, expected_dB):
+def elementwise_atol(tolerance: specs.Tolerance, expected_dB: ArrayLike) -> np.ndarray:
     """the per-element absolute tolerance on a dB-valued output, from its
     `specs.Tolerance` and the numpy array of values expected of it.
 
@@ -258,4 +263,4 @@ def elementwise_atol(tolerance, expected_dB):
     err = 10 ** (tolerance.off_peak_dBc.peak / 20)
     additive = tolerance.on_peak.peak - 20 * math.log10(1 + err)
     depth = np.nanmax(expected_dB) - expected_dB
-    return additive + sw.power_analysis.off_peak_dB_tolerance(depth, err)
+    return np.asarray(additive + sw.power_analysis.off_peak_dB_tolerance(depth, err))

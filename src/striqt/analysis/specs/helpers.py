@@ -187,7 +187,7 @@ class SpecValidationError(msgspec.ValidationError):
         message: str,
         path: tuple[str, ...] = (),
         locations: tuple[str, ...] = (),
-    ):
+    ) -> None:
         self.message = message
         self.path = tuple(path)
         self.locations = tuple(locations)
@@ -346,7 +346,7 @@ def _enc_hook(obj) -> Any:
 
 
 @util.lru_cache()
-def _enc_hook_no_tuple_keys(obj) -> Any:
+def _enc_hook_no_tuple_keys(obj: Any) -> Any:
     """like `_enc_hook`, but with dictionary tuple keys encoded as JSON array text"""
 
     out = _enc_hook(obj)

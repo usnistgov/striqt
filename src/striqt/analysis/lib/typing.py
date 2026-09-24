@@ -13,11 +13,12 @@ if TYPE_CHECKING:
         Protocol,
         Self,
         TypeAlias,
+        TypedDict,
         TypeVar,
     )
 
     from . import dataarrays
-    from striqt.waveform.lib.typing import Array
+    from striqt.waveform.lib.typing import Array, ArrayBackend
     from .. import specs
 
     import xarray as xr
@@ -57,6 +58,11 @@ if TYPE_CHECKING:
 
     # %% register.py
     Measurement: TypeAlias = Array | tuple[Array, dict[str, Any]]
+
+    class ToleranceKws(TypedDict, total=False):
+        array_backend: ArrayBackend
+        input_error: float
+
     RM = TypeVar('RM', bound=Measurement)
 
     class AnalysisFunc(Protocol[P, R]):
