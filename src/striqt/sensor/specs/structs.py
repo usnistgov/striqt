@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     _T = TypeVar('_T')
     from typing_extensions import Self as _Self
 
-    import SoapySDR  # type: ignore
+    import SoapySDR  # type: ignore[import-not-found, unused-ignore]
 
 
 @sa.util.lru_cache()

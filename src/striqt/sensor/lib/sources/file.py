@@ -84,7 +84,7 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
 
         float_dtype = np.finfo(np.dtype(dtype)).dtype
 
-        return (iq * float_dtype.type(scale)).view(dtype).copy()  # type: ignore
+        return (iq * float_dtype.type(scale)).view(dtype).copy()
 
     def package_iq(
         self,
