@@ -2,7 +2,7 @@
 
 from __future__ import annotations as __
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from striqt.analysis import testing
 
@@ -13,6 +13,10 @@ from . import base
 from ..typing import TypeVar
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
+    from striqt.waveform.lib.typing import DTypeLike
+
     from ..typing import Array
 
 
@@ -30,7 +34,9 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
     def get_info(self):
         return specs.SourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
-    def _generator_kws(self, count: int, start_index: int, xp) -> dict:
+    def _generator_kws(
+        self, count: int, start_index: int, xp: ModuleType
+    ) -> dict[str, Any]:
         """the `striqt.analysis.testing` arguments shared by every source here.
 
         The sample rate is the source's rather than the capture's, because host
@@ -82,8 +88,8 @@ class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapt
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
     ) -> Array:
         capture = self._capture
         index, ports = self._port_position(port)
@@ -106,8 +112,8 @@ class DiracDeltaSource(TestSourceBase[specs.FunctionSource, specs.DiracDeltaCapt
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
     ) -> Array:
         capture = self._capture
 
@@ -125,8 +131,8 @@ class SawtoothSource(TestSourceBase[specs.FunctionSource, specs.SawtoothCapture]
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
     ) -> Array:
         capture = self._capture
 
@@ -144,8 +150,8 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture]):
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
     ) -> Array:
         capture = self._capture
         index, ports = self._port_position(port)

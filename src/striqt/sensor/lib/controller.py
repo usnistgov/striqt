@@ -380,7 +380,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     def is_open(self, wait=True) -> bool:
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
-    def close(self):
+    def close(self) -> None:
         if self._closed:
             return
         self._closed = True

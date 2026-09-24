@@ -3,6 +3,7 @@
 from __future__ import annotations as __
 
 from collections import Counter, defaultdict, ChainMap
+from collections.abc import Hashable
 import contextlib
 import itertools
 import math
@@ -451,7 +452,7 @@ def adjust_captures(
         key,
         field_default: str | structs.CaptureRemap | None,
     ):
-        def lookup_one(k):
+        def lookup_one(k: Hashable) -> Any:
             try:
                 return lookup_spec.lookup[k]
             except KeyError:

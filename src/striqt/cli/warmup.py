@@ -9,7 +9,7 @@ import numpy as np
 
 
 @click.command()
-def cli():
+def cli() -> None:
     """Warm numba JIT caches for CPU and (if available) CUDA kernels."""
     import striqt.waveform.lib.jit  # noqa: F401  triggers NUMBA_CACHE_DIR setup + stamp patch
 

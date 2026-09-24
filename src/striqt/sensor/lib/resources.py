@@ -112,7 +112,9 @@ class ConnectionManager(
         super().__init__()
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
-    def __enter__(self):
+    # ExitStack is inherited for its callback registry, but `with` yields the
+    # resources it collected rather than the stack itself
+    def __enter__(self) -> Resources[SS, SP, SC, PS, PC]:  # ty: ignore[invalid-method-override]
         return self.resources
 
     @util.cached_property

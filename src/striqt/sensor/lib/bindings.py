@@ -61,7 +61,7 @@ class SensorBinding(Sensor[SS, SP, SC]):
     # schema: specs.Schema[SS, SP, SC, PS, PC]
     sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # type: ignore
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()
         assert isinstance(self.sweep_spec_cls, type)
         if not issubclass(self.sweep_spec_cls, specs.Sweep):

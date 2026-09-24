@@ -423,7 +423,7 @@ class CalibrationSweep(
     )
     calibration: Union[SPC, None] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()
 
         implied_loops = getattr(self.calibration, 'implied_loops', ())

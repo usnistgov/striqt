@@ -19,7 +19,9 @@ if TYPE_CHECKING:
 SS = TypeVar('SS', bound='specs.SoapySource')
 
 
-def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
+def compute_y_factor_corrections(
+    dataset: 'xr.Dataset', Tref: float = 290.0
+) -> 'xr.Dataset':
     return _y_factor_power_corrections(dataset, Tref=Tref)
 
 
