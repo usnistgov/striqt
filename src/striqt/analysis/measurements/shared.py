@@ -20,7 +20,7 @@ def hint_keywords(
     func: Callable[P, Any],
 ) -> Callable[[WrappedAnalysis[..., R]], WrappedAnalysis[P, R]]:
     """fill in type hints for the analysis parameters"""
-    return lambda f: f  # pyright: ignore
+    return lambda f: f
 
 
 def capture_sample_count(capture: specs.Capture) -> int:

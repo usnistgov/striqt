@@ -26,7 +26,7 @@ def cli() -> None:
         click.echo(f'  CPU kernel ({np.dtype(dtype).name}) warmed')
 
     try:
-        import cupy as cp  # type: ignore
+        import cupy as cp  # ty: ignore[unresolved-import]
         from striqt.waveform.lib.jit.cuda import _corr_at_indices as _cuda_corr
 
         x_gpu = cp.zeros(nfft + ncp + 128, dtype=np.complex64)

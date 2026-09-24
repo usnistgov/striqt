@@ -1886,7 +1886,7 @@ def run_server(
     def acquisition_loop():
         """Run data acquisition in a separate thread."""
 
-        def on_data(result: 'ss.lib.compute.DelayedDataset'):
+        def on_data(result: 'ss.lib.compute.DelayedDataset') -> None:
             """Callback when new data arrives."""
             # Store capture spec for field origin introspection
             update_dataset(result)
@@ -1897,7 +1897,8 @@ def run_server(
         ctx = ss.open_resources(spec, path)
 
         with ctx as resources:
-            resources['sink'].append = on_data
+            # the sink's result is discarded here, so the callback need not return it
+            resources['sink'].append = on_data  # ty: ignore[invalid-assignment]
             while True:
                 sweep = ss.iterate_sweep(
                     resources, yield_values=True, always_yield=True

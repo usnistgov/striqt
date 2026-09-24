@@ -207,8 +207,8 @@ class FrequencyAnalysisSpecBase(
 
     window: types.WindowType
     frequency_resolution: float
-    fractional_overlap: fractions.Fraction = 0  # type: ignore
-    window_fill: fractions.Fraction = 1  # type: ignore
+    fractional_overlap: fractions.Fraction = 0  # ty: ignore[invalid-assignment]
+    window_fill: fractions.Fraction = 1  # ty: ignore[invalid-assignment]
     integration_bandwidth: typing.Optional[float] = None
     trim_stopband: bool = True
     lo_bandstop: Union[types.LOBandstop, None] = None

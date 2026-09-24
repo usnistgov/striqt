@@ -59,7 +59,7 @@ class Sensor(Generic[SS, SP, SC]):
 @dataclasses.dataclass()
 class SensorBinding(Sensor[SS, SP, SC]):
     # schema: specs.Schema[SS, SP, SC, PS, PC]
-    sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # type: ignore
+    sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # ty: ignore[dataclass-field-order]
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -91,8 +91,8 @@ def bind_sensor(
 
     binding = SensorBinding(
         source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),  # ty: ignore
-        sweep_spec_cls=sensor.sweep_spec_cls,  # type: ignore
-        peripherals_cls=sensor.peripherals_cls,  # type: ignore
+        sweep_spec_cls=sensor.sweep_spec_cls,  # ty: ignore[invalid-argument-type]
+        peripherals_cls=sensor.peripherals_cls,  # ty: ignore[invalid-argument-type]
         sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),  # ty: ignore
     )
 
@@ -121,14 +121,14 @@ def bind_sensor(
                 )
             super().__post_init__()
 
-    BoundSweep = _subclass_with_tag(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # type: ignore
+    BoundSweep = _subclass_with_tag(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # ty: ignore[invalid-assignment]
     binding = dataclasses.replace(binding, sweep_spec_cls=BoundSweep)
 
     global tagged_sweeps
     if tagged_sweeps is None:
         tagged_sweeps = BoundSweep
     else:
-        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # type: ignore
+        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # ty: ignore[invalid-assignment]
 
     cls = bind_controller(cast(SensorBinding[SS, SP, SC], binding), schema)
     cls.__module__ = sys._getframe(1).f_globals.get('__name__') or schema.__module__
@@ -196,7 +196,7 @@ def get_tagged_sweep_type() -> type[specs.Sweep]:
     """return a tagged union type that msgspec can decode"""
     if tagged_sweeps is None:
         raise TypeError('no bindings have been defined')
-    return tagged_sweeps  # pyright: ignore
+    return tagged_sweeps
 
 
 def _subclass_with_tag(

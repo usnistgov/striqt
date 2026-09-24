@@ -7,6 +7,8 @@ from . import util
 
 
 if _typing.TYPE_CHECKING:
+    from pathlib import Path as _Path
+
     from xarray import Dataset as _DS
     from xarray.core.types import ScaleOptions as _ScaleOptions
     from .backend import PlotBackend as _PlotBackend
@@ -183,8 +185,12 @@ def cyclic_channel_power(data: '_DS', plotter: '_PlotBackend', *, noise_line=Tru
 
 @_register_data_var_plot
 def power_spectral_density(
-    data: '_DS', plotter: '_PlotBackend', *, hue='time_statistic', noise_line=True
-):
+    data: '_DS',
+    plotter: '_PlotBackend',
+    *,
+    hue: str = 'time_statistic',
+    noise_line: bool = True,
+) -> _Path | None:
     name = sa.measurements.power_spectral_density.__name__
     _, x = _coord_names(sa.specs.PowerSpectralDensity)
     # legacy support tweaks
@@ -199,7 +205,7 @@ def power_spectral_density(
 
 
 @_register_data_var_plot
-def spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line=True):
+def spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line: bool = True) -> None:
     name = sa.measurements.spectrogram.__name__
     x, y = _coord_names(sa.specs.Spectrogram)
     sub = data[name].dropna(y)
