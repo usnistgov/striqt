@@ -7,7 +7,7 @@ import functools
 import importlib
 import os
 import sys
-from typing import Any, cast, ContextManager, Generic, TYPE_CHECKING
+from typing import Any, Callable, cast, ContextManager, Generic, TYPE_CHECKING
 from pathlib import Path
 
 import typing_extensions
@@ -225,8 +225,11 @@ def open_resources(
                 raise
 
         if spec.source.calibration is not None:
+            read_calibration = cast(
+                'Callable[..., xr.Dataset | None]', io.read_calibration
+            )
             cal = util.threadpool.submit(
-                _timeit('read calibration')(io.read_calibration),
+                _timeit('read calibration')(read_calibration),
                 spec.source.calibration,
                 fmt,
             )

@@ -8,7 +8,7 @@ import logging
 import sys
 import threading
 import time
-from typing import Any, Generator, Iterable, TYPE_CHECKING
+from typing import Any, cast, Iterable, Iterator, TYPE_CHECKING
 from pathlib import Path
 
 import striqt.analysis as sa
@@ -42,7 +42,7 @@ def zip_offsets(
     fill: Any,
     *,
     squeeze: bool = True,
-) -> Generator[tuple[_T, ...]]:
+) -> Iterator[tuple[_T, ...]]:
     """a generator that yields from `seq` at multiple index shifts.
 
     Shifts that would yield an invalid index (i.e., before or beyond the end of `seq`) are
@@ -73,7 +73,7 @@ def zip_offsets(
     if squeeze and len(shifts) == 1:
         return iters[0]
     else:
-        return itertools.zip_longest(*iters, fillvalue=fill)  # ty: ignore[invalid-return-type]
+        return itertools.zip_longest(*iters, fillvalue=fill)
 
 
 # %% Concurrency
@@ -303,7 +303,7 @@ def retry(
     if isinstance(excs, type) and issubclass(excs, BaseException):
         excs = (excs,)
     else:
-        excs = tuple(excs)
+        excs = tuple(cast('Iterable[type[BaseException]]', excs))
 
     def decorator(f: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(f)
@@ -488,8 +488,9 @@ def log_to_file(log_path: str | Path, level_name: str):
     # level on this parent would never gate their records
     handler.setLevel(_LOG_LEVEL_NAMES[level_name])
 
+    striqt_logger = cast(Any, logger)
     if hasattr(logger, '_striqt_handler'):
-        logger.removeHandler(logger._striqt_handler)  # ty: ignore[invalid-argument-type]
+        logger.removeHandler(striqt_logger._striqt_handler)
 
     logger.addHandler(handler)
-    logger._striqt_handler = handler  # ty: ignore[unresolved-attribute]
+    striqt_logger._striqt_handler = handler

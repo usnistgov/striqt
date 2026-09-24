@@ -18,10 +18,10 @@ from . import compute, util
 from .. import specs
 
 if TYPE_CHECKING:
-    from .typing import Array, Self
+    from .typing import Array, Self, TypeAlias
 
     T = TypeVar('T', bound='Controller')
-    PendingController = 'Controller | Event | BaseException'
+    PendingController: TypeAlias = 'Controller | Event | BaseException'
     from . import bindings
 
 
@@ -66,7 +66,7 @@ class lookup:
         """lookup a source ID from a source specification."""
         controller = cls.instance(spec, timeout)
 
-        obj = cls._id[spec]
+        obj: Event | str = cls._id[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
@@ -212,8 +212,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     _closed: bool = False
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
-    schema: 'specs.Schema[SS, SP, SC, PS, PC]'
-    sensor: 'bindings.SensorBinding[SS, SP, SC]'
+    schema: ClassVar['specs.Schema[Any, Any, Any, Any, Any]']
+    sensor: ClassVar['bindings.SensorBinding[Any, Any, Any]']
 
     @sa.util.stopwatch(
         'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
@@ -227,7 +227,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         config = ControllerConfig(
             init_rx_ports=None, reuse_iq=False, analysis=None, format_path=None
         )
-        spec = self.schema.source(*args, **kwargs)  # ty: ignore[invalid-argument-type]
+        spec = self.schema.source(*args, **kwargs)
         self._setup(spec, config)
 
     def __init_subclass__(
@@ -344,7 +344,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
     def arm(self, *args: PC.args, **kwargs: PC.kwargs) -> SC | None:
         assert self._buffers is not None
-        spec = self.schema.capture(*args, **kwargs)  # ty: ignore[invalid-argument-type]
+        spec = self.schema.capture(*args, **kwargs)
         return self._arm_spec(spec)
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)

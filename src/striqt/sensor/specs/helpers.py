@@ -374,7 +374,7 @@ def describe_capture(
 
 def describe_capture_origin(
     loops: tuple[structs.LoopBase, ...],
-    capture: SC | Mapping[str, Any],
+    capture: structs.SensorCapture | Mapping[str, Any],
     origin: CaptureOrigin,
 ) -> tuple[str, ...]:
     """locate an expanded capture in its sweep, as sibling paths for an error message.
@@ -815,7 +815,9 @@ def _unique_capture_origins(
 
 @contextlib.contextmanager
 def _located_in_sweep(
-    loops: tuple[structs.LoopSpec, ...], capture: SC, origin: CaptureOrigin
+    loops: tuple[structs.LoopSpec, ...],
+    capture: structs.SensorCapture,
+    origin: CaptureOrigin,
 ) -> Iterator[None]:
     """re-raise a validation failure at the entry and loop points that made `capture`"""
     try:
@@ -899,7 +901,9 @@ def _validate_sweep_corrections(
                     corrections.validate_oaresample_shift(design)
 
 
-def _read_capture_field(capture: SC | Mapping[str, Any], field: str) -> Any:
+def _read_capture_field(
+    capture: structs.SensorCapture | Mapping[str, Any], field: str
+) -> Any:
     if isinstance(capture, Mapping):
         return capture[field]
     else:
@@ -1294,7 +1298,7 @@ def _list_capture_adjustments(
 def _merge_analysis_loops(points: _LoopPointsDict) -> dict[str, Any]:
     """apply any loops where isin == 'analysis' into capture.adjust_captures"""
 
-    updates = {}
+    updates: dict[str, Any] = {}
     analysis_updates = {}
     for (target, field), value in points.items():
         if target == 'capture':

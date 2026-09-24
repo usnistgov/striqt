@@ -110,6 +110,9 @@ class Source(SpecBase, frozen=True, kw_only=True):
     # this leaves room for subclasses to add schema fields
     gapless = False
     calibration = None
+    if TYPE_CHECKING:
+        gapless: bool
+        calibration: str | None
 
     # validation data
     transient_holdoff_time: ClassVar[float] = 0

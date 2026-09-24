@@ -250,6 +250,8 @@ def _calibration_peripherals_cls(
 
     class cls(peripherals.CalibrationPeripheralsBase):
         _last_state = (None, None)
+        ext: Peripherals[Any, Any]
+        cal: peripherals.CalibrationPeripheralsBase[Any, Any, Any]
 
         def __init__(self, spec):
             self.ext = ext(spec)
@@ -488,7 +490,7 @@ def _lookup_calibration_var(
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
-        exact_matches = {
+        exact_matches: dict[str, Any] = {
             port_key: c.port,
             'gain': c.gain,
             'lo_shift': c.lo_shift,
@@ -498,7 +500,7 @@ def _lookup_calibration_var(
 
         try:
             # there is still one more dim to drop
-            sel = cal_var.sel(**exact_matches, drop=True)  # ty: ignore
+            sel = cal_var.sel(**exact_matches, drop=True)
         except KeyError:
             misses = _describe_missing_data(cal_var, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')

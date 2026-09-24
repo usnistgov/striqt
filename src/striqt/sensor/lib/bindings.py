@@ -37,7 +37,7 @@ class BoundSweep(specs.Sweep[SS, SP, SC], frozen=True, kw_only=True):
 
 
 registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any]]'] = {}
-tagged_sweeps: type[specs.Sweep] | None = None
+tagged_sweeps: Any = None
 
 
 @dataclasses.dataclass()
@@ -58,9 +58,6 @@ class Sensor(Generic[SS, SP, SC]):
 
 @dataclasses.dataclass()
 class SensorBinding(Sensor[SS, SP, SC]):
-    # schema: specs.Schema[SS, SP, SC, PS, PC]
-    sweep_spec_cls: type[BoundSweep[SS, SP, SC]]  # ty: ignore[dataclass-field-order]
-
     def __post_init__(self) -> None:
         super().__post_init__()
         assert isinstance(self.sweep_spec_cls, type)
@@ -90,10 +87,12 @@ def bind_sensor(
         raise TypeError(f'a sensor binding named {key!r} was already registered')
 
     binding = SensorBinding(
-        source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),  # ty: ignore
-        sweep_spec_cls=sensor.sweep_spec_cls,  # ty: ignore[invalid-argument-type]
-        peripherals_cls=sensor.peripherals_cls,  # ty: ignore[invalid-argument-type]
-        sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),  # ty: ignore
+        source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),
+        sweep_spec_cls=cast('type[specs.Sweep[SS, SP, SC]]', sensor.sweep_spec_cls),
+        peripherals_cls=cast(
+            'type[Peripherals[SP, SC] | NoPeripherals[SP, SC]]', sensor.peripherals_cls
+        ),
+        sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),
     )
 
     schema_ = schema
@@ -121,16 +120,16 @@ def bind_sensor(
                 )
             super().__post_init__()
 
-    BoundSweep = _subclass_with_tag(key, BoundSweep, specs.SWEEP_TAG_FIELD)  # ty: ignore[invalid-assignment]
-    binding = dataclasses.replace(binding, sweep_spec_cls=BoundSweep)
+    tagged_cls = _subclass_with_tag(key, BoundSweep, specs.SWEEP_TAG_FIELD)
+    binding = dataclasses.replace(binding, sweep_spec_cls=tagged_cls)
 
     global tagged_sweeps
     if tagged_sweeps is None:
-        tagged_sweeps = BoundSweep
+        tagged_sweeps = tagged_cls
     else:
-        tagged_sweeps = Union[tagged_sweeps, BoundSweep]  # ty: ignore[invalid-assignment]
+        tagged_sweeps = Union[tagged_sweeps, tagged_cls]
 
-    cls = bind_controller(cast(SensorBinding[SS, SP, SC], binding), schema)
+    cls = bind_controller(binding, schema)
     cls.__module__ = sys._getframe(1).f_globals.get('__name__') or schema.__module__
 
     if register:
@@ -149,7 +148,7 @@ def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
 @functools.lru_cache
 def mock_binding(
     origin: type[Controller], target: str | type[Controller], register: bool = True
-) -> type[Controller[SS, SP, SC, PS, PC]]:
+) -> type[Controller[Any, Any, Any, Any, Any]]:
     mock_name = f'mock_{target}_{origin.sensor.sweep_spec_cls.__name__}'
 
     if isinstance(target, str):

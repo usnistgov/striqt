@@ -642,7 +642,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             # exceptions
             return
 
-        self.device.__del__ = lambda: None # type: ignore
+        self.device.__del__ = lambda: None  # type: ignore
         device = getattr(self, '_device', None)
         rx_stream = getattr(self, '_rx_stream', None)
 
