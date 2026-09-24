@@ -509,23 +509,17 @@ class TestSweepAdjustCaptures:
                 {'defaults': {'duration': 1.0}},
                 re.escape('Object contains reserved capture field `duration`'),
             ),
+            (
+                {'defaults': ['snr', 1.0]},
+                # msgspec names the path after the message, SpecValidationError before
+                r'(?s)Expected `object`.*adjust_captures\[|adjust_captures\[.*Expected `object`',
+            ),
         ],
+        ids=['unknown source id', 'reserved field', 'per-source list not mapping'],
     )
     def test_invalid_adjustments_rejected(self, adjust, match):
         kws = make_sweep_kws(adjust_captures=adjust)
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
-
-    @pytest.mark.xfail(
-        strict=True,
-        raises=NameError,
-        reason=(
-            'the tuple branch of _get_capture_adjust_map references an undefined '
-            'name source_fields'
-        ),
-    )
-    def test_tuple_of_pairs_form_is_accepted(self):
-        sweep = make_sweep(adjust_captures=(('defaults', {'snr': 1.0}),))
-        assert sweep.adjust_captures['defaults'] == {'snr': 1.0}
 
 
 # %% CalibrationSweep

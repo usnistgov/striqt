@@ -362,10 +362,8 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
 
 _CaptureMapScalarType = Union[float, int, str, bool, None]
 _AdjustSourceCapturesMap = dict[str, Union[CaptureRemap, _CaptureMapScalarType]]
-_AdjustSourceCapturesTup = tuple[str, Union[CaptureRemap, _CaptureMapScalarType]]
 AdjustCapturesType = dict[
-    Union[types.SourceID, Literal['defaults']],
-    Union[_AdjustSourceCapturesMap, _AdjustSourceCapturesTup],
+    Union[types.SourceID, Literal['defaults']], _AdjustSourceCapturesMap
 ]
 
 
