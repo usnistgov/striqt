@@ -21,7 +21,7 @@ from .arrays import (
 )
 
 if typing.TYPE_CHECKING:
-    from .typing import Array, WindowSpecType
+    from .typing import Array, DTypeLike, WindowSpecType
 
 
 def _min_diff(x: typing.Sequence[int]) -> int | None:
@@ -89,7 +89,7 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
 
 
 def corr_atol(
-    dtype, n_inds: int, norm: bool, scale: float = 1.0, n_impl: int = 1
+    dtype: DTypeLike, n_inds: int, norm: bool, scale: float = 1.0, n_impl: int = 1
 ) -> float:
     """absolute roundoff bound on `corr_at_indices` against exact arithmetic.
 

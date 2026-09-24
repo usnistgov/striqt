@@ -15,7 +15,10 @@ _TC = TypeVar('_TC', bound=Callable)
 
 if TYPE_CHECKING:
     from types import ModuleType
-    from .typing import ArrayLike, Array, TypeIsCupy
+
+    import cupy  # ty: ignore[unresolved-import]
+
+    from .typing import _AT, ArrayLike, Array, DTypeLike, TypeIsCupy
 
 
 # %% rounding
@@ -106,12 +109,12 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
 ROUNDOFF_SAFETY = 2
 
 
-def unit_roundoff(dtype) -> float:
+def unit_roundoff(dtype: DTypeLike) -> float:
     """u = eps / 2 of the real dtype underlying `dtype` (complex dtypes included)"""
-    return float(np.finfo(dtype).eps / 2)
+    return float(np.finfo(np.dtype(dtype)).eps / 2)
 
 
-def accum_rms(dtype, n: int, n_impl: int = 1) -> float:
+def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """rms roundoff of a sum or mean over `n` terms of `dtype` along a contiguous axis,
     relative to the result; `n_impl` independent implementations add in quadrature"""
     # A reduction over a contiguous axis is not summed in order. numpy sums it pairwise
@@ -132,7 +135,7 @@ def accum_rms(dtype, n: int, n_impl: int = 1) -> float:
     return safety * math.sqrt(n_impl * (1 + n / run)) * u
 
 
-def accum_rtol(dtype, n: int, n_impl: int = 1) -> float:
+def accum_rtol(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """rtol on a sum or mean over `n` terms of `dtype` along a strided axis, which
     numpy accumulates in order: n roundings (measured 1600 u rms and 2000 u max at
     n = 1e6, against the 2e6 u of this bound)"""
@@ -199,8 +202,10 @@ def binned_mean(
 
 @util.lru_cache()
 def _sliding_window_output_shape(
-    array_shape: tuple[int, ...] | int, window_shape: tuple[int, ...] | int, axis
-):
+    array_shape: tuple[int, ...] | int,
+    window_shape: tuple[int, ...] | int,
+    axis: int | tuple[int, ...] | None,
+) -> tuple[int, ...]:
     """return the shape of the output of sliding_window_view, for example
     to pre-create an output buffer."""
     try:
@@ -530,7 +535,9 @@ def _pad_slices_to_dim(ndim: int, axis: int, /):
     return before, after
 
 
-def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
+def pad_along_axis(
+    a: _AT, pad_width: list, axis: int = 0, *args: Any, **kws: Any
+) -> _AT:
     if axis < 0:
         axis += a.ndim
 
@@ -611,7 +618,9 @@ class NonStreamContext:
         pass
 
 
-def array_stream(obj: Array, null=False, non_blocking=False, ptds=False):
+def array_stream(
+    obj: Array, null: bool = False, non_blocking: bool = False, ptds: bool = False
+) -> cupy.cuda.Stream | NonStreamContext:
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
     if is_cupy_array(obj) and cp is not None:
         return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)
