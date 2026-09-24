@@ -4,7 +4,7 @@ cellular_5g_ssb_spectrogram: levels, axes and the shared spectrogram machinery.
 The level assertions are anchored on the closed form of a bin-centered unit tone. For
 a boxcar window the peak bin reads exactly ``0.0`` dB, and for any other window it
 reads ``-10*log10(enbw_bins)``, where ``enbw_bins`` is the window's equivalent noise
-bandwidth in FFT bins: `shared._cached_spectrogram` normalizes the STFT to a power
+bandwidth in FFT bins: `spectrum._cached_spectrogram` normalizes the STFT to a power
 spectral density and labels the result with ``noise_bandwidth = frequency_resolution``,
 so a tone whose power all falls in one bin is reported low by the ratio of the window's
 ENBW to that labeled bandwidth.
@@ -271,7 +271,7 @@ class TestSpectrogram:
         # whichever caller has the surrounding context
         spec_fields = {'window': 'boxcar', 'frequency_resolution': RES, **kwargs}
         with pytest.raises(ValueError, match=re.escape(message)) as valueinfo:
-            sa.measurements.shared.validated_spectrogram_sizing(
+            sa.measurements.spectrum.validated_spectrogram_sizing(
                 CAPTURE, sa.specs.Spectrogram(**spec_fields)
             )
 

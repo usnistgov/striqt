@@ -7,7 +7,7 @@ from .. import specs
 
 from ..lib import util
 from ..lib.util import np
-from . import _spectrogram, power, shared
+from . import power, shared, spectrum
 from ._cellular_cyclic_autocorrelation import link_direction, tdd_config_from_str
 from .shared import registry, hint_keywords
 
@@ -217,14 +217,14 @@ def validated_resource_grid_sizing(
     )
 
     spg_spec = _spectrogram_spec(spec)
-    sizing = shared.validated_spectrogram_sizing(capture, spg_spec)
+    sizing = spectrum.validated_spectrogram_sizing(capture, spg_spec)
 
     slot_period = sw.ofdm.slot_period(spec.subcarrier_spacing)
     if not spec.average_slots:
         time_bin_averaging = None
     elif sw.isroundmod(slot_period, sizing.hop_period):
         time_bin_averaging = round(slot_period / sizing.hop_period)
-        window_count = shared.spectrogram_window_count(capture, sizing)
+        window_count = spectrum.spectrogram_window_count(capture, sizing)
         if time_bin_averaging > window_count:
             raise ValueError(
                 'duration must span at least one slot to average across slots '
@@ -252,7 +252,7 @@ def validated_resource_grid_sizing(
 @registry.measurement(
     coord_factories=[link_direction, cellular_resource_power_bin],
     dtype='float32',
-    depends=_spectrogram.spectrogram,
+    depends=spectrum.spectrogram,
     spec_type=specs.CellularResourcePowerHistogram,
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'Fraction of resource grid'},
@@ -276,12 +276,12 @@ def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwa
 
     sizing = validated_resource_grid_sizing(capture, spec)
 
-    spg, metadata = shared.evaluate_spectrogram(
+    spg, metadata = spectrum.evaluate_spectrogram(
         iq, capture, sizing.spectrogram, dtype='float32', dB=False
     )
     del metadata['units']
 
-    freqs = shared.spectrogram_freqs(capture, sizing.spectrogram)
+    freqs = spectrum.spectrogram_freqs(capture, sizing.spectrogram)
     freqs = xp.asarray(freqs)
 
     masked_spgs = apply_mask(

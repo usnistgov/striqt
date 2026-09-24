@@ -4,7 +4,7 @@ from .. import specs
 
 from ..lib import util
 from ..lib.util import np
-from . import shared
+from . import shared, spectrum
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
@@ -73,14 +73,14 @@ def _spectrogram_spec(spec: specs.Cellular5GNRSSBSpectrogram) -> specs.Spectrogr
 
 def validated_ssb_spectrogram_sizing(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
-) -> shared.SpectrogramSizing:
+) -> spectrum.SpectrogramSizing:
     """check the STFT sizing of the symbol-resolved SSB spectrogram.
 
     The 3GPP cell-search parameters are deliberately not consulted: this measurement
     lays symbols out from `subcarrier_spacing` and `discovery_periodicity` alone, and
     unlike the correlators it has no `symbol_indexes` field to pick a search case with.
     """
-    sizing = shared.validated_spectrogram_sizing(capture, _spectrogram_spec(spec))
+    sizing = spectrum.validated_spectrogram_sizing(capture, _spectrogram_spec(spec))
 
     # the frequency axis is binned to one bin per subcarrier before the band is cut
     shared.check_frequency_band(
@@ -93,7 +93,7 @@ def validated_ssb_spectrogram_sizing(
 
     symbol_count = _burst_symbol_count(spec)
     discovery_symbols = _discovery_symbol_count(spec)
-    window_count = shared.spectrogram_window_count(capture, sizing)
+    window_count = spectrum.spectrogram_window_count(capture, sizing)
     full_periods, trailing = divmod(window_count, discovery_symbols)
     kept = full_periods * min(discovery_symbols, symbol_count)
     kept += min(trailing, symbol_count)
@@ -133,7 +133,7 @@ def _discovery_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
 def ssb_spectrogram_tolerance(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, **kwargs
 ) -> specs.Tolerance:
-    return shared.spectrogram_tolerance(
+    return spectrum.spectrogram_level_tolerance(
         capture, _spectrogram_spec(spec), dtype='float16', limit_digits=3, **kwargs
     )
 
@@ -143,7 +143,7 @@ def ssb_spectrogram_tolerance(
     specs.Cellular5GNRSSBSpectrogram,
     coord_factories=_coord_factories,
     dtype='float16',
-    caches=(shared.spectrogram_cache,),
+    caches=(spectrum.spectrogram_cache,),
     prefer_iq_source='pre_filter',
     attrs={'standard_name': 'SSB Spectrogram'},
     validate=validated_ssb_spectrogram_sizing,
@@ -172,7 +172,7 @@ def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
     symbol_count = _burst_symbol_count(spec)
     discovery_symbols = _discovery_symbol_count(spec)
 
-    spg, attrs = shared.evaluate_spectrogram(
+    spg, attrs = spectrum.evaluate_spectrogram(
         iq,
         capture=capture,
         spec=_spectrogram_spec(spec),
