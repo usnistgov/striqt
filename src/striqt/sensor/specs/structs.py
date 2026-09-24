@@ -459,8 +459,9 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     sweep_index: Union[int, None] = None
     capture_index: int = 0
 
-    # TODO: this is wrong. want sa.Trigger, but that is triggering a type
-    # resolution problem in py39
+    # ideally, this union would include sa.Trigger, but that triggers a
+    # resolution problem in python 3.9. fix this when the minimum python
+    # version. in the meantime, it's a hack.
     signal_trigger: Union[str, None] = None
 
     def replace(self, **attrs) -> _Self:
