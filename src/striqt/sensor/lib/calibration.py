@@ -8,18 +8,12 @@ from . import compute, io, peripherals, sinks, util
 from .controller import Controller
 from .typing import Peripherals, TypeVar, SC, SP, SPC, PS, PC
 import striqt.analysis as sa
+from striqt.analysis.lib.util import np, pd, xr
 
 import msgspec
 
 if TYPE_CHECKING:
-    import numpy as np
-    import pandas as pd
-    import xarray as xr
     from . import bindings
-else:
-    np = sa.util.lazy_import('numpy')
-    pd = sa.util.lazy_import('pandas')
-    xr = sa.util.lazy_import('xarray')
 
 
 SS = TypeVar('SS', bound='specs.SoapySource')

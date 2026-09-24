@@ -5,22 +5,17 @@ from __future__ import annotations as __
 import contextlib
 import math
 import itertools
-from typing import Any, Generator, TYPE_CHECKING
+from typing import Any, Generator
 
 import striqt.waveform as sw
 import striqt.analysis as sa
+from striqt.analysis.lib.util import pd, xr
 
 from . import compute, util
 from .. import specs
 from .resources import Resources, AnyResources
 from .calibration import lookup_system_noise_power
 from .typing import PC, PS, SC, SP, SS, Unpack
-
-if TYPE_CHECKING:
-    import xarray as xr
-    import pandas as pd
-else:
-    xr = util.lazy_import('xarray')
 
 
 def iterate_sweep(

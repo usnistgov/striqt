@@ -209,8 +209,10 @@ class TestPhy3GPP:
         mu = round(np.log2(scs / 15e3))
 
         if (144 * nfft) % 2048:
-            with pytest.raises(ValueError, match='non-integer cyclic prefix'):
+            with pytest.raises(ValueError, match='non-integer cyclic prefix') as info:
                 phy_5g(scs, sample_rate)
+            assert repr(sample_rate) in str(info.value)
+            assert repr(scs) in str(info.value)
             return
         phy = phy_5g(scs, sample_rate)
 
@@ -644,6 +646,16 @@ class TestSyncParams:
         assert params.max_lag_symbols == 3
         assert params.lag_count == 3 * params.short_symbol_size
 
+    def test_adjacent_symbol_indexes_need_explicit_max_lag_symbols(self):
+        """the automatic lag search spans at least the 4 symbols of one SSB, which
+        symbols 1 apart cannot separate"""
+        with pytest.raises(ValueError, match=r'\(2, 3\).*max_lag_symbols'):
+            sync_params(symbol_indexes=(2, 3))
+
+        params = sync_params(symbol_indexes=(2, 3), max_lag_symbols=1)
+        assert params.symbol_indexes == [2, 3]
+        assert params.lag_count == params.short_symbol_size
+
     def test_sss_params_follow_pss_by_two_symbols(self, subtests):
         pss = sync_params()
         sss = ofdm.sss_params(
@@ -801,6 +813,41 @@ class TestCorrelateSyncSequence:
         )
         with pytest.raises(ValueError, match='same excess CP'):
             ofdm.correlate_sync_sequence(silent_block(params), pss, params=bad)
+
+    @pytest.mark.parametrize('n_frames', [1, 2, 3])
+    def test_sync_frame_count(self, n_frames):
+        params = sync_params()
+        assert ofdm.sync_frame_count(n_frames * params.frame_size, params) == n_frames
+
+    def test_sync_frame_count_rejects_a_partial_frame(self):
+        params, _, pss, _ = pss_setup()
+        match = 'whole number of 10 ms frames'
+        with pytest.raises(ValueError, match=match):
+            ofdm.sync_frame_count(params.frame_size + 1, params)
+        with pytest.raises(ValueError, match=match):
+            ofdm.sync_frame_count(0, params)
+        with pytest.raises(ValueError, match=match):
+            ofdm.correlate_sync_sequence(
+                silent_block(params)[:, :-1], pss, params=params
+            )
+
+    def test_sync_frame_count_rejects_a_span_beyond_the_frame(self):
+        """symbol 280 lies past the 20 slots (280 symbols) of a 30 kHz frame, so its
+        21-slot correlation span cannot come from one frame"""
+        params, _, pss, _ = pss_setup()
+        beyond = sync_params(symbol_indexes=(280,))
+        assert beyond.slot_count == 21
+        with pytest.raises(ValueError, match=r'21-slot.*\(280,\).*does not fit'):
+            ofdm.correlate_sync_sequence(silent_block(params), pss, params=beyond)
+
+    def test_sync_frame_count_rejects_too_few_lags(self):
+        """one slot of 3840 samples less its 4 excess CP samples cannot host a 3840
+        sample lag search"""
+        params = dataclasses.replace(
+            sync_params(), slot_count=1, corr_size=3840, lag_count=3840
+        )
+        with pytest.raises(ValueError, match='3836 correlation samples, fewer than'):
+            ofdm.sync_frame_count(params.frame_size, params)
 
 
 class TestChooseSsbOffset:

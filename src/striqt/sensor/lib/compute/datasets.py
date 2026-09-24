@@ -5,26 +5,16 @@ from __future__ import annotations as __
 from collections import defaultdict
 import dataclasses
 import logging
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Any, Literal
 
 from ... import specs
-from .. import util
 
 import striqt.analysis as sa
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM
+from striqt.analysis.lib.util import np, pd, xr
 from ..typing import Callable, Sequence, TAR
 
 import msgspec
-
-if TYPE_CHECKING:
-    import numpy as np
-    import pandas as pd
-    import xarray as xr
-
-else:
-    np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')
-    xr = util.lazy_import('xarray')
 
 
 SOURCE_ID_NAME = 'source_id'

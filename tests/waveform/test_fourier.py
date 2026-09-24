@@ -238,6 +238,31 @@ class TestGetWindow:
         with pytest.raises(ValueError, match=match):
             fourier.find_window_param_from_enbw(window, enbw)
 
+    def test_equivalent_argument_spellings_share_one_cache_entry(self):
+        """the analysis warms the cache with a dtype string and no xp, while stft
+        asks with a numpy dtype object and its namespace; both must hit one entry"""
+        window, nwindow, nzero = ('kaiser', 11.884), 3840, 3328
+        fourier.get_window.cache_clear()
+
+        w1 = fourier.get_window(
+            window, nwindow, nzero=nzero, dtype='complex64', fftshift=True
+        )
+        before = fourier.get_window.cache_info()
+        w2 = fourier.get_window(
+            window,
+            nwindow,
+            nzero,
+            dtype=np.dtype('complex64'),
+            xp=np,
+            norm=True,
+            fftshift=True,
+        )
+        after = fourier.get_window.cache_info()
+
+        assert (after.hits, after.misses) == (before.hits + 1, before.misses)
+        assert w2 is w1
+        assert w1.shape == (nwindow + nzero,)
+
 
 class TestFftfreq:
     @given(nfft=st.integers(min_value=2, max_value=512), fs=sample_rates())
@@ -290,7 +315,7 @@ class TestFrequencySlicing:
         bandwidth = bw_bins * fres
         offset = offset_bins * fres
 
-        s = fourier._slice_freqs(nfft, fs, bandwidth, offset=offset)
+        s = fourier.slice_freqs(nfft, fs, bandwidth, offset=offset)
         bins = np.arange(nfft)[s]
 
         assert bins.size == bw_bins
@@ -307,18 +332,32 @@ class TestFrequencySlicing:
         assert np.isnan(x[:, :, s]).all()
         assert np.isnan(x).sum() == 2 * 3 * bw_bins
 
+    def test_slice_freqs_half_band(self):
+        """half of a 64-bin axis centered on DC is the 32 bins from 16 to 48"""
+        assert fourier.slice_freqs(64, 1.0, 0.5) == slice(16, 48)
+
     @pytest.mark.parametrize(
-        'kws, match',
+        'nfft, kws, match',
         [
-            ({'bandwidth': -1.0}, 'negative bandwidth'),
-            ({'bandwidth': 0.5, 'offset': 0.3}, 'not a multiple'),
-            ({'bandwidth': 0.5, 'offset': 0.5}, r'> fs/2'),
-            ({'bandwidth': 0.5, 'offset': -0.5}, r'< fs/2'),
+            (64, {'bandwidth': -1.0}, 'negative bandwidth'),
+            (64, {'bandwidth': 0.5, 'offset': 0.3}, 'not a multiple'),
+            (63, {'bandwidth': 0.5}, 'not a multiple'),
+            (64, {'bandwidth': 0.5, 'offset': 0.5}, r'> fs/2'),
+            (64, {'bandwidth': 0.5, 'offset': -0.5}, r'< fs/2'),
+            (64, {'bandwidth': 1.5}, r'fs/2'),
+        ],
+        ids=[
+            'negative_bandwidth',
+            'offset_off_grid',
+            'odd_nfft_puts_dc_off_grid',
+            'offset_too_high',
+            'offset_too_low',
+            'bandwidth_exceeds_fs',
         ],
     )
-    def test_slice_freqs_errors(self, kws, match):
+    def test_slice_freqs_errors(self, nfft, kws, match):
         with pytest.raises(ValueError, match=match):
-            fourier._slice_freqs(64, 1.0, **kws)
+            fourier.slice_freqs(nfft, 1.0, **kws)
 
     def test_freq_band_edges(self):
         freqs = fourier.fftfreq(64, 1.0)
@@ -402,9 +441,11 @@ class TestResample:
         X = fourier.fft(fourier.time_fftshift(x), axis=0)
         y_time = fourier.resample(x, num)
         y_freq = fourier.resample(X.copy(), num, domain='freq')
+        y_frequency = fourier.resample(X.copy(), num, domain='frequency')
         y_freq_inplace = fourier.resample(X, num, domain='freq', overwrite_x=True)
         sigma = cross_backend_sigma(x.dtype, [x.size], n_elementwise=1)
         assert_close(y_freq, y_time, sigma=sigma)
+        assert_array_equal(y_frequency, y_freq)
         assert_array_equal(y_freq_inplace, y_freq)
 
     @given(shift=st.integers(min_value=-16, max_value=16))
@@ -441,6 +482,33 @@ class TestResample:
     def test_odd_length_rejected(self):
         with pytest.raises(ValueError, match='even'):
             fourier.resample(np.ones(255, dtype=np.complex64), 128)
+
+    def test_resample_edges(self):
+        """downsampling 256 to 128 bins keeps the middle 128, shifted by `shift`"""
+        assert fourier.resample_edges(256, 128) is None
+        assert fourier.resample_edges(256, 512) is None
+        assert fourier.resample_edges(256, 128, shift=10) == (74, 202)
+        assert fourier.resample_edges(256, 128, shift=-64) == (0, 128)
+        assert fourier.resample_edges(256, 128, shift=64) == (128, 256)
+
+    @pytest.mark.parametrize(
+        'nfft_in, nfft_out, shift, match',
+        [
+            (255, 128, 0, 'even, not 255'),
+            (256, 512, 1, 'downsampling'),
+            (256, 128, -65, 'too small'),
+            (256, 128, 65, 'too large'),
+        ],
+        ids=[
+            'odd_input',
+            'shift_while_upsampling',
+            'shift_too_small',
+            'shift_too_large',
+        ],
+    )
+    def test_resample_edges_errors(self, nfft_in, nfft_out, shift, match):
+        with pytest.raises(ValueError, match=match):
+            fourier.resample_edges(nfft_in, nfft_out, shift)
 
 
 class TestStft:
@@ -785,22 +853,8 @@ class TestFilterDesign:
             ('hamming', 1 / 2),
             ('blackman', 2 / 3),
             ('blackmanharris', 4 / 5),
-            pytest.param(
-                'rect',
-                1,
-                marks=pytest.mark.xfail(
-                    strict=True,
-                    reason="the 'rect'/None branch is followed by `if` rather than "
-                    "`elif`, so it falls through to the 'unexpected matching error'",
-                ),
-            ),
-            pytest.param(
-                None,
-                1,
-                marks=pytest.mark.xfail(
-                    strict=True, reason='same fall-through as the rect window'
-                ),
-            ),
+            ('rect', 1),
+            (None, 1),
         ],
     )
     def test_design_oafilter_overlap(self, window, overlap_scale):
@@ -816,7 +870,7 @@ class TestFilterDesign:
     @pytest.mark.parametrize(
         'size, kws, exc, match',
         [
-            (1200, {'window': 'hann'}, TypeError, 'window'),
+            (1200, {'window': 'hann'}, TypeError, "'blackmanharris'.*, not 'hann'"),
             (1210, {'window': 'blackman', 'nfft_out': 121}, ValueError, '% 3'),
             (1000, {'window': 'hamming'}, ValueError, 'integer multiple of noverlap'),
         ],
@@ -907,6 +961,15 @@ class TestFilterDesign:
             ({'bw': 10e6, 'shift': 'sideways'}, 'shift argument'),
             ({'bw': 10e6, 'shift': 'left', 'fs_base': 20e6}, 'minimum'),
             ({'fs_target': 125e6 / np.pi}, 'no rational FFT sizes'),
+            ({'window': 'hann'}, "'blackmanharris'.*, not 'hann'"),
+        ],
+        ids=[
+            'shift_without_bandwidth',
+            'bandwidth_exceeds_nyquist',
+            'bad_shift',
+            'shift_needs_faster_radio',
+            'irrational_ratio',
+            'window_without_cola_divisor',
         ],
     )
     def test_design_cola_resampler_errors(self, kws, match):
@@ -1051,7 +1114,7 @@ class TestOverlapAddFilters:
     @pytest.mark.parametrize(
         'up, down, shift, match',
         [
-            (128, 256, 1e6 / 256 / 3, 'multiple of fs/up'),
+            (128, 256, 1e6 / 256 / 3, 'multiple of fs/down'),
             (128, 256, 100 * 1e6 / 256, 'too large'),
             (128, 256, -100 * 1e6 / 256, 'too small'),
             (512, 256, 1e6 / 256, 'only supported when downsampling'),

@@ -10,21 +10,14 @@ import typing
 from .. import specs
 from . import register, util
 from .typing import TAR
+from .util import array_api_compat, np, xr
 
 import striqt.waveform as sw
 
 import msgspec
 
 if typing.TYPE_CHECKING:
-    import array_api_compat
-    import numpy as np
-    import xarray as xr
     from .typing import Array, CoordFunc
-
-else:
-    np = util.lazy_import('numpy')
-    xr = util.lazy_import('xarray')
-    array_api_compat = util.lazy_import('array_api_compat')
 
 
 CAPTURE_DIM = 'capture'
@@ -350,13 +343,6 @@ class DelayedDataArray(collections.UserDict):
         return build_dataarray(self, expand_dims=expand_dims)
 
 
-def select_parameter_kws(locals_: dict, omit=(PORT_DIM, 'out')) -> dict:
-    """return the analysis parameters from the locals() evaluated at the beginning of analysis function"""
-
-    items = list(locals_.items())
-    return {k: v for k, v in items[1:] if k not in omit}
-
-
 class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
     as_xarray: TAR
     registry: register.AnalysisRegistry
@@ -390,10 +376,7 @@ def evaluate_by_spec(
     if not isinstance(iq, AcquiredIQ):
         iq = AcquiredIQ(pre_align=iq, pre_filter=None, aligned=None, capture=None)
 
-    if isinstance(spec, dict):
-        spec_dict = spec
-    else:
-        spec_dict = spec.to_dict()
+    spec_dict = spec.to_dict()
     results = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
@@ -407,9 +390,7 @@ def evaluate_by_spec(
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
-            if not isinstance(iq, AcquiredIQ):
-                iq_sel = iq
-            elif meas.prefer_iq_source == 'pre_filter':
+            if meas.prefer_iq_source == 'pre_filter':
                 iq_sel = iq.pre_filter
             elif iq.aligned is None or meas.prefer_iq_source == 'pre_align':
                 iq_sel = iq.pre_align

@@ -2,7 +2,6 @@ from __future__ import annotations as __
 
 import functools
 import math
-import msgspec
 import threading
 import typing
 import warnings
@@ -14,13 +13,10 @@ from yaml import SequenceNode
 from .. import specs
 
 from . import dataarrays, register, util
-
+from .util import np, pd, xr
 
 if typing.TYPE_CHECKING:
     import numcodecs
-    import numpy as np
-    import pandas as pd
-    import xarray as xr
     import yaml
     import zarr
     from typing_extensions import TypeIs
@@ -28,9 +24,6 @@ if typing.TYPE_CHECKING:
 
 else:
     numcodecs = util.lazy_import('numcodecs')
-    np = util.lazy_import('numpy')
-    pd = util.lazy_import('pandas')
-    xr = util.lazy_import('xarray')
     zarr = util.lazy_import('zarr')
     yaml = util.lazy_import('yaml')
 
@@ -214,14 +207,6 @@ def decode_from_yaml_file(
         return type.from_dict(obj)
     else:
         raise TypeError(f'unsupported type {repr(type)}')
-
-
-def decode_from_json_file(
-    path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
-):
-    with open(path, 'rb') as buf:
-        s = buf.read()
-    return msgspec.json.decode(s, type=type, dec_hook=specs.helpers._dec_hook)
 
 
 class _FileStreamBase:
@@ -766,19 +751,6 @@ def _build_encodings_zarr_v2(
             encodings[name]['compressor'] = compressor
 
     return encodings
-
-
-def _deep_update(dict1, dict2):
-    """nested merge of two dictionaries"""
-    for key, value in dict2.items():
-        if key not in dict1:
-            continue
-        if isinstance(dict1[key], dict) and isinstance(value, dict):
-            # If both values are dicts, merge them recursively
-            _deep_update(dict1[key], value)
-        else:
-            # Otherwise, the value from dict2 overwrites the one from dict1
-            dict1[key] = value
 
 
 class _YAMLFrozenLoader(yaml.SafeLoader):

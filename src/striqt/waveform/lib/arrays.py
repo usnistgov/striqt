@@ -8,28 +8,14 @@ from typing import Any, Callable, cast, Generator, TypeVar, TYPE_CHECKING
 import array_api_compat
 
 from . import util
+from .util import cp, np
 
 _TC = TypeVar('_TC', bound=Callable)
 
 
 if TYPE_CHECKING:
     from types import ModuleType
-    from typing import cast
     from .typing import ArrayLike, Array, TypeIsCupy
-    import numpy as np
-
-    try:
-        import cupy as cp  # type: ignore
-    except ModuleNotFoundError:
-        cp = None
-    cp = cast(ModuleType | None, cp)
-
-else:
-    np = util.lazy_import('numpy')
-    try:
-        cp = util.lazy_import('cupy')
-    except ImportError:
-        cp = None
 
 
 # %% rounding
@@ -377,7 +363,7 @@ def axis_to_blocks(y: Array, size: int, truncate=False, axis=0) -> Array:
     if ax_size % size != 0:
         if not truncate:
             raise ValueError(
-                f'axis 0 size {ax_size} is not a factor of block size {size}'
+                f'axis {axis} size {ax_size} is not a multiple of block size {size}'
             )
 
         slices = len(y.shape) * [slice(None, None)]

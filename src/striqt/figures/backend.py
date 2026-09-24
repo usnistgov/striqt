@@ -12,12 +12,11 @@ from . import specs, util
 
 import striqt.analysis as sa
 import striqt.waveform as sw
+from striqt.analysis.lib.util import np, xr
 
 if typing.TYPE_CHECKING:
     from typing_extensions import NotRequired, Unpack
     import matplotlib as mpl
-    import numpy as np
-    import xarray as xr
     import xarray.plot
     import xarray.core.types
 
@@ -25,8 +24,6 @@ if typing.TYPE_CHECKING:
 
 else:
     mpl = sw.util.lazy_import('matplotlib')
-    xr = sw.util.lazy_import('xarray')
-    np = sw.util.lazy_import('numpy')
 
 
 def select_mpl_backend(

@@ -8,20 +8,14 @@ from pathlib import Path
 from typing import Optional, overload, TYPE_CHECKING
 
 import striqt.analysis as sa
+from striqt.analysis.lib.util import np, xr
 
 from .. import specs
-from . import util
 
 import msgspec
 
 if TYPE_CHECKING:
     from .typing import ZarrStore
-
-    import numpy as np
-    import xarray as xr
-else:
-    np = util.lazy_import('numpy')
-    xr = util.lazy_import('xarray')
 
 
 def open_store(

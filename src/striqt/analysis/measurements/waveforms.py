@@ -3,18 +3,15 @@ from __future__ import annotations as __
 import typing
 
 from .. import specs
-from ..lib import util
+from ..lib.util import pd
 from . import shared
 from .shared import hint_keywords, registry
 
 if typing.TYPE_CHECKING:
-    import pandas as pd
-
     from striqt.waveform.lib.typing import ArrayBackend
-else:
-    pd = util.lazy_import('pandas')
 
 
+# %% iq_waveform
 def _get_start_stop_index(
     capture: specs.Capture,
     spec: specs.IQWaveform,

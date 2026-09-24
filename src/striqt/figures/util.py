@@ -2,22 +2,18 @@ from __future__ import annotations as __
 
 import ast
 import math
-import string
 import striqt.analysis as sa
 import striqt.waveform as sw
 import striqt.sensor as ss
 import typing
 
 from . import specs
+from striqt.analysis.lib.util import np, xr
 
 if typing.TYPE_CHECKING:
-    import numpy as np
-    import xarray as xr
-
     _T = typing.TypeVar('_T', bound=xr.Dataset)
-else:
-    np = sw.util.lazy_import('numpy')
-    xr = sw.util.lazy_import('xarray')
+
+get_format_fields = ss.specs.helpers.get_format_fields
 
 
 @typing.overload
@@ -87,12 +83,6 @@ def quantized_value_range(data: xr.DataArray, vmin, vmax, vstep):
     levels = np.linspace(vmin_edge, vmax_edge, n).tolist()
 
     return levels
-
-
-@sa.util.lru_cache()
-def get_format_fields(fmt, exclude=()):
-    all_exclude = exclude + (None,)
-    return [l[1] for l in string.Formatter().parse(fmt) if l[1] not in all_exclude]
 
 
 def get_groupby_fields(ds: 'xr.Dataset', opts: specs.PlotOptions) -> list[str]:

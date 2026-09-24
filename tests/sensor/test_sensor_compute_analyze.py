@@ -99,8 +99,8 @@ def test_a_source_only_capture_field_reuses_the_analysis_caches(stages):
     """the analysis-side caches are keyed on a projection of the capture
     (`sa.specs.helpers.lru_cache_on_converted`), so a sweep that loops over a field no
     measurement reads - here the synthetic source's `snr` - pays for them once"""
-    shared = sa.measurements.shared
-    cached = (shared.validated_spectrogram_sizing, shared.spectrogram_freqs)
+    spectrum = sa.measurements.spectrum
+    cached = (spectrum.validated_spectrogram_sizing, spectrum.spectrogram_freqs)
     for func in cached:
         func.cache_clear()
 

@@ -4,17 +4,15 @@ import functools
 import time
 from typing import TYPE_CHECKING
 
+from striqt.analysis.lib.util import np
+
 from ... import specs
 from .. import util
 from ..typing import SS, SC, SourceBackend
 
 if TYPE_CHECKING:
     from ..typing import Array, Self
-    import numpy as np
     import striqt.waveform as sw
-
-else:
-    np = util.lazy_import('numpy')
 
 
 class ReceiveStreamError(IOError):

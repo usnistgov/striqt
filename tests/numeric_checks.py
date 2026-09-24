@@ -134,6 +134,21 @@ def assert_tone_level(y, ref=1.0):
     assert np.abs(level_error_dB(y, ref)).max() < COLA_RIPPLE_DB
 
 
+# %% measurement result views
+
+
+def levels(result) -> np.ndarray:
+    """the dB values of a measurement result, widened to float64 for comparison"""
+    values = result.values if hasattr(result, 'values') else result
+    return np.asarray(values, dtype='float64')
+
+
+def populated(fractions, bins):
+    """the (bin, fraction) pairs of the non-zero entries of one histogram row"""
+    index = np.nonzero(np.asarray(fractions))
+    return list(zip(bins[index], np.asarray(fractions)[index]))
+
+
 # %% test-only tolerance policy
 
 # elementwise tolerances for the deterministic outputs (windows, frequency axes)

@@ -121,11 +121,24 @@ def test_warmup_sweep_flattens_to_count_captures(count):
 def test_warmup_sweep_preserves_analysis_sink_and_trigger():
     source = CUPY.replace(signal_trigger='cellular_5g_pss_sync')
     sink = ss.specs.Sink(path='somewhere.zarr', batched_write_count=3)
+    analysis = ss.specs.BundledAnalysis.from_dict({
+        **ANALYSIS.to_dict(),
+        # shared_spectrum picks SSB case C, which a capture with no center_frequency
+        # cannot otherwise resolve at 30 kHz
+        'cellular_5g_pss_sync': {
+            'subcarrier_spacing': 30e3,
+            'sample_rate': 7.68e6,
+            'discovery_periodicity': 0.02,
+            'shared_spectrum': True,
+        },
+    })
+    # the correlator needs whole 10 ms frames
+    capture = scale_only(duration=10e-3)
     sweep = make_sweep(
-        'single_tone', (scale_only(),), analysis=ANALYSIS, source=source, sink=sink
+        'single_tone', (capture,), analysis=analysis, source=source, sink=sink
     )
     warmup = gpu.build_warmup_sweep(sweep)
-    assert warmup.analysis == ANALYSIS
+    assert warmup.analysis == analysis
     assert warmup.sink == sink
     assert warmup.source.signal_trigger == 'cellular_5g_pss_sync'
     assert warmup.source.master_clock_rate == SOURCE.master_clock_rate

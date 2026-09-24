@@ -510,6 +510,83 @@ def test_design_resampler_needs_a_clock_rate():
         corrections.design_resampler(capture, None)
 
 
+# %% validate_fir_band
+
+FIR_TRANSITION_BW = corrections.FIR_TRANSITION_BW
+
+
+@pytest.mark.parametrize(
+    'analysis_bandwidth, match',
+    [(0.9e6, 'leaves no room'), (200e3, 'leaves no passband')],
+    ids=['within_the_transition_of_nyquist', 'below_the_transition_band'],
+)
+def test_fir_band_edges_are_rejected(analysis_bandwidth, match):
+    capture = make_capture(
+        'single_tone', sample_rate=1e6, analysis_bandwidth=analysis_bandwidth
+    )
+    with pytest.raises(ValueError, match=match):
+        corrections.validate_fir_band(capture)
+
+
+@pytest.mark.parametrize('offset', [-1e3, 0.0], ids=['inside', 'on_the_edge'])
+@pytest.mark.parametrize('edge', ['nyquist', 'zero'])
+def test_fir_band_edges_agree_with_the_filter_design(edge, offset):
+    """the rejection is exactly where scipy.signal.firls stops designing the filter:
+    a band of zero width, at either end, is already too narrow"""
+    fs = 1e6
+    if edge == 'nyquist':
+        bw = fs - FIR_TRANSITION_BW + offset
+    else:
+        bw = FIR_TRANSITION_BW - offset
+    capture = make_capture('single_tone', sample_rate=fs, analysis_bandwidth=bw)
+
+    try:
+        sw.design_fir_lpf(bw=bw, fs=fs, transition_bw=FIR_TRANSITION_BW)
+    except ValueError:
+        designs = False
+    else:
+        designs = True
+
+    try:
+        corrections.validate_fir_band(capture)
+    except ValueError:
+        validates = False
+    else:
+        validates = True
+
+    assert validates is designs is (offset != 0)
+
+
+# %% validate_oaresample_shift
+
+# a 10 kHz resampler bin: 1000 bins in, the middle 500 out, so the output band spans
+# bins [250, 750) and can shift by at most 250 bins (2.5 MHz) either way
+SHIFT_DESIGN = {'fs_sdr': 10e6, 'nfft': 1000, 'nfft_out': 500}
+
+
+@pytest.mark.parametrize(
+    'lo_offset', [0.0, 2.5e6, -2.5e6], ids=['none', 'high_edge', 'low_edge']
+)
+def test_oaresample_shift_within_the_source_band_is_accepted(lo_offset):
+    design = {**SHIFT_DESIGN, 'lo_offset': lo_offset}
+    assert corrections.validate_oaresample_shift(design) is None
+
+
+@pytest.mark.parametrize(
+    'design, match',
+    [
+        ({**SHIFT_DESIGN, 'nfft_out': 2000, 'lo_offset': 1e6}, 'only supported'),
+        ({**SHIFT_DESIGN, 'lo_offset': 1.5e4}, 'not a multiple'),
+        ({**SHIFT_DESIGN, 'lo_offset': 2.51e6}, 'outside the source bandwidth'),
+        ({**SHIFT_DESIGN, 'lo_offset': -2.51e6}, 'outside the source bandwidth'),
+    ],
+    ids=['upsampling', 'off_the_bin_grid', 'above_the_band', 'below_the_band'],
+)
+def test_oaresample_shift_rejects(design, match):
+    with pytest.raises(ValueError, match=match):
+        corrections.validate_oaresample_shift(design)
+
+
 # %% get_correction_overlaps: properties over the capture domain
 
 sample_rates = st.integers(min_value=1000, max_value=20000).map(lambda k: k * 1e3)
@@ -659,6 +736,24 @@ def test_correct_iq_trims_an_odd_lead_pad():
 
     assert corrected.pre_align.shape[1] == round(capture.duration * capture.sample_rate)
     assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
+
+
+# %% _resample
+
+
+def test_resample_rejects_a_length_that_does_not_divide():
+    """6.25 MS/s to 6 MS/s is 25:24, so one sample more than the (350, 350) overlaps
+    leaves a padded length that is not a multiple of 25"""
+    capture = make_capture('dirac_delta', **RESAMPLE_ONLY, time=IMPULSE_TIME)
+    lead, tail = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
+    fs = fs_sdr(capture)
+    count = lead + 1 + round(capture.duration * fs) + tail
+    assert not sw.isroundmod(count * capture.sample_rate, fs)
+
+    iq = _build_iq('dirac_delta', capture, (lead + 1, tail))
+
+    with pytest.raises(ValueError, match=f'{count} samples at {fs} S/s'):
+        ss.correct_iq(iq)
 
 
 # %% get_correction_overlaps: the soapy captures

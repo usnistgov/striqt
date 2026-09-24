@@ -14,15 +14,13 @@ import striqt.analysis as sa
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    import SoapySDR  # type: ignore
+    import SoapySDR  # type: ignore[import-not-found, unused-ignore]
     from ..typing import Array, Self
 else:
     try:
         SoapySDR = util.lazy_import('SoapySDR')
     except ImportError:
         SoapySDR = None
-
-    pd = util.lazy_import('pandas')
 
 
 SS = typing.TypeVar('SS', bound='specs.SoapySource')
@@ -644,7 +642,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             # exceptions
             return
 
-        self.device.__del__ = lambda: None
+        self.device.__del__ = lambda: None # type: ignore
         device = getattr(self, '_device', None)
         rx_stream = getattr(self, '_rx_stream', None)
 

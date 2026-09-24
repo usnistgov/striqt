@@ -1,10 +1,10 @@
-"""the time-selective power measurements: channel_power_time_series,
-cyclic_channel_power and iq_waveform.
+"""striqt.analysis.measurements.power: channel_power_time_series,
+channel_power_histogram and cyclic_channel_power.
 
 `tests/waveform/test_power_analysis.py` property-tests the underlying
 `iq_to_bin_power` and `iq_to_cyclic_power` kernels, so these tests cover only what
 the measurement wrapping adds: coordinate values, axis order, dtype, the dB
-conversion, detector and statistic selection, and slicing.
+conversion, and detector and statistic selection.
 
 Inputs are the closed-form generators in `striqt.analysis.testing`, whose levels
 `tests/analysis/test_analysis_testing.py` pins. A unit-amplitude tone has mean
@@ -25,12 +25,12 @@ import re
 import msgspec
 import numpy as np
 import pytest
-from analysis_strategies import registered_tolerance
-from numeric_checks import assert_close
+from analysis_strategies import POWER_BINS, registered_tolerance
+from numeric_checks import assert_close, elementwise_rtol, populated
 
 import striqt.analysis as sa
-import striqt.waveform as sw
 from striqt.analysis import testing
+from striqt.analysis.measurements.power import make_power_bins
 
 FS = 1e6
 
@@ -163,13 +163,23 @@ class TestChannelPowerTimeSeries:
                 10.5 * float(DETECTOR_PERIOD),
                 'duration must be a counting-number multiple of detector_period',
             ),
+            (
+                {'power_detectors': ('rms', 'bogus')},
+                DURATION,
+                "power_detectors entry 'bogus' is not a supported statistic",
+            ),
         ],
-        ids=['detector_period_3.33_samples', 'duration_10.5_detector_periods'],
+        ids=[
+            'detector_period_3.33_samples',
+            'duration_10.5_detector_periods',
+            'unknown_detector',
+        ],
     )
     def test_unevenly_tiled_capture_is_rejected(self, kwargs, duration, message):
         """`detector_period` is 10/3 samples at `sample_rate`, then the capture is 10.5
-        detector periods long. `iq_to_bin_power` and `axis_to_blocks` reject both once
-        they have IQ; the validator rejects them before any is acquired."""
+        detector periods long, then a detector `stat_ufunc_from_shorthand` does not
+        know. `iq_to_bin_power` and `axis_to_blocks` reject all three once they have
+        IQ; the validator rejects them before any is acquired."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(
             msgspec.ValidationError, match=re.escape(message)
@@ -214,6 +224,15 @@ class TestChannelPowerTimeSeries:
         assert longer_bin.on_peak.peak > base.on_peak.peak
         assert longer_capture.on_peak.rms == pytest.approx(base.on_peak.rms)
         assert longer_capture.on_peak.peak > base.on_peak.peak
+
+    def test_tolerance_accumulates_only_for_the_averaging_detectors(self):
+        """peak and min select one sample exactly, so their budget does not grow with
+        the detector period the way the rms mean's does"""
+        rms = tolerance(CPTS_SPEC.replace(power_detectors=('rms',)))
+        peak = tolerance(CPTS_SPEC.replace(power_detectors=('peak',)))
+        longer = CPTS_SPEC.replace(detector_period=5 * DETECTOR_PERIOD)
+        assert peak.on_peak.peak < rms.on_peak.peak
+        assert tolerance(longer.replace(power_detectors=('peak',))) == peak
 
 
 # %% cyclic_channel_power
@@ -262,17 +281,30 @@ class TestCyclicChannelPower:
                 DURATION,
                 'detector_period must be a counting-number multiple of the sample period',
             ),
+            (
+                {'power_detectors': ('bogus',)},
+                DURATION,
+                "power_detectors entry 'bogus' is not a supported statistic",
+            ),
+            (
+                {'cyclic_statistics': ('min', 1.5)},
+                DURATION,
+                'cyclic_statistics entry 1.5 is not a supported statistic',
+            ),
         ],
         ids=[
             'duration_1.5_cycles',
             'cyclic_period_2.5_detector_periods',
             'detector_period_3.33_samples',
+            'unknown_detector',
+            'quantile_above_one',
         ],
     )
     def test_unevenly_nested_periods_are_rejected(self, kwargs, duration, message):
         """the three couplings the docstring states: `duration` is 1.5 cycles,
         `cyclic_period` is 2.5 detector periods, and `detector_period` is 10/3 samples
-        at `sample_rate`. Each is caught before any IQ is touched, so the error carries
+        at `sample_rate`; then a detector and a quantile that the statistic table does
+        not implement. Each is caught before any IQ is touched, so the error carries
         the measurement's field path."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(
@@ -345,6 +377,111 @@ class TestCyclicChannelPower:
         assert quantile.on_peak.peak > selections.on_peak.peak
 
 
+# %% channel_power_histogram
+
+HIST_DURATION = 1e-3
+HIST_DETECTOR_PERIOD = fractions.Fraction(1, 10000)
+HIST_CAPTURE = sa.specs.Capture(duration=HIST_DURATION, sample_rate=FS)
+
+RTOL = elementwise_rtol(np.float32)
+
+
+@pytest.mark.parametrize(
+    'level,expected_bin',
+    [
+        (-13.0, -13.0),
+        (0.0, 0.0),
+        (7.0, 7.0),
+        (20.0, float('inf')),
+        (-60.0, float('-inf')),
+    ],
+    ids=['level-13dB', 'level0dB', 'level7dB', 'above_power_high', 'below_power_low'],
+)
+def test_channel_power_histogram_constant_level_fills_one_bin(level, expected_bin):
+    """every detector reading of a constant-envelope tone is the same level, so the
+    whole normalized fraction lands in the bin centered on it, or in the infinite
+    catch-all bin when the level falls outside the grid"""
+    iq = sa.testing.tone(HIST_DURATION, FS) * 10 ** (level / 20)
+
+    da = sa.measurements.channel_power_histogram(
+        iq,
+        HIST_CAPTURE,
+        detector_period=HIST_DETECTOR_PERIOD,
+        as_xarray=True,
+        **POWER_BINS,
+    )
+
+    bins = da.channel_power_bin.values
+    for detector in range(da.sizes['power_detector']):
+        assert populated(da.values[0, detector], bins) == [(expected_bin, 1.0)]
+
+
+def test_channel_power_histogram_fractions_sum_to_one():
+    """the counts are normalized so that each (port, detector) row sums to 1, even
+    though the sum in the source runs over both detectors at once"""
+    # one ramp across the whole capture, so each detector period reads a level of its
+    # own rather than repeating one bin
+    iq = sa.testing.sawtooth(HIST_DURATION, FS, period=HIST_DURATION, ports=2)
+
+    da = sa.measurements.channel_power_histogram(
+        iq,
+        HIST_CAPTURE,
+        detector_period=HIST_DETECTOR_PERIOD,
+        as_xarray=True,
+        **POWER_BINS,
+    )
+
+    assert (da.values > 0).sum(axis=-1).min() > 1, 'expected a spread of bins'
+    assert_close(da.values.sum(axis=-1), np.ones((2, 2)), rtol=RTOL)
+
+
+@pytest.mark.parametrize(
+    'power_low,power_high,power_resolution',
+    [(-40.0, 10.0, 1.0), (-40.0, 10.0, 3.0), (-20.0, 0.0, 0.5)],
+    ids=['step1', 'step3_off_grid_high', 'step0.5'],
+)
+def test_channel_power_histogram_bin_coordinate(
+    power_low, power_high, power_resolution
+):
+    iq = sa.testing.tone(HIST_DURATION, FS)
+    bins = {
+        'power_low': power_low,
+        'power_high': power_high,
+        'power_resolution': power_resolution,
+    }
+
+    da = sa.measurements.channel_power_histogram(
+        iq, HIST_CAPTURE, detector_period=HIST_DETECTOR_PERIOD, as_xarray=True, **bins
+    )
+
+    expected = make_power_bins(power_low, power_high, power_resolution)
+    assert_close(da.channel_power_bin.values, expected, rtol=RTOL)
+    assert da.channel_power_bin.values[0] == float('-inf')
+    assert da.channel_power_bin.values[-1] == float('inf')
+
+
+def test_channel_power_histogram_shares_the_time_series_validator():
+    """the histogram bins the time series, so the detector names and the tiling
+    rules that reject one must reject the other, at the histogram's own path"""
+    assert (
+        sa.registry[sa.specs.ChannelPowerHistogram].validate
+        is sa.registry[sa.specs.ChannelPowerTimeSeries].validate
+    )
+
+    iq = sa.testing.tone(HIST_DURATION, FS)
+    with pytest.raises(
+        msgspec.ValidationError, match="power_detectors entry 'bogus'"
+    ) as ex:
+        sa.measurements.channel_power_histogram(
+            iq,
+            HIST_CAPTURE,
+            detector_period=HIST_DETECTOR_PERIOD,
+            power_detectors=('rms', 'bogus'),
+            **POWER_BINS,
+        )
+    assert str(ex.value).startswith('$.channel_power_histogram: ')
+
+
 # %% registered tolerances
 
 POWER_SPECS = [CPTS_SPEC, CYCLIC_SPEC]
@@ -380,101 +517,3 @@ def test_tolerance_is_backend_independent_since_no_fft_is_involved(spec, input_e
     numpy_tol = tolerance(spec, input_error=input_error, array_backend='numpy')
     cupy_tol = tolerance(spec, input_error=input_error, array_backend='cupy')
     assert cupy_tol == numpy_tol
-
-
-# %% iq_waveform
-
-
-class TestIqWaveform:
-    @staticmethod
-    def waveform(duration=DURATION):
-        return testing.single_tone(duration, FS, frequency_offset=1e5, snr=10)
-
-    @pytest.mark.parametrize(
-        ('start_time_sec', 'stop_time_sec', 'start', 'stop'),
-        [
-            (None, None, 0, SIZE),
-            (2e-5, 6e-5, 20, 60),
-            (None, 2.5e-5, 0, 25),
-            (9.6e-5, None, 96, SIZE),
-            (None, 2 * DURATION, 0, SIZE),
-            (None, DURATION, 0, SIZE),
-        ],
-        ids=[
-            'unbounded',
-            'both_bounds',
-            'stop_only',
-            'start_only',
-            'stop_past_end',
-            'stop_at_end',
-        ],
-    )
-    def test_time_bounds_slice_by_sample_index(
-        self, start_time_sec, stop_time_sec, start, stop
-    ):
-        iq = self.waveform()
-        da = sa.measurements.iq_waveform(
-            iq, capture(), start_time_sec=start_time_sec, stop_time_sec=stop_time_sec
-        )
-
-        assert da.sizes['iq_index'] == stop - start
-        assert np.array_equal(da.values, iq[:, start:stop])
-        indices = da.coords['iq_index']
-        assert indices.dtype == np.dtype('uint64')
-        np.testing.assert_array_equal(indices.values, np.arange(start, stop))
-
-    @pytest.mark.parametrize(
-        'stop_time_sec', [None, 3 * DURATION], ids=['start_only', 'both_bounds']
-    )
-    def test_bounds_past_the_capture_end_are_empty(self, stop_time_sec):
-        iq = self.waveform()
-        da = sa.measurements.iq_waveform(
-            iq, capture(), start_time_sec=2 * DURATION, stop_time_sec=stop_time_sec
-        )
-
-        assert da.sizes['iq_index'] == 0
-        assert da.coords['iq_index'].size == 0
-
-    def test_reversed_window_is_empty(self):
-        """current behaviour, not a validated contract: a window that ends before it
-        starts yields an empty result rather than an error"""
-        iq = self.waveform()
-        da = sa.measurements.iq_waveform(
-            iq, capture(), start_time_sec=6e-5, stop_time_sec=2e-5
-        )
-
-        assert da.sizes['iq_index'] == 0
-        assert da.coords['iq_index'].size == 0
-
-    def test_tolerance_accumulates_only_for_the_averaging_detectors(self):
-        """peak and min select one sample exactly, so their budget does not grow with
-        the detector period the way the rms mean's does"""
-        rms = tolerance(CPTS_SPEC.replace(power_detectors=('rms',)))
-        peak = tolerance(CPTS_SPEC.replace(power_detectors=('peak',)))
-        longer = CPTS_SPEC.replace(detector_period=5 * DETECTOR_PERIOD)
-        assert peak.on_peak.peak < rms.on_peak.peak
-        assert tolerance(longer.replace(power_detectors=('peak',))) == peak
-
-    def test_tolerance_is_the_input_error_on_the_envelope_level(self):
-        """the slice adds no error of its own, so exact IQ passes through with a zero
-        budget, and an rms amplitude error `r` in the IQ reads on the envelope level
-        ``20*log10|iq|`` as an rms of ``20*log10(1 + r)`` dB with a larger peak over
-        the slice"""
-        exact = tolerance(sa.specs.IQWaveform())
-        assert exact == sa.specs.Tolerance(
-            units='dB', rtol=0.0, on_peak=sa.specs.ErrorBound(rms=0.0, peak=0.0)
-        )
-
-        r = 1e-4
-        noisy = tolerance(sa.specs.IQWaveform(), input_error=r)
-        assert noisy.units == 'dB'
-        assert noisy.rtol == exact.rtol
-        assert noisy.on_peak.rms == pytest.approx(
-            sw.power_analysis.level_tolerance_dB(r)
-        )
-        assert noisy.on_peak.peak > noisy.on_peak.rms
-        assert noisy.off_peak_dBc is not None and noisy.off_peak_dBc.peak < 0
-
-        shorter = tolerance(sa.specs.IQWaveform(stop_time_sec=1e-5), input_error=r)
-        assert shorter.on_peak.rms == noisy.on_peak.rms
-        assert shorter.on_peak.peak < noisy.on_peak.peak

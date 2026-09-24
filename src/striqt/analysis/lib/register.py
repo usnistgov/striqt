@@ -4,10 +4,8 @@ into xarray DataArray objects with labeled dimensions and coordinates.
 
 from __future__ import annotations as __
 
-import collections
 import contextlib
 import functools
-import textwrap
 from typing import Any, Callable, cast, Literal, NamedTuple, TYPE_CHECKING, Union
 from fractions import Fraction
 
@@ -281,27 +279,12 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
     def __init__(self):
         super().__init__()
-        self.depends_on: dict[Callable, set[Callable]] = {}
         self.names: set[str] = set()
         self.caches = {}
-        self.use_unaligned_input: set[Callable] = set()
         self.coordinates = CoordRegistry()
         self.signal_trigger = AlignmentSourceRegistry()
         self.parameter_defaults = {}
         self.parameter_fields = {}
-
-    def __or__(self, other):
-        result = super().__or__(other)
-        assert isinstance(result, AnalysisRegistry)
-        result.depends_on = self.depends_on | other.depends_on
-        result.names = self.names | other.names
-        result.caches = self.caches | other.caches
-        result.use_unaligned_input = (
-            self.use_unaligned_input | other.use_unaligned_input
-        )
-        result.coordinates = self.coordinates | other.coordinates
-        result.signal_trigger = self.signal_trigger | other.signal_trigger
-        return result
 
     def measurement(
         self,
@@ -448,10 +431,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                     else:
                         self.parameter_fields[field.name] = field
                         self.parameter_defaults[field.name] = coord_default
-
-            self.depends_on[wrapped] = set()
-            for dep in info_kws['depends']:
-                self.depends_on[dep].add(wrapped)
 
             if caches is None:
                 pass
@@ -653,12 +632,6 @@ class Trigger:
         lags = self.info.lag_coord_func(capture, self.meas_spec)
         step = lags[1] - lags[0]
         return step * len(lags)
-
-
-def get_trigger(
-    name: str, analysis: specs.AnalysisGroup, registry: AnalysisRegistry
-) -> Trigger:
-    return Trigger.from_spec(name, analysis, registry)
 
 
 def get_signal_trigger_measurement_name(name: str, registry: AnalysisRegistry) -> str:

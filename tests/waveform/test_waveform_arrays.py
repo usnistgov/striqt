@@ -292,6 +292,10 @@ class TestAxisToBlocks:
         with pytest.raises(exc):
             arrays.axis_to_blocks(np.zeros(shape), size)
 
+    def test_misaligned_axis_is_named(self):
+        with pytest.raises(ValueError, match='axis 1 size 7 is not a multiple of'):
+            arrays.axis_to_blocks(np.zeros((3, 7)), 2, axis=1)
+
 
 class TestHistogramLastAxis:
     @given(

@@ -7,23 +7,17 @@ from typing import cast, Literal, overload, TYPE_CHECKING
 import warnings
 
 from ... import specs
-from .. import sources, util
+from .. import sources
 from . import corrections, gpu, datasets
 
 import striqt.analysis as sa
 import striqt.waveform as sw
+from striqt.analysis.lib.util import np, xr
 
 import msgspec
 
 if TYPE_CHECKING:
     from ..typing import Array
-
-    import numpy as np
-    import xarray as xr
-
-else:
-    np = util.lazy_import('numpy')
-    xr = util.lazy_import('xarray')
 
 
 SOURCE_ID_NAME = 'source_id'

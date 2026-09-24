@@ -1,8 +1,11 @@
 """striqt.analysis.lib.register: the `validate=` and `tolerance=` hooks on measurement
-registration and the `AnalysisRegistry.validate`/`.tolerances` walks over an analysis
-group.
+registration, the `AnalysisRegistry.validate`/`.tolerances` walks over an analysis
+group, and the guarantees the live registry makes: a (capture, spec) pair that
+validates is one the measurement can run, and every registered measurement honours
+the contract in the last cell (dtype, dims, coords and attrs reach the DataArray, and
+the raw `as_xarray=False` path returns the same values).
 
-Everything here builds its own `AnalysisRegistry`; mutating the live
+The hook tests build their own `AnalysisRegistry`; mutating the live
 `register.registry` would leak a measurement into every other test module. The
 measurements are called with `as_xarray=False` because the xarray path resolves
 coordinate factories through the *global* registry.
@@ -10,9 +13,14 @@ coordinate factories through the *global* registry.
 
 from __future__ import annotations
 
+from fractions import Fraction
+
 import msgspec
 import numpy as np
 import pytest
+from analysis_strategies import VALIDATOR_DOMAINS
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 import striqt.analysis as sa
 from striqt.analysis.lib import register
@@ -323,3 +331,371 @@ def test_registry_tolerances_is_cached_on_the_projected_capture():
     registry.tolerances(CAPTURE.replace(analysis_bandwidth=5e5), group)
 
     assert len(seen) == 2
+
+
+# %% a validator that passes means the measurement runs
+
+VALIDATED = [info for info in sa.registry.values() if info.validate is not None]
+VALIDATED_IDS = [info.name for info in VALIDATED]
+# the SSS correlators search all 1008 cell ids per accepted example, so their draws
+# cost roughly ten times the others'
+SSS = [info for info in VALIDATED if 'sss' in info.name]
+OTHERS = [info for info in VALIDATED if 'sss' not in info.name]
+
+
+def test_every_validated_measurement_has_a_strategy():
+    """the guarantee below is only as broad as the domains it draws from"""
+    assert set(VALIDATOR_DOMAINS) == set(VALIDATED_IDS)
+
+
+def check_accepted_pair_runs(info, data):
+    """`Sweep.__post_init__` runs these validators on every capture before anything
+    is acquired, so a pair they accept must not fail on shape or scalar arithmetic
+    once IQ arrives. Pairs they reject are out of scope here; the spot checks below
+    cover those."""
+    capture, spec = data.draw(VALIDATOR_DOMAINS[info.name], label=info.name)
+    group = sa.registry.tospec()(**{info.name: spec})
+    try:
+        sa.registry.validate(capture, group)
+    except SpecValidationError:
+        return
+
+    ports = 2 if isinstance(spec, sa.specs.SpectrogramHistogramRatio) else 1
+    iq = sa.testing.noise(
+        capture.duration,
+        capture.sample_rate,
+        noise_psd=1 / capture.sample_rate,
+        ports=ports,
+    )
+    try:
+        info.func(iq, capture, as_xarray=False, **spec.to_dict())
+    except (ValueError, IndexError, TypeError) as ex:
+        pytest.fail(f'{info.name} accepted {capture!r} with {spec!r} but raised {ex!r}')
+
+
+@pytest.mark.parametrize('info', OTHERS, ids=[i.name for i in OTHERS])
+@given(data=st.data())
+@settings(max_examples=50)
+def test_a_validator_that_passes_means_the_measurement_runs(info, data):
+    check_accepted_pair_runs(info, data)
+
+
+@pytest.mark.parametrize('info', SSS, ids=[i.name for i in SSS])
+@given(data=st.data())
+@settings(max_examples=15)
+def test_a_validator_that_passes_means_the_sss_measurement_runs(info, data):
+    check_accepted_pair_runs(info, data)
+
+
+FS = 1.024e6
+NFFT = 8
+SAMPLES = 64
+SPG = {'window': 'boxcar', 'frequency_resolution': FS / NFFT}
+CELL_FS = 3.84e6
+FRAME = round(10e-3 * CELL_FS)
+PSS = {'subcarrier_spacing': 30e3, 'sample_rate': CELL_FS, 'symbol_indexes': 'c'}
+BINS = {'power_low': -40.0, 'power_high': 10.0, 'power_resolution': 1.0}
+
+
+def capture_of(samples, sample_rate, **kwargs) -> sa.specs.Capture:
+    return sa.specs.Capture(
+        duration=samples / sample_rate, sample_rate=sample_rate, **kwargs
+    )
+
+
+# (measurement, capture, spec, the spec or capture field the message must name)
+REJECTED = {
+    'spectrogram_shorter_than_nfft': (
+        capture_of(NFFT - 1, FS),
+        sa.specs.Spectrogram(**SPG),
+        'duration',
+    ),
+    'spectrogram_lo_bandstop_on_odd_nfft': (
+        capture_of(SAMPLES, FS),
+        sa.specs.Spectrogram(
+            window='boxcar', frequency_resolution=FS / 7, lo_bandstop=FS / 7
+        ),
+        'lo_bandstop',
+    ),
+    'spectrogram_analysis_bandwidth_above_sample_rate': (
+        capture_of(SAMPLES, FS, analysis_bandwidth=1.5 * FS),
+        sa.specs.Spectrogram(**SPG),
+        'analysis_bandwidth',
+    ),
+    'spectrogram_trim_on_odd_nfft': (
+        capture_of(SAMPLES, FS, analysis_bandwidth=FS / 2),
+        sa.specs.Spectrogram(window='boxcar', frequency_resolution=FS / 7),
+        'analysis_bandwidth',
+    ),
+    'spectrogram_integration_bandwidth_above_sample_rate': (
+        capture_of(SAMPLES, FS),
+        sa.specs.Spectrogram(**SPG, integration_bandwidth=2 * FS),
+        'integration_bandwidth',
+    ),
+    'spectrogram_time_aperture_longer_than_capture': (
+        capture_of(NFFT, FS),
+        sa.specs.Spectrogram(**SPG, time_aperture=2 * NFFT / FS),
+        'time_aperture',
+    ),
+    'psd_unknown_statistic': (
+        capture_of(SAMPLES, FS),
+        sa.specs.PowerSpectralDensity(**SPG, time_statistic=('mean', 'bogus')),
+        'time_statistic',
+    ),
+    'psd_quantile_above_one': (
+        capture_of(SAMPLES, FS),
+        sa.specs.PowerSpectralDensity(**SPG, time_statistic=(1.5,)),
+        'time_statistic',
+    ),
+    'channel_power_unknown_detector': (
+        capture_of(100, 1e6),
+        sa.specs.ChannelPowerTimeSeries(
+            detector_period=Fraction(1, 100_000), power_detectors=('rms', 'bogus')
+        ),
+        'power_detectors',
+    ),
+    'channel_power_histogram_unknown_detector': (
+        capture_of(100, 1e6),
+        sa.specs.ChannelPowerHistogram(
+            detector_period=Fraction(1, 100_000),
+            power_detectors=('bogus',),
+            **BINS,
+        ),
+        'power_detectors',
+    ),
+    'cyclic_power_quantile_below_zero': (
+        capture_of(100, 1e6),
+        sa.specs.CyclicChannelPower(
+            cyclic_period=1e-4,
+            detector_period=Fraction(1, 100_000),
+            cyclic_statistics=('min', -0.5),
+        ),
+        'cyclic_statistics',
+    ),
+    'pss_odd_sample_count': (
+        capture_of(FRAME + 1, CELL_FS),
+        sa.specs.Cellular5GNRPSSCorrelator(**PSS),
+        'duration',
+    ),
+    'pss_frequency_offset_off_the_resampler_grid': (
+        capture_of(FRAME, CELL_FS),
+        sa.specs.Cellular5GNRPSSCorrelator(**PSS, frequency_offset=150.0),
+        'frequency_offset',
+    ),
+    'pss_frequency_offset_shifts_past_the_band': (
+        capture_of(FRAME, CELL_FS),
+        sa.specs.Cellular5GNRPSSCorrelator(
+            subcarrier_spacing=15e3, sample_rate=1.92e6, frequency_offset=CELL_FS / 2
+        ),
+        'frequency_offset',
+    ),
+    'sss_partial_frame': (
+        capture_of(FRAME + FRAME // 2, CELL_FS),
+        sa.specs.Cellular5GNRSSSCorrelator(**PSS),
+        'duration',
+    ),
+    'pss_sync_partial_frame': (
+        capture_of(FRAME + FRAME // 2, CELL_FS),
+        sa.specs.Cellular5GNPSSSync(**PSS),
+        'duration',
+    ),
+    'sss_sync_odd_sample_count': (
+        capture_of(FRAME + 1, CELL_FS),
+        sa.specs.Cellular5GNSSSSync(**PSS),
+        'duration',
+    ),
+    'ssb_spectrogram_frequency_offset_off_the_subcarrier_grid': (
+        capture_of(8400, 420e3),
+        sa.specs.Cellular5GNRSSBSpectrogram(
+            subcarrier_spacing=30e3, sample_rate=120e3, frequency_offset=15e3
+        ),
+        'frequency_offset',
+    ),
+    'ssb_spectrogram_sample_rate_above_capture': (
+        capture_of(8400, 420e3),
+        sa.specs.Cellular5GNRSSBSpectrogram(subcarrier_spacing=30e3, sample_rate=840e3),
+        'sample_rate',
+    ),
+    'ssb_spectrogram_partial_burst_set': (
+        capture_of(8400 + 210, 420e3),
+        sa.specs.Cellular5GNRSSBSpectrogram(subcarrier_spacing=30e3, sample_rate=120e3),
+        'duration',
+    ),
+    'autocorrelation_symbol_range_past_the_slot': (
+        capture_of(FRAME, CELL_FS),
+        sa.specs.CellularCyclicAutocorrelator(
+            subcarrier_spacings=30e3, symbol_range=(14, 15)
+        ),
+        'symbol_range',
+    ),
+    'autocorrelation_no_downlink_slot': (
+        capture_of(FRAME, CELL_FS),
+        sa.specs.CellularCyclicAutocorrelator(
+            subcarrier_spacings=30e3, frame_slots='u'
+        ),
+        'frame_slots',
+    ),
+    'autocorrelation_frame_range_past_the_capture': (
+        capture_of(FRAME, CELL_FS),
+        sa.specs.CellularCyclicAutocorrelator(
+            subcarrier_spacings=30e3, frame_range=(0, 2)
+        ),
+        'frame_range',
+    ),
+    'resource_grid_analysis_bandwidth_above_sample_rate': (
+        capture_of(420, 210e3, analysis_bandwidth=1.5 * 210e3),
+        sa.specs.CellularResourcePowerHistogram(
+            window='hamming', subcarrier_spacing=15e3, **BINS
+        ),
+        'analysis_bandwidth',
+    ),
+}
+
+
+@pytest.mark.parametrize('case', list(REJECTED), ids=list(REJECTED))
+def test_validator_rejects_at_the_analysis_path_naming_the_field(case):
+    """each failure mode the runtime kernels would raise on is rejected first by the
+    registered validator, located at the measurement key and worded in spec terms"""
+    capture, spec, field = REJECTED[case]
+    name = sa.registry[type(spec)].name
+    group = sa.registry.tospec()(**{name: spec})
+
+    with pytest.raises(SpecValidationError) as excinfo:
+        sa.registry.validate(capture, group)
+
+    assert excinfo.value.path[:2] == ('.analysis', f'.{name}')
+    assert str(excinfo.value).startswith(f'$.analysis.{name}')
+    assert field in excinfo.value.message
+
+
+# %% the contract shared by every measurement
+
+CONTRACT_FS = 210e3
+CONTRACT_SCS = 15e3
+CONTRACT_DETECTOR_PERIOD = Fraction(1, 10000)
+CONTRACT_CAPTURE = sa.specs.Capture(
+    duration=4e-3, sample_rate=CONTRACT_FS, analysis_bandwidth=150e3
+)
+
+# 4 ms at 210 kHz is 1 discovery period of 56 symbols at 15 kHz subcarriers, whose
+# first 28 are the SSB burst set, and a whole number of detector and cyclic periods
+CONTRACT_SPECS = (
+    sa.specs.Spectrogram(window='hamming', frequency_resolution=7.5e3),
+    sa.specs.PowerSpectralDensity(window='hamming', frequency_resolution=7.5e3),
+    sa.specs.Cellular5GNRSSBSpectrogram(
+        subcarrier_spacing=CONTRACT_SCS,
+        sample_rate=CONTRACT_FS / 2,
+        discovery_periodicity=CONTRACT_CAPTURE.duration,
+    ),
+    sa.specs.ChannelPowerTimeSeries(detector_period=CONTRACT_DETECTOR_PERIOD),
+    sa.specs.CyclicChannelPower(
+        cyclic_period=1e-3, detector_period=CONTRACT_DETECTOR_PERIOD
+    ),
+    sa.specs.IQWaveform(),
+    sa.specs.ChannelPowerHistogram(detector_period=CONTRACT_DETECTOR_PERIOD, **BINS),
+    sa.specs.SpectrogramHistogram(window='hamming', frequency_resolution=7.5e3, **BINS),
+    sa.specs.SpectrogramHistogramRatio(
+        window='hamming', frequency_resolution=7.5e3, **BINS
+    ),
+    sa.specs.CellularResourcePowerHistogram(
+        window='hamming', subcarrier_spacing=CONTRACT_SCS, **BINS
+    ),
+)
+
+SPEC_IDS = [type(spec).__name__ for spec in CONTRACT_SPECS]
+
+
+def measure(spec, as_xarray):
+    """run the measurement registered for `type(spec)` the way the registry calls it"""
+    info = sa.registry[type(spec)]
+    ports = 2 if isinstance(spec, sa.specs.SpectrogramHistogramRatio) else 1
+    iq = sa.testing.tone(
+        CONTRACT_CAPTURE.duration, CONTRACT_CAPTURE.sample_rate, ports=ports
+    )
+    return info, info.func(iq, CONTRACT_CAPTURE, as_xarray=as_xarray, **spec.to_dict())
+
+
+def registered_dims(info):
+    dims = ['port']
+    for factory in info.coord_factories:
+        for dim in sa.registry.coordinates[factory].dims:
+            if dim not in dims:
+                dims.append(dim)
+    return tuple(dims)
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_measurement_dtype_and_dims(spec):
+    info, da = measure(spec, as_xarray=True)
+
+    assert da.dtype == info.dtype
+    if info.dims is None:
+        assert da.dims == registered_dims(info)
+    else:
+        assert da.dims == ('port',) + info.dims
+    assert set(da.coords) == set(da.dims) - {'port'}
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_measurement_attrs(spec):
+    """the registered attrs and every spec field reach the DataArray, which is what
+    names them in a saved zarr store"""
+    info, da = measure(spec, as_xarray=True)
+
+    for name, value in info.attrs.items():
+        assert da.attrs[name] == value
+
+    # the wrapper decodes the keywords into a spec before calling, so the attrs hold
+    # the validated field values rather than the ones passed in
+    for name, value in spec.validate().to_dict().items():
+        assert da.attrs[name] == value
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_measurement_without_xarray(spec):
+    _, (data, attrs) = measure(spec, as_xarray=False)
+    _, da = measure(spec, as_xarray=True)
+
+    assert isinstance(attrs, dict)
+    data = np.asarray(data)
+    assert data.shape == da.shape
+    # the raw array is not held to the registered dtype: power_spectral_density
+    # returns float16 where it registers float32
+    assert np.array_equal(data.astype(da.dtype), da.values, equal_nan=True)
+
+
+# the only measurement that validates nothing: iq_waveform clamps its start/stop
+# bounds into the capture by design rather than rejecting them
+NO_VALIDATOR = {'iq_waveform'}
+
+
+def test_every_measurement_has_a_validator():
+    """a measurement without a validator silently skips pre-sweep validation, so a
+    new one has to either register `validate=` or be named here"""
+    missing = {
+        info.name for info in sa.registry.values() if info.validate is None
+    } - NO_VALIDATOR
+
+    assert missing == set()
+    assert NO_VALIDATOR <= {info.name for info in sa.registry.values()}
+
+
+CONTRACT_VALIDATED_SPECS = [
+    s for s in CONTRACT_SPECS if sa.registry[type(s)].validate is not None
+]
+CONTRACT_VALIDATED_IDS = [type(spec).__name__ for spec in CONTRACT_VALIDATED_SPECS]
+
+
+@pytest.mark.parametrize('spec', CONTRACT_VALIDATED_SPECS, ids=CONTRACT_VALIDATED_IDS)
+def test_validators_accept_the_contract_specs(spec):
+    """the pairs the contract tests measure successfully must also pass validation,
+    without IQ"""
+    validate = sa.registry[type(spec)].validate
+    validate(sa.specs.helpers.to_analysis_capture(CONTRACT_CAPTURE), spec)
+
+
+def test_registry_validate_accepts_the_whole_contract_group():
+    group = sa.registry.tospec()(**{
+        sa.registry[type(spec)].name: spec for spec in CONTRACT_SPECS
+    })
+    sa.registry.validate(CONTRACT_CAPTURE, group)

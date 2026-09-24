@@ -10,6 +10,7 @@ from threading import Event
 
 import striqt.analysis as sa
 import striqt.waveform as sw
+from striqt.analysis.lib.util import np
 
 from .sources import base, buffers
 from .typing import SS, SP, SC, S, PC, PS, SourceBackend, TypeVar
@@ -18,14 +19,10 @@ from .. import specs
 
 if TYPE_CHECKING:
     from .typing import Array, Self
-    import numpy as np
 
     T = TypeVar('T', bound='Controller')
     PendingController = 'Controller | Event | BaseException'
     from . import bindings
-
-else:
-    np = util.lazy_import('numpy')
 
 
 class lookup:
