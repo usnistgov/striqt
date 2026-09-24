@@ -118,6 +118,24 @@ CELL_FS = 3.84e6
 TDD_20_SLOTS = 'dddsuudddddddsuudddd'
 TDD_10_SLOTS = 'dsuuuuuuuu'
 
+# the STFT nfft is sample_rate/(subcarrier_spacing/2) and has to be a multiple of 28
+# for the 13/28 overlap and 15/28 window fill to land on whole samples; 420 kHz is the
+# smallest rate that satisfies it, which keeps this the cheapest capture that still
+# spans a whole 20 ms discovery period
+SSB_SPECTROGRAM_FS = 420e3
+SSB_SPECTROGRAM_SAMPLE_RATE = 120e3
+SSB_SPECTROGRAM_PERIODICITY = 20e-3
+SSB_SPECTROGRAM_SPEC = sa.specs.Cellular5GNRSSBSpectrogram(
+    subcarrier_spacing=30e3,
+    sample_rate=SSB_SPECTROGRAM_SAMPLE_RATE,
+    discovery_periodicity=SSB_SPECTROGRAM_PERIODICITY,
+    window='boxcar',
+)
+
+
+def ssb_spectrogram_capture(duration) -> sa.specs.Capture:
+    return sa.specs.Capture(duration=duration, sample_rate=SSB_SPECTROGRAM_FS)
+
 
 def _capture(samples: int, sample_rate: float, analysis_bandwidth=inf):
     return sa.specs.Capture(
