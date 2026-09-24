@@ -461,7 +461,7 @@ def ssb_tone_level_dB() -> float:
     Dirichlet kernel is not zero on the neighboring bins, and the integration sums
     the tone bin with one neighbor holding sinc(L/nfft)**2 of the tone's power.
     """
-    _, window_fill = sa.measurements.shared.cellular_stft_window_fractions('normal')
+    _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
     nfft = round(2 * SSB_FS / SSB_SCS)
     L = round(window_fill * nfft)
     return 10 * np.log10(L / nfft * (1 + np.sinc(L / nfft) ** 2))

@@ -22,7 +22,7 @@ import pytest
 
 import striqt.analysis as sa
 from striqt.analysis import testing
-from striqt.analysis.measurements import shared
+from striqt.analysis.measurements import cellular
 
 FS = 3.84e6
 FRAME = round(10e-3 * FS)
@@ -57,7 +57,7 @@ def measure(spec, cap: sa.specs.Capture):
 def test_ssb_measurements_share_one_validator(cls):
     """`sss_params` reaches every check in `pss_params`, so the four registrations
     resolve their sync layout through one function"""
-    assert sa.registry[cls].validate is shared.validated_5g_ssb_sync_params
+    assert sa.registry[cls].validate is cellular.validated_5g_ssb_sync_params
 
 
 SSB_REJECTED = {
