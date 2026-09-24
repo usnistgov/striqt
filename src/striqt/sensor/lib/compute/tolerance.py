@@ -7,6 +7,7 @@ capture, feeds each measurement's registered tolerance function as its `input_er
 from __future__ import annotations as __
 
 import math
+from collections.abc import Iterable
 from math import isfinite
 from typing import TYPE_CHECKING, Literal
 
@@ -143,7 +144,7 @@ def sweep_tolerances(
     return result
 
 
-def _loosest(bounds) -> sa.specs.ErrorBound:
+def _loosest(bounds: Iterable[sa.specs.ErrorBound]) -> sa.specs.ErrorBound:
     bounds = list(bounds)
     return sa.specs.ErrorBound(
         rms=max(b.rms for b in bounds), peak=max(b.peak for b in bounds)

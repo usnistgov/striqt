@@ -11,6 +11,8 @@ from ..lib.util import np
 if TYPE_CHECKING:
     from typing import Sequence
 
+    from striqt.waveform.lib.typing import DTypeLike
+
     from ..lib.typing import P, R, WrappedAnalysis
 
 
@@ -18,7 +20,7 @@ def hint_keywords(
     func: Callable[P, Any],
 ) -> Callable[[WrappedAnalysis[..., R]], WrappedAnalysis[P, R]]:
     """fill in type hints for the analysis parameters"""
-    return lambda f: f  # pyright: ignore
+    return lambda f: f
 
 
 def capture_sample_count(capture: specs.Capture) -> int:
@@ -77,7 +79,7 @@ def check_frequency_band(
 # %% tolerance
 
 
-def quantization_dB(dtype, limit_digits: int | None = None) -> float:
+def quantization_dB(dtype: DTypeLike, limit_digits: int | None = None) -> float:
     """worst-case error from rounding a dB level to `limit_digits` decimals and storing
     it as `dtype`, for levels within 200 dB of 0 dB"""
     # a tolerance function never sees output values, so the storage rounding is bounded
@@ -96,7 +98,7 @@ def level_tolerance(
     log_tol: dict[str, float],
     quantization: float = 0.0,
     power_rms: float = 0.0,
-    dtype='complex64',
+    dtype: DTypeLike = 'complex64',
 ) -> specs.Tolerance:
     """the `specs.Tolerance` of a dB power output, from its error terms.
 

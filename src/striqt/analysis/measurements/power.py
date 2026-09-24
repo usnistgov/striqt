@@ -1,15 +1,19 @@
 from __future__ import annotations as __
 
 import typing
+from typing import Any
 
 from .. import specs
 
 from ..lib import dataarrays, register, util
-from ..lib.util import np, pd
+from ..lib.util import np
 from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
+
+if typing.TYPE_CHECKING:
+    from ..lib.typing import Array, Measurement
 
 
 # %% channel_power_time_series
@@ -92,9 +96,11 @@ def channel_power_tolerance(
     dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
-def time_elapsed(capture: specs.Capture, spec: specs.ChannelPowerTimeSeries):
+def time_elapsed(
+    capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
+) -> np.ndarray:
     binning = validated_channel_power_binning(capture, spec)
-    return pd.RangeIndex(binning.bin_count) * float(spec.detector_period)
+    return np.arange(binning.bin_count) * float(spec.detector_period)
 
 
 @registry.coordinates(dtype=object, attrs={'standard_name': 'Power detector'})
@@ -142,7 +148,9 @@ def evaluate_channel_power_time_series(
     validate=validated_channel_power_binning,
     tolerance=channel_power_tolerance,
 )
-def channel_power_time_series(iq, capture: specs.Capture, **kwargs):
+def channel_power_time_series(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """Compute a binned time series of channel power detector measurements.
 
     Args:
@@ -197,8 +205,8 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def channel_power_bin(
     capture: specs.Capture, spec: specs.ChannelPowerHistogram
-) -> dict[str, np.ndarray]:
-    """returns a dictionary of coordinate values, keyed by axis dimension name"""
+) -> np.ndarray:
+    """the power bin coordinate values"""
     return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
 
 
@@ -212,7 +220,9 @@ def channel_power_bin(
     attrs={'standard_name': 'Fraction of channel power readings'},
     validate=validated_channel_power_binning,
 )
-def channel_power_histogram(iq, capture: specs.Capture, **kwargs):
+def channel_power_histogram(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """evaluate the fraction of channel power readings binned on a uniform grid spacing.
 
     The outputs correspond to bin centers.
@@ -340,7 +350,7 @@ def cyclic_channel_power_tolerance(
     dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
-def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
+def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.ndarray:
     lag_count = validated_cyclic_lag_count(capture, spec)
 
     return np.arange(lag_count) * float(spec.detector_period)
@@ -356,7 +366,9 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower):
     validate=validated_cyclic_lag_count,
     tolerance=cyclic_channel_power_tolerance,
 )
-def cyclic_channel_power(iq, capture: specs.Capture, **kwargs):
+def cyclic_channel_power(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """Evaluate cyclic statistics of channel power across the cycles in a capture.
 
     Each power detector bins the capture on `detector_period`; the binned series is

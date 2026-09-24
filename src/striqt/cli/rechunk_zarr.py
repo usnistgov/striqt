@@ -62,7 +62,7 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
 
     if compression > 1:
         try:
-            from zarr import codecs  # pyright: ignore
+            from zarr import codecs
 
             # compatibility: zarr v3
             c = codecs.BloscCodec(cname='zstd', clevel=compression, shuffle='shuffle')
@@ -120,4 +120,4 @@ def generate_timestamp_suffix(data) -> str:
 
 
 if __name__ == '__main__':
-    cli()  # pyright: ignore
+    cli()

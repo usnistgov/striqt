@@ -9,7 +9,7 @@ import numpy as np
 
 
 @click.command()
-def cli():
+def cli() -> None:
     """Warm numba JIT caches for CPU and (if available) CUDA kernels."""
     import striqt.waveform.lib.jit  # noqa: F401  triggers NUMBA_CACHE_DIR setup + stamp patch
 
@@ -26,7 +26,7 @@ def cli():
         click.echo(f'  CPU kernel ({np.dtype(dtype).name}) warmed')
 
     try:
-        import cupy as cp  # type: ignore
+        import cupy as cp  # ty: ignore[unresolved-import]
         from striqt.waveform.lib.jit.cuda import _corr_at_indices as _cuda_corr
 
         x_gpu = cp.zeros(nfft + ncp + 128, dtype=np.complex64)

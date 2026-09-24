@@ -108,7 +108,7 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
         # is not cast, but promotes the result, so it is cast back
         q = xp.asarray(kind, dtype='float64')
 
-        def ufunc(x, axis=axis):
+        def ufunc(x: Array, axis: int = axis) -> Array:
             return xp.quantile(x, q, axis=axis).astype(x.dtype, copy=False)
 
     elif callable(kind):
@@ -133,7 +133,7 @@ DB_PER_NEPER = 10 / math.log(10)
 
 
 def log_conversion_tol(
-    dtype, scale: float, complex_input: bool = False, n_impl: int = 1
+    dtype: DTypeLike, scale: float, complex_input: bool = False, n_impl: int = 1
 ) -> dict[str, float]:
     """tolerances for scale*log10(|x|), against exact math (n_impl=1) or a second
     implementation (n_impl=2).
@@ -152,7 +152,7 @@ def log_conversion_tol(
     }
 
 
-def pow_conversion_rtol(dtype, max_abs_dB: float, n_impl: int = 1) -> float:
+def pow_conversion_rtol(dtype: DTypeLike, max_abs_dB: float, n_impl: int = 1) -> float:
     """rtol for 10**(x/10) with |x| <= max_abs_dB.
 
     Rounding x/10 perturbs the exponent, so its effect scales with |x|.
@@ -163,7 +163,9 @@ def pow_conversion_rtol(dtype, max_abs_dB: float, n_impl: int = 1) -> float:
     return ROUNDOFF_SAFETY * n_impl * rtol
 
 
-def envelope_power_rtol(dtype, complex_input: bool = False, n_impl: int = 1) -> float:
+def envelope_power_rtol(
+    dtype: DTypeLike, complex_input: bool = False, n_impl: int = 1
+) -> float:
     """rtol for |x|**2"""
     u = unit_roundoff(dtype)
     rtol = 2 * u * (0.5 + (2 * HYPOT_ULP if complex_input else 0))
@@ -171,7 +173,7 @@ def envelope_power_rtol(dtype, complex_input: bool = False, n_impl: int = 1) -> 
 
 
 def linear_stat_tol(
-    dtype, max_abs_dB: float, n: int, n_impl: int = 1
+    dtype: DTypeLike, max_abs_dB: float, n: int, n_impl: int = 1
 ) -> dict[str, float]:
     """tolerances in dB for dBlinmean/dBlinsum over n terms with |x| <= max_abs_dB"""
     u = unit_roundoff(dtype)
@@ -183,14 +185,14 @@ def linear_stat_tol(
     }
 
 
-def roundtrip_power_rtol(dtype, max_abs_dB: float) -> float:
+def roundtrip_power_rtol(dtype: DTypeLike, max_abs_dB: float) -> float:
     """rtol for dBtopow(powtodB(x)) with |powtodB(x)| <= max_abs_dB"""
     tol = log_conversion_tol(dtype, 10)
     dB_err = tol['rtol'] * max_abs_dB + tol['atol']
     return math.log(10) / 10 * dB_err + pow_conversion_rtol(dtype, max_abs_dB)
 
 
-def roundtrip_dB_tol(dtype, max_abs_dB: float) -> dict[str, float]:
+def roundtrip_dB_tol(dtype: DTypeLike, max_abs_dB: float) -> dict[str, float]:
     """tolerances for powtodB(dBtopow(x)) with |x| <= max_abs_dB"""
     tol = log_conversion_tol(dtype, 10)
     return {
@@ -199,7 +201,7 @@ def roundtrip_dB_tol(dtype, max_abs_dB: float) -> dict[str, float]:
     }
 
 
-def level_tolerance_dB(sigma, power: bool = False):
+def level_tolerance_dB(sigma: float, power: bool = False) -> float:
     """express a relative tolerance on an output as the uncertainty of its level in dB.
 
     `sigma` bounds an amplitude ratio (level 20*log10|x|) unless `power` is True
@@ -208,7 +210,7 @@ def level_tolerance_dB(sigma, power: bool = False):
     return (10 if power else 20) * np.log10(1 + sigma)
 
 
-def linear_tolerance_dB(rtol):
+def linear_tolerance_dB(rtol: float) -> float:
     """express a relative tolerance on a linear power as a tolerance in dB"""
     return 10 * np.log10(1 + rtol)
 
@@ -218,7 +220,11 @@ def dB_tolerance(rtol: float, atol: float, max_abs_dB: float) -> float:
     return atol + rtol * max_abs_dB
 
 
-def off_peak_dB_tolerance(depth_dBc, err):
+@typing.overload
+def off_peak_dB_tolerance(depth_dBc: float, err: float) -> float: ...
+@typing.overload
+def off_peak_dB_tolerance(depth_dBc: Array, err: float) -> Array: ...
+def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array:
     """two-sided dB tolerance on an element `depth_dBc` (>= 0) below the peak of its
     output, given a relative amplitude error `err` at the peak.
 
@@ -361,7 +367,7 @@ def envtopow(
         values = ne.evaluate(expr, out=out, casting='unsafe')
 
         if xp.iscomplexobj(values):
-            values = values.real  # pyright: ignore
+            values = values.real
     elif _use_cuda_kernels(values):
         from .jit import cuda
 
@@ -408,7 +414,7 @@ def dBlinmean(
 
     x = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
     linmean = x.mean(axis)  # type: ignore
-    return powtodB(linmean, overwrite_x=True, min_dtype=min_dtype)  # pyright: ignore
+    return powtodB(linmean, overwrite_x=True, min_dtype=min_dtype)
 
 
 def dBlinsum(
@@ -432,7 +438,7 @@ def dBlinsum(
     return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
 
 
-def stat_rtol(dtype, kind: str | float, n_impl: int = 1) -> float:
+def stat_rtol(dtype: DTypeLike, kind: str | float, n_impl: int = 1) -> float:
     """worst-case rtol of applying the `kind` statistic (as `stat_ufunc_from_shorthand`)
     to exact samples: one interpolation rounding for a quantile or the median, nothing
     for a selection or a mean, whose accumulation roundoff is `bin_power_rms`"""
@@ -443,7 +449,9 @@ def stat_rtol(dtype, kind: str | float, n_impl: int = 1) -> float:
     return ROUNDOFF_SAFETY * n_impl * unit_roundoff(dtype)
 
 
-def bin_power_rtol(dtype, n_impl: int = 1, kind: str | float = 'mean') -> float:
+def bin_power_rtol(
+    dtype: DTypeLike, n_impl: int = 1, kind: str | float = 'mean'
+) -> float:
     """worst-case rtol of the `kind` statistic of |x|**2 (as `stat_ufunc_from_shorthand`)
     before any accumulation: squaring the envelope, and `stat_rtol` for the statistic.
     The mean's accumulation roundoff is `bin_power_rms`."""
@@ -452,7 +460,7 @@ def bin_power_rtol(dtype, n_impl: int = 1, kind: str | float = 'mean') -> float:
 
 
 def bin_power_rms(
-    dtype, size: int, n_impl: int = 1, kind: str | float = 'mean'
+    dtype: DTypeLike, size: int, n_impl: int = 1, kind: str | float = 'mean'
 ) -> float:
     """rms accumulation roundoff of the `kind` statistic of |x|**2 over `size` samples
     of a contiguous axis, relative to the result: `accum_rms` for the mean ('rms' is

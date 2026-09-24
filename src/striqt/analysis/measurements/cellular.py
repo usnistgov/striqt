@@ -16,7 +16,9 @@ from .shared import registry, hint_keywords
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    from ..lib.typing import Array
+    from typing_extensions import Unpack
+
+    from ..lib.typing import Array, Measurement, ToleranceKws
     from ..specs.structs import _Cellular5GNRSSBCorrelator, _Cellular5GNRSSBSync
 
 
@@ -73,7 +75,9 @@ def cellular_cell_id2(capture: specs.Capture, spec: Any):
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
-def cellular_ssb_beam_index(capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBSync):
+def cellular_ssb_beam_index(
+    capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBSync
+) -> list[int]:
     # pss_params and sss_params return the same number of symbol indexes
     params = sync_params(capture, spec, 'sss')
 
@@ -87,7 +91,7 @@ def cellular_ssb_beam_index(capture: specs.AnalysisCapture, spec: _Cellular5GNRS
 def cellular_ssb_start_time(
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator | specs.Cellular5GNRSSSCorrelator,
-):
+) -> np.ndarray:
     # the bare Capture projection carries no center_frequency, so the cell search
     # case is resolved here as for an unknown band
     params = sync_params(capture, spec, 'pss')
@@ -98,7 +102,9 @@ def cellular_ssb_start_time(
 
 @registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
-def cellular_ssb_lag(capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator):
+def cellular_ssb_lag(
+    capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator
+) -> np.ndarray:
     # pss_params and sss_params agree on lag_count
     params = sync_params(capture, spec, 'pss')
     offs = round(spec.sample_rate * spec.delay)
@@ -272,7 +278,9 @@ def choose_pss_sync_offsets(
     attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
     validate=validated_5g_ssb_sync_params,
 )
-def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
+def cellular_5g_pss_sync(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """compute sync index offsets based on correlate_5g_pss"""
 
     spec = specs.Cellular5GNPSSSync.from_dict(kwargs).validate()
@@ -293,8 +301,8 @@ def cellular_5g_pss_sync(iq, capture: specs.Capture, **kwargs):
     validate=validated_5g_ssb_sync_params,
 )
 def cellular_5g_pss_correlation(
-    iq, capture: specs.Capture, **kwargs
-) -> tuple[Array, dict]:
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
 
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
@@ -379,7 +387,9 @@ def choose_sss_sync_offsets(
     attrs={'standard_name': 'SSS Synchronization Delay', 'units': 's'},
     validate=validated_5g_ssb_sync_params,
 )
-def cellular_5g_sss_sync(iq, capture: specs.Capture, **kwargs):
+def cellular_5g_sss_sync(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """compute sync index offsets based on correlate_5g_sss"""
 
     spec = specs.Cellular5GNSSSSync.from_dict(kwargs).validate()
@@ -400,8 +410,8 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, **kwargs):
     validate=validated_5g_ssb_sync_params,
 )
 def cellular_5g_sss_correlation(
-    iq, capture: specs.Capture, **kwargs
-) -> tuple[Array, dict]:
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """correlate each channel of the IQ against the cellular secondary synchronization signal (SSS) waveform.
 
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
@@ -461,7 +471,9 @@ def cellular_ssb_baseband_frequency(
 
 @registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
 @specs.helpers.lru_cache_on_converted(specs.Capture)
-def cellular_ssb_index(capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram):
+def cellular_ssb_index(
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
+) -> np.ndarray:
     count = ssb_block_count(capture.duration, spec)
     return np.arange(count, dtype='uint16')
 
@@ -549,7 +561,9 @@ def _discovery_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
 
 
 def ssb_spectrogram_tolerance(
-    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram, **kwargs
+    capture: specs.Capture,
+    spec: specs.Cellular5GNRSSBSpectrogram,
+    **kwargs: Unpack[ToleranceKws],
 ) -> specs.Tolerance:
     return spectrum.spectrogram_level_tolerance(
         capture, _ssb_spectrogram_spec(spec), dtype='float16', limit_digits=3, **kwargs
@@ -567,7 +581,9 @@ def ssb_spectrogram_tolerance(
     validate=validated_ssb_spectrogram_sizing,
     tolerance=ssb_spectrogram_tolerance,
 )
-def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
+def cellular_5g_ssb_spectrogram(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """spectrogram of each 5G NR synchronization signal block (SSB) burst set, resolved to OFDM symbol and subcarrier.
 
     The STFT hops once per OFDM symbol, and its half-subcarrier bins are integrated
@@ -726,7 +742,7 @@ def tdd_config_from_str(
     uplink_slots = [i for i, s in enumerate(frame_slots) if s == 'u']
 
     if 's' not in frame_slots or special_symbols is not None:
-        frame_by_symbol = ''.join([slot_by_symbol[k] for k in frame_slots])  # ty: ignore
+        frame_by_symbol = ''.join([slot_by_symbol[k] for k in frame_slots])  # ty: ignore[invalid-key]
     else:
         frame_by_symbol = 'd' * len(frame_slots)
 
@@ -830,8 +846,15 @@ def _get_spec_range(
     pass
 
 
+@typing.overload
 def _get_spec_range(
-    field_range: typing.Union[int, tuple[int, None], tuple[int, int]], name
+    field_range: int | tuple[int, int | None], name
+) -> tuple[int, ...] | typing.Literal['all']:
+    pass
+
+
+def _get_spec_range(
+    field_range: int | tuple[int, int | None], name
 ) -> tuple[int, ...] | typing.Literal['all']:
     if field_range in ((0,), (None, None), (0, None)):
         return 'all'
@@ -895,7 +918,7 @@ def validated_autocorrelation_lag_count(
             f'frames in capture: {samples / frame_size})'
         )
 
-    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
+    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')
     if symbol_range != 'all':
         symbols_per_slot = sw.ofdm.Phy3GPP.FFT_PER_SLOT
         if len(symbol_range) == 0:
@@ -927,7 +950,9 @@ def validated_autocorrelation_lag_count(
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
     validate=validated_autocorrelation_lag_count,
 )
-def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwargs):
+def cellular_cyclic_autocorrelation(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
 
@@ -955,15 +980,15 @@ def cellular_cyclic_autocorrelation(iq: 'Array', capture: specs.Capture, **kwarg
         generation=spec.generation,
         xp=xp,
     )
-    metadata = {}
+    metadata: dict[str, Any] = {}
 
     metadata['frames'] = spec.frame_range
     metadata['symbols'] = spec.symbol_range
 
     frame_range = _get_spec_range(spec.frame_range, 'frame_range')
-    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore
+    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')
 
-    def corr_for_slots(phy, x, slots):
+    def corr_for_slots(phy: sw.ofdm.Phy3GPP, x: Array, slots: tuple[int, ...]) -> Array:
         cp_inds = phy.index_cyclic_prefix(
             frames=frame_range, symbols=symbol_range, slots=slots
         )
@@ -1238,7 +1263,9 @@ def validated_resource_grid_sizing(
     attrs={'standard_name': 'Fraction of resource grid'},
     validate=validated_resource_grid_sizing,
 )
-def cellular_resource_power_histogram(iq: 'Array', capture: specs.Capture, **kwargs):
+def cellular_resource_power_histogram(
+    iq: Array, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """Evaluate the spectrograms of a cellular resource grid on each port, and
     return a flattened histogram of its power levels.
 

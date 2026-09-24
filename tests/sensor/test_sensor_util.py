@@ -328,6 +328,25 @@ class TestRetry:
             wrapped()
         assert len(flaky.calls) == 3
 
+    @pytest.mark.parametrize('tries', [0, -3], ids=['zero', 'negative'])
+    def test_rejects_tries_below_one_at_decoration(self, tries):
+        with pytest.raises(ValueError, match='tries'):
+            util.retry(ConnectionError, tries=tries)
+
+    def test_single_try_is_a_plain_call(self):
+        original = ConnectionError('only failure')
+        calls = []
+
+        def fails(*args, **kws):
+            calls.append((args, kws))
+            raise original
+
+        wrapped = util.retry(ConnectionError, tries=1)(fails)
+        with pytest.raises(ConnectionError) as excinfo:
+            wrapped(1, k=2)
+        assert calls == [((1,), {'k': 2})]
+        assert excinfo.value is original
+
     def test_other_exceptions_propagate_immediately(self):
         flaky = Flaky(5, exc=KeyError)
         wrapped = util.retry(ConnectionError, tries=3)(flaky)

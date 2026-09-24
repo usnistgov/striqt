@@ -28,10 +28,13 @@ from .windows import register_extra_windows
 import array_api_compat
 
 if typing.TYPE_CHECKING:
+    from types import ModuleType
+
     from .typing import (
         Array,
         _AT,
         ArrayBackend,
+        DTypeLike,
         ShiftType,
         WindowSpecType,
         WindowType,
@@ -66,7 +69,11 @@ FFT_ROUNDOFF_SAFETY = 3
 
 
 def fft_roundoff_rms(
-    dtype, nffts, n_elementwise: int = 0, *, array_backend: ArrayBackend = 'numpy'
+    dtype: DTypeLike,
+    nffts: typing.Iterable[int],
+    n_elementwise: int = 0,
+    *,
+    array_backend: ArrayBackend = 'numpy',
 ) -> float:
     """expected rms roundoff error of one backend, relative to the output rms.
 
@@ -91,7 +98,11 @@ def fft_roundoff_rms(
 
 
 def fft_tolerance_rms(
-    dtype, nffts, n_elementwise: int = 0, *, array_backend: ArrayBackend = 'numpy'
+    dtype: DTypeLike,
+    nffts: typing.Iterable[int],
+    n_elementwise: int = 0,
+    *,
+    array_backend: ArrayBackend = 'numpy',
 ) -> float:
     """rms tolerance on one backend's error against an exact reference, relative to
     the output rms (see `fft_roundoff_rms` for the arguments)"""
@@ -105,7 +116,7 @@ def peak_factor(size: int) -> float:
     return float(2 * np.sqrt(np.log(size)))
 
 
-def on_peak_roundoff(dtype) -> float:
+def on_peak_roundoff(dtype: DTypeLike) -> float:
     """bound on structured roundoff in the matched-filter bin of the matched input,
     relative to that peak's amplitude.
 
@@ -126,7 +137,7 @@ def rms_tolerance_dBc(sigma: float) -> float:
 
 
 def off_peak_floor_dBc(
-    sigma: float, nfft: int, size: int | None = None, dtype='complex64'
+    sigma: float, nfft: int, size: int | None = None, dtype: DTypeLike = 'complex64'
 ) -> float:
     """express the roundoff floor in bins away from the matched-filter bin of the
     matched input (a bin-centered tone), relative to the peak, in dBc.
@@ -148,10 +159,10 @@ def _design_window(
     nzero: int = 0,
     *,
     fftshift: bool = False,
-    center_zeros=False,
-    fftbins=True,
-    norm=True,
-    dtype='float32',
+    center_zeros: bool = False,
+    fftbins: bool = True,
+    norm: bool = True,
+    dtype: DTypeLike = 'float32',
 ) -> Array:
     """the uncached numpy implementation of `get_window`"""
 
@@ -206,10 +217,10 @@ def get_window(
     nzero: int = 0,
     *,
     fftshift: bool = False,
-    center_zeros=False,
-    fftbins=True,
-    norm=True,
-    dtype='float32',
+    center_zeros: bool = False,
+    fftbins: bool = True,
+    norm: bool = True,
+    dtype: DTypeLike = 'float32',
     xp: 'XpType' = None,
 ) -> Array:
     """build an window function with optional zero-padding or parameter finding.
@@ -236,8 +247,8 @@ def get_window(
     )
 
 
-get_window.cache_info = _cached_design_window.cache_info  # ty: ignore
-get_window.cache_clear = _cached_design_window.cache_clear  # ty: ignore
+typing.cast(typing.Any, get_window).cache_info = _cached_design_window.cache_info
+typing.cast(typing.Any, get_window).cache_clear = _cached_design_window.cache_clear
 
 
 @util.lru_cache()
@@ -321,12 +332,18 @@ def get_max_cupy_fft_chunk():
 
 
 def truncate_freqs(
-    x, nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0, axis: int = 0
-):
+    x: _AT,
+    nfft: int,
+    fs: float,
+    bandwidth: float,
+    *,
+    offset: float = 0.0,
+    axis: int = 0,
+) -> _AT:
     """trim an array outside of the specified bandwidth on a frequency axis"""
 
     s = slice_freqs(nfft, fs, bandwidth, offset=offset)
-    return axis_slice(x, s.start, s.stop, axis=axis)
+    return typing.cast('_AT', axis_slice(x, s.start, s.stop, axis=axis))
 
 
 def null_lo(
@@ -407,7 +424,11 @@ def ifft(
 
 @util.lru_cache()
 def fftfreq(
-    nfft: int, fs: float, dtype='float64', as_index: bool = True, xp=np
+    nfft: int,
+    fs: float,
+    dtype='float64',
+    as_index: bool = True,
+    xp: ModuleType = np,
 ) -> Array:
     """compute fftfreq for a specified sample rate.
 
@@ -429,7 +450,7 @@ def fftfreq(
                 -fnyq + fnyq / nfft, fnyq - fnyq / nfft, nfft, dtype=dtype
             )
 
-    if not array_api_compat.is_numpy_namespace(xp):  # pyright: ignore
+    if not array_api_compat.is_numpy_namespace(xp):
         return xp.asarray(fftfreq(nfft, fs, dtype, as_index=as_index))
 
     # high resolution rational representation of frequency resolution
@@ -868,7 +889,7 @@ def _stack_stft_windows(
 
 
 def _unstack_stft_windows(
-    y: Array, noverlap: int, nperseg: int, axis=0, out=None
+    y: Array, noverlap: int, nperseg: int, axis: int = 0, out: Array | None = None
 ) -> Array:
     """reconstruct the time-domain waveform from its STFT representation.
 
@@ -1497,7 +1518,7 @@ def resample(
     axis: int = 0,
     window: None = None,
     domain: typing.Literal['time', 'frequency'] = 'time',
-    overwrite_x=False,
+    overwrite_x: bool = False,
     scale: Array | float = 1,
     shift: int = 0,
 ) -> _AT:
@@ -1658,7 +1679,9 @@ def oaresample(
 
 
 @util.lru_cache(16)
-def _find_downsampled_freqs(nfft_out, freq_step, xp=None):
+def _find_downsampled_freqs(
+    nfft_out: int, freq_step: float, xp: XpType = None
+) -> Array:
     return fftfreq(nfft_out, freq_step * nfft_out, xp=xp or np)
 
 
@@ -1673,7 +1696,7 @@ def _broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
 
     slices = [xp.newaxis] * int(other.ndim)
     slices[axis] = slice(None, None)
-    return a[tuple(slices)]  # pyright: ignore
+    return typing.cast('_AT', a[tuple(slices)])
 
 
 def _same_base_memory(a: Array, b: Array) -> bool:

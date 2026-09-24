@@ -337,6 +337,19 @@ class TestRxStreamSetup:
         soapy_stream.setup(soapy_device, ports=(0,))
         assert len(soapy_device.calls_named('setupStream')) == 1
 
+    def test_setup_with_new_ports_closes_and_reopens_the_stream(
+        self, soapy_device, soapy_stream
+    ):
+        soapy_stream.setup(soapy_device, ports=(1,))
+
+        assert call_names(
+            soapy_device, 'setupStream', 'deactivateStream', 'closeStream'
+        ) == ['setupStream', 'deactivateStream', 'closeStream', 'setupStream']
+        assert soapy_stream.ports == (1,)
+        assert not soapy_stream.is_enabled
+        assert [s.channels for s in soapy_device.streams] == [(1,)]
+        assert soapy_stream.stream is soapy_device.streams[0]
+
 
 class TestRxStreamEnable:
     def test_enable_activates_with_a_delayed_timestamp(self, soapy_device):
@@ -701,13 +714,6 @@ class TestSoapySourceArm:
         source.arm(soapy_capture(gain=-5))
         assert not source.rx_stream.is_enabled
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason='capture_changes_port is inverted and SoapySource.arm never records '
-        '_capture, so a port change on a non-stream_all source does not rebuild '
-        'the stream',
-    )
     def test_port_change_rebuilds_the_stream(self, fake_soapy):
         source = soapy.SoapySource(source_spec())
         source.setup()

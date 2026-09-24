@@ -70,7 +70,9 @@ test = [
     "pytest-cov",
     "pytest-subtests; python_version < \"3.10\"",
     "pytest-lazy-fixtures",
-    "hypothesis"
+    "hypothesis",
+    "pyright",
+    "pyrefly",
 ]
 
 [project.scripts]
@@ -132,9 +134,24 @@ exclude_also = [
 [tool.ruff.lint.extend-per-file-ignores]
 "**/__init__.py" = [ "F401", "F403", "E402"]
 
+[tool.ty.environment]
+# the 3.9 floor governs the rules in every environment; test314 differs only through
+# its newer dependency stubs
+python-version = "3.9"
+
 [tool.ty.rules]
 call-top-callable = "ignore"
 invalid-type-form = "ignore"
+
+[tool.pyright]
+pythonVersion = "3.9"
+include = ["src"]
+
+[tool.pyrefly]
+python-version = "3.9"
+project-includes = ["src"]
+# cupy is the optional GPU backend; every import of it is inside try/except or TYPE_CHECKING
+ignore-missing-imports = ["cupy", "cupy.*"]
 
 [tool.tox]
 # Forces tox to auto-provision the tox-uv plugin if missing

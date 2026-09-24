@@ -16,6 +16,7 @@ from typing import (
     TYPE_CHECKING,
     TypeVar,
     ValuesView,
+    cast,
     get_origin,
     overload,
 )
@@ -79,7 +80,7 @@ class frozendict(Mapping[_K, _V]):
 
     def __new__(cls, *args: Any, **kwargs: Any) -> frozendict[_K, _V]:
         inst = super().__new__(cls)
-        inst._dict = dict(*args, **kwargs)  # type: ignore
+        inst._dict = cast('dict[_K, _V]', dict(*args, **kwargs))
         inst._hash = None
         return inst
 
@@ -186,7 +187,7 @@ class SpecValidationError(msgspec.ValidationError):
         message: str,
         path: tuple[str, ...] = (),
         locations: tuple[str, ...] = (),
-    ):
+    ) -> None:
         self.message = message
         self.path = tuple(path)
         self.locations = tuple(locations)
@@ -280,10 +281,10 @@ def lru_cache_on_converted(
         cached = util.lru_cache(maxsize)(func)
 
         @functools.wraps(func)
-        def wrapped(*args, **kwargs):
+        def wrapped(*args: Any, **kwargs: Any) -> _R:
             if len(args) < len(spec_types):
                 raise TypeError(
-                    f'{func.__name__} needs its first {len(spec_types)} argument(s) '  # ty: ignore
+                    f'{func.__name__} needs its first {len(spec_types)} argument(s) '  # ty: ignore[unresolved-attribute]
                     'passed by position, since they are converted before the cache '
                     'lookup'
                 )
@@ -296,10 +297,10 @@ def lru_cache_on_converted(
             return cached(*converted, *args[len(spec_types) :], **kwargs)
 
         # functools.wraps does not carry these over from the lru_cache wrapper
-        wrapped.cache_clear = cached.cache_clear  # ty: ignore
-        wrapped.cache_info = cached.cache_info  # ty: ignore
+        cast(Any, wrapped).cache_clear = cached.cache_clear
+        cast(Any, wrapped).cache_info = cached.cache_info
 
-        return wrapped  # type: ignore
+        return cast('LRUWrapped[..., _R]', wrapped)
 
     return wrapper
 
@@ -345,7 +346,7 @@ def _enc_hook(obj) -> Any:
 
 
 @util.lru_cache()
-def _enc_hook_no_tuple_keys(obj) -> Any:
+def _enc_hook_no_tuple_keys(obj: Any) -> Any:
     """like `_enc_hook`, but with dictionary tuple keys encoded as JSON array text"""
 
     out = _enc_hook(obj)
@@ -410,9 +411,9 @@ def freeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = tuple([freeze(v, nd) for v in obj])
-            return ret  # pyright: ignore
+            return ret
         else:
-            return tuple(obj)  # pyright: ignore
+            return tuple(obj)
     elif isinstance(obj, dict):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
@@ -421,7 +422,7 @@ def freeze(
         else:
             return frozendict(obj)
     else:
-        return obj  # type: ignore
+        return cast('_T', obj)
 
 
 @overload
@@ -448,19 +449,19 @@ def unfreeze(
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = [unfreeze(v, nd) for v in obj]
-            return ret  # pyright: ignore # pyrefly: ignore
+            return ret
         else:
-            return list(obj)  # ty: ignore
+            return list(obj)  # ty: ignore[invalid-return-type]
 
     if isinstance(obj, (dict, frozendict)):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
             ret = {k: unfreeze(v, nd) for k, v in obj.items()}
-            return ret  # pyright: ignore # pyrefly: ignore
+            return ret
         else:
             return dict(obj)
     else:
-        return obj  # type: ignore
+        return cast('_V', obj)
 
 
 def convert_dict(obj: Any, type: type[_T]) -> _T:

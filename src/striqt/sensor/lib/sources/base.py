@@ -11,6 +11,10 @@ from .. import util
 from ..typing import SS, SC, SourceBackend
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
+    from striqt.waveform.lib.typing import DTypeLike
+
     from ..typing import Array, Self
     import striqt.waveform as sw
 
@@ -34,7 +38,7 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
     def close(self):
         pass
 
-    def get_id(self) -> str:  # pyright: ignore
+    def get_id(self) -> str:
         return 'null'
 
     def get_info(self):
@@ -100,8 +104,8 @@ class VirtualSource(SourceBackend[SS, SC]):
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
     ) -> Array:
         """`count` samples of `port` starting at absolute sample `start_index`.
 

@@ -1,5 +1,7 @@
 """JIT implementations of numerical functions specific to CPU and CUDA"""
 
+from __future__ import annotations as __
+
 import hashlib
 import os
 import pathlib
@@ -20,7 +22,7 @@ if not os.environ.get('NUMBA_CACHE_DIR'):
 from numba.core.caching import _SourceFileBackedLocatorMixin as _Locator
 
 
-def _stamp_by_content(self):
+def _stamp_by_content(self) -> tuple[str, int] | tuple[float, int]:
     try:
         data = open(self._py_file, 'rb').read()
         return (hashlib.sha1(data).hexdigest(), len(data))

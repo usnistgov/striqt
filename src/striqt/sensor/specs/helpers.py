@@ -3,6 +3,7 @@
 from __future__ import annotations as __
 
 from collections import Counter, defaultdict, ChainMap
+from collections.abc import Hashable
 import contextlib
 import itertools
 import math
@@ -16,13 +17,11 @@ from typing import (
     get_type_hints,
     Iterable,
     Iterator,
-    Literal,
     Mapping,
     NamedTuple,
     Optional,
     Tuple,
     TYPE_CHECKING,
-    Union,
 )
 from datetime import datetime
 from pathlib import Path
@@ -39,7 +38,6 @@ from striqt.analysis.specs.helpers import (
 
 from . import structs
 from . import types
-from .structs import _AdjustSourceCapturesMap
 
 
 if TYPE_CHECKING:
@@ -341,11 +339,6 @@ def max_by_frequency(
     return map
 
 
-_AdjustCaptureMap = dict[
-    Union[types.SourceID, Literal['defaults']], _AdjustSourceCapturesMap
-]
-
-
 @sa.util.lru_cache()
 def describe_capture(
     capture: structs.Capture,
@@ -373,7 +366,7 @@ def describe_capture(
 
 def describe_capture_origin(
     loops: tuple[structs.LoopBase, ...],
-    capture: SC | Mapping[str, Any],
+    capture: structs.SensorCapture | Mapping[str, Any],
     origin: CaptureOrigin,
 ) -> tuple[str, ...]:
     """locate an expanded capture in its sweep, as sibling paths for an error message.
@@ -451,7 +444,7 @@ def adjust_captures(
         key,
         field_default: str | structs.CaptureRemap | None,
     ):
-        def lookup_one(k):
+        def lookup_one(k: Hashable) -> Any:
             try:
                 return lookup_spec.lookup[k]
             except KeyError:
@@ -491,7 +484,7 @@ def adjust_captures(
             return values
         return lookup_one(key[0] if isinstance(key, tuple) else key)
 
-    defaults = _get_capture_adjust_map(adjust_spec).get('defaults', {})
+    defaults = adjust_spec.get('defaults', {})
     default_fields = {
         k: v for k, v in defaults.items() if isinstance(v, structs.CaptureRemap)
     }
@@ -814,7 +807,9 @@ def _unique_capture_origins(
 
 @contextlib.contextmanager
 def _located_in_sweep(
-    loops: tuple[structs.LoopSpec, ...], capture: SC, origin: CaptureOrigin
+    loops: tuple[structs.LoopSpec, ...],
+    capture: structs.SensorCapture,
+    origin: CaptureOrigin,
 ) -> Iterator[None]:
     """re-raise a validation failure at the entry and loop points that made `capture`"""
     try:
@@ -898,7 +893,9 @@ def _validate_sweep_corrections(
                     corrections.validate_oaresample_shift(design)
 
 
-def _read_capture_field(capture: SC | Mapping[str, Any], field: str) -> Any:
+def _read_capture_field(
+    capture: structs.SensorCapture | Mapping[str, Any], field: str
+) -> Any:
     if isinstance(capture, Mapping):
         return capture[field]
     else:
@@ -1035,12 +1032,17 @@ def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesTy
     capture_cls = get_capture_type(type(sweep))
 
     field_types = sa.specs.helpers.get_capture_field_types(capture_cls)
-    adjust_map = _get_capture_adjust_map(sweep.adjust_captures)
+    adjust_map = sweep.adjust_captures
 
     cls_repr = sa.util.qualified_name(capture_cls)
 
     for source_id, lookup_map in adjust_map.items():
         at_source = ('.adjust_captures', f'[{source_id!r}]')
+
+        if not isinstance(lookup_map, (dict, frozendict)):
+            raise SpecValidationError(
+                'Expected `object` mapping capture field names to values', at_source
+            )
 
         if source_id != 'defaults':
             try:
@@ -1236,7 +1238,7 @@ def _get_capture_adjust_fields(
     spec: structs.AdjustCapturesType, source_id: str | None
 ) -> dict[str, str | structs.CaptureRemap | float | None]:
     fields = {}
-    map = _get_capture_adjust_map(spec)
+    map = spec
 
     # the globals spec may use the source-specific spec
     for name, value in map.get('defaults', {}).items():
@@ -1248,13 +1250,6 @@ def _get_capture_adjust_fields(
         fields.update(source_fields)
 
     return fields
-
-
-def _get_capture_adjust_map(spec: structs.AdjustCapturesType) -> _AdjustCaptureMap:
-    if isinstance(spec, tuple):
-        return dict(zip(source_fields))  # type: ignore
-    else:
-        return spec  # type: ignore
 
 
 def _get_source_capture_adjustments(
@@ -1293,7 +1288,7 @@ def _list_capture_adjustments(
 def _merge_analysis_loops(points: _LoopPointsDict) -> dict[str, Any]:
     """apply any loops where isin == 'analysis' into capture.adjust_captures"""
 
-    updates = {}
+    updates: dict[str, Any] = {}
     analysis_updates = {}
     for (target, field), value in points.items():
         if target == 'capture':

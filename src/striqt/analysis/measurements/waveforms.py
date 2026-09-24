@@ -1,6 +1,7 @@
 from __future__ import annotations as __
 
 import typing
+from typing import Any, Literal
 
 from .. import specs
 from ..lib.util import pd
@@ -10,13 +11,27 @@ from .shared import hint_keywords, registry
 if typing.TYPE_CHECKING:
     from striqt.waveform.lib.typing import ArrayBackend
 
+    from ..lib.typing import Array, Measurement
+
 
 # %% iq_waveform
+@typing.overload
+def _get_start_stop_index(
+    capture: specs.Capture, spec: specs.IQWaveform, allow_none: Literal[False]
+) -> tuple[int, int]: ...
+
+
+@typing.overload
+def _get_start_stop_index(
+    capture: specs.Capture, spec: specs.IQWaveform, allow_none: Literal[True] = ...
+) -> tuple[int | None, int | None]: ...
+
+
 def _get_start_stop_index(
     capture: specs.Capture,
     spec: specs.IQWaveform,
-    allow_none=True,
-):
+    allow_none: bool = True,
+) -> tuple[int | None, int | None]:
     # bounds are clamped into the capture so that the index range agrees with the
     # waveform slice, which numpy clips silently
     size = round(capture.duration * capture.sample_rate)
@@ -76,7 +91,7 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     store_compressed=False,
     tolerance=iq_waveform_tolerance,
 )
-def iq_waveform(iq, capture, **kwargs):
+def iq_waveform(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """package the IQ waveform as a measurement result.
 
     Args:

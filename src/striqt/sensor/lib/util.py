@@ -8,7 +8,7 @@ import logging
 import sys
 import threading
 import time
-from typing import Any, Generator, Iterable, TYPE_CHECKING
+from typing import Any, cast, Iterable, Iterator, TYPE_CHECKING
 from pathlib import Path
 
 import striqt.analysis as sa
@@ -19,7 +19,9 @@ from striqt.waveform.lib.util import lazy_import
 if TYPE_CHECKING:
     import exceptiongroup
     import concurrent.futures
-    from .typing import PassThroughWrapper, TypeVar
+    from typing import Callable
+
+    from .typing import P, PassThroughWrapper, R, TypeVar
 
     cached_property = property
 
@@ -40,7 +42,7 @@ def zip_offsets(
     fill: Any,
     *,
     squeeze: bool = True,
-) -> Generator[tuple[_T, ...]]:
+) -> Iterator[tuple[_T, ...]]:
     """a generator that yields from `seq` at multiple index shifts.
 
     Shifts that would yield an invalid index (i.e., before or beyond the end of `seq`) are
@@ -71,7 +73,7 @@ def zip_offsets(
     if squeeze and len(shifts) == 1:
         return iters[0]
     else:
-        return itertools.zip_longest(*iters, fillvalue=fill)  # type: ignore
+        return itertools.zip_longest(*iters, fillvalue=fill)
 
 
 # %% Concurrency
@@ -174,7 +176,7 @@ class ExceptionStack:
         if len(non_ints) == 1:
             raise non_ints[0]
         elif len(non_ints) > 1:
-            raise exceptiongroup.ExceptionGroup(self.group_label, non_ints)  # type: ignore
+            raise exceptiongroup.ExceptionGroup(self.group_label, non_ints)  # ty: ignore[invalid-argument-type]
         else:
             for int in ints:
                 # prefer keyboardinterrupts
@@ -266,9 +268,9 @@ def retry(
     *,
     delay: float = 0,
     backoff: float = 0,
-    exception_func=lambda *args, **kws: None,
+    exception_func: Callable[..., None] = lambda *args, **kws: None,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
-) -> 'PassThroughWrapper':
+) -> 'PassThroughWrapper[P, R]':
     """calls to the decorated function are repeated, suppressing specified exception(s), until a
     maximum number of retries has been attempted.
 
@@ -298,37 +300,37 @@ def retry(
         logger: if specified, a log info message is emitted on the first retry
     """
 
+    if tries < 1:
+        raise ValueError(f'tries must be at least 1, but got {tries!r}')
+
     if isinstance(excs, type) and issubclass(excs, BaseException):
         excs = (excs,)
     else:
-        excs = tuple(excs)
+        excs = tuple(cast('Iterable[type[BaseException]]', excs))
 
-    def decorator(f):
+    def decorator(f: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(f)
-        def do_retry(*args, **kwargs):
+        def do_retry(*args: P.args, **kwargs: P.kwargs) -> R:
             notified = False
             active_delay = delay
-            for _ in range(tries):
+            remaining = tries
+            while True:
                 try:
-                    ret = f(*args, **kwargs)
+                    return f(*args, **kwargs)
                 except excs as e:
+                    remaining -= 1
                     if not notified and logger is not None:
                         etype = type(e).__qualname__
-                        msg = f"caught '{etype}' on first call to '{f.__name__}' - repeating the call {tries - 1} more times or until no exception is raised"
+                        msg = f"caught '{etype}' on first call to '{do_retry.__name__}' - repeating the call {tries - 1} more times or until no exception is raised"
 
                         logger.info(msg)
 
                         notified = True
-                    ex = e
                     exception_func(*args, **kwargs)
                     time.sleep(active_delay)
                     active_delay = active_delay * backoff
-                else:
-                    break
-            else:
-                raise ex  # pyright: ignore # pyrefly: ignore
-
-            return ret
+                    if remaining == 0:
+                        raise
 
         return do_retry
 
@@ -382,9 +384,9 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
 
     if capture_count is None:
         capture_count = extra.get('capture_count', 'unknown')
-        extra['capture_count'] = capture_count  # pyright: ignore
+        extra['capture_count'] = capture_count
 
-    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'  # pyright: ignore
+    extra['capture_progress'] = f'{capture_index + 1}/{capture_count}'
 
     unchanged = logger.extra
     logger.extra = extra
@@ -486,8 +488,9 @@ def log_to_file(log_path: str | Path, level_name: str):
     # level on this parent would never gate their records
     handler.setLevel(_LOG_LEVEL_NAMES[level_name])
 
+    striqt_logger = cast(Any, logger)
     if hasattr(logger, '_striqt_handler'):
-        logger.removeHandler(logger._striqt_handler)  # type: ignore
+        logger.removeHandler(striqt_logger._striqt_handler)
 
     logger.addHandler(handler)
-    logger._striqt_handler = handler  # type: ignore
+    striqt_logger._striqt_handler = handler

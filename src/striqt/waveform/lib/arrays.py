@@ -15,7 +15,10 @@ _TC = TypeVar('_TC', bound=Callable)
 
 if TYPE_CHECKING:
     from types import ModuleType
-    from .typing import ArrayLike, Array, TypeIsCupy
+
+    import cupy  # ty: ignore[unresolved-import]
+
+    from .typing import _AT, ArrayLike, Array, DTypeLike, TypeIsCupy
 
 
 # %% rounding
@@ -106,12 +109,12 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
 ROUNDOFF_SAFETY = 2
 
 
-def unit_roundoff(dtype) -> float:
+def unit_roundoff(dtype: DTypeLike) -> float:
     """u = eps / 2 of the real dtype underlying `dtype` (complex dtypes included)"""
-    return float(np.finfo(dtype).eps / 2)
+    return float(np.finfo(cast('np.dtype[np.floating[Any]]', np.dtype(dtype))).eps / 2)
 
 
-def accum_rms(dtype, n: int, n_impl: int = 1) -> float:
+def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """rms roundoff of a sum or mean over `n` terms of `dtype` along a contiguous axis,
     relative to the result; `n_impl` independent implementations add in quadrature"""
     # A reduction over a contiguous axis is not summed in order. numpy sums it pairwise
@@ -132,7 +135,7 @@ def accum_rms(dtype, n: int, n_impl: int = 1) -> float:
     return safety * math.sqrt(n_impl * (1 + n / run)) * u
 
 
-def accum_rtol(dtype, n: int, n_impl: int = 1) -> float:
+def accum_rtol(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """rtol on a sum or mean over `n` terms of `dtype` along a strided axis, which
     numpy accumulates in order: n roundings (measured 1600 u rms and 2000 u max at
     n = 1e6, against the 2e6 u of this bound)"""
@@ -199,8 +202,10 @@ def binned_mean(
 
 @util.lru_cache()
 def _sliding_window_output_shape(
-    array_shape: tuple[int, ...] | int, window_shape: tuple[int, ...] | int, axis
-):
+    array_shape: tuple[int, ...] | int,
+    window_shape: tuple[int, ...] | int,
+    axis: int | tuple[int, ...] | None,
+) -> tuple[int, ...]:
     """return the shape of the output of sliding_window_view, for example
     to pre-create an output buffer."""
     try:
@@ -225,7 +230,10 @@ def _sliding_window_output_shape(
                 f'Since axis is `None`, must provide window_shape for all dimensions of `x`; got {len(window_shape)} window_shape elements and `x.ndim` is {ndim}.'
             )
     else:
-        axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True)  # type: ignore
+        axis = cast(
+            'tuple[int, ...]',
+            stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True),  # ty: ignore[unresolved-attribute]
+        )
         if len(window_shape) != len(axis):
             raise ValueError(
                 f'Must provide matching length window_shape and axis; got {len(window_shape)} window_shape elements and {len(axis)} axes elements.'
@@ -330,7 +338,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     if axis is None:
         axis = tuple(range(x.ndim))
     else:
-        axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # type: ignore
+        axis = stride_tricks.normalize_axis_tuple(axis, x.ndim)  # ty: ignore[unresolved-attribute]
     out_strides = x.strides + tuple(x.strides[ax] for ax in axis)
 
     return xp.lib.stride_tricks.as_strided(x, strides=out_strides, shape=out_shape)
@@ -403,11 +411,11 @@ def histogram_last_axis(
     if isinstance(bins, int):
         if range is None:
             range = x.min(), x.max()
-        bins = xp.linspace(range[0], range[1], bins + 1)
+        bins = cast('Array', xp.linspace(range[0], range[1], bins + 1))
     else:
-        bins = xp.asarray(bins)
+        bins = cast('Array', xp.asarray(bins))
 
-    size = bins.size  # pyright: ignore
+    size = bins.size
     flat = x.reshape(-1, hist_size)
     idx = xp.searchsorted(bins, flat, 'right') - 1
     idx[flat == bins[-1]] = size - 2
@@ -470,7 +478,7 @@ def grouped_slices_along_axis(shape: tuple[int, ...], max_size: int, axis: int):
     # tracks the size of all axes > iax
     size_rest = math.prod(shape)
 
-    slices_per_ax = []
+    slices_per_ax: list[tuple[slice, ...]] = []
     for iax, n in enumerate(shape):
         if iax == axis or size_rest < max_size:
             slices_per_ax.append((slice(None, None),))
@@ -530,7 +538,9 @@ def _pad_slices_to_dim(ndim: int, axis: int, /):
     return before, after
 
 
-def pad_along_axis(a, pad_width: list, axis=0, *args, **kws):
+def pad_along_axis(
+    a: _AT, pad_width: list, axis: int = 0, *args: Any, **kws: Any
+) -> _AT:
     if axis < 0:
         axis += a.ndim
 
@@ -553,23 +563,23 @@ def pinned_array_as_cupy(x, stream=None):
 
 def sync_if_cupy(x: Array):
     if is_cupy_array(x) and cp is not None:
-        stream = cp.cuda.get_current_stream()  # pyright: ignore
+        stream = cp.cuda.get_current_stream()
         stream.synchronize()
 
 
 @functools.cache
 def configure_cupy():
     if cp is not None:
-        import cupy.fft as fft  # type: ignore
+        import cupy.fft as fft  # ty: ignore[unresolved-import]
 
         # the FFT plan sets up large caches that don't help us
-        fft.config.get_plan_cache().set_size(0)  # pyright: ignore
-        cp.cuda.set_pinned_memory_allocator(None)  # pyright: ignore
+        fft.config.get_plan_cache().set_size(0)
+        cp.cuda.set_pinned_memory_allocator(None)
 
 
 def free_cupy_mempool():
     if cp is not None:
-        mempool = cp.get_default_memory_pool()  # pyright: ignore
+        mempool = cp.get_default_memory_pool()
         if mempool is not None:
             mempool.free_all_blocks()
 
@@ -579,7 +589,7 @@ def set_cuda_mem_limit(fraction=0.75):
     if cp is None:
         return
 
-    cp.get_default_memory_pool().set_limit(fraction=fraction)  # pyright: ignore
+    cp.get_default_memory_pool().set_limit(fraction=fraction)
 
     # Alternative: select an absolute amount of memory
     #
@@ -611,10 +621,12 @@ class NonStreamContext:
         pass
 
 
-def array_stream(obj: Array, null=False, non_blocking=False, ptds=False):
+def array_stream(
+    obj: Array, null: bool = False, non_blocking: bool = False, ptds: bool = False
+) -> cupy.cuda.Stream | NonStreamContext:
     """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
     if is_cupy_array(obj) and cp is not None:
-        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)  # pyright: ignore
+        return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)
     else:
         return NonStreamContext()
 
@@ -625,7 +637,7 @@ def array_namespace(a, use_compat=False) -> ModuleType:
 
 def convert_np_to_xp(func: _TC) -> _TC:
     @functools.wraps(func)
-    def wrapped(*args, **kwargs):
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
         import array_api_compat.numpy as anp
 
         xp = kwargs.get('xp', anp)
@@ -638,9 +650,9 @@ def convert_np_to_xp(func: _TC) -> _TC:
         kwargs_with_np = dict(kwargs, xp=anp)
         x = func(*args, **kwargs_with_np)
         if hasattr(xp, 'asarray'):
-            x = xp.asarray(x)  # pyright: ignore
+            x = xp.asarray(x)
         elif hasattr(xp, 'array'):
-            x = xp.array(x)  # pyright: ignore
+            x = xp.array(x)
         else:
             raise AttributeError(f'invalid array module {xp}')
 

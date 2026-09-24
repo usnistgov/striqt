@@ -6,8 +6,6 @@ from pathlib import Path
 import sys
 import typing
 
-from multiprocessing import RLock
-
 from . import specs, util
 
 import striqt.analysis as sa
@@ -15,6 +13,7 @@ import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
 if typing.TYPE_CHECKING:
+    from multiprocessing.synchronize import RLock
     from typing_extensions import NotRequired, Unpack
     import matplotlib as mpl
     import xarray.plot
@@ -25,10 +24,10 @@ if typing.TYPE_CHECKING:
 else:
     mpl = sw.util.lazy_import('matplotlib')
 
+TerminalGraphics = typing.Literal['sixel', 'kitcat', 'kitty']
 
-def select_mpl_backend(
-    style: str | None, interactive: typing.Literal['sixel', 'kitcat'] | None
-) -> None:
+
+def select_mpl_backend(style: str | None, interactive: TerminalGraphics | None) -> None:
     """select a matplotlib backend, and return extra styles to use"""
 
     from matplotlib import pyplot as plt
@@ -99,7 +98,7 @@ def plot_cyclic_channel_power(
     ax=None,
     colors=None,
     steps=True,
-    plot_kws={},
+    plot_kws: dict[str, typing.Any] = {},
 ):
     from . import labels
     import matplotlib.pyplot as plt
@@ -109,7 +108,7 @@ def plot_cyclic_channel_power(
 
     time = cyclic_channel_power.cyclic_lag
 
-    fill_kws = {}
+    fill_kws: dict[str, typing.Any] = {}
     if steps:
         plot_kws = plot_kws | {'drawstyle': 'steps-post'}
         fill_kws['step'] = 'post'
@@ -127,7 +126,7 @@ def plot_cyclic_channel_power(
             time,
             (a.sel(cyclic_statistic=center_statistic)),
             color=f'C{i}' if colors is None else colors[i],
-            **plot_kws,  # ty: ignore
+            **plot_kws,
         )
 
     for i, detector in enumerate(cyclic_channel_power.power_detector.data):
@@ -141,7 +140,7 @@ def plot_cyclic_channel_power(
             alpha=0.25,
             lw=0,
             rasterized=True,
-            **fill_kws,  # ty: ignore
+            **fill_kws,
         )
 
     labels.label_axis('x', cyclic_channel_power.cyclic_lag, ax=ax)
@@ -158,7 +157,7 @@ class _FakeLock:
 
 
 @contextlib.contextmanager
-def batch_term_images(interactive: typing.Literal['sixel', 'kitcat'] | None):
+def batch_term_images(interactive: TerminalGraphics | None):
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         yield
@@ -387,9 +386,9 @@ class PlotBackend:
                     raise TypeError('no colorbar on facet grid')
 
                 if _matplotlib_version() >= (3, 10):
-                    long_axis = cbar.long_axis  # pyright: ignore
+                    long_axis = cbar.long_axis
                 else:
-                    long_axis = cbar.ax.yaxis  # pyright: ignore
+                    long_axis = cbar.ax.yaxis
 
                 meanloc = noise.values.mean()
                 for i, n in enumerate(noise.values.tolist()):

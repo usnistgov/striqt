@@ -15,7 +15,7 @@ from .. import specs
 from . import util
 
 if TYPE_CHECKING:
-    from striqt.waveform.lib.typing import ArrayBackend
+    from striqt.waveform.lib.typing import ArrayBackend, DTypeLike
     import inspect
     from .typing import (
         AnalysisFunc,
@@ -32,7 +32,6 @@ if TYPE_CHECKING:
         TC,
         TM,
         WrappedAnalysis,
-        WrappedCoord,
     )
 else:
     inspect = util.lazy_import('inspect')
@@ -91,7 +90,7 @@ class KwArgCache:
             *args: P.args,
             **kwargs: P.kwargs,
         ) -> RM:
-            all_kws = dict(kwargs, capture=capture)  # ty: ignore
+            all_kws = dict(kwargs, capture=capture)  # ty: ignore[no-matching-overload]
             match = self.lookup(all_kws)
             if match is not None:
                 return match
@@ -128,7 +127,7 @@ class KwArgCache:
 class CoordInfo(NamedTuple):
     name: str
     func: CoordFunc
-    dtype: str
+    dtype: DTypeLike
     dims: tuple[str, ...] = ()
     attrs: dict = {}
 
@@ -136,12 +135,12 @@ class CoordInfo(NamedTuple):
 class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
     def __call__(
         self,
-        dtype,
+        dtype: DTypeLike,
         *,
         name: str | None = None,
         dims: tuple[str, ...] | None = None,
-        attrs={},
-    ) -> CoordFuncWrapper:
+        attrs: dict = {},
+    ) -> CoordFuncWrapper[TC, TM, R]:
         """register a coordinate factory function.
 
         The factory function should return an iterable containing coordinate
@@ -149,7 +148,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
         """
         kws = locals()
 
-        def wrapper(func: CoordFunc[TC, TM, R]) -> WrappedCoord[TC, TM, R]:
+        def wrapper(func: CoordFunc[TC, TM, R]) -> CoordFunc[TC, TM, R]:
             if isinstance(kws['dims'], str):
                 dims = tuple((kws['dims'],))
             else:
@@ -157,7 +156,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
             if kws['name'] is None:
                 try:
-                    name = func.__name__  # type: ignore
+                    name = func.__name__
                 except AttributeError as ex:
                     raise TypeError(
                         'specify the coordinate name with coordinates(name, ...)'
@@ -179,17 +178,17 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
                 name=name, func=func, dims=dims, dtype=dtype, attrs=attrs
             )
 
-            return func  # type: ignore
+            return func
 
-        return cast('CoordFuncWrapper', wrapper)
+        return wrapper
 
-    def __hash__(self):  # pyright: ignore
+    def __hash__(self) -> int:
         return hash(frozenset(self.items()))
 
 
 class SyncInfo(NamedTuple):
     name: str
-    func: Callable
+    func: WrappedAnalysis
     lag_coord_func: CoordFunc
     meas_spec_type: type[specs.Analysis]
 
@@ -200,8 +199,8 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
         meas_spec_type: type[specs.Analysis],
         *,
         lag_coord_func: CoordFunc,
-        name=None,
-    ) -> AnalysisFuncWrapper:
+        name: str | None = None,
+    ) -> Callable[[WrappedAnalysis[P, RM]], WrappedAnalysis[P, RM]]:
         """register a coordinate factory function.
 
         The proper dimension to evaluate in the data is determined from
@@ -210,26 +209,25 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
         Arguments:
             coord_factory: the coordinate factory used to define the measurement.
         """
-        info_kws = {
-            'name': name,
-            'lag_coord_func': lag_coord_func,
-            'meas_spec_type': meas_spec_type,
-        }
 
         def wrapper(
-            func: AnalysisFunc[P, RM],
+            func: WrappedAnalysis[P, RM],
         ) -> WrappedAnalysis[P, RM]:
-            if info_kws['name'] is None:
-                info_kws['name'] = func.__name__
+            sync_name = func.__name__ if name is None else name
 
-            if info_kws['name'] in self:
+            if sync_name in self:
                 raise TypeError(
-                    f'a signal_trigger named {info_kws["name"]} was already registered'
+                    f'a signal_trigger named {sync_name} was already registered'
                 )
 
-            self[func] = self[info_kws['name']] = SyncInfo(func=func, **info_kws)  # ty: ignore
+            self[func] = self[sync_name] = SyncInfo(
+                name=sync_name,
+                func=func,
+                lag_coord_func=lag_coord_func,
+                meas_spec_type=meas_spec_type,
+            )
 
-            return func  # type: ignore
+            return func
 
         return wrapper
 
@@ -271,7 +269,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
     # a registry is mutated only at import time, so identity is a stable key; dict
     # inherits __eq__, which would otherwise leave it unhashable
-    __hash__ = object.__hash__  # pyright: ignore
+    __hash__ = object.__hash__
 
     caches: dict[AnalysisFunc, list[KwArgCache]]
     parameter_fields: dict[str, 'msgspec.structs.FieldInfo|None']
@@ -293,15 +291,15 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         dtype: str,
         name: str | None = None,
         dims: tuple[str, ...] | str | None = None,
-        coord_factories: Iterable[WrappedCoord] | WrappedCoord | None = None,
+        coord_factories: Iterable[CoordFunc] | CoordFunc | None = None,
         depends: Iterable[Callable] | Callable = [],
         caches: Iterable[KwArgCache] | KwArgCache | None = None,
         prefer_iq_source: PreferIQSource = 'aligned',
-        store_compressed=True,
-        attrs={},
+        store_compressed: bool = True,
+        attrs: dict[str, Any] = {},
         validate: AnalysisValidator | None = None,
         tolerance: AnalysisTolerance | None = None,
-    ) -> AnalysisFuncWrapper:
+    ) -> AnalysisFuncWrapper[P]:
         """add decorated `func` and its keyword arguments in the self.tostruct() schema.
 
         Arguments:
@@ -457,7 +455,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 doc = func.__doc__
             setattr(wrapped, '__doc__', doc)
 
-            return wrapped  # type: ignore
+            # one runtime def with `as_xarray: bool | Literal['delayed']` cannot
+            # satisfy the 3-overload WrappedAnalysis Protocol, so name the type
+            return cast('WrappedAnalysis[P, Measurement]', wrapped)
 
         return wrapper
 
@@ -468,7 +468,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     ) -> type[specs.AnalysisGroup]:
         return to_analysis_spec_type(self, base)
 
-    def cache_context(self, capture: specs.Capture, callback: Callable | None = None):
+    def cache_context(
+        self, capture: specs.Capture, callback: Callable | None = None
+    ) -> contextlib.AbstractContextManager[contextlib.ExitStack]:
         return cached_registry_context(self, capture, callback)
 
     def validate(self, capture: specs.Capture, analysis: specs.AnalysisGroup) -> None:

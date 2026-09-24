@@ -110,6 +110,9 @@ class Source(SpecBase, frozen=True, kw_only=True):
     # this leaves room for subclasses to add schema fields
     gapless = False
     calibration = None
+    if TYPE_CHECKING:
+        gapless: bool
+        calibration: str | None
 
     # validation data
     transient_holdoff_time: ClassVar[float] = 0
@@ -359,10 +362,8 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
 
 _CaptureMapScalarType = Union[float, int, str, bool, None]
 _AdjustSourceCapturesMap = dict[str, Union[CaptureRemap, _CaptureMapScalarType]]
-_AdjustSourceCapturesTup = tuple[str, Union[CaptureRemap, _CaptureMapScalarType]]
 AdjustCapturesType = dict[
-    Union[types.SourceID, Literal['defaults']],
-    Union[_AdjustSourceCapturesMap, _AdjustSourceCapturesTup],
+    Union[types.SourceID, Literal['defaults']], _AdjustSourceCapturesMap
 ]
 
 
@@ -387,7 +388,7 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     peripherals: SP = cast(SP, Peripherals())
 
     # analysis
-    analysis: BundledAnalysis = BundledAnalysis()  # pyright: ignore
+    analysis: BundledAnalysis = BundledAnalysis()
 
     # misc
     extensions: Extension = Extension()
@@ -423,7 +424,7 @@ class CalibrationSweep(
     )
     calibration: Union[SPC, None] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         super().__post_init__()
 
         implied_loops = getattr(self.calibration, 'implied_loops', ())
@@ -456,8 +457,9 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     sweep_index: Union[int, None] = None
     capture_index: int = 0
 
-    # TODO: this is wrong. want sa.Trigger, but that is triggering a type
-    # resolution problem in py39
+    # ideally, this union would include sa.Trigger, but that triggers a
+    # resolution problem in python 3.9. fix this when the minimum python
+    # version. in the meantime, it's a hack.
     signal_trigger: Union[str, None] = None
 
     def replace(self, **attrs) -> _Self:
