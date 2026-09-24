@@ -9,7 +9,7 @@ CellSSBIndexes = Union[
 
 if typing.TYPE_CHECKING:
     from typing_extensions import TypeAlias, ParamSpec, TypeIs
-    from typing import Any, Callable, Protocol, TypeVar, Union
+    from typing import Any, Callable, Optional, Protocol, TypeVar, Union
     from numbers import Number
     from types import ModuleType
 
@@ -47,7 +47,7 @@ if typing.TYPE_CHECKING:
     WindowSpecType: TypeAlias = Union[str, tuple[str, Any], tuple[str, Any, Any]]
     WindowType: TypeAlias = Union[Array, WindowSpecType]
 
-    XpType: TypeAlias = ModuleType | None
+    XpType: TypeAlias = Optional[ModuleType]
     ArrayBackend: TypeAlias = typing.Literal['numpy', 'cupy']
 
     _ALN = TypeVar('_ALN', bound=Union[ArrayLike, Number])

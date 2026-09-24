@@ -205,8 +205,8 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def channel_power_bin(
     capture: specs.Capture, spec: specs.ChannelPowerHistogram
-) -> dict[str, np.ndarray]:
-    """returns a dictionary of coordinate values, keyed by axis dimension name"""
+) -> np.ndarray:
+    """the power bin coordinate values"""
     return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
 
 

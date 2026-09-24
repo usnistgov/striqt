@@ -41,6 +41,8 @@ PERFORMANCE_DETAIL = 12
 
 
 class StriqtLogger(logging.LoggerAdapter):
+    _screen_handler: logging.StreamHandler
+
     EXTRA_DEFAULTS = {
         'capture_index': 0,
         'capture_progress': 'control',

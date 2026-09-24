@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 import threading
 from types import ModuleType
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING, cast
 
 
 _lazy_import_locks = collections.defaultdict(threading.RLock)
@@ -86,7 +86,7 @@ def lru_cache(
     def wrap(wrapee: Callable[P, R]) -> LRUWrapped[P, R]:
         wrapped = func(wrapee)
         _caches[wrapee] = wrapped
-        return wrapped  # ty: ignore[invalid-return-type]
+        return cast('LRUWrapped[P, R]', wrapped)
 
     return wrap
 
@@ -173,7 +173,7 @@ def _make_lru_key(func, args, kwargs) -> str:
 
 def persistent_cache(
     maxsize: int = 128,
-) -> Callable[[Callable[P, R]], LRUWrapped[P, R]]:
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """memoize a function's results in a shelf that survives across processes.
 
     The shelf holds at most `maxsize` entries; which entry is evicted past that
@@ -186,7 +186,7 @@ def persistent_cache(
     reach its caller.
     """
 
-    def decorator(func: Callable[P, R]) -> LRUWrapped[P, R]:
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             if _cache_shelf_disabled:
@@ -236,7 +236,7 @@ def persistent_cache(
             return result
 
         wrapper.__wrapped__ = func
-        return wrapper  # ty: ignore[invalid-return-type]
+        return wrapper
 
     return decorator
 

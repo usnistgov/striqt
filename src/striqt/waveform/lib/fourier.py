@@ -28,6 +28,8 @@ from .windows import register_extra_windows
 import array_api_compat
 
 if typing.TYPE_CHECKING:
+    from types import ModuleType
+
     from .typing import (
         Array,
         _AT,
@@ -245,8 +247,8 @@ def get_window(
     )
 
 
-get_window.cache_info = _cached_design_window.cache_info  # ty: ignore
-get_window.cache_clear = _cached_design_window.cache_clear  # ty: ignore
+typing.cast(typing.Any, get_window).cache_info = _cached_design_window.cache_info
+typing.cast(typing.Any, get_window).cache_clear = _cached_design_window.cache_clear
 
 
 @util.lru_cache()
@@ -341,7 +343,7 @@ def truncate_freqs(
     """trim an array outside of the specified bandwidth on a frequency axis"""
 
     s = slice_freqs(nfft, fs, bandwidth, offset=offset)
-    return axis_slice(x, s.start, s.stop, axis=axis)
+    return typing.cast('_AT', axis_slice(x, s.start, s.stop, axis=axis))
 
 
 def null_lo(
@@ -422,7 +424,11 @@ def ifft(
 
 @util.lru_cache()
 def fftfreq(
-    nfft: int, fs: float, dtype='float64', as_index: bool = True, xp=np
+    nfft: int,
+    fs: float,
+    dtype='float64',
+    as_index: bool = True,
+    xp: ModuleType = np,
 ) -> Array:
     """compute fftfreq for a specified sample rate.
 
@@ -1690,7 +1696,7 @@ def _broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
 
     slices = [xp.newaxis] * int(other.ndim)
     slices[axis] = slice(None, None)
-    return a[tuple(slices)]
+    return typing.cast('_AT', a[tuple(slices)])
 
 
 def _same_base_memory(a: Array, b: Array) -> bool:

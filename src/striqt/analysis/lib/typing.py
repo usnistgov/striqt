@@ -1,5 +1,14 @@
 from __future__ import annotations as __
-from typing import Any, Iterable, Literal, overload, TypeVar, TYPE_CHECKING
+from typing import (
+    Any,
+    Iterable,
+    Literal,
+    Optional,
+    overload,
+    TypeVar,
+    TYPE_CHECKING,
+    Union,
+)
 
 
 # %% dataarrays.py
@@ -41,7 +50,7 @@ if TYPE_CHECKING:
 
         def get_capture_fields(self) -> dict: ...
 
-    ChunksSize = int | Literal['auto'] | tuple[int, ...] | None
+    ChunksSize = Optional[Union[int, Literal['auto'], tuple[int, ...]]]
 
     if hasattr(zarr.storage, 'Store'):
         # zarr 2.x
@@ -54,10 +63,10 @@ if TYPE_CHECKING:
     else:
         ZarrStore: TypeAlias = Any
 
-    ZarrFormat: TypeAlias = str | Literal[2, 3]
+    ZarrFormat: TypeAlias = Union[str, Literal[2, 3]]
 
     # %% register.py
-    Measurement: TypeAlias = Array | tuple[Array, dict[str, Any]]
+    Measurement: TypeAlias = Union[Array, tuple[Array, dict[str, Any]]]
 
     class ToleranceKws(TypedDict, total=False):
         array_backend: ArrayBackend

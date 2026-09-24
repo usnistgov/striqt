@@ -80,7 +80,7 @@ class frozendict(Mapping[_K, _V]):
 
     def __new__(cls, *args: Any, **kwargs: Any) -> frozendict[_K, _V]:
         inst = super().__new__(cls)
-        inst._dict = dict(*args, **kwargs)  # ty: ignore[invalid-assignment]
+        inst._dict = cast('dict[_K, _V]', dict(*args, **kwargs))
         inst._hash = None
         return inst
 
@@ -297,8 +297,8 @@ def lru_cache_on_converted(
             return cached(*converted, *args[len(spec_types) :], **kwargs)
 
         # functools.wraps does not carry these over from the lru_cache wrapper
-        wrapped.cache_clear = cached.cache_clear  # ty: ignore[unresolved-attribute]
-        wrapped.cache_info = cached.cache_info  # ty: ignore[unresolved-attribute]
+        cast(Any, wrapped).cache_clear = cached.cache_clear
+        cast(Any, wrapped).cache_info = cached.cache_info
 
         return cast('LRUWrapped[..., _R]', wrapped)
 
@@ -422,7 +422,7 @@ def freeze(
         else:
             return frozendict(obj)
     else:
-        return obj  # ty: ignore[invalid-return-type]
+        return cast('_T', obj)
 
 
 @overload
@@ -461,7 +461,7 @@ def unfreeze(
         else:
             return dict(obj)
     else:
-        return obj  # ty: ignore[invalid-return-type]
+        return cast('_V', obj)
 
 
 def convert_dict(obj: Any, type: type[_T]) -> _T:

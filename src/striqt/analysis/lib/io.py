@@ -173,9 +173,22 @@ def load_attrs(path: str | Path) -> dict[str, typing.Any]:
         return array.attrs.asdict()
 
 
+_S = typing.TypeVar('_S', bound=specs.SpecBase)
+
+
+@typing.overload
+def decode_from_yaml_file(
+    path: str | Path, *, type: type[dict] = ...
+) -> dict[str, typing.Any]: ...
+
+
+@typing.overload
+def decode_from_yaml_file(path: str | Path, *, type: type[_S]) -> _S: ...
+
+
 def decode_from_yaml_file(
     path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
-):
+) -> dict[str, typing.Any] | specs.SpecBase:
     """Deserialize an object from YAML.
 
     Parameters
@@ -817,7 +830,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
     def pop_include_path(self):
         self.nested_paths.pop()
 
-    def __call__(self, loader: yaml.Loader, node: yaml.Node):
+    def __call__(self, loader: _YAMLFrozenLoader, node: yaml.Node):
         if not node.tag.startswith('!include'):
             raise ValueError(f'unknown tag {node.tag!r}')
 

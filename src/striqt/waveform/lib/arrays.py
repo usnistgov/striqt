@@ -111,7 +111,7 @@ ROUNDOFF_SAFETY = 2
 
 def unit_roundoff(dtype: DTypeLike) -> float:
     """u = eps / 2 of the real dtype underlying `dtype` (complex dtypes included)"""
-    return float(np.finfo(np.dtype(dtype)).eps / 2)
+    return float(np.finfo(cast('np.dtype[np.floating[Any]]', np.dtype(dtype))).eps / 2)
 
 
 def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
@@ -230,7 +230,10 @@ def _sliding_window_output_shape(
                 f'Since axis is `None`, must provide window_shape for all dimensions of `x`; got {len(window_shape)} window_shape elements and `x.ndim` is {ndim}.'
             )
     else:
-        axis = stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True)  # ty: ignore[unresolved-attribute]
+        axis = cast(
+            'tuple[int, ...]',
+            stride_tricks.normalize_axis_tuple(axis, ndim, allow_duplicate=True),  # ty: ignore[unresolved-attribute]
+        )
         if len(window_shape) != len(axis):
             raise ValueError(
                 f'Must provide matching length window_shape and axis; got {len(window_shape)} window_shape elements and {len(axis)} axes elements.'
@@ -408,9 +411,9 @@ def histogram_last_axis(
     if isinstance(bins, int):
         if range is None:
             range = x.min(), x.max()
-        bins = xp.linspace(range[0], range[1], bins + 1)
+        bins = cast('Array', xp.linspace(range[0], range[1], bins + 1))
     else:
-        bins = xp.asarray(bins)
+        bins = cast('Array', xp.asarray(bins))
 
     size = bins.size
     flat = x.reshape(-1, hist_size)
@@ -475,7 +478,7 @@ def grouped_slices_along_axis(shape: tuple[int, ...], max_size: int, axis: int):
     # tracks the size of all axes > iax
     size_rest = math.prod(shape)
 
-    slices_per_ax = []
+    slices_per_ax: list[tuple[slice, ...]] = []
     for iax, n in enumerate(shape):
         if iax == axis or size_rest < max_size:
             slices_per_ax.append((slice(None, None),))

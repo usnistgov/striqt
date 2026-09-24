@@ -846,8 +846,15 @@ def _get_spec_range(
     pass
 
 
+@typing.overload
 def _get_spec_range(
-    field_range: typing.Union[int, tuple[int, None], tuple[int, int]], name
+    field_range: int | tuple[int, int | None], name
+) -> tuple[int, ...] | typing.Literal['all']:
+    pass
+
+
+def _get_spec_range(
+    field_range: int | tuple[int, int | None], name
 ) -> tuple[int, ...] | typing.Literal['all']:
     if field_range in ((0,), (None, None), (0, None)):
         return 'all'
@@ -911,7 +918,7 @@ def validated_autocorrelation_lag_count(
             f'frames in capture: {samples / frame_size})'
         )
 
-    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore[no-matching-overload]
+    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')
     if symbol_range != 'all':
         symbols_per_slot = sw.ofdm.Phy3GPP.FFT_PER_SLOT
         if len(symbol_range) == 0:
@@ -973,13 +980,13 @@ def cellular_cyclic_autocorrelation(
         generation=spec.generation,
         xp=xp,
     )
-    metadata = {}
+    metadata: dict[str, Any] = {}
 
     metadata['frames'] = spec.frame_range
     metadata['symbols'] = spec.symbol_range
 
     frame_range = _get_spec_range(spec.frame_range, 'frame_range')
-    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')  # ty: ignore[no-matching-overload]
+    symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')
 
     def corr_for_slots(phy: sw.ofdm.Phy3GPP, x: Array, slots: tuple[int, ...]) -> Array:
         cp_inds = phy.index_cyclic_prefix(
