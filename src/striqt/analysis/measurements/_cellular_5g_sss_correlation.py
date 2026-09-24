@@ -107,7 +107,7 @@ def cellular_5g_sss_sync(iq, capture: specs.Capture, **kwargs):
 def cellular_5g_sss_correlation(
     iq, capture: specs.Capture, **kwargs
 ) -> tuple[Array, dict]:
-    """correlate each channel of the IQ against the cellular primary synchronization signal (SSS) waveform.
+    """correlate each channel of the IQ against the cellular secondary synchronization signal (SSS) waveform.
 
     Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
 

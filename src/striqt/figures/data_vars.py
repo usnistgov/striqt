@@ -24,6 +24,12 @@ if _typing.TYPE_CHECKING:
 _data_plots: dict[str, _DataVariablePlotter] = {}
 
 
+def _coord_names(spec_type: type[sa.specs.Analysis]) -> tuple[str, ...]:
+    """registered coordinate names of a measurement, in its `coord_factories` order"""
+    factories = sa.registry[spec_type].coord_factories
+    return tuple(sa.registry.coordinates[f].name for f in factories)
+
+
 def _register_data_var_plot(func: '_TVP') -> '_TVP':
     name = func.__name__
     func = sa.util.stopwatch(name, 'analysis', logger_level=sa.util.PERFORMANCE_INFO)(
@@ -180,7 +186,7 @@ def power_spectral_density(
     data: '_DS', plotter: '_PlotBackend', *, hue='time_statistic', noise_line=True
 ):
     name = sa.measurements.power_spectral_density.__name__
-    x = sa.measurements._power_spectral_density.baseband_frequency.__name__
+    _, x = _coord_names(sa.specs.PowerSpectralDensity)
     # legacy support tweaks
     if name not in data.data_vars and 'persistence_spectrum' in data.data_vars:
         name = 'persistence_spectrum'
@@ -195,9 +201,8 @@ def power_spectral_density(
 @_register_data_var_plot
 def spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line=True):
     name = sa.measurements.spectrogram.__name__
-    sub = data[name].dropna('spectrogram_baseband_frequency')
-    x = sa.measurements._spectrogram.spectrogram_time.__name__
-    y = sa.measurements.shared.spectrogram_baseband_frequency.__name__
+    x, y = _coord_names(sa.specs.Spectrogram)
+    sub = data[name].dropna(y)
     vmin = util.get_system_noise(data, name, 6)
     grid = plotter.heatmap(sub, x=x, y=y, vmin=vmin, vstep=2)
     if noise_line:

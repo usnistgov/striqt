@@ -150,15 +150,20 @@ def ssb_spectrogram_tolerance(
     tolerance=ssb_spectrogram_tolerance,
 )
 def cellular_5g_ssb_spectrogram(iq, capture: specs.Capture, **kwargs):
-    """correlate each channel of the IQ against the cellular primary synchronization signal (PSS) waveform.
+    """spectrogram of each 5G NR synchronization signal block (SSB) burst set, resolved to OFDM symbol and subcarrier.
 
-    Returns a DataArray containing the time-lag for each combination of NID2, symbol, and SSB start time.
+    The STFT hops once per OFDM symbol, and its half-subcarrier bins are integrated
+    pairwise to one bin per subcarrier of the given `subcarrier_spacing` before the
+    frequency axis is trimmed to the `sample_rate` band about `frequency_offset`. Only
+    the symbols of the burst set at the start of each `discovery_periodicity` are kept.
+
+    Returns a DataArray of power spectral density indexed by SSB burst set within the
+    capture, OFDM symbol within the burst set, and baseband frequency.
 
     Args:
     {args}
 
     References:
-        3GPP TS 138 211: Table 7.4.3.1-1, Section 7.4.2.2
         3GPP TS 138 213: Section 4.1
     """
 

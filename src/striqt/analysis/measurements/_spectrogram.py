@@ -1,25 +1,15 @@
 from __future__ import annotations as __
 
 import typing
-import warnings
 
 from .. import specs
 
-from ..lib import util
 from ..lib.util import np
 from . import shared
 from .shared import registry, hint_keywords
 
 if typing.TYPE_CHECKING:
-    import striqt.waveform as sw
-
     from ..lib.typing import Array
-else:
-    sw = util.lazy_import('striqt.waveform')
-
-warnings.filterwarnings(
-    'ignore', '.*Mean of empty slice.*', category=RuntimeWarning, module=__name__
-)
 
 
 @registry.coordinates(
