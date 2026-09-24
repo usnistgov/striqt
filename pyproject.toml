@@ -70,7 +70,9 @@ test = [
     "pytest-cov",
     "pytest-subtests; python_version < \"3.10\"",
     "pytest-lazy-fixtures",
-    "hypothesis"
+    "hypothesis",
+    "pyright",
+    "pyrefly",
 ]
 
 [project.scripts]
