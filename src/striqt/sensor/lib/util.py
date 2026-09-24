@@ -300,6 +300,9 @@ def retry(
         logger: if specified, a log info message is emitted on the first retry
     """
 
+    if tries < 1:
+        raise ValueError(f'tries must be at least 1, but got {tries!r}')
+
     if isinstance(excs, type) and issubclass(excs, BaseException):
         excs = (excs,)
     else:
@@ -310,10 +313,12 @@ def retry(
         def do_retry(*args: P.args, **kwargs: P.kwargs) -> R:
             notified = False
             active_delay = delay
-            for _ in range(tries):
+            remaining = tries
+            while True:
                 try:
-                    ret = f(*args, **kwargs)
+                    return f(*args, **kwargs)
                 except excs as e:
+                    remaining -= 1
                     if not notified and logger is not None:
                         etype = type(e).__qualname__
                         msg = f"caught '{etype}' on first call to '{do_retry.__name__}' - repeating the call {tries - 1} more times or until no exception is raised"
@@ -321,16 +326,11 @@ def retry(
                         logger.info(msg)
 
                         notified = True
-                    ex = e
                     exception_func(*args, **kwargs)
                     time.sleep(active_delay)
                     active_delay = active_delay * backoff
-                else:
-                    break
-            else:
-                raise ex
-
-            return ret
+                    if remaining == 0:
+                        raise
 
         return do_retry
 
