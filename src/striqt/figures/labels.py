@@ -283,7 +283,7 @@ def label_legend(
     if units is not None:
         # TODO: implement tick_units
         formatter = ticker.EngFormatter(unit=units, unitInTick=True)
-        legend_data = [formatter(v) for v in data]  # pyright: ignore
+        legend_data = [formatter(v) for v in data]
     else:
         legend_data = [str(v) for v in data]
 

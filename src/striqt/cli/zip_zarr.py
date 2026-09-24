@@ -60,4 +60,4 @@ def generate_timestamp_suffix(data) -> str:
 
 
 if __name__ == '__main__':
-    cli()  # pyright: ignore
+    cli()

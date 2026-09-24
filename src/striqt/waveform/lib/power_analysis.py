@@ -367,7 +367,7 @@ def envtopow(
         values = ne.evaluate(expr, out=out, casting='unsafe')
 
         if xp.iscomplexobj(values):
-            values = values.real  # pyright: ignore
+            values = values.real
     elif _use_cuda_kernels(values):
         from .jit import cuda
 
@@ -414,7 +414,7 @@ def dBlinmean(
 
     x = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
     linmean = x.mean(axis)  # type: ignore
-    return powtodB(linmean, overwrite_x=True, min_dtype=min_dtype)  # pyright: ignore
+    return powtodB(linmean, overwrite_x=True, min_dtype=min_dtype)
 
 
 def dBlinsum(

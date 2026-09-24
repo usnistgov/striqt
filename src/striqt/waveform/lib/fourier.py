@@ -444,7 +444,7 @@ def fftfreq(
                 -fnyq + fnyq / nfft, fnyq - fnyq / nfft, nfft, dtype=dtype
             )
 
-    if not array_api_compat.is_numpy_namespace(xp):  # pyright: ignore
+    if not array_api_compat.is_numpy_namespace(xp):
         return xp.asarray(fftfreq(nfft, fs, dtype, as_index=as_index))
 
     # high resolution rational representation of frequency resolution
@@ -1690,7 +1690,7 @@ def _broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
 
     slices = [xp.newaxis] * int(other.ndim)
     slices[axis] = slice(None, None)
-    return a[tuple(slices)]  # pyright: ignore
+    return a[tuple(slices)]
 
 
 def _same_base_memory(a: Array, b: Array) -> bool:

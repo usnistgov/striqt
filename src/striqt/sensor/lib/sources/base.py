@@ -38,7 +38,7 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
     def close(self):
         pass
 
-    def get_id(self) -> str:  # pyright: ignore
+    def get_id(self) -> str:
         return 'null'
 
     def get_info(self):

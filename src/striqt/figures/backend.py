@@ -387,9 +387,9 @@ class PlotBackend:
                     raise TypeError('no colorbar on facet grid')
 
                 if _matplotlib_version() >= (3, 10):
-                    long_axis = cbar.long_axis  # pyright: ignore
+                    long_axis = cbar.long_axis
                 else:
-                    long_axis = cbar.ax.yaxis  # pyright: ignore
+                    long_axis = cbar.ax.yaxis
 
                 meanloc = noise.values.mean()
                 for i, n in enumerate(noise.values.tolist()):

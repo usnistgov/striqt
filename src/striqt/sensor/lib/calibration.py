@@ -337,7 +337,7 @@ def bind_manual_yfactor_calibration(
 
     cal_schema = specs.Schema(
         source=ctrl_cls.schema.source,
-        capture=capture_spec_cls,  # pyright: ignore
+        capture=capture_spec_cls,
         peripherals=ctrl_cls.schema.peripherals,
         init_like=ctrl_cls.schema.init_like,
         arm_like=ctrl_cls.schema.arm_like,

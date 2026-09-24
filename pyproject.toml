@@ -141,6 +141,16 @@ python-version = "3.9"
 call-top-callable = "ignore"
 invalid-type-form = "ignore"
 
+[tool.pyright]
+pythonVersion = "3.9"
+include = ["src"]
+
+[tool.pyrefly]
+python-version = "3.9"
+project-includes = ["src"]
+# cupy is the optional GPU backend; every import of it is inside try/except or TYPE_CHECKING
+ignore-missing-imports = ["cupy", "cupy.*"]
+
 [tool.tox]
 # Forces tox to auto-provision the tox-uv plugin if missing
 requires = ["tox-uv"]

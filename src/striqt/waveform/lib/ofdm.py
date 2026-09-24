@@ -81,7 +81,7 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
         tpb = 32
         bpg = max((x.size + (tpb - 1)) // tpb, 1)
 
-        func = _corr_at_indices[bpg, tpb]  # pyright: ignore
+        func = _corr_at_indices[bpg, tpb]
 
     func(flat_inds, x, int(nfft), int(ncp), bool(norm), out)
 

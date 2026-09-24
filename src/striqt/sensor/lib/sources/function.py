@@ -73,11 +73,11 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
             return ports.index(port), len(ports)
 
     @util.cached_property
-    def id(self):  # pyright: ignore
+    def id(self):
         return '00'
 
     @util.cached_property
-    def about(self) -> specs.SourceInfo:  # pyright: ignore
+    def about(self) -> specs.SourceInfo:
         return specs.SourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
 

@@ -387,7 +387,7 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     peripherals: SP = cast(SP, Peripherals())
 
     # analysis
-    analysis: BundledAnalysis = BundledAnalysis()  # pyright: ignore
+    analysis: BundledAnalysis = BundledAnalysis()
 
     # misc
     extensions: Extension = Extension()

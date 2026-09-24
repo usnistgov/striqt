@@ -42,7 +42,7 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
         super().__init__(spec)
 
         try:
-            from nptdms import TdmsFile  # pyright: ignore # pyrefly: ignore
+            from nptdms import TdmsFile
         except ImportError:
             raise ImportError('install nptdms to open TDMS files')
 
@@ -144,7 +144,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     def get_info(self):
         return specs.structs.SourceInfo(num_rx_ports=None)
 
-    def get_id(self):  # pyright: ignore
+    def get_id(self):
         return str(self.setup_spec.path)
 
     def arm(self, capture):
@@ -219,10 +219,10 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
         self._waveform = waveform
 
-    def get_id(self):  # pyright: ignore
+    def get_id(self):
         return str(self.setup_spec.path)
 
-    def get_info(self):  # pyright: ignore
+    def get_info(self):
         return specs.structs.SourceInfo(num_rx_ports=self._waveform.shape[0])
 
     def close(self) -> None:

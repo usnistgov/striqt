@@ -102,4 +102,4 @@ def cli(*, path: str, debug: bool, verbose: bool, skip_confirm: bool, output_pat
 
 
 if __name__ == '__main__':
-    cli()  # pyright: ignore
+    cli()
