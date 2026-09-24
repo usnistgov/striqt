@@ -122,11 +122,12 @@ TDD_10_SLOTS = 'dsuuuuuuuu'
 # for the 13/28 overlap and 15/28 window fill to land on whole samples; 420 kHz is the
 # smallest rate that satisfies it, which keeps this the cheapest capture that still
 # spans a whole 20 ms discovery period
+SSB_SPECTROGRAM_SCS = 30e3
 SSB_SPECTROGRAM_FS = 420e3
 SSB_SPECTROGRAM_SAMPLE_RATE = 120e3
 SSB_SPECTROGRAM_PERIODICITY = 20e-3
 SSB_SPECTROGRAM_SPEC = sa.specs.Cellular5GNRSSBSpectrogram(
-    subcarrier_spacing=30e3,
+    subcarrier_spacing=SSB_SPECTROGRAM_SCS,
     sample_rate=SSB_SPECTROGRAM_SAMPLE_RATE,
     discovery_periodicity=SSB_SPECTROGRAM_PERIODICITY,
     window='boxcar',

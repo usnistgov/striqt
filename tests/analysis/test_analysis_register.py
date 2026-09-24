@@ -1,7 +1,9 @@
 """striqt.analysis.lib.register: the `validate=` and `tolerance=` hooks on measurement
 registration, the `AnalysisRegistry.validate`/`.tolerances` walks over an analysis
-group, and the guarantee the live registry's validators make: a (capture, spec) pair
-that validates is one the measurement can run.
+group, and the guarantees the live registry makes: a (capture, spec) pair that
+validates is one the measurement can run, and every registered measurement honours
+the contract in the last cell (dtype, dims, coords and attrs reach the DataArray, and
+the raw `as_xarray=False` path returns the same values).
 
 The hook tests build their own `AnalysisRegistry`; mutating the live
 `register.registry` would leak a measurement into every other test module. The
@@ -564,3 +566,136 @@ def test_validator_rejects_at_the_analysis_path_naming_the_field(case):
     assert excinfo.value.path[:2] == ('.analysis', f'.{name}')
     assert str(excinfo.value).startswith(f'$.analysis.{name}')
     assert field in excinfo.value.message
+
+
+# %% the contract shared by every measurement
+
+CONTRACT_FS = 210e3
+CONTRACT_SCS = 15e3
+CONTRACT_DETECTOR_PERIOD = Fraction(1, 10000)
+CONTRACT_CAPTURE = sa.specs.Capture(
+    duration=4e-3, sample_rate=CONTRACT_FS, analysis_bandwidth=150e3
+)
+
+# 4 ms at 210 kHz is 1 discovery period of 56 symbols at 15 kHz subcarriers, whose
+# first 28 are the SSB burst set, and a whole number of detector and cyclic periods
+CONTRACT_SPECS = (
+    sa.specs.Spectrogram(window='hamming', frequency_resolution=7.5e3),
+    sa.specs.PowerSpectralDensity(window='hamming', frequency_resolution=7.5e3),
+    sa.specs.Cellular5GNRSSBSpectrogram(
+        subcarrier_spacing=CONTRACT_SCS,
+        sample_rate=CONTRACT_FS / 2,
+        discovery_periodicity=CONTRACT_CAPTURE.duration,
+    ),
+    sa.specs.ChannelPowerTimeSeries(detector_period=CONTRACT_DETECTOR_PERIOD),
+    sa.specs.CyclicChannelPower(
+        cyclic_period=1e-3, detector_period=CONTRACT_DETECTOR_PERIOD
+    ),
+    sa.specs.IQWaveform(),
+    sa.specs.ChannelPowerHistogram(detector_period=CONTRACT_DETECTOR_PERIOD, **BINS),
+    sa.specs.SpectrogramHistogram(window='hamming', frequency_resolution=7.5e3, **BINS),
+    sa.specs.SpectrogramHistogramRatio(
+        window='hamming', frequency_resolution=7.5e3, **BINS
+    ),
+    sa.specs.CellularResourcePowerHistogram(
+        window='hamming', subcarrier_spacing=CONTRACT_SCS, **BINS
+    ),
+)
+
+SPEC_IDS = [type(spec).__name__ for spec in CONTRACT_SPECS]
+
+
+def measure(spec, as_xarray):
+    """run the measurement registered for `type(spec)` the way the registry calls it"""
+    info = sa.registry[type(spec)]
+    ports = 2 if isinstance(spec, sa.specs.SpectrogramHistogramRatio) else 1
+    iq = sa.testing.tone(
+        CONTRACT_CAPTURE.duration, CONTRACT_CAPTURE.sample_rate, ports=ports
+    )
+    return info, info.func(iq, CONTRACT_CAPTURE, as_xarray=as_xarray, **spec.to_dict())
+
+
+def registered_dims(info):
+    dims = ['port']
+    for factory in info.coord_factories:
+        for dim in sa.registry.coordinates[factory].dims:
+            if dim not in dims:
+                dims.append(dim)
+    return tuple(dims)
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_measurement_dtype_and_dims(spec):
+    info, da = measure(spec, as_xarray=True)
+
+    assert da.dtype == info.dtype
+    if info.dims is None:
+        assert da.dims == registered_dims(info)
+    else:
+        assert da.dims == ('port',) + info.dims
+    assert set(da.coords) == set(da.dims) - {'port'}
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_measurement_attrs(spec):
+    """the registered attrs and every spec field reach the DataArray, which is what
+    names them in a saved zarr store"""
+    info, da = measure(spec, as_xarray=True)
+
+    for name, value in info.attrs.items():
+        assert da.attrs[name] == value
+
+    # the wrapper decodes the keywords into a spec before calling, so the attrs hold
+    # the validated field values rather than the ones passed in
+    for name, value in spec.validate().to_dict().items():
+        assert da.attrs[name] == value
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_measurement_without_xarray(spec):
+    _, (data, attrs) = measure(spec, as_xarray=False)
+    _, da = measure(spec, as_xarray=True)
+
+    assert isinstance(attrs, dict)
+    data = np.asarray(data)
+    assert data.shape == da.shape
+    # the raw array is not held to the registered dtype: power_spectral_density
+    # returns float16 where it registers float32
+    assert np.array_equal(data.astype(da.dtype), da.values, equal_nan=True)
+
+
+# the only measurement that validates nothing: iq_waveform clamps its start/stop
+# bounds into the capture by design rather than rejecting them
+NO_VALIDATOR = {'iq_waveform'}
+
+
+def test_every_measurement_has_a_validator():
+    """a measurement without a validator silently skips pre-sweep validation, so a
+    new one has to either register `validate=` or be named here"""
+    missing = {
+        info.name for info in sa.registry.values() if info.validate is None
+    } - NO_VALIDATOR
+
+    assert missing == set()
+    assert NO_VALIDATOR <= {info.name for info in sa.registry.values()}
+
+
+CONTRACT_VALIDATED_SPECS = [
+    s for s in CONTRACT_SPECS if sa.registry[type(s)].validate is not None
+]
+CONTRACT_VALIDATED_IDS = [type(spec).__name__ for spec in CONTRACT_VALIDATED_SPECS]
+
+
+@pytest.mark.parametrize('spec', CONTRACT_VALIDATED_SPECS, ids=CONTRACT_VALIDATED_IDS)
+def test_validators_accept_the_contract_specs(spec):
+    """the pairs the contract tests measure successfully must also pass validation,
+    without IQ"""
+    validate = sa.registry[type(spec)].validate
+    validate(sa.specs.helpers.to_analysis_capture(CONTRACT_CAPTURE), spec)
+
+
+def test_registry_validate_accepts_the_whole_contract_group():
+    group = sa.registry.tospec()(**{
+        sa.registry[type(spec)].name: spec for spec in CONTRACT_SPECS
+    })
+    sa.registry.validate(CONTRACT_CAPTURE, group)

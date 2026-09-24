@@ -1,5 +1,6 @@
-"""striqt.analysis.measurements.spectrogram, power_spectral_density and
-cellular_5g_ssb_spectrogram: levels, axes and the shared spectrogram machinery.
+"""striqt.analysis.measurements.spectrum: spectrogram, power_spectral_density,
+spectrogram_histogram and spectrogram_ratio_histogram, and the shared spectrogram
+machinery behind them.
 
 The level assertions are anchored on the closed form of a bin-centered unit tone. For
 a boxcar window the peak bin reads exactly ``0.0`` dB, and for any other window it
@@ -18,12 +19,26 @@ import re
 import msgspec
 import numpy as np
 import pytest
-from analysis_strategies import registered_tolerance
-from numeric_checks import ATOL, RTOL_FLOAT64, assert_close
+from analysis_strategies import (
+    POWER_BINS,
+    SSB_SPECTROGRAM_PERIODICITY,
+    SSB_SPECTROGRAM_SPEC,
+    registered_tolerance,
+    ssb_spectrogram_capture,
+)
+from numeric_checks import (
+    ATOL,
+    RTOL_FLOAT64,
+    assert_close,
+    elementwise_rtol,
+    levels,
+    populated,
+)
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis import testing
+from striqt.analysis.measurements.power import make_power_bins
 from striqt.waveform.lib.fourier import fft_tolerance_rms, off_peak_floor_dBc
 
 # a 64-point FFT over 8 non-overlapping windows: 512 samples, 500 us
@@ -37,12 +52,6 @@ CAPTURE = sa.specs.Capture(duration=DURATION, sample_rate=FS)
 
 # roundoff of the one FFT that separates the IQ from the reported spectrum
 FFT_SIGMA = fft_tolerance_rms(np.complex64, [NFFT])
-
-
-def levels(result) -> np.ndarray:
-    """the dB values of a measurement result, widened to float64 for comparison"""
-    values = result.values if hasattr(result, 'values') else result
-    return np.asarray(values, dtype='float64')
 
 
 def bin_centered_tone_level_dB(window, nfft=NFFT):
@@ -418,131 +427,134 @@ class TestPowerSpectralDensity:
         assert str(excinfo.value).startswith('$.power_spectral_density: ')
 
 
-# %% cellular_5g_ssb_spectrogram
+# %% spectrogram_histogram
 
-SSB_SCS = 30e3
-# the STFT nfft is sample_rate/(subcarrier_spacing/2) and has to be a multiple of 28
-# for the 13/28 overlap and 15/28 window fill to land on whole samples; 420 kHz is the
-# smallest rate that satisfies it, which keeps this the cheapest capture that still
-# spans a whole 20 ms discovery period
-SSB_FS = 420e3
-SSB_SAMPLE_RATE = 120e3
-SSB_PERIODICITY = 20e-3
-SSB_SYMBOLS = round(28 * SSB_SCS / 15e3)
+HIST_FS = 1e6
+HIST_DURATION = 1e-3
+HIST_FREQUENCY_RESOLUTION = 50e3
+HIST_NFFT = round(HIST_FS / HIST_FREQUENCY_RESOLUTION)
+HIST_CAPTURE = sa.specs.Capture(duration=HIST_DURATION, sample_rate=HIST_FS)
+
+RTOL = elementwise_rtol(np.float32)
 
 
-SSB_SPEC = sa.specs.Cellular5GNRSSBSpectrogram(
-    subcarrier_spacing=SSB_SCS,
-    sample_rate=SSB_SAMPLE_RATE,
-    discovery_periodicity=SSB_PERIODICITY,
-    window='boxcar',
-)
-
-
-def ssb_capture(duration) -> sa.specs.Capture:
-    return sa.specs.Capture(duration=duration, sample_rate=SSB_FS)
-
-
-def ssb_of(duration, frequency=None, **kwargs):
-    if frequency is None:
-        iq = testing.noise(duration, SSB_FS, noise_psd=1 / SSB_FS)
-    else:
-        iq = testing.tone(duration, SSB_FS, frequency=frequency)
-    return sa.measurements.cellular_5g_ssb_spectrogram(
-        iq, ssb_capture(duration), as_xarray=True, **(SSB_SPEC.to_dict() | kwargs)
+def spectrogram_histogram_of(iq, window='hamming', **kwargs):
+    return sa.measurements.spectrogram_histogram(
+        iq,
+        HIST_CAPTURE,
+        window=window,
+        frequency_resolution=HIST_FREQUENCY_RESOLUTION,
+        as_xarray=True,
+        **POWER_BINS,
+        **kwargs,
     )
 
 
-def ssb_tone_level_dB() -> float:
-    """level of a tone centered on a 15 kHz bin after integration to one 30 kHz bin.
+def test_spectrogram_histogram_fractions_sum_to_one():
+    """both ports are normalized by the count of port 0, which is the same count"""
+    iq = sa.testing.noise(HIST_DURATION, HIST_FS, noise_psd=1e-6, ports=2)
 
-    The STFT window is a boxcar of `window_fill` * nfft samples zero-padded to nfft,
-    whose ENBW is nfft/L bins, so the tone bin alone reads 10*log10(L/nfft). Its
-    Dirichlet kernel is not zero on the neighboring bins, and the integration sums
-    the tone bin with one neighbor holding sinc(L/nfft)**2 of the tone's power.
+    da = spectrogram_histogram_of(iq)
+
+    assert (da.values > 0).sum(axis=-1).min() > 1, 'expected a spread of bins'
+    assert_close(da.values.sum(axis=-1), np.ones(2), rtol=RTOL)
+
+
+def test_spectrogram_histogram_concentrates_bin_centered_tone():
+    """a tone on an FFT bin center, taken through a rectangular window, puts all of
+    its power in 1 of the `HIST_NFFT` bins of every STFT window and exactly 0 in the rest.
+
+    The populated bin is therefore 0 dBm -- the whole power of the tone -- rather than
+    a level referred to the 50 kHz noise bandwidth that the units attr reports, and
+    the empty bins fall in the -inf catch-all.
+
+    The fractions are 19/20 and 1/20 (`HIST_NFFT` is 20, not a power of two, so these are
+    not dyadic), computed here in float32 to match the measurement's registered
+    dtype, so they are compared with a float32-appropriate tolerance rather than
+    exact equality.
     """
-    _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
-    nfft = round(2 * SSB_FS / SSB_SCS)
-    L = round(window_fill * nfft)
-    return 10 * np.log10(L / nfft * (1 + np.sinc(L / nfft) ** 2))
-
-
-class TestCellular5GSSBSpectrogram:
-    @pytest.mark.parametrize('blocks', [1, 2], ids='blocks{}'.format)
-    def test_axis_shapes(self, blocks):
-        da = ssb_of(blocks * SSB_PERIODICITY)
-
-        assert da.sizes['cellular_ssb_index'] == blocks
-        assert da.sizes['cellular_ssb_symbol_index'] == SSB_SYMBOLS
-        assert list(da.cellular_ssb_symbol_index.values) == list(range(SSB_SYMBOLS))
-
-        # the frequency axis is binned to one bin per subcarrier spacing and then
-        # truncated to the SSB sample rate around frequency_offset
-        freqs = da.cellular_ssb_baseband_frequency.values
-        assert freqs.size == round(SSB_SAMPLE_RATE / SSB_SCS)
-        assert_close(np.diff(freqs), SSB_SCS, rtol=RTOL_FLOAT64)
-        assert np.all(np.abs(freqs) <= SSB_SAMPLE_RATE / 2)
-
-    def test_tone_lands_in_its_labeled_frequency_bin_in_every_block(self):
-        tone_frequency = SSB_SCS
-        da = ssb_of(2 * SSB_PERIODICITY, frequency=tone_frequency)
-
-        freqs = da.cellular_ssb_baseband_frequency.values
-        expected = int(np.argmin(np.abs(freqs - tone_frequency)))
-        spg = levels(da)
-        assert np.all(np.argmax(spg, axis=-1) == expected)
-
-        # a stationary tone reads the same in every symbol of every block
-        peak = spg[..., expected]
-        assert peak.max() == peak.min()
-
-    def test_tone_level_sums_the_tone_bin_with_its_leaking_neighbor(self):
-        duration = 2 * SSB_PERIODICITY
-        da = ssb_of(duration, frequency=SSB_SCS)
-
-        freqs = da.cellular_ssb_baseband_frequency.values
-        index = int(np.argmin(np.abs(freqs - SSB_SCS)))
-        tol = registered_tolerance(ssb_capture(duration), SSB_SPEC)
-        assert_close(
-            levels(da)[..., index],
-            ssb_tone_level_dB(),
-            rtol=tol.rtol,
-            atol=tol.on_peak.peak,
-        )
-
-    @pytest.mark.parametrize(
-        'duration,kwargs,message',
-        [
-            (
-                SSB_PERIODICITY,
-                {'frequency_offset': SSB_SCS / 2},
-                'sample_rate must select a band of whole bins centered at frequency_offset',
-            ),
-            (
-                SSB_PERIODICITY,
-                {'sample_rate': 2 * SSB_FS},
-                'sample_rate must select a band of whole bins',
-            ),
-            (
-                # half a burst set (one slot) past the discovery period
-                SSB_PERIODICITY + sw.ofdm.slot_period(SSB_SCS),
-                {},
-                'duration must end on a whole discovery_periodicity or after a complete burst set of 56 symbols',
-            ),
-        ],
-        ids=[
-            'frequency_offset_off_the_subcarrier_grid',
-            'sample_rate_above_capture',
-            'partial_burst_set',
-        ],
+    iq = sa.testing.tone(
+        HIST_DURATION, HIST_FS, frequency=2 * HIST_FREQUENCY_RESOLUTION
     )
-    def test_incompatible_burst_layout_is_rejected(self, duration, kwargs, message):
-        """the frequency cut and the per-block reshape at the end of the measurement
-        would fail on these; the validator names the field first"""
-        with pytest.raises(msgspec.ValidationError, match=re.escape(message)) as ex:
-            ssb_of(duration, **kwargs)
 
-        assert str(ex.value).startswith('$.cellular_5g_ssb_spectrogram: ')
+    da = spectrogram_histogram_of(iq, window='boxcar')
+
+    assert da.attrs['noise_bandwidth'] == HIST_FREQUENCY_RESOLUTION
+    bins, fractions = zip(*populated(da.values[0], da.spectrogram_power_bin.values))
+    assert bins == (float('-inf'), 0.0)
+    assert_close(fractions, ((HIST_NFFT - 1) / HIST_NFFT, 1 / HIST_NFFT), rtol=RTOL)
+
+
+@pytest.mark.parametrize(
+    'integration_bandwidth,units',
+    [(None, 'dBm/50 kHz'), (100e3, 'dBm/100 kHz')],
+    ids=['no_integration', 'integrate_100kHz'],
+)
+def test_spectrogram_histogram_bin_coordinate(integration_bandwidth, units):
+    """the bin coordinate is the shared power grid, labeled with the equivalent noise
+    bandwidth that the readings are referred to"""
+    iq = sa.testing.tone(HIST_DURATION, HIST_FS)
+
+    da = spectrogram_histogram_of(iq, integration_bandwidth=integration_bandwidth)
+
+    expected = make_power_bins(**POWER_BINS)
+    assert_close(da.spectrogram_power_bin.values, expected, rtol=RTOL)
+    assert da.spectrogram_power_bin.attrs['units'] == units
+
+
+# %% spectrogram_ratio_histogram
+
+
+def ratio_histogram(iq, **kwargs):
+    return sa.measurements.spectrogram_ratio_histogram(
+        iq,
+        HIST_CAPTURE,
+        window='hamming',
+        frequency_resolution=HIST_FREQUENCY_RESOLUTION,
+        as_xarray=True,
+        **POWER_BINS,
+        **kwargs,
+    )
+
+
+def two_ports_offset_by(offset_dB):
+    """noise repeated on 2 ports, with port 1 scaled up by `offset_dB`.
+
+    Noise rather than a tone so that every spectrogram bin carries power well above
+    the float32 roundoff floor: in the near-empty bins of a tone's spectrogram the
+    cross-port ratio is roundoff noise rather than the applied offset.
+    """
+    iq = sa.testing.noise(HIST_DURATION, HIST_FS, noise_psd=1e-6, ports=2)
+    iq[1] = iq[0] * 10 ** (offset_dB / 20)
+    return iq
+
+
+@pytest.mark.parametrize('offset_dB', [0.0, 6.0, -7.0], ids='offset{:g}dB'.format)
+def test_spectrogram_ratio_histogram_offset_ports(offset_dB):
+    """row 0 holds spg[0]-spg[1] and row 1 holds spg[1]-spg[0], so a level offset
+    between the ports puts the two rows at opposite signs of it"""
+    da = ratio_histogram(two_ports_offset_by(offset_dB))
+
+    bins = da.spectrogram_ratio_power_bin.values
+    assert populated(da.values[0], bins) == [(-offset_dB, 1.0)]
+    assert populated(da.values[1], bins) == [(offset_dB, 1.0)]
+
+
+@pytest.mark.parametrize('ports', [1, 3], ids='ports{}'.format)
+def test_spectrogram_ratio_histogram_requires_two_ports(ports):
+    iq = sa.testing.tone(HIST_DURATION, HIST_FS, ports=ports)
+
+    with pytest.raises(ValueError, match='only supported for 2-channel measurements'):
+        ratio_histogram(iq)
+
+
+def test_spectrogram_ratio_histogram_bin_units_are_ratios():
+    """the bins hold a cross-port ratio, so their units are dB rather than the dBm of
+    the absolute spectrogram histogram"""
+    da = ratio_histogram(two_ports_offset_by(0.0))
+
+    units = da.spectrogram_ratio_power_bin.attrs['units']
+    assert units == 'dB/50 kHz'
 
 
 # %% tolerance
@@ -550,7 +562,7 @@ class TestCellular5GSSBSpectrogram:
 TOLERANCE_CASES = [
     (CAPTURE, spg_spec()),
     (PSD_CAPTURE, psd_spec()),
-    (ssb_capture(SSB_PERIODICITY), SSB_SPEC),
+    (ssb_spectrogram_capture(SSB_SPECTROGRAM_PERIODICITY), SSB_SPECTROGRAM_SPEC),
 ]
 TOLERANCE_IDS = ['spectrogram', 'power_spectral_density', 'cellular_5g_ssb_spectrogram']
 

@@ -1,5 +1,5 @@
-"""the time-selective power measurements: channel_power_time_series and
-cyclic_channel_power.
+"""striqt.analysis.measurements.power: channel_power_time_series,
+channel_power_histogram and cyclic_channel_power.
 
 `tests/waveform/test_power_analysis.py` property-tests the underlying
 `iq_to_bin_power` and `iq_to_cyclic_power` kernels, so these tests cover only what
@@ -25,11 +25,12 @@ import re
 import msgspec
 import numpy as np
 import pytest
-from analysis_strategies import registered_tolerance
-from numeric_checks import assert_close
+from analysis_strategies import POWER_BINS, registered_tolerance
+from numeric_checks import assert_close, elementwise_rtol, populated
 
 import striqt.analysis as sa
 from striqt.analysis import testing
+from striqt.analysis.measurements.power import make_power_bins
 
 FS = 1e6
 
@@ -374,6 +375,111 @@ class TestCyclicChannelPower:
 
         assert quantile.on_peak.rms > selections.on_peak.rms
         assert quantile.on_peak.peak > selections.on_peak.peak
+
+
+# %% channel_power_histogram
+
+HIST_DURATION = 1e-3
+HIST_DETECTOR_PERIOD = fractions.Fraction(1, 10000)
+HIST_CAPTURE = sa.specs.Capture(duration=HIST_DURATION, sample_rate=FS)
+
+RTOL = elementwise_rtol(np.float32)
+
+
+@pytest.mark.parametrize(
+    'level,expected_bin',
+    [
+        (-13.0, -13.0),
+        (0.0, 0.0),
+        (7.0, 7.0),
+        (20.0, float('inf')),
+        (-60.0, float('-inf')),
+    ],
+    ids=['level-13dB', 'level0dB', 'level7dB', 'above_power_high', 'below_power_low'],
+)
+def test_channel_power_histogram_constant_level_fills_one_bin(level, expected_bin):
+    """every detector reading of a constant-envelope tone is the same level, so the
+    whole normalized fraction lands in the bin centered on it, or in the infinite
+    catch-all bin when the level falls outside the grid"""
+    iq = sa.testing.tone(HIST_DURATION, FS) * 10 ** (level / 20)
+
+    da = sa.measurements.channel_power_histogram(
+        iq,
+        HIST_CAPTURE,
+        detector_period=HIST_DETECTOR_PERIOD,
+        as_xarray=True,
+        **POWER_BINS,
+    )
+
+    bins = da.channel_power_bin.values
+    for detector in range(da.sizes['power_detector']):
+        assert populated(da.values[0, detector], bins) == [(expected_bin, 1.0)]
+
+
+def test_channel_power_histogram_fractions_sum_to_one():
+    """the counts are normalized so that each (port, detector) row sums to 1, even
+    though the sum in the source runs over both detectors at once"""
+    # one ramp across the whole capture, so each detector period reads a level of its
+    # own rather than repeating one bin
+    iq = sa.testing.sawtooth(HIST_DURATION, FS, period=HIST_DURATION, ports=2)
+
+    da = sa.measurements.channel_power_histogram(
+        iq,
+        HIST_CAPTURE,
+        detector_period=HIST_DETECTOR_PERIOD,
+        as_xarray=True,
+        **POWER_BINS,
+    )
+
+    assert (da.values > 0).sum(axis=-1).min() > 1, 'expected a spread of bins'
+    assert_close(da.values.sum(axis=-1), np.ones((2, 2)), rtol=RTOL)
+
+
+@pytest.mark.parametrize(
+    'power_low,power_high,power_resolution',
+    [(-40.0, 10.0, 1.0), (-40.0, 10.0, 3.0), (-20.0, 0.0, 0.5)],
+    ids=['step1', 'step3_off_grid_high', 'step0.5'],
+)
+def test_channel_power_histogram_bin_coordinate(
+    power_low, power_high, power_resolution
+):
+    iq = sa.testing.tone(HIST_DURATION, FS)
+    bins = {
+        'power_low': power_low,
+        'power_high': power_high,
+        'power_resolution': power_resolution,
+    }
+
+    da = sa.measurements.channel_power_histogram(
+        iq, HIST_CAPTURE, detector_period=HIST_DETECTOR_PERIOD, as_xarray=True, **bins
+    )
+
+    expected = make_power_bins(power_low, power_high, power_resolution)
+    assert_close(da.channel_power_bin.values, expected, rtol=RTOL)
+    assert da.channel_power_bin.values[0] == float('-inf')
+    assert da.channel_power_bin.values[-1] == float('inf')
+
+
+def test_channel_power_histogram_shares_the_time_series_validator():
+    """the histogram bins the time series, so the detector names and the tiling
+    rules that reject one must reject the other, at the histogram's own path"""
+    assert (
+        sa.registry[sa.specs.ChannelPowerHistogram].validate
+        is sa.registry[sa.specs.ChannelPowerTimeSeries].validate
+    )
+
+    iq = sa.testing.tone(HIST_DURATION, FS)
+    with pytest.raises(
+        msgspec.ValidationError, match="power_detectors entry 'bogus'"
+    ) as ex:
+        sa.measurements.channel_power_histogram(
+            iq,
+            HIST_CAPTURE,
+            detector_period=HIST_DETECTOR_PERIOD,
+            power_detectors=('rms', 'bogus'),
+            **POWER_BINS,
+        )
+    assert str(ex.value).startswith('$.channel_power_histogram: ')
 
 
 # %% registered tolerances
