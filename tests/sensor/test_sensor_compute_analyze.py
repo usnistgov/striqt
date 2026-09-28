@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.compute.analyze: analyze() packaging around correct_iq and the
-measurement registry, trigger selection from the source spec, and the warmup
-decision of prepare_compute"""
+"""striqt.sensor.lib.compute.analyze: packaging around correct_iq and the measurement
+registry, trigger selection, and the warmup decision
+"""
 
 from __future__ import annotations
 

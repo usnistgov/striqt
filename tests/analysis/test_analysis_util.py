@@ -1,5 +1,6 @@
-"""striqt.analysis.lib.util: the logging adapters, stopwatch, compute lock, blocking
-input and small helpers that the analysis, sensor, cli and figures packages call"""
+"""striqt.analysis.lib.util: logging adapters, stopwatch, compute lock and small
+helpers
+"""
 
 from __future__ import annotations
 

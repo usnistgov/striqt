@@ -1,9 +1,7 @@
-"""Tests for the JIT kernels in striqt.waveform.lib.jit.
+"""striqt.waveform.lib.jit: the numba correlation kernels against a numpy reference.
 
-The numba `_corr_at_indices` kernels (CPU and CUDA) are checked against a numpy
-reference. The CUDA tests skip when cupy is not available. The `cupy.fuse` dB kernels
-in `jit.cuda` are covered through the public dispatcher by
-`test_power_analysis.TestNumpyCupyCrossComparison`.
+The CUDA tests skip when cupy is not available; the `cupy.fuse` dB kernels are covered
+through the public dispatcher in test_power_analysis.
 """
 
 from __future__ import annotations

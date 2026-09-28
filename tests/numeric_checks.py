@@ -1,13 +1,10 @@
-"""comparison assertions, reference helpers and test-only tolerance policy shared by
+"""comparison assertions, float64 oracles and the test-only tolerance policy shared by
 the suite.
 
-The roundoff models themselves live in the library beside the functions they describe
-(`striqt.waveform.fourier`, `striqt.waveform.power_analysis`,
-`striqt.waveform.lib.arrays`, `striqt.waveform.ofdm`) and the per-measurement budgets
-are registered with `striqt.analysis.registry`; tests take their pass criteria from
-there, so the model the suite enforces is the one the library reports.
-
-Not a conftest: importable by bare name from every test module.
+The roundoff models live in the library beside the functions they describe, and the
+per-measurement budgets are registered with `striqt.analysis.registry`; tests take
+their pass criteria from there, so the model the suite enforces is the one the library
+reports. Not a conftest: importable by bare name from every test module.
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@ tests/waveform/test_fourier.py:
     rms_rel_error = c * eps * sqrt(log2(N))        (per FFT pass, eps = 2**-24)
 
 Usage:
-    uv run --extra test --extra gpu python chores/tests/measure_fft_accuracy.py [--trials 32]
+    pixi run -e cupy python chores/tests/measure_fft_accuracy.py [--trials 32]
 
 The single-fft tables report the fitted c per backend; the pipeline table reports the
 ratio of the measured error to the model with c = C_ASSUMED (the value used by the

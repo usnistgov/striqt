@@ -1,11 +1,8 @@
-"""the waveform pass-through measurement: iq_waveform.
+"""striqt.analysis.measurements.waveforms: the IQ pass-through measurement.
 
-`iq_waveform` slices the corrected IQ between `start_time_sec` and `stop_time_sec`
-without transforming it, so the tests cover what the measurement wrapping adds: the
-conversion of the time bounds to sample indices (open, closed, past the capture end,
-reversed), the `iq_index` coordinate and its dtype, and the registered tolerance,
-which passes the caller's input error through to the envelope level with no budget of
-its own.
+The tests cover what the measurement wrapping adds to a slice of the corrected IQ:
+the conversion of the time bounds to sample indices, the index coordinate, and the
+registered tolerance, which passes the caller's input error straight through.
 """
 
 from __future__ import annotations

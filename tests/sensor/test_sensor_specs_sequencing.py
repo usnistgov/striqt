@@ -1,6 +1,5 @@
-"""striqt.sensor.specs.sequencing: sweep expansion (loop_captures,
-loop_capture_origins, adjust_captures, list_capture_adjustments, adjust_analysis) and
-the capture descriptions derived from it
+"""striqt.sensor.specs.sequencing: sweep expansion and the capture descriptions derived
+from it.
 
 The site-shaped cases use the extension binding in sweeps/src/extensions.py and the
 override files in sweeps/sites*, mirroring the downstream sensor configuration.

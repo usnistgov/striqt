@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.controller: registry (lookup) lifetime, the raw acquisition
-layout against the synthetic generators, IQ reuse, the chunked read loop, and
-acquisition through the fake SoapySDR device (read sizes, timestamp, signal level)"""
+"""striqt.sensor.lib.controller: controller lifetime, the raw acquisition layout, IQ
+reuse, the chunked read loop, and acquisition through the fake SoapySDR device
+"""
 
 from __future__ import annotations
 

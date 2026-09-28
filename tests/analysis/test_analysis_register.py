@@ -1,14 +1,10 @@
-"""striqt.analysis.lib.register: the `validate=` and `tolerance=` hooks on measurement
-registration, the `AnalysisRegistry.validate`/`.tolerances` walks over an analysis
-group, and the guarantees the live registry makes: a (capture, spec) pair that
-validates is one the measurement can run, and every registered measurement honours
-the contract in the last cell (dtype, dims, coords and attrs reach the DataArray, and
-the raw `as_xarray=False` path returns the same values).
+"""striqt.analysis.lib.register: measurement registration hooks, the validation and
+tolerance walks over an analysis group, and the contract every registered measurement
+honors (dtype, dims, coords and attrs reach the DataArray; the raw path returns the
+same values).
 
-The hook tests build their own `AnalysisRegistry`; mutating the live
-`register.registry` would leak a measurement into every other test module. The
-measurements are called with `as_xarray=False` because the xarray path resolves
-coordinate factories through the *global* registry.
+The hook tests build their own `AnalysisRegistry`, since mutating the live registry
+would leak a measurement into every other test module.
 """
 
 from __future__ import annotations

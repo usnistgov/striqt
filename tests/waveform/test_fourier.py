@@ -1,10 +1,5 @@
-"""Property-based tests for striqt.waveform.lib.fourier using Hypothesis.
-
-Covers windowing, fftfreq, frequency slicing, oaconvolve, resample, stft/istft and
-spectrogram, STFT frequency editing, the filter and resampler designs, and the
-overlap-add filters: identities, linearity, dtype and shape properties,
-numpy/cupy/dask compatibility, and roundoff bounds derived from an FFT error model
-(numpy vs cupy, and the off-peak floor around a tone).
+"""striqt.waveform.lib.fourier: property tests of the windows, STFT, resampling and
+filter designs against identities and the FFT roundoff model, on numpy, cupy and dask.
 """
 
 from __future__ import annotations

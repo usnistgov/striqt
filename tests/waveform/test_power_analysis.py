@@ -1,8 +1,5 @@
-"""Property-based tests for striqt.waveform.power_analysis using Hypothesis.
-
-Covers the dB/linear conversions and dB-domain statistics: identities and algebraic
-rules, dtype handling, input preservation, edge cases, complex inputs, numpy/cupy/dask
-compatibility, and numpy-vs-cupy agreement within ulp budgets for the library calls.
+"""striqt.waveform.power_analysis: property tests of the dB conversions and dB-domain
+statistics, including numpy-vs-cupy agreement within ulp budgets.
 """
 
 from __future__ import annotations

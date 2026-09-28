@@ -1,7 +1,7 @@
-"""striqt.sensor.lib.compute.corrections: the per-capture signal path of correct_iq
-(time origin, level, band placement and the pre_filter/pre_align/aligned stages), the
-resampler design, and the sizing of the extra acquisition overlap that the resampler
-and the analysis filter consume"""
+"""striqt.sensor.lib.compute.corrections: the per-capture signal path of correct_iq,
+the resampler design, and the acquisition overlap that the resampler and analysis
+filter consume
+"""
 
 from __future__ import annotations
 

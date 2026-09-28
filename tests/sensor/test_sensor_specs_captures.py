@@ -1,6 +1,4 @@
-"""striqt.sensor.specs.captures: per-capture utilities (split_capture_ports,
-pairwise_by_port, ensure_tuple, get_unique_ports, get_capture_type, concat_group_sizes)
-"""
+"""striqt.sensor.specs.captures: per-capture and per-port utilities"""
 
 from __future__ import annotations
 

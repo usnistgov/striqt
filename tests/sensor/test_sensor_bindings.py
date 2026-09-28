@@ -1,5 +1,4 @@
-"""striqt.sensor.lib.bindings: the tagged sweep union, schema binding of decoded
-sweeps, BoundSweep validation, and out-of-tree binding registration"""
+"""striqt.sensor.lib.bindings: the tagged sweep union and binding registration"""
 
 from __future__ import annotations
 

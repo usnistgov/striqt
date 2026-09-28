@@ -1,13 +1,12 @@
-"""striqt.sensor sweeps end to end over the synthetic sources: the CLI entry point on
-the YAML files under sweeps/, and in-memory sweeps checked against the
-striqt.analysis.testing generators that the sources themselves call.
+"""striqt.sensor sweeps end to end over the synthetic sources: the CLI on the YAML files
+under sweeps/, and in-memory sweeps checked against the generators the sources call.
 
 The PSD oracle is the window's own spectrum: a unit tone at fine bin k0 puts
 ``|W(k - k0)|**2 / (nfft * sum(w**2))`` of its power in fine bin k (Parseval), and a
-reported bin integrates the fine bins it spans. For a bin-centred tone with no
-integration this is the ``-10*log10(enbw_bins)`` of tests/analysis; with
-quick.yaml's 24-bin integration it is the in-block fraction of the kaiser window,
-about -0.002 dB, with -33 dB spilling into the neighbouring block.
+reported bin integrates the fine bins it spans. For a bin-centered tone with no
+integration this is the ``-10*log10(enbw_bins)`` of tests/analysis; with quick.yaml's
+24-bin integration it is the in-block fraction of the kaiser window, about -0.002 dB,
+with -33 dB spilling into the neighboring block.
 """
 
 from __future__ import annotations

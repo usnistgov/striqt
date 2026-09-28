@@ -1,5 +1,4 @@
-"""striqt.analysis.lib.io.decode_from_yaml_file: `!include` globs, lists and nesting,
-flow-sequence keys, scalar typing"""
+"""striqt.analysis.lib.io: YAML decoding with `!include`"""
 
 from __future__ import annotations
 

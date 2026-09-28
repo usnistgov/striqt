@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.io: read_yaml_spec, read_json_spec and read_zarr_spec, including
-the `extensions:` block and YAML files shaped like the downstream sensor and fragment
-files"""
+"""striqt.sensor.lib.io: reading sweep specs from YAML, JSON and zarr, including the
+`extensions:` block
+"""
 
 from __future__ import annotations
 

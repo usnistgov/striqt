@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.sinks: NoSink passthrough, batch sizing, the zarr sinks written
-through a real sweep (rows equal the in-memory datasets exactly), the .zarr.zip
-archive path, and the Zipper"""
+"""striqt.sensor.lib.sinks: the sinks written through a real sweep, batch sizing and the
+zip archive path
+"""
 
 from __future__ import annotations
 

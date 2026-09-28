@@ -1,6 +1,4 @@
-"""striqt.sensor.lib.resources: the open_resources lifecycle — working directory,
-sink selection through extensions.sink, cleanup after a sink failure, the
-calibration and log file resources, and the source-opened callback"""
+"""striqt.sensor.lib.resources: the open_resources lifecycle"""
 
 from __future__ import annotations
 

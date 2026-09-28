@@ -1,16 +1,13 @@
 """what the type checker sees at striqt's keyword-unpacking sites.
 
-Measurement signatures are synthesized (`hint_keywords` binds a `ParamSpec` from the
-spec Struct), coordinate factories, `Controller` construction and `arm`, the cache and
-`retry` decorators re-scope their type variables through generic wrappers, and
-`design_resampler`/`iterate_sweep` forward `**kwargs: Unpack[TypedDict]`. None of that
-runs at test time, so a broken Protocol or a lost `ParamSpec` would be silent.
-
-Each probe under `tests/ty_probes/` is ordinary typed code that must check clean: a
-call that must be accepted asserts its result with `typing_extensions.assert_type`, and
-a call that must be rejected carries `# ty: ignore[<rule>]`, which ty reports as an
-unused ignore if the rejection ever stops. The probe for every registered measurement is
-generated here from `sa.registry` on the same pattern.
+Measurement signatures, coordinate factories, `Controller` construction and `arm`,
+the cache and `retry` decorators and the `Unpack[TypedDict]` forwarders all get their
+static types through generic wrappers that never run at test time, so a broken
+Protocol or a lost `ParamSpec` would otherwise be silent. Each probe under
+`tests/ty_probes/` is ordinary typed code that must check clean: an accepted call
+asserts its result with `assert_type`, and a rejected call carries
+`# ty: ignore[<rule>]`, which ty reports as unused if the rejection ever stops. The
+probe over the registered measurements is generated from `sa.registry`.
 """
 
 from __future__ import annotations

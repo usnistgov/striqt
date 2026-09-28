@@ -1,14 +1,10 @@
-"""striqt.analysis.measurements.spectrum: spectrogram, power_spectral_density,
-spectrogram_histogram and spectrogram_ratio_histogram, and the shared spectrogram
-machinery behind them.
+"""striqt.analysis.measurements.spectrum: the spectrogram-derived measurements.
 
-The level assertions are anchored on the closed form of a bin-centered unit tone. For
-a boxcar window the peak bin reads exactly ``0.0`` dB, and for any other window it
-reads ``-10*log10(enbw_bins)``, where ``enbw_bins`` is the window's equivalent noise
-bandwidth in FFT bins: `spectrum._cached_spectrogram` normalizes the STFT to a power
-spectral density and labels the result with ``noise_bandwidth = frequency_resolution``,
-so a tone whose power all falls in one bin is reported low by the ratio of the window's
-ENBW to that labeled bandwidth.
+Level assertions are anchored on a bin-centered unit tone: a boxcar window reads
+exactly ``0.0`` dB in the peak bin, and any other window reads
+``-10*log10(enbw_bins)``, because the spectrogram is normalized to a power spectral
+density labeled with ``noise_bandwidth = frequency_resolution`` while the tone's power
+spreads over the window's equivalent noise bandwidth.
 """
 
 from __future__ import annotations

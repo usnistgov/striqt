@@ -1,11 +1,6 @@
-"""Tests for the parts of striqt.waveform.lib.ofdm that striqt.analysis uses.
-
-The cellular measurements call `get_3gpp_phy`/`Phy3GPP.index_cyclic_prefix` and
-`corr_at_indices` (cyclic autocorrelation), `pss_params`/`sss_params`,
-`pss_5g_nr`/`sss_5g_nr`, `get_5g_ssb_iq`, `correlate_sync_sequence` and
-`choose_ssb_offset` (5G NR synchronization). Each is checked against an independent
-restatement of the 3GPP structure it encodes, and against a synthetic waveform that
-contains a known cyclic prefix or synchronization sequence.
+"""striqt.waveform.lib.ofdm: the 3GPP frame model and 5G NR synchronization used by the
+cellular measurements, each checked against an independent restatement of the standard
+and against a synthetic waveform with a known cyclic prefix or sync sequence.
 """
 
 from __future__ import annotations

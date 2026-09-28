@@ -1,6 +1,4 @@
-"""striqt.sensor.lib.sources.base: the read contract of VirtualSource (buffer position
-to generator index, contiguity across reads, timestamps, re-arming) and the empty
-NoSource"""
+"""striqt.sensor.lib.sources.base: the read contract of the virtual sources"""
 
 from __future__ import annotations
 

@@ -1,16 +1,11 @@
-"""generate reference synthetic waveforms for tests and examples.
+"""generate reference synthetic waveforms for tests and the synthetic sensor sources.
 
-Each generator returns a 2-D array of shape ``(ports, count)`` in the array
-namespace `xp`. All are *windowable*: `start_index` is an absolute sample index,
-and a call with `start_index` and `count` returns exactly the slice
-``[:, start_index:start_index + count]`` of the whole-capture call with the same
-arguments, which is what allows a gapless IQ source to serve one capture in several
-reads. Index 0 is the first sample of a capture; a negative `start_index` extends
-the same waveform backward in time, which is how a source generates the pre-roll
-that the sensor's resampler and filter overlaps consume.
-
-The synthetic sources in `striqt.sensor.lib.sources.function` produce these
-waveforms.
+Each generator returns an array of shape ``(ports, count)`` in the array namespace
+`xp` and is *windowable*: `start_index` is an absolute sample index, so a call with
+`start_index` and `count` is exactly the slice ``[:, start_index:start_index + count]``
+of the whole-capture call. Index 0 is the first sample of a capture, and a negative
+`start_index` extends the waveform backward in time for the pre-roll that the
+sensor's resampler and filter overlaps consume.
 """
 
 from __future__ import annotations as __
