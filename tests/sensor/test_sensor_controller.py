@@ -17,7 +17,7 @@ from synthetic_sources import (
     RESAMPLE_FILTER,
     SCALE_ONLY,
     expected_raw,
-    make_capture,
+    preset_capture,
 )
 
 import striqt.sensor as ss
@@ -140,7 +140,7 @@ def test_acquire_layout_is_lead_data_tail_from_the_generator(
     binding, preset, array_backend, isolated_lookup
 ):
     source = SOURCE.replace(array_backend=array_backend)
-    capture = make_capture(binding, **LAYOUT_PRESETS[preset])
+    capture = preset_capture(binding, **LAYOUT_PRESETS[preset])
     iq = open_and_acquire(binding, capture, source)
     expected = expected_raw(binding, capture, source)
     assert iq.pre_align.shape == expected.shape
@@ -148,7 +148,7 @@ def test_acquire_layout_is_lead_data_tail_from_the_generator(
 
 
 def test_acquire_metadata_defaults(isolated_lookup, subtests):
-    capture = make_capture('single_tone', **SCALE_ONLY)
+    capture = preset_capture('single_tone', **SCALE_ONLY)
     with TONE.from_source_spec(SOURCE) as ctrl:
         ctrl._arm_spec(capture)
         iq = ctrl.acquire()
@@ -173,14 +173,14 @@ def test_acquire_metadata_defaults(isolated_lookup, subtests):
 def test_acquire_on_cupy_returns_device_arrays(xp, isolated_lookup):
     source = SOURCE.replace(array_backend='cupy')
     iq = open_and_acquire(
-        'single_tone', make_capture('single_tone', **SCALE_ONLY), source
+        'single_tone', preset_capture('single_tone', **SCALE_ONLY), source
     )
     assert sw.is_cupy_array(iq.pre_align)
 
 
 # %% acquire: reuse_iq
 
-REUSABLE = make_capture('single_tone', **SCALE_ONLY)
+REUSABLE = preset_capture('single_tone', **SCALE_ONLY)
 REUSABLE_VARIANT = REUSABLE.replace(analysis_bandwidth=5e6)
 NOT_REUSABLE = REUSABLE.replace(frequency_offset=1e5)
 
@@ -255,7 +255,7 @@ def test_reuse_iq_clears_the_soapy_start_time(fake_controller):
 def test_one_port_capture_after_a_two_port_capture_has_one_row(isolated_lookup):
     """the receive buffers alternate between acquisitions, so the third
     acquisition is offered the two-port buffer of the first"""
-    two_port = make_capture('sawtooth', **SCALE_ONLY)
+    two_port = preset_capture('sawtooth', **SCALE_ONLY)
     one_port = two_port.replace(port=1, duration=0.5e-3)
     one_port_short = one_port.replace(duration=0.25e-3)
     with BINDINGS['sawtooth'].from_source_spec(SOURCE) as ctrl:
@@ -296,7 +296,7 @@ class OverReports(BINDINGS['sawtooth'].sensor.source_cls):
 
 def test_partial_reads_are_completed_contiguously(monkeypatch, isolated_lookup):
     monkeypatch.setattr(BINDINGS['sawtooth'].sensor, 'source_cls', HalfReads)
-    capture = make_capture('sawtooth', **SCALE_ONLY)
+    capture = preset_capture('sawtooth', **SCALE_ONLY)
     with BINDINGS['sawtooth'].from_source_spec(SOURCE) as ctrl:
         ctrl._arm_spec(capture)
         iq = ctrl.acquire()
@@ -309,7 +309,7 @@ def test_partial_reads_are_completed_contiguously(monkeypatch, isolated_lookup):
 def test_overfilled_buffer_is_a_memory_error(monkeypatch, isolated_lookup):
     monkeypatch.setattr(BINDINGS['sawtooth'].sensor, 'source_cls', OverReports)
     with BINDINGS['sawtooth'].from_source_spec(SOURCE) as ctrl:
-        ctrl._arm_spec(make_capture('sawtooth', **SCALE_ONLY))
+        ctrl._arm_spec(preset_capture('sawtooth', **SCALE_ONLY))
         with pytest.raises(MemoryError):
             ctrl.acquire()
 

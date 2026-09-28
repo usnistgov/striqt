@@ -32,7 +32,9 @@ from site_strategies import (
     make_site_sweep,
 )
 from sweep_strategies import (
+    RESOLUTION_MSG,
     SOURCE,
+    SPG,
     CaptureCls,
     capture_tuples,
     frequency_bin_range_loop,
@@ -1294,10 +1296,6 @@ def test_adjust_analysis_warns_about_unused_keys(synthetic_sweep, caplog):
 
 # %% validate_sweep
 
-# 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
-SPG = ss.specs.BundledAnalysis.from_dict({
-    'spectrogram': {'window': 'hann', 'frequency_resolution': 1e4}
-})
 BAD_RESOLUTION = Remap(
     key='frequency_offset',
     lookup={0.0: {'frequency_resolution': 1e4}, 1e5: {'frequency_resolution': 3e4}},
@@ -1339,7 +1337,7 @@ def test_validate_sweep_reports_a_per_source_override():
     # the measurement that rejected it, the values the failed rule compared, then the
     # place in the sweep that produced them: the loop point and the `captures:` entry
     assert message.startswith('$.analysis.spectrogram: ')
-    assert 'sample_rate/resolution must be a counting number' in message
+    assert RESOLUTION_MSG in message
     assert '(sample_rate: 1000000.0, frequency_resolution: 30000.0)' in message
     assert message.endswith(
         " - at $.loops: {'frequency_offset': 100000.0} on $.captures[0]"

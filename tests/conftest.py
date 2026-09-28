@@ -128,6 +128,20 @@ def cupy_available():
     return namespace_module('cupy')
 
 
+@pytest.fixture(scope='module')
+def real_soapy():
+    """the real SoapySDR module, as striqt imported it; skipped under uv"""
+    from striqt.sensor.lib.sources import soapy
+
+    pytest.importorskip('SoapySDR')
+    if (
+        soapy.SoapySDR is None
+        or getattr(soapy.SoapySDR, '__name__', None) != 'SoapySDR'
+    ):
+        pytest.skip('striqt did not import SoapySDR at load time')
+    return soapy.SoapySDR
+
+
 def pytest_generate_tests(metafunc):
     """parametrize `xp` over the namespaces named by a `namespaces` marker, or numpy
     and cupy by default"""
@@ -419,38 +433,13 @@ def armed_tone_controller(isolated_lookup):
     """a single_tone Controller on the synthetic FunctionSource, armed with the
     scale-only preset capture"""
     from sweep_strategies import SOURCE
-    from synthetic_sources import SCALE_ONLY, make_capture
+    from synthetic_sources import SCALE_ONLY, preset_capture
 
     import striqt.sensor as ss
 
     with ss.bindings.single_tone.from_source_spec(SOURCE) as ctrl:
-        ctrl._arm_spec(make_capture('single_tone', **SCALE_ONLY))
+        ctrl._arm_spec(preset_capture('single_tone', **SCALE_ONLY))
         yield ctrl
-
-
-@pytest.fixture
-def receive_buffers():
-    """make(capture, source=None) -> a ReceiveBuffers for a controller stub holding
-    only the attributes it reads; `source` defaults to a gapless SoapySource, which
-    is what the carryover path needs"""
-    from types import SimpleNamespace
-
-    from soapy_factories import source_spec
-
-    import striqt.sensor as ss
-    from striqt.sensor.lib.sources import buffers
-
-    def make(capture, source=None):
-        if source is None:
-            source = source_spec(gapless=True, time_sync_at='open')
-        controller = SimpleNamespace(
-            capture_spec=capture,
-            source_spec=source,
-            source_info=ss.specs.SourceInfo(num_rx_ports=None),
-        )
-        return buffers.ReceiveBuffers(controller)
-
-    return make
 
 
 def assert_source_released(lookup, sweep):

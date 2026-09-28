@@ -823,18 +823,6 @@ class TestSoapySourceClose:
 # %% real SoapySDR bindings: the null driver (pixi environments)
 
 
-@pytest.fixture(scope='module')
-def real_soapy():
-    """the real SoapySDR module, as striqt imported it; skipped under uv"""
-    pytest.importorskip('SoapySDR')
-    if (
-        soapy.SoapySDR is None
-        or getattr(soapy.SoapySDR, '__name__', None) != 'SoapySDR'
-    ):
-        pytest.skip('striqt did not import SoapySDR at load time')
-    return soapy.SoapySDR
-
-
 @pytest.fixture
 def null_device(real_soapy):
     devices = real_soapy.Device(({'driver': 'null'},))

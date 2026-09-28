@@ -14,7 +14,9 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 from site_strategies import SiteCaptureCls, make_site_capture_kws, make_site_sweep
 from sweep_strategies import (
+    RESOLUTION_MSG,
     SOURCE,
+    SPG,
     CalSourceCls,
     CalSweepCls,
     SweepCls,
@@ -437,11 +439,31 @@ class TestSweepCaptures:
 
 # %% Sweep: (capture, analysis) validation
 
-# 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
-SPG = ss.specs.BundledAnalysis.from_dict({
-    'spectrogram': {'window': 'hann', 'frequency_resolution': 1e4}
-})
-RESOLUTION_MSG = 'sample_rate/resolution must be a counting number'
+# (capture, loops, message tail): each row breaks SPG's resolution rule at a different
+# origin, and the error names the values it compared and then that origin
+INVALID_RESOLUTION_ORIGINS = {
+    'looped_capture': (
+        make_capture(),
+        (List(field='sample_rate', values=(1e6, 1.005e6)),),
+        (
+            '(sample_rate: 1005000.0, frequency_resolution: 10000.0) '
+            "- at $.loops: {'sample_rate': 1005000.0} on $.captures[0]"
+        ),
+    ),
+    'adjust_analysis': (
+        make_capture(adjust_analysis={'frequency_resolution': 3e4}),
+        (),
+        '(sample_rate: 1000000.0, frequency_resolution: 30000.0) - at $.captures[0]',
+    ),
+    'analysis_loop': (
+        make_capture(),
+        (List(field='frequency_resolution', isin='analysis', values=(1e4, 3e4)),),
+        (
+            '(sample_rate: 1000000.0, frequency_resolution: 30000.0) '
+            "- at $.loops: {'frequency_resolution': 30000.0} on $.captures[0]"
+        ),
+    ),
+}
 
 
 class TestSweepAnalysisValidation:
@@ -451,36 +473,13 @@ class TestSweepAnalysisValidation:
         ):
             assert sweep.analysis == SPG
 
-    def test_an_invalid_looped_capture_names_its_captures_entry_and_loop_point(self):
-        loops = (List(field='sample_rate', values=(1e6, 1.005e6)),)
-        kws = make_sweep_kws(captures=(make_capture(),), loops=loops, analysis=SPG)
-        match = re.escape(
-            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
-            '(sample_rate: 1005000.0, frequency_resolution: 10000.0) '
-            "- at $.loops: {'sample_rate': 1005000.0} on $.captures[0]"
-        )
-        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
-
-    def test_an_adjust_analysis_override_is_caught(self):
-        capture = make_capture(adjust_analysis={'frequency_resolution': 3e4})
-        kws = make_sweep_kws(captures=(capture,), analysis=SPG)
-        match = re.escape(
-            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
-            '(sample_rate: 1000000.0, frequency_resolution: 30000.0) '
-            '- at $.captures[0]'
-        )
-        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
-
-    def test_an_analysis_loop_override_is_caught(self):
-        loops = (
-            List(field='frequency_resolution', isin='analysis', values=(1e4, 3e4)),
-        )
-        kws = make_sweep_kws(captures=(make_capture(),), loops=loops, analysis=SPG)
-        match = re.escape(
-            f'$.analysis.spectrogram: {RESOLUTION_MSG} '
-            '(sample_rate: 1000000.0, frequency_resolution: 30000.0) '
-            "- at $.loops: {'frequency_resolution': 30000.0} on $.captures[0]"
-        )
+    @pytest.mark.parametrize(
+        'origin', list(INVALID_RESOLUTION_ORIGINS), ids=list(INVALID_RESOLUTION_ORIGINS)
+    )
+    def test_an_invalid_combination_names_its_origin(self, origin):
+        capture, loops, location = INVALID_RESOLUTION_ORIGINS[origin]
+        kws = make_sweep_kws(captures=(capture,), loops=loops, analysis=SPG)
+        match = re.escape(f'$.analysis.spectrogram: {RESOLUTION_MSG} {location}')
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
     def test_the_warmup_sweep_constructs(self, synthetic_sweep):

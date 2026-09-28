@@ -38,8 +38,8 @@ from synthetic_sources import (
     RESAMPLE_FILTER,
     expected_corrected,
     fs_sdr,
-    make_capture,
-    make_sweep,
+    preset_capture,
+    preset_sweep,
     run_in_memory,
 )
 
@@ -420,16 +420,16 @@ FILTER_ONLY_IMPULSE_TIME = (
 # resampler's 6250-point FFT at 6.25 MS/s, so the tone passes without COLA ripple
 FIDELITY_CAPTURES = {
     'single_tone': (
-        make_capture('single_tone', frequency_offset=-1e6, snr=None),
-        make_capture('single_tone', frequency_offset=1.6e6, snr=None),
+        preset_capture('single_tone', frequency_offset=-1e6, snr=None),
+        preset_capture('single_tone', frequency_offset=1.6e6, snr=None),
     ),
-    'noise': (make_capture('noise', noise_psd=1e-17),),
+    'noise': (preset_capture('noise', noise_psd=1e-17),),
     'sawtooth': (
-        make_capture('sawtooth', period=RESAMPLE_FILTER['duration'], power=0.0),
+        preset_capture('sawtooth', period=RESAMPLE_FILTER['duration'], power=0.0),
     ),
     'dirac_delta': (
-        make_capture('dirac_delta', time=IMPULSE_TIME, power=0.0),
-        make_capture(
+        preset_capture('dirac_delta', time=IMPULSE_TIME, power=0.0),
+        preset_capture(
             'dirac_delta', **FILTER_ONLY, time=FILTER_ONLY_IMPULSE_TIME, power=-3.0
         ),
     ),
@@ -545,7 +545,7 @@ CHECKS = {
 @pytest.mark.parametrize('binding', list(CHECKS), ids=list(CHECKS))
 def test_in_memory_fidelity(binding, subtests):
     captures = FIDELITY_CAPTURES[binding]
-    datasets = run_in_memory(make_sweep(binding, captures))
+    datasets = run_in_memory(preset_sweep(binding, captures))
     assert len(datasets) == len(captures)
     for i, (capture, ds) in enumerate(zip(captures, datasets)):
         assert ds.sizes['capture'] == len(ports_of(capture.port))
@@ -559,9 +559,9 @@ def test_in_memory_fidelity(binding, subtests):
 def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
     """the cupy signal path agrees with numpy to within the roundoff of both"""
     captures = FIDELITY_CAPTURES[binding]
-    reference = run_in_memory(make_sweep(binding, captures))
+    reference = run_in_memory(preset_sweep(binding, captures))
     source = SOURCE.replace(array_backend=array_backend)
-    datasets = run_in_memory(make_sweep(binding, captures, source=source))
+    datasets = run_in_memory(preset_sweep(binding, captures, source=source))
     backends = ('numpy', 'cupy')
     for i, (capture, ds, ref) in enumerate(zip(captures, datasets, reference)):
         budget = {

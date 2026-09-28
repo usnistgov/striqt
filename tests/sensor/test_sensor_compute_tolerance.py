@@ -15,8 +15,8 @@ from synthetic_sources import (
     RESAMPLE_ONLY,
     SCALE_ONLY,
     acquire_corrected,
-    make_capture,
-    make_sweep,
+    preset_sweep,
+    tone_capture,
 )
 
 import striqt.analysis as sa
@@ -30,12 +30,6 @@ PRESETS = {
     'resample_only': RESAMPLE_ONLY,
     'resample_filter': RESAMPLE_FILTER,
 }
-
-
-def tone_capture(preset, **kws):
-    return make_capture(
-        'single_tone', **{**preset, 'frequency_offset': 1e6, 'snr': None, **kws}
-    )
 
 
 # %% _oaconvolve_nfft
@@ -126,7 +120,7 @@ def test_capture_tolerances_feed_the_correction_error_into_each_measurement():
 
 def test_sweep_tolerances_follow_the_looped_captures():
     captures = (tone_capture(RESAMPLE_FILTER), tone_capture(SCALE_ONLY))
-    sweep = make_sweep('single_tone', captures, analysis=ANALYSIS)
+    sweep = preset_sweep('single_tone', captures, analysis=ANALYSIS)
     entries = tolerance.sweep_tolerances(sweep)
 
     assert [c for c, _ in entries] == list(ss.specs.helpers.loop_captures(sweep))
@@ -147,7 +141,7 @@ def test_sweep_tolerances_use_the_looped_value_over_an_adjustment(source_id):
     `lo_shift='none'` skips the shift stage, so its budget differs from a shifted one."""
     loops = (ss.specs.List(field='lo_shift', values=('none', 'left')),)
     block = 'defaults' if source_id is None else source_id
-    sweep = make_sweep(
+    sweep = preset_sweep(
         'single_tone',
         (tone_capture(LO_SHIFT_CAPTURE),),
         loops=loops,
@@ -182,7 +176,7 @@ def test_sweep_tolerances_apply_adjustments_to_unlooped_fields(
     adjustment, expected_snr
 ):
     loops = (ss.specs.List(field='frequency_offset', values=(1e6, 2e6)),)
-    sweep = make_sweep(
+    sweep = preset_sweep(
         'single_tone',
         (tone_capture(SCALE_ONLY),),
         loops=loops,

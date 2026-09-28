@@ -15,8 +15,8 @@ from synthetic_sources import (
     IQ_ONLY,
     SCALE_ONLY,
     SPECTROGRAM,
-    make_capture,
-    make_sweep,
+    preset_capture,
+    preset_sweep,
     spectrogram_frames,
 )
 
@@ -37,7 +37,7 @@ WINDOW_LOOP = ss.specs.List(field='window', isin='analysis', values=('hann', 'ha
 def two_port_captures(**kws):
     fields = {**SCALE_ONLY, 'snr': None, 'external_lo_frequency': LO_FREQUENCIES}
     return tuple(
-        make_capture('single_tone', **fields, frequency_offset=f, **kws)
+        preset_capture('single_tone', **fields, frequency_offset=f, **kws)
         for f in OFFSETS
     )
 
@@ -52,18 +52,18 @@ def delayed_results(sweep) -> list[compute.DelayedDataset]:
 def two_port_run() -> list[compute.DelayedDataset]:
     """2 captures (frequency_offset) x 2 ports; run once for the module"""
     return delayed_results(
-        make_sweep('single_tone', two_port_captures(), analysis=IQ_ONLY, loops=LOOPS)
+        preset_sweep('single_tone', two_port_captures(), analysis=IQ_ONLY, loops=LOOPS)
     )
 
 
 @functools.lru_cache
 def spectrogram_run() -> list:
-    sweep = make_sweep('single_tone', two_port_captures(), analysis=SPECTROGRAM)
+    sweep = preset_sweep('single_tone', two_port_captures(), analysis=SPECTROGRAM)
     return [compute.from_delayed(dd) for dd in delayed_results(sweep)]
 
 
 def options(**kws):
-    sweep = make_sweep('single_tone', two_port_captures(), analysis=IQ_ONLY)
+    sweep = preset_sweep('single_tone', two_port_captures(), analysis=IQ_ONLY)
     return compute.EvaluationOptions(
         sweep_spec=sweep, registry=sa.registry, as_xarray='delayed', **kws
     )
