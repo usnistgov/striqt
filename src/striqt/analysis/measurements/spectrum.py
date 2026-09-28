@@ -23,10 +23,11 @@ if typing.TYPE_CHECKING:
 class SpectrogramSizing(NamedTuple):
     """the STFT sizing of one capture under a spectrogram spec.
 
-    Instances come from `validated_spectrogram_sizing`. `nfft`, `noverlap`, `nzero` and `hop_size` are in samples and `hop_period` in s;
-    `frequency_bin_averaging` and `time_bin_averaging` are the bins summed per
-    `integration_bandwidth` and the windows averaged per `time_aperture`, each `None`
-    when its field is unset; `enbw` is the noise bandwidth of one output bin in Hz.
+    Instances come from `validated_spectrogram_sizing`. `nfft`, `noverlap`, `nzero`
+    and `hop_size` are in samples and `hop_period` in s; `frequency_bin_averaging` and
+    `time_bin_averaging` are the bins summed per `integration_bandwidth` and the
+    windows averaged per `time_aperture`, each `None` when its field is unset; `enbw`
+    is the noise bandwidth of one output bin in Hz.
     """
 
     nfft: int

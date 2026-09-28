@@ -200,8 +200,9 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
     """return histogram bin centers (in dB) with catch-all bins at each end.
 
     The finite centers run from `power_low` toward `power_high` in steps of
-    `power_resolution`, bracketed by ``-inf`` and ``inf``. The last finite center is `power_high` or lies within half a step below it. The
-    result is cached and shared between callers, so it must not be modified in place.
+    `power_resolution`, bracketed by ``-inf`` and ``inf``. The last finite center is
+    `power_high` or lies within half a step below it. The result is cached and shared
+    between callers, so it must not be modified in place.
 
     Returns:
         1-D array in the namespace `xp`: the grid points with one extra element at
