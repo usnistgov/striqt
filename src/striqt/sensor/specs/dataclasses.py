@@ -2,7 +2,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Callable, Generic, Literal
 
-from . import structs, helpers
+from . import structs, paths
 from ..lib.typing import SS, SC, SP, PS, PC
 
 import striqt.waveform as sw
@@ -33,7 +33,7 @@ class AcquiredIQ(sa.dataarrays.AcquiredIQ):
     extra_data: dict[str, Any]
     source_spec: structs.Source
     resampler: sw.ResamplerDesign
-    format_path: helpers.PathFormatter | None = None
+    format_path: paths.PathFormatter | None = None
     voltage_scale: sw.typing.Array | float = 1
 
     # whether to evaluate the complex conjugate of each port

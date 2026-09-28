@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 def open_store(
     spec: specs.Sink,
     *,
-    format_path: specs.helpers.PathFormatter | None = None,
+    format_path: specs.paths.PathFormatter | None = None,
     force=False,
 ) -> ZarrStore:
     spec_path = spec.path
@@ -222,19 +222,19 @@ def read_tdms_iq(
 
 @overload
 def read_calibration(
-    path: None, format_path: specs.helpers.PathFormatter | None = None
+    path: None, format_path: specs.paths.PathFormatter | None = None
 ) -> None: ...
 
 
 @overload
 def read_calibration(
-    path: str | Path, format_path: specs.helpers.PathFormatter | None = None
+    path: str | Path, format_path: specs.paths.PathFormatter | None = None
 ) -> 'xr.Dataset': ...
 
 
 @sa.util.lru_cache()
 def read_calibration(
-    path: str | Path | None, format_path: specs.helpers.PathFormatter | None = None
+    path: str | Path | None, format_path: specs.paths.PathFormatter | None = None
 ) -> 'xr.Dataset|None':
     if path is None:
         return None
@@ -255,7 +255,7 @@ def save_calibration(path, corrections: 'xr.Dataset'):
 
 def _import_extensions_from_spec(
     spec: specs.Extension,
-    format_path: specs.helpers.PathFormatter | None = None,
+    format_path: specs.paths.PathFormatter | None = None,
     root_dir: Path | str = '.',
 ) -> None:
     """import an extension class from a dict representation of structs.Extensions

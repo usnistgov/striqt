@@ -41,7 +41,7 @@ def lookup_power_correction(
     cal_data: 'str | Path | None',
     capture: specs.SoapyCapture,
     master_clock_rate: float,
-    format_path: specs.helpers.PathFormatter | None = None,
+    format_path: specs.paths.PathFormatter | None = None,
     *,
     xp=None,
 ):
@@ -68,7 +68,7 @@ def lookup_system_noise_power(
     cal_data: 'Path | str | None',
     capture: specs.SoapyCapture,
     master_clock_rate: float,
-    format_path: specs.helpers.PathFormatter | None = None,
+    format_path: specs.paths.PathFormatter | None = None,
     *,
     T=290.0,
     B=1.0,
@@ -483,7 +483,7 @@ def _lookup_calibration_var(
 
     results = []
 
-    for c in specs.helpers.split_capture_ports(capture):
+    for c in specs.captures.split_capture_ports(capture):
         assert not isinstance(c.center_frequency, tuple)
 
         fs = compute.design_resampler(c, master_clock_rate)['fs_sdr']

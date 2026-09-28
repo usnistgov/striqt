@@ -1580,7 +1580,7 @@ def _extract_capture_coordinates(
     if capture_coords is None:
         raise TypeError('did not receive capture information')
 
-    splits = ss.specs.helpers.split_capture_ports(result.capture)
+    splits = ss.specs.captures.split_capture_ports(result.capture)
     port_count = len(splits)
 
     # Get field origins from the capture spec

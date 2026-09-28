@@ -175,7 +175,7 @@ def read_retries(source: Controller) -> Generator[None]:
 @dataclasses.dataclass
 class ControllerConfig:
     reuse_iq: bool
-    format_path: specs.helpers.PathFormatter | None
+    format_path: specs.paths.PathFormatter | None
     analysis: specs.AnalysisGroup | None
     init_rx_ports: tuple[int, ...] | None
 
@@ -313,12 +313,12 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     def from_sweep_spec(
         cls,
         spec: specs.Sweep[SS, Any, SC],
-        format_path: specs.helpers.PathFormatter | None = None,
+        format_path: specs.paths.PathFormatter | None = None,
     ) -> Controller[SS, SP, SC, PS, PC]:
         self = cast(Controller[SS, SP, SC, PS, PC], object.__new__(cls))
 
         config = ControllerConfig(
-            init_rx_ports=specs.helpers.get_unique_ports(spec.captures, spec.loops),
+            init_rx_ports=specs.captures.get_unique_ports(spec.captures, spec.loops),
             reuse_iq=spec.options.reuse_iq,
             analysis=spec.analysis,
             format_path=format_path,
@@ -331,7 +331,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         spec: SS,
         reuse_iq: bool = False,
         rx_ports: tuple[int, ...] | None = None,
-        format_path: specs.helpers.PathFormatter | None = None,
+        format_path: specs.paths.PathFormatter | None = None,
     ) -> Controller[SS, SP, SC, PS, PC]:
         self = cast(Controller[SS, SP, SC, PS, PC], object.__new__(cls))
         config = ControllerConfig(
@@ -353,7 +353,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             raise RuntimeError('open the radio before arming')
 
         cal = self.source_spec.calibration
-        if cal and specs.helpers.get_format_fields(cal):
+        if cal and specs.paths.get_format_fields(cal):
             if not self._config.format_path:
                 raise TypeError(
                     'calibration is specified with path formatter fields - '
@@ -420,14 +420,14 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         self._config.analysis = analysis
 
     def set_calibration_formatter(
-        self, format_path: specs.helpers.PathFormatter | None = None
+        self, format_path: specs.paths.PathFormatter | None = None
     ):
         """set the formatter to use to expand calibration file formatting fields.
 
         This is needed if calibration is defined in the source spec with format fields
         like `{name}`.
         """
-        if format_path is None or isinstance(format_path, specs.helpers.PathFormatter):
+        if format_path is None or isinstance(format_path, specs.paths.PathFormatter):
             self._config.format_path = format_path
         else:
             raise TypeError('format_path must be a PathFormatter or None')
@@ -575,7 +575,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
                 analysis = None
                 signal_trigger = None
             else:
-                analysis = specs.helpers.adjust_analysis(
+                analysis = specs.sequencing.adjust_analysis(
                     self._config.analysis, self.capture_spec.adjust_analysis
                 )
                 signal_trigger = compute.get_trigger_from_spec(

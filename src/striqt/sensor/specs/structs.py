@@ -400,14 +400,14 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     sensor: ClassVar[Any] = None
 
     def __post_init__(self):
-        from . import helpers
+        from . import sequencing, sweep
 
         # do this first, so that its result can then also be frozen
-        fixed_labels = helpers._convert_label_lookup_keys(self)
+        fixed_labels = sequencing._convert_label_lookup_keys(self)
         msgspec.structs.force_setattr(self, 'adjust_captures', fixed_labels)
 
         super().__post_init__()
-        helpers.validate_sweep(self)
+        sweep.validate_sweep(self)
 
 
 class CalibrationSweep(

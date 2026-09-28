@@ -24,7 +24,7 @@ class _BatchTracker:
     total_size: int
 
     def __init__(self, captures: tuple[specs.SensorCapture, ...], min_size: int):
-        sizes = specs.helpers.concat_group_sizes(captures, min_size=min_size)
+        sizes = specs.captures.concat_group_sizes(captures, min_size=min_size)
         self.total_size = sum(sizes)
 
         self._cycler = itertools.cycle(sizes)
@@ -116,7 +116,7 @@ class SinkBase(Generic[specs.SC]):
     def __init__(
         self,
         sweep_spec: specs.Sweep[Any, Any, specs.SC],
-        format_path: specs.helpers.PathFormatter | None = None,
+        format_path: specs.paths.PathFormatter | None = None,
         *,
         force: bool = False,
     ):
@@ -134,7 +134,7 @@ class SinkBase(Generic[specs.SC]):
 
         # decide group sizes
         source_id = controller.lookup.id(sweep_spec.source)
-        captures = specs.helpers.loop_captures(sweep_spec, source_id)
+        captures = specs.sequencing.loop_captures(sweep_spec, source_id)
         if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], specs.Repeat):
             captures = sweep_spec.loops[0].count * captures
         self._batch = _BatchTracker(
@@ -314,7 +314,7 @@ class ZarrTimeAppendSink(ZarrSinkBase):
     def __init__(
         self,
         sweep_spec: specs.Sweep,
-        format_path: specs.helpers.PathFormatter | None = None,
+        format_path: specs.paths.PathFormatter | None = None,
         *,
         force: bool = False,
     ):

@@ -163,7 +163,7 @@ def sweep_tolerances(
 ) -> list[tuple[specs.SensorCapture, dict[str, sa.specs.Tolerance]]]:
     """budget the roundoff error of every capture the sweep runs, in run order.
 
-    The captures are exactly those `specs.helpers.loop_captures` expands for
+    The captures are exactly those `specs.sequencing.loop_captures` expands for
     `source_id`: the per-source `adjust_captures` overrides are applied there, a
     looped field keeps the loop's value over any adjustment, and a `repeat` loop is
     listed once.
@@ -173,7 +173,7 @@ def sweep_tolerances(
         returns for the sweep's source backend
     """
     result = []
-    for capture in specs.helpers.loop_captures(sweep, source_id=source_id):
+    for capture in specs.sequencing.loop_captures(sweep, source_id=source_id):
         result.append((
             capture,
             capture_tolerances(capture, sweep.source, sweep.analysis),

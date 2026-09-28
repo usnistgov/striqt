@@ -34,7 +34,7 @@ if TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep[SS, SP, SC]
         calibration: 'xr.Dataset|None'
-        format_path: specs.helpers.PathFormatter | None
+        format_path: specs.paths.PathFormatter | None
 
     class AnyResources(
         typing_extensions.TypedDict,
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep[SS, SP, SC]
         calibration: 'xr.Dataset|None'
-        format_path: specs.helpers.PathFormatter | None
+        format_path: specs.paths.PathFormatter | None
 
 else:
     # python < 3.10 workaround
@@ -62,7 +62,7 @@ else:
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        format_path: specs.helpers.PathFormatter | None
+        format_path: specs.paths.PathFormatter | None
 
     class AnyResources(typing_extensions.TypedDict, total=False):
         """Sensor resources needed to run a sweep"""
@@ -73,7 +73,7 @@ else:
         except_context: typing_extensions.NotRequired[ContextManager]
         sweep_spec: specs.Sweep
         calibration: 'xr.Dataset|None'
-        format_path: specs.helpers.PathFormatter | None
+        format_path: specs.paths.PathFormatter | None
 
 
 def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
@@ -85,7 +85,7 @@ def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
 def _open_sink(
     spec: specs.Sweep[Any, Any, SC],
     default_cls: type[SinkBase] | None,
-    format_path: specs.helpers.PathFormatter | None = None,
+    format_path: specs.paths.PathFormatter | None = None,
 ) -> SinkBase[SC]:
     with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
         if spec.extensions.sink is not None:
@@ -139,7 +139,7 @@ def _open_devices(
     ctrl_cls: type[controller.Controller],
     spec: specs.Sweep,
     skip_peripherals: bool = False,
-    format_path: specs.helpers.PathFormatter | None = None,
+    format_path: specs.paths.PathFormatter | None = None,
 ):
     """open source and optionally peripherals"""
 
@@ -172,7 +172,7 @@ def _open_devices(
 def _prepare_sweep(spec: specs.Sweep, callback: SourceOpenCallback | None = None):
     """after the source opens, enumerate the sweep and invoke callback"""
     source_id = controller.lookup.id(spec.source)
-    specs.helpers.list_capture_adjustments(spec, source_id=source_id)
+    specs.sequencing.list_capture_adjustments(spec, source_id=source_id)
 
     if callback is not None:
         callback(spec, source_id)
@@ -198,7 +198,7 @@ def open_resources(
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')
 
-    fmt = specs.helpers.PathFormatter(spec, spec_path=spec_path)
+    fmt = specs.paths.PathFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))

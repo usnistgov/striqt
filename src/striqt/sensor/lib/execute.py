@@ -86,7 +86,7 @@ def iterate_sweep(
 
     iq = None
     analysis = None
-    captures = specs.helpers.loop_captures(
+    captures = specs.sequencing.loop_captures(
         spec, source_id=resources['source'].source_id
     )
     indexer = _AcquisitionIndexer(len(captures))
@@ -289,7 +289,7 @@ def _log_cache_info(
     )
 
     logger = sa.util.get_logger('analysis')
-    capture_splits = specs.helpers.split_capture_ports(capture)
+    capture_splits = specs.captures.split_capture_ports(capture)
 
     for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
         if sw.is_cupy_array(snr.data):
@@ -300,7 +300,7 @@ def _log_cache_info(
             continue
 
         snr_desc = f'{round(snr)} dB max SNR'
-        capture_desc = specs.helpers.describe_capture(
+        capture_desc = specs.sequencing.describe_capture(
             c,
             fields=info_fields,
             source_id=resources['source'].source_id,

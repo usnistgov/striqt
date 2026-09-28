@@ -52,7 +52,7 @@ from striqt.waveform.lib import fourier
 from striqt.waveform.lib.fourier import off_peak_floor_dBc, on_peak_roundoff
 
 # the ports of a capture in row order
-ports_of = ss.specs.helpers.ensure_tuple
+ports_of = ss.specs.captures.ensure_tuple
 
 # %% oracles
 
@@ -190,7 +190,7 @@ def test_cli_run(name, tmp_path, monkeypatch, subtests):
     ds = sa.load(out_path)
 
     source_id = str(ds.source_id.values[0])
-    captures = ss.specs.helpers.loop_captures(spec, source_id=source_id)
+    captures = ss.specs.sequencing.loop_captures(spec, source_id=source_id)
     repeat = spec.loops[0].count if isinstance(spec.loops[0], ss.specs.Repeat) else 1
     rows = [(i, p) for i, c in enumerate(captures) for p in ports_of(c.port)]
     assert ds.capture_index.values.tolist() == [i for i, _ in rows] * repeat
@@ -300,7 +300,7 @@ def test_check_sweep_budgets_the_looped_field_over_its_adjustment(
         )
         return ['NaN' if v is None else f'{v:.4g}' for v in values]
 
-    captures = ss.specs.helpers.loop_captures(spec, source_id=source_id)
+    captures = ss.specs.sequencing.loop_captures(spec, source_id=source_id)
     adjusted = captures[0].replace(**spec.adjust_captures['defaults'])
     # the adjusted capture must render differently for the check to discriminate
     assert rendered([adjusted]) != rendered(captures)
@@ -337,7 +337,7 @@ def test_check_sweep_formats_the_default_sink_path(write_yaml, monkeypatch, caps
     )
     assert block is not None, out
     template, formatted = (ast.literal_eval(v) for v in block.groups())
-    assert set(ss.specs.helpers.get_format_fields(template)) <= {
+    assert set(ss.specs.paths.get_format_fields(template)) <= {
         'spec_name',
         'start_time',
     }
@@ -393,7 +393,7 @@ def test_check_sweep_lists_the_looped_field_over_its_adjustment(
     labels = ast.literal_eval('{' + '\n'.join(entries) + '}')
 
     spec = ss.read_yaml_spec(path)
-    captures = ss.specs.helpers.loop_captures(spec, source_id=source_id)
+    captures = ss.specs.sequencing.loop_captures(spec, source_id=source_id)
     looped = tuple(dict.fromkeys(c.host_resample for c in captures))
     assert looped == (True, False)
     assert labels == {

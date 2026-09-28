@@ -551,6 +551,6 @@ class TestCalibrationSweep:
         loops = (List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)
         sweep = make_calibration_sweep(loops=loops)
         bandwidths = {
-            c.analysis_bandwidth for c in ss.specs.helpers.loop_captures(sweep)
+            c.analysis_bandwidth for c in ss.specs.sequencing.loop_captures(sweep)
         }
         assert bandwidths == {0.5e6, math.inf}

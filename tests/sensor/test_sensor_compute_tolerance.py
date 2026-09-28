@@ -123,7 +123,7 @@ def test_sweep_tolerances_follow_the_looped_captures():
     sweep = preset_sweep('single_tone', captures, analysis=ANALYSIS)
     entries = tolerance.sweep_tolerances(sweep)
 
-    assert [c for c, _ in entries] == list(ss.specs.helpers.loop_captures(sweep))
+    assert [c for c, _ in entries] == list(ss.specs.sequencing.loop_captures(sweep))
     for capture, tols in entries:
         assert tols == tolerance.capture_tolerances(capture, sweep.source, ANALYSIS)
     # iq_waveform passes the correction error straight through, so it alone orders the
@@ -147,7 +147,7 @@ def test_sweep_tolerances_use_the_looped_value_over_an_adjustment(source_id):
         loops=loops,
         adjust_captures={block: {'lo_shift': 'right'}},
     )
-    expected = list(ss.specs.helpers.loop_captures(sweep, source_id=source_id))
+    expected = list(ss.specs.sequencing.loop_captures(sweep, source_id=source_id))
     entries = tolerance.sweep_tolerances(sweep, source_id=source_id)
 
     assert [c for c, _ in entries] == expected

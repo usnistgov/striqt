@@ -115,7 +115,7 @@ Relative to the msgspec-idiom message pass (`1667/395/94/305` and
 +6 in `test_sensor_specs_structs.py::TestSweepLoops` for the new
 `_validate_loop_capture_collisions` and the sharpened duplicate-loop message
 (5 functions, one parametrized on a leading `repeat`), +4 in
-`test_sensor_specs_helpers.py` for the `only_fields` loop-index regression
+`test_sensor_specs_sequencing.py` for the `only_fields` loop-index regression
 (parametrized), the located missing-required-field error, and a bare `Repeat`
 with no captures, and +8 for the new `TestSlotPeriod` in
 `test_waveform_ofdm.py` covering the extracted `ofdm.slot_period`. `skipped`,
@@ -139,7 +139,7 @@ best-effort shelf, +10 net in
 into a row went away), +2 parametrize rows on
 `TestSpectrogram::test_non_integer_binning_raises`, +12 for
 `loop_capture_origins` and `describe_capture_origin` in
-`test_sensor_specs_helpers.py`, and a net 0 in `test_sensor_specs_structs.py`
+`test_sensor_specs_sequencing.py`, and a net 0 in `test_sensor_specs_structs.py`
 where `test_an_invalid_looped_capture_names_its_expanded_index` was renamed to
 `..._names_its_captures_entry_and_loop_point`. `skipped` and `xfailed` did not
 move, so no cupy case was lost and no marker was added or removed.
@@ -448,7 +448,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 8. Required `defaults` remaps are silently omitted on a miss
 
-`tests/sensor/test_sensor_specs_helpers.py::test_adjust_captures_missing_required_default_lookup_raises`
+`tests/sensor/test_sensor_specs_sequencing.py::test_adjust_captures_missing_required_default_lookup_raises`
 
 - **Mechanism.** `helpers.py:286`: the `elif required: return msgspec.UNSET`
   and `else: raise KeyError` arms are inverted. A `defaults` remap is its own
@@ -465,7 +465,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 9. A remap keyed on an unknown field is pruned, not rejected
 
-`tests/sensor/test_sensor_specs_helpers.py::test_remap_keyed_on_an_unknown_field_is_rejected`
+`tests/sensor/test_sensor_specs_sequencing.py::test_remap_keyed_on_an_unknown_field_is_rejected`
 
 - **Mechanism.** `helpers.py:562` and `:575`: `continue` immediately precedes
   the `raise msgspec.ValidationError(...)` in both the scalar and tuple-key
@@ -527,7 +527,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 - **Mechanism.** `calibration.py:369-393` `_ensure_loop_at_position` only
   allows for a leading `port` loop; `_validate_loops`
-  (`sensor/specs/helpers.py`) requires a `Repeat` to be first. The toggle
+  (`sensor/specs/sweep.py`) requires a `Repeat` to be first. The toggle
   is inserted ahead of the `Repeat`, or the helper raises when the `Repeat` is
   already first.
 - **Why the test is right.** The two constraints are stated in code and are
@@ -539,7 +539,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 16. Remaps keyed on a fixed numeric alias reject numeric keys
 
-`tests/sensor/test_sensor_specs_helpers.py::test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys`
+`tests/sensor/test_sensor_specs_sequencing.py::test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys`
 
 - **Mechanism.** `helpers.py:832` and `:872` set `lookup_types[field] = str`
   after a fixed value or a remap is processed, overriding the real field type
@@ -655,7 +655,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 10. Chained remaps resolve only in declaration order
 
-`tests/sensor/test_sensor_specs_helpers.py::test_chained_remap_declared_before_its_key_resolves`
+`tests/sensor/test_sensor_specs_sequencing.py::test_chained_remap_declared_before_its_key_resolves`
 
 - **Mechanism.** `helpers.py:298` iterates the merged fields once with
   `ChainMap(ret, capture)`; a remap keyed on an alias declared later sees the
@@ -870,7 +870,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 68. Ragged per-port tuples are truncated or copied instead of rejected
 
-`tests/sensor/test_sensor_specs_helpers.py::test_split_rejects_a_tuple_field_shorter_than_port`,
+`tests/sensor/test_sensor_specs_captures.py::test_split_rejects_a_tuple_field_shorter_than_port`,
 `::test_pairwise_rejects_different_port_counts`
 
 - **Mechanism.** `split_capture_ports` zips each tuple field against `port`,
@@ -1200,7 +1200,7 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 
 ### 69. `get_capture_type` returns the TypeVar for an unbound `Sweep` subclass
 
-`tests/sensor/test_sensor_specs_helpers.py::test_capture_type_of_an_unbound_sweep`
+`tests/sensor/test_sensor_specs_captures.py::test_capture_type_of_an_unbound_sweep`
 
 - **Mechanism.** The unbound branch uses `get_type_hints`, which does not
   substitute the generic parameters of

@@ -727,7 +727,7 @@ class TestSoapySourceAcquire:
     def _acquire(self, source, capture, count):
         source.arm(capture)
         source.trigger()
-        ports = len(ss.specs.helpers.split_capture_ports(capture))
+        ports = len(ss.specs.captures.split_capture_ports(capture))
         samples = np.zeros((ports, count), dtype='complex64')
         bufs = [row.view('float32') for row in samples]
         received, time_ns = source.read(bufs, 0, count, 0.01)

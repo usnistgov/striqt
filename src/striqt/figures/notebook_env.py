@@ -66,7 +66,7 @@ def set_matplotlib_formats(formats, *args, **kws):
 
     from IPython.core import pylabtools as pltt
 
-    pltt = reload(pltt)  # ty: ignore
+    pltt = reload(pltt)
 
     def guess_title(fig):
         if fig._suptitle is not None:
@@ -92,7 +92,7 @@ def set_matplotlib_formats(formats, *args, **kws):
         label = title_to_label(guess_title(fig))
         caption_text = _captions.get(id(fig), '')
 
-        ret = pltt._print_figure(fig, fmt=fmt, *a, **k)  # ty: ignore
+        ret = pltt._print_figure(fig, fmt=fmt, *a, **k)
 
         markup = f'<tt>{label}.{fmt}:</tt>{"<br>" + caption_text if caption_text else " (no caption data)"}'
         display(HTML(markup))

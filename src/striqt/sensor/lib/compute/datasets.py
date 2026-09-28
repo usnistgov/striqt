@@ -153,7 +153,7 @@ def build_capture_coords(
     extras: specs.AcquisitionInfo,
     loops: tuple[specs.LoopBase, ...],
 ) -> 'xr.Coordinates|None':
-    captures = specs.helpers.split_capture_ports(capture)
+    captures = specs.captures.split_capture_ports(capture)
 
     if len(captures) == 0:
         return None

@@ -74,7 +74,7 @@ def run(yaml_path: str):
 
         print('\n\nFormat fields available for use in paths:')
         print(80 * '▀')
-        afields = ss.specs.helpers.get_path_fields(
+        afields = ss.specs.paths.get_path_fields(
             spec, source_id=source_id, spec_path=yaml_path
         )
         afields = {f'{{{k}}}': v for k, v in afields.items()}
@@ -103,7 +103,7 @@ def run(yaml_path: str):
         print(table.to_string(float_format='{:.4g}'.format))
 
         print('\n\nUnique capture field coordinates in output:')
-        labels = ss.specs.helpers.list_capture_adjustments(spec, source_id)
+        labels = ss.specs.sequencing.list_capture_adjustments(spec, source_id)
 
         if len(labels) == 0:
             return

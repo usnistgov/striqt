@@ -292,7 +292,7 @@ def compute_overload_info(
         info['adc_headroom'] = xp.clip(adc_headroom, -100, 100).astype('int8')
     if if_limit is not None:
         xp = sw.array_namespace(samples)
-        gains = [c.gain for c in specs.helpers.split_capture_ports(capture)]
+        gains = [c.gain for c in specs.captures.split_capture_ports(capture)]
         peak_im3 = peak + (2 / 3) * xp.array(gains)  # 2/3 arises from intermod
         if_headroom = xp.floor(if_limit - peak_im3)
         info['if_headroom'] = xp.clip(if_headroom, -100, 100).astype('int8')
@@ -327,7 +327,7 @@ class RxStream:
         if self.source_spec.stream_all_rx_ports:
             ports = tuple(range(self.info.num_rx_ports))
         elif ports is not None:
-            ports = specs.helpers.ensure_tuple(ports)
+            ports = specs.captures.ensure_tuple(ports)
 
         if not ports:
             raise RuntimeError('ports were not specified and stream_all_rx_ports=False')
@@ -493,7 +493,7 @@ class RxStream:
         return self._enabled
 
     def capture_changes_port(self, capture: specs.SoapyCapture) -> bool:
-        return specs.helpers.ensure_tuple(capture.port) == self.ports
+        return specs.captures.ensure_tuple(capture.port) == self.ports
 
 
 class HardwareTimeSync:
@@ -668,7 +668,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         rs = self.get_resampler(capture)
 
         # gain before center frequency to accommodate attenuator settling time
-        for c in specs.helpers.split_capture_ports(capture):
+        for c in specs.captures.split_capture_ports(capture):
             assert not isinstance(c.center_frequency, tuple)
             lo_freq = c.external_lo_frequency or 0.0
             assert isinstance(lo_freq, float)
@@ -758,7 +758,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
 
         # flag conjugating the IQ for any high_side LOs
         conj = []
-        for c in specs.helpers.split_capture_ports(capture):
+        for c in specs.captures.split_capture_ports(capture):
             lo_freq = c.external_lo_frequency or 0.0
             assert isinstance(c.center_frequency, float) and isinstance(lo_freq, float)
             diff = lo_freq - (c.center_frequency - rs['lo_offset'])
