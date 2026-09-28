@@ -92,6 +92,6 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> Warmup
         sink=sweep.sink,
     )
 
-    captures = specs.helpers.loop_captures(sweep_spec, limit=count)
+    captures = specs.sequencing.loop_captures(sweep_spec, limit=count)
 
     return sweep_spec.replace(captures=captures, loops=())

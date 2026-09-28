@@ -111,7 +111,7 @@ def analyze(
     else:
         raise TypeError('iq.capture must be a SensorCapture')
 
-    analysis = specs.helpers.adjust_analysis(
+    analysis = specs.sequencing.adjust_analysis(
         options.sweep_spec.analysis, capture.adjust_analysis
     )
 

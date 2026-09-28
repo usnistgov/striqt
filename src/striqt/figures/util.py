@@ -13,7 +13,7 @@ from striqt.analysis.lib.util import np, xr
 if typing.TYPE_CHECKING:
     _T = typing.TypeVar('_T', bound=xr.Dataset)
 
-get_format_fields = ss.specs.helpers.get_format_fields
+get_format_fields = ss.specs.paths.get_format_fields
 
 
 @typing.overload

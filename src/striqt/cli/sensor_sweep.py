@@ -14,7 +14,7 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
     import striqt.analysis as sa
     from pprint import pformat
 
-    labels = ss.specs.helpers.list_capture_adjustments(spec, source_id)
+    labels = ss.specs.sequencing.list_capture_adjustments(spec, source_id)
     if len(labels) == 0:
         return
 

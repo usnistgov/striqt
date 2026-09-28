@@ -24,7 +24,7 @@ def _adc_overload_message(
 ) -> str | None:
     if 'adc_headroom' in extra_data and isinstance(capture, specs.SoapyCapture):
         headroom = extra_data['adc_headroom']
-        caps = specs.helpers.split_capture_ports(capture)
+        caps = specs.captures.split_capture_ports(capture)
     else:
         return None
 
@@ -58,8 +58,8 @@ def _if_overload_message(
     else:
         captures = cast(tuple[specs.SoapyCapture, ...], sweep_spec.captures)
 
-    gains = specs.helpers.max_by_frequency('gain', captures, sweep_spec.loops)
-    caps = specs.helpers.split_capture_ports(capture)
+    gains = specs.sequencing.max_by_frequency('gain', captures, sweep_spec.loops)
+    caps = specs.captures.split_capture_ports(capture)
 
     ol_cases = {}
     for c, hr in zip(caps, if_headroom):
