@@ -695,7 +695,7 @@ def _make_measurement_docstring(spec_cls):
     extra_prepend = {
         'iq': 'input waveform array',
         'capture': 'acquisition specification',
-        'ax_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
+        'as_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
     }
     extra_types = {
         'iq': 'Array',

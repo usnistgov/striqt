@@ -14,11 +14,11 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import sys
-import typing
 from contextlib import asynccontextmanager
 import functools
 from pathlib import Path
+import re
+import sys
 from typing import (
     Any,
     ClassVar,
@@ -29,6 +29,7 @@ from typing import (
     Set,
     Tuple,
     TypedDict,
+    TYPE_CHECKING,
     Union,
     cast,
 )
@@ -41,6 +42,13 @@ import xarray as xr
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
+
+if TYPE_CHECKING:
+    import striqt.sensor as ss
+    import striqt.figures as sf
+    import striqt.analysis as sa
+
+
 _json_encoder = msgspec.json.Encoder()
 _json_decoder = msgspec.json.Decoder()
 
@@ -51,12 +59,6 @@ def _to_numpy(arr: Any) -> np.ndarray:
         # cupy array - transfer to CPU
         return arr.get()
     return np.asarray(arr)
-
-
-if typing.TYPE_CHECKING:
-    import striqt.sensor as ss
-    import striqt.figures as sf
-    import striqt.analysis as sa
 
 
 # ---------------------------------------------------------------------------
@@ -108,33 +110,6 @@ class AppState(TypedDict):
     plot_opts: Optional['sf.specs.PlotOptions']
     data_select: Dict[str, Any]
     spec_filename: str
-
-
-# ---------------------------------------------------------------------------
-# Plot configuration (mirrors live-plotter)
-# ---------------------------------------------------------------------------
-
-plot_opts_dict = {
-    'data': {
-        'select': {
-            'channel_power_bin': 'slice(-100, -15)',
-            'spectrogram_power_bin': 'slice(-130, -50)',
-            'spectrogram_time': 'slice(0, 20e-3)',
-        },
-        'sweep_index': -1,
-    },
-    'plotter': {
-        'col': 'port',
-        'col_label_format': 'Port {port} {channel_name}',
-        'style': None,
-        'filename_fmt': '{name}.svg',
-        'suptitle_fmt': '',
-    },
-    'variables': {
-        'spectrogram': {},
-        'power_spectral_density': {},
-    },
-}
 
 
 # ---------------------------------------------------------------------------
@@ -1758,9 +1733,6 @@ def _format_coord_value(value: Any) -> str:
     if isinstance(value, bytes):
         return value.decode('utf-8', errors='replace')
     return str(value)
-
-
-import re
 
 
 def _build_variable_labels_from_registry(
