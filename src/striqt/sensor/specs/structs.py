@@ -311,7 +311,7 @@ BundledTriggers = sa.registry.signal_trigger.to_spec()
 
 
 class Sink(SpecBase, frozen=True, kw_only=True):
-    path: str = '{yaml_name}-{start_time}'
+    path: str = '{spec_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
     store: types.StoreFormat = 'directory'

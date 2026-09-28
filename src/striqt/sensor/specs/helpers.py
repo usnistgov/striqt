@@ -579,18 +579,34 @@ def get_format_fields(s: str, exclude: tuple[str, ...] = ()) -> list[str]:
 @sa.util.lru_cache()
 def list_capture_adjustments(
     sweep: structs.Sweep[Any, Any, SC], source_id: str
-) -> dict[str, tuple[str, ...]]:
-    lookup_fields = _list_capture_adjustments(
-        sweep.adjust_captures, source_id=source_id
-    )
-    captures = loop_captures(sweep, only_fields=lookup_fields, source_id=source_id)
-    cdicts = cast(tuple[dict[str, Any], ...], _to_builtins(captures))
-    result = defaultdict(dict)
+) -> dict[str, tuple[Any, ...]]:
+    """list the unique values of each adjusted capture field across the sweep.
 
-    for c in cdicts:
-        changes = adjust_captures(c, sweep.adjust_captures, source_id=source_id)
-        for name, value in changes.items():
-            result[name][value] = None
+    The values are read from the expanded captures, so they are what the runner
+    will actually produce: a loop over an adjusted field wins over the adjustment
+    (see `loop_captures`), and the listing shows the loop values in loop order.
+    A `CaptureRemap` miss that leaves the field unset contributes nothing for that
+    capture, as in `adjust_captures`.
+
+    Returns:
+        the unique values of each adjusted field in first-seen order, keyed by
+        field name. Empty when `adjust_captures` touches no fields.
+    """
+    adjust = sweep.adjust_captures
+    adjusted_fields = tuple(_get_capture_adjust_fields(adjust, source_id))
+    lookup_fields = _list_capture_adjustments(adjust, source_id=source_id)
+    only_fields = adjusted_fields + lookup_fields
+
+    captures = loop_captures(sweep, only_fields=only_fields, source_id=source_id)
+    cdicts = cast(tuple[dict[str, Any], ...], _to_builtins(captures))
+    result: defaultdict[str, dict[Any, None]] = defaultdict(dict)
+
+    for capture, cdict in zip(captures, cdicts):
+        # `adjust_captures` decides which remaps resolved; the value itself comes
+        # from the capture so that a loop over the same field is reported correctly
+        resolved = adjust_captures(cdict, adjust, source_id=source_id)
+        for name in resolved:
+            result[name][getattr(capture, name)] = None
 
     return {name: tuple(v.keys()) for name, v in result.items()}
 

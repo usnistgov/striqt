@@ -436,11 +436,6 @@ def test_formatter_names_the_unknown_field_and_the_allowed_ones(
     assert 'source_id' in str(info.value)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Sink.path defaults to '{yaml_name}-{start_time}' but get_path_fields "
-    'provides spec_name, not yaml_name',
-)
 def test_formatter_accepts_the_default_sink_path(
     synthetic_sweep, synthetic_spec_path, fake_source_id
 ):
@@ -1209,6 +1204,51 @@ def test_list_capture_adjustments_for_a_radio(site_sweep):
     assert listed['radio_name'] == ('radio02',)
     assert listed['antenna_name'] == (('Omni', '1x32'),)
     assert listed['channel_name'] == ('3750 MHz',)
+
+
+HOST_RESAMPLE_LOOP = ss.specs.List(field='host_resample', values=(True, False))
+
+
+@pytest.mark.parametrize(
+    'adjust, source_id',
+    [
+        ({'defaults': {'host_resample': False}}, 'ffff'),
+        ({'ab12': {'host_resample': False}}, 'ab12'),
+    ],
+    ids=['defaults', 'source_block'],
+)
+def test_list_capture_adjustments_of_a_looped_field_lists_the_loop_values(
+    adjust, source_id
+):
+    # loop_captures re-applies the loop point after the adjustment, so the loop
+    # values are what the runner produces and the listing must follow them
+    sweep = make_sweep(
+        captures=(make_capture(),), loops=(HOST_RESAMPLE_LOOP,), adjust_captures=adjust
+    )
+    listed = H.list_capture_adjustments(sweep, source_id)
+    assert listed == {'host_resample': HOST_RESAMPLE_LOOP.values}
+    produced = (c.host_resample for c in H.loop_captures(sweep, source_id=source_id))
+    assert listed['host_resample'] == tuple(dict.fromkeys(produced))
+
+
+def test_list_capture_adjustments_of_unlooped_fields_beside_a_looped_one():
+    offsets = (200.0, 100.0, 300.0)
+    loops = (
+        HOST_RESAMPLE_LOOP,
+        ss.specs.List(field='frequency_offset', values=offsets),
+    )
+    adjust = {
+        'defaults': {'lo_shift': 'none', 'snr': DEFAULT_SNR, 'host_resample': False}
+    }
+    sweep = make_sweep(captures=(make_capture(),), loops=loops, adjust_captures=adjust)
+    snr_over_loop = (
+        SNR_BY_OFFSET.get(f'{o:.0f}', DEFAULT_SNR.default) for o in offsets
+    )
+    assert H.list_capture_adjustments(sweep, 'ffff') == {
+        'host_resample': HOST_RESAMPLE_LOOP.values,
+        'lo_shift': ('none',),
+        'snr': tuple(snr_over_loop),
+    }
 
 
 # %% adjust_analysis
