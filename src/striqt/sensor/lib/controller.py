@@ -55,7 +55,7 @@ class lookup:
         elif isinstance(obj, Controller):
             return obj
         else:
-            # a cancelled open may never register a controller at all; report the
+            # a canceled open may never register a controller at all; report the
             # cancellation, which ExceptionStack makes yield to the error that caused
             # it, rather than a timeout that would mask it
             util.propagate_thread_interrupts()

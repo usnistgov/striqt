@@ -221,7 +221,7 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
     with subtests.test(stage='pre_align'):
         pre_align = to_numpy(stages.corrected.pre_align)
         if isfinite(capture.analysis_bandwidth):
-            # the centre tap of a unit-DC-gain windowed-sinc lowpass at cutoff bw/2
+            # the center tap of a unit-DC-gain windowed-sinc lowpass at cutoff bw/2
             # is bw/fs, up to the passband error that the DC normalization moves
             peak = amplitude * capture.analysis_bandwidth / fs_sdr
             assert_close(np.abs(pre_align[:, index]), peak, rtol=FIR_LEAKAGE)

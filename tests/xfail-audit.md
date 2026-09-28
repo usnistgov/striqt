@@ -1,6 +1,6 @@
 # Audit of strict xfails
 
-Every xfail in this repo is `strict=True` and is written against the behaviour
+Every xfail in this repo is `strict=True` and is written against the behavior
 the code was *meant* to have, so the list doubles as the known-defect registry
 (see CLAUDE.md, "Known gaps are recorded as strict xfails"). This document
 records, for each open one, why the failing test is believed to describe a real
@@ -13,7 +13,7 @@ Y-factor calibration test build-out (branch `test-soapy-and-cals`, confirmed
 against the closed-form receiver model in `sweep_strategies` and the fake
 `SoapySDR` module, not on hardware), and 62 to 73 on 2026-09-16 from the value
 audit of the pre-existing tests, which inverted passing tests that had pinned
-defective behaviour into xfails against the intended behaviour (that audit's own
+defective behavior into xfails against the intended behavior (that audit's own
 write-up was retired on 2026-09-18 once its actions had all landed; its three
 remaining observations are in the list at the end of this file). Items 74 to 76
 were added on 2026-09-17 while writing the first direct tests of the
@@ -35,7 +35,7 @@ Suite state on 2026-09-22, after the pass that consolidated the duplication this
 branch introduced: `1685 passed, 395 skipped, 94 xfailed, 305 subtests` on
 `test39` and `1686 passed, 394 skipped, 94 xfailed, 305 subtests` on `test314`
 (one xarray-version-gated test skips on py39, and one passes there only since the
-cancelled-lookup fix of 2026-09-21), from 76 xfail sites (`grep -rn "mark.xfail"
+canceled-lookup fix of 2026-09-21), from 76 xfail sites (`grep -rn "mark.xfail"
 tests --include='*.py' | wc -l`; a site that marks a parametrized test counts
 once). No xpass.
 
@@ -153,7 +153,7 @@ For each xfail I:
 1. Re-read the test and the library code it targets, and confirmed the failure
    mechanism named in the xfail `reason` against the source (file:line below).
 2. Asked what evidence says the *test's* expectation, rather than the current
-   behaviour, is the intended one: a docstring, a type annotation, a 3GPP
+   behavior, is the intended one: a docstring, a type annotation, a 3GPP
    clause, the YAML reference in `doc/`, a sibling code path that already does
    it right, or how the sensor pipeline and the site-style sweeps consume it.
 3. Traced callers (`grep` over `src/` and `tests/sensor/sweeps/`) to decide
@@ -168,9 +168,9 @@ For each xfail I:
 
 ### Confidence
 
-- **High**: mechanism confirmed in source, and the intended behaviour is
+- **High**: mechanism confirmed in source, and the intended behavior is
   documented or forced by a sibling code path.
-- **Medium**: mechanism confirmed, but the intended behaviour is inferred from
+- **Medium**: mechanism confirmed, but the intended behavior is inferred from
   convention (numpy semantics, an unused parameter, an unreachable branch)
   rather than stated anywhere.
 
@@ -325,7 +325,7 @@ item is open.
   out at +0.661 MHz for `lo_shift: right` at 7.68 MS/s / 3.072 MHz bandwidth.
 - **Why the test is right.** `test_lo_shift_design_moves_the_lo_out_of_band`
   (passing) shows the design does displace the LO by `lo_offset`, so the
-  correction must undo it or the whole capture is off-centre by
+  correction must undo it or the whole capture is off-center by
   `bw/2 + 125 kHz`.
 - **Impact.** B. `lo_shift` is a `SensorCapture` field and a loop field in the
   in-tree and downstream calibration YAMLs, but every production value is
@@ -543,7 +543,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 - **Mechanism.** `helpers.py:832` and `:872` set `lookup_types[field] = str`
   after a fixed value or a remap is processed, overriding the real field type
-  that `lookup_types` was initialised from. Later keys are converted with
+  that `lookup_types` was initialized from. Later keys are converted with
   `msgspec.convert(k, str, strict=False)`, which rejects an int.
 - **Why the test is right.** `SwitchInput` is `Annotated[int, ...]` in the
   extensions module; forcing `str` contradicts the schema.
@@ -600,7 +600,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 - **Mechanism.** With `norm=None` the no-overlap path applies `w / nfft`
   uncompensated (`fourier.py:558`), while `_stack_stft_windows`
-  (`fourier.py:750`) normalises the same factor away, so the same segment
+  (`fourier.py:750`) normalizes the same factor away, so the same segment
   differs by `nfft` between the two supported overlaps and
   `istft(stft(x))` returns `x / nfft` for `noverlap=0`.
 - **Why the test is right.** The previous test fitted an arbitrary gain by
@@ -769,7 +769,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
   file length) silently appends the file from index 0 with `loop=False`; it only
   raises "too few samples" when one request exceeds the leftover plus a full
   file. `test_mat_loop_repeats_file` passes for the same mechanism because it
-  asserts the intended `loop=True` behaviour.
+  asserts the intended `loop=True` behavior.
 - **Why the test is right.** Zarr and TDMS raise `ValueError` past the end.
 - **Impact.** C. A capture longer than the file returns looped data with no
   error.
@@ -1028,7 +1028,7 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 
 `tests/waveform/test_fourier.py::TestOverlapAddFilters::test_oafilter_downsample_preserves_level`
 
-- **Mechanism.** The STFT is normalised for `nfft`-point frames and the
+- **Mechanism.** The STFT is normalized for `nfft`-point frames and the
   inverse reconstructs `nfft_out`-point frames (`fourier.py:882-923`).
   Measured gain is 1, 2, 4 for `nfft_out` of 256, 128, 64, so the xfail
   reason's "doubles" is the special case of a 2:1 ratio.
@@ -1044,7 +1044,7 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 
 - **Mechanism.** `sensor/lib/io.py:248` `importlib.import_module` returns the
   cached module; the "did not bind a sensor" warning then fires.
-- **Why the test is right.** The behaviour is undocumented either way; the
+- **Why the test is right.** The behavior is undocumented either way; the
   warning encodes the current heuristic. A real reload would also collide with
   `bind_sensor`'s "already registered" check.
 - **Impact.** The CLIs read one spec per process. Notebook and test sessions
@@ -1057,20 +1057,20 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 `tests/waveform/test_power_analysis.py::TestIqToBinPower::test_negative_axis`
 
 - **Mechanism.** `power_analysis.py:414` reduces `axis + 1` without
-  normalising, so `axis=-1` reduces axis 0.
+  normalizing, so `axis=-1` reduces axis 0.
 - **Why the test is right.** Numpy convention; not stated in the docstring.
   Medium.
 - **Impact.** Callers pass `axis=1`. Unreachable.
 - **Fix.** Normalise the axis at entry. Trivial.
 
-### 34. `iq_to_cyclic_power` normalises a negative axis too late
+### 34. `iq_to_cyclic_power` normalizes a negative axis too late
 
 `tests/waveform/test_power_analysis.py::TestIqToCyclicPower::test_negative_axis`
 
-- **Mechanism.** `power_analysis.py:484` normalises after the
+- **Mechanism.** `power_analysis.py:484` normalizes after the
   `iq_to_bin_power` calls and the `power_shape[1]` check. The observed failure
   is item 31 propagating (the xfail reason now says so); the late
-  normalisation is real but secondary, and this test cannot fail or pass
+  normalization is real but secondary, and this test cannot fail or pass
   independently of item 31's.
 - **Why the test is right.** Numpy convention only; the paper works with a
   single time series and does not define a channel axis. Medium.
@@ -1207,7 +1207,7 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   `class X(Sweep[FunctionSource, NoPeripherals, SingleToneCapture])`, so the
   bare `SC` TypeVar is returned.
 - **Impact.** Every in-tree caller passes a bound sweep.
-- **Fix.** Read `__orig_bases__` for the parametrised base. Easy.
+- **Fix.** Read `__orig_bases__` for the parametrized base. Easy.
 
 ## Tool limitations
 
@@ -1235,7 +1235,7 @@ it was standing in for is enabled.
   explicit keyword-only parameter list. `ty` already applies that rule to a
   TypedDict literal (`invalid-key`) and to a plain signature (`unknown-argument`),
   which is the rule the test expects.
-- **Impact.** None on striqt's behaviour. The two call sites that forward
+- **Impact.** None on striqt's behavior. The two call sites that forward
   `**kwargs: Unpack[...]` (`design_resampler` to `sw.design_cola_resampler`,
   `iterate_sweep` to the `Resources` replacement) are the places where a
   mistyped keyword is not caught statically; at runtime the misspelt key still
@@ -1286,7 +1286,7 @@ it was standing in for is enabled.
 - **`find_trigger_holdoff` is not minimal.** When the first strobe edge falls
   short of the minimum holdoff it adds `ceil(min/strobe)*strobe` and can skip
   one extra period (up to `min_holdoff + 2*strobe`). Pinned as current
-  behaviour in `test_sensor_sources_buffers.py`; alignment within one sample and
+  behavior in `test_sensor_sources_buffers.py`; alignment within one sample and
   the lower bound are the asserted contract.
 
 - **`cast_iq` slices `2*acquired_count` complex samples.** `buffers.py` on the
@@ -1332,17 +1332,17 @@ it was standing in for is enabled.
 
 ## Fixed on 2026-09-21 without a ledger number
 
-- **A cancelled source lookup reported a timeout instead of the cancellation.**
+- **A canceled source lookup reported a timeout instead of the cancellation.**
   `controller.lookup.instance` raised
   `TimeoutError('no controller instance initializing given spec')` when its 0.5 s
-  wait expired, without checking whether the open had been cancelled. In
+  wait expired, without checking whether the open had been canceled. In
   `open_resources` the sink, the devices and `_prepare_sweep` run concurrently
   under `ExceptionStack(cancel_on_except=True)`, so a sink that raised in
   `__init__` could cancel the open before the source thread registered a
   controller; `_prepare_sweep`'s `lookup.id` then contributed that `TimeoutError`
   to the group and `ExceptionStack.handle()` raised an `ExceptionGroup` instead of
   the sink's own error. `instance` now calls `util.propagate_thread_interrupts()`
-  before raising, which turns a cancelled wait into the `ThreadInterruptRequest`
+  before raising, which turns a canceled wait into the `ThreadInterruptRequest`
   that `ExceptionStack` already makes yield to the real error; an uncancelled wait
   still times out, as the class docstring promises. Confirming test:
   `tests/sensor/test_sensor_resources.py::test_sink_failure_surfaces_and_closes_the_source[init]`,

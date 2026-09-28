@@ -107,7 +107,7 @@ def test_find_trigger_holdoff_aligns_to_the_strobe(
     """the holdoff ends on a strobe edge (to within one sample), covers the
     overlap and, on a fresh arm, the transient holdoff.
 
-    The upper bound records current behaviour rather than a contract: the
+    The upper bound records current behavior rather than a contract: the
     implementation may skip up to one extra strobe period beyond the first edge
     that satisfies the minimum.
     """

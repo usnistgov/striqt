@@ -84,7 +84,7 @@ class TestIqWaveform:
         assert da.coords['iq_index'].size == 0
 
     def test_reversed_window_is_empty(self):
-        """current behaviour, not a validated contract: a window that ends before it
+        """current behavior, not a validated contract: a window that ends before it
         starts yields an empty result rather than an error"""
         iq = self.waveform()
         da = sa.measurements.iq_waveform(

@@ -40,7 +40,7 @@ def test_cwd_follows_the_spec_directory(tmp_path, monkeypatch):
 
 
 def test_test_only_omits_the_peripherals():
-    """current behaviour, not a contract: the peripherals are not opened"""
+    """current behavior, not a contract: the peripherals are not opened"""
     with ss.open_resources(tone_sweep(OFFSETS), None, test_only=True) as res:
         assert 'peripherals' not in res
 

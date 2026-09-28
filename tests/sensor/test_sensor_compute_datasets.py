@@ -205,7 +205,7 @@ def test_get_looped_coords_lists_the_capture_loop_fields():
 
 
 def test_get_looped_coords_include_repeats():
-    """current behaviour, not a contract: a Repeat has no field and is listed as None"""
+    """current behavior, not a contract: a Repeat has no field and is listed as None"""
     ds = compute.from_delayed(two_port_run()[0])
     assert compute.get_looped_coords(ds, include_repeats=True) == [None, 'snr']
 

@@ -71,7 +71,7 @@ def test_as_xarray_true_returns_a_dataset(stages):
 
 
 def test_as_xarray_false_returns_the_delayed_arrays(stages):
-    """current behaviour, not a contract: the values are DelayedDataArray results
+    """current behavior, not a contract: the values are DelayedDataArray results
     keyed by measurement name, not bare arrays as the annotation says"""
     result = compute.analyze(
         fresh_raw(stages), options(correction=True, as_xarray=False)

@@ -173,7 +173,7 @@ def test_zarr_get_waveform_dtype(zarr_iq_file, dtype, expected):
 
 def test_zarr_read_timestamps(zarr_iq_file):
     """the first chunk is stamped with the store's start_time; later chunks return 0
-    (current behaviour, not a contract: Controller.read_iq only keeps the first)"""
+    (current behavior, not a contract: Controller.read_iq only keeps the first)"""
     source = ss.lib.sources.ZarrIQSource(zarr_spec(zarr_iq_file, capture_index=0))
     source.setup()
     source.arm(file_capture())

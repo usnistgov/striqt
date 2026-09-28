@@ -97,14 +97,14 @@ def window_count(attrs, capture) -> int:
 
 def check_tone_psd(psd, freqs, attrs, capture, frequency_offset, snr, err_msg=''):
     """assert the mean PSD of one port holds a unit tone at `frequency_offset` at the
-    modelled level, and nothing else above the noise and roundoff floors"""
+    modeled level, and nothing else above the noise and roundoff floors"""
     res = attrs['frequency_resolution']
     nfft = round(capture.sample_rate / res)
     nzero = round((1 - Fraction(str(attrs['window_fill']))) * nfft)
     window = attrs['window']
     if isinstance(window, list):
         window = tuple(window)
-    assert sw.isroundmod(frequency_offset, res), 'the test tone must be bin-centred'
+    assert sw.isroundmod(frequency_offset, res), 'the test tone must be bin-centered'
 
     tone = tone_bin_powers(
         window,

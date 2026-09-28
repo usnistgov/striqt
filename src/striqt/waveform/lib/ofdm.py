@@ -809,7 +809,7 @@ def weighted_ssb_detect(
 
     # evaluate the sub-symbol IQ offset
     nfine = rpeak.shape[FINE_LAG_DIM]
-    # an odd window has a single peak sample, so neighbouring lags never tie;
+    # an odd window has a single peak sample, so neighboring lags never tie;
     # even zero padding keeps that peak at the correlate1d origin
     nfill = max(1, 2 * ((round(window_fill * nfine) - 1) // 2) + 1)
     nzero = nfine - nfill

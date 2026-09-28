@@ -107,7 +107,7 @@ YIELD_MODES = {
 
 @pytest.mark.parametrize('mode', list(YIELD_MODES), ids=list(YIELD_MODES))
 def test_yield_modes(mode):
-    """current behaviour, not a contract: the pipeline runs N + 2 stages and yields
+    """current behavior, not a contract: the pipeline runs N + 2 stages and yields
     the sink result of every stage when yield_values is set (None for the two
     stages before the first capture reaches the sink), one None per stage when
     only always_yield is set, and nothing otherwise. The iterate_sweep docstring

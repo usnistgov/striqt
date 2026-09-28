@@ -664,7 +664,7 @@ class TestIqToBinPower:
     def test_quantile_of_a_long_heavy_tailed_bin_is_exact_on_every_numpy(self):
         """numpy < 2.3 casts a scalar q to float32 (numpy.lib._function_base_impl,
         quantile), which shifts the virtual index (n-1)*q by ~n*2**-25 samples before
-        interpolating between the two neighbouring order statistics. On a heavy-tailed
+        interpolating between the two neighboring order statistics. On a heavy-tailed
         bin of 2**20 samples that read 124 u against a budget of 28 u."""
         n, q = 2**20, 0.999
         rng = np.random.default_rng(0)

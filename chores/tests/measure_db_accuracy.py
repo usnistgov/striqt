@@ -40,8 +40,8 @@ exact powers):
     max/u, rms/u  relative error in units of u = 2**-24 as above, worst over the draws
     model/u       `stat_rtol(float32, q)` (or `bin_power_rtol` when it is not shipped
                   yet): squaring the envelope plus one rounding of the interpolation
-                  between the two neighbouring order statistics
-The heavy tail makes that neighbour gap large at q=0.999. A max/u far above model/u on
+                  between the two neighboring order statistics
+The heavy tail makes that neighbor gap large at q=0.999. A max/u far above model/u on
 one backend means its `quantile` interpolates in float32 (numpy < 2.3 casts a Python
 float q to the array dtype, which errs by about n*2**-25 of the gap); the fix passes
 q as a float64 array, so the result dtype printed under the table must stay float32.
@@ -138,7 +138,7 @@ def report_elementwise(name, backends, func, x, ref, dtype, db_scale=None):
 
 def _iq_draws(rng, n, draws):
     """(label, iq) pairs of complex64 shape (4, n): circular Gaussian, then a unit
-    tone at a frequency that is not bin-centred"""
+    tone at a frequency that is not bin-centered"""
     t = np.arange(n)
     for _ in range(draws):
         iq = (

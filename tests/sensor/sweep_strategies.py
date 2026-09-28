@@ -242,7 +242,7 @@ def noise_figure_lookup(nf_dB, port, center_frequency) -> float:
 def yfactor_rms_power(
     gain_dB, nf_dB, bandwidth, *, diode_on, enr_dB=YFACTOR_ENR_DB, T0=T_REF, **gain_kws
 ):
-    """rms output power in full-scale units of the modelled receiver"""
+    """rms output power in full-scale units of the modeled receiver"""
     Te = T0 * (10 ** (nf_dB / 10) - 1)
     Tsource = T0 + np.where(diode_on, T0 * 10 ** (enr_dB / 10), 0.0)
     return (
