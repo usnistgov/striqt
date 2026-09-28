@@ -24,7 +24,6 @@ from numeric_checks import (
     RTOL_FLOAT64,
     assert_close,
     assert_tone_level,
-    bin_centered_tone,
     cross_backend,
     dtype_id,
     elementwise_rtol,
@@ -35,10 +34,10 @@ from numeric_checks import (
     to_numpy,
     tone_bin,
     tone_frequency,
-    unit_tone,
 )
 from numpy.testing import assert_allclose, assert_array_equal
 
+from striqt.analysis import testing
 from striqt.waveform.lib import fourier
 from striqt.waveform.lib.arrays import accum_rtol, unit_roundoff
 from striqt.waveform.lib.fourier import off_peak_floor_dBc, on_peak_roundoff
@@ -452,7 +451,7 @@ class TestResample:
     def test_shift_moves_tone_when_downsampling(self, shift):
         nfft_in, nfft_out = 256, 128
         k = 26
-        x = unit_tone(nfft_in, 1.0, k / nfft_in)
+        x = testing.tone(None, 1.0, frequency=k / nfft_in, count=nfft_in)[0]
         y = fourier.resample(x, nfft_out, shift=shift)
         assert y.shape == (nfft_out,) and y.dtype == x.dtype
         # the band copied to the output starts `shift` bins higher, so the tone
@@ -1023,7 +1022,7 @@ class TestOverlapAddFilters:
     PASSBAND = (-0.2e6, 0.2e6)
 
     def _tone(self, f0, channels=None):
-        x = unit_tone(self.NFFT * self.NSEG, self.FS, f0)
+        x = testing.tone(None, self.FS, frequency=f0, count=self.NFFT * self.NSEG)[0]
         return x if channels is None else np.tile(x, (channels, 1))
 
     def _oafilter(self, x, **kws):
@@ -1176,13 +1175,17 @@ class TestOffPeakFloor:
     def _stft(x, nfft):
         return fourier.stft(x, fs=1.0, window='rect', nperseg=nfft, noverlap=0)[2]
 
+    def _bin_centered_tone(self, nfft: int, k: int) -> np.ndarray:
+        """a unit tone with `k` cycles per `nfft`-sample segment, over NSEG segments"""
+        return testing.tone(None, nfft, frequency=k, count=self.NSEG * nfft)[0]
+
     @given(
         nfft=st.sampled_from(OFF_PEAK_NFFTS),
         bin_fraction=st.floats(min_value=0, max_value=1),
     )
     def test_stft_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         k = tone_bin(nfft, bin_fraction)
-        x = bin_centered_tone(nfft, k, self.NSEG)
+        x = self._bin_centered_tone(nfft, k)
         X_ref = self._stft(x.astype(np.complex128), nfft)
         X = to_numpy(self._stft(xp.asarray(x), nfft)).astype(np.complex128)
 
@@ -1210,7 +1213,7 @@ class TestOffPeakFloor:
     def test_resample_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         # keep the tone inside the half band that survives downsampling by 2
         k = tone_bin(nfft, 0.3 + 0.4 * bin_fraction)
-        x = bin_centered_tone(nfft, k, self.NSEG)
+        x = self._bin_centered_tone(nfft, k)
         num_out = x.size // 2
         # fftshift multiply, fft(N), ifft(N/2), ifftshift multiply
         sigma = fourier.fft_tolerance_rms(
@@ -1228,7 +1231,7 @@ class TestOffPeakFloor:
         bin_fraction=st.floats(min_value=0, max_value=1),
     )
     def test_oaconvolve_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
-        x = bin_centered_tone(nfft, tone_bin(nfft, bin_fraction), self.NSEG)
+        x = self._bin_centered_tone(nfft, tone_bin(nfft, bin_fraction))
         # a unit-gain lowpass; the tone may land in its stopband, so bounds are
         # anchored to the input tone rather than the output
         kernel = np.hanning(self.KERNEL_TAPS).astype(np.float32)
@@ -1393,7 +1396,9 @@ class TestNumpyCupyCrossComparison:
     @given(f0_bins=st.integers(min_value=-20, max_value=20))
     def test_oafilter_and_oaresample(self, cupy_available, f0_bins):
         fs, nfft = 1e6, 256
-        x = np.tile(unit_tone(nfft * 40, fs, f0_bins * fs / nfft), (2, 1))
+        x = testing.tone(
+            None, fs, frequency=f0_bins * fs / nfft, count=nfft * 40, ports=2
+        )
 
         kws = {'fs': fs, 'nfft': nfft, 'window': 'hamming', 'passband': (-0.2e6, 0.2e6)}
         y_np, y_cp = numpy_and_cupy(cupy_available, fourier.oafilter, x[0], **kws)

@@ -1,7 +1,8 @@
 """strategies and oracles for the analysis tests: the capture/delay/range domains
 that __post_init__ validates, the (capture, spec) domains of every registered
-validator, the freeze/unfreeze and frozendict trees, and the registry walk that
-fetches a measurement's tolerance.
+validator, the freeze/unfreeze and frozendict trees, the registry walk that fetches a
+measurement's tolerance, and the constants (power bins, cellular sample rate and frame
+size, SSB spectrogram layout) that more than one test module builds specs from.
 
 Not a conftest: a second rootless conftest would shadow the root one that other test
 directories import by name.
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 from fractions import Fraction
 from math import inf
+from typing import Any
 
 from conftest import scalars
 from hypothesis import strategies as st
@@ -115,6 +117,7 @@ DETECTORS = ('rms', 'peak', 'max', 'min', 'mean', 'median')
 # the sample rates at which the 3GPP cyclic prefixes are whole samples: multiples of
 # 1.92e6 at 15 kHz and of 3.84e6 at 30 kHz (3GPP TS 38.211 Section 5.3.1)
 CELL_FS = 3.84e6
+CELL_FRAME = round(10e-3 * CELL_FS)
 TDD_20_SLOTS = 'dddsuudddddddsuudddd'
 TDD_10_SLOTS = 'dsuuuuuuuu'
 
@@ -138,21 +141,20 @@ def ssb_spectrogram_capture(duration) -> sa.specs.Capture:
     return sa.specs.Capture(duration=duration, sample_rate=SSB_SPECTROGRAM_FS)
 
 
-def _capture(samples: int, sample_rate: float, analysis_bandwidth=inf):
+def capture_of(samples: int, sample_rate: float, **kwargs: Any) -> sa.specs.Capture:
+    """a capture of `samples` at `sample_rate`, with any other fields as given"""
     return sa.specs.Capture(
-        duration=samples / sample_rate,
-        sample_rate=sample_rate,
-        analysis_bandwidth=analysis_bandwidth,
+        duration=samples / sample_rate, sample_rate=sample_rate, **kwargs
     )
 
 
 def _split_capture(params: dict) -> tuple[sa.specs.Capture, dict]:
     """pop the capture fields off a drawn parameter set"""
     params = dict(params)
-    capture = _capture(
+    capture = capture_of(
         params.pop('samples'),
         params.pop('sample_rate'),
-        params.pop('analysis_bandwidth', inf),
+        analysis_bandwidth=params.pop('analysis_bandwidth', inf),
     )
     return capture, params
 
@@ -237,8 +239,7 @@ def detector_pairs(draw, spec_type=sa.specs.ChannelPowerTimeSeries, **extra):
 @st.composite
 def ssb_correlator_pairs(draw, spec_type=sa.specs.Cellular5GNRPSSCorrelator, **extra):
     """(capture, spec) for the PSS/SSS correlators and synchronizers"""
-    frame_size = round(10e-3 * CELL_FS)
-    samples = draw(st.integers(min_value=1, max_value=2)) * frame_size
+    samples = draw(st.integers(min_value=1, max_value=2)) * CELL_FRAME
     step = CELL_FS / samples
     scs = draw(st.sampled_from((15e3, 30e3)))
     if round(scs) == 15_000:
@@ -265,7 +266,7 @@ def ssb_correlator_pairs(draw, spec_type=sa.specs.Cellular5GNRPSSCorrelator, **e
         'max_lag_symbols': draw(st.sampled_from((None, 1, 4, 6))),
     }
     perturbations = {
-        'samples': st.sampled_from((samples + 1, samples + frame_size // 2)),
+        'samples': st.sampled_from((samples + 1, samples + CELL_FRAME // 2)),
         'sample_rate': st.just(1.92e6),
         'sample_rate_out': st.sampled_from(bad_rates),
         'discovery_periodicity': st.just(15e-3),

@@ -18,7 +18,7 @@ from fractions import Fraction
 import msgspec
 import numpy as np
 import pytest
-from analysis_strategies import VALIDATOR_DOMAINS
+from analysis_strategies import POWER_BINS, VALIDATOR_DOMAINS, capture_of
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -391,171 +391,30 @@ FS = 1.024e6
 NFFT = 8
 SAMPLES = 64
 SPG = {'window': 'boxcar', 'frequency_resolution': FS / NFFT}
-CELL_FS = 3.84e6
-FRAME = round(10e-3 * CELL_FS)
-PSS = {'subcarrier_spacing': 30e3, 'sample_rate': CELL_FS, 'symbol_indexes': 'c'}
-BINS = {'power_low': -40.0, 'power_high': 10.0, 'power_resolution': 1.0}
 
-
-def capture_of(samples, sample_rate, **kwargs) -> sa.specs.Capture:
-    return sa.specs.Capture(
-        duration=samples / sample_rate, sample_rate=sample_rate, **kwargs
-    )
-
-
-# (measurement, capture, spec, the spec or capture field the message must name)
+# (capture, spec, the spec or capture field the message must name). Every registered
+# validator raises a bare ValueError, so `registry.validate` has one mechanism to
+# exercise here: `validation_path` wrapping it at the measurement key. One row names
+# a capture field and one a spec field; the per-measurement rejection tables live in
+# the test_analysis_measurements_* modules.
 REJECTED = {
     'spectrogram_shorter_than_nfft': (
         capture_of(NFFT - 1, FS),
         sa.specs.Spectrogram(**SPG),
         'duration',
     ),
-    'spectrogram_lo_bandstop_on_odd_nfft': (
-        capture_of(SAMPLES, FS),
-        sa.specs.Spectrogram(
-            window='boxcar', frequency_resolution=FS / 7, lo_bandstop=FS / 7
-        ),
-        'lo_bandstop',
-    ),
-    'spectrogram_analysis_bandwidth_above_sample_rate': (
-        capture_of(SAMPLES, FS, analysis_bandwidth=1.5 * FS),
-        sa.specs.Spectrogram(**SPG),
-        'analysis_bandwidth',
-    ),
-    'spectrogram_trim_on_odd_nfft': (
-        capture_of(SAMPLES, FS, analysis_bandwidth=FS / 2),
-        sa.specs.Spectrogram(window='boxcar', frequency_resolution=FS / 7),
-        'analysis_bandwidth',
-    ),
-    'spectrogram_integration_bandwidth_above_sample_rate': (
-        capture_of(SAMPLES, FS),
-        sa.specs.Spectrogram(**SPG, integration_bandwidth=2 * FS),
-        'integration_bandwidth',
-    ),
-    'spectrogram_time_aperture_longer_than_capture': (
-        capture_of(NFFT, FS),
-        sa.specs.Spectrogram(**SPG, time_aperture=2 * NFFT / FS),
-        'time_aperture',
-    ),
     'psd_unknown_statistic': (
         capture_of(SAMPLES, FS),
         sa.specs.PowerSpectralDensity(**SPG, time_statistic=('mean', 'bogus')),
         'time_statistic',
-    ),
-    'psd_quantile_above_one': (
-        capture_of(SAMPLES, FS),
-        sa.specs.PowerSpectralDensity(**SPG, time_statistic=(1.5,)),
-        'time_statistic',
-    ),
-    'channel_power_unknown_detector': (
-        capture_of(100, 1e6),
-        sa.specs.ChannelPowerTimeSeries(
-            detector_period=Fraction(1, 100_000), power_detectors=('rms', 'bogus')
-        ),
-        'power_detectors',
-    ),
-    'channel_power_histogram_unknown_detector': (
-        capture_of(100, 1e6),
-        sa.specs.ChannelPowerHistogram(
-            detector_period=Fraction(1, 100_000),
-            power_detectors=('bogus',),
-            **BINS,
-        ),
-        'power_detectors',
-    ),
-    'cyclic_power_quantile_below_zero': (
-        capture_of(100, 1e6),
-        sa.specs.CyclicChannelPower(
-            cyclic_period=1e-4,
-            detector_period=Fraction(1, 100_000),
-            cyclic_statistics=('min', -0.5),
-        ),
-        'cyclic_statistics',
-    ),
-    'pss_odd_sample_count': (
-        capture_of(FRAME + 1, CELL_FS),
-        sa.specs.Cellular5GNRPSSCorrelator(**PSS),
-        'duration',
-    ),
-    'pss_frequency_offset_off_the_resampler_grid': (
-        capture_of(FRAME, CELL_FS),
-        sa.specs.Cellular5GNRPSSCorrelator(**PSS, frequency_offset=150.0),
-        'frequency_offset',
-    ),
-    'pss_frequency_offset_shifts_past_the_band': (
-        capture_of(FRAME, CELL_FS),
-        sa.specs.Cellular5GNRPSSCorrelator(
-            subcarrier_spacing=15e3, sample_rate=1.92e6, frequency_offset=CELL_FS / 2
-        ),
-        'frequency_offset',
-    ),
-    'sss_partial_frame': (
-        capture_of(FRAME + FRAME // 2, CELL_FS),
-        sa.specs.Cellular5GNRSSSCorrelator(**PSS),
-        'duration',
-    ),
-    'pss_sync_partial_frame': (
-        capture_of(FRAME + FRAME // 2, CELL_FS),
-        sa.specs.Cellular5GNPSSSync(**PSS),
-        'duration',
-    ),
-    'sss_sync_odd_sample_count': (
-        capture_of(FRAME + 1, CELL_FS),
-        sa.specs.Cellular5GNSSSSync(**PSS),
-        'duration',
-    ),
-    'ssb_spectrogram_frequency_offset_off_the_subcarrier_grid': (
-        capture_of(8400, 420e3),
-        sa.specs.Cellular5GNRSSBSpectrogram(
-            subcarrier_spacing=30e3, sample_rate=120e3, frequency_offset=15e3
-        ),
-        'frequency_offset',
-    ),
-    'ssb_spectrogram_sample_rate_above_capture': (
-        capture_of(8400, 420e3),
-        sa.specs.Cellular5GNRSSBSpectrogram(subcarrier_spacing=30e3, sample_rate=840e3),
-        'sample_rate',
-    ),
-    'ssb_spectrogram_partial_burst_set': (
-        capture_of(8400 + 210, 420e3),
-        sa.specs.Cellular5GNRSSBSpectrogram(subcarrier_spacing=30e3, sample_rate=120e3),
-        'duration',
-    ),
-    'autocorrelation_symbol_range_past_the_slot': (
-        capture_of(FRAME, CELL_FS),
-        sa.specs.CellularCyclicAutocorrelator(
-            subcarrier_spacings=30e3, symbol_range=(14, 15)
-        ),
-        'symbol_range',
-    ),
-    'autocorrelation_no_downlink_slot': (
-        capture_of(FRAME, CELL_FS),
-        sa.specs.CellularCyclicAutocorrelator(
-            subcarrier_spacings=30e3, frame_slots='u'
-        ),
-        'frame_slots',
-    ),
-    'autocorrelation_frame_range_past_the_capture': (
-        capture_of(FRAME, CELL_FS),
-        sa.specs.CellularCyclicAutocorrelator(
-            subcarrier_spacings=30e3, frame_range=(0, 2)
-        ),
-        'frame_range',
-    ),
-    'resource_grid_analysis_bandwidth_above_sample_rate': (
-        capture_of(420, 210e3, analysis_bandwidth=1.5 * 210e3),
-        sa.specs.CellularResourcePowerHistogram(
-            window='hamming', subcarrier_spacing=15e3, **BINS
-        ),
-        'analysis_bandwidth',
     ),
 }
 
 
 @pytest.mark.parametrize('case', list(REJECTED), ids=list(REJECTED))
 def test_validator_rejects_at_the_analysis_path_naming_the_field(case):
-    """each failure mode the runtime kernels would raise on is rejected first by the
-    registered validator, located at the measurement key and worded in spec terms"""
+    """a pair the registered validator rejects is reported at the measurement key
+    under `$.analysis`, worded in terms of the spec or capture field at fault"""
     capture, spec, field = REJECTED[case]
     name = sa.registry[type(spec)].name
     group = sa.registry.tospec()(**{name: spec})
@@ -592,13 +451,17 @@ CONTRACT_SPECS = (
         cyclic_period=1e-3, detector_period=CONTRACT_DETECTOR_PERIOD
     ),
     sa.specs.IQWaveform(),
-    sa.specs.ChannelPowerHistogram(detector_period=CONTRACT_DETECTOR_PERIOD, **BINS),
-    sa.specs.SpectrogramHistogram(window='hamming', frequency_resolution=7.5e3, **BINS),
+    sa.specs.ChannelPowerHistogram(
+        detector_period=CONTRACT_DETECTOR_PERIOD, **POWER_BINS
+    ),
+    sa.specs.SpectrogramHistogram(
+        window='hamming', frequency_resolution=7.5e3, **POWER_BINS
+    ),
     sa.specs.SpectrogramHistogramRatio(
-        window='hamming', frequency_resolution=7.5e3, **BINS
+        window='hamming', frequency_resolution=7.5e3, **POWER_BINS
     ),
     sa.specs.CellularResourcePowerHistogram(
-        window='hamming', subcarrier_spacing=CONTRACT_SCS, **BINS
+        window='hamming', subcarrier_spacing=CONTRACT_SCS, **POWER_BINS
     ),
 )
 
