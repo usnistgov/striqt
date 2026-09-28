@@ -55,24 +55,27 @@ def check_frequency_band(
     offset: float = 0.0,
     offset_field: str = 'frequency_offset',
 ) -> int:
-    """return the bin count of the band `field` selects, checking it lies on the grid.
+    """return the number of bins in the band that `field` selects.
 
-    `sw.fourier.slice_freqs` applies the same rules to the array; only the vocabulary
-    changes here, because an odd `nfft` reads as an off-grid DC bin there.
+    The checks are those of `sw.fourier.slice_freqs`, whose errors are reworded in
+    terms of the spec fields: `offset` must fall on the ``sample_rate / nfft`` grid and
+    the band must lie within ``±sample_rate / 2``. `bandwidth` itself is not checked
+    against the grid; it is rounded to the nearest whole number of bins, so a value
+    between grid multiples passes and the returned count reflects the rounding.
 
     Args:
         nfft: number of bins across `sample_rate`, which sets the grid spacing
         sample_rate: in S/s
-        bandwidth: width of the band in Hz, rounded to a whole number of bins
+        bandwidth: width of the band in Hz, rounded to the nearest whole number of bins
         offset: center of the band relative to baseband DC in Hz
         offset_field: name of the spec field that set `offset`, for the message
 
     Returns:
-        the number of bins the band spans
+        the number of bins the band spans after rounding, at least 0
 
     Raises:
-        ValueError: if `bandwidth` is negative, `offset` is off the grid, or the band
-            extends beyond the sampled bandwidth
+        ValueError: if `bandwidth` is negative, `offset` is off the grid, or the
+            rounded band extends beyond ``±sample_rate / 2``
     """
     try:
         band = sw.fourier.slice_freqs(nfft, sample_rate, bandwidth, offset=offset)

@@ -301,10 +301,10 @@ def _lin_to_dB(
     """compute ``scale*log10(abs(x) + eps)`` or ``scale*log10(x + eps)``.
 
     With `overwrite_x`, the result is written into `x` unless `min_dtype` widens it
-    first; a complex `x` overwritten in place keeps its complex dtype on numpy but
-    comes back as the real view of that buffer on cupy (`_real_buffer`). The numexpr
-    expression is one of eight constant strings so its compile cache still hits, and
-    `values`/`eps` are looked up from this frame by name.
+    first; a complex `x` overwritten in place comes back as the real view of its
+    buffer (`_real_buffer`) on every backend. The numexpr expression is one of eight
+    constant strings so its compile cache still hits, and `values`/`eps` are looked up
+    from this frame by name.
     """
 
     eps_str = '' if eps == 0 else '+eps'
@@ -316,6 +316,7 @@ def _lin_to_dB(
             expr = f'real({scale}*log10(abs(values){eps_str}))'
         else:
             expr = f'real({scale}*log10(values{eps_str}))'
+        out = _real_buffer(out)
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif _use_cuda_kernels(values):
         from .jit import cuda
@@ -359,8 +360,7 @@ def powtodB(
             either case
         eps: an offset added before the logarithm so that zeros map to a finite value
         overwrite_x: True to write the result into `x` when its dtype is at least
-            `min_dtype` (on numpy, a complex `x` then keeps its complex dtype with
-            zero imaginary part)
+            `min_dtype`; a complex `x` then returns the real view of its buffer
         min_dtype: the narrowest floating-point dtype of the computation; a narrower
             `x` is widened to it
 
@@ -812,9 +812,8 @@ def _real_buffer(out: Array) -> Array:
     """return `out`, or the real view of `out` if it is complex.
 
     `_arraylike_with_buffer` hands back a complex buffer only when overwriting
-    complex input in place. The fused kernels compute real values and cannot
-    assign into it, so they write the real part; the numpy path writes the same
-    values into the complex buffer itself.
+    complex input in place. The conversions produce real values, so both the numexpr
+    and the fused-kernel paths write into this view and return it.
     """
     if out.dtype.kind == 'c':
         return out.real
