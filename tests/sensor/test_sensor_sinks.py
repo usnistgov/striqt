@@ -14,7 +14,7 @@ from synthetic_sources import (
     IQ_ONLY,
     ONE_PORT,
     SPECTROGRAM,
-    make_capture,
+    preset_capture,
     spectrogram_frames,
     tone_captures,
     tone_sweep,
@@ -67,7 +67,7 @@ def test_batch_tracker_merges_captures_of_different_shape():
     """a group closes only once every distinct capture shape is both pending and
     still to come, so two 1 ms captures followed by a 2 ms one form one group"""
     captures = tone_captures((1e6, 2e6)) + (
-        make_capture('single_tone', **{**ONE_PORT, 'duration': 2e-3}, snr=None),
+        preset_capture('single_tone', **{**ONE_PORT, 'duration': 2e-3}, snr=None),
     )
     tracker = sinks._BatchTracker(captures, min_size=1)
     assert tracker.total_size == 3

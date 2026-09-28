@@ -19,7 +19,7 @@ from synthetic_sources import (
     RESAMPLE_FILTER,
     SCALE_ONLY,
     fs_sdr,
-    make_capture,
+    preset_capture,
 )
 
 import striqt.sensor as ss
@@ -31,13 +31,26 @@ HOLDOFF_TIME = 2**-10
 STROBE_TIME = 2**-12
 
 
-def stub_controller(capture, source=SOURCE):
+def stub_controller(
+    capture: ss.specs.SensorCapture, source: ss.specs.Source = SOURCE
+) -> SimpleNamespace:
     """the controller attributes that ReceiveBuffers and _alloc_empty_iq read"""
     return SimpleNamespace(
         capture_spec=capture,
         source_spec=source,
         source_info=ss.specs.SourceInfo(num_rx_ports=None),
     )
+
+
+GAPLESS_SOURCE = source_spec(gapless=True, time_sync_at='open')
+
+
+def receive_buffers(
+    capture: ss.specs.SensorCapture, source: ss.specs.Source = GAPLESS_SOURCE
+) -> buffers.ReceiveBuffers:
+    """a ReceiveBuffers on stub_controller(capture, source); the gapless default is
+    what the carryover path needs"""
+    return buffers.ReceiveBuffers(stub_controller(capture, source))
 
 
 # %% get_read_count
@@ -48,7 +61,7 @@ def stub_controller(capture, source=SOURCE):
 def test_get_read_count_is_the_source_rate_sample_count_plus_overlap(preset, overlap):
     """the source must deliver duration * fs_sdr samples (rounded up when the
     resampler ratio is fractional) plus the requested overlap"""
-    capture = make_capture('single_tone', **PRESETS[preset])
+    capture = preset_capture('single_tone', **PRESETS[preset])
     samples_out = round(capture.duration * capture.sample_rate)
     ratio = fs_sdr(capture) / capture.sample_rate
     expected = ceil(samples_out * ratio) + overlap
@@ -74,7 +87,7 @@ def test_get_read_count_holdoff_adds_transient_and_two_strobe_periods():
 
 @pytest.mark.parametrize('overlap', [1, 3, -2], ids=['odd1', 'odd3', 'negative'])
 def test_get_read_count_rejects_invalid_overlap(overlap):
-    capture = make_capture('single_tone', **SCALE_ONLY)
+    capture = preset_capture('single_tone', **SCALE_ONLY)
     with pytest.raises(ValueError, match='non-negative even'):
         buffers.get_read_count(capture, SOURCE, overlap=overlap)
 
@@ -194,9 +207,9 @@ def test_get_dtype_scale(transport_dtype, expected):
 
 # %% is_reusable
 
-_C1 = make_capture('single_tone', **RESAMPLE_FILTER)
+_C1 = preset_capture('single_tone', **RESAMPLE_FILTER)
 # host_resample changes fs_sdr unless the rate divides the master clock
-_C_DIVISOR = make_capture(
+_C_DIVISOR = preset_capture(
     'single_tone', **{**SCALE_ONLY, 'sample_rate': 12.5e6, 'duration': 1e-3}
 )
 
@@ -219,8 +232,8 @@ REUSE_CASES = {
         True,
     ),
     'host_resample_new_fs_sdr': (
-        make_capture('single_tone', **SCALE_ONLY),
-        make_capture('single_tone', **{**SCALE_ONLY, 'host_resample': True}),
+        preset_capture('single_tone', **SCALE_ONLY),
+        preset_capture('single_tone', **{**SCALE_ONLY, 'host_resample': True}),
         False,
     ),
     'port': (_C1, _C1.replace(port=0), False),
@@ -242,7 +255,7 @@ def test_is_reusable(case):
 # %% ReceiveBuffers carryover
 
 
-def test_carryover_round_trip_copies_the_tail_into_the_next_head(receive_buffers):
+def test_carryover_round_trip_copies_the_tail_into_the_next_head():
     capture = soapy_capture(duration=2e-3)
     rb = receive_buffers(capture)
     unused = 7
@@ -259,7 +272,7 @@ def test_carryover_round_trip_copies_the_tail_into_the_next_head(receive_buffers
     np.testing.assert_array_equal(samples[:, unused:], -1 - 1j)
 
 
-def test_carryover_is_a_copy_of_the_stashed_samples(receive_buffers):
+def test_carryover_is_a_copy_of_the_stashed_samples():
     capture = soapy_capture()
     rb = receive_buffers(capture)
     previous = np.ones((1, 20), dtype='complex64')
@@ -271,7 +284,7 @@ def test_carryover_is_a_copy_of_the_stashed_samples(receive_buffers):
     assert (samples[:, :5] == 1).all()
 
 
-def test_carryover_without_a_stash_returns_the_timestamp_only(receive_buffers):
+def test_carryover_without_a_stash_returns_the_timestamp_only():
     rb = receive_buffers(soapy_capture())
     samples = np.zeros((1, 8), dtype='complex64')
     assert rb.apply(samples) == (None, 0)
@@ -279,7 +292,7 @@ def test_carryover_without_a_stash_returns_the_timestamp_only(receive_buffers):
     assert rb.apply(samples) == (55, 0)
 
 
-def test_carryover_is_disabled_when_not_gapless(receive_buffers):
+def test_carryover_is_disabled_when_not_gapless():
     capture = soapy_capture()
     rb = receive_buffers(capture, source_spec())
     previous = np.ones((1, 20), dtype='complex64')
@@ -291,7 +304,7 @@ def test_carryover_is_disabled_when_not_gapless(receive_buffers):
     assert not samples.any()
 
 
-def test_carryover_without_a_timestamp_is_an_error(receive_buffers):
+def test_carryover_without_a_timestamp_is_an_error():
     rb = receive_buffers(soapy_capture())
     rb.carryover_samples = np.ones((1, 4), dtype='complex64')
     rb.start_time_ns = None
@@ -299,7 +312,7 @@ def test_carryover_without_a_timestamp_is_an_error(receive_buffers):
         rb.apply(np.zeros((1, 8), dtype='complex64'))
 
 
-def test_clear_drops_the_carryover(receive_buffers):
+def test_clear_drops_the_carryover():
     capture = soapy_capture()
     rb = receive_buffers(capture)
     rb.stash_carryover(
@@ -311,7 +324,7 @@ def test_clear_drops_the_carryover(receive_buffers):
 
 # %% _alloc_empty_iq
 
-_TWO_PORT = make_capture('sawtooth', **SCALE_ONLY)
+_TWO_PORT = preset_capture('sawtooth', **SCALE_ONLY)
 _ONE_PORT = _TWO_PORT.replace(port=0)
 _THREE_PORT = _TWO_PORT.replace(port=(0, 1, 2))
 _LONG = _TWO_PORT.replace(duration=2e-3)
@@ -399,13 +412,8 @@ def test_alloc_for_cupy_is_pinned_host_memory(xp):
 # %% get_array_namespace
 
 
-def test_get_array_namespace_numpy():
-    assert buffers.get_array_namespace('numpy') is np
-
-
-@pytest.mark.namespaces('cupy')
-def test_get_array_namespace_cupy(xp):
-    assert buffers.get_array_namespace('cupy') is xp
+def test_get_array_namespace(xp):
+    assert buffers.get_array_namespace(xp.__name__) is xp
 
 
 def test_get_array_namespace_cupy_unavailable_is_an_import_error(monkeypatch):

@@ -13,6 +13,7 @@ requires.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from fractions import Fraction
 from typing import NamedTuple
 
@@ -113,12 +114,12 @@ SPECTROGRAM = ss.specs.BundledAnalysis.from_dict({
 NO_SINK = ss.specs.Extension(sink='striqt.sensor.sinks.NoSink')
 
 
-def make_capture(binding: str, **kws):
+def preset_capture(binding: str, **kws):
     """a capture spec for `binding` from RESAMPLE_FILTER updated with `kws`"""
     return BINDINGS[binding].schema.capture(**{**RESAMPLE_FILTER, **kws})
 
 
-def make_sweep(
+def preset_sweep(
     binding: str,
     captures,
     *,
@@ -139,20 +140,24 @@ def make_sweep(
     )
 
 
-def tone_captures(offsets, **kws):
-    """a ONE_PORT single_tone capture per frequency offset, with no added noise so
-    that a result attributed to the wrong capture disagrees with its generator oracle"""
-    return tuple(
-        make_capture(
-            'single_tone', **{**ONE_PORT, 'snr': None, **kws}, frequency_offset=f
-        )
-        for f in offsets
-    )
+def tone_capture(preset: dict, **kws) -> ss.specs.SingleToneCapture:
+    """a single_tone capture from `preset` at a 1 MHz offset with no added noise, so
+    that a result attributed to the wrong capture disagrees with its generator
+    oracle; `kws` override both"""
+    fields = {**preset, 'frequency_offset': 1e6, 'snr': None, **kws}
+    return preset_capture('single_tone', **fields)
+
+
+def tone_captures(
+    offsets: Iterable[float], **kws
+) -> tuple[ss.specs.SingleToneCapture, ...]:
+    """a ONE_PORT tone_capture per frequency offset"""
+    return tuple(tone_capture(ONE_PORT, **kws, frequency_offset=f) for f in offsets)
 
 
 def tone_sweep(offsets, *, analysis=IQ_ONLY, **replace):
     """a NO_SINK sweep over tone_captures(offsets)"""
-    return make_sweep(
+    return preset_sweep(
         'single_tone', tone_captures(offsets), analysis=analysis, **replace
     )
 

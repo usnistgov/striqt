@@ -5,6 +5,7 @@ NoSource"""
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from soapy_factories import MCR
 from sweep_strategies import SOURCE as FUNCTION_SOURCE
 
@@ -43,6 +44,10 @@ def _sawtooth_source():
     return _armed(
         sources.SawtoothSource, FUNCTION_SOURCE, ss.specs.SawtoothCapture, period=PERIOD
     )
+
+
+def _no_source():
+    return _armed(sources.NoSource, NO_SOURCE, ss.specs.SensorCapture)
 
 
 def _buffers(count, ports=2):
@@ -84,8 +89,11 @@ def test_consecutive_reads_are_contiguous():
     assert np.array_equal(np.stack(buffers), _expected_sawtooth(-OVERLAPS[0], COUNT))
 
 
-def test_timestamps_advance_by_the_samples_read():
-    source, _ = _sawtooth_source()
+@pytest.mark.parametrize(
+    'armed', [_sawtooth_source, _no_source], ids=['sawtooth', 'no_source']
+)
+def test_timestamps_advance_by_the_samples_read(armed):
+    source, _ = armed()
 
     _, first_ns = source.read(_buffers(COUNT), 0, COUNT)
     _, second_ns = source.read(_buffers(24), 0, 24)
@@ -131,10 +139,6 @@ def test_rows_follow_the_capture_port_order():
 # %% NoSource
 
 
-def _no_source():
-    return _armed(sources.NoSource, NO_SOURCE, ss.specs.SensorCapture)
-
-
 def test_no_source_read_leaves_the_buffers_alone():
     source, _ = _no_source()
     buffers = _buffers(COUNT)
@@ -149,12 +153,3 @@ def test_no_source_identity():
     source, _ = _no_source()
     assert source.get_id() == 'null'
     assert source.get_info().num_rx_ports == NO_SOURCE.num_rx_ports
-
-
-def test_no_source_timestamps_advance_by_the_samples_read():
-    source, _ = _no_source()
-
-    _, first_ns = source.read(_buffers(COUNT), 0, COUNT)
-    _, second_ns = source.read(_buffers(24), 0, 24)
-
-    assert second_ns - first_ns == _sample_period_ns(COUNT)

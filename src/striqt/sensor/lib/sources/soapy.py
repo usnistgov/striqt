@@ -324,9 +324,6 @@ class RxStream:
 
     @sa.util.stopwatch('stream initialization', 'source')
     def setup(self, device: 'SoapySDR.Device', ports: specs.types.Port | None = None):
-        if self.stream is not None and self.ports is not None:
-            return
-
         if self.source_spec.stream_all_rx_ports:
             ports = tuple(range(self.info.num_rx_ports))
         elif ports is not None:
@@ -341,7 +338,7 @@ class RxStream:
         elif ports == self.ports:
             return
         else:
-            self.close()
+            self.close(device)
 
         self.ports = ports
 
@@ -642,7 +639,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             # exceptions
             return
 
-        self.device.__del__ = lambda: None # type: ignore
+        self.device.__del__ = lambda: None  # type: ignore
         device = getattr(self, '_device', None)
         rx_stream = getattr(self, '_rx_stream', None)
 

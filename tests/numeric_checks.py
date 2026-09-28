@@ -219,18 +219,6 @@ def tone_bin(nfft, bin_fraction):
     return round(bin_fraction * (nfft - 1)) - nfft // 2
 
 
-def bin_centered_tone(nfft, k, nseg, dtype=np.complex64):
-    """a unit tone with `k` cycles per segment, over `nseg` segments"""
-    n = np.arange(nseg * nfft)
-    return np.exp(2j * np.pi * k * n / nfft).astype(dtype)
-
-
-def unit_tone(size, fs, f0, dtype=np.complex64):
-    """a unit complex tone at f0 Hz sampled at fs Hz"""
-    t = np.arange(size) / fs
-    return np.exp(2j * np.pi * f0 * t).astype(dtype)
-
-
 def tone_frequency(x, fs):
     """the frequency of the strongest spectral line of x, to within fs/x.size"""
     X = np.fft.fft(np.asarray(x).astype(np.complex128))

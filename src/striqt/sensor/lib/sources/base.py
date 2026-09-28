@@ -11,6 +11,10 @@ from .. import util
 from ..typing import SS, SC, SourceBackend
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
+    from striqt.waveform.lib.typing import DTypeLike
+
     from ..typing import Array, Self
     import striqt.waveform as sw
 
@@ -34,7 +38,7 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
     def close(self):
         pass
 
-    def get_id(self) -> str:  # pyright: ignore
+    def get_id(self) -> str:
         return 'null'
 
     def get_info(self):
@@ -100,15 +104,19 @@ class VirtualSource(SourceBackend[SS, SC]):
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
     ) -> Array:
-        """`count` samples of `port` starting at absolute sample `start_index`.
+        """return `count` samples of `port` starting at absolute sample `start_index`.
 
         Indices are at the source sample rate and are referenced to the corrected
         capture: index 0 is the first sample of the output of `correct_iq`, so
         negative indices are the leading-overlap pre-roll that it trims. A source
-        that has no samples there (a file) fills them with zeros.
+        that has no samples there (a file) fills them with zeros. Subclasses
+        implement this; the base class raises `NotImplementedError`.
+
+        Returns:
+            a 1-D array of `count` samples in the `xp` namespace with dtype `dtype`
         """
         raise NotImplementedError
 

@@ -119,7 +119,7 @@ def register_extra_windows():
     import scipy.signal.windows._windows as _windows
 
     if hasattr(_windows, '_win_equiv'):
-        registry: dict[str, typing.Callable] = _windows._win_equiv  # pyright: ignore
+        registry: dict[str, typing.Callable] = _windows._win_equiv
     else:
         registry: dict[str, typing.Callable] = _windows._WIN_FUNCS  # type: ignore
     registry['acg'] = acg

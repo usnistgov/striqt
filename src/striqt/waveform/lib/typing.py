@@ -9,14 +9,14 @@ CellSSBIndexes = Union[
 
 if typing.TYPE_CHECKING:
     from typing_extensions import TypeAlias, ParamSpec, TypeIs
-    from typing import Any, Callable, Protocol, TypeVar, Union
+    from typing import Any, Callable, Optional, Protocol, TypeVar, Union
     from numbers import Number
     from types import ModuleType
 
     # bury this type checking in here to avoid lengthening the import time of iqwaveform
     # if cupy isn't installed
     try:
-        import cupy as cp  # type: ignore
+        import cupy as cp  # ty: ignore[unresolved-import]
 
         TypeIsCupy = TypeIs[cp.ndarray]
     except ModuleNotFoundError:
@@ -47,7 +47,7 @@ if typing.TYPE_CHECKING:
     WindowSpecType: TypeAlias = Union[str, tuple[str, Any], tuple[str, Any, Any]]
     WindowType: TypeAlias = Union[Array, WindowSpecType]
 
-    XpType: TypeAlias = ModuleType | None
+    XpType: TypeAlias = Optional[ModuleType]
     ArrayBackend: TypeAlias = typing.Literal['numpy', 'cupy']
 
     _ALN = TypeVar('_ALN', bound=Union[ArrayLike, Number])
@@ -57,6 +57,7 @@ if typing.TYPE_CHECKING:
     R = TypeVar('R')
 
     class LRUWrapped(Protocol[P, R]):
+        __name__: str
         __wrapped__: Callable[P, R]
 
         def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...

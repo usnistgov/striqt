@@ -15,7 +15,7 @@ from .. import specs
 from . import util
 
 if TYPE_CHECKING:
-    from striqt.waveform.lib.typing import ArrayBackend
+    from striqt.waveform.lib.typing import ArrayBackend, DTypeLike
     import inspect
     from .typing import (
         AnalysisFunc,
@@ -32,7 +32,6 @@ if TYPE_CHECKING:
         TC,
         TM,
         WrappedAnalysis,
-        WrappedCoord,
     )
 else:
     inspect = util.lazy_import('inspect')
@@ -91,7 +90,7 @@ class KwArgCache:
             *args: P.args,
             **kwargs: P.kwargs,
         ) -> RM:
-            all_kws = dict(kwargs, capture=capture)  # ty: ignore
+            all_kws = dict(kwargs, capture=capture)  # ty: ignore[no-matching-overload]
             match = self.lookup(all_kws)
             if match is not None:
                 return match
@@ -128,7 +127,7 @@ class KwArgCache:
 class CoordInfo(NamedTuple):
     name: str
     func: CoordFunc
-    dtype: str
+    dtype: DTypeLike
     dims: tuple[str, ...] = ()
     attrs: dict = {}
 
@@ -136,12 +135,12 @@ class CoordInfo(NamedTuple):
 class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
     def __call__(
         self,
-        dtype,
+        dtype: DTypeLike,
         *,
         name: str | None = None,
         dims: tuple[str, ...] | None = None,
-        attrs={},
-    ) -> CoordFuncWrapper:
+        attrs: dict = {},
+    ) -> CoordFuncWrapper[TC, TM, R]:
         """register a coordinate factory function.
 
         The factory function should return an iterable containing coordinate
@@ -149,7 +148,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
         """
         kws = locals()
 
-        def wrapper(func: CoordFunc[TC, TM, R]) -> WrappedCoord[TC, TM, R]:
+        def wrapper(func: CoordFunc[TC, TM, R]) -> CoordFunc[TC, TM, R]:
             if isinstance(kws['dims'], str):
                 dims = tuple((kws['dims'],))
             else:
@@ -157,7 +156,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
             if kws['name'] is None:
                 try:
-                    name = func.__name__  # type: ignore
+                    name = func.__name__
                 except AttributeError as ex:
                     raise TypeError(
                         'specify the coordinate name with coordinates(name, ...)'
@@ -179,17 +178,17 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
                 name=name, func=func, dims=dims, dtype=dtype, attrs=attrs
             )
 
-            return func  # type: ignore
+            return func
 
-        return cast('CoordFuncWrapper', wrapper)
+        return wrapper
 
-    def __hash__(self):  # pyright: ignore
+    def __hash__(self) -> int:
         return hash(frozenset(self.items()))
 
 
 class SyncInfo(NamedTuple):
     name: str
-    func: Callable
+    func: WrappedAnalysis
     lag_coord_func: CoordFunc
     meas_spec_type: type[specs.Analysis]
 
@@ -200,8 +199,8 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
         meas_spec_type: type[specs.Analysis],
         *,
         lag_coord_func: CoordFunc,
-        name=None,
-    ) -> AnalysisFuncWrapper:
+        name: str | None = None,
+    ) -> Callable[[WrappedAnalysis[P, RM]], WrappedAnalysis[P, RM]]:
         """register a coordinate factory function.
 
         The proper dimension to evaluate in the data is determined from
@@ -210,26 +209,25 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
         Arguments:
             coord_factory: the coordinate factory used to define the measurement.
         """
-        info_kws = {
-            'name': name,
-            'lag_coord_func': lag_coord_func,
-            'meas_spec_type': meas_spec_type,
-        }
 
         def wrapper(
-            func: AnalysisFunc[P, RM],
+            func: WrappedAnalysis[P, RM],
         ) -> WrappedAnalysis[P, RM]:
-            if info_kws['name'] is None:
-                info_kws['name'] = func.__name__
+            sync_name = func.__name__ if name is None else name
 
-            if info_kws['name'] in self:
+            if sync_name in self:
                 raise TypeError(
-                    f'a signal_trigger named {info_kws["name"]} was already registered'
+                    f'a signal_trigger named {sync_name} was already registered'
                 )
 
-            self[func] = self[info_kws['name']] = SyncInfo(func=func, **info_kws)  # ty: ignore
+            self[func] = self[sync_name] = SyncInfo(
+                name=sync_name,
+                func=func,
+                lag_coord_func=lag_coord_func,
+                meas_spec_type=meas_spec_type,
+            )
 
-            return func  # type: ignore
+            return func
 
         return wrapper
 
@@ -271,7 +269,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
     # a registry is mutated only at import time, so identity is a stable key; dict
     # inherits __eq__, which would otherwise leave it unhashable
-    __hash__ = object.__hash__  # pyright: ignore
+    __hash__ = object.__hash__
 
     caches: dict[AnalysisFunc, list[KwArgCache]]
     parameter_fields: dict[str, 'msgspec.structs.FieldInfo|None']
@@ -293,28 +291,71 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         dtype: str,
         name: str | None = None,
         dims: tuple[str, ...] | str | None = None,
-        coord_factories: Iterable[WrappedCoord] | WrappedCoord | None = None,
+        coord_factories: Iterable[CoordFunc] | CoordFunc | None = None,
         depends: Iterable[Callable] | Callable = [],
         caches: Iterable[KwArgCache] | KwArgCache | None = None,
         prefer_iq_source: PreferIQSource = 'aligned',
-        store_compressed=True,
-        attrs={},
+        store_compressed: bool = True,
+        attrs: dict[str, Any] = {},
         validate: AnalysisValidator | None = None,
         tolerance: AnalysisTolerance | None = None,
-    ) -> AnalysisFuncWrapper:
-        """add decorated `func` and its keyword arguments in the self.tostruct() schema.
+    ) -> AnalysisFuncWrapper[P]:
+        """register the decorated function as the measurement configured by `spec_type`.
 
-        Arguments:
+        Registration mutates this registry when the decorator is applied: `spec_type`
+        becomes a key here and an optional field of the `AnalysisGroup` struct that
+        `tospec()` synthesizes, so the measurement gains a key in the ``analysis:``
+        block of a sweep spec. Each field of `spec_type` is also recorded in
+        `parameter_fields` and `parameter_defaults` for coordinate inference.
+
+        The decorated function is called as ``func(iq, capture, **spec.to_dict())``
+        and returns an array, or an ``(array, attrs)`` tuple, whose axes are `dims`.
+        The wrapper that replaces it accepts ``(iq, capture, as_xarray=True,
+        **kwargs)`` with the fields of `spec_type` as keywords; its `__signature__`
+        and the ``{args}`` placeholder in its docstring are filled from `spec_type`.
+        The wrapper runs `validate` before touching IQ, raising
+        `specs.helpers.SpecValidationError` on a rejected combination, and then
+        returns an `xarray.DataArray` with a leading ``port`` dimension when
+        `as_xarray` is True, a `DelayedDataArray` when it is ``'delayed'``, or the
+        ``(array, attrs)`` pair when it is False.
+
+        Args:
+            spec_type: the `specs.Analysis` subclass whose fields are the keyword
+                arguments of the measurement; one measurement per type
+            dtype: numpy dtype name of the output array
+            name: the output data variable name, or None for the function `__name__`
+            dims: dimension names of the output axes, or None to take them in order
+                from the coordinates that `coord_factories` produce
+            coord_factories: functions registered with `coordinates` that produce the
+                coordinate values along `dims` from ``(capture, spec)``
+            depends: measurements whose intermediate this one reuses; recorded on
+                the `AnalysisInfo` entry and not otherwise consumed
+            caches: `KwArgCache` instances shared with other measurements, which
+                `cache_context` scopes to one capture
+            prefer_iq_source: the stage of the acquired IQ handed to the function;
+                ``'aligned'`` falls back to ``'pre_align'`` when no trigger ran
+            store_compressed: False to store the output uncompressed in zarr
+            attrs: attrs of the output `xarray.DataArray`; the spec fields and any
+                attrs returned by the function take precedence
             validate: checks the (capture, spec) combination without touching IQ, so
                 that a sweep can reject a bad combination before it acquires. The
                 return value is ignored here, but by convention it is the derived
-                sizing that `func` consumes, so the arithmetic has one home; such a
-                validator is named for what it returns (`validated_*`)
+                sizing that the measurement consumes, so the arithmetic has one
+                home; such a validator is named for what it returns (`validated_*`)
             tolerance: derives the roundoff error budget of the output from the
                 (capture, spec) combination without touching IQ, as a
                 `specs.Tolerance`, so that a test or a consumer can decide how
-                closely two evaluations of `func` must agree. It is called with the
-                keywords `array_backend` and `input_error` (see `AnalysisTolerance`)
+                closely two evaluations must agree. It is called with the keywords
+                `array_backend` and `input_error` (see `AnalysisTolerance`)
+
+        Returns:
+            a decorator that registers its function and returns the wrapper
+
+        Raises:
+            ValueError: when `spec_type` is already registered
+            TypeError: when a `coord_factories` entry is not callable; from the
+                returned decorator, when `name` is already registered or `caches`
+                holds something other than `KwArgCache` instances
         """
 
         if isinstance(dims, str):
@@ -457,7 +498,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 doc = func.__doc__
             setattr(wrapped, '__doc__', doc)
 
-            return wrapped  # type: ignore
+            # one runtime def with `as_xarray: bool | Literal['delayed']` cannot
+            # satisfy the 3-overload WrappedAnalysis Protocol, so name the type
+            return cast('WrappedAnalysis[P, Measurement]', wrapped)
 
         return wrapper
 
@@ -468,15 +511,22 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     ) -> type[specs.AnalysisGroup]:
         return to_analysis_spec_type(self, base)
 
-    def cache_context(self, capture: specs.Capture, callback: Callable | None = None):
+    def cache_context(
+        self, capture: specs.Capture, callback: Callable | None = None
+    ) -> contextlib.AbstractContextManager[contextlib.ExitStack]:
         return cached_registry_context(self, capture, callback)
 
     def validate(self, capture: specs.Capture, analysis: specs.AnalysisGroup) -> None:
         """check each measurement in `analysis` against `capture` without IQ.
 
+        Measurements left unset in `analysis`, and those registered without a
+        `validate=` function, are skipped. Results are cached on the
+        `specs.AnalysisCapture` projection of `capture`, so captures that differ
+        only in fields the analysis layer ignores share one entry.
+
         Raises:
             specs.helpers.SpecValidationError: on the first invalid combination,
-                with a field path rooted at `$.analysis`
+                with a field path rooted at ``$.analysis``
         """
         _validate_analysis_group(capture, analysis, self)
 
@@ -488,11 +538,20 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         array_backend: ArrayBackend = 'numpy',
         input_error: float = 0.0,
     ) -> dict[str, specs.Tolerance]:
-        """the error budget of each measurement in `analysis` that declares one.
+        """return the roundoff error budget of each measurement in `analysis`.
+
+        Results are cached on the `specs.AnalysisCapture` projection of `capture`.
+
+        Args:
+            array_backend: the array namespace the measurements evaluate in, which
+                selects the roundoff model
+            input_error: relative rms amplitude error already present in the IQ
+                handed to the measurements, as a ratio
 
         Returns:
-            a dict keyed by measurement name; measurements registered without a
-            `tolerance=` function are omitted
+            a dict of `specs.Tolerance` keyed by measurement name; measurements left
+            unset in `analysis` or registered without a `tolerance=` function are
+            omitted
         """
         return _analysis_group_tolerances(
             capture, analysis, self, array_backend, input_error
@@ -693,7 +752,7 @@ def _make_measurement_docstring(spec_cls):
     extra_prepend = {
         'iq': 'input waveform array',
         'capture': 'acquisition specification',
-        'ax_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
+        'as_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
     }
     extra_types = {
         'iq': 'Array',

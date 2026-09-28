@@ -43,6 +43,13 @@ def make_sweep(captures=(), loops=(), adjust_captures=None, **kws):
     return SweepCls(**make_sweep_kws(captures, loops, adjust_captures, **kws))
 
 
+# 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
+SPG = ss.specs.BundledAnalysis.from_dict({
+    'spectrogram': {'window': 'hann', 'frequency_resolution': 1e4}
+})
+RESOLUTION_MSG = 'sample_rate/resolution must be a counting number'
+
+
 port_scalars = st.integers(min_value=0, max_value=3)
 port_tuples = st.lists(port_scalars, min_size=1, max_size=3, unique=True).map(tuple)
 port_values = st.one_of(port_scalars, port_tuples)

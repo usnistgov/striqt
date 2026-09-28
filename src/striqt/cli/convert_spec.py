@@ -82,4 +82,4 @@ def _custom_indent(obj, indent_level=2, current_indent=0):
 
 
 if __name__ == '__main__':
-    cli()  # pyright: ignore
+    cli()

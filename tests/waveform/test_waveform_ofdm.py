@@ -25,10 +25,10 @@ from numeric_checks import (
     reference_power,
     rms,
     tone_frequency,
-    unit_tone,
 )
 from numpy.testing import assert_array_equal
 
+from striqt.analysis import testing
 from striqt.waveform.lib import ofdm
 
 # the analysis default synchronization block sample rate (15.36e6 / 2)
@@ -697,7 +697,7 @@ class TestGet5gSsbIq:
     SIZE = round(4e-3 * 15.36e6)
 
     def _tones(self, f, scales=(1.0, 2.0), dtype=np.complex64):
-        x = unit_tone(self.SIZE, self.FS_IN, f, dtype=dtype)
+        x = testing.tone(None, self.FS_IN, frequency=f, count=self.SIZE, dtype=dtype)[0]
         return np.stack([s * x for s in scales]).astype(dtype)
 
     def _ssb_iq(self, iq, **kws):

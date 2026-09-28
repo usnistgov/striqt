@@ -18,10 +18,10 @@ from . import compute, util
 from .. import specs
 
 if TYPE_CHECKING:
-    from .typing import Array, Self
+    from .typing import Array, Self, TypeAlias
 
     T = TypeVar('T', bound='Controller')
-    PendingController = 'Controller | Event | BaseException'
+    PendingController: TypeAlias = 'Controller | Event | BaseException'
     from . import bindings
 
 
@@ -66,7 +66,7 @@ class lookup:
         """lookup a source ID from a source specification."""
         controller = cls.instance(spec, timeout)
 
-        obj = cls._id[spec]
+        obj: Event | str = cls._id[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
@@ -164,12 +164,12 @@ def read_retries(source: Controller) -> Generator[None]:
 
     initial = source.read_iq
     retry = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retrigger)
-    source.read_iq = retry(source.read_iq)  # ty: ignore
+    source.read_iq = retry(source.read_iq)  # ty: ignore[invalid-assignment]
 
     try:
         yield
     finally:
-        source.read_iq = initial  # ty: ignore
+        source.read_iq = initial  # ty: ignore[invalid-assignment]
 
 
 @dataclasses.dataclass
@@ -212,8 +212,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     _closed: bool = False
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
-    schema: 'specs.Schema[SS, SP, SC, PS, PC]'
-    sensor: 'bindings.SensorBinding[SS, SP, SC]'
+    schema: ClassVar['specs.Schema[Any, Any, Any, Any, Any]']
+    sensor: ClassVar['bindings.SensorBinding[Any, Any, Any]']
 
     @sa.util.stopwatch(
         'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
@@ -227,7 +227,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         config = ControllerConfig(
             init_rx_ports=None, reuse_iq=False, analysis=None, format_path=None
         )
-        spec = self.schema.source(*args, **kwargs)  # type: ignore
+        spec = self.schema.source(*args, **kwargs)
         self._setup(spec, config)
 
     def __init_subclass__(
@@ -274,7 +274,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         sig = inspect.signature(cls.schema.capture).replace(
             return_annotation=cls.schema.capture
         )
-        cls.arm.__signature__ = sig  # ty: ignore
+        cls.arm.__signature__ = sig  # ty: ignore[unresolved-attribute]
         return cls
 
     def _setup(self, spec: SS, config: ControllerConfig) -> 'Self':
@@ -344,7 +344,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
     def arm(self, *args: PC.args, **kwargs: PC.kwargs) -> SC | None:
         assert self._buffers is not None
-        spec = self.schema.capture(*args, **kwargs)  # type: ignore
+        spec = self.schema.capture(*args, **kwargs)
         return self._arm_spec(spec)
 
     @sa.util.stopwatch('arm', 'source', threshold=10e-3)
@@ -380,7 +380,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     def is_open(self, wait=True) -> bool:
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
-    def close(self):
+    def close(self) -> None:
         if self._closed:
             return
         self._closed = True

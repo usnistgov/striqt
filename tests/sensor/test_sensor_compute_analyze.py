@@ -15,7 +15,7 @@ from synthetic_sources import (
     IQ_ONLY,
     SPECTROGRAM,
     acquire_corrected,
-    make_sweep,
+    preset_sweep,
     tone_captures,
 )
 
@@ -24,7 +24,7 @@ import striqt.sensor as ss
 from striqt.sensor.lib import compute
 
 (CAPTURE,) = tone_captures((1e6,))
-SWEEP = make_sweep('single_tone', (CAPTURE,), analysis=IQ_ONLY)
+SWEEP = preset_sweep('single_tone', (CAPTURE,), analysis=IQ_ONLY)
 
 PSS = ss.specs.BundledAnalysis.from_dict({
     'cellular_5g_pss_sync': {'subcarrier_spacing': 30e3}
@@ -105,7 +105,7 @@ def test_a_source_only_capture_field_reuses_the_analysis_caches(stages):
         func.cache_clear()
 
     opts = options(
-        sweep_spec=make_sweep('single_tone', (CAPTURE,), analysis=SPECTROGRAM),
+        sweep_spec=preset_sweep('single_tone', (CAPTURE,), analysis=SPECTROGRAM),
         correction=True,
         as_xarray=True,
     )
@@ -177,9 +177,9 @@ WARMUP_ENABLED = ss.specs.SweepOptions(skip_warmup=False)
 @pytest.mark.parametrize(
     'skip_warmup, sweep',
     [
-        (True, make_sweep('single_tone', (CAPTURE,), options=WARMUP_ENABLED)),
-        (False, make_sweep('single_tone', (CAPTURE,), options=WARMUP_ENABLED)),
-        (False, make_sweep('single_tone', (CAPTURE,))),
+        (True, preset_sweep('single_tone', (CAPTURE,), options=WARMUP_ENABLED)),
+        (False, preset_sweep('single_tone', (CAPTURE,), options=WARMUP_ENABLED)),
+        (False, preset_sweep('single_tone', (CAPTURE,))),
     ],
     ids=['skip_argument', 'numpy_backend', 'skip_option'],
 )
@@ -192,7 +192,7 @@ def test_prepare_compute_runs_a_warmup_sweep_on_cupy(array_backend):
     """the warmup is one capture through iterate_sweep(always_yield=True), so its
     three pipeline stages yield two placeholders and one result"""
     source = SOURCE.replace(array_backend=array_backend)
-    sweep = make_sweep(
+    sweep = preset_sweep(
         'single_tone',
         (CAPTURE,),
         analysis=ANALYSIS,

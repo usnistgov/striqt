@@ -21,7 +21,7 @@ from sweep_strategies import BOLTZMANN_MW, SOURCE, T_REF
 from synthetic_sources import (
     IQ_ONLY,
     expected_corrected,
-    make_sweep,
+    preset_sweep,
     run_in_memory,
     tone_captures,
     tone_sweep,
@@ -93,7 +93,7 @@ def test_loop_cycles_with_an_incrementing_sweep_index():
 
 
 def test_empty_captures_yield_nothing():
-    assert run_in_memory(make_sweep('single_tone', (), analysis=IQ_ONLY)) == []
+    assert run_in_memory(preset_sweep('single_tone', (), analysis=IQ_ONLY)) == []
 
 
 # %% iterate_sweep: yield modes

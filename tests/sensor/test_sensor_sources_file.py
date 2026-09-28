@@ -18,8 +18,8 @@ from synthetic_sources import (
     FILTER_SIZE,
     SCALE_ONLY,
     acquire_corrected,
-    make_capture,
-    make_sweep,
+    preset_capture,
+    preset_sweep,
     run_in_memory,
 )
 
@@ -93,10 +93,10 @@ def zarr_iq_file(tmp_path_factory):
 
     fields = {**SCALE_ONLY, 'duration': FILE_DURATION, 'snr': None}
     captures = [
-        make_capture('single_tone', **fields, frequency_offset=f)
+        preset_capture('single_tone', **fields, frequency_offset=f)
         for f in TONE_FREQUENCIES
     ]
-    ds = xr.concat(run_in_memory(make_sweep('single_tone', captures)), dim='capture')
+    ds = xr.concat(run_in_memory(preset_sweep('single_tone', captures)), dim='capture')
     rows = ds.sizes['capture']
     ds = ds.assign_coords(
         center_frequency=('capture', np.full(rows, CENTER_FREQUENCY)),

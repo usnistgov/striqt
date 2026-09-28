@@ -179,7 +179,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
     """The ticker locator for linearized gamma-distributed survival functions"""
 
     _nbins: int
-    axis: _axis.Axis  # pyright: ignore
+    axis: _axis.Axis
 
     # avoid removing these quantiles when selecting ticks
     PREFER_TICKS = [

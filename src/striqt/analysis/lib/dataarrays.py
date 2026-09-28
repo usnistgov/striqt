@@ -192,10 +192,12 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
 
 
 def _restore_padded_coord_dtype(da: 'xr.DataArray', info: register.CoordInfo) -> None:
-    """undo the integer dtype promotion caused by the nan fill in `xr.DataArray.pad`.
+    """restore the integer or bool dtype declared for coordinate `info.name` of `da`.
 
-    The padded region spans the whole coordinate and is overwritten by the
-    coordinate factory, so the fill values themselves need not survive.
+    `xr.DataArray.pad` fills with nan and so promotes integer and bool coordinates
+    to float. The coordinate is replaced in place with zeros of `info.dtype`, since
+    `build_dataarray` overwrites every element from the coordinate factory afterward.
+    Coordinates of other dtypes, or already of `info.dtype`, are left untouched.
     """
 
     dtype = np.dtype(info.dtype)

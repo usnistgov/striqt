@@ -262,12 +262,16 @@ def design_resampler(
 
 
 def validate_fir_band(capture: specs.SensorCapture) -> None:
-    """raise what `scipy.signal.firls` rejects inside `design_fir_lpf` for `capture`:
-    every band needs a positive width, so the transition band must fit strictly
-    inside (0, fs/2)
+    """raise what `scipy.signal.firls` rejects inside `design_fir_lpf` for `capture`.
+
+    Every band needs a positive width, so the `FIR_TRANSITION_BW` (in Hz) transition
+    band centered on ``analysis_bandwidth / 2`` must lie strictly inside
+    ``(0, sample_rate / 2)``.
 
     Raises:
-        ValueError: on `capture.analysis_bandwidth`, in capture vocabulary
+        ValueError: the passband below the transition band is empty, or the
+            transition band reaches ``sample_rate / 2``. The message names
+            `analysis_bandwidth` and `sample_rate` rather than the filter bands.
     """
     bw = capture.analysis_bandwidth
     fs = capture.sample_rate
@@ -287,11 +291,15 @@ def validate_fir_band(capture: specs.SensorCapture) -> None:
 
 
 def validate_oaresample_shift(design: sw.ResamplerDesign) -> None:
-    """raise what `striqt.waveform.oaresample` rejects in `correct_iq` for the LO
-    offset of `design`
+    """raise what `striqt.waveform.oaresample` rejects in `correct_iq` for `design`.
+
+    A zero ``lo_offset`` always passes.
 
     Raises:
-        ValueError: on `capture.lo_shift`, in capture vocabulary
+        ValueError: ``lo_offset`` is nonzero while upsampling, is not a multiple of
+            the resampler's FFT bin spacing (in Hz, set by ``fs_sdr`` and ``nfft``),
+            or shifts the output passband outside the source bandwidth. The message
+            names `lo_shift` rather than the resampler design.
     """
     shift = design['lo_offset']
     nfft = design['nfft']

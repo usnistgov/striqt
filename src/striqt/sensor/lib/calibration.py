@@ -19,7 +19,9 @@ if TYPE_CHECKING:
 SS = TypeVar('SS', bound='specs.SoapySource')
 
 
-def compute_y_factor_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
+def compute_y_factor_corrections(
+    dataset: 'xr.Dataset', Tref: float = 290.0
+) -> 'xr.Dataset':
     return _y_factor_power_corrections(dataset, Tref=Tref)
 
 
@@ -248,6 +250,8 @@ def _calibration_peripherals_cls(
 
     class cls(peripherals.CalibrationPeripheralsBase):
         _last_state = (None, None)
+        ext: Peripherals[Any, Any]
+        cal: peripherals.CalibrationPeripheralsBase[Any, Any, Any]
 
         def __init__(self, spec):
             self.ext = ext(spec)
@@ -335,7 +339,7 @@ def bind_manual_yfactor_calibration(
 
     cal_schema = specs.Schema(
         source=ctrl_cls.schema.source,
-        capture=capture_spec_cls,  # pyright: ignore
+        capture=capture_spec_cls,
         peripherals=ctrl_cls.schema.peripherals,
         init_like=ctrl_cls.schema.init_like,
         arm_like=ctrl_cls.schema.arm_like,
@@ -486,7 +490,7 @@ def _lookup_calibration_var(
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
-        exact_matches = {
+        exact_matches: dict[str, Any] = {
             port_key: c.port,
             'gain': c.gain,
             'lo_shift': c.lo_shift,
@@ -496,7 +500,7 @@ def _lookup_calibration_var(
 
         try:
             # there is still one more dim to drop
-            sel = cal_var.sel(**exact_matches, drop=True)  # ty: ignore
+            sel = cal_var.sel(**exact_matches, drop=True)
         except KeyError:
             misses = _describe_missing_data(cal_var, exact_matches)
             exc = KeyError(f'calibration is not available for this capture: {misses}')

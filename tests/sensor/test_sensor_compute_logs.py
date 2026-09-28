@@ -7,7 +7,7 @@ import logging
 
 import pytest
 from soapy_factories import soapy_capture
-from synthetic_sources import SCALE_ONLY, make_capture, make_sweep
+from synthetic_sources import SCALE_ONLY, preset_capture, preset_sweep
 
 import striqt.analysis as sa
 import striqt.sensor as ss
@@ -23,8 +23,8 @@ HIGH_GAIN = soapy_capture(port=0, center_frequency=2e9, gain=30.0)
 SWEEP = AIR.sensor.sweep_spec_cls(
     source=AIR.schema.source(), captures=(CAPTURE, HIGH_GAIN)
 )
-TONE = make_capture('single_tone', **SCALE_ONLY)
-TONE_SWEEP = make_sweep('single_tone', (TONE,))
+TONE = preset_capture('single_tone', **SCALE_ONLY)
+TONE_SWEEP = preset_sweep('single_tone', (TONE,))
 
 ADC_OVERLOAD = 'adc overload on port 0 (1000 MHz)'
 IF_OVERLOAD = 'if overload at port 0 (onto 2000 MHz)'

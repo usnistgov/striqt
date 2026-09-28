@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 import threading
 from types import ModuleType
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING, cast
 
 
 _lazy_import_locks = collections.defaultdict(threading.RLock)
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from .typing import LRUWrapped, P, R
 
     try:
-        import cupy as cp  # type: ignore
+        import cupy as cp  # ty: ignore[unresolved-import]
     except ModuleNotFoundError:
         cp = None
 
@@ -86,7 +86,7 @@ def lru_cache(
     def wrap(wrapee: Callable[P, R]) -> LRUWrapped[P, R]:
         wrapped = func(wrapee)
         _caches[wrapee] = wrapped
-        return wrapped  # type: ignore
+        return cast('LRUWrapped[P, R]', wrapped)
 
     return wrap
 
@@ -105,13 +105,14 @@ _cache_shelf_disabled = False
 
 
 def _discard_cache_shelf(ex: BaseException) -> None:
-    """stop using the disk cache in this process, and delete its files.
+    """disable the disk cache for this process and delete its files.
 
     A fault in the shelf must never fail a call that has a working uncached path,
     and it does happen: the macOS dbm backend corrupts once the cache evicts, and
     the `UnicodeDecodeError` it then raises subclasses `ValueError`, so letting it
     propagate gets a machine-local fault mistaken for a bad argument several layers
-    up. The files hold nothing that cannot be recomputed.
+    up. The files hold nothing that cannot be recomputed. A `UserWarning` names the
+    deleted files and `ex`.
     """
     global _cache_shelf_disabled
     import glob
@@ -147,7 +148,7 @@ def _get_cache_shelf():
         shelf = shelve.open(filename, writeback=True)
 
     # sync is forced on each operation already
-    shelf.__del__ = lambda: None  # ty: ignore
+    shelf.__del__ = lambda: None  # ty: ignore[invalid-assignment]
     return shelf, cache_lock
 
 
@@ -172,23 +173,24 @@ def _make_lru_key(func, args, kwargs) -> str:
 
 
 def persistent_cache(
-    maxsize=128,
-) -> Callable[[Callable[P, R]], LRUWrapped[P, R]]:
-    """memoize a function's results in a shelf that survives across processes.
+    maxsize: int = 128,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    """memoize a function's results in a shelf on disk that survives across processes.
 
     The shelf holds at most `maxsize` entries; which entry is evicted past that
     limit is unspecified, since the access order is rebuilt from the shelf's key
-    iteration on every call rather than tracked. This is normally stacked under
-    `lru_cache`, which supplies the in-memory LRU behaviour.
+    iteration on every call rather than tracked. `get_window` and `design_fir_lpf`
+    stack it under `lru_cache`, which supplies the in-memory LRU behavior.
 
-    The cache is best-effort: a fault reading or writing the shelf discards it and
-    the call proceeds uncached, so only the wrapped function's own exceptions ever
-    reach its caller.
+    The cache is best-effort: a fault reading or writing the shelf (an unpicklable
+    result included) disables it for the process, deletes its files
+    (`_discard_cache_shelf`) and lets the call proceed uncached, so only the wrapped
+    function's own exceptions reach its caller.
     """
 
-    def decorator(func):
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             if _cache_shelf_disabled:
                 return func(*args, **kwargs)
 
@@ -238,7 +240,7 @@ def persistent_cache(
         wrapper.__wrapped__ = func
         return wrapper
 
-    return decorator  # pyright: ignore
+    return decorator
 
 
 def clear_caches():

@@ -44,7 +44,7 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
         DirectoryStore = zarr.storage.DirectoryStore  # type: ignore
     else:
         StoreBase = zarr.abc.store.Store  # type: ignore
-        DirectoryStore = zarr.storage.LocalStore  # pyright: ignore
+        DirectoryStore = zarr.storage.LocalStore
 
     if isinstance(target, StoreBase):
         store = target
@@ -173,9 +173,22 @@ def load_attrs(path: str | Path) -> dict[str, typing.Any]:
         return array.attrs.asdict()
 
 
+_S = typing.TypeVar('_S', bound=specs.SpecBase)
+
+
+@typing.overload
+def decode_from_yaml_file(
+    path: str | Path, *, type: type[dict] = ...
+) -> dict[str, typing.Any]: ...
+
+
+@typing.overload
+def decode_from_yaml_file(path: str | Path, *, type: type[_S]) -> _S: ...
+
+
 def decode_from_yaml_file(
     path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
-):
+) -> dict[str, typing.Any] | specs.SpecBase:
     """Deserialize an object from YAML.
 
     Parameters
@@ -706,10 +719,10 @@ def _choose_chunk_sizes(
 def _build_encodings_zarr_v3(
     data, registry: register.AnalysisRegistry, compression=True
 ):
-    if isinstance(compression, zarr.core.codec_pipeline.Codec):  # pyright: ignore
+    if isinstance(compression, zarr.core.codec_pipeline.Codec):
         compressors = [compression]
     elif compression:
-        from zarr import codecs  # pyright: ignore
+        from zarr import codecs
 
         compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle='shuffle')]
     else:
@@ -799,7 +812,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
 
     def __enter__(self):
         self._lock.acquire()
-        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)  # pyright: ignore
+        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)
 
     def __exit__(self, *args):
         self._lock.release()
@@ -817,7 +830,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
     def pop_include_path(self):
         self.nested_paths.pop()
 
-    def __call__(self, loader: yaml.Loader, node: yaml.Node):
+    def __call__(self, loader: _YAMLFrozenLoader, node: yaml.Node):
         if not node.tag.startswith('!include'):
             raise ValueError(f'unknown tag {node.tag!r}')
 

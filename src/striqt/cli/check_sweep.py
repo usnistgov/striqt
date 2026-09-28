@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import typing
+
 import click
 
 from striqt.sensor.lib import calibration, resources
@@ -95,7 +97,9 @@ def run(yaml_path: str):
                 ('Off-peak (dBc)', 'peak'): None if off is None else off.peak,
             }
         table = pd.DataFrame.from_dict(rows, orient='index')
-        table.columns = pd.MultiIndex.from_tuples(table.columns)
+        table.columns = pd.MultiIndex.from_tuples(
+            typing.cast('typing.Iterable[tuple[str, str]]', table.columns)
+        )
         print(table.to_string(float_format='{:.4g}'.format))
 
         print('\n\nUnique capture field coordinates in output:')

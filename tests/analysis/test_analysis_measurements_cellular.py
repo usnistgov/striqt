@@ -25,12 +25,15 @@ import msgspec
 import numpy as np
 import pytest
 from analysis_strategies import (
+    CELL_FRAME,
+    CELL_FS,
     POWER_BINS,
     SSB_SPECTROGRAM_FS,
     SSB_SPECTROGRAM_PERIODICITY,
     SSB_SPECTROGRAM_SAMPLE_RATE,
     SSB_SPECTROGRAM_SCS,
     SSB_SPECTROGRAM_SPEC,
+    capture_of,
     registered_tolerance,
     ssb_spectrogram_capture,
 )
@@ -41,11 +44,9 @@ import striqt.waveform as sw
 from striqt.analysis import testing
 from striqt.analysis.measurements import cellular
 
-FS = 3.84e6
-FRAME = round(10e-3 * FS)
-DURATION = 2 * FRAME / FS
+DURATION = 2 * CELL_FRAME / CELL_FS
 SCS = 30e3
-SSB = {'subcarrier_spacing': SCS, 'sample_rate': FS, 'symbol_indexes': 'c'}
+SSB = {'subcarrier_spacing': SCS, 'sample_rate': CELL_FS, 'symbol_indexes': 'c'}
 
 SSB_SPEC_TYPES = [
     sa.specs.Cellular5GNRPSSCorrelator,
@@ -56,8 +57,10 @@ SSB_SPEC_TYPES = [
 SSB_IDS = [cls.__name__ for cls in SSB_SPEC_TYPES]
 
 
-def capture(samples=2 * FRAME, sample_rate=FS) -> sa.specs.Capture:
-    return sa.specs.Capture(duration=samples / sample_rate, sample_rate=sample_rate)
+def capture(
+    samples: int = 2 * CELL_FRAME, sample_rate: float = CELL_FS
+) -> sa.specs.Capture:
+    return capture_of(samples, sample_rate)
 
 
 def measure(spec, cap: sa.specs.Capture):
@@ -79,7 +82,7 @@ def test_ssb_measurements_share_one_validator(cls):
 
 SSB_REJECTED = {
     'odd_sample_count': (
-        capture(2 * FRAME + 1),
+        capture(2 * CELL_FRAME + 1),
         {},
         'the capture cannot be resampled to the synchronization block: the input length must be even',
     ),
@@ -91,7 +94,11 @@ SSB_REJECTED = {
     ),
     'frequency_offset_shifts_past_the_band': (
         capture(),
-        {'subcarrier_spacing': 15e3, 'sample_rate': FS / 2, 'frequency_offset': FS / 2},
+        {
+            'subcarrier_spacing': 15e3,
+            'sample_rate': CELL_FS / 2,
+            'frequency_offset': CELL_FS / 2,
+        },
         'the capture cannot be resampled to the synchronization block: shift is too large',
     ),
     'frequency_offset_without_downsampling': (
@@ -101,13 +108,13 @@ SSB_REJECTED = {
         'the capture cannot be resampled to the synchronization block',
     ),
     'partial_frame': (
-        capture(2 * FRAME + FRAME // 2),
+        capture(2 * CELL_FRAME + CELL_FRAME // 2),
         {},
         'duration must hold whole 10 ms frames for the correlator',
     ),
     'block_shorter_than_a_frame': (
-        capture(FRAME, sample_rate=2 * FS),
-        {'sample_rate': FS / 2, 'subcarrier_spacing': 15e3},
+        capture(CELL_FRAME, sample_rate=2 * CELL_FS),
+        {'sample_rate': CELL_FS / 2, 'subcarrier_spacing': 15e3},
         'duration must hold whole 10 ms frames for the correlator',
     ),
 }
@@ -132,7 +139,9 @@ def test_ssb_layout_the_resampler_cannot_produce_is_rejected(cls, case):
 def test_ssb_downsampled_and_shifted_block_runs(cls):
     """the accepted counterpart of the rejections above: a 2:1 downsample with a
     frequency offset on the 50 Hz resampler grid reaches the correlator"""
-    spec = cls(subcarrier_spacing=15e3, sample_rate=FS / 2, frequency_offset=100 * 50.0)
+    spec = cls(
+        subcarrier_spacing=15e3, sample_rate=CELL_FS / 2, frequency_offset=100 * 50.0
+    )
     data, _ = measure(spec, capture())
     assert np.all(np.isfinite(data))
 
@@ -209,7 +218,7 @@ def test_autocorrelation_guards_a_waveform_shorter_than_its_capture():
     spec = sa.specs.CellularCyclicAutocorrelator(
         subcarrier_spacings=SCS, frame_range=(0, 2)
     )
-    short_iq = testing.noise(DURATION / 2, FS, noise_psd=1 / FS)
+    short_iq = testing.noise(DURATION / 2, CELL_FS, noise_psd=1 / CELL_FS)
 
     with pytest.raises(ValueError, match=r'lies past the .* samples of the waveform'):
         body(short_iq, capture(), **spec.to_dict())

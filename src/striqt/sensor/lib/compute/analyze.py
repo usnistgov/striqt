@@ -163,7 +163,7 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
             # this order is important on some versions/platforms!
             # https://github.com/numba/numba/issues/6131
             np.__version__  # reify
-            import numba.cuda  # pyright: ignore
+            import numba.cuda
             import cupy  # type: ignore
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):

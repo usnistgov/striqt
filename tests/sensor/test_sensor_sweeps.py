@@ -12,8 +12,10 @@ about -0.002 dB, with -33 dB spilling into the neighbouring block.
 
 from __future__ import annotations
 
+import ast
 import math
 import os
+import re
 from fractions import Fraction
 
 import numpy as np
@@ -36,8 +38,8 @@ from synthetic_sources import (
     RESAMPLE_FILTER,
     expected_corrected,
     fs_sdr,
-    make_capture,
-    make_sweep,
+    preset_capture,
+    preset_sweep,
     run_in_memory,
 )
 
@@ -243,6 +245,163 @@ def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
         assert len(fields) == 5 and all(math.isfinite(float(f)) for f in fields), name
 
 
+def test_check_sweep_budgets_the_looped_field_over_its_adjustment(
+    write_yaml, monkeypatch, capsys
+):
+    """a loop point outranks an `adjust_captures` value for the same field
+    (`loop_captures`, pass 3), so the printed budget includes the resampler FFTs of
+    the looped `host_resample: true` rather than the adjustment's `false`"""
+    path = write_yaml(
+        'looped-host-resample.yaml',
+        """
+        sensor_binding: single_tone
+        source:
+          master_clock_rate: 125e6
+          num_rx_ports: 2
+          array_backend: numpy
+        captures:
+          - port: [0, 1]
+            sample_rate: 6.144e6
+            duration: 1e-3
+            analysis_bandwidth: 5e6
+        loops:
+          - kind: list
+            field: host_resample
+            values: [true]
+        adjust_captures:
+          defaults:
+            host_resample: false
+        analysis:
+          iq_waveform: {}
+        sink:
+          path: out.zarr.zip
+        """,
+    )
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(path))
+
+    out = capsys.readouterr().out
+    id_line = re.search(r'^source_id: (.*)$', out, re.MULTILINE)
+    source_id = ast.literal_eval(id_line[1])
+    block = out.split('Numerical tolerance')[1].split('\n\n')[0]
+    (row,) = [r for r in block.splitlines()[4:] if r.startswith('iq_waveform')]
+    spec = ss.read_yaml_spec(path)
+
+    def rendered(captures):
+        budget = ss.lib.compute.worst_case_tolerances([
+            (c, capture_tolerances(c, spec.source, spec.analysis)) for c in captures
+        ])
+        tol = budget['iq_waveform']
+        off = tol.off_peak_dBc
+        values = (tol.rtol, tol.on_peak.rms, tol.on_peak.peak) + (
+            (None, None) if off is None else (off.rms, off.peak)
+        )
+        return ['NaN' if v is None else f'{v:.4g}' for v in values]
+
+    captures = ss.specs.helpers.loop_captures(spec, source_id=source_id)
+    adjusted = captures[0].replace(**spec.adjust_captures['defaults'])
+    # the adjusted capture must render differently for the check to discriminate
+    assert rendered([adjusted]) != rendered(captures)
+    assert row.split()[1:] == rendered(captures)
+
+
+def test_check_sweep_formats_the_default_sink_path(write_yaml, monkeypatch, capsys):
+    """a spec with no `sink:` block takes the `Sink.path` default, whose format
+    fields must all be ones that `get_path_fields` supplies"""
+    path = write_yaml(
+        'no-sink-block.yaml',
+        """
+        sensor_binding: single_tone
+        source:
+          master_clock_rate: 125e6
+          num_rx_ports: 1
+          array_backend: numpy
+        captures:
+          - port: 0
+            sample_rate: 6.144e6
+            duration: 1e-3
+        analysis:
+          iq_waveform: {}
+        """,
+    )
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(path))
+
+    out = capsys.readouterr().out
+    block = re.search(
+        r'^sink\.path:\n  Input: +(.*)\n  Formatted: +(.*)$', out, re.MULTILINE
+    )
+    assert block is not None, out
+    template, formatted = (ast.literal_eval(v) for v in block.groups())
+    assert set(ss.specs.helpers.get_format_fields(template)) <= {
+        'spec_name',
+        'start_time',
+    }
+    assert formatted.startswith(path.stem + '-')
+    assert '{' not in formatted
+
+
+def test_check_sweep_lists_the_looped_field_over_its_adjustment(
+    write_yaml, monkeypatch, capsys
+):
+    """the coordinates block follows `loop_captures`: a field that is both looped and
+    adjusted lists the loop's values in loop order, while an adjusted field that no
+    loop touches lists the adjusted value"""
+    path = write_yaml(
+        'looped-and-adjusted.yaml',
+        """
+        sensor_binding: single_tone
+        source:
+          master_clock_rate: 125e6
+          num_rx_ports: 1
+          array_backend: numpy
+        captures:
+          - port: 0
+            sample_rate: 6.144e6
+            duration: 1e-3
+            analysis_bandwidth: 5e6
+        loops:
+          - kind: list
+            field: host_resample
+            values: [true, false]
+        adjust_captures:
+          defaults:
+            host_resample: false
+            snr: 5.0
+        analysis:
+          iq_waveform: {}
+        sink:
+          path: out.zarr.zip
+        """,
+    )
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(path))
+
+    out = capsys.readouterr().out
+    id_line = re.search(r'^source_id: (.*)$', out, re.MULTILINE)
+    source_id = ast.literal_eval(id_line[1])
+    # the title, then a rule, then the entries of a pformat dict without its braces
+    _, _, *entries = out.split('Unique capture field coordinates in output:')[1].split(
+        '\n'
+    )
+    labels = ast.literal_eval('{' + '\n'.join(entries) + '}')
+
+    spec = ss.read_yaml_spec(path)
+    captures = ss.specs.helpers.loop_captures(spec, source_id=source_id)
+    looped = tuple(dict.fromkeys(c.host_resample for c in captures))
+    assert looped == (True, False)
+    assert labels == {
+        'host_resample': looped,
+        'snr': (spec.adjust_captures['defaults']['snr'],),
+    }
+
+
 # %% in-memory sweeps against the generators
 
 FS = RESAMPLE_FILTER['sample_rate']
@@ -261,16 +420,16 @@ FILTER_ONLY_IMPULSE_TIME = (
 # resampler's 6250-point FFT at 6.25 MS/s, so the tone passes without COLA ripple
 FIDELITY_CAPTURES = {
     'single_tone': (
-        make_capture('single_tone', frequency_offset=-1e6, snr=None),
-        make_capture('single_tone', frequency_offset=1.6e6, snr=None),
+        preset_capture('single_tone', frequency_offset=-1e6, snr=None),
+        preset_capture('single_tone', frequency_offset=1.6e6, snr=None),
     ),
-    'noise': (make_capture('noise', noise_psd=1e-17),),
+    'noise': (preset_capture('noise', noise_psd=1e-17),),
     'sawtooth': (
-        make_capture('sawtooth', period=RESAMPLE_FILTER['duration'], power=0.0),
+        preset_capture('sawtooth', period=RESAMPLE_FILTER['duration'], power=0.0),
     ),
     'dirac_delta': (
-        make_capture('dirac_delta', time=IMPULSE_TIME, power=0.0),
-        make_capture(
+        preset_capture('dirac_delta', time=IMPULSE_TIME, power=0.0),
+        preset_capture(
             'dirac_delta', **FILTER_ONLY, time=FILTER_ONLY_IMPULSE_TIME, power=-3.0
         ),
     ),
@@ -386,7 +545,7 @@ CHECKS = {
 @pytest.mark.parametrize('binding', list(CHECKS), ids=list(CHECKS))
 def test_in_memory_fidelity(binding, subtests):
     captures = FIDELITY_CAPTURES[binding]
-    datasets = run_in_memory(make_sweep(binding, captures))
+    datasets = run_in_memory(preset_sweep(binding, captures))
     assert len(datasets) == len(captures)
     for i, (capture, ds) in enumerate(zip(captures, datasets)):
         assert ds.sizes['capture'] == len(ports_of(capture.port))
@@ -400,9 +559,9 @@ def test_in_memory_fidelity(binding, subtests):
 def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
     """the cupy signal path agrees with numpy to within the roundoff of both"""
     captures = FIDELITY_CAPTURES[binding]
-    reference = run_in_memory(make_sweep(binding, captures))
+    reference = run_in_memory(preset_sweep(binding, captures))
     source = SOURCE.replace(array_backend=array_backend)
-    datasets = run_in_memory(make_sweep(binding, captures, source=source))
+    datasets = run_in_memory(preset_sweep(binding, captures, source=source))
     backends = ('numpy', 'cupy')
     for i, (capture, ds, ref) in enumerate(zip(captures, datasets, reference)):
         budget = {

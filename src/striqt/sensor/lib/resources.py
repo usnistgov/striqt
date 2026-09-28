@@ -7,7 +7,7 @@ import functools
 import importlib
 import os
 import sys
-from typing import Any, cast, ContextManager, Generic, TYPE_CHECKING
+from typing import Any, Callable, cast, ContextManager, Generic, TYPE_CHECKING
 from pathlib import Path
 
 import typing_extensions
@@ -20,7 +20,7 @@ from .. import specs
 import striqt.analysis as sa
 
 if TYPE_CHECKING:
-    from .typing import PassThroughWrapper, SourceOpenCallback
+    from .typing import P, PassThroughWrapper, R, SourceOpenCallback
     import xarray as xr
 
     # python < 3.10 workaround
@@ -76,7 +76,7 @@ else:
         format_path: specs.helpers.PathFormatter | None
 
 
-def _timeit(desc: str = '') -> PassThroughWrapper:
+def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
     return sa.util.stopwatch(
         desc, 'sweep', threshold=0.5, logger_level=util.logging.INFO
     )
@@ -112,7 +112,9 @@ class ConnectionManager(
         super().__init__()
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
-    def __enter__(self):  # pyright: ignore
+    # ExitStack is inherited for its callback registry, but `with` yields the
+    # resources it collected rather than the stack itself
+    def __enter__(self) -> Resources[SS, SP, SC, PS, PC]:  # ty: ignore[invalid-method-override]
         return self.resources
 
     @util.cached_property
@@ -158,7 +160,9 @@ def _open_devices(
         with exc.defer():
             if peripherals is not None:
                 peripherals = conn._resources['peripherals'] = peripherals.result()
-                conn.enter_context(peripherals)
+                # ty 0.0.81 does not accept a Protocol with __enter__/__exit__ as an
+                # AbstractContextManager
+                conn.enter_context(peripherals)  # ty: ignore[invalid-argument-type]
 
     # the peripherals wait until both the source and the
     if peripherals is not None:
@@ -221,8 +225,11 @@ def open_resources(
                 raise
 
         if spec.source.calibration is not None:
+            read_calibration = cast(
+                'Callable[..., xr.Dataset | None]', io.read_calibration
+            )
             cal = util.threadpool.submit(
-                _timeit('read calibration')(io.read_calibration),
+                _timeit('read calibration')(read_calibration),
                 spec.source.calibration,
                 fmt,
             )

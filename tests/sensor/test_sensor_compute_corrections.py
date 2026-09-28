@@ -37,7 +37,7 @@ from synthetic_sources import (
     expected_raw,
     fs_sdr,
     generator,
-    make_capture,
+    preset_capture,
 )
 
 import striqt.sensor as ss
@@ -153,7 +153,7 @@ def assert_impulse_at(x, capture, time):
 
 @PRESET_PARAMS
 def test_impulse_lands_on_its_output_sample(preset, array_backend, subtests):
-    capture = make_capture('dirac_delta', **preset, time=IMPULSE_TIME)
+    capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
     stages = acquire_corrected('dirac_delta', capture, array_backend=array_backend)
     fs = capture.sample_rate
 
@@ -171,7 +171,7 @@ def test_output_is_the_generator_from_index_zero(preset, array_backend):
     """A sawtooth rather than a tone, so that a trim that is off by any number of
     samples shows. The resample presets are left to the impulse test, because a
     ramp's discontinuities ring through a brick-wall resampler."""
-    capture = make_capture('sawtooth', **preset, period=1e-4)
+    capture = preset_capture('sawtooth', **preset, period=1e-4)
     stages = acquire_corrected('sawtooth', capture, array_backend=array_backend)
     expected = expected_corrected('sawtooth', capture)
 
@@ -181,7 +181,7 @@ def test_output_is_the_generator_from_index_zero(preset, array_backend):
 
 @PRESET_PARAMS
 def test_tone_phase_matches_the_generator(preset, array_backend):
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone', **preset, frequency_offset=TONE_FREQUENCY, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
@@ -197,7 +197,7 @@ def test_tone_phase_matches_the_generator(preset, array_backend):
 
 @PRESET_PARAMS
 def test_impulse_level_through_the_stages(preset, array_backend, subtests):
-    capture = make_capture(
+    capture = preset_capture(
         'dirac_delta', **preset, time=IMPULSE_TIME, power=IMPULSE_POWER_DB
     )
     stages = acquire_corrected('dirac_delta', capture, array_backend=array_backend)
@@ -231,7 +231,7 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
 
 @PRESET_PARAMS
 def test_tone_level_and_frequency(preset, array_backend, subtests):
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone', **preset, frequency_offset=TONE_FREQUENCY, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
@@ -253,7 +253,7 @@ def test_tone_level_and_frequency(preset, array_backend, subtests):
 )
 def test_voltage_scale(preset, voltage_scale, array_backend):
     """powers of two, so the scaling itself is exact and only the resample rounds"""
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone', **preset, frequency_offset=TONE_FREQUENCY, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
@@ -273,7 +273,7 @@ def test_voltage_scale(preset, voltage_scale, array_backend):
 
 @CHEAP_PRESETS
 def test_conjugate_flips_only_the_flagged_port(preset, array_backend):
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone', **preset, frequency_offset=TONE_FREQUENCY, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
@@ -287,7 +287,7 @@ def test_conjugate_flips_only_the_flagged_port(preset, array_backend):
 
 def test_ignore_highside_lo_bypasses_the_conjugate(corrections_flags):
     corrections_flags(ignore_highside_lo=True)
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
     )
     stages = acquire_corrected('single_tone', capture)
@@ -301,7 +301,7 @@ def test_ignore_highside_lo_bypasses_the_conjugate(corrections_flags):
 def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
     """the scale-only path hands the acquisition buffer itself on when voltage_scale
     is 1, so an in-place conjugate there would corrupt a reused acquisition"""
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
@@ -325,7 +325,7 @@ def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
 def test_analysis_filter_passband(preset, frequency, passes, array_backend):
     """pre_filter is the resampled tone either way; pre_align keeps it, with no
     delay, only inside analysis_bandwidth"""
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone', **preset, frequency_offset=frequency, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
@@ -343,7 +343,7 @@ def test_analysis_filter_passband(preset, frequency, passes, array_backend):
 
 @CHEAP_PRESETS
 def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
-    capture = make_capture('dirac_delta', **preset, time=IMPULSE_TIME)
+    capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
     trigger = FakeTrigger(TRIGGER_LAGS)
     raw = _build_iq_for_trigger('dirac_delta', capture, trigger, xp)
     fs = capture.sample_rate
@@ -391,7 +391,7 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
 @RESAMPLED_PRESETS
 def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags):
     corrections_flags(use_oaresample=True)
-    capture = make_capture('dirac_delta', **preset, time=IMPULSE_TIME)
+    capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
 
     corrected = ss.correct_iq(_build_iq('dirac_delta', capture, overlaps))
@@ -411,7 +411,7 @@ def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags
 @RESAMPLED_PRESETS
 def test_oaresample_acquisition(preset, corrections_flags):
     corrections_flags(use_oaresample=True)
-    capture = make_capture('dirac_delta', **preset, time=IMPULSE_TIME)
+    capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
 
     stages = acquire_corrected('dirac_delta', capture)
 
@@ -425,7 +425,7 @@ def test_oaresample_acquisition(preset, corrections_flags):
 def test_lo_shift_design_moves_the_lo_out_of_band(lo_shift):
     """the LO leakage sits at 0 Hz in the radio's baseband, so the shifted passband
     must exclude it while still fitting the radio's Nyquist band"""
-    capture = make_capture('single_tone', **LO_SHIFT_CAPTURE, lo_shift=lo_shift)
+    capture = preset_capture('single_tone', **LO_SHIFT_CAPTURE, lo_shift=lo_shift)
     design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
     half_bw = capture.analysis_bandwidth / 2
 
@@ -445,7 +445,7 @@ def test_lo_shift_design_moves_the_lo_out_of_band(lo_shift):
     'lo_shift, frequency', [('left', 1e6), ('right', -1e6)], ids=['left', 'right']
 )
 def test_lo_shift_is_removed_from_the_output(lo_shift, frequency):
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone',
         **LO_SHIFT_CAPTURE,
         lo_shift=lo_shift,
@@ -472,12 +472,12 @@ def test_lo_shift_is_removed_from_the_output(lo_shift, frequency):
     ids=['resamples', 'unity_ratio', 'firmware_rate'],
 )
 def test_needs_resample(design, host_resample, expected):
-    capture = make_capture('single_tone', host_resample=host_resample)
+    capture = preset_capture('single_tone', host_resample=host_resample)
     assert corrections.needs_resample(design, capture) is expected
 
 
 def test_design_without_host_resample_is_the_identity():
-    capture = make_capture('single_tone', **SCALE_ONLY)
+    capture = preset_capture('single_tone', **SCALE_ONLY)
     design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
 
     assert design['fs_sdr'] == capture.sample_rate
@@ -499,13 +499,13 @@ def test_design_without_host_resample_is_the_identity():
     ],
 )
 def test_design_resampler_rejects(kws, match):
-    capture = make_capture('single_tone', **kws)
+    capture = preset_capture('single_tone', **kws)
     with pytest.raises(ValueError, match=match):
         corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
 
 
 def test_design_resampler_needs_a_clock_rate():
-    capture = make_capture('single_tone', **SCALE_ONLY)
+    capture = preset_capture('single_tone', **SCALE_ONLY)
     with pytest.raises(TypeError, match='master_clock_rate'):
         corrections.design_resampler(capture, None)
 
@@ -521,7 +521,7 @@ FIR_TRANSITION_BW = corrections.FIR_TRANSITION_BW
     ids=['within_the_transition_of_nyquist', 'below_the_transition_band'],
 )
 def test_fir_band_edges_are_rejected(analysis_bandwidth, match):
-    capture = make_capture(
+    capture = preset_capture(
         'single_tone', sample_rate=1e6, analysis_bandwidth=analysis_bandwidth
     )
     with pytest.raises(ValueError, match=match):
@@ -538,7 +538,7 @@ def test_fir_band_edges_agree_with_the_filter_design(edge, offset):
         bw = fs - FIR_TRANSITION_BW + offset
     else:
         bw = FIR_TRANSITION_BW - offset
-    capture = make_capture('single_tone', sample_rate=fs, analysis_bandwidth=bw)
+    capture = preset_capture('single_tone', sample_rate=fs, analysis_bandwidth=bw)
 
     try:
         sw.design_fir_lpf(bw=bw, fs=fs, transition_bw=FIR_TRANSITION_BW)
@@ -600,7 +600,7 @@ def _drawn_capture(sample_rate, count, bandwidth_fraction):
         bw = inf
     else:
         bw = round(bandwidth_fraction * sample_rate / 1e3) * 1e3
-    return make_capture(
+    return preset_capture(
         'single_tone',
         sample_rate=sample_rate,
         duration=count / sample_rate,
@@ -697,7 +697,7 @@ def test_preset_overlaps_are_acquirable(name):
     """The harness presets were chosen to dodge the two overlap defects above. Pin
     the sizes that synthetic_sources documents, so that a change here shows up as
     a harness change rather than as unrelated acquisition failures."""
-    capture = make_capture('single_tone', **PRESETS[name])
+    capture = preset_capture('single_tone', **PRESETS[name])
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
     assert overlaps == DOCUMENTED_OVERLAPS[name]
 
@@ -722,14 +722,14 @@ NONINTEGRAL_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 4e6, 'duration': 1e-3}
     ],
 )
 def test_impulse_acquisition(preset):
-    capture = make_capture('dirac_delta', **preset, time=IMPULSE_TIME)
+    capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
     stages = acquire_corrected('dirac_delta', capture)
     assert_impulse_at(stages.corrected.pre_align, capture, IMPULSE_TIME)
 
 
 def test_correct_iq_trims_an_odd_lead_pad():
     """the even-overlap requirement is Controller.read_iq's, not the correction's"""
-    capture = make_capture('dirac_delta', **ODD_OVERLAP_CAPTURE, time=IMPULSE_TIME)
+    capture = preset_capture('dirac_delta', **ODD_OVERLAP_CAPTURE, time=IMPULSE_TIME)
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
 
     corrected = ss.correct_iq(_build_iq('dirac_delta', capture, overlaps))
@@ -744,7 +744,7 @@ def test_correct_iq_trims_an_odd_lead_pad():
 def test_resample_rejects_a_length_that_does_not_divide():
     """6.25 MS/s to 6 MS/s is 25:24, so one sample more than the (350, 350) overlaps
     leaves a padded length that is not a multiple of 25"""
-    capture = make_capture('dirac_delta', **RESAMPLE_ONLY, time=IMPULSE_TIME)
+    capture = preset_capture('dirac_delta', **RESAMPLE_ONLY, time=IMPULSE_TIME)
     lead, tail = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
     fs = fs_sdr(capture)
     count = lead + 1 + round(capture.duration * fs) + tail

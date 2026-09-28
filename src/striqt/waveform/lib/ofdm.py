@@ -21,7 +21,7 @@ from .arrays import (
 )
 
 if typing.TYPE_CHECKING:
-    from .typing import Array, WindowSpecType
+    from .typing import Array, DTypeLike, WindowSpecType
 
 
 def _min_diff(x: typing.Sequence[int]) -> int | None:
@@ -81,7 +81,7 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
         tpb = 32
         bpg = max((x.size + (tpb - 1)) // tpb, 1)
 
-        func = _corr_at_indices[bpg, tpb]  # pyright: ignore
+        func = _corr_at_indices[bpg, tpb]
 
     func(flat_inds, x, int(nfft), int(ncp), bool(norm), out)
 
@@ -89,22 +89,23 @@ def corr_at_indices(inds, x, nfft, norm=True, out=None):
 
 
 def corr_atol(
-    dtype, n_inds: int, norm: bool, scale: float = 1.0, n_impl: int = 1
+    dtype: DTypeLike, n_inds: int, norm: bool, scale: float = 1.0, n_impl: int = 1
 ) -> float:
-    """absolute roundoff bound on `corr_at_indices` against exact arithmetic.
+    """bound the absolute roundoff of `corr_at_indices` against exact arithmetic.
 
-    Each of the n_inds products a*conj(b) and the power terms are rounded at the input
-    precision before the complex128 accumulation, and the result is rounded once more
-    on output. With norm=True the Cauchy-Schwarz bound sum|a||b| <= sqrt(Pa*Pb) makes
-    the error relative to a unit-scale output, and `scale` is ignored; with norm=False
-    it is relative to the largest product magnitude, which the caller passes as
-    `scale` = max|x|**2.
+    The bound grows linearly with `n_inds` in unit roundoffs of `dtype`: each
+    product ``a*conj(b)`` and the power terms are rounded at the input precision
+    before the complex128 accumulation, and the result once more on output. With
+    ``norm=True`` the Cauchy-Schwarz bound ``sum|a||b| <= sqrt(Pa*Pb)`` makes the
+    error relative to a unit-scale output, and `scale` is ignored; with
+    ``norm=False`` it is relative to the largest product magnitude, which the caller
+    passes as ``scale = max|x|**2``.
 
     Args:
         dtype: the input dtype (real or complex)
         n_inds: the number of index pairs summed at each lag
         norm: the `corr_at_indices` normalization flag
-        scale: max|x|**2 when norm is False
+        scale: ``max|x|**2`` when `norm` is False
         n_impl: 1 against exact arithmetic, 2 against a second implementation
     """
     u = unit_roundoff(dtype)
@@ -443,9 +444,9 @@ def index_pss_symbols(
 
 
 def slot_period(subcarrier_spacing: float) -> float:
-    """the duration (in s) of one 3GPP slot at the given subcarrier spacing.
+    """return the duration (in s) of one 3GPP slot at `subcarrier_spacing`.
 
-    A 10 ms radio frame holds 10 subframes of `subcarrier_spacing/15e3` slots each
+    A 10 ms radio frame holds 10 subframes of ``subcarrier_spacing/15e3`` slots each
     (3GPP TS 38.211 Section 4.3.2).
     """
     return 10e-3 / (10 * subcarrier_spacing / 15e3)
@@ -636,12 +637,14 @@ def get_5g_ssb_iq(
 
 
 def sync_frame_count(sample_count: int, params: SyncParams) -> int:
-    """the number of 10 ms frames in a synchronization block of `sample_count` samples.
+    """count the 10 ms frames in a synchronization block of `sample_count` samples.
 
-    Raises `ValueError` where `correlate_sync_sequence` could not proceed: when the
-    block does not hold a whole number of frames, or when the correlation span
-    that `params` calls for would leave fewer than `params.lag_count` correlation
-    samples in a frame.
+    Raises:
+        ValueError: if `correlate_sync_sequence` could not proceed on the block:
+            it does not hold a whole, nonzero number of frames of `params.frame_size`
+            samples, the correlation span `params.corr_size` exceeds a frame, or
+            trimming each slot's excess cyclic prefix from that span would leave
+            fewer than `params.lag_count` correlation samples
     """
     frame_count, remainder = divmod(sample_count, params.frame_size)
     if remainder != 0 or frame_count == 0:

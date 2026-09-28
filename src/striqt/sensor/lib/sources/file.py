@@ -16,14 +16,20 @@ from . import base, buffers
 from ..typing import PS, PC
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
+    from striqt.waveform.lib.typing import DTypeLike
+
     from ..typing import Array, FileStream
 
 
 def _split_preroll(start_index: int, count: int) -> tuple[int, int, int]:
-    """(zero-fill count, first file index, file sample count) for a read request.
+    """split a read request into (zero-fill count, first file index, file sample count).
 
     File index 0 is corrected sample 0, so the part of the request before it is
-    filled with zeros rather than read.
+    filled with zeros rather than read. All three values are in samples and never
+    negative; the zero-fill and file sample counts sum to `count`, and reading starts
+    at `start_index` when that lies in the file and at sample 0 otherwise.
     """
     fill = min(max(-start_index, 0), count)
     return fill, max(start_index, 0), count - fill
@@ -38,7 +44,7 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
         super().__init__(spec)
 
         try:
-            from nptdms import TdmsFile  # pyright: ignore # pyrefly: ignore
+            from nptdms import TdmsFile
         except ImportError:
             raise ImportError('install nptdms to open TDMS files')
 
@@ -51,10 +57,10 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
             center_frequency=header_fd['carrier_frequency'][0],
         )
 
-    def get_id(self):  # pyright: ignore
+    def get_id(self) -> str:
         return str(self.setup_spec.path)
 
-    def get_info(self):
+    def get_info(self) -> specs.SourceInfo:
         return specs.structs.SourceInfo(num_rx_ports=1)
 
     def get_waveform(
@@ -63,9 +69,9 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
-    ):
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
+    ) -> Array:
         size = int(self._handle['header_fd']['total_samples'][0])
         ref_level = self._handle['header_fd']['reference_level_dBm'][0]
         fill, file_start, file_count = _split_preroll(start_index, count)
@@ -104,7 +110,7 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
             backend_sample_rate=self._file_info.backend_sample_rate,
         )
 
-    def close(self):
+    def close(self) -> None:
         pass
 
 
@@ -140,7 +146,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     def get_info(self):
         return specs.structs.SourceInfo(num_rx_ports=None)
 
-    def get_id(self):  # pyright: ignore
+    def get_id(self):
         return str(self.setup_spec.path)
 
     def arm(self, capture):
@@ -157,9 +163,9 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
-    ):
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
+    ) -> Array:
         fill, file_start, file_count = _split_preroll(start_index, count)
 
         # at least one sample, because the stream only reveals its port count by
@@ -215,13 +221,13 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
         self._waveform = waveform
 
-    def get_id(self):  # pyright: ignore
+    def get_id(self):
         return str(self.setup_spec.path)
 
-    def get_info(self):  # pyright: ignore
+    def get_info(self):
         return specs.structs.SourceInfo(num_rx_ports=self._waveform.shape[0])
 
-    def close(self):
+    def close(self) -> None:
         pass
 
     def get_resampler(self, capture) -> sw.ResamplerDesign:
@@ -272,9 +278,9 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
         start_index: int,
         *,
         port: int = 0,
-        xp,
-        dtype='complex64',
-    ):
+        xp: ModuleType,
+        dtype: DTypeLike = 'complex64',
+    ) -> Array:
         assert self._waveform is not None
         iq_size = self._waveform.shape[1]
         fill, file_start, file_count = _split_preroll(start_index, count)

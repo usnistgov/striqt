@@ -113,24 +113,31 @@ def read_zarr_spec(
     store_backend: Optional[str] = None,
     extension_root: str | Path | None = None,
 ) -> specs.Sweep:
-    """Rebuild the Sweep specification that iterate_sweep saved in a zarr store's attrs.
+    """rebuild the `Sweep` that `iterate_sweep` saved in the attrs of a zarr store.
 
-    Only attrs that name Sweep fields are read; other dataset attrs are ignored. As
-    for `read_yaml_spec`, the store's directory is the root for a relative
-    `extensions.import_path` unless `extension_root` is given, and passing the store
-    path to `open_resources` derives the `{spec_name}` and `{parent_name}` path
-    fields from it.
+    Only attrs that name `Sweep` fields (plus the binding tag and ``mock_source``)
+    are read; other dataset attrs are ignored. The `extensions` block is imported
+    before the sweep is decoded, so a `sensor_binding` it defines is available. As
+    for `read_yaml_spec`, passing the store path to `open_resources` derives the
+    ``{spec_name}`` and ``{parent_name}`` path fields from it.
 
     Args:
-        path: path to the zarr store (a `.zarr` directory or `.zarr.zip` archive)
-        type: the type of sweep specification to load, or None to use specs.Sweep
-        output_path: optional override for the specification's output path
-        store_backend: optional override for the specification's output store backend
+        path: the zarr store, a ``.zarr`` directory or ``.zarr.zip`` archive
+        type: the sweep class to decode against, or None to decode against the
+            tagged union of registered sensor bindings and filter attrs by the fields
+            of `specs.Sweep`. A saved ``mock_source`` attr selects that binding's
+            sweep class instead.
+        output_path: replaces `sink.path` in the returned spec when given
+        store_backend: replaces `sink.store` in the returned spec when given
         extension_root: directory that a relative `extensions.import_path` is
-            relative to, or None for the store's directory
+            resolved against, or None for the store's directory
 
     Returns:
-        an instance of specs.Sweep
+        the decoded sweep, an instance of `type` or of the bound sweep class the tag
+        selects
+
+    Raises:
+        msgspec.ValidationError: the attrs do not validate as a sweep of that class
     """
     attrs = sa.lib.io.load_attrs(path)
     sweep_cls = specs.Sweep if type is None else type

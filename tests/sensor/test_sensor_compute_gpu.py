@@ -11,8 +11,8 @@ from synthetic_sources import (
     FILTER_ONLY,
     IQ_ONLY,
     SCALE_ONLY,
-    make_capture,
-    make_sweep,
+    preset_capture,
+    preset_sweep,
 )
 
 import striqt.sensor as ss
@@ -23,13 +23,13 @@ AIR = ss.bindings.air7101b
 
 
 def cupy_sweep(captures, *, analysis=IQ_ONLY, loops=()):
-    return make_sweep(
+    return preset_sweep(
         'single_tone', captures, analysis=analysis, loops=loops, source=CUPY
     )
 
 
 def scale_only(**kws):
-    return make_capture('single_tone', **{**SCALE_ONLY, **kws})
+    return preset_capture('single_tone', **{**SCALE_ONLY, **kws})
 
 
 def air_sweep(**source_kws):
@@ -42,13 +42,13 @@ def air_sweep(**source_kws):
 # %% sweep_touches_gpu
 
 TOUCHES_GPU = {
-    'numpy': (make_sweep('single_tone', (scale_only(),), analysis=ANALYSIS), False),
+    'numpy': (preset_sweep('single_tone', (scale_only(),), analysis=ANALYSIS), False),
     'cupy_measurements': (cupy_sweep((scale_only(),), analysis=ANALYSIS), True),
     'cupy_calibration': (air_sweep(calibration='cal.nc'), True),
     'cupy_iq_scale_only': (cupy_sweep((scale_only(),)), False),
     'cupy_iq_host_resample': (cupy_sweep((scale_only(host_resample=True),)), True),
     'cupy_iq_filter_only': (
-        cupy_sweep((make_capture('single_tone', **FILTER_ONLY),)),
+        cupy_sweep((preset_capture('single_tone', **FILTER_ONLY),)),
         True,
     ),
     'cupy_iq_loop_host_resample': (
@@ -134,7 +134,7 @@ def test_warmup_sweep_preserves_analysis_sink_and_trigger():
     })
     # the correlator needs whole 10 ms frames
     capture = scale_only(duration=10e-3)
-    sweep = make_sweep(
+    sweep = preset_sweep(
         'single_tone', (capture,), analysis=analysis, source=source, sink=sink
     )
     warmup = gpu.build_warmup_sweep(sweep)

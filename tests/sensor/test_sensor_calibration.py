@@ -491,10 +491,6 @@ def flushed_calibration(fake_sweep_runner, tmp_path_factory) -> FakeRun:
     return FakeRun(str(path), [], sweep, None, None)
 
 
-def test_flush_saves_a_file(flushed_calibration):
-    assert Path(flushed_calibration.path).exists()
-
-
 class TestYFactorSinkFlush:
     def test_saved_file_is_usable_for_lookups(self, flushed_calibration):
         capture = soapy_capture(port=1, gain=-10, sample_rate=62.5e6)

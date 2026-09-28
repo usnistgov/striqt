@@ -271,6 +271,27 @@ class TestInputPreservation:
         assert_array_equal(x, original)
 
 
+class TestInPlaceComplexInput:
+    """Properties: a complex input overwritten in place comes back real-valued."""
+
+    @by_log_conversion
+    @pytest.mark.parametrize('dtype', [np.complex64, np.complex128], ids=dtype_id)
+    def test_overwrite_x_writes_magnitude_dB_into_real_part(
+        self, xp, func, scale, dtype
+    ):
+        """the result is scale*log10(|z|) in the real dtype of z, held in z's real part"""
+        magnitude = np.array([1e-3, 0.5, 1.0, 2.0, 1e3], dtype=np.float64)
+        phase = np.linspace(0, np.pi, magnitude.size)
+        z = as_xp(xp, (magnitude * np.exp(1j * phase)).astype(dtype))
+
+        result = to_numpy(func(z, overwrite_x=True))
+
+        assert result.dtype == np.empty(0, dtype=dtype).real.dtype
+        tol = log_conversion_tol(dtype, scale, complex_input=True)
+        assert_close(result, scale * np.log10(magnitude), **tol)
+        assert_array_equal(to_numpy(z).real, result)
+
+
 class TestEdgeCases:
     """Properties: Behavior at edge cases (zeros, extreme values)."""
 

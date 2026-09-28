@@ -1,6 +1,6 @@
 from __future__ import annotations
 import dataclasses
-from typing import Any, Callable, Generic
+from typing import Any, Callable, Generic, Literal
 
 from . import structs, helpers
 from ..lib.typing import SS, SC, SP, PS, PC
@@ -37,4 +37,4 @@ class AcquiredIQ(sa.dataarrays.AcquiredIQ):
     voltage_scale: sw.typing.Array | float = 1
 
     # whether to evaluate the complex conjugate of each port
-    conjugate: tuple[bool, ...] | False = False
+    conjugate: tuple[bool, ...] | Literal[False] = False
