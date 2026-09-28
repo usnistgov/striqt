@@ -149,7 +149,11 @@ Library defects that need a design decision rather than a local fix are written 
 - **Docstrings** are the API reference (sphinx autodoc + napoleon render them into `doc/`), so write them as the caller's contract: inputs, outputs, side effects, exceptions. Google sections only — `Args:`, `Returns:`, `Yields:`, `Raises:`, `Examples:`, `References:` — never `Arguments:`, numpy underlines, or ad hoc headers.
   - **Summary line.** One line, imperative mood, lowercase first word, naming the effect or the returned quantity with its units: "return the duration (in s) of one 3GPP slot at `subcarrier_spacing`". Not "an iterator that ...", "helper for ...", "this function ...", or a third-person verb ("designs ..."). Include a trailing period unless the docstring
   is one-line docstring. `pixi run -e test39 ruff check --select D401 src` lists non-imperative summaries; it is not enforced, so run it on files you touch.
-  - **Language** Write in American english and spelling.
+  - **Module Docstrings.** Don't list objects in the module. Focus on giving brief
+  context that describes the general theme of the module contents, and any shared
+  context about the implementation that's not specified in comments. Use
+  restraint similar to the guidelines on writing comments.
+  - **Language** Write with American english and spelling.
   - **State what the signature cannot.** An `Args:` entry adds meaning, never type: units (Hz, s, S/s, dB vs linear power), array shape and which axis holds what, dtype, valid range or ratio constraint, and what `None`/`inf`/`'auto'` selects. `x: input array` and `fs: sampling rate` are omissions, not entries. `Returns:` gives shape, axis layout or dimension names, dict keys, units, and whether the array namespace follows the input. Generators use `Yields:` and say what ends the iteration (`loop=True` is infinite).
   - **Side effects are contract.** In-place modification (`overwrite_x`, `out=`, including an `out=` that is accepted but not honoured), process-global state (logger handlers, caches, the GPU lock), threads started, files written.
   - **`Raises:`** lists every exception the caller can act on with its condition. Omit exceptions that only a bug would raise.

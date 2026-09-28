@@ -1,8 +1,4 @@
-"""`str.format` fields for sink and calibration paths in a sweep specification.
-
-The fields come from the sweep, the open source and the fixed `adjust_captures`
-values, so a path is resolved only once the source id is known; `PathFormatter`
-defers that lookup to the call."""
+"""`str.format` fields for sink and calibration paths in a sweep specification"""
 
 from __future__ import annotations as __
 
