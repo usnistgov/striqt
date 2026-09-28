@@ -52,7 +52,7 @@ import striqt.sensor as ss
 from striqt.sensor.lib import calibration
 from striqt.sensor.lib.compute.datasets import build_capture_coords
 
-H = ss.specs.helpers
+H = ss.specs.sequencing
 Repeat = ss.specs.Repeat
 TOGGLE = 'noise_diode_enabled'
 TOGGLE_MSG = 'noise_diode_enabled must be the first specified loop'
