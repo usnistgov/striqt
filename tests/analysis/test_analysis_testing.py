@@ -38,7 +38,6 @@ GENERATORS = {
         {'frequency_offset': 1e5, 'lo_offset': -2e5, 'snr': 6},
     ),
     'circular_awgn': (testing.circular_awgn, {'power': 1e-3}),
-    'noise': (testing.noise, {'noise_psd': 1e-9}),
     'sawtooth': (testing.sawtooth, {'period': 1e-5, 'power': 3}),
     'dirac_delta': (testing.dirac_delta, {'time': 3.7e-5, 'power': -4}),
 }
@@ -195,16 +194,6 @@ def test_circular_awgn_seed_determines_the_samples(xp):
 # %% noise
 
 
-@pytest.mark.parametrize('noise_psd', [1e-9, 1e-17], ids='psd{:g}'.format)
-def test_noise_is_circular_awgn_at_the_integrated_power(xp, noise_psd):
-    """the contract that keeps `noise` and `circular_awgn` in step"""
-    x = testing.noise(DURATION, FS, noise_psd=noise_psd, ports=2, seed=3, xp=xp)
-    expected = testing.circular_awgn(
-        DURATION, FS, power=noise_psd * FS, ports=2, seed=3, xp=xp
-    )
-    assert np.array_equal(to_numpy(x), to_numpy(expected))
-
-
 # %% sawtooth
 
 
@@ -313,7 +302,7 @@ def test_window_matches_the_whole_capture(xp, name, start_index, count, ports):
     ids=['tail', 'preroll'],
 )
 def test_count_defaults_to_the_remainder_of_the_capture(xp, start_index, count):
-    x = testing.noise(DURATION, FS, start_index=start_index, xp=xp)
+    x = testing.circular_awgn(DURATION, FS, start_index=start_index, xp=xp)
     assert x.shape == (1, count)
 
 

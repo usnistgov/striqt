@@ -224,7 +224,9 @@ def circular_awgn(
 
     The real and imaginary parts are independent and each has variance
     ``power / 2``, so the mean of ``|iq|**2`` is `power`. Each port is an
-    independent draw.
+    independent draw. White noise of power spectral density ``noise_psd`` mW/Hz
+    spread over the full sample rate is ``power=noise_psd * sample_rate``, which is
+    how the sensor's `noise` source calls this.
 
     The draws are interleaved port-by-port within each sample so that the first
     ``start_index + count`` samples of every port are a prefix of the stream from
@@ -262,58 +264,6 @@ def circular_awgn(
     # a python float scalar; a numpy scalar would upcast the samples to complex128
     scale = float(np.sqrt(power / 2))
     return (values * scale).astype(dtype, copy=False)
-
-
-def noise(
-    duration: float | None,
-    sample_rate: float,
-    *,
-    noise_psd: float = 1e-17,
-    ports: int = 1,
-    start_index: int = 0,
-    count: int | None = None,
-    seed: int = 0,
-    xp: ModuleType = np,
-    dtype: DTypeLike = 'complex64',
-) -> Array:
-    """generate additive white gaussian noise of power spectral density `noise_psd`.
-
-    This is `circular_awgn` with `noise_psd` spread over the full `sample_rate` Hz
-    of bandwidth, so the mean of ``|iq|**2`` is the product of `noise_psd` and
-    `sample_rate`, in mW, split equally between the real and imaginary parts. Each
-    port is an independent draw.
-
-    Args:
-        duration: capture duration, in s, used only when `count` is None
-        sample_rate: IQ sample rate, in Hz
-        noise_psd: noise power spectral density, in mW/Hz (the power measurements
-            treat ``|iq|**2`` as mW)
-        ports: number of receive ports, which get independent noise
-        start_index: absolute index of the first returned sample
-        count: number of samples, or None for `duration` less `start_index`
-        seed: seed of the noise generator, in ``[0, 2**31)``
-        xp: the array namespace to generate with
-        dtype: the returned complex dtype
-
-    Returns:
-        an array of shape ``(ports, count)`` and dtype `dtype` in the namespace `xp`
-
-    Raises:
-        ValueError: when `ports` is below 1, when `duration` and `count` are both
-            None, when the resolved `count` is negative, or when `start_index` is
-            negative and `seed` is outside ``[0, 2**31)``
-    """
-    return circular_awgn(
-        duration,
-        sample_rate,
-        power=noise_psd * sample_rate,
-        ports=ports,
-        start_index=start_index,
-        count=count,
-        seed=seed,
-        xp=xp,
-        dtype=dtype,
-    )
 
 
 def sawtooth(

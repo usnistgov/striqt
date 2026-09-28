@@ -148,7 +148,7 @@ class TestSpectrogram:
 
     @pytest.mark.parametrize('lo_bandstop', [RES, 4 * RES], ids='bw{:g}'.format)
     def test_lo_bandstop_nulls_only_the_bins_at_dc(self, lo_bandstop):
-        iq = testing.noise(DURATION, FS, noise_psd=1 / FS)
+        iq = testing.circular_awgn(DURATION, FS, power=1.0)
         da = spg_of(iq, lo_bandstop=lo_bandstop, as_xarray=True)
 
         freqs = da.spectrogram_baseband_frequency.values
@@ -452,7 +452,7 @@ def spectrogram_histogram_of(iq, window='hamming', **kwargs):
 
 def test_spectrogram_histogram_fractions_sum_to_one():
     """both ports are normalized by the count of port 0, which is the same count"""
-    iq = sa.testing.noise(HIST_DURATION, HIST_FS, noise_psd=1e-6, ports=2)
+    iq = sa.testing.circular_awgn(HIST_DURATION, HIST_FS, power=1e-6 * HIST_FS, ports=2)
 
     da = spectrogram_histogram_of(iq)
 
@@ -524,7 +524,7 @@ def two_ports_offset_by(offset_dB):
     the float32 roundoff floor: in the near-empty bins of a tone's spectrogram the
     cross-port ratio is roundoff noise rather than the applied offset.
     """
-    iq = sa.testing.noise(HIST_DURATION, HIST_FS, noise_psd=1e-6, ports=2)
+    iq = sa.testing.circular_awgn(HIST_DURATION, HIST_FS, power=1e-6 * HIST_FS, ports=2)
     iq[1] = iq[0] * 10 ** (offset_dB / 20)
     return iq
 

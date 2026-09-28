@@ -124,10 +124,10 @@ def test_rows_follow_the_capture_port_order():
 
     source.read(buffers, 0, COUNT)
 
-    expected = testing.noise(
+    expected = testing.circular_awgn(
         None,
         SAMPLE_RATE,
-        noise_psd=NOISE_PSD,
+        power=NOISE_PSD * SAMPLE_RATE,
         ports=2,
         start_index=-OVERLAPS[0],
         count=COUNT,

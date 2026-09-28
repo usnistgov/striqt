@@ -225,7 +225,7 @@ same thing is invisible until the two drift. Look here before writing setup:
 
 ### Inputs and tolerance models
 
-- Build inputs from `striqt.analysis.testing` (`tone`, `single_tone`, `noise`, `sawtooth`,
+- Build inputs from `striqt.analysis.testing` (`tone`, `single_tone`, `sawtooth`,
   `dirac_delta`, `circular_awgn`): backend-agnostic, windowable, and the same definitions the
   synthetic sensor sources use, so a two-port generator call reproduces a two-port
   acquisition. They use `numpy.random.RandomState` because that is the API numpy and cupy
