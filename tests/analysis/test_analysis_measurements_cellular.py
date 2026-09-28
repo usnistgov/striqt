@@ -66,7 +66,7 @@ def capture(
 def measure(spec, cap: sa.specs.Capture):
     """run the registered measurement for `spec` the way the registry calls it"""
     info = sa.registry[type(spec)]
-    iq = testing.noise(cap.duration, cap.sample_rate, noise_psd=1 / cap.sample_rate)
+    iq = testing.circular_awgn(cap.duration, cap.sample_rate, power=1.0)
     return info.func(iq, cap, as_xarray=False, **spec.to_dict())
 
 
@@ -218,7 +218,7 @@ def test_autocorrelation_guards_a_waveform_shorter_than_its_capture():
     spec = sa.specs.CellularCyclicAutocorrelator(
         subcarrier_spacings=SCS, frame_range=(0, 2)
     )
-    short_iq = testing.noise(DURATION / 2, CELL_FS, noise_psd=1 / CELL_FS)
+    short_iq = testing.circular_awgn(DURATION / 2, CELL_FS, power=1.0)
 
     with pytest.raises(ValueError, match=r'lies past the .* samples of the waveform'):
         body(short_iq, capture(), **spec.to_dict())
@@ -231,9 +231,7 @@ SSB_SYMBOLS = round(28 * SSB_SPECTROGRAM_SCS / 15e3)
 
 def ssb_of(duration, frequency=None, **kwargs):
     if frequency is None:
-        iq = testing.noise(
-            duration, SSB_SPECTROGRAM_FS, noise_psd=1 / SSB_SPECTROGRAM_FS
-        )
+        iq = testing.circular_awgn(duration, SSB_SPECTROGRAM_FS, power=1.0)
     else:
         iq = testing.tone(duration, SSB_SPECTROGRAM_FS, frequency=frequency)
     return sa.measurements.cellular_5g_ssb_spectrogram(

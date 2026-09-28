@@ -361,11 +361,8 @@ def check_accepted_pair_runs(info, data):
         return
 
     ports = 2 if isinstance(spec, sa.specs.SpectrogramHistogramRatio) else 1
-    iq = sa.testing.noise(
-        capture.duration,
-        capture.sample_rate,
-        noise_psd=1 / capture.sample_rate,
-        ports=ports,
+    iq = sa.testing.circular_awgn(
+        capture.duration, capture.sample_rate, power=1.0, ports=ports
     )
     try:
         info.func(iq, capture, as_xarray=False, **spec.to_dict())

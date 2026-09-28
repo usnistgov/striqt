@@ -101,6 +101,15 @@ parametrized tests (`test_timestamps_advance_by_the_samples_read[sawtooth|no_sou
 test_an_invalid_combination_names_its_origin[looped_capture|adjust_analysis|analysis_loop]`).
 No xfail node id changed; `xfailed` and the 70 sites are unchanged. No xpass.
 
+Suite state on 2026-09-28 (evening), after removing `striqt.analysis.testing.noise`, a
+pure wrapper of `circular_awgn` (`power=noise_psd * sample_rate`): `1909 passed, 376
+skipped, 88 xfailed, 311 subtests` on `test39` and `1911 passed, 374 skipped, 88 xfailed,
+311 subtests` on `test314`. The 51 node ids that went were the `[noise]` rows of the
+`GENERATORS`-table tests in `test_analysis_testing.py` (half of them the skipped cupy
+variants) and `test_noise_is_circular_awgn_at_the_integrated_power`, which asserted the
+relation the wrapper was; every other caller now calls `circular_awgn` with the scaled
+power. No xfail node id changed. No xpass.
+
 Relative to the msgspec-idiom message pass (`1667/395/94/305` and
 `1668/394/94/305`), both interpreters gained 18 passes and nothing else moved:
 +6 in `test_sensor_specs_structs.py::TestSweepLoops` for the new

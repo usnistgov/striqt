@@ -53,8 +53,9 @@ def test_noise_ports_are_independent_and_match_the_generator():
         sources.NoiseSource, ss.specs.NoiseCapture, port=(0, 1), noise_psd=NOISE_PSD
     )
     rows = _rows(source, (0, 1))
-    expected = sa.testing.noise(
-        noise_psd=NOISE_PSD, ports=2, **_generator_kws(source, capture)
+    kws = _generator_kws(source, capture)
+    expected = sa.testing.circular_awgn(
+        power=NOISE_PSD * kws['sample_rate'], ports=2, **kws
     )
 
     for i, row in enumerate(rows):
@@ -68,8 +69,9 @@ def test_noise_rows_follow_the_capture_port_order():
     source, capture = _armed(
         sources.NoiseSource, ss.specs.NoiseCapture, port=(3, 2), noise_psd=NOISE_PSD
     )
-    expected = sa.testing.noise(
-        noise_psd=NOISE_PSD, ports=2, **_generator_kws(source, capture)
+    kws = _generator_kws(source, capture)
+    expected = sa.testing.circular_awgn(
+        power=NOISE_PSD * kws['sample_rate'], ports=2, **kws
     )
 
     # the port number is not its own index: port 3 is the capture's first row
@@ -81,8 +83,9 @@ def test_noise_from_a_scalar_port_capture():
     source, capture = _armed(
         sources.NoiseSource, ss.specs.NoiseCapture, port=1, noise_psd=NOISE_PSD
     )
-    expected = sa.testing.noise(
-        noise_psd=NOISE_PSD, ports=1, **_generator_kws(source, capture)
+    kws = _generator_kws(source, capture)
+    expected = sa.testing.circular_awgn(
+        power=NOISE_PSD * kws['sample_rate'], ports=1, **kws
     )
     assert np.array_equal(_rows(source, (1,))[0], expected)
 

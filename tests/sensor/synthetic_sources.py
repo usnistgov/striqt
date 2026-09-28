@@ -33,7 +33,7 @@ BINDINGS = {
 
 GENERATORS = {
     'single_tone': testing.single_tone,
-    'noise': testing.noise,
+    'noise': testing.circular_awgn,
     'sawtooth': testing.sawtooth,
     'dirac_delta': testing.dirac_delta,
 }
@@ -259,6 +259,8 @@ def generator(
     if ports is None:
         ports = len(capture.port) if isinstance(capture.port, tuple) else 1
     kws = {name: getattr(capture, name) for name in SIGNAL_KWS[binding]}
+    if binding == 'noise':
+        kws['power'] = kws.pop('noise_psd') * sample_rate
     kws.update(ports=ports, start_index=start_index, count=count, xp=xp)
     return GENERATORS[binding](None, sample_rate, **kws)
 

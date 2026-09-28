@@ -160,10 +160,9 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture]):
         capture = self._capture
         index, ports = self._port_position(port)
 
-        x = testing.noise(
-            noise_psd=capture.noise_psd,
-            ports=ports,
-            **self._generator_kws(count, start_index, xp),
+        kws = self._generator_kws(count, start_index, xp)
+        x = testing.circular_awgn(
+            power=capture.noise_psd * kws['sample_rate'], ports=ports, **kws
         )
 
         return x[index : index + 1]
