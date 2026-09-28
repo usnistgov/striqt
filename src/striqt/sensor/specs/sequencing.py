@@ -1,9 +1,9 @@
 """expansion of a sweep specification into the sequence of captures it runs.
 
-`loop_captures` nests `Sweep.loops` over `Sweep.captures` and applies the
-`adjust_captures` remaps for the open source; `loop_capture_origins` and
-`describe_capture_origin` trace each expanded capture back to the entry and loop
-point in the user's file, which the validators in `sweep` use to locate errors.
+Loops nest over the listed captures, the `adjust_captures` remaps for the open source
+apply on top, and the loop point is applied last, so a looped field always wins. Each
+expanded capture keeps a record of the entry and loop point it came from, which the
+validators in `sweep` use to locate errors in the user's file.
 """
 
 from __future__ import annotations as __

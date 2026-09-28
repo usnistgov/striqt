@@ -1,10 +1,10 @@
 """validation of a `Sweep` after construction.
 
-`validate_sweep` runs from `Sweep.__post_init__`, so a constructed sweep is a
-validated one: the `loops` entries and their collisions with `captures`,
-measurement names that shadow capture fields, and each unique capture against the
-registered measurements and the `correct_iq` signal path. Failures are located in
-the user's file through the capture origins that `sequencing` records.
+It runs from `Sweep.__post_init__`, so a constructed sweep is a validated one: loop
+entries and their collisions with the listed captures, measurement names that shadow
+capture fields, and each unique capture against the registered measurements and the
+`correct_iq` signal path. Failures are located in the user's file through the capture
+origins that `sequencing` records.
 """
 
 from __future__ import annotations as __

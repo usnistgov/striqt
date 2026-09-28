@@ -1,7 +1,6 @@
-"""per-capture utilities shared across the sensor package: the type of a sweep's
-captures, splitting a multi-port capture into per-port captures, tuple
-normalization, the set of ports a sweep touches, and the sizes of groups of
-captures whose analysis results can be concatenated."""
+"""utilities on individual captures and the ports they span, shared across the sensor
+package.
+"""
 
 from __future__ import annotations as __
 

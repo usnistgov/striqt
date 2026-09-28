@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""
-Web-based real-time display for radio diagnostic tooling.
+"""serve a live browser display of sweep results.
 
-This is a variant of live-plotter that uses FastAPI/uvicorn to serve
-real-time visualizations via a web browser, taking advantage of GPU
-acceleration on clients through WebGL (via Plotly.js).
-
-Usage:
-    python _experiments/web-plotter.py path/to/spec.yaml
-    # Then open http://localhost:8000 in a browser
+FastAPI and uvicorn serve the page and stream updates over a websocket; Plotly.js
+renders them client-side through WebGL. Run ``web-plotter path/to/spec.yaml`` and
+open http://localhost:8000.
 """
 
 from __future__ import annotations

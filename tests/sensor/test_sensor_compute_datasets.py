@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.compute.datasets: packaging a DelayedDataset into an
-xarray.Dataset (capture rows, per-port coordinates, attrs, peripheral data), the
-spectrogram time concatenation, and the looped-coordinate indexing helpers"""
+"""striqt.sensor.lib.compute.datasets: packaging delayed results into xarray datasets
+and the looped-coordinate indexing helpers
+"""
 
 from __future__ import annotations
 

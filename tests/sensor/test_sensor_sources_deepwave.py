@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.sources.deepwave: Airstack source specs, their bindings, the JESD
-SYSREF register field, and the MAC-address radio id, against the fake SoapySDR device
-and (under the `hardware` marker) an attached radio"""
+"""striqt.sensor.lib.sources.deepwave: the Airstack source specs and bindings against
+the fake SoapySDR device and, under the `hardware` marker, an attached radio
+"""
 
 from __future__ import annotations
 

@@ -1,6 +1,4 @@
-"""striqt.sensor.lib.sources.soapy: the pieces that run without a SoapySDR module.
-Stream reads, overload accounting, capability structs, time source mapping, and
-calibration assignment onto acquired IQ"""
+"""striqt.sensor.lib.sources.soapy: the pieces that run without a SoapySDR module"""
 
 from __future__ import annotations
 

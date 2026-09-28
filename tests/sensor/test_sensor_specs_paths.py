@@ -1,5 +1,4 @@
-"""striqt.sensor.specs.paths: sink path formatting (get_format_fields,
-get_path_fields, PathFormatter)
+"""striqt.sensor.specs.paths: sink path formatting.
 
 The site-shaped cases use the extension binding in sweeps/src/extensions.py and the
 override files in sweeps/sites*, mirroring the downstream sensor configuration.

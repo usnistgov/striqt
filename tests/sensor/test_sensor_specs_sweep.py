@@ -1,4 +1,4 @@
-"""striqt.sensor.specs.sweep: validate_sweep and the located errors it raises from
+"""striqt.sensor.specs.sweep: the located errors validate_sweep raises from
 Sweep.__post_init__
 """
 

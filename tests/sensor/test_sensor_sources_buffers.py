@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.sources.buffers: read-count arithmetic, trigger holdoff
-alignment, transport dtype casting, IQ reuse compatibility, gapless carryover and
-receive buffer allocation"""
+"""striqt.sensor.lib.sources.buffers: read-count arithmetic, trigger alignment,
+transport casting, IQ reuse and receive buffer allocation
+"""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.calibration: the generated calibration sweep and capture classes,
-noise diode loop insertion, the Y-factor corrections and their lookups, YFactorSink,
-and the manual noise diode peripheral"""
+"""striqt.sensor.lib.calibration: the generated calibration sweep, the Y-factor
+corrections and their lookups, and the calibration sink
+"""
 
 from __future__ import annotations
 

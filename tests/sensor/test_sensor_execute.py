@@ -1,9 +1,7 @@
 """striqt.sensor.lib.execute: the acquire/analyze/sink pipeline of iterate_sweep.
 
-Sequencing and indexing of the results, repeat and loop expansion, the yield modes,
-failure propagation from the sink and peripheral threads, and the calibration cache
-log. The captures are 1-port scale-only tones at distinct offsets, so a result
-attributed to the wrong capture disagrees with its own generator oracle exactly.
+The captures are 1-port scale-only tones at distinct offsets, so a result attributed
+to the wrong capture disagrees with its own generator oracle exactly.
 """
 
 from __future__ import annotations

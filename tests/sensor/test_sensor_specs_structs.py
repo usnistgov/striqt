@@ -1,5 +1,4 @@
-"""striqt.sensor.specs.structs: __post_init__ validation and freezing of the sensor
-capture, source, loop, remap and sweep specs"""
+"""striqt.sensor.specs.structs: validation and freezing of the sensor specs"""
 
 from __future__ import annotations
 

@@ -1,20 +1,10 @@
-"""striqt.analysis.measurements.power: channel_power_time_series,
-channel_power_histogram and cyclic_channel_power.
+"""striqt.analysis.measurements.power: the channel power measurements.
 
-`tests/waveform/test_power_analysis.py` property-tests the underlying
-`iq_to_bin_power` and `iq_to_cyclic_power` kernels, so these tests cover only what
-the measurement wrapping adds: coordinate values, axis order, dtype, the dB
-conversion, and detector and statistic selection.
-
-Inputs are the closed-form generators in `striqt.analysis.testing`, whose levels
-`tests/analysis/test_analysis_testing.py` pins. A unit-amplitude tone has mean
-``|x|**2 == 1``, so the measurements' dBm scale is ``10*log10(mean |x|**2)`` with no
-offset, and an amplitude of ``10**(power/20)`` reads `power` dBm.
-
-Tolerances are the `sa.specs.Tolerance` each measurement registers with
-`tolerance=`, fetched through `sa.registry.tolerances`: the float32 dB conversion
-budget plus the roundoff of squaring, averaging and storing the level. They land near
-2e-5 dB, which is far below any level a measurement is read at.
+`tests/waveform/test_power_analysis.py` property-tests the underlying kernels, so
+these tests cover what the measurement wrapping adds: coordinates, axis order, dtype,
+the dB conversion, and detector and statistic selection. A unit-amplitude tone has
+mean ``|x|**2 == 1``, so the dBm scale is ``10*log10(mean |x|**2)`` with no offset.
+Tolerances are the ones each measurement registers.
 """
 
 from __future__ import annotations

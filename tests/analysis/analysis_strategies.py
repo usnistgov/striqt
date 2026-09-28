@@ -1,8 +1,4 @@
-"""strategies and oracles for the analysis tests: the capture/delay/range domains
-that __post_init__ validates, the (capture, spec) domains of every registered
-validator, the freeze/unfreeze and frozendict trees, the registry walk that fetches a
-measurement's tolerance, and the constants (power bins, cellular sample rate and frame
-size, SSB spectrogram layout) that more than one test module builds specs from.
+"""strategies, spec factories and shared constants for the analysis tests.
 
 Not a conftest: a second rootless conftest would shadow the root one that other test
 directories import by name.

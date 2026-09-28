@@ -1,20 +1,11 @@
-"""striqt.analysis.measurements.cellular: the synchronization and cyclic prefix
-measurements cellular_5g_pss_correlation, cellular_5g_sss_correlation,
-cellular_5g_pss_sync, cellular_5g_sss_sync and cellular_cyclic_autocorrelation, plus
-cellular_5g_ssb_spectrogram and cellular_resource_power_histogram.
+"""striqt.analysis.measurements.cellular: the 5G NR synchronization, cyclic prefix and
+resource grid measurements.
 
 `tests/waveform/test_waveform_ofdm.py` proves the correlators and the cyclic prefix
-kernel numerically. What the measurement layer adds, and what is tested here, is the
-(capture, spec) validation that rejects a combination before acquisition: the
-resampler's grid and band limits and the 10 ms frame count for the correlators, and
-the frame, slot and symbol index bounds for the autocorrelation.
-
-Two frames at 3.84 MS/s is the smallest capture at which a 30 kHz cell search (case
-C, 3GPP TS 38.213 Section 4.1) and a two-frame `frame_range` both fit.
-
-The SSB spectrogram is checked against the closed form of a bin-centered tone through
-the zero-padded boxcar window; the resource grid histogram against the constant
-envelope of a tone, which puts the whole normalized fraction in one power bin.
+kernel numerically; these tests cover the (capture, spec) validation the measurement
+layer adds, and the coordinates and levels of the spectrogram products. Two frames at
+3.84 MS/s is the smallest capture at which a 30 kHz cell search (case C, 3GPP TS 38.213
+Section 4.1) and a two-frame `frame_range` both fit.
 """
 
 from __future__ import annotations

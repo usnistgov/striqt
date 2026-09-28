@@ -1,9 +1,5 @@
-"""Property-based tests for striqt.waveform.lib.arrays using Hypothesis.
-
-Covers rounding, dtype helpers, binned and sliding windows, blocking, histograms,
-axis slicing and indexing, grouped views, padding, the numpy-to-xp conversion
-decorator, and the cupy runtime helpers, each against a plain numpy reference.
-Known defects are recorded as strict expected failures.
+"""striqt.waveform.lib.arrays: property tests of the array helpers against a plain
+numpy reference.
 """
 
 from __future__ import annotations

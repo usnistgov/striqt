@@ -1,6 +1,6 @@
 """striqt.sensor.lib.util: the pipeline offset iterator, thread interrupt sharing,
-deferred exception handling, retry, and the logging helpers used by the sweep
-execution, calibration, sinks, resources and cli modules"""
+deferred exception handling, retry, and the logging helpers
+"""
 
 from __future__ import annotations
 

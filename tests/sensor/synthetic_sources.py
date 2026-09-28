@@ -1,14 +1,11 @@
 """factories and oracles for sweeps over the synthetic (function generator) sources.
 
-Not a conftest: importable by bare name from the sensor test modules only.
-
-The four synthetic bindings call the `striqt.analysis.testing` generators at the
-source sample rate `fs_sdr` with absolute sample indices referenced to the corrected
-capture, so the corrected output of a capture is the same generator evaluated at
-`capture.sample_rate` from index 0 (`expected_corrected`). The presets below were
-chosen from a 125 MHz master clock so that every acquisition stays under 5e4 samples
-per port and the correction overlaps come out even, which `Controller.read_iq`
-requires.
+The synthetic bindings call the `striqt.analysis.testing` generators at the source
+sample rate with absolute indices referenced to the corrected capture, so the
+corrected output is the same generator evaluated at `capture.sample_rate` from
+index 0. The presets keep every acquisition under 5e4 samples per port with even
+correction overlaps, which `Controller.read_iq` requires. Not a conftest: importable
+by bare name from the sensor test modules.
 """
 
 from __future__ import annotations
