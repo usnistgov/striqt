@@ -24,10 +24,12 @@ if TYPE_CHECKING:
 
 
 def _split_preroll(start_index: int, count: int) -> tuple[int, int, int]:
-    """(zero-fill count, first file index, file sample count) for a read request.
+    """split a read request into (zero-fill count, first file index, file sample count).
 
     File index 0 is corrected sample 0, so the part of the request before it is
-    filled with zeros rather than read.
+    filled with zeros rather than read. All three values are in samples and never
+    negative; the zero-fill and file sample counts sum to `count`, and reading starts
+    at `start_index` when that lies in the file and at sample 0 otherwise.
     """
     fill = min(max(-start_index, 0), count)
     return fill, max(start_index, 0), count - fill

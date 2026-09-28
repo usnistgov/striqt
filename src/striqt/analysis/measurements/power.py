@@ -18,7 +18,11 @@ if typing.TYPE_CHECKING:
 
 # %% channel_power_time_series
 class ChannelPowerBinning(typing.NamedTuple):
-    """the detector binning implied by a (capture, channel power spec) combination"""
+    """the detector binning of one capture.
+
+    `bin_size` is the number of samples per detector bin and `bin_count` the number of
+    bins across the capture, as computed by `validated_channel_power_binning`.
+    """
 
     bin_size: int
     bin_count: int
@@ -28,7 +32,11 @@ def validated_detector_bin_size(
     capture: specs.Capture,
     spec: typing.Union[specs.ChannelPowerTimeSeries, specs.CyclicChannelPower],
 ) -> int:
-    """check that `detector_period` spans a whole number of samples, returning that count"""
+    """check that `detector_period` is a whole number of samples, returning that count.
+
+    Raises:
+        ValueError: if `detector_period` is not a whole multiple of the sample period
+    """
     if not sw.isroundmod(float(spec.detector_period), 1 / capture.sample_rate):
         raise ValueError(
             'detector_period must be a counting-number multiple of the sample period '
@@ -42,11 +50,15 @@ def validated_detector_bin_size(
 def validated_channel_power_binning(
     capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
 ) -> ChannelPowerBinning:
-    """check that `detector_period` tiles the capture in whole samples, returning the
-    derived detector binning.
+    """return the detector binning of `capture` under `spec`, checking it tiles evenly.
 
-    `sw.iq_to_bin_power` and `sw.axis_to_blocks` apply these same two rules once IQ is
+    `sw.iq_to_bin_power` and `sw.axis_to_blocks` apply the same two rules once IQ is
     in hand; checking them here moves the failure ahead of the acquisition.
+
+    Raises:
+        ValueError: if `detector_period` is not a whole number of samples, `duration`
+            is not a whole number of detector periods, or an entry of
+            `power_detectors` is not a supported statistic
     """
     shared.check_statistics('power_detectors', spec.power_detectors)
     bin_size = validated_detector_bin_size(capture, spec)
@@ -71,8 +83,19 @@ def channel_power_tolerance(
     array_backend: sw.typing.ArrayBackend = 'numpy',
     input_error: float = 0.0,
 ) -> specs.Tolerance:
-    """the roundoff budget of `channel_power_time_series` in dB, from the detector
-    binning and the relative rms amplitude error `input_error` already in the IQ"""
+    """bound the roundoff (in dB) of `channel_power_time_series`.
+
+    The bound is set by the detector binning and by the relative rms amplitude error
+    `input_error` already present in the IQ.
+
+    Args:
+        input_error: relative rms error of the IQ amplitude (linear, unitless)
+        array_backend: has no effect on this bound
+
+    Returns:
+        the `specs.Tolerance` in dB over the ``(power_detector, time_elapsed)`` output
+        elements
+    """
     binning = validated_channel_power_binning(capture, spec)
     return shared.level_tolerance(
         amplitude_rms=input_error,
@@ -151,7 +174,15 @@ def evaluate_channel_power_time_series(
 def channel_power_time_series(
     iq: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
-    """Compute a binned time series of channel power detector measurements.
+    """evaluate a time series of binned channel power for each power detector.
+
+    Each detector reduces the instantaneous power ``|iq|**2`` over consecutive blocks
+    of `detector_period` ('rms' the mean, 'peak' the maximum), and the result is
+    converted to dBm. Per capture, the result has dimensions
+    ``(power_detector, time_elapsed)``, with `time_elapsed` in s from the start of the
+    capture in steps of `detector_period`. The capture `duration` must be a whole
+    number of detector periods and `detector_period` a whole number of samples at
+    `sample_rate`; otherwise validation raises `ValueError`.
 
     Args:
     {args}
@@ -166,7 +197,16 @@ def channel_power_time_series(
 # %% channel_power_histogram
 @util.lru_cache()
 def make_power_bins(power_low, power_high, power_resolution, xp=np):
-    """generate the list of power bins"""
+    """return histogram bin centers (in dB) with catch-all bins at each end.
+
+    The finite centers run from `power_low` toward `power_high` in steps of
+    `power_resolution`, bracketed by ``-inf`` and ``inf``. The last finite center is `power_high` or lies within half a step below it. The
+    result is cached and shared between callers, so it must not be modified in place.
+
+    Returns:
+        1-D array in the namespace `xp`: the grid points with one extra element at
+        each end
+    """
     ret = xp.arange(power_low, power_high, power_resolution)
     if power_high - ret[-1] > power_resolution / 2:
         ret = xp.pad(ret, [[0, 1]], mode='constant', constant_values=power_high).copy()
@@ -180,7 +220,16 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
 
 @util.lru_cache()
 def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=np):
-    """generate the list of power bins"""
+    """return the `xp.histogram` bin edges (in dB) that pair with `make_power_bins`.
+
+    Edges sit midway between adjacent grid points, so the first and last edges are
+    ``-inf`` and ``inf`` and the finite edges extend half a step below `power_low` and
+    half a step above `power_high`. The result is cached and shared between callers,
+    so it must not be modified in place.
+
+    Returns:
+        1-D array in the namespace `xp`, one element longer than `make_power_bins`
+    """
 
     bin_centers = (
         make_power_bins(
@@ -206,7 +255,11 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 def channel_power_bin(
     capture: specs.Capture, spec: specs.ChannelPowerHistogram
 ) -> np.ndarray:
-    """the power bin coordinate values"""
+    """return the `channel_power_bin` coordinate: histogram bin centers in dBm.
+
+    The grid runs from `power_low` to `power_high` in steps of `power_resolution`,
+    with ``-inf`` and ``inf`` catch-all bins at each end (`make_power_bins`).
+    """
     return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
 
 
@@ -223,9 +276,14 @@ def channel_power_bin(
 def channel_power_histogram(
     iq: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
-    """evaluate the fraction of channel power readings binned on a uniform grid spacing.
+    """evaluate the fraction of channel power readings that fall in each power bin.
 
-    The outputs correspond to bin centers.
+    The readings are those of `channel_power_time_series` with the same detector
+    fields. Per capture, the result has dimensions
+    ``(power_detector, channel_power_bin)`` and sums to 1 over the bins of each
+    detector. `channel_power_bin` holds the bin centers in dBm; its ``-inf`` and
+    ``inf`` entries collect the readings more than half a bin below `power_low` or
+    above `power_high`.
 
     Args:
     {args}
@@ -284,6 +342,12 @@ def validated_cyclic_lag_count(
 
     Returns:
         the number of detector bins in one cycle, i.e. the length of `cyclic_lag`
+
+    Raises:
+        ValueError: if `detector_period` is not a whole number of samples,
+            `cyclic_period` is not a whole number of detector periods, `duration` is
+            not a whole number of cycles, or an entry of `power_detectors` or
+            `cyclic_statistics` is not a supported statistic
     """
     shared.check_statistics('power_detectors', spec.power_detectors)
     shared.check_statistics('cyclic_statistics', spec.cyclic_statistics)
@@ -314,9 +378,20 @@ def cyclic_channel_power_tolerance(
     array_backend: sw.typing.ArrayBackend = 'numpy',
     input_error: float = 0.0,
 ) -> specs.Tolerance:
-    """the roundoff budget of `cyclic_channel_power` in dB, from the detector binning,
-    the number of cycles each statistic reduces over, and the relative rms amplitude
-    error `input_error` already in the IQ"""
+    """bound the roundoff (in dB) of `cyclic_channel_power`.
+
+    The bound is set by the detector binning, the number of cycles each statistic
+    reduces over, and the relative rms amplitude error `input_error` already present
+    in the IQ.
+
+    Args:
+        input_error: relative rms error of the IQ amplitude (linear, unitless)
+        array_backend: has no effect on this bound
+
+    Returns:
+        the `specs.Tolerance` in dB over the
+        ``(power_detector, cyclic_statistic, cyclic_lag)`` output elements
+    """
     lag_count = validated_cyclic_lag_count(capture, spec)
     bin_size = validated_detector_bin_size(capture, spec)
     cycle_count = round(capture.duration / spec.cyclic_period)
@@ -369,21 +444,21 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.nda
 def cyclic_channel_power(
     iq: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
-    """Evaluate cyclic statistics of channel power across the cycles in a capture.
+    """evaluate cyclic statistics of channel power across the cycles in a capture.
 
     Each power detector bins the capture on `detector_period`; the binned series is
     folded into cycles of `cyclic_period`, and each cyclic statistic reduces across
     the cycles, following D.G. Kuester et al., "Cyclic Analysis of Power in Radio
-    Channels". Per capture, the result has
-    dimensions ``(power_detector, cyclic_statistic, cyclic_lag)``. The `cyclic_lag`
-    coordinate runs from 0 to ``cyclic_period - detector_period`` in steps of
-    `detector_period`, so every trace holds ``cyclic_period / detector_period``
-    samples regardless of the capture `duration`.
+    Channels". Per capture, the result has dimensions
+    ``(power_detector, cyclic_statistic, cyclic_lag)``. The `cyclic_lag` coordinate
+    in s starts at 0 and spans one `cyclic_period` in steps of `detector_period`, so
+    those two fields alone set the trace length, regardless of the capture
+    `duration`.
 
-    Signals whose period divides `cyclic_period` (e.g., 10 ms covers TDD cellular frames,
-    5 ms WiMAX frames and the 1 ms CBRS test ``bin 1'' pulse repetition interval) resolve
-    at fixed lags with little spread between the 'min' and 'max' statistics, so the
-    uplink and downlink levels of a TDD network can be read from disjoint lag
+    Signals whose period divides `cyclic_period` (10 ms covers TDD cellular frames,
+    5 ms WiMAX frames and the 1 ms CBRS test ``bin 1`` pulse repetition interval)
+    resolve at fixed lags with little spread between the 'min' and 'max' statistics,
+    so the uplink and downlink levels of a TDD network can be read from disjoint lag
     windows, while occupancy with an incommensurate period smears across all lags.
 
     Statistics are evaluated in linear power and converted to dBm afterwards. The

@@ -75,14 +75,19 @@ def fft_roundoff_rms(
     *,
     array_backend: ArrayBackend = 'numpy',
 ) -> float:
-    """expected rms roundoff error of one backend, relative to the output rms.
+    """return the expected rms roundoff of one backend, relative to the output rms.
 
-    Arguments:
-        dtype: the working dtype (complex dtypes select by their real component)
+    Args:
+        dtype: the working dtype (a complex dtype selects its real component)
         nffts: the size of each FFT pass in the computation
         n_elementwise: the number of elementwise roundings in the computation
         array_backend: the backend whose FFT constant applies, named as in a source
             spec so that a budget can be evaluated where that backend is not installed
+
+    Returns:
+        a dimensionless fraction of the output rms, proportional to the unit
+        roundoff of `dtype`, that grows with each FFT size in `nffts` and with
+        `n_elementwise`, and is larger for cupy than for numpy
     """
     # Per FFT pass the rms error relative to the output rms is c*eps*sqrt(log2 N), eps
     # the unit roundoff (Gentleman & Sande 1966; FFTW accuracy notes), and each
@@ -104,24 +109,28 @@ def fft_tolerance_rms(
     *,
     array_backend: ArrayBackend = 'numpy',
 ) -> float:
-    """rms tolerance on one backend's error against an exact reference, relative to
-    the output rms (see `fft_roundoff_rms` for the arguments)"""
+    """return the rms tolerance on one backend's error against an exact reference.
+
+    The tolerance is relative to the output rms and exceeds `fft_roundoff_rms`,
+    which documents the arguments, by the module's safety margin.
+    """
     return FFT_ROUNDOFF_SAFETY * fft_roundoff_rms(
         dtype, nffts, n_elementwise, array_backend=array_backend
     )
 
 
 def peak_factor(size: int) -> float:
-    """max/rms ratio of `size` complex gaussian errors, with 2x margin on the tail"""
+    """bound the max/rms ratio of `size` complex gaussian errors with 2x tail margin"""
     return float(2 * np.sqrt(np.log(size)))
 
 
 def on_peak_roundoff(dtype: DTypeLike) -> float:
-    """bound on structured roundoff in the matched-filter bin of the matched input,
-    relative to that peak's amplitude.
+    """bound the structured roundoff in the matched-filter bin of the matched input.
 
-    This is where roundoff concentrates: the bin of a tone in the frequency domain
-    (an FFT), or the sample of an impulse in the time domain (a resampler or detector).
+    The bound is relative to that peak's amplitude and is a fixed multiple of the
+    unit roundoff of `dtype`. This is where roundoff concentrates: the bin of a tone
+    in the frequency domain (an FFT), or the sample of an impulse in the time domain
+    (a resampler or detector).
     """
     # an FFT of a tone measured up to 6.7 units of roundoff of the tone amplitude at
     # the tone (cuFFT, N=512) and 3.9 in a far bin (cuFFT, N=1024), against ~2 for
@@ -131,20 +140,25 @@ def on_peak_roundoff(dtype: DTypeLike) -> float:
 
 
 def rms_tolerance_dBc(sigma: float) -> float:
-    """express an rms amplitude tolerance relative to the output rms as error power
-    relative to the signal, in dBc"""
+    """convert a relative rms amplitude tolerance `sigma` to error power in dBc.
+
+    `sigma` is relative to the output rms, so the result is the error power relative
+    to the signal: negative for `sigma` below 1, and unbounded below as `sigma`
+    approaches 0.
+    """
     return float(20 * np.log10(sigma))
 
 
 def off_peak_floor_dBc(
     sigma: float, nfft: int, size: int | None = None, dtype: DTypeLike = 'complex64'
 ) -> float:
-    """express the roundoff floor in bins away from the matched-filter bin of the
-    matched input (a bin-centered tone), relative to the peak, in dBc.
+    """express the roundoff floor in off-peak bins of a matched-filter output, in dBc.
 
-    The input occupies one bin while roundoff spreads evenly over all `nfft` bins. With
-    `size`, the result is the peak tolerance over that many off-peak bins, which is the
-    larger of the white-noise tail and the structured `on_peak_roundoff`.
+    The matched input (a bin-centered tone) occupies one bin while roundoff of
+    relative rms `sigma` spreads evenly over all `nfft` bins, so the floor below the
+    peak deepens with `nfft`. With `size`, the result is the peak tolerance over that
+    many off-peak bins, which is the larger of the white-noise tail and the
+    structured `on_peak_roundoff` of `dtype`.
     """
     if size is None:
         return rms_tolerance_dBc(sigma / np.sqrt(nfft))
@@ -164,7 +178,7 @@ def _design_window(
     norm: bool = True,
     dtype: DTypeLike = 'float32',
 ) -> Array:
-    """the uncached numpy implementation of `get_window`"""
+    """design the window of `get_window` in numpy, without caching"""
 
     from scipy import signal
 
@@ -223,13 +237,35 @@ def get_window(
     dtype: DTypeLike = 'float32',
     xp: 'XpType' = None,
 ) -> Array:
-    """build an window function with optional zero-padding or parameter finding.
+    """return a window of `nwindow` samples for `xp`, zero-padded to `nwindow + nzero`.
 
-    The design is cached in memory and on disk. Equivalent spellings of the
-    arguments (a dtype given as a string or a `numpy.dtype`, `xp` given or omitted,
-    positional or keyword `nzero`) share one cache entry.
+    The design is cached in memory and on disk (`persistent_cache`), so a call that
+    misses both costs the scipy window design and a disk write. Equivalent spellings
+    of the arguments (a dtype given as a string or a `numpy.dtype`, `xp` given or
+    omitted, positional or keyword `nzero`) share one cache entry.
 
-    See also:
+    Args:
+        name_or_tuple: a window name, ``(name, parameter)`` tuple, or Kaiser beta
+            accepted by `scipy.signal.get_window`, or a name registered by
+            `striqt.waveform.lib.windows.register_extra_windows`
+        nwindow: the number of nonzero window samples
+        nzero: the number of zero samples appended to the window
+        fftshift: True to modulate the window by a half-band shift so that the FFT of
+            a windowed signal comes out in ascending frequency order; the window is
+            then complex when `nwindow + nzero` is odd
+        center_zeros: True to split the `nzero` zeros before and after the window
+            instead of appending them
+        fftbins: True for a periodic window (spectral analysis), False for a
+            symmetric one, as in `scipy.signal.get_window`
+        norm: True to scale the window to unit time-averaged power
+        dtype: the floating-point precision of the result (the complex counterpart
+            when `fftshift` makes the window complex); None keeps scipy's float64
+        xp: the array namespace of the result; None selects numpy
+
+    Returns:
+        a 1-D array of `nwindow + nzero` samples in `xp`
+
+    References:
         `scipy.signal.get_window`
     """
     if dtype is not None:
@@ -545,10 +581,14 @@ def _prime_fft_sizes(min=2, max=OLA_MAX_FFT_SIZE):
 def slice_freqs(
     nfft: int, fs: float, bandwidth: float, *, offset: float = 0.0
 ) -> slice:
-    """the slice of an `nfft`-bin frequency axis that spans `bandwidth` about `offset`.
+    """return the slice of `bandwidth` about `offset` on an `nfft`-bin frequency axis.
 
-    Raises `ValueError` for an `offset` off the `fs/nfft` grid or a band outside
-    `±fs/2`, which is why validators call it.
+    The axis is the ascending `fftfreq` grid at sample rate `fs`; `fs`, `bandwidth`
+    and `offset` are in Hz. Validators call this for its exceptions.
+
+    Raises:
+        ValueError: if `bandwidth` is negative, if `offset` is off the ``fs/nfft``
+            grid, or if the band extends outside ``±fs/2``
     """
     if bandwidth < 0:
         raise ValueError('invalid negative bandwidth')
@@ -1487,11 +1527,16 @@ def oaconvolve(x1, x2, mode='full', axes=-1):
 def resample_edges(
     nfft_in: int, nfft_out: int, shift: int = 0
 ) -> tuple[int, int] | None:
-    """the frequency bin range `[edge_low, edge_high)` that `resample` copies from
-    an `nfft_in`-sample input into `nfft_out` samples, or None for an unshifted band.
+    """return the input bin range ``[edge_low, edge_high)`` that `resample` keeps.
 
-    Raises `ValueError` when `nfft_in` is odd, when a nonzero `shift` is requested
-    while upsampling, or when the shifted band runs outside the input spectrum.
+    The range indexes the `nfft_in`-bin spectrum of the input in ascending frequency
+    order, which `resample` copies into `nfft_out` output samples when downsampling
+    by a band `shift` of that many bins. None means the unshifted band.
+
+    Raises:
+        ValueError: if `nfft_in` is odd, if `shift` is nonzero while upsampling
+            (``nfft_out > nfft_in``), or if the shifted band runs outside the input
+            spectrum
     """
     if nfft_in % 2 != 0:
         raise ValueError(f'the input length must be even, not {nfft_in}')

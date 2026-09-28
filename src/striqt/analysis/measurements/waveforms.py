@@ -62,8 +62,17 @@ def iq_waveform_tolerance(
     array_backend: ArrayBackend = 'numpy',
     input_error: float = 0.0,
 ) -> specs.Tolerance:
-    """the error budget on the IQ envelope level ``20*log10|iq|`` in dB, which is
-    the pass-through of `input_error` since the slice itself is exact"""
+    """bound the error (in dB) of the IQ sample magnitudes.
+
+    The slice itself is exact, so the bound is `input_error` passed through.
+
+    Args:
+        input_error: relative rms error of the IQ amplitude (linear, unitless)
+        array_backend: has no effect on this bound
+
+    Returns:
+        the `specs.Tolerance` in dB over the sliced samples
+    """
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)
     # the slice may be empty, where peak_factor's log is undefined
     size = max(stop - start, 1)

@@ -135,11 +135,13 @@ DB_PER_NEPER = 10 / math.log(10)
 def log_conversion_tol(
     dtype: DTypeLike, scale: float, complex_input: bool = False, n_impl: int = 1
 ) -> dict[str, float]:
-    """tolerances for scale*log10(|x|), against exact math (n_impl=1) or a second
-    implementation (n_impl=2).
+    """return the ``rtol`` and ``atol`` (in dB) on ``scale*log10(|x|)`` as a dict.
 
-    Roundoff on the input side of the log becomes an absolute dB error, which is what
-    bounds the result near 0 dB where ulps of the output are meaningless.
+    Both are fixed multiples of the unit roundoff of `dtype`, and ``atol`` also
+    scales with `scale`. `n_impl` is 1 against exact math and 2 against a second
+    implementation; `complex_input` adds the roundoff of ``|x|``. Roundoff on the
+    input side of the log becomes an absolute dB error, which is what bounds the
+    result near 0 dB where ulps of the output are meaningless.
     """
     log10_ulp = 2
     u = unit_roundoff(dtype)
@@ -153,9 +155,12 @@ def log_conversion_tol(
 
 
 def pow_conversion_rtol(dtype: DTypeLike, max_abs_dB: float, n_impl: int = 1) -> float:
-    """rtol for 10**(x/10) with |x| <= max_abs_dB.
+    """return the rtol on ``10**(x/10)`` for ``|x| <= max_abs_dB``.
 
-    Rounding x/10 perturbs the exponent, so its effect scales with |x|.
+    Rounding the exponent perturbs the result in proportion to its magnitude, so the
+    bound grows linearly with `max_abs_dB` from a floor of a fixed number of unit
+    roundoffs of `dtype`. `n_impl` is 1 against exact math and 2 against a second
+    implementation.
     """
     pow_ulp = 8
     u = unit_roundoff(dtype)
@@ -166,7 +171,12 @@ def pow_conversion_rtol(dtype: DTypeLike, max_abs_dB: float, n_impl: int = 1) ->
 def envelope_power_rtol(
     dtype: DTypeLike, complex_input: bool = False, n_impl: int = 1
 ) -> float:
-    """rtol for |x|**2"""
+    """return the rtol on ``|x|**2``.
+
+    The bound is a fixed multiple of the unit roundoff of `dtype`, larger when
+    `complex_input` adds the roundoff of ``|x|``. `n_impl` is 1 against exact math
+    and 2 against a second implementation.
+    """
     u = unit_roundoff(dtype)
     rtol = 2 * u * (0.5 + (2 * HYPOT_ULP if complex_input else 0))
     return ROUNDOFF_SAFETY * n_impl * rtol
@@ -175,7 +185,13 @@ def envelope_power_rtol(
 def linear_stat_tol(
     dtype: DTypeLike, max_abs_dB: float, n: int, n_impl: int = 1
 ) -> dict[str, float]:
-    """tolerances in dB for dBlinmean/dBlinsum over n terms with |x| <= max_abs_dB"""
+    """return the ``rtol`` and ``atol`` in dB on `dBlinmean`/`dBlinsum` over `n` terms.
+
+    `max_abs_dB` bounds ``|x|`` of the dB-valued input. ``rtol`` is that of the final
+    dB conversion; ``atol`` grows with `max_abs_dB` and linearly with `n` for the
+    accumulation of the linear terms. `n_impl` is 1 against exact math and 2 against
+    a second implementation.
+    """
     u = unit_roundoff(dtype)
     rel_linear = pow_conversion_rtol(dtype, max_abs_dB) + ROUNDOFF_SAFETY * n * u
     tol = log_conversion_tol(dtype, 10)
@@ -186,14 +202,17 @@ def linear_stat_tol(
 
 
 def roundtrip_power_rtol(dtype: DTypeLike, max_abs_dB: float) -> float:
-    """rtol for dBtopow(powtodB(x)) with |powtodB(x)| <= max_abs_dB"""
+    """return the rtol on ``dBtopow(powtodB(x))`` for ``|powtodB(x)| <= max_abs_dB``"""
     tol = log_conversion_tol(dtype, 10)
     dB_err = tol['rtol'] * max_abs_dB + tol['atol']
     return math.log(10) / 10 * dB_err + pow_conversion_rtol(dtype, max_abs_dB)
 
 
 def roundtrip_dB_tol(dtype: DTypeLike, max_abs_dB: float) -> dict[str, float]:
-    """tolerances for powtodB(dBtopow(x)) with |x| <= max_abs_dB"""
+    """return the ``rtol`` and ``atol`` in dB on ``powtodB(dBtopow(x))``.
+
+    `max_abs_dB` bounds ``|x|``, and ``atol`` grows with it.
+    """
     tol = log_conversion_tol(dtype, 10)
     return {
         'rtol': tol['rtol'],
@@ -202,21 +221,25 @@ def roundtrip_dB_tol(dtype: DTypeLike, max_abs_dB: float) -> dict[str, float]:
 
 
 def level_tolerance_dB(sigma: float, power: bool = False) -> float:
-    """express a relative tolerance on an output as the uncertainty of its level in dB.
+    """convert a relative tolerance `sigma` on an output to a level uncertainty in dB.
 
-    `sigma` bounds an amplitude ratio (level 20*log10|x|) unless `power` is True
-    (level 10*log10 x, e.g. spectrogram bins).
+    `sigma` bounds an amplitude ratio (20 dB per decade) unless `power` is True for a
+    power ratio (10 dB per decade, e.g. spectrogram bins). The result is
+    non-negative for non-negative `sigma`.
     """
     return (10 if power else 20) * np.log10(1 + sigma)
 
 
 def linear_tolerance_dB(rtol: float) -> float:
-    """express a relative tolerance on a linear power as a tolerance in dB"""
+    """convert a relative tolerance `rtol` on a linear power to a tolerance in dB"""
     return 10 * np.log10(1 + rtol)
 
 
 def dB_tolerance(rtol: float, atol: float, max_abs_dB: float) -> float:
-    """express (rtol, atol) on a dB-valued output as its worst-case tolerance in dB"""
+    """return the worst-case tolerance in dB of ``(rtol, atol)`` on a dB-valued output.
+
+    `max_abs_dB` bounds the magnitude of the output, and the result grows with it.
+    """
     return atol + rtol * max_abs_dB
 
 
@@ -225,21 +248,23 @@ def off_peak_dB_tolerance(depth_dBc: float, err: float) -> float: ...
 @typing.overload
 def off_peak_dB_tolerance(depth_dBc: Array, err: float) -> Array: ...
 def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array:
-    """two-sided dB tolerance on an element `depth_dBc` (>= 0) below the peak of its
-    output, given a relative amplitude error `err` at the peak.
+    """bound the dB error of an element `depth_dBc` (>= 0) below the peak of its output.
 
-    The peak here is the matched-filter bin of the matched input, so the same bound
-    serves a tone's FFT bin and an impulse's detector bin.
+    The tolerance is two-sided, given a relative amplitude error `err` at the peak.
+    The peak is the matched-filter bin of the matched input, so the same bound serves
+    a tone's FFT bin and an impulse's detector bin. The result is non-negative and
+    grows with `depth_dBc`: a float for a scalar `depth_dBc` and a float64 numpy
+    array otherwise.
 
     Roundoff bounds an element's amplitude error relative to the output's *peak*, so
     as a share of the element's own amplitude the bound grows with its depth below the
-    peak. A relative amplitude error r leaves the power anywhere in
-    [(1-r)**2, (1+r)**2] of its exact value, and the low side is what dominates in dB:
-    -20*log10(1-r), which diverges as r approaches 1. So an element deeper than
-    -20*log10(err) below the peak, where roundoff alone could account for all of its
-    amplitude, gets an infinite tolerance and goes unchecked - the floor falls out of
-    the bound rather than having to be imposed on top of it. This assumes nothing about
-    the error spreading over an FFT's bins, so it suits any dB-valued output.
+    peak. A relative amplitude error ``r`` leaves the power anywhere between
+    ``(1-r)**2`` and ``(1+r)**2`` of its exact value, and the low side is what
+    dominates in dB, diverging as ``r`` approaches 1. So an element deep enough
+    below the peak that roundoff alone could account for all of its amplitude gets
+    an infinite tolerance and goes unchecked - the floor falls out of the bound
+    rather than having to be imposed on top of it. This assumes nothing about the
+    error spreading over an FFT's bins, so it suits any dB-valued output.
     """
     r = err * 10 ** (np.asarray(depth_dBc, dtype='float64') / 20)
     with np.errstate(divide='ignore'):
@@ -273,10 +298,13 @@ def _lin_to_dB(
     overwrite_x: bool,
     min_dtype: DTypeLike,
 ) -> _ALN:
-    """compute `scale*log10(abs(x) + eps)` or `scale*log10(x + eps)`.
+    """compute ``scale*log10(abs(x) + eps)`` or ``scale*log10(x + eps)``.
 
-    The numexpr expression is one of eight constant strings so its compile cache
-    still hits, and `values`/`eps` are looked up from this frame by name.
+    With `overwrite_x`, the result is written into `x` unless `min_dtype` widens it
+    first; a complex `x` overwritten in place keeps its complex dtype on numpy but
+    comes back as the real view of that buffer on cupy (`_real_buffer`). The numexpr
+    expression is one of eight constant strings so its compile cache still hits, and
+    `values`/`eps` are looked up from this frame by name.
     """
 
     eps_str = '' if eps == 0 else '+eps'
@@ -320,7 +348,27 @@ def powtodB(
     overwrite_x: bool = False,
     min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
-    """compute `10*log10(abs(x) + eps)` or `10*log10(x + eps)` with speed optimizations"""
+    """compute ``10*log10(abs(x) + eps)``, or ``10*log10(x + eps)`` when `abs` is False.
+
+    The computation is elementwise through numexpr on numpy and fused kernels on
+    cupy, in a floating-point dtype no narrower than `min_dtype`.
+
+    Args:
+        x: values in linear power units, as a number, array, or pandas/xarray object
+        abs: True to convert ``abs(x)``; a complex `x` is converted by magnitude in
+            either case
+        eps: an offset added before the logarithm so that zeros map to a finite value
+        overwrite_x: True to write the result into `x` when its dtype is at least
+            `min_dtype` (on numpy, a complex `x` then keeps its complex dtype with
+            zero imaginary part)
+        min_dtype: the narrowest floating-point dtype of the computation; a narrower
+            `x` is widened to it
+
+    Returns:
+        the dB values, real-valued, in the container type of `x` (a Python number for
+        a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
+        xarray ``units`` attribute converted from linear power to dB)
+    """
     return _lin_to_dB(
         x, scale=10, abs=abs, eps=eps, overwrite_x=overwrite_x, min_dtype=min_dtype
     )
@@ -439,9 +487,17 @@ def dBlinsum(
 
 
 def stat_rtol(dtype: DTypeLike, kind: str | float, n_impl: int = 1) -> float:
-    """worst-case rtol of applying the `kind` statistic (as `stat_ufunc_from_shorthand`)
-    to exact samples: one interpolation rounding for a quantile or the median, nothing
-    for a selection or a mean, whose accumulation roundoff is `bin_power_rms`"""
+    """return the worst-case rtol of the `kind` statistic applied to exact samples.
+
+    `kind` is a shorthand of `stat_ufunc_from_shorthand`. The result is 0 for a
+    selection or a mean, whose accumulation roundoff is `bin_power_rms`, and a fixed
+    multiple of the unit roundoff of `dtype` for a quantile or the median, which
+    interpolate once. `n_impl` is 1 against exact math and 2 against a second
+    implementation.
+
+    Raises:
+        ValueError: if `kind` is an unknown statistic name
+    """
     if kind in ('mean', 'rms', 'min', 'max', 'peak'):
         return 0.0
     elif isinstance(kind, str) and kind != 'median':
@@ -452,9 +508,12 @@ def stat_rtol(dtype: DTypeLike, kind: str | float, n_impl: int = 1) -> float:
 def bin_power_rtol(
     dtype: DTypeLike, n_impl: int = 1, kind: str | float = 'mean'
 ) -> float:
-    """worst-case rtol of the `kind` statistic of |x|**2 (as `stat_ufunc_from_shorthand`)
-    before any accumulation: squaring the envelope, and `stat_rtol` for the statistic.
-    The mean's accumulation roundoff is `bin_power_rms`."""
+    """return the pre-accumulation rtol of the `kind` statistic of ``|x|**2``.
+
+    The bound covers squaring the envelope of complex samples and `stat_rtol` for the
+    `kind` shorthand of `stat_ufunc_from_shorthand`; the mean's accumulation roundoff
+    is `bin_power_rms`.
+    """
     envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
     return envelope + stat_rtol(dtype, kind, n_impl)
 
@@ -462,9 +521,12 @@ def bin_power_rtol(
 def bin_power_rms(
     dtype: DTypeLike, size: int, n_impl: int = 1, kind: str | float = 'mean'
 ) -> float:
-    """rms accumulation roundoff of the `kind` statistic of |x|**2 over `size` samples
-    of a contiguous axis, relative to the result: `accum_rms` for the mean ('rms' is
-    the same mean of power), nothing for a selection or a quantile"""
+    """return the rms accumulation roundoff of the `kind` statistic of ``|x|**2``.
+
+    The roundoff is relative to the result over `size` samples of a contiguous axis:
+    `accum_rms` for the mean (``'rms'`` is the same mean of power), 0 for a
+    selection or a quantile.
+    """
     if kind in ('mean', 'rms'):
         return accum_rms(dtype, size, n_impl)
     return 0.0
@@ -527,7 +589,7 @@ def iq_to_cyclic_power(
     cycle_stats=('min', 'mean', 'max'),
     axis=0,
 ) -> dict[str, dict[str, Array]]:
-    """Evaluate cyclic statistics of binned channel power.
+    """return cyclic statistics of the channel power of `x` binned along `axis`.
 
     Channel power along `axis` is first binned with each power detector on
     `detector_period`, giving a time series of ``K`` detector samples. That series
@@ -551,32 +613,38 @@ def iq_to_cyclic_power(
 
     A mismatch ``dT`` between `cyclic_period` and the true signal period, such as
     a sample clock offset, drifts features by ``M * dT / detector_period`` lags by
-    the end of the capture and bleeds power between neighbouring lags. Keep
-    ``M * dT`` below `detector_period` by limiting the number of cycles ``M``.
-
-    Reference: D.G. Kuester et al., "Cyclic Analysis of Power in Radio Channels".
+    the end of the capture and bleeds power between neighboring lags. Features
+    stay within one lag while ``M * dT`` is below `detector_period`, which limits
+    the number of cycles ``M``.
 
     Args:
-        x: complex-valued input waveform samples
-        Ts: sample period of the waveform
-        detector_period: duration of each power detector bin
-        cyclic_period: duration of one cycle, an integer multiple of `detector_period`
-        truncate: if True, drop trailing detector bins that do not complete a cycle
+        x: complex-valued IQ waveform samples
+        Ts: sample period of the waveform (in s)
+        detector_period: duration of each power detector bin (in s), an integer
+            multiple of `Ts`
+        cyclic_period: duration of one cycle (in s), an integer multiple of
+            `detector_period`
+        truncate: True to drop trailing samples that do not complete a detector bin
+            or a cycle, and to round `detector_period` to the nearest multiple of `Ts`
         detectors: power detector names accepted by `iq_to_bin_power`
         cycle_stats: statistics accepted by `stat_ufunc_from_shorthand`, evaluated
-            across cycles (names such as 'min', 'mean', 'max', or quantiles in
-            (0, 1))
+            across cycles (names such as ``'min'``, ``'mean'``, ``'max'``, or
+            quantiles in (0, 1))
         axis: the time axis of `x`
 
-    Raises:
-        ValueError: if `detector_period` is not an integer multiple of `Ts`,
-            `cyclic_period` is not an integer multiple of `detector_period`, or
-            the capture does not hold a whole number of cycles and `truncate` is
-            False
-
     Returns:
-        dict keyed on detector, of dicts keyed on cyclic statistic, of arrays whose
-        `axis` dimension has been replaced by the ``L`` cycle lags
+        dict keyed on detector, of dicts keyed on cyclic statistic, of arrays in the
+        namespace of `x` with the `axis` dimension replaced by the ``L`` cycle lags,
+        in linear power units
+
+    Raises:
+        ValueError: if `detectors` is None; if `cyclic_period` is not an integer
+            multiple of `detector_period`; or, when `truncate` is False, if
+            `detector_period` is not an integer multiple of `Ts` or the capture
+            does not hold a whole number of cycles
+
+    References:
+        D.G. Kuester et al., "Cyclic Analysis of Power in Radio Channels".
     """
 
     # apply the detector statistic
@@ -741,12 +809,12 @@ def _arraylike_with_buffer(
 
 
 def _real_buffer(out: Array) -> Array:
-    """`out`, or its real part if it is complex.
+    """return `out`, or the real view of `out` if it is complex.
 
     `_arraylike_with_buffer` hands back a complex buffer only when overwriting
     complex input in place. The fused kernels compute real values and cannot
-    assign into it, so they write the real part, which is also what the numpy
-    path returns.
+    assign into it, so they write the real part; the numpy path writes the same
+    values into the complex buffer itself.
     """
     if out.dtype.kind == 'c':
         return out.real
@@ -754,9 +822,9 @@ def _real_buffer(out: Array) -> Array:
 
 
 def _use_cuda_kernels(values: Array) -> bool:
-    """whether to evaluate on `values` with the fused kernels in `.jit.cuda`.
+    """report whether `values` is evaluated with the fused kernels in `.jit.cuda`.
 
-    The kernels assign through `out[:]`, which 0-d arrays do not support, so
+    The kernels assign through ``out[:]``, which 0-d arrays do not support, so cupy
     scalars take the generic array-API path.
     """
     return is_cupy_array(values) and values.ndim > 0

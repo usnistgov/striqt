@@ -300,19 +300,62 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         validate: AnalysisValidator | None = None,
         tolerance: AnalysisTolerance | None = None,
     ) -> AnalysisFuncWrapper[P]:
-        """add decorated `func` and its keyword arguments in the self.tostruct() schema.
+        """register the decorated function as the measurement configured by `spec_type`.
 
-        Arguments:
+        Registration mutates this registry when the decorator is applied: `spec_type`
+        becomes a key here and an optional field of the `AnalysisGroup` struct that
+        `tospec()` synthesizes, so the measurement gains a key in the ``analysis:``
+        block of a sweep spec. Each field of `spec_type` is also recorded in
+        `parameter_fields` and `parameter_defaults` for coordinate inference.
+
+        The decorated function is called as ``func(iq, capture, **spec.to_dict())``
+        and returns an array, or an ``(array, attrs)`` tuple, whose axes are `dims`.
+        The wrapper that replaces it accepts ``(iq, capture, as_xarray=True,
+        **kwargs)`` with the fields of `spec_type` as keywords; its `__signature__`
+        and the ``{args}`` placeholder in its docstring are filled from `spec_type`.
+        The wrapper runs `validate` before touching IQ, raising
+        `specs.helpers.SpecValidationError` on a rejected combination, and then
+        returns an `xarray.DataArray` with a leading ``port`` dimension when
+        `as_xarray` is True, a `DelayedDataArray` when it is ``'delayed'``, or the
+        ``(array, attrs)`` pair when it is False.
+
+        Args:
+            spec_type: the `specs.Analysis` subclass whose fields are the keyword
+                arguments of the measurement; one measurement per type
+            dtype: numpy dtype name of the output array
+            name: the output data variable name, or None for the function `__name__`
+            dims: dimension names of the output axes, or None to take them in order
+                from the coordinates that `coord_factories` produce
+            coord_factories: functions registered with `coordinates` that produce the
+                coordinate values along `dims` from ``(capture, spec)``
+            depends: measurements whose intermediate this one reuses; recorded on
+                the `AnalysisInfo` entry and not otherwise consumed
+            caches: `KwArgCache` instances shared with other measurements, which
+                `cache_context` scopes to one capture
+            prefer_iq_source: the stage of the acquired IQ handed to the function;
+                ``'aligned'`` falls back to ``'pre_align'`` when no trigger ran
+            store_compressed: False to store the output uncompressed in zarr
+            attrs: attrs of the output `xarray.DataArray`; the spec fields and any
+                attrs returned by the function take precedence
             validate: checks the (capture, spec) combination without touching IQ, so
                 that a sweep can reject a bad combination before it acquires. The
                 return value is ignored here, but by convention it is the derived
-                sizing that `func` consumes, so the arithmetic has one home; such a
-                validator is named for what it returns (`validated_*`)
+                sizing that the measurement consumes, so the arithmetic has one
+                home; such a validator is named for what it returns (`validated_*`)
             tolerance: derives the roundoff error budget of the output from the
                 (capture, spec) combination without touching IQ, as a
                 `specs.Tolerance`, so that a test or a consumer can decide how
-                closely two evaluations of `func` must agree. It is called with the
-                keywords `array_backend` and `input_error` (see `AnalysisTolerance`)
+                closely two evaluations must agree. It is called with the keywords
+                `array_backend` and `input_error` (see `AnalysisTolerance`)
+
+        Returns:
+            a decorator that registers its function and returns the wrapper
+
+        Raises:
+            ValueError: when `spec_type` is already registered
+            TypeError: when a `coord_factories` entry is not callable; from the
+                returned decorator, when `name` is already registered or `caches`
+                holds something other than `KwArgCache` instances
         """
 
         if isinstance(dims, str):
@@ -476,9 +519,14 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     def validate(self, capture: specs.Capture, analysis: specs.AnalysisGroup) -> None:
         """check each measurement in `analysis` against `capture` without IQ.
 
+        Measurements left unset in `analysis`, and those registered without a
+        `validate=` function, are skipped. Results are cached on the
+        `specs.AnalysisCapture` projection of `capture`, so captures that differ
+        only in fields the analysis layer ignores share one entry.
+
         Raises:
             specs.helpers.SpecValidationError: on the first invalid combination,
-                with a field path rooted at `$.analysis`
+                with a field path rooted at ``$.analysis``
         """
         _validate_analysis_group(capture, analysis, self)
 
@@ -490,11 +538,20 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         array_backend: ArrayBackend = 'numpy',
         input_error: float = 0.0,
     ) -> dict[str, specs.Tolerance]:
-        """the error budget of each measurement in `analysis` that declares one.
+        """return the roundoff error budget of each measurement in `analysis`.
+
+        Results are cached on the `specs.AnalysisCapture` projection of `capture`.
+
+        Args:
+            array_backend: the array namespace the measurements evaluate in, which
+                selects the roundoff model
+            input_error: relative rms amplitude error already present in the IQ
+                handed to the measurements, as a ratio
 
         Returns:
-            a dict keyed by measurement name; measurements registered without a
-            `tolerance=` function are omitted
+            a dict of `specs.Tolerance` keyed by measurement name; measurements left
+            unset in `analysis` or registered without a `tolerance=` function are
+            omitted
         """
         return _analysis_group_tolerances(
             capture, analysis, self, array_backend, input_error

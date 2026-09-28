@@ -112,12 +112,12 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 
 
 class AnalysisCapture(Capture, kw_only=True, frozen=True):
-    """the capture fields that measurements and coordinate factories may read.
+    """hold the capture fields that measurements and coordinate factories may read.
 
     Measurement validators take this projection of a (potentially much larger)
-    sensor capture so that captures differing only in fields the analysis layer
-    ignores share one validation cache entry. A measurement outside this package
-    whose validator needs another capture field cannot see it here.
+    sensor capture, so captures differing only in fields the analysis layer ignores
+    share one validation cache entry. A measurement outside this package whose
+    validator needs another capture field cannot see it here.
     """
 
     center_frequency: Union[types.CenterFrequency, None] = None
@@ -147,36 +147,45 @@ class Analysis(SpecBase, kw_only=True, frozen=True):
 
 
 class ErrorBound(SpecBase, kw_only=True, frozen=True):
-    """an rms and a worst-case bound on the same quantity"""
+    """bound one quantity by its rms over all elements and its worst case at any one"""
 
     rms: float
     peak: float
 
 
 class Tolerance(SpecBase, kw_only=True, frozen=True):
-    """the roundoff error budget of one measurement output.
+    """budget the roundoff error of one measurement output.
 
     A tolerance function derives this from a (capture, spec) pair alone, so `on_peak`
     holds at an element at full scale and `off_peak_dBc` is relative to the output's
-    own peak; neither can depend on the values actually produced.
-
-    Fields:
-        units: of `on_peak`: 'dB', or the output's linear units
-        rtol: relative tolerance on the output value
-        on_peak: the absolute error, in `units`, of elements at the output's peak
-            level: its rms over them and its worst case at any one. The peak is the
-            matched-filter bin of the matched input, e.g. a tone's FFT bin or an
-            impulse's detector sample.
-        off_peak_dBc: the depth below the output's peak at which the rms, and the
-            worst-case, amplitude error equals an element's own amplitude; elements
-            deeper than `off_peak_dBc.peak` are not resolved by the budget. This
-            governs the other bins, away from the matched-filter bin.
+    own peak; neither can depend on the values produced. The peak is the
+    matched-filter bin of the matched input, e.g. a tone's FFT bin or an impulse's
+    detector sample; `off_peak_dBc` governs the other bins, and elements deeper than
+    `off_peak_dBc.peak` are not resolved by the budget.
     """
 
-    units: str
-    rtol: float
-    on_peak: ErrorBound
-    off_peak_dBc: Union[ErrorBound, None] = None
+    units: typing.Annotated[
+        str, helpers.Meta("units of `on_peak`: 'dB', or the linear units of the output")
+    ]
+    rtol: typing.Annotated[
+        float, helpers.Meta('relative tolerance on the output value')
+    ]
+    on_peak: typing.Annotated[
+        ErrorBound,
+        helpers.Meta(
+            'absolute error, in `units`, of elements at the peak level of the output: '
+            'its rms over them and its worst case at any one'
+        ),
+    ]
+    off_peak_dBc: typing.Annotated[
+        Union[ErrorBound, None],
+        helpers.Meta(
+            'level below the peak of the output, as a negative value, at which the '
+            'rms (and the worst-case) amplitude error equals the amplitude of the '
+            'element itself',
+            'dBc',
+        ),
+    ] = None
 
 
 class AnalysisGroup(SpecBase, kw_only=True, frozen=True):

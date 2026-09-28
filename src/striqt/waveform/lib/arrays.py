@@ -110,13 +110,24 @@ ROUNDOFF_SAFETY = 2
 
 
 def unit_roundoff(dtype: DTypeLike) -> float:
-    """u = eps / 2 of the real dtype underlying `dtype` (complex dtypes included)"""
+    """return the unit roundoff of the real dtype underlying `dtype`.
+
+    The unit roundoff is half the spacing between 1 and the next representable
+    value of that dtype (half an ulp); a complex `dtype` selects that of its real
+    component.
+    """
     return float(np.finfo(cast('np.dtype[np.floating[Any]]', np.dtype(dtype))).eps / 2)
 
 
 def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
-    """rms roundoff of a sum or mean over `n` terms of `dtype` along a contiguous axis,
-    relative to the result; `n_impl` independent implementations add in quadrature"""
+    """return the relative rms roundoff of a sum or mean over `n` terms of `dtype`.
+
+    The reduction runs along a contiguous axis, which numpy and cupy accumulate
+    partly in order and partly by tree, so the result grows with the square root of
+    `n` from a floor of a few unit roundoffs of `dtype`; the strided-axis bound is
+    `accum_rtol`. `n_impl` independent implementations add in quadrature: 1 against
+    an exact reference, 2 between two backends.
+    """
     # A reduction over a contiguous axis is not summed in order. numpy sums it pairwise
     # (numpy/_core/src/umath/loops_utils.h.src; before numpy 2.3 per 8192-element
     # buffer, with the buffers summed in order), and cupy has each thread of a block sum
@@ -136,14 +147,22 @@ def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
 
 
 def accum_rtol(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
-    """rtol on a sum or mean over `n` terms of `dtype` along a strided axis, which
-    numpy accumulates in order: n roundings (measured 1600 u rms and 2000 u max at
-    n = 1e6, against the 2e6 u of this bound)"""
+    """bound the relative roundoff of a sum or mean over `n` terms of `dtype`.
+
+    The reduction runs along a strided axis, which numpy accumulates in order, so
+    the bound grows linearly with `n` in unit roundoffs of `dtype` (measured 1600 u
+    rms and 2000 u max at n = 1e6, against the 2e6 u of this bound). `n_impl` is 1
+    against an exact reference and 2 between two implementations.
+    """
     return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
 
 
 def mean_atol(x: Array, count: int) -> float:
-    """absolute roundoff bound on the mean of `count` samples drawn from `x`"""
+    """bound the absolute roundoff of the mean of `count` samples drawn from `x`.
+
+    The bound is in the units of `x`, grows linearly with `count`, and scales with
+    the largest magnitude in `x` at the precision of its dtype.
+    """
     xp = array_namespace(x)
     return count * float(np.finfo(x.dtype).eps) * float(xp.abs(x).max())
 

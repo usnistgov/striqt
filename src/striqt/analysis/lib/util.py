@@ -248,13 +248,22 @@ def ordered_set_union(*args: Iterable[Any]) -> list[Any]:
 
 
 def elementwise_atol(tolerance: specs.Tolerance, expected_dB: ArrayLike) -> np.ndarray:
-    """the per-element absolute tolerance on a dB-valued output, from its
-    `specs.Tolerance` and the numpy array of values expected of it.
+    """return the per-element absolute tolerance, in dB, on a dB-valued output.
 
     `tolerance.on_peak.peak` holds at the output's own peak; deeper elements get the
     two-sided bound of `sw.power_analysis.off_peak_dB_tolerance`, which reaches +inf at
     `off_peak_dBc.peak` below the peak. Without an `off_peak_dBc` there is no amplitude
     error to grow with depth, and `on_peak.peak` holds everywhere.
+
+    Args:
+        expected_dB: the values expected of the output, in dB; their nanmax is the
+            peak that depth is measured from
+
+    Returns:
+        a float64 numpy array of the shape of `expected_dB`, in dB: no element is
+        below `tolerance.on_peak.peak`, elements at or beyond `off_peak_dBc.peak`
+        relative to the peak are +inf, and elements are nan where `expected_dB` is
+        nan
     """
     import numpy as np
 

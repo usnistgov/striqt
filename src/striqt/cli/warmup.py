@@ -1,7 +1,8 @@
-"""Warm the numba JIT cache for the current platform.
+"""warm the numba JIT cache for the current platform.
 
-Run once after install on a new machine. On Jetson TX2i this takes ~2 minutes the first
-time; subsequent runs are instant because the cache persists in the user cache directory.
+Run once after install on a new machine. The cache persists in the user cache
+directory, so a later run only reloads it; on a Jetson TX2i the first run takes about
+2 minutes.
 """
 
 import click
@@ -10,7 +11,12 @@ import numpy as np
 
 @click.command()
 def cli() -> None:
-    """Warm numba JIT caches for CPU and (if available) CUDA kernels."""
+    """warm the numba JIT caches of the CPU and CUDA `corr_at_indices` kernels.
+
+    The CPU kernel is compiled for complex64 input. The CUDA kernel is compiled when
+    `cupy` imports; any failure there is echoed and skipped rather than raised.
+    Progress is echoed to stdout.
+    """
     import striqt.waveform.lib.jit  # noqa: F401  triggers NUMBA_CACHE_DIR setup + stamp patch
 
     from striqt.waveform.lib.jit.cpu import _corr_at_indices
