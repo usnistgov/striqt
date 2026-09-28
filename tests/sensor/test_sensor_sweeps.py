@@ -12,8 +12,10 @@ about -0.002 dB, with -33 dB spilling into the neighbouring block.
 
 from __future__ import annotations
 
+import ast
 import math
 import os
+import re
 from fractions import Fraction
 
 import numpy as np
@@ -241,6 +243,68 @@ def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
     for name, fields in table.items():
         # rtol, then the on-peak and off-peak pairs
         assert len(fields) == 5 and all(math.isfinite(float(f)) for f in fields), name
+
+
+def test_check_sweep_budgets_the_looped_field_over_its_adjustment(
+    write_yaml, monkeypatch, capsys
+):
+    """a loop point outranks an `adjust_captures` value for the same field
+    (`loop_captures`, pass 3), so the printed budget includes the resampler FFTs of
+    the looped `host_resample: true` rather than the adjustment's `false`"""
+    path = write_yaml(
+        'looped-host-resample.yaml',
+        """
+        sensor_binding: single_tone
+        source:
+          master_clock_rate: 125e6
+          num_rx_ports: 2
+          array_backend: numpy
+        captures:
+          - port: [0, 1]
+            sample_rate: 6.144e6
+            duration: 1e-3
+            analysis_bandwidth: 5e6
+        loops:
+          - kind: list
+            field: host_resample
+            values: [true]
+        adjust_captures:
+          defaults:
+            host_resample: false
+        analysis:
+          iq_waveform: {}
+        sink:
+          path: out.zarr.zip
+        """,
+    )
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(path))
+
+    out = capsys.readouterr().out
+    id_line = re.search(r'^source_id: (.*)$', out, re.MULTILINE)
+    source_id = ast.literal_eval(id_line[1])
+    block = out.split('Numerical tolerance')[1].split('\n\n')[0]
+    (row,) = [r for r in block.splitlines()[4:] if r.startswith('iq_waveform')]
+    spec = ss.read_yaml_spec(path)
+
+    def rendered(captures):
+        budget = ss.lib.compute.worst_case_tolerances([
+            (c, capture_tolerances(c, spec.source, spec.analysis)) for c in captures
+        ])
+        tol = budget['iq_waveform']
+        off = tol.off_peak_dBc
+        values = (tol.rtol, tol.on_peak.rms, tol.on_peak.peak) + (
+            (None, None) if off is None else (off.rms, off.peak)
+        )
+        return ['NaN' if v is None else f'{v:.4g}' for v in values]
+
+    captures = ss.specs.helpers.loop_captures(spec, source_id=source_id)
+    adjusted = captures[0].replace(**spec.adjust_captures['defaults'])
+    # the adjusted capture must render differently for the check to discriminate
+    assert rendered([adjusted]) != rendered(captures)
+    assert row.split()[1:] == rendered(captures)
 
 
 # %% in-memory sweeps against the generators

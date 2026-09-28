@@ -10,6 +10,7 @@ from sweep_strategies import SOURCE
 from synthetic_sources import (
     ANALYSIS,
     FILTER_ONLY,
+    LO_SHIFT_CAPTURE,
     RESAMPLE_FILTER,
     RESAMPLE_ONLY,
     SCALE_ONLY,
@@ -31,8 +32,10 @@ PRESETS = {
 }
 
 
-def tone_capture(preset):
-    return make_capture('single_tone', **preset, frequency_offset=1e6, snr=None)
+def tone_capture(preset, **kws):
+    return make_capture(
+        'single_tone', **{**preset, 'frequency_offset': 1e6, 'snr': None, **kws}
+    )
 
 
 # %% _oaconvolve_nfft
@@ -135,6 +138,60 @@ def test_sweep_tolerances_follow_the_looped_captures():
         entries[1][1]['iq_waveform'].on_peak.rms
         < entries[0][1]['iq_waveform'].on_peak.rms
     )
+
+
+@pytest.mark.parametrize('source_id', [None, 'ab12'], ids=['defaults', 'source'])
+def test_sweep_tolerances_use_the_looped_value_over_an_adjustment(source_id):
+    """`loop_captures` applies the loop point last, so a looped field keeps its loop
+    value over an `adjust_captures` entry and the budget is that of the looped capture.
+    `lo_shift='none'` skips the shift stage, so its budget differs from a shifted one."""
+    loops = (ss.specs.List(field='lo_shift', values=('none', 'left')),)
+    block = 'defaults' if source_id is None else source_id
+    sweep = make_sweep(
+        'single_tone',
+        (tone_capture(LO_SHIFT_CAPTURE),),
+        loops=loops,
+        adjust_captures={block: {'lo_shift': 'right'}},
+    )
+    expected = list(ss.specs.helpers.loop_captures(sweep, source_id=source_id))
+    entries = tolerance.sweep_tolerances(sweep, source_id=source_id)
+
+    assert [c for c, _ in entries] == expected
+    assert [c.lo_shift for c, _ in entries] == ['none', 'left']
+    budgets = [
+        tolerance.capture_tolerances(c, sweep.source, ANALYSIS) for c in expected
+    ]
+    assert [t for _, t in entries] == budgets
+    # the check discriminates: the adjusted value would have changed the first budget
+    adjusted = expected[0].replace(lo_shift='right')
+    assert tolerance.capture_tolerances(adjusted, sweep.source, ANALYSIS) != budgets[0]
+
+
+@pytest.mark.parametrize(
+    'adjustment, expected_snr',
+    [
+        (10.0, [10.0, 10.0]),
+        (
+            ss.specs.CaptureRemap(key='frequency_offset', lookup={1e6: 3.0, 2e6: 5.0}),
+            [3.0, 5.0],
+        ),
+    ],
+    ids=['scalar', 'remap_on_looped_field'],
+)
+def test_sweep_tolerances_apply_adjustments_to_unlooped_fields(
+    adjustment, expected_snr
+):
+    loops = (ss.specs.List(field='frequency_offset', values=(1e6, 2e6)),)
+    sweep = make_sweep(
+        'single_tone',
+        (tone_capture(SCALE_ONLY),),
+        loops=loops,
+        adjust_captures={'defaults': {'snr': adjustment}},
+    )
+    captures = [c for c, _ in tolerance.sweep_tolerances(sweep)]
+
+    assert [c.frequency_offset for c in captures] == [1e6, 2e6]
+    assert [c.snr for c in captures] == expected_snr
 
 
 # %% worst_case_tolerances

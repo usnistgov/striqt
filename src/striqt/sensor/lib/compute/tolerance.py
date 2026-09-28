@@ -128,15 +128,14 @@ def capture_tolerances(
 def sweep_tolerances(
     sweep: specs.Sweep, source_id: specs.types.SourceID | None = None
 ) -> list[tuple[specs.SensorCapture, dict[str, sa.specs.Tolerance]]]:
-    """`capture_tolerances` for every capture the sweep will run, in run order, after
-    the per-source `adjust_captures` overrides"""
+    """`capture_tolerances` for every capture the sweep will run, in run order.
+
+    The captures are exactly those `specs.helpers.loop_captures` expands for
+    `source_id`: the per-source `adjust_captures` overrides are applied there, and a
+    looped field keeps the loop's value over any adjustment.
+    """
     result = []
     for capture in specs.helpers.loop_captures(sweep, source_id=source_id):
-        if sweep.adjust_captures:
-            changes = specs.helpers.adjust_captures(
-                capture.to_dict(), sweep.adjust_captures, source_id
-            )
-            capture = capture.replace(**changes)
         result.append((
             capture,
             capture_tolerances(capture, sweep.source, sweep.analysis),
