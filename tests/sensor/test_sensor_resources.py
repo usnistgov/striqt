@@ -134,12 +134,6 @@ def test_log_path_records_a_yaml_array_at_the_log_level(tmp_path):
     assert 'below the log level' not in by_message
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=json.JSONDecodeError,
-    reason="_RotatingJSONFileHandler.emit appends ',\\n' after every record, so the "
-    'array that close() terminates ends in a trailing comma (sensor/lib/util.py:466-473)',
-)
 def test_log_file_is_json(tmp_path):
     records = json.loads(_run_with_log(tmp_path))
     assert 'marker record' in {r['message'] for r in records}
