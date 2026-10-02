@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, 72, 74 to 76, and 85); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -223,7 +223,6 @@ item is open.
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
 | 83 | `test_mat_two_port` | High | C | easy |
 | 84 | `test_mat_request_past_end` | High | C | easy |
-| 85 | `test_test_only_resources_run_a_sweep` | High | C | easy |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
 | 87 | `test_from_delayed_accepts_the_acquisition_info_defaults` | High | C | trivial |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
@@ -776,21 +775,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
 - **Fix.** Track the consumed position in the stream instead of re-listing the
   refs; touches `seek`/`_leftover` in `MATLegacyFileStream` and
   `MATNewFileStream`. Easy to medium.
-
-### 85. `open_resources(test_only=True)` returns resources `iterate_sweep` cannot run
-
-`tests/sensor/test_sensor_resources.py::test_test_only_resources_run_a_sweep`
-
-- **Mechanism.** `resources.py:146-151` skips the peripherals when `test_only`,
-  and `execute.py:235` `_acquire_both` indexes `res['peripherals']`
-  unconditionally, raising `KeyError`.
-- **Why the test is right.** `Resources` declares `peripherals` as
-  `NotRequired` and `open_resources` documents its result as ready to run the
-  sweep; the test harness (`synthetic_sources.run_in_memory`) has to pass
-  `peripherals=` itself.
-- **Impact.** C (`test_only` is a Python-API flag).
-- **Fix.** Open `NoPeripherals` when skipping, or guard with
-  `res.get('peripherals')` in `_acquire_both`. Easy; needs a choice.
 
 ### 86. `Source.signal_trigger` cannot decode the analysis-group form
 
