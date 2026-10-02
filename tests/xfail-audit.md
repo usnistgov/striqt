@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25 to 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 66, 69, 72, 74 to 76, and 87); their write-ups are in the git history of this file. Items
+51, 60, 61, 64, 66, 69, 72, 74 to 76, and 87); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
