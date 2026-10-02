@@ -27,8 +27,8 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 63, 72, 74 to 76, and 87); their write-ups are in the git history of this file. Items
+fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25 to 29, 35 to 37, 40, 42, 47,
+51, 60, 61, 66, 72, and 74 to 76, and 87); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -200,7 +200,6 @@ item is open.
 | 78 | `test_lo_shift_is_removed_from_the_output[left]`, `[right]` | High | B | design |
 | 79 | `test_reused_iq_can_be_corrected_for_a_wider_analysis_filter` | High | B | design |
 | 90 | `test_upsampled_overlap_covers_the_output_rate_filter_pad` | High | B | small |
-| 66 | `test_zero_stft_by_freq_zeroes_outside_passband[off_grid]`; `test_downsample_stft_passband_zeroing[off_grid]` | High | B | easy |
 | 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
@@ -237,8 +236,6 @@ item is open.
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
 | 55 | `TestHardwareTimeSync::test_call_returns_the_sync_time` | High | C | trivial |
 | 57 | `TestRxStreamRead::test_read_without_an_enable_delay` | High | C | trivial |
-| 27 | `TestIstft::test_out_buffer_is_used`; `test_downsample_stft_writes_into_out` | High | C | easy |
-| 28 | `test_oafilter_downsample_preserves_level` | High | C | easy |
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
 | 31 | `TestIqToBinPower.test_negative_axis` | Medium | C | trivial |
 | 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
@@ -390,21 +387,6 @@ item is open.
   in output samples throughout). Small, but it changes the acquired sample count
   of every upsampling capture, so `DOCUMENTED_OVERLAPS` and any downstream
   expectation of a read size move with it.
-
-### 66. `_freq_band_edges` drops the last in-band bin for an off-grid cutoff
-
-`tests/waveform/test_fourier.py::TestStftFrequencyEditing::test_zero_stft_by_freq_zeroes_outside_passband[off_grid]`,
-`test_downsample_stft_passband_zeroing[off_grid]`
-
-- **Mechanism.** `fourier.py:446` takes the index of the last bin
-  `<= cutoff_hi` as the exclusive stop of the passband, so a cutoff between
-  bins zeroes a bin that lies inside the passband.
-- **Why the test is right.** The on-grid cases pass, and the half-open
-  `[lo, hi)` contract in CLAUDE.md is only true on-grid. The caller
-  `analysis/lib/source.py:83` passes spec-derived passbands that need not
-  fall on the grid.
-- **Fix.** Use `searchsorted(freqs, cutoff_hi)` (or `+ 1`) for the stop.
-  Easy.
 
 ### 6. `Phy3GPP` cyclic-prefix layout is wrong at 15 kHz and 60 kHz
 
@@ -980,35 +962,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Every in-tree spec sets a float. A subclass that opts out of
   the delayed start cannot read.
 - **Fix.** `(self.source_spec.rx_enable_delay or 0)`. Trivial.
-
-### 27. `istft` and `downsample_stft` never write into `out`
-
-`tests/waveform/test_fourier.py::TestIstft::test_out_buffer_is_used`;
-`TestStftFrequencyEditing::test_downsample_stft_writes_into_out`
-
-- **Mechanism.** `_truncated_buffer` (`fourier.py:185`) uses
-  `ndarray.flatten()`, which always copies.
-- **Why the test is right.** `_unstack_stft_windows` documents `out` as the
-  array that receives the result, and `downsample_stft` has a fast path that
-  returns a view of `y` when no zeroing is needed.
-- **Impact.** Nothing on the production path passes `out=` to `istft`;
-  `oafilter` passes `out=y` to `downsample_stft` only when `nfft_out != nfft`,
-  which no production caller does. The `out=` API is inert, not harmful.
-- **Fix.** `reshape(-1)` on a contiguous buffer, with a fallback. Easy.
-
-### 28. `oafilter` with `nfft_out != nfft` scales the level by `nfft / nfft_out`
-
-`tests/waveform/test_fourier.py::TestOverlapAddFilters::test_oafilter_downsample_preserves_level`
-
-- **Mechanism.** The STFT is normalized for `nfft`-point frames and the
-  inverse reconstructs `nfft_out`-point frames (`fourier.py:882-923`).
-  Measured gain is 1, 2, 4 for `nfft_out` of 256, 128, 64, so the xfail
-  reason's "doubles" is the special case of a 2:1 ratio.
-- **Why the test is right.** `oaresample` (`fourier.py:1540`) rescales by the
-  size ratio explicitly, showing the intended convention.
-- **Impact.** No caller passes `nfft_out != nfft`; `oaresample` is a separate
-  implementation and `correct_iq` uses `resample`. Unreachable.
-- **Fix.** Multiply by `nfft_out / nfft`. Easy.
 
 ### 23. A second extensions directory with the same module name is never imported
 
