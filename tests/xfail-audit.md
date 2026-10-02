@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25 to 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 66, 72, and 74 to 76, and 87); their write-ups are in the git history of this file. Items
+51, 60, 61, 66, 69, 72, 74 to 76, and 87); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -227,7 +227,6 @@ item is open.
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
 | 53 | `test_capture_changes_port` | High | C | easy |
 | 54 | `TestSoapySourceSetup::test_initial_ports_on_a_non_stream_all_source` | High | C | trivial |
-| 68 | `test_split_rejects_a_tuple_field_shorter_than_port`; `test_pairwise_rejects_different_port_counts` | High | C | easy |
 | 70 | `TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports` | High | C | easy |
 | 20 | `test_list_port_direct_is_frozen`; `test_var_tuple_list_is_frozen_on_direct_construction`; `test_freeze_depths_count_dict_list_and_tuple_nesting`; `test_freeze_depths_of_real_specs`; `test_direct_struct_with_list_validates_and_replaces` | High | C | trivial |
 | 64 | `test_descending_range_from_zero_rejected[frame_range]`, `[symbol_range]` | High | C | trivial |
@@ -250,7 +249,6 @@ item is open.
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
 | 39 | `test_calibration_capture_class_has_a_descriptive_name` | High | D | trivial |
 | 50 | `test_air7201b_init_like_matches_its_source_spec` | High | D | trivial |
-| 69 | `test_capture_type_of_an_unbound_sweep` | High | D | easy |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
 ## Tier B: reachable from plausible YAML or a spec default
@@ -835,27 +833,14 @@ tables draw their marks from the module's `scs_cp_layout` builder
   spec. `Controller.from_sweep_spec` always passes `init_rx_ports`.
 - **Fix.** `self.rx_stream.setup(self.device, rx_ports)`. Trivial.
 
-### 68. Ragged per-port tuples are truncated or copied instead of rejected
-
-`tests/sensor/test_sensor_specs_captures.py::test_split_rejects_a_tuple_field_shorter_than_port`,
-`::test_pairwise_rejects_different_port_counts`
-
-- **Mechanism.** `split_capture_ports` zips each tuple field against `port`,
-  so a tuple shorter than `port` is copied whole onto the extra ports;
-  `pairwise_by_port` zips two split lists and truncates to the shorter.
-- **Why the test is right.** Nothing in the specs or docs sanctions ragged
-  tuples; both outcomes silently mis-assign per-port values.
-- **Impact.** The capture validators reject mismatched `gain` tuples, so only
-  fields without a length check (item 70) and hand-built captures reach it.
-- **Fix.** Raise `ValueError` on a length mismatch in both helpers. Easy.
-
 ### 70. `SoapyCapture` does not check the `center_frequency` tuple length
 
 `tests/sensor/test_sensor_specs_structs.py::TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports`
 
 - **Mechanism.** Only `gain` is validated against the port count; a
-  `center_frequency` tuple of the wrong length is accepted and
-  `split_capture_ports` then drops the extras (item 68).
+  `center_frequency` tuple of the wrong length is accepted and only
+  `split_capture_ports` rejects it, with a `ValueError` at run time rather
+  than at spec validation.
 - **Fix.** Extend `_validate_multichannel` to every per-port tuple field.
   Easy.
 
@@ -1122,17 +1107,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   type-hinting only, so the wrong class affects editor hints for the
   `air7201b` controller and nothing at run time.
 - **Fix.** Name change. Trivial.
-
-### 69. `get_capture_type` returns the TypeVar for an unbound `Sweep` subclass
-
-`tests/sensor/test_sensor_specs_captures.py::test_capture_type_of_an_unbound_sweep`
-
-- **Mechanism.** The unbound branch uses `get_type_hints`, which does not
-  substitute the generic parameters of
-  `class X(Sweep[FunctionSource, NoPeripherals, SingleToneCapture])`, so the
-  bare `SC` TypeVar is returned.
-- **Impact.** Every in-tree caller passes a bound sweep.
-- **Fix.** Read `__orig_bases__` for the parametrized base. Easy.
 
 ## Tool limitations
 
