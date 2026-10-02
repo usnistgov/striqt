@@ -309,8 +309,15 @@ def get_dtype_scale(transport_dtype: specs.types.TransportDType) -> float:
 
 def is_reusable(
     c1: specs.SensorCapture | None, c2: specs.SensorCapture | None, mcr: float
-):
-    """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
+) -> bool:
+    """return whether the raw IQ acquired for `c1` serves `c2` as well.
+
+    Reuse requires the same radio sample rate from `design_resampler` at `mcr`, the
+    same `analysis_bandwidth` (the acquisition is padded for its filter transient),
+    and equality on every other field except `sample_rate`, `host_resample`,
+    `backend_sample_rate` and `adjust_analysis`, which change only the host-side
+    processing of the same record. `None` for either capture is never reusable.
+    """
 
     if c1 is None or c2 is None:
         return False
@@ -331,11 +338,6 @@ def is_reusable(
     }
 
     c1_compare = c1.replace(**downstream_kws)
-    c2_compare = c2.replace(
-        # ignore parameters that only affect downstream processing
-        analysis_bandwidth=c1.analysis_bandwidth,
-        sample_rate=c1.sample_rate,
-        **downstream_kws,
-    )
+    c2_compare = c2.replace(sample_rate=c1.sample_rate, **downstream_kws)
 
     return c1_compare == c2_compare

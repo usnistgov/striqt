@@ -235,7 +235,10 @@ def test_acquire_on_cupy_returns_device_arrays(xp, isolated_lookup):
 # %% acquire: reuse_iq
 
 REUSABLE = preset_capture('single_tone', **SCALE_ONLY)
-REUSABLE_VARIANT = REUSABLE.replace(analysis_bandwidth=5e6)
+REUSABLE_VARIANT = REUSABLE.replace(
+    adjust_analysis={'power_spectral_density': {'window': 'hann'}}
+)
+FILTERED_VARIANT = REUSABLE.replace(analysis_bandwidth=5e6)
 NOT_REUSABLE = REUSABLE.replace(frequency_offset=1e5)
 
 
@@ -243,10 +246,11 @@ NOT_REUSABLE = REUSABLE.replace(frequency_offset=1e5)
     'reuse_iq, second_capture, shares_buffer',
     [
         (True, REUSABLE_VARIANT, True),
+        (True, FILTERED_VARIANT, False),
         (True, NOT_REUSABLE, False),
         (False, REUSABLE_VARIANT, False),
     ],
-    ids=['reused', 'incompatible', 'disabled'],
+    ids=['reused', 'new_filter', 'incompatible', 'disabled'],
 )
 def test_reuse_iq(reuse_iq, second_capture, shares_buffer, isolated_lookup):
     """a reused acquisition is the first capture's buffer itself; otherwise the
@@ -266,26 +270,17 @@ def test_reuse_iq(reuse_iq, second_capture, shares_buffer, isolated_lookup):
         assert_close(second.pre_align, expected)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'buffers.is_reusable ignores analysis_bandwidth, but get_correction_overlaps '
-        'pads the acquisition for the FIR of the capture being acquired, so the reused '
-        'pre_align is short of the wider filter overlap of the second capture and '
-        'correct_iq fails its size_out assertion (compute/corrections.py:116)'
-    ),
-)
-def test_reused_iq_can_be_corrected_for_a_wider_analysis_filter(isolated_lookup):
-    """reuse across analysis bandwidths is the purpose of reuse_iq, so the shared
-    acquisition must carry the widest filter overlap of the captures that share it"""
+def test_a_new_analysis_filter_is_acquired_with_its_own_overlap(isolated_lookup):
+    """the acquisition is padded for its own filter transient, so a capture that
+    adds an analysis filter is acquired afresh and corrects to its full length"""
     with TONE.from_source_spec(SOURCE, reuse_iq=True) as ctrl:
         ctrl._arm_spec(REUSABLE)
         ctrl.acquire()
-        ctrl._arm_spec(REUSABLE_VARIANT)
-        reused = ctrl.acquire()
+        ctrl._arm_spec(FILTERED_VARIANT)
+        second = ctrl.acquire()
 
-    corrected = ss.correct_iq(reused)
-    size_out = round(REUSABLE_VARIANT.duration * REUSABLE_VARIANT.sample_rate)
+    corrected = ss.correct_iq(second)
+    size_out = round(FILTERED_VARIANT.duration * FILTERED_VARIANT.sample_rate)
     assert corrected.pre_align.shape == (2, size_out)
 
 
@@ -295,7 +290,11 @@ def test_reuse_iq_clears_the_soapy_start_time(fake_controller):
     with fake_controller(reuse_iq=True) as ctrl:
         ctrl._arm_spec(capture)
         first = ctrl.acquire()
-        ctrl._arm_spec(capture.replace(analysis_bandwidth=20e6))
+        ctrl._arm_spec(
+            capture.replace(
+                adjust_analysis={'power_spectral_density': {'window': 'hann'}}
+            )
+        )
         second = ctrl.acquire()
 
     assert first.info.start_time is not None

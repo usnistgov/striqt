@@ -79,7 +79,6 @@ item is open.
 
 | # | Test | Confidence | Impact | Fix |
 | --- | --- | --- | --- | --- |
-| 79 | `test_reused_iq_can_be_corrected_for_a_wider_analysis_filter` | High | B | design |
 | 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
@@ -116,28 +115,6 @@ item is open.
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
 ## Tier B: reachable from plausible YAML or a spec default
-
-### 79. `reuse_iq` under-acquires the filter overlap of a wider analysis bandwidth
-
-`tests/sensor/test_sensor_controller.py::test_reused_iq_can_be_corrected_for_a_wider_analysis_filter`
-
-- **Mechanism.** `buffers.is_reusable` (`buffers.py:326-345`) deliberately
-  ignores `analysis_bandwidth`, `sample_rate` and `host_resample`, so a
-  `reuse_iq: true` controller hands the first capture's `pre_align` to a second
-  capture with a finite `analysis_bandwidth`. `get_correction_overlaps` sized
-  that first acquisition for the first capture's filter (512 per side for the
-  unfiltered `SCALE_ONLY` preset, 4608 once a 5 MHz filter is requested), so
-  `correct_iq` runs out of samples and fails `assert x_pre_align.shape[axis] ==
-  size_out` at `corrections.py:116`.
-- **Why the test is right.** Sharing one acquisition across analysis settings is
-  the documented purpose of `SweepOptions.reuse_iq`, and the warmup sweep sets
-  it. The corrected output must still have `duration*sample_rate` samples.
-- **Impact.** B. Any `reuse_iq: true` sweep whose reusable captures differ in
-  `analysis_bandwidth` crashes at the second capture.
-- **Fix.** Either acquire with the maximum overlaps over the group of reusable
-  captures (needs the sweep's capture list at acquire time) or make
-  `is_reusable` compare `analysis_bandwidth` (one line, but narrows reuse to
-  less than the docstring promises). Design decision; medium.
 
 ### 6. `Phy3GPP` cyclic-prefix layout is wrong at 15 kHz and 60 kHz
 
