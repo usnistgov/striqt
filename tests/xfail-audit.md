@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 63, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, 63, 72, 74 to 76, and 87); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -225,7 +225,6 @@ item is open.
 | 84 | `test_mat_request_past_end` | High | C | easy |
 | 85 | `test_test_only_resources_run_a_sweep` | High | C | easy |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
-| 87 | `test_from_delayed_accepts_the_acquisition_info_defaults` | High | C | trivial |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
 | 53 | `test_capture_changes_port` | High | C | easy |
 | 54 | `TestSoapySourceSetup::test_initial_ports_on_a_non_stream_all_source` | High | C | trivial |
@@ -803,19 +802,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   validated spec; `BundledTriggers` (`structs.py:307`) exists and is unused.
 - **Impact.** C. Only the string form works, which is what every YAML uses.
 - **Fix.** Annotate with `BundledTriggers`. Easy, but a schema change.
-
-### 87. `from_delayed` rejects the `AcquisitionInfo` default `sweep_index=None`
-
-`tests/sensor/test_sensor_compute_datasets.py::test_from_delayed_accepts_the_acquisition_info_defaults`
-
-- **Mechanism.** `datasets.py:194` writes `AcquisitionInfo.sweep_index` (default
-  `None`, typed `Union[int, None]`) into the `int` template that
-  `_coords_template` derives, raising `TypeError`. Only `iterate_sweep`'s
-  `_AcquisitionIndexer` ever sets it, so `compute.analyze` on a bare
-  `Controller.acquire()` result cannot be packaged.
-- **Impact.** C (Python API).
-- **Fix.** Default `sweep_index: int = 0`, or coerce `None` in
-  `build_capture_coords`. One line once decided.
 
 ### 88. An analysis loop over an un-inferable field breaks `from_delayed`
 
