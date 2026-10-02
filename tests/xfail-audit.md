@@ -204,8 +204,6 @@ item is open.
 | 52 | `TestSoapySourceClose::test_close_releases_the_stream_and_device` | High | B | trivial |
 | 14 | `test_leading_repeat_is_accepted` | High | B | easy |
 | 16 | `test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys` | High | B | trivial |
-| 17 | `test_nested_include_resolves_relative_to_the_including_file` | High | B | moderate |
-| 18 | `test_absolute_include_outside_root` | High | B | easy |
 | 62 | `test_three_deep_adjust_analysis_is_hashable` | High | B | small |
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
 | 67 | `test_cuda_unsorted_indices` | High | B (GPU, unverified) | trivial |
@@ -215,7 +213,8 @@ item is open.
 | 80 | `test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`, `[resample_only]` | High | C | moderate |
 | 81 | `test_oaresample_acquisition[resample_filter]`, `[resample_only]` | High | C | small |
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
-| 84 | `test_mat_request_past_end` | High | C | easy |
+| 83 | `test_mat_two_port` | High | C | easy |
+| 85 | `test_test_only_resources_run_a_sweep` | High | C | easy |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
 | 53 | `test_capture_changes_port` | High | C | easy |
@@ -504,34 +503,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   avoid it because `switch_input` is looped, not fixed.
 - **Fix.** Delete both assignments. Trivial.
 
-### 17. Nested `!include` is globbed against the wrong directory
-
-`tests/analysis/test_analysis_io.py::test_nested_include_resolves_relative_to_the_including_file`
-
-- **Mechanism.** `analysis/lib/io.py:852` globs relative to the top-level
-  spec's directory while `io.py:840` opens relative to the innermost fragment;
-  the glob results are also relativised to the top-level directory and then
-  re-joined onto the fragment directory.
-- **Why the test is right.** The `nested_paths` stack exists only to resolve
-  nested includes relative to the including file.
-- **Impact.** No in-tree fragment includes another file. A downstream fragment
-  in a subdirectory that includes a sibling gets `FileNotFoundError`.
-- **Fix.** Pass the fragment directory as `root_dir` and stop relativising.
-  Moderate, shared with item 18.
-
-### 18. Absolute `!include` outside the spec tree fails
-
-`tests/analysis/test_analysis_io.py::test_absolute_include_outside_root`
-
-- **Mechanism.** `io.py:805` calls `relative_to(root_dir)` on the absolute
-  match, which raises `ValueError` when the file is outside the top-level
-  directory.
-- **Why the test is right.** `get_include_path` (`io.py:835`) has an explicit
-  absolute-path branch, and `test_absolute_include_inside_root` passes.
-- **Impact.** `source: !include /etc/striqt/radio.yaml` from a spec elsewhere
-  fails with "is not in the subpath of". Not used in-tree.
-- **Fix.** Return absolute matches as-is. Easy.
-
 ### 62. `SpecBase` freezes `dict[str, Any]` fields to depth 2 only
 
 `tests/analysis/test_analysis_specs_helpers.py::test_three_deep_adjust_analysis_is_hashable`
@@ -681,24 +652,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   `backend_sample_rate`, yet the overlap machinery has no access to the backend.
   Design decision; the xfail is kept whole so that it records that file
   resampling is broken end to end, not only the design.
-
-### 84. `MATLegacyFileStream.read` wraps past the end of the file regardless of `loop`
-
-`tests/sensor/test_sensor_sources_file.py::test_mat_request_past_end`
-
-- **Mechanism.** `src/striqt/analysis/lib/io.py` `MATLegacyFileStream.read`
-  (about lines 401-447) rebuilds `all_refs = list(self._refs)` on every call,
-  and `_refs` is the whole matrix, so a request past the end (up to one extra
-  file length) silently appends the file from index 0 with `loop=False`; it only
-  raises "too few samples" when one request exceeds the leftover plus a full
-  file. `test_mat_loop_repeats_file` passes for the same mechanism because it
-  asserts the intended `loop=True` behavior.
-- **Why the test is right.** Zarr and TDMS raise `ValueError` past the end.
-- **Impact.** C. A capture longer than the file returns looped data with no
-  error.
-- **Fix.** Track the consumed position in the stream instead of re-listing the
-  refs; touches `seek`/`_leftover` in `MATLegacyFileStream` and
-  `MATNewFileStream`. Easy to medium.
 
 ### 86. `Source.signal_trigger` cannot decode the analysis-group form
 

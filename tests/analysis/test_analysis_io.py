@@ -104,12 +104,6 @@ def test_absolute_include_inside_root(write_yaml):
     assert load(spec)['top'] == {'v': 1}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason='_expand_paths rewrites every path relative to the top-level directory, '
-    'which fails for an absolute include outside it',
-)
 def test_absolute_include_outside_root(write_yaml):
     frag = write_yaml('elsewhere/frag.yaml', 'v: 1\n')
     spec = write_yaml('site/spec.yaml', f'top: !include {frag}\n')
@@ -123,12 +117,6 @@ def test_nested_include_in_the_same_directory(write_yaml):
     assert load(spec)['top'] == {'x': {'v': 1}}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=FileNotFoundError,
-    reason='nested includes are globbed relative to the top-level file but opened '
-    'relative to the including fragment',
-)
 def test_nested_include_resolves_relative_to_the_including_file(write_yaml):
     write_yaml('frag/leaf.yaml', 'v: 1\n')
     write_yaml('frag/c.yaml', 'x: !include leaf.yaml\n')
