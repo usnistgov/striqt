@@ -27,7 +27,7 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
+fixed or withdrawn (1 to 5, 7, 11, 12, 15, 17, 18, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
 51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
@@ -209,8 +209,6 @@ item is open.
 | 52 | `TestSoapySourceClose::test_close_releases_the_stream_and_device` | High | B | trivial |
 | 14 | `test_leading_repeat_is_accepted` | High | B | easy |
 | 16 | `test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys` | High | B | trivial |
-| 17 | `test_nested_include_resolves_relative_to_the_including_file` | High | B | moderate |
-| 18 | `test_absolute_include_outside_root` | High | B | easy |
 | 62 | `test_three_deep_adjust_analysis_is_hashable` | High | B | small |
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
 | 67 | `test_cuda_unsorted_indices` | High | B (GPU, unverified) | trivial |
@@ -552,34 +550,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   field" error. The in-tree files
   avoid it because `switch_input` is looped, not fixed.
 - **Fix.** Delete both assignments. Trivial.
-
-### 17. Nested `!include` is globbed against the wrong directory
-
-`tests/analysis/test_analysis_io.py::test_nested_include_resolves_relative_to_the_including_file`
-
-- **Mechanism.** `analysis/lib/io.py:852` globs relative to the top-level
-  spec's directory while `io.py:840` opens relative to the innermost fragment;
-  the glob results are also relativised to the top-level directory and then
-  re-joined onto the fragment directory.
-- **Why the test is right.** The `nested_paths` stack exists only to resolve
-  nested includes relative to the including file.
-- **Impact.** No in-tree fragment includes another file. A downstream fragment
-  in a subdirectory that includes a sibling gets `FileNotFoundError`.
-- **Fix.** Pass the fragment directory as `root_dir` and stop relativising.
-  Moderate, shared with item 18.
-
-### 18. Absolute `!include` outside the spec tree fails
-
-`tests/analysis/test_analysis_io.py::test_absolute_include_outside_root`
-
-- **Mechanism.** `io.py:805` calls `relative_to(root_dir)` on the absolute
-  match, which raises `ValueError` when the file is outside the top-level
-  directory.
-- **Why the test is right.** `get_include_path` (`io.py:835`) has an explicit
-  absolute-path branch, and `test_absolute_include_inside_root` passes.
-- **Impact.** `source: !include /etc/striqt/radio.yaml` from a spec elsewhere
-  fails with "is not in the subpath of". Not used in-tree.
-- **Fix.** Return absolute matches as-is. Easy.
 
 ### 62. `SpecBase` freezes `dict[str, Any]` fields to depth 2 only
 

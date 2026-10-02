@@ -780,14 +780,20 @@ _YAMLFrozenLoader.add_constructor(
 
 
 def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
-    def glob_path(s: str):
+    """expand the ``!include`` patterns in `node` into sorted absolute paths.
+
+    Relative patterns are globbed under `root_dir`, the directory of the file
+    that contains the tag.
+    """
+
+    def glob_path(s: str) -> list[str]:
         p = Path(s)
         if p.is_absolute():
             rel = p.parent
             s = p.name
         else:
             rel = root_dir
-        paths = list(str(g.relative_to(root_dir)) for g in rel.glob(s))
+        paths = [str(g) for g in rel.glob(s)]
         if len(paths) == 0:
             raise FileNotFoundError(s)
         return sorted(paths)
@@ -834,7 +840,7 @@ class _YAMLIncludeConstructor(yaml.Loader):
         if not node.tag.startswith('!include'):
             raise ValueError(f'unknown tag {node.tag!r}')
 
-        values = _expand_paths(node, root_dir=self.nested_paths[0].parent)
+        values = _expand_paths(node, root_dir=self.nested_paths[-1].parent)
 
         content = []
         for v in values:
