@@ -110,13 +110,6 @@ class TestCapture:
             Capture, ValueError, PERIOD_MSG, duration=1e-3, sample_rate=math.nan
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            'math.remainder(inf, 1) raises "math domain error" inside util.isroundmod '
-            'before Capture can report its own message'
-        ),
-    )
     def test_infinite_sample_rate_reports_sample_period_message(self):
         with pytest.raises(ValueError, match=PERIOD_MSG):
             Capture(duration=1e-3, sample_rate=math.inf)

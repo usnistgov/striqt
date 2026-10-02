@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
     ratio = value / div
     try:
+        if not math.isfinite(ratio):
+            return False
         return abs(math.remainder(ratio, 1)) <= atol
     except TypeError:
         return np.abs(np.rint(ratio) - ratio) <= atol

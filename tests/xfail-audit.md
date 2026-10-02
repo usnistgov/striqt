@@ -27,7 +27,7 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11 to 13, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
+fixed or withdrawn (1 to 5, 7, 11 to 13, 15, 19, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
 51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
@@ -214,7 +214,6 @@ item is open.
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
 | 67 | `test_cuda_unsorted_indices` | High | B (GPU, unverified) | trivial |
 | 59 | `test_probe_soapy_info_with_a_channel_sensor` | High | B (latent) | trivial |
-| 19 | `test_infinite_sample_rate_reports_sample_period_message` | High | B (unlikely) | trivial |
 | 10 | `test_chained_remap_declared_before_its_key_resolves` | Medium | B | moderate |
 | 45 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]` | Medium | B | easy |
 | 80 | `test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`, `[resample_only]` | High | C | moderate |
@@ -617,21 +616,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   lists none, since sweeps run on it; other SoapySDR drivers (bladeRF, USRP
   via UHD) do expose per-channel sensors. Latent.
 - **Fix.** Drop the `[0]`. Trivial.
-
-### 19. `Capture(sample_rate=inf)` raises "math domain error"
-
-`tests/analysis/test_analysis_specs_structs.py::TestCapture::test_infinite_sample_rate_reports_sample_period_message`
-
-- **Mechanism.** `analysis/lib/util.py:50` `math.remainder(inf, 1)` raises
-  `ValueError`, which `isroundmod` does not catch; the duplicate in
-  `waveform/lib/arrays.py:38` has the same gap. `nan` happens to produce the
-  intended message.
-- **Why the test is right.** `Capture.__post_init__` intends its own
-  sample-period message for any non-integer sample count, and the type aliases
-  carry no finiteness constraint.
-- **Impact.** `sample_rate: .inf` in YAML surfaces as
-  `ValidationError: math domain error`. Not a realistic configuration.
-- **Fix.** Return `False` for non-finite ratios in both copies. Trivial.
 
 ### 10. Chained remaps resolve only in declaration order
 
