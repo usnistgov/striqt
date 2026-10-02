@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, 69, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -255,7 +255,6 @@ item is open.
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
 | 39 | `test_calibration_capture_class_has_a_descriptive_name` | High | D | trivial |
 | 50 | `test_air7201b_init_like_matches_its_source_spec` | High | D | trivial |
-| 69 | `test_capture_type_of_an_unbound_sweep` | High | D | easy |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
 ## Tier B: reachable from plausible YAML or a spec default
@@ -1197,17 +1196,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   type-hinting only, so the wrong class affects editor hints for the
   `air7201b` controller and nothing at run time.
 - **Fix.** Name change. Trivial.
-
-### 69. `get_capture_type` returns the TypeVar for an unbound `Sweep` subclass
-
-`tests/sensor/test_sensor_specs_captures.py::test_capture_type_of_an_unbound_sweep`
-
-- **Mechanism.** The unbound branch uses `get_type_hints`, which does not
-  substitute the generic parameters of
-  `class X(Sweep[FunctionSource, NoPeripherals, SingleToneCapture])`, so the
-  bare `SC` TypeVar is returned.
-- **Impact.** Every in-tree caller passes a bound sweep.
-- **Fix.** Read `__orig_bases__` for the parametrized base. Easy.
 
 ## Tool limitations
 

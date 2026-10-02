@@ -171,11 +171,6 @@ def test_capture_type_of_a_bound_sweep():
     assert C.get_capture_type(b.sensor.sweep_spec_cls) is b.schema.capture
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='get_type_hints does not substitute the Generic parameters of a Sweep '
-    'subclass, so the unbound branch returns the bare SC TypeVar',
-)
 def test_capture_type_of_an_unbound_sweep():
     assert C.get_capture_type(_UnboundSweep) is ss.specs.SingleToneCapture
 

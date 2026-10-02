@@ -6,7 +6,9 @@ from __future__ import annotations as __
 
 from collections import Counter
 import numbers
-from typing import cast, get_args, get_type_hints, TYPE_CHECKING
+from typing import cast, get_args, TYPE_CHECKING
+
+import msgspec
 
 import striqt.analysis as sa
 
@@ -24,8 +26,8 @@ def get_capture_type(sweep_cls: type[structs.Sweep]) -> type[structs.SensorCaptu
     if sweep_cls.sensor is not None:
         return sweep_cls.schema.capture
     else:
-        captures_type = get_type_hints(sweep_cls)['captures']
-        return get_args(captures_type)[0]
+        fields = {f.name: f for f in msgspec.structs.fields(sweep_cls)}
+        return get_args(fields['captures'].type)[0]
 
 
 @sa.util.lru_cache()
