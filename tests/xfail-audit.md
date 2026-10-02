@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 17, 18, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, 72, 74 to 76, and 84); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -220,7 +220,6 @@ item is open.
 | 81 | `test_oaresample_acquisition[resample_filter]`, `[resample_only]` | High | C | small |
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
 | 83 | `test_mat_two_port` | High | C | easy |
-| 84 | `test_mat_request_past_end` | High | C | easy |
 | 85 | `test_test_only_resources_run_a_sweep` | High | C | easy |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
 | 87 | `test_from_delayed_accepts_the_acquisition_info_defaults` | High | C | trivial |
@@ -728,24 +727,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
 - **Fix.** `ret[[port], :file_count]`, one line, once it is decided that `port`
   indexes rows (a `port: 3` label on a one-row file, which works today, would
   then fail). Easy.
-
-### 84. `MATLegacyFileStream.read` wraps past the end of the file regardless of `loop`
-
-`tests/sensor/test_sensor_sources_file.py::test_mat_request_past_end`
-
-- **Mechanism.** `src/striqt/analysis/lib/io.py` `MATLegacyFileStream.read`
-  (about lines 401-447) rebuilds `all_refs = list(self._refs)` on every call,
-  and `_refs` is the whole matrix, so a request past the end (up to one extra
-  file length) silently appends the file from index 0 with `loop=False`; it only
-  raises "too few samples" when one request exceeds the leftover plus a full
-  file. `test_mat_loop_repeats_file` passes for the same mechanism because it
-  asserts the intended `loop=True` behavior.
-- **Why the test is right.** Zarr and TDMS raise `ValueError` past the end.
-- **Impact.** C. A capture longer than the file returns looped data with no
-  error.
-- **Fix.** Track the consumed position in the stream instead of re-listing the
-  refs; touches `seek`/`_leftover` in `MATLegacyFileStream` and
-  `MATNewFileStream`. Easy to medium.
 
 ### 85. `open_resources(test_only=True)` returns resources `iterate_sweep` cannot run
 

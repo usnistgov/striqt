@@ -223,6 +223,10 @@ def decode_from_yaml_file(
 
 
 class _FileStreamBase:
+    _refs: list[typing.Any]
+    _pending: list[typing.Any]
+    _loop: bool = False
+
     def __init__(
         self,
         path,
@@ -243,8 +247,53 @@ class _FileStreamBase:
     def close(self):
         pass
 
-    def read(self, count: int) -> Array:
+    def _cast_ref(self, ref: typing.Any) -> Array:
+        """convert one array reference from the file into a (port, sample) array"""
         raise NotImplementedError
+
+    def read(self, count: int | None = None) -> Array | None:
+        if count == 0:
+            return None
+
+        if self._leftover is None:
+            tally = 0
+            array_list: list[Array] = []
+        else:
+            tally = self._leftover.shape[1]
+            array_list = [self._leftover]
+
+        while count is None or tally < count:
+            try:
+                ref = self._pending.pop(0)
+            except IndexError:
+                if count is None:
+                    break
+                elif self._loop and len(self._refs) > 0:
+                    self._pending = list(self._refs)
+                    ref = self._pending.pop(0)
+                else:
+                    raise ValueError('too few samples in the file')
+
+            if not hasattr(ref, 'shape') or ref.ndim != 2:
+                continue
+
+            x = self._cast_ref(ref)
+            array_list.append(x)
+            tally += x.shape[1]
+
+        iq = self._xp.concatenate(array_list, axis=1)
+        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
+
+        if count is None:
+            self._leftover = None
+            return iq
+
+        self._leftover = iq[:, count:]
+        if self._position is None:
+            self._position = count
+        else:
+            self._position += count
+        return iq[:, :count]
 
     def seek(self, pos):
         self._leftover = None
@@ -285,56 +334,10 @@ class MATNewFileStream(_FileStreamBase):
     def close(self):
         self._fd.close()
 
-    def read(self, count: int):
-        if count == 0:
-            return
-
-        xp = self._xp
-
-        if self._leftover is None:
-            tally = 0
-            array_list = []
-        else:
-            tally = self._leftover.shape[1]
-            array_list = [self._leftover]
-
-        all_refs = list(self._refs)
-
-        while tally < count:
-            try:
-                ref = all_refs.pop(0)
-            except IndexError:
-                if count is None:
-                    break
-                elif self._loop and len(self._refs) > 0:
-                    all_refs = list(self._refs)
-                    ref = all_refs.pop(0)
-                else:
-                    raise ValueError('too few samples in the file')
-
-            if not hasattr(ref, 'shape') or ref.ndim != 2:
-                continue
-
-            raw = np.asarray(ref)
-            input_dtype = np.result_type(raw.dtype[0], complex)
-            x = raw.view(input_dtype).astype(self.dtype)
-
-            array_list.append(x)
-            tally += x.shape[1]
-
-        iq = xp.concat(array_list, axis=1)
-        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
-
-        if count is None:
-            self._leftover = None
-            return iq
-
-        self._leftover = iq[:, count:]
-        if self._position is None:
-            self._position = count
-        else:
-            self._position += count
-        return iq[:, :count]
+    def _cast_ref(self, ref: typing.Any) -> Array:
+        raw = np.asarray(ref)
+        input_dtype = np.result_type(raw.dtype[0], complex)
+        return raw.view(input_dtype).astype(self.dtype)
 
     def seek(self, pos):
         if pos == self._position:
@@ -350,6 +353,7 @@ class MATNewFileStream(_FileStreamBase):
         else:
             raise IOError('no data references found in file')
 
+        self._pending = list(self._refs)
         self.read(self._skip_samples + pos)
 
 
@@ -396,53 +400,8 @@ class MATLegacyFileStream(_FileStreamBase):
     def close(self):
         pass
 
-    def read(self, count=None):
-        if count == 0:
-            return
-
-        xp = self._xp
-
-        if self._leftover is None:
-            tally = 0
-            array_list = []
-        else:
-            tally = self._leftover.shape[1]
-            array_list = [self._leftover]
-
-        all_refs = list(self._refs)
-
-        while count is None or tally < count:
-            try:
-                ref = all_refs.pop(0)
-            except IndexError:
-                if count is None:
-                    break
-                elif self._loop and len(self._refs) > 0:
-                    all_refs = list(self._refs)
-                    ref = all_refs.pop(0)
-                else:
-                    raise ValueError('too few samples in the file')
-
-            if not hasattr(ref, 'shape') or ref.ndim != 2:
-                continue
-
-            x = xp.asarray(ref, ref.dtype).astype(self.dtype)
-            array_list.append(x)
-            tally += x.shape[1]
-
-        iq = xp.concatenate(array_list, axis=1)
-        self._capture_dict[dataarrays.PORT_DIM] = list(range(iq.shape[0]))
-
-        if count is None:
-            self._leftover = None
-            return iq
-
-        self._leftover = iq[:, count:]
-        if self._position is None:
-            self._position = count
-        else:
-            self._position += count
-        return iq[:, :count]
+    def _cast_ref(self, ref: typing.Any) -> Array:
+        return self._xp.asarray(ref, ref.dtype).astype(self.dtype)
 
     def seek(self, pos):
         if pos == self._position:
@@ -452,6 +411,7 @@ class MATLegacyFileStream(_FileStreamBase):
 
         iq = np.atleast_2d(self._fd[self._key])
         self._refs = [iq]
+        self._pending = list(self._refs)
         self.read(self._skip_samples + pos)
 
 
@@ -481,9 +441,9 @@ class NPYFileStream(_FileStreamBase):
     def close(self):
         pass
 
-    def read(self, count: int = 0):
+    def read(self, count: int | None = 0) -> Array | None:
         if count == 0:
-            return
+            return None
 
         xp = self._xp
 
@@ -494,7 +454,7 @@ class NPYFileStream(_FileStreamBase):
             tally = self._leftover.shape[1]
             array_list = [self._leftover]
 
-        while tally < count:
+        while count is None or tally < count:
             try:
                 ref = self._refs.pop(0)
             except IndexError:

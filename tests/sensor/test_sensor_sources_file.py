@@ -297,13 +297,6 @@ def test_mat_get_waveform_preroll(mat_files, array_backend, key, fill):
     assert_preroll_then_file(waveform, fill, mat_files[1].waveform)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'MATLegacyFileStream.read re-lists the whole matrix as a fresh ref on every '
-        'call, so a request past the end wraps to file index 0 regardless of loop'
-    ),
-)
 def test_mat_request_past_end(mat_files):
     """without loop, a read past the end of the file is an error, as for the zarr
     and TDMS sources"""
