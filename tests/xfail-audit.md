@@ -25,10 +25,7 @@ the same change without giving them a number (listed under "Fixed on 2026-09-18
 without a ledger number" below). Item 90 was added on 2026-09-23 by the
 sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
-xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
-numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11 to 13, 15, 19, 21, 25 to 29, 35 to 38, 40, 42, 47, 50,
-51, 60, 61, 64, 66, 69, 72 to 76, 83, 85, 87, and 89); their write-ups are in the git history of this file. Items
+xfail so that the `ty` upgrade that closes it surfaces as an xpass. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
