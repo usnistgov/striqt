@@ -6,7 +6,7 @@ import functools
 import inspect
 from typing import Any, Callable, cast, ClassVar, Generic, Generator, TYPE_CHECKING
 from collections import defaultdict
-from threading import Event
+from threading import Event, RLock
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -35,6 +35,7 @@ class lookup:
     _obj: dict[specs.Source, 'PendingController'] = defaultdict(Event)
     _id: dict[specs.Source, Event | str] = defaultdict(Event)
     _ready: dict[specs.Source, Event | bool] = defaultdict(Event)
+    _lock = RLock()
 
     @classmethod
     def instance(cls, spec: specs.Source, timeout=0.5) -> Controller:
@@ -103,19 +104,46 @@ class lookup:
             raise TypeError
 
     @classmethod
-    def _clear(cls, spec: specs.Source):
-        cls._obj[spec] = Event()
-        cls._ready[spec] = Event()
-        cls._id[spec] = Event()
+    def _clear(cls, spec: specs.Source) -> None:
+        with cls._lock:
+            cls._obj[spec] = Event()
+            cls._ready[spec] = Event()
+            cls._id[spec] = Event()
 
     @classmethod
-    def _register(cls, spec: specs.Source, controller: Controller):
-        obj = cls._obj[spec]
-        if isinstance(obj, Event):
+    def _register(cls, spec: specs.Source, controller: Controller) -> None:
+        """take the registry slot of `spec` for `controller` and wake its waiters.
+
+        A controller that is still open for an equal spec is closed first, with a
+        warning on the ``'source'`` logger, so that a notebook cell that rebinds a
+        name to a new controller does not need to release the previous one by hand.
+        An exception left in the slot by a failed open is discarded.
+
+        Args:
+            spec: the registry key; equality is by field value, so separately
+                constructed specs with equal fields share one slot
+            controller: the instance that `instance` returns for `spec` until it is
+                closed
+        """
+        with cls._lock:
+            obj = cls._obj[spec]
+            if isinstance(obj, Controller):
+                if not obj._closed:
+                    sa.util.get_logger('source').warning(
+                        'closing the open controller for an equal source spec before '
+                        'reopening it; release controllers with close() or a `with` '
+                        'block'
+                    )
+                    obj.close()
+                else:
+                    cls._clear(spec)
+                obj = cls._obj[spec]
+            elif isinstance(obj, BaseException):
+                cls._clear(spec)
+                obj = cls._obj[spec]
+            assert isinstance(obj, Event)
             cls._obj[spec] = controller
             obj.set()
-        else:
-            raise TypeError('controller object was already registered for this spec')
 
     @classmethod
     def _set_ready(cls, spec: specs.Source, is_ready: bool):
@@ -377,7 +405,20 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
         self._capture = self.backend.arm(spec) or spec
 
-    def is_open(self, wait=True) -> bool:
+    def is_open(self, wait: bool = True) -> bool:
+        """return whether this instance holds an open backend.
+
+        Args:
+            wait: when True, block up to the controller timeout for an open that is
+                still in progress; when False, report the state at the time of
+                the call
+
+        Returns:
+            False once `close` has run on this instance, even if another controller
+            has since been opened for an equal source spec
+        """
+        if self._closed:
+            return False
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
     def close(self) -> None:
