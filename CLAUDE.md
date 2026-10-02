@@ -160,6 +160,7 @@ Library defects that need a design decision rather than a local fix are written 
   - **Avoid repeating exact code in the function when documenting the return value**. Rather, state which inputs will be used to compute the returned value, and the scope
   of possible return values such as bounds, etc.
   - **Behavior, not mechanism.** Name the method only when it decides the result or the cost (overlap-add edge behavior, the copy made by `_truncated_buffer`, a disk-cached window design). No step-by-step narration of the body; when the steps *are* the observable precedence (`loop_captures`), state them as rules.
+  - **Constraints, not their reasons.** State what the caller must satisfy and what they get back. The reason a constraint exists belongs in a code comment at the line that enforces it, if anywhere; never in the docstring.
   - **Present tense, present code.** Nothing about what the code used to do, was changed to do, or may do later — no "now", "no longer", "previously", "new", "legacy", "used to", "fix", "workaround", "TODO", "for now". No hedging — "should" where "must" is meant, "try to", "attempt", "safely", "properly", "simply", "just", "basically", "note that". No first person or reader address ("we", "our", "you"). No performance boasts ("with speed optimizations"): state the cost or nothing.
   - **Cite external context.** A standard section (3GPP TS 38.211 §5.3.1), a paper, or an upstream issue URL goes under `References:` or inline in parentheses.
   - **Do not duplicate what the tooling injects.** Spec-struct fields are documented through `Meta(description=..., units)`; the class docstring says what the block configures and how its fields interact, never a field list. A measurement docstring ends with `Args:\n    {args}`, which the registry fills; document the *output* (dimension names, units) in prose above it. `Controller` subclass and `arm` docstrings are generated.
@@ -167,7 +168,7 @@ Library defects that need a design decision rather than a local fix are written 
   - **Length follows audience.** Public API (`striqt.analysis`, `striqt.sensor`, the `waveform` shims) gets full sections; a private `.lib` helper gets a summary line plus only the sections that carry information. No docstring beats one that restates the name.
   - **Scope of a change.** Bring the docstring of any function you edit to this standard, including stale parameter names and exception lists. Do not rewrite docstrings of untouched functions in the same change.
 
-  After editing, re-read every docstring you touched: delete any sentence that restates the signature, describes the change rather than the code, or hedges.
+  After editing, re-read every docstring you touched: delete any sentence that restates the signature, describes the change rather than the code, or hedges, and any clause that starts with "because", "since" or "so that" or sits in parentheses explaining the mechanism.
 
 ## Testing
 
