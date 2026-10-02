@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+50, 51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -254,7 +254,6 @@ item is open.
 | 56 | `TestHardwareTimeSync::test_unsupported_source_names_itself` | High | D | trivial |
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
 | 39 | `test_calibration_capture_class_has_a_descriptive_name` | High | D | trivial |
-| 50 | `test_air7201b_init_like_matches_its_source_spec` | High | D | trivial |
 | 69 | `test_capture_type_of_an_unbound_sweep` | High | D | easy |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
@@ -1188,15 +1187,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Surfaces in the JSON schema `$defs`, the `adjust_captures`
   error text, and the `Controller.arm` signature. Not in zarr attrs.
 - **Fix.** Set `__name__` and `__qualname__`. Trivial.
-
-### 50. `air7201b` binds `init_like=Air7101BSourceSpec`
-
-`tests/sensor/test_sensor_sources_deepwave.py::test_air7201b_init_like_matches_its_source_spec`
-
-- **Mechanism.** `bindings.py:149`. `Schema.init_like` is documented as
-  type-hinting only, so the wrong class affects editor hints for the
-  `air7201b` controller and nothing at run time.
-- **Fix.** Name change. Trivial.
 
 ### 69. `get_capture_type` returns the TypeVar for an unbound `Sweep` subclass
 
