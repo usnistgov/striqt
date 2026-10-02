@@ -5,7 +5,7 @@ import logging
 import types
 import typing
 from typing import Any, cast, TYPE_CHECKING
-from math import ceil
+from math import ceil, isfinite
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -312,11 +312,11 @@ def is_reusable(
 ) -> bool:
     """return whether the raw IQ acquired for `c1` serves `c2` as well.
 
-    Reuse requires the same radio sample rate from `design_resampler` at `mcr`, the
-    same `analysis_bandwidth` (the acquisition is padded for its filter transient),
+    Reuse requires the same radio sample rate and LO offset from `design_resampler`
+    at `mcr`, an `analysis_bandwidth` that is finite for both or infinite for both,
     and equality on every other field except `sample_rate`, `host_resample`,
-    `backend_sample_rate` and `adjust_analysis`, which change only the host-side
-    processing of the same record. `None` for either capture is never reusable.
+    `backend_sample_rate` and `adjust_analysis`. `None` for either capture is never
+    reusable.
     """
 
     if c1 is None or c2 is None:
@@ -324,11 +324,13 @@ def is_reusable(
 
     from .. import compute
 
-    fsb1 = compute.design_resampler(c1, mcr)['fs_sdr']
-    fsb2 = compute.design_resampler(c2, mcr)['fs_sdr']
+    d1 = compute.design_resampler(c1, mcr)
+    d2 = compute.design_resampler(c2, mcr)
 
-    if fsb1 != fsb2:
-        # the realized backend sample rates need to be the same
+    if d1['fs_sdr'] != d2['fs_sdr'] or d1['lo_offset'] != d2['lo_offset']:
+        # the radio must be clocked and tuned the same way
+        return False
+    if isfinite(c1.analysis_bandwidth) != isfinite(c2.analysis_bandwidth):
         return False
 
     downstream_kws = {
@@ -338,6 +340,10 @@ def is_reusable(
     }
 
     c1_compare = c1.replace(**downstream_kws)
-    c2_compare = c2.replace(sample_rate=c1.sample_rate, **downstream_kws)
+    c2_compare = c2.replace(
+        sample_rate=c1.sample_rate,
+        analysis_bandwidth=c1.analysis_bandwidth,
+        **downstream_kws,
+    )
 
     return c1_compare == c2_compare
