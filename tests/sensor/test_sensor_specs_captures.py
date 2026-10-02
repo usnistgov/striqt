@@ -58,11 +58,6 @@ def test_split_leaves_adjust_analysis_intact(subtests):
             assert c.adjust_analysis == {'a': (1, 2, 3)}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='split_capture_ports zips each tuple field against port, so a tuple '
-    'shorter than port is copied whole onto the extra ports instead of raising',
-)
 def test_split_rejects_a_tuple_field_shorter_than_port():
     capture = make_capture(port=(0, 1, 2), external_lo_frequency=(1e9, 2e9))
     with pytest.raises(ValueError):
@@ -85,11 +80,6 @@ def test_pairwise_pairs_by_index():
     assert C.pairwise_by_port(c1, c2, False) == expected
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='pairwise_by_port zips the two split lists, silently truncating to the '
-    'shorter port count instead of raising',
-)
 def test_pairwise_rejects_different_port_counts():
     with pytest.raises(ValueError):
         C.pairwise_by_port(make_capture(port=(0, 1)), make_capture(port=0), False)
