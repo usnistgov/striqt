@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, 64, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -233,7 +233,6 @@ item is open.
 | 70 | `TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports` | High | C | easy |
 | 20 | `test_list_port_direct_is_frozen`; `test_var_tuple_list_is_frozen_on_direct_construction`; `test_freeze_depths_count_dict_list_and_tuple_nesting`; `test_freeze_depths_of_real_specs`; `test_direct_struct_with_list_validates_and_replaces` | High | C | trivial |
 | 63 | `test_negative_sample_rate_is_rejected_on_convert` | High | C | trivial |
-| 64 | `test_descending_range_from_zero_rejected[frame_range]`, `[symbol_range]` | High | C | trivial |
 | 22 | `test_analysis_group_accepted` | High | C | moderate |
 | 24 | `test_recurses_into_frozendict` | High | C | trivial |
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
@@ -928,17 +927,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Sensor sweeps decode through `BackendSampleRate`, which has the
   bound; only analysis-level specs built directly are open.
 - **Fix.** Add `gt=0`. Trivial.
-
-### 64. `_validate_range` skips the order check when the start is 0
-
-`tests/analysis/test_analysis_specs_structs.py::TestCellularCyclicAutocorrelator::test_descending_range_from_zero_rejected[frame_range]`, `[symbol_range]`
-
-- **Mechanism.** `analysis/specs/structs.py:282` returns before the
-  `end >= start` check when `start` is 0, so `(0, -5)` becomes `range(0, -5)`,
-  an empty selection, and the measurement silently produces nothing.
-- **Why the test is right.** The existing message "Expected an end value at or
-  after `start`" is the stated rule for every other start.
-- **Fix.** Drop the early return. Trivial.
 
 ### 22. `SoapySource.signal_trigger` rejects the `AnalysisGroup` form
 

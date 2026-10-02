@@ -205,13 +205,6 @@ class TestCellularCyclicAutocorrelator:
             symbol_range=(1, None),
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            '_validate_range (analysis/specs/structs.py:270) returns before the '
-            'end >= start check when start is 0, so (0, -5) becomes an empty range'
-        ),
-    )
     @pytest.mark.parametrize('field', ['frame_range', 'symbol_range'])
     def test_descending_range_from_zero_rejected(self, field):
         raises_on_both_paths(
