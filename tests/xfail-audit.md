@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, and 72 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -245,7 +245,6 @@ item is open.
 | 31 | `TestIqToBinPower.test_negative_axis` | Medium | C | trivial |
 | 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
 | 89 | `test_log_file_is_json` | High | D | small |
-| 73 | `TestRetry::test_exhausted_tries_sleep_only_between_tries` | High | D | trivial |
 | 38 | `test_capture_type_attrs` | High | D | trivial |
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
@@ -1093,17 +1092,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   JSON array.
 - **Impact.** D.
 - **Fix.** Write the separator before each record after the first. Small.
-
-### 73. `retry` sleeps once more after the final failure
-
-`tests/sensor/test_sensor_util.py::TestRetry::test_exhausted_tries_sleep_only_between_tries`
-
-- **Mechanism.** `sensor/lib/util.py:323-325` runs `exception_func` and
-  `time.sleep` after the last failed try as well, before the `for ... else`
-  re-raises.
-- **Impact.** `read_retries` uses `delay=0`; other callers pay one extra
-  backoff interval before seeing the exception.
-- **Fix.** Sleep only when another try remains. Trivial.
 
 ### 38. `get_capture_type_attrs` returns empty attrs
 
