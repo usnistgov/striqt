@@ -198,6 +198,10 @@ def binned_mean(
         size_left = center_bin - count // 2
         blocks_left = size_left // count
         block_count = 2 * blocks_left + 1
+        # count 1 is exempt: every length is block-aligned, and truncating would
+        # drop the -fs/2 bin from the fftshift layout
+        while count > 1 and block_count > 1 and count * block_count > x.shape[axis]:
+            block_count -= 2
         start = center_bin - (count * block_count) // 2
         stop = start + count * block_count
 

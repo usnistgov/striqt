@@ -27,7 +27,7 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
+fixed or withdrawn (1 to 5, 7, 11 to 13, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
 51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
@@ -204,7 +204,6 @@ item is open.
 | 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
-| 13 | `test_fft_bins_odd_count_even_length` | High | B | easy |
 | 44 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]` | High | B | trivial |
 | 52 | `TestSoapySourceClose::test_close_releases_the_stream_and_device` | High | B | trivial |
 | 14 | `test_leading_repeat_is_accepted` | High | B | easy |
@@ -475,25 +474,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
 - **Impact.** A typo such as `centre_frequency` deletes the whole remap and the
   coordinate goes missing from the output with no diagnostic.
 - **Fix.** Delete the two `continue` lines. Trivial.
-
-### 13. `binned_mean(fft=True)` raises for some odd bin counts
-
-`tests/waveform/test_waveform_arrays.py::TestBinnedMean::test_fft_bins_odd_count_even_length[8-3]`, `[14-3]`, `[1024-5]`
-
-- **Mechanism.** `arrays.py:139-147`: when `(n//2 - count//2) % count == 0`
-  with odd `count` and even `n`, `count*block_count` is `n+1`, `start` is 0,
-  `stop` is `n+1`, the slice is skipped, and `axis_to_blocks` rejects the
-  unaligned length.
-- **Why the test is right.** The docstring promises fft-aligned bins with
-  truncation of incomplete ones; raising is not one of the documented
-  outcomes.
-- **Impact.** Callers are the spectrogram frequency-bin averaging in
-  `measurements/spectrum.py` (`_cached_spectrogram` and `spectrogram_freqs`; count is
-  `integration_bandwidth / frequency_resolution`, axis 2, `fft=True`) and the
-  SSB spectrogram (count 2). All shipped YAMLs use a ratio of 24. A user who
-  picks an odd ratio such as 45 kHz over 15 kHz gets a `ValueError` for about
-  a third of realistic `nfft` values.
-- **Fix.** Clamp `block_count` so the block span never exceeds `n`. Easy.
 
 ### 44. A single-frequency calibration cannot be looked up
 
