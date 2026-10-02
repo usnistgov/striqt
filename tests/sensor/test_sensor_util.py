@@ -385,12 +385,6 @@ class TestRetry:
         util.retry(ConnectionError, tries=4, delay=0.1, backoff=2)(flaky)()
         assert sleeps == pytest.approx([0.1, 0.2, 0.4])
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason='util.py:323-325 run exception_func and time.sleep after the final '
-        'failed try as well, before the for-else re-raises',
-    )
     def test_exhausted_tries_sleep_only_between_tries(self, monkeypatch):
         sleeps = []
         monkeypatch.setattr(util.time, 'sleep', sleeps.append)
