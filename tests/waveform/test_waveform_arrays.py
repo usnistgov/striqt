@@ -171,15 +171,6 @@ class TestBinnedMean:
         ref = x[start : start + nblocks * count].reshape(nblocks, count).mean(axis=1)
         assert_close(result, ref, atol=arrays.mean_atol(x, count))
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=ValueError,
-        reason=(
-            'binned_mean(fft=True) computes a stop index of n+1 when '
-            '(n//2 - count//2) % count == 0 for odd count and even n, skips the '
-            'slice, and axis_to_blocks then rejects the unaligned length'
-        ),
-    )
     @pytest.mark.parametrize('n,count', [(8, 3), (14, 3), (1024, 5)])
     def test_fft_bins_odd_count_even_length(self, n, count):
         result = arrays.binned_mean(np.arange(n, dtype=np.float64), count, fft=True)
