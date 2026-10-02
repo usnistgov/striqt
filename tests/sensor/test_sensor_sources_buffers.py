@@ -215,12 +215,19 @@ _C_DIVISOR = preset_capture(
 
 REUSE_CASES = {
     'identical': (_C1, _C1, True),
-    'analysis_bandwidth': (_C1, _C1.replace(analysis_bandwidth=float('inf')), True),
-    'sample_rate_same_fs_sdr': (
+    'analysis_bandwidth_finite': (_C1, _C1.replace(analysis_bandwidth=4e6), True),
+    'analysis_bandwidth_removed': (
         _C1,
-        _C1.replace(sample_rate=6e6, analysis_bandwidth=float('inf')),
-        True,
+        _C1.replace(analysis_bandwidth=float('inf')),
+        False,
     ),
+    # 5 and 4.9 MHz both decimate the clock by 10 but snap to different lo_offsets
+    'lo_shift_new_offset': (
+        _C1.replace(lo_shift='left'),
+        _C1.replace(lo_shift='left', analysis_bandwidth=4.9e6),
+        False,
+    ),
+    'sample_rate_same_fs_sdr': (_C1, _C1.replace(sample_rate=6e6), True),
     'adjust_analysis': (
         _C1,
         _C1.replace(adjust_analysis={'power_spectral_density': {'window': 'hann'}}),

@@ -1249,6 +1249,18 @@ def design_oafilter(
 
 
 class ResamplerDesign(typing.TypedDict):
+    """the radio and COLA resampler settings that realize a target sample rate.
+
+    ``fs_sdr`` and ``fs`` both hold the radio sample rate (in S/s) that the
+    resampler takes as input. ``nfft`` and ``nfft_out`` are the input and output
+    FFT sizes, in the exact ratio of the radio rate to the target rate and both
+    divisible by the COLA divisor of ``window``. ``lo_offset`` is the offset (in
+    Hz) by which the radio is tuned below the center frequency: a whole number of
+    ``fs_sdr / nfft`` bins, or zero without an LO shift; ``frequency_shift`` records
+    the requested direction. ``passband`` holds the protected band edges (in Hz)
+    relative to the tuned LO, or ``(None, None)`` when the bandwidth is unbounded.
+    """
+
     fs_sdr: float
     lo_offset: float
     window: str | tuple[str, float]
@@ -1303,12 +1315,8 @@ def design_cola_resampler(
         fs_sdr: the radio sample rate (in S/s) to use instead of selecting one
 
     Returns:
-        a `ResamplerDesign` whose ``fs_sdr`` and ``fs`` are the radio rate, ``nfft``
-        and ``nfft_out`` the input and output FFT sizes, ``lo_offset`` the LO offset
-        (in Hz, zero when `bw` is infinite or there is no shift), ``passband`` the
-        protected band edges (in Hz) relative to the tuned LO or ``(None, None)``
-        when `bw` is infinite, ``window`` the COLA window name, and
-        ``frequency_shift`` the `shift` argument
+        the `ResamplerDesign` that resamples from the selected radio rate to
+        `fs_target`
 
     Raises:
         ValueError: if `shift` is set while `bw` is infinite, `shift` is not a

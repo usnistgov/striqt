@@ -5,7 +5,7 @@ import logging
 import types
 import typing
 from typing import Any, cast, TYPE_CHECKING
-from math import ceil
+from math import ceil, isfinite
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -309,19 +309,28 @@ def get_dtype_scale(transport_dtype: specs.types.TransportDType) -> float:
 
 def is_reusable(
     c1: specs.SensorCapture | None, c2: specs.SensorCapture | None, mcr: float
-):
-    """return True if c2 is compatible with the raw and uncalibrated IQ acquired for c1"""
+) -> bool:
+    """return whether the raw IQ acquired for `c1` serves `c2` as well.
+
+    Reuse requires the same radio sample rate and LO offset from `design_resampler`
+    at `mcr`, an `analysis_bandwidth` that is finite for both or infinite for both,
+    and equality on every other field except `sample_rate`, `host_resample`,
+    `backend_sample_rate` and `adjust_analysis`. `None` for either capture is never
+    reusable.
+    """
 
     if c1 is None or c2 is None:
         return False
 
     from .. import compute
 
-    fsb1 = compute.design_resampler(c1, mcr)['fs_sdr']
-    fsb2 = compute.design_resampler(c2, mcr)['fs_sdr']
+    d1 = compute.design_resampler(c1, mcr)
+    d2 = compute.design_resampler(c2, mcr)
 
-    if fsb1 != fsb2:
-        # the realized backend sample rates need to be the same
+    if d1['fs_sdr'] != d2['fs_sdr'] or d1['lo_offset'] != d2['lo_offset']:
+        # the radio must be clocked and tuned the same way
+        return False
+    if isfinite(c1.analysis_bandwidth) != isfinite(c2.analysis_bandwidth):
         return False
 
     downstream_kws = {
@@ -332,9 +341,8 @@ def is_reusable(
 
     c1_compare = c1.replace(**downstream_kws)
     c2_compare = c2.replace(
-        # ignore parameters that only affect downstream processing
-        analysis_bandwidth=c1.analysis_bandwidth,
         sample_rate=c1.sample_rate,
+        analysis_bandwidth=c1.analysis_bandwidth,
         **downstream_kws,
     )
 
