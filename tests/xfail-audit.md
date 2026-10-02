@@ -233,7 +233,6 @@ item is open.
 | 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
 | 89 | `test_log_file_is_json` | High | D | small |
 | 73 | `TestRetry::test_exhausted_tries_sleep_only_between_tries` | High | D | trivial |
-| 38 | `test_capture_type_attrs` | High | D | trivial |
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
 | 48 | `TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields` | High | D | trivial |
