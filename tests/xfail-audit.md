@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, 66, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -200,7 +200,6 @@ item is open.
 | 78 | `test_lo_shift_is_removed_from_the_output[left]`, `[right]` | High | B | design |
 | 79 | `test_reused_iq_can_be_corrected_for_a_wider_analysis_filter` | High | B | design |
 | 90 | `test_upsampled_overlap_covers_the_output_rate_filter_pad` | High | B | small |
-| 66 | `test_zero_stft_by_freq_zeroes_outside_passband[off_grid]`; `test_downsample_stft_passband_zeroing[off_grid]` | High | B | easy |
 | 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
@@ -392,21 +391,6 @@ item is open.
   in output samples throughout). Small, but it changes the acquired sample count
   of every upsampling capture, so `DOCUMENTED_OVERLAPS` and any downstream
   expectation of a read size move with it.
-
-### 66. `_freq_band_edges` drops the last in-band bin for an off-grid cutoff
-
-`tests/waveform/test_fourier.py::TestStftFrequencyEditing::test_zero_stft_by_freq_zeroes_outside_passband[off_grid]`,
-`test_downsample_stft_passband_zeroing[off_grid]`
-
-- **Mechanism.** `fourier.py:446` takes the index of the last bin
-  `<= cutoff_hi` as the exclusive stop of the passband, so a cutoff between
-  bins zeroes a bin that lies inside the passband.
-- **Why the test is right.** The on-grid cases pass, and the half-open
-  `[lo, hi)` contract in CLAUDE.md is only true on-grid. The caller
-  `analysis/lib/source.py:83` passes spec-derived passbands that need not
-  fall on the grid.
-- **Fix.** Use `searchsorted(freqs, cutoff_hi)` (or `+ 1`) for the stop.
-  Easy.
 
 ### 6. `Phy3GPP` cyclic-prefix layout is wrong at 15 kHz and 60 kHz
 

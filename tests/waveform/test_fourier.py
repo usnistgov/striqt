@@ -721,16 +721,9 @@ class TestStftFrequencyEditing:
         )
         return freqs, Y
 
-    OFF_GRID_XFAIL = pytest.mark.xfail(
-        strict=True,
-        reason='_freq_band_edges returns the index of the last bin <= cutoff_hi as '
-        'the exclusive end of the passband (fourier.py:446), so an upper cutoff '
-        'between bins zeroes the last in-band bin',
-    )
-
     @pytest.mark.parametrize(
         'edge_shift_bins',
-        [0, pytest.param(0.5, marks=OFF_GRID_XFAIL)],
+        [0, 0.5],
         ids=['on_grid', 'off_grid'],
     )
     def test_zero_stft_by_freq_zeroes_outside_passband(self, edge_shift_bins):
@@ -774,7 +767,7 @@ class TestStftFrequencyEditing:
 
     @pytest.mark.parametrize(
         'edge_shift_bins',
-        [0, pytest.param(-0.5, marks=OFF_GRID_XFAIL)],
+        [0, -0.5],
         ids=['on_grid', 'off_grid'],
     )
     def test_downsample_stft_passband_zeroing(self, edge_shift_bins):

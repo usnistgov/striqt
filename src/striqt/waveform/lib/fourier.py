@@ -627,7 +627,7 @@ def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
     elif cutoff_hi >= freqs[-1]:
         ihi = freqs.size
     else:
-        ihi = xp.where(freqs <= cutoff_hi)[0][-1]
+        ihi = int(xp.searchsorted(freqs, cutoff_hi))
 
     return ilo, ihi
 
