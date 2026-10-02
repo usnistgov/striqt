@@ -25,10 +25,7 @@ the same change without giving them a number (listed under "Fixed on 2026-09-18
 without a ledger number" below). Item 90 was added on 2026-09-23 by the
 sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
-xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
-numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11 to 13, 15, 19, 21, 25 to 29, 35 to 37, 40, 42, 47, 50,
-51, 60, 61, 64, 66, 69, 72 to 76, 83, 85, 87, and 89); their write-ups are in the git history of this file. Items
+xfail so that the `ty` upgrade that closes it surfaces as an xpass. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -234,6 +231,8 @@ item is open.
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
 | 31 | `TestIqToBinPower.test_negative_axis` | Medium | C | trivial |
 | 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
+| 89 | `test_log_file_is_json` | High | D | small |
+| 73 | `TestRetry::test_exhausted_tries_sleep_only_between_tries` | High | D | trivial |
 | 38 | `test_capture_type_attrs` | High | D | trivial |
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
@@ -893,31 +892,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   that load two sites are affected.
 - **Fix.** Needs a registry replace-or-namespace policy first. Design decision.
 
-
-### 31. `iq_to_bin_power` with a negative axis reduces the wrong axis
-
-`tests/waveform/test_power_analysis.py::TestIqToBinPower::test_negative_axis`
-
-- **Mechanism.** `power_analysis.py:414` reduces `axis + 1` without
-  normalizing, so `axis=-1` reduces axis 0.
-- **Why the test is right.** Numpy convention; not stated in the docstring.
-  Medium.
-- **Impact.** Callers pass `axis=1`. Unreachable.
-- **Fix.** Normalise the axis at entry. Trivial.
-
-### 34. `iq_to_cyclic_power` normalizes a negative axis too late
-
-`tests/waveform/test_power_analysis.py::TestIqToCyclicPower::test_negative_axis`
-
-- **Mechanism.** `power_analysis.py:484` normalizes after the
-  `iq_to_bin_power` calls and the `power_shape[1]` check. The observed failure
-  is item 31 propagating (the xfail reason now says so); the late
-  normalization is real but secondary, and this test cannot fail or pass
-  independently of item 31's.
-- **Why the test is right.** Numpy convention only; the paper works with a
-  single time series and does not define a channel axis. Medium.
-- **Impact.** Unreachable (axis=1 in production).
-- **Fix.** Normalise at entry, together with items 31 and 33. Easy.
 
 ## Tier D: cosmetic
 
