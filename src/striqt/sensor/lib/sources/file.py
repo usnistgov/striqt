@@ -172,12 +172,18 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
         # returning data
         self._file_stream.seek(file_start)
         ret = self._file_stream.read(max(file_count, 1))
-        ret = ret[:, :file_count]
+
+        if port >= ret.shape[0]:
+            raise ValueError(
+                f'requested channel exceeds data channel count of {ret.shape[0]}'
+            )
+
+        ret = ret[[port], :file_count]
 
         if fill == 0:
             return ret.copy()
 
-        iq = sw.array_namespace(ret).zeros((ret.shape[0], count), dtype=ret.dtype)
+        iq = sw.array_namespace(ret).zeros((1, count), dtype=ret.dtype)
         iq[:, fill:] = ret
         return iq
 

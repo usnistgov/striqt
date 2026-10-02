@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, 72, 74 to 76, and 83); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -221,7 +221,6 @@ item is open.
 | 80 | `test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`, `[resample_only]` | High | C | moderate |
 | 81 | `test_oaresample_acquisition[resample_filter]`, `[resample_only]` | High | C | small |
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
-| 83 | `test_mat_two_port` | High | C | easy |
 | 84 | `test_mat_request_past_end` | High | C | easy |
 | 85 | `test_test_only_resources_run_a_sweep` | High | C | easy |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
@@ -745,19 +744,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   `backend_sample_rate`, yet the overlap machinery has no access to the backend.
   Design decision; the xfail is kept whole so that it records that file
   resampling is broken end to end, not only the design.
-
-### 83. `MATSource.get_waveform` ignores `port` for multi-row files
-
-`tests/sensor/test_sensor_sources_file.py::test_mat_two_port`
-
-- **Mechanism.** `MATSource.get_waveform` returns `ret[:, :file_count]`, every
-  row regardless of `port`; `VirtualSource.read` then cannot assign the
-  `(rows, count)` result into one port buffer. Zarr uses row = port and the MAT
-  stream itself reports `port = list(range(rows))`.
-- **Impact.** C. Multi-row `.mat` files work single-port only.
-- **Fix.** `ret[[port], :file_count]`, one line, once it is decided that `port`
-  indexes rows (a `port: 3` label on a one-row file, which works today, would
-  then fail). Easy.
 
 ### 84. `MATLegacyFileStream.read` wraps past the end of the file regardless of `loop`
 
