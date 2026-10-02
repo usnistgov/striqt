@@ -113,13 +113,6 @@ def test_from_delayed_rejects_extra_data_of_the_wrong_length():
         compute.from_delayed(dd)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=TypeError,
-    reason='_coords_template types sweep_index as int from Union[int, None], so '
-    'build_capture_coords cannot store the AcquisitionInfo default None '
-    '(datasets.py:194)',
-)
 def test_from_delayed_accepts_the_acquisition_info_defaults():
     dd = dataclasses.replace(two_port_run()[0], extra_coords=ss.specs.AcquisitionInfo())
     compute.from_delayed(dd)
