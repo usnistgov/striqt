@@ -13,6 +13,7 @@ from pathlib import Path
 import typing_extensions
 
 from . import bindings, controller, io, util
+from .peripherals import NoPeripherals
 from .sinks import SinkBase
 from .typing import Peripherals, SS, SP, SC, PS, PC
 from .. import specs
@@ -141,16 +142,16 @@ def _open_devices(
     skip_peripherals: bool = False,
     format_path: specs.paths.PathFormatter | None = None,
 ):
-    """open source and optionally peripherals"""
+    """open the source and peripherals; `skip_peripherals` substitutes `NoPeripherals`"""
 
     source = util.threadpool.submit(ctrl_cls.from_sweep_spec, spec, format_path)
 
-    if not skip_peripherals:
-        peripherals = util.threadpool.submit(
-            _timeit('open peripherals')(ctrl_cls.sensor.peripherals_cls), spec
-        )
-    else:
-        peripherals = None
+    peripherals_cls: type[Peripherals] = (
+        NoPeripherals if skip_peripherals else ctrl_cls.sensor.peripherals_cls
+    )
+    peripherals = util.threadpool.submit(
+        _timeit('open peripherals')(peripherals_cls), spec
+    )
 
     with util.ExceptionStack() as exc:
         with exc.defer():
@@ -158,15 +159,13 @@ def _open_devices(
             conn.enter_context(source)
 
         with exc.defer():
-            if peripherals is not None:
-                peripherals = conn._resources['peripherals'] = peripherals.result()
-                # ty 0.0.81 does not accept a Protocol with __enter__/__exit__ as an
-                # AbstractContextManager
-                conn.enter_context(peripherals)  # ty: ignore[invalid-argument-type]
+            peripherals = conn._resources['peripherals'] = peripherals.result()
+            # ty 0.0.81 does not accept a Protocol with __enter__/__exit__ as an
+            # AbstractContextManager
+            conn.enter_context(peripherals)  # ty: ignore[invalid-argument-type]
 
     # the peripherals wait until both the source and the
-    if peripherals is not None:
-        peripherals.setup(spec.captures, spec.loops)
+    peripherals.setup(spec.captures, spec.loops)
 
 
 def _prepare_sweep(spec: specs.Sweep, callback: SourceOpenCallback | None = None):

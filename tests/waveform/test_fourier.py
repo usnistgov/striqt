@@ -675,10 +675,6 @@ class TestIstft:
         y = fourier.istft(X, size, nfft=nfft, noverlap=nfft // 2)
         assert y.shape == (size,)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='_truncated_buffer flattens (copies) `out`, so istft never writes into it',
-    )
     def test_out_buffer_is_used(self):
         nfft = self.NFFT
         x = np.ones(8 * nfft, dtype=np.complex64)
@@ -721,16 +717,9 @@ class TestStftFrequencyEditing:
         )
         return freqs, Y
 
-    OFF_GRID_XFAIL = pytest.mark.xfail(
-        strict=True,
-        reason='_freq_band_edges returns the index of the last bin <= cutoff_hi as '
-        'the exclusive end of the passband (fourier.py:446), so an upper cutoff '
-        'between bins zeroes the last in-band bin',
-    )
-
     @pytest.mark.parametrize(
         'edge_shift_bins',
-        [0, pytest.param(0.5, marks=OFF_GRID_XFAIL)],
+        [0, 0.5],
         ids=['on_grid', 'off_grid'],
     )
     def test_zero_stft_by_freq_zeroes_outside_passband(self, edge_shift_bins):
@@ -774,7 +763,7 @@ class TestStftFrequencyEditing:
 
     @pytest.mark.parametrize(
         'edge_shift_bins',
-        [0, pytest.param(-0.5, marks=OFF_GRID_XFAIL)],
+        [0, -0.5],
         ids=['on_grid', 'off_grid'],
     )
     def test_downsample_stft_passband_zeroing(self, edge_shift_bins):
@@ -791,6 +780,22 @@ class TestStftFrequencyEditing:
         assert_array_equal(Yo[:, -quarter:], 0)
         assert np.all(Yo[:, quarter:-quarter] != 0)
 
+    def test_downsample_stft_centers_an_odd_width_passband_on_dc(self):
+        fs = 1e6
+        freqs, Y = self._stft(fs)
+        nfft_out = self.NFFT // 2
+        half_width = nfft_out // 4
+        step = fs / self.NFFT
+        # 2 * half_width + 1 passband bins leave an odd number of zeroed bins
+        passband = (-half_width * step, (half_width + 0.5) * step)
+        _, Yo = fourier.downsample_stft(freqs, Y, nfft_out, passband=passband)
+
+        band_in = slice(self.NFFT // 2 - half_width, self.NFFT // 2 + half_width + 1)
+        band_out = slice(nfft_out // 2 - half_width, nfft_out // 2 + half_width + 1)
+        assert_array_equal(Yo[:, band_out], Y[:, band_in])
+        assert_array_equal(Yo[:, : band_out.start], 0)
+        assert_array_equal(Yo[:, band_out.stop :], 0)
+
     def test_downsample_stft_out_buffer(self):
         freqs, Y = self._stft(1.0)
         nfft_out = self.NFFT // 2
@@ -803,12 +808,6 @@ class TestStftFrequencyEditing:
         assert Yo.shape == (self.NSEG, nfft_out)
         assert_array_equal(Yo, expected)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='_truncated_buffer flattens `out` with ndarray.flatten(), which '
-        'copies, so downsample_stft allocates a new array instead of writing '
-        'into the buffer it was given',
-    )
     def test_downsample_stft_writes_into_out(self):
         freqs, Y = self._stft(1.0)
         out = np.empty_like(Y)
@@ -1049,10 +1048,6 @@ class TestOverlapAddFilters:
         y = self._oafilter(x, nfft_out=nfft_out)
         assert y.shape == (round(x.size * nfft_out / self.NFFT),)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='the downsample_stft branch of oafilter doubles the tone amplitude',
-    )
     def test_oafilter_downsample_preserves_level(self):
         nfft_out = self.NFFT // 2
         y = self._oafilter(self._tone(0.05e6), nfft_out=nfft_out)
