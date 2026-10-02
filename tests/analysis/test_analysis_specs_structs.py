@@ -105,10 +105,11 @@ class TestCapture:
     def test_tolerance_is_one_microsample(self):
         Capture(duration=(1000 + 1e-7) / 1e6, sample_rate=1e6)
 
-    def test_nan_sample_rate_gives_sample_period_message(self):
-        raises_on_both_paths(
-            Capture, ValueError, PERIOD_MSG, duration=1e-3, sample_rate=math.nan
-        )
+    def test_nan_sample_rate_is_rejected_on_both_paths(self):
+        with pytest.raises(ValueError, match=PERIOD_MSG):
+            Capture(duration=1e-3, sample_rate=math.nan)
+        with pytest.raises(msgspec.ValidationError, match='sample_rate'):
+            Capture.from_dict({'duration': 1e-3, 'sample_rate': math.nan})
 
     @pytest.mark.xfail(
         strict=True,
@@ -121,13 +122,6 @@ class TestCapture:
         with pytest.raises(ValueError, match=PERIOD_MSG):
             Capture(duration=1e-3, sample_rate=math.inf)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            'types.SampleRate (analysis/specs/types.py:69) carries no gt=0 bound, '
-            'unlike the sensor BackendSampleRate, so a negative rate converts'
-        ),
-    )
     def test_negative_sample_rate_is_rejected_on_convert(self):
         with pytest.raises(msgspec.ValidationError, match='sample_rate'):
             Capture.from_dict({'duration': 1e-3, 'sample_rate': -1e6})

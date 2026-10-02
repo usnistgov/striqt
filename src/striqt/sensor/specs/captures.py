@@ -6,7 +6,9 @@ from __future__ import annotations as __
 
 from collections import Counter
 import numbers
-from typing import cast, get_args, get_type_hints, TYPE_CHECKING
+from typing import cast, get_args, TYPE_CHECKING
+
+import msgspec
 
 import striqt.analysis as sa
 
@@ -24,8 +26,8 @@ def get_capture_type(sweep_cls: type[structs.Sweep]) -> type[structs.SensorCaptu
     if sweep_cls.sensor is not None:
         return sweep_cls.schema.capture
     else:
-        captures_type = get_type_hints(sweep_cls)['captures']
-        return get_args(captures_type)[0]
+        fields = {f.name: f for f in msgspec.structs.fields(sweep_cls)}
+        return get_args(fields['captures'].type)[0]
 
 
 @sa.util.lru_cache()
@@ -47,6 +49,10 @@ def split_capture_ports(capture: SC) -> list[SC]:
         values = getattr(capture, field)
         if not isinstance(values, tuple):
             continue
+        if len(values) != len(capture.port):
+            raise ValueError(
+                f'{field!r} has {len(values)} values for {len(capture.port)} ports'
+            )
 
         for remap, value in zip(remaps, values):
             remap[field] = value
@@ -64,6 +70,8 @@ def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC |
         c2_split = len(c1_split) * [None]
     else:
         c2_split = split_capture_ports(c2)
+        if len(c2_split) != len(c1_split):
+            raise ValueError(f'captures span {len(c1_split)} and {len(c2_split)} ports')
 
     pairwise = zip(*(c1_split, c2_split))
     return list(pairwise)

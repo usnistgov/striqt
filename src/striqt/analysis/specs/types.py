@@ -92,7 +92,7 @@ PowerDetectors = Annotated[
 PowerBinMin = Annotated[float, Meta('Minimum power bin', units='dB power')]
 PowerBinMax = Annotated[float, Meta('Maximum power bin', units='dB power')]
 PowerBinStep = Annotated[float, Meta('Power bin resolution', units='dB')]
-SampleRate = Annotated[float, Meta('Analysis sample rate', 'S/s')]
+SampleRate = Annotated[float, Meta('Analysis sample rate', 'S/s', gt=0)]
 WindowFill = Annotated[
     float, Meta('Fraction of a symbol to fill with weighting function', gt=0, le=1)
 ]
