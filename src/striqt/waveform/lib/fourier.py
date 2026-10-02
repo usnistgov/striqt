@@ -1,6 +1,7 @@
 from __future__ import annotations as __
 
 import decimal
+import math
 import typing
 from math import inf, isfinite
 from os import cpu_count
@@ -1266,22 +1267,49 @@ def design_cola_resampler(
     window=None,
     fs_sdr: typing.Optional[float] = None,
 ) -> ResamplerDesign:
-    """designs sampling and RF center frequency parameters that shift LO leakage outside of the specified bandwidth.
+    """design the radio sample rate, LO offset and COLA FFT sizes of a resampler.
 
-    The result includes the integer-divided SDR sample rate to request from the SDR, the LO frequency offset,
-    and the keyword arguments needed to realize resampling with `ola_filter`.
+    The design resamples from the radio rate ``fs_sdr`` (an integer division of
+    `fs_base`, unless given) to `fs_target` with FFT sizes in the ratio
+    ``nfft / nfft_out == fs_sdr / fs_target`` exactly, both divisible by the COLA
+    divisor of `window`. With `shift`, the radio is to be tuned ``lo_offset`` below
+    the center frequency so that its LO leakage falls outside the protected band,
+    and ``fs_sdr`` is raised so that the `fs_target`-wide output band around
+    ``lo_offset`` fits inside the radio's Nyquist band. The magnitude of
+    ``lo_offset`` is ``bw / 2 + bw_lo / 2`` rounded up to a whole number of
+    ``fs_sdr / nfft`` bins, so a radio tuned by it is offset by up to one bin more
+    than that sum.
 
     Args:
-        fs_base: the base clock rate (sometimes known as master clock rate, MCR) of the receiver
-        fs_target: the desired sample rate after resampling
-        bw: the analysis bandwidth to protect from LO leakage
-        bw_lo: the spectral leakage/phase noise bandwidth of the LO
-        shift: the direction to shift the LO
-        avoid_primes: whether to avoid large prime numbered FFTs for performance reasons
-        fs_sdr: force the given sample rate (in Hz), or None to select automatically
+        fs_base: the master clock rate (in S/s) that ``fs_sdr`` divides
+        fs_target: the sample rate (in S/s) after resampling
+        bw: the bandwidth (in Hz) to protect from LO leakage; ``inf`` disables the
+            LO shift and leaves the passband unbounded
+        bw_lo: the bandwidth (in Hz) of the LO leakage and phase noise kept out of
+            the protected band
+        min_oversampling: the factor applied to `bw` when sizing ``fs_sdr`` for an
+            LO shift, which leaves room for the bin rounding of ``lo_offset``
+        min_fft_size: the smallest ``nfft_out`` candidate considered
+        shift: ``'left'`` or ``'right'`` moves the LO leakage below or above the
+            protected band; ``'none'``, None or False leaves it at the center
+        avoid_primes: whether to reject ``nfft_out`` candidates that are large
+            primes, which the FFT computes slowly
+        window: a key of the COLA window divisor table; None selects ``'hamming'``
+        fs_sdr: the radio sample rate (in S/s) to use instead of selecting one
 
     Returns:
-        (SDR sample rate, RF LO frequency offset in Hz, ola_filter_kws)
+        a `ResamplerDesign` whose ``fs_sdr`` and ``fs`` are the radio rate, ``nfft``
+        and ``nfft_out`` the input and output FFT sizes, ``lo_offset`` the LO offset
+        (in Hz, zero when `bw` is infinite or there is no shift), ``passband`` the
+        protected band edges (in Hz) relative to the tuned LO or ``(None, None)``
+        when `bw` is infinite, ``window`` the COLA window name, and
+        ``frequency_shift`` the `shift` argument
+
+    Raises:
+        ValueError: if `shift` is set while `bw` is infinite, `shift` is not a
+            recognized direction, `window` has no COLA divisor, `bw` exceeds
+            `fs_base`, no FFT size up to `OLA_MAX_FFT_SIZE` realizes the rate ratio,
+            or the LO shift does not fit the radio's Nyquist band at ``fs_sdr``
     """
 
     if bw == inf and shift:
@@ -1295,7 +1323,8 @@ def design_cola_resampler(
         )
 
     if shift:
-        fs_sdr_min = fs_target + min_oversampling * bw / 2 + bw_lo / 2
+        # the output band is fs_target wide and centered on lo_offset
+        fs_sdr_min = fs_target + min_oversampling * bw + bw_lo
     else:
         fs_sdr_min = fs_target
 
@@ -1357,13 +1386,21 @@ def design_cola_resampler(
         raise ValueError('a passband bandwidth must be set to design a LO shift')
 
     if bw == inf:
-        lo_offset = 0
+        lo_offset = 0.0
         passband = (None, None)
     else:
-        lo_offset = sign * (
-            bw / 2 + bw_lo / 2
-        )  # fs_sdr / nfft_in * (nfft_in - nfft_out)
+        # records handed to `resample` are padded to a multiple of nfft_in, so an
+        # offset on the fs_sdr / nfft_in grid is a whole number of their bins too
+        bin_size = fs_sdr / nfft_in
+        lo_offset = sign * math.ceil((bw / 2 + bw_lo / 2) / bin_size) * bin_size
         passband = (lo_offset - bw / 2, lo_offset + bw / 2)
+
+    if sign != 0 and abs(lo_offset) + fs_target / 2 > fs_sdr / 2:
+        raise ValueError(
+            f'LO frequency shift of {lo_offset / 1e6:0.3f} MHz does not fit the '
+            f'{fs_target / 1e6:0.2f} MS/s output band in the radio Nyquist band at '
+            f'{fs_sdr / 1e6:0.2f} MS/s'
+        )
 
     return ResamplerDesign(
         fs_sdr=fs_sdr,

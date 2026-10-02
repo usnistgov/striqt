@@ -421,13 +421,6 @@ def test_lo_shift_design_moves_the_lo_out_of_band(lo_shift):
     assert abs(design['lo_offset']) + half_bw <= design['fs_sdr'] / 2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='_resample calls sw.resample without shift=, so the lo_offset that '
-    'design_resampler moved the radio LO by (and that the synthetic source '
-    'reproduces) is never removed and the tone stays at frequency_offset + lo_offset',
-)
 @pytest.mark.parametrize(
     'lo_shift, frequency', [('left', 1e6), ('right', -1e6)], ids=['left', 'right']
 )

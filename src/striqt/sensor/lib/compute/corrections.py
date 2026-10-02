@@ -391,10 +391,12 @@ def _scale_only(
 def _resample(
     iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
+    """resample `iq.pre_align` to the capture sample rate, recentering the LO shift."""
     x = iq.pre_align
     source_spec = iq.source_spec
     capture = iq.capture
     fs = iq.resampler['fs_sdr']
+    lo_offset = iq.resampler['lo_offset']
 
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
@@ -404,11 +406,18 @@ def _resample(
             f'{x.shape[1]} samples at {fs} S/s do not resample to a whole number '
             f'of samples at {capture.sample_rate} S/s'
         )
+    if not sw.isroundmod(lo_offset * x.shape[axis], fs):
+        raise ValueError(
+            f'the lo_shift offset {format_units(lo_offset, unit="Hz")} is not a '
+            f'whole number of bins of the {x.shape[axis]}-sample record at '
+            f'{format_units(fs, unit="S/s")}'
+        )
     ny = round(x.shape[1] * capture.sample_rate / fs)
+    shift = round(lo_offset * x.shape[axis] / fs)
     padx = _get_resample_overlap(capture, source_spec, min_overlap)[0]
     pady = round(padx * capture.sample_rate / fs)
     scale = 1 if iq.voltage_scale is None else iq.voltage_scale
-    y = sw.resample(x, ny, overwrite_x=overwrite_x, axis=axis, scale=scale)
+    y = sw.resample(x, ny, overwrite_x=overwrite_x, axis=axis, scale=scale, shift=shift)
 
     return y, pady
 
