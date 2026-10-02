@@ -213,11 +213,12 @@ def read_tdms_iq(
     source_spec = tdms_file.schema.source(
         master_clock_rate=master_clock_rate, path=str(path)
     )
-    source = tdms_file.from_source_spec(source_spec)
-    source.arm(**source.capture_spec.to_dict())
-    iq, _ = source.read_iq()
+    with tdms_file.from_source_spec(source_spec) as source:
+        source.arm(**source.capture_spec.to_dict())
+        iq, _ = source.read_iq()
+        capture = source.capture_spec
 
-    return iq, source.capture_spec
+    return iq, capture
 
 
 @overload

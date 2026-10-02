@@ -5,6 +5,8 @@ reuse, the chunked read loop, and acquisition through the fake SoapySDR device
 from __future__ import annotations
 
 import gc
+import logging
+import weakref
 from threading import Event
 
 import numpy as np
@@ -60,7 +62,55 @@ def test_garbage_collected_stale_controller_keeps_the_live_one_open():
         gc.enable()
 
 
-def test_failed_setup_entry_is_cleared_for_the_next_open(monkeypatch):
+def test_reopening_an_equal_spec_closes_the_stale_controller(caplog):
+    lookup = ss.lib.controller.lookup
+    stale = TONE.from_source_spec(SOURCE)
+    # the binding call form is the notebook path through Controller.__init__
+    with caplog.at_level(logging.WARNING, logger='striqt.source'):
+        live = TONE(**SOURCE.to_dict())
+    with live:
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert 'equal source spec' in warnings[0].getMessage()
+        assert stale._closed
+        assert not stale.is_open(wait=False)
+        assert lookup.instance(SOURCE) is live
+        assert live.is_open()
+        stale.close()
+        assert live.is_open()
+
+
+def test_collecting_an_unreferenced_controller_closes_it_and_frees_its_slot(caplog):
+    lookup = ss.lib.controller.lookup
+    closes = []
+    ctrl = TONE.from_source_spec(SOURCE)
+    backend_close = ctrl.backend.close
+    ctrl.backend.close = lambda: (closes.append(1), backend_close())
+    ref = weakref.ref(ctrl)
+
+    del ctrl
+    # the controller survives in a reference cycle with its ReceiveBuffers until
+    # the collector runs; the registry must not be what keeps it alive
+    gc.collect()
+    assert ref() is None
+    assert closes == [1]
+    assert isinstance(lookup._get(SOURCE), Event)
+
+    with (
+        caplog.at_level(logging.WARNING, logger='striqt.source'),
+        TONE.from_source_spec(SOURCE) as live,
+    ):
+        assert live.is_open()
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_source_info_of_a_replaced_controller_is_a_connection_error():
+    stale = TONE.from_source_spec(SOURCE)
+    with TONE.from_source_spec(SOURCE), pytest.raises(ConnectionError):
+        _ = stale.source_info
+
+
+def test_failed_setup_entry_is_cleared_for_the_next_open(monkeypatch, caplog):
     lookup = ss.lib.controller.lookup
 
     def fail(spec):
@@ -69,11 +119,15 @@ def test_failed_setup_entry_is_cleared_for_the_next_open(monkeypatch):
     monkeypatch.setattr(TONE.sensor, 'source_cls', fail)
     with pytest.raises(RuntimeError):
         TONE.from_source_spec(SOURCE)
-    assert isinstance(lookup._obj[SOURCE], Event)
+    assert isinstance(lookup._get(SOURCE), Event)
     monkeypatch.undo()
 
-    with TONE.from_source_spec(SOURCE) as live:
+    with (
+        caplog.at_level(logging.WARNING, logger='striqt.source'),
+        TONE.from_source_spec(SOURCE) as live,
+    ):
         assert live.is_open()
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
 # %% read_retries (fake SoapySDR device)

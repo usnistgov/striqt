@@ -447,7 +447,7 @@ def assert_source_released(lookup, sweep):
     source, so the next open does not find a closed one"""
     import striqt.sensor as ss
 
-    assert not isinstance(lookup._obj.get(sweep.source), ss.lib.controller.Controller)
+    assert not isinstance(lookup._get(sweep.source), ss.lib.controller.Controller)
 
 
 @pytest.fixture

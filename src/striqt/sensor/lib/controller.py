@@ -4,9 +4,10 @@ import contextlib
 import dataclasses
 import functools
 import inspect
+import weakref
 from typing import Any, Callable, cast, ClassVar, Generic, Generator, TYPE_CHECKING
 from collections import defaultdict
-from threading import Event
+from threading import Event, RLock
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
     T = TypeVar('T', bound='Controller')
     PendingController: TypeAlias = 'Controller | Event | BaseException'
+    PendingSlot: TypeAlias = 'weakref.ref[Controller] | Event | BaseException'
     from . import bindings
 
 
@@ -32,13 +34,39 @@ class lookup:
     within `timeout` seconds. Otherwise, `TimeoutError` is raised.
     """
 
-    _obj: dict[specs.Source, 'PendingController'] = defaultdict(Event)
+    _obj: dict[specs.Source, 'PendingSlot'] = defaultdict(Event)
     _id: dict[specs.Source, Event | str] = defaultdict(Event)
     _ready: dict[specs.Source, Event | bool] = defaultdict(Event)
+    _lock = RLock()
+
+    @classmethod
+    def _get(cls, spec: specs.Source) -> PendingController:
+        """return the controller, pending event or stored exception for `spec`.
+
+        The registry holds controllers weakly, so a controller that nothing else
+        references is finalized by the collector and its slot reverts to a pending
+        event. A dead reference seen before its callback ran is cleared here.
+        """
+        obj = cls._obj[spec]
+        if isinstance(obj, weakref.ref):
+            controller = obj()
+            if controller is None:
+                cls._clear(spec)
+                obj = cls._obj[spec]
+                assert isinstance(obj, Event)
+                return obj
+            return controller
+        return obj
+
+    @classmethod
+    def _finalized(cls, spec: specs.Source, ref: weakref.ref[Controller]) -> None:
+        with cls._lock:
+            if cls._obj.get(spec) is ref:
+                cls._clear(spec)
 
     @classmethod
     def instance(cls, spec: specs.Source, timeout=0.5) -> Controller:
-        obj = cls._obj[spec]
+        obj = cls._get(spec)
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
@@ -48,7 +76,7 @@ class lookup:
         else:
             obj.wait(timeout)
 
-        obj = cls._obj[spec]
+        obj = cls._get(spec)
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
@@ -103,19 +131,41 @@ class lookup:
             raise TypeError
 
     @classmethod
-    def _clear(cls, spec: specs.Source):
-        cls._obj[spec] = Event()
-        cls._ready[spec] = Event()
-        cls._id[spec] = Event()
+    def _clear(cls, spec: specs.Source) -> None:
+        with cls._lock:
+            cls._obj[spec] = Event()
+            cls._ready[spec] = Event()
+            cls._id[spec] = Event()
 
     @classmethod
-    def _register(cls, spec: specs.Source, controller: Controller):
-        obj = cls._obj[spec]
-        if isinstance(obj, Event):
-            cls._obj[spec] = controller
+    def _register(cls, spec: specs.Source, controller: Controller) -> None:
+        """take the registry slot of `spec` for `controller` and wake its waiters.
+
+        Args:
+            spec: the registry key
+            controller: the instance that `instance` returns for `spec`
+        """
+        with cls._lock:
+            obj = cls._get(spec)
+            if isinstance(obj, Controller):
+                if not obj._closed:
+                    sa.util.get_logger('source').warning(
+                        'closing the open controller for an equal source spec before '
+                        'reopening it; release controllers with close() or a `with` '
+                        'block'
+                    )
+                    obj.close()
+                else:
+                    cls._clear(spec)
+                obj = cls._obj[spec]
+            elif isinstance(obj, BaseException):
+                cls._clear(spec)
+                obj = cls._obj[spec]
+            assert isinstance(obj, Event)
+            cls._obj[spec] = weakref.ref(
+                controller, functools.partial(cls._finalized, spec)
+            )
             obj.set()
-        else:
-            raise TypeError('controller object was already registered for this spec')
 
     @classmethod
     def _set_ready(cls, spec: specs.Source, is_ready: bool):
@@ -134,10 +184,6 @@ class lookup:
             obj.set()
         else:
             raise TypeError('id was already setup')
-
-    @classmethod
-    def _set_open(cls, spec: specs.Source, controller: Controller):
-        cls._obj[spec] = controller
 
     @classmethod
     def _raise(cls, spec: specs.Source, exc: BaseException):
@@ -295,8 +341,6 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
                 lookup._raise(spec, ex)
             finally:
                 self.close()
-        else:
-            lookup._set_open(spec, self)
         try:
             if spec.array_backend == 'cupy':
                 sw.arrays.configure_cupy()
@@ -377,7 +421,20 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
         self._capture = self.backend.arm(spec) or spec
 
-    def is_open(self, wait=True) -> bool:
+    def is_open(self, wait: bool = True) -> bool:
+        """return whether this instance holds an open backend.
+
+        Args:
+            wait: when True, block up to the controller timeout for an open that is
+                still in progress; when False, report the state at the time of
+                the call
+
+        Returns:
+            False once `close` has run on this instance, even if another controller
+            has since been opened for an equal source spec
+        """
+        if self._closed:
+            return False
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
     def close(self) -> None:
@@ -388,7 +445,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         # the registry is keyed by spec value, so a stale controller that the
         # garbage collector finalizes late must not clear the entry of a live
         # controller that was opened afterward with an equal spec
-        current = lookup._obj.get(self.__setup__)
+        current = lookup._get(self.__setup__)
         if current is self or isinstance(current, BaseException):
             lookup._clear(self.__setup__)
 
