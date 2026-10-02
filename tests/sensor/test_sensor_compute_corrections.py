@@ -371,16 +371,6 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
 # %% correct_iq: experimental oaresample path (STRIQT_USE_OARESAMPLE=1)
 
 
-OARESAMPLE_TRIM_REASON = (
-    '_oaresample trims nfft_out samples from the front of the sw.oaresample '
-    'output instead of the resampled lead overlap, then asserts that the remainder '
-    'is exactly the capture plus its tail pad; with the lead that '
-    '_get_oaresample_overlaps requests it never is, so correct_iq cannot complete '
-    'under STRIQT_USE_OARESAMPLE=1'
-)
-
-
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=OARESAMPLE_TRIM_REASON)
 @RESAMPLED_PRESETS
 def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags):
     corrections_flags(use_oaresample=True)
@@ -394,7 +384,6 @@ def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags
     assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=OARESAMPLE_TRIM_REASON)
 @RESAMPLED_PRESETS
 def test_oaresample_acquisition(preset, corrections_flags):
     corrections_flags(use_oaresample=True)

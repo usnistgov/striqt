@@ -1150,20 +1150,21 @@ def _fir_lowpass_fft(
     *,
     cutoff: float,
     transition: float,
-    window='hamming',
-    xp=None,
-    dtype='complex64',
-):
-    """returns the complex frequency response of an FIR filter suited for filtering in the frequency domain
+    window: WindowType = 'hamming',
+    xp: XpType = None,
+    dtype: DTypeLike = 'complex64',
+) -> Array:
+    """return the zero-phase response of an FIR low-pass on the `size` bins of an STFT.
 
-    Arguments:
-        size: window size
-        sample_rate: sample rate (in Hz)
-        cutoff: filter cutoff (in Hz)
-        transition: bandwidth of the transition (in Hz)
+    The taps are a `scipy.signal.firwin2` design with unit gain below `cutoff` (in Hz)
+    falling linearly to zero over `transition` (in Hz); a transition band that would
+    run past Nyquist ends there. The result is the real amplitude response of that
+    linear-phase design on the bin grid of `stft` (ascending frequency), so multiplying
+    an STFT by it filters each segment without delaying it. A `cutoff` at or above
+    Nyquist gives all ones.
 
     Returns:
-        a frequency-domain window
+        a 1-D array of `size` samples with dtype `dtype` in `xp` (numpy when None)
     """
 
     if xp is None:
@@ -1185,11 +1186,15 @@ def _fir_lowpass_fft(
         gains = [1.0, 1.0, 0.0]
     h = signal.firwin2(size, freqs, gains, window=window, fs=sample_rate)
 
-    taps = xp.array(h).astype(dtype)
-    w = get_window('rect', size, xp=xp, dtype=dtype, fftshift=True)
-    H = xp.fft.fft(taps * w) * w
-    # numpy < 2 evaluates fft in complex128 regardless of the input precision
-    return H.astype(dtype, copy=False)
+    # the shift baked into the window rotates the spectrum by size // 2 bins, which
+    # is fftshift order only for even sizes
+    w = get_window('rect', size, dtype='complex128', fftshift=True)
+    omega = 2 * np.pi * np.roll(np.fft.fftfreq(size), -(size // 2))
+    # the design is symmetric about (size - 1) / 2, a half sample for even sizes, so
+    # its delay is removed on the shifted grid rather than by a time-domain rotation
+    H = np.fft.fft(h * w) * np.exp(1j * omega * (size - 1) / 2)
+
+    return xp.asarray(H.real, dtype=dtype)
 
 
 @util.lru_cache()
