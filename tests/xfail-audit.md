@@ -27,7 +27,7 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
+fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40 to 42, 47,
 51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
@@ -250,7 +250,6 @@ item is open.
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
 | 48 | `TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields` | High | D | trivial |
-| 41 | `test_message_names_the_field` | High | D | trivial |
 | 56 | `TestHardwareTimeSync::test_unsupported_source_names_itself` | High | D | trivial |
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
 | 39 | `test_calibration_capture_class_has_a_descriptive_name` | High | D | trivial |
@@ -1152,16 +1151,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   what `io.save_calibration` writes.
 - **Impact.** Nothing in `src/` reads the attribute. Metadata only.
 - **Fix.** `.assign_attrs(by_field.attrs)` on the result. Trivial.
-
-### 41. `BoundSweep` error text says `mock_sensor`
-
-`tests/sensor/test_sensor_bindings.py::TestMockSource::test_message_names_the_field`
-
-- **Mechanism.** `bindings.py:120` names a stale field. `_convert_dict_spec`
-  raises a `KeyError` first, so the CLI never shows this text anyway.
-- **Fix.** String change. Trivial. On 2026-09-16 the stale `mock_sensor`
-  field on `BoundSweep` was renamed and the `SensorBinding` assertion fixed,
-  but the message still says `mock_sensor`, so the xfail stands.
 
 ### 56. Unsupported time source message is not an f-string
 

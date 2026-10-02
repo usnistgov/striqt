@@ -62,10 +62,6 @@ class TestMockSource:
         )
         assert make_sweep(mock_source='warmup').mock_source == 'warmup'
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='BoundSweep.__post_init__ error text says mock_sensor, not mock_source',
-    )
     def test_message_names_the_field(self):
         with pytest.raises(TypeError, match=r"mock_source 'bogus'"):
             make_sweep(mock_source='bogus')

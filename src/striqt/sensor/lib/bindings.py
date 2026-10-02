@@ -115,7 +115,7 @@ def bind_sensor(
                 pass
             elif self.mock_source not in registry.keys():
                 raise TypeError(
-                    f'mock_sensor {self.mock_source!r}: no sensor was bound with this name. '
+                    f'mock_source {self.mock_source!r}: no sensor was bound with this name. '
                     f'valid binding names are {tuple(registry)!r}'
                 )
             super().__post_init__()
