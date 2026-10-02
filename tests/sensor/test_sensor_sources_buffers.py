@@ -85,10 +85,10 @@ def test_get_read_count_holdoff_adds_transient_and_two_strobe_periods():
     assert buffers.get_read_count(capture, source, include_holdoff=False) == base
 
 
-@pytest.mark.parametrize('overlap', [1, 3, -2], ids=['odd1', 'odd3', 'negative'])
+@pytest.mark.parametrize('overlap', [-2, 2.5], ids=['negative', 'fractional'])
 def test_get_read_count_rejects_invalid_overlap(overlap):
     capture = preset_capture('single_tone', **SCALE_ONLY)
-    with pytest.raises(ValueError, match='non-negative even'):
+    with pytest.raises(ValueError, match='non-negative integer'):
         buffers.get_read_count(capture, SOURCE, overlap=overlap)
 
 

@@ -76,14 +76,6 @@ RESAMPLED_PRESETS = pytest.mark.parametrize(
     'preset', [RESAMPLE_FILTER, RESAMPLE_ONLY], ids=['resample_filter', 'resample_only']
 )
 
-D1_REASON = (
-    '_get_resample_overlap splits its pad into two equal halves: it asserts '
-    'pad_end % 2 == 0, which fails whenever round(duration*fs_sdr) is odd, and when '
-    'pad_end is 2 mod 4 each half is odd and Controller.read_iq rejects the overlaps '
-    'as not even, so most host-resampled (sample_rate, duration) pairs cannot acquire'
-)
-
-
 D90_REASON = (
     '_get_resampler_overlaps compares its pad against _get_filter_overlap, which is '
     'FILTER_SIZE//2 + 1 counted at fs_sdr, but correct_iq applies the FIR after '
@@ -379,15 +371,16 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
 # %% correct_iq: experimental oaresample path (STRIQT_USE_OARESAMPLE=1)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='_oaresample trims nfft_out samples from the front of the sw.oaresample '
+OARESAMPLE_TRIM_REASON = (
+    '_oaresample trims nfft_out samples from the front of the sw.oaresample '
     'output instead of the resampled lead overlap, then asserts that the remainder '
     'is exactly the capture plus its tail pad; with the lead that '
     '_get_oaresample_overlaps requests it never is, so correct_iq cannot complete '
-    'under STRIQT_USE_OARESAMPLE=1',
+    'under STRIQT_USE_OARESAMPLE=1'
 )
+
+
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=OARESAMPLE_TRIM_REASON)
 @RESAMPLED_PRESETS
 def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags):
     corrections_flags(use_oaresample=True)
@@ -401,13 +394,7 @@ def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags
     assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason='_get_oaresample_overlaps returns odd overlaps (43750, 9375 for the '
-    'resample_filter preset), which Controller.read_iq rejects, so no capture '
-    'acquires under STRIQT_USE_OARESAMPLE=1',
-)
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=OARESAMPLE_TRIM_REASON)
 @RESAMPLED_PRESETS
 def test_oaresample_acquisition(preset, corrections_flags):
     corrections_flags(use_oaresample=True)
@@ -611,8 +598,7 @@ def _drawn_capture(sample_rate, count, bandwidth_fraction):
 def _overlaps_or_skip(capture, min_overlap=0):
     """the resampler overlaps of `capture`, skipping the example when the design
     falls into one of the registered defects that abort inside
-    _get_resample_overlap: the swapped ceildiv (xfail-audit #43) or the odd pad
-    (test_overlaps_are_even)"""
+    _get_resample_overlap: the swapped ceildiv (xfail-audit #43)"""
     try:
         return corrections._get_resampler_overlaps(
             capture, FUNCTION_SOURCE, min_overlap=min_overlap
@@ -663,25 +649,28 @@ def test_upsampled_overlap_covers_the_output_rate_filter_pad():
     assert lead * capture.sample_rate / fs_sdr(capture) >= FILTER_SIZE // 2
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=D1_REASON)
 @settings(report_multiple_bugs=False, max_examples=50)
 @given(
     sample_rate=sample_rates,
     count=sample_counts,
     bandwidth_fraction=bandwidth_fractions,
 )
-def test_overlaps_are_even(sample_rate, count, bandwidth_fraction):
+def test_overlaps_pad_to_a_whole_resampler_block(
+    sample_rate, count, bandwidth_fraction
+):
+    """the overlaps need not be even or equal: together they pad the source-rate
+    record to a length that resamples to a whole number of output samples, which is
+    what _resample requires, and read_iq reads exactly that padded record"""
     capture = _drawn_capture(sample_rate, count, bandwidth_fraction)
-    design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
-    # the small-FFT case is xfail-audit #43, not this defect
-    assume(
-        not isfinite(capture.analysis_bandwidth)
-        or design['nfft'] >= corrections._get_filter_overlap(capture)
+    lead, tail = _overlaps_or_skip(capture)
+    fs = fs_sdr(capture)
+    padded = round(capture.duration * fs) + lead + tail
+
+    assert lead >= 0 and tail >= 0
+    assert sw.isroundmod(padded * capture.sample_rate, fs)
+    assert (
+        buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=lead + tail) == padded
     )
-
-    lead, tail = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
-
-    assert lead % 2 == 0 and tail % 2 == 0
 
 
 DOCUMENTED_OVERLAPS = {
@@ -702,7 +691,7 @@ def test_preset_overlaps_are_acquirable(name):
     assert overlaps == DOCUMENTED_OVERLAPS[name]
 
 
-# %% acquisitions that the overlap defects block
+# %% acquisitions with odd or non-integral source-rate pads
 
 # 6.144 MS/s for 2 ms without an analysis filter pads to (3125, 3125)
 ODD_OVERLAP_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 6.144e6}
@@ -713,11 +702,7 @@ NONINTEGRAL_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 4e6, 'duration': 1e-3}
 @pytest.mark.parametrize(
     'preset',
     [
-        pytest.param(
-            ODD_OVERLAP_CAPTURE,
-            id='odd_overlap',
-            marks=pytest.mark.xfail(strict=True, raises=ValueError, reason=D1_REASON),
-        ),
+        pytest.param(ODD_OVERLAP_CAPTURE, id='odd_overlap'),
         pytest.param(NONINTEGRAL_CAPTURE, id='nonintegral_source_duration'),
     ],
 )
@@ -728,7 +713,7 @@ def test_impulse_acquisition(preset):
 
 
 def test_correct_iq_trims_an_odd_lead_pad():
-    """the even-overlap requirement is Controller.read_iq's, not the correction's"""
+    """an odd lead pad is trimmed exactly like an even one"""
     capture = preset_capture('dirac_delta', **ODD_OVERLAP_CAPTURE, time=IMPULSE_TIME)
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
 

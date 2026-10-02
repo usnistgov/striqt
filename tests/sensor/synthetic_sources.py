@@ -3,9 +3,8 @@
 The synthetic bindings call the `striqt.analysis.testing` generators at the source
 sample rate with absolute indices referenced to the corrected capture, so the
 corrected output is the same generator evaluated at `capture.sample_rate` from
-index 0. The presets keep every acquisition under 5e4 samples per port with even
-correction overlaps, which `Controller.read_iq` requires. Not a conftest: importable
-by bare name from the sensor test modules.
+index 0. The presets keep every acquisition under 5e4 samples per port. Not a
+conftest: importable by bare name from the sensor test modules.
 """
 
 from __future__ import annotations
@@ -80,7 +79,7 @@ PRESETS = {
 }
 ONE_PORT = {**SCALE_ONLY, 'port': 0}
 
-# the smallest lo_shift design from the 125 MHz clock whose overlaps are even:
+# a small lo_shift design from the 125 MHz clock:
 # fs_sdr 9.615 MS/s, lo_offset 1.661 MHz, 25000 samples per port
 LO_SHIFT_CAPTURE = {
     'port': (0, 1),

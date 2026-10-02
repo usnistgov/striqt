@@ -521,9 +521,8 @@ def _get_resample_overlap(
     # primes
     pad_blocks = _get_next_fast_len(min_blocks + 1, array_backend=setup.array_backend)
     pad_end = pad_blocks * block_size - analysis_size
-    assert pad_end % 2 == 0
 
-    return (pad_end // 2, pad_end // 2)
+    return (pad_end // 2, pad_end - pad_end // 2)
 
 
 @sa.util.lru_cache()

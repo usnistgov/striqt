@@ -80,7 +80,6 @@ item is open.
 | # | Test | Confidence | Impact | Fix |
 | --- | --- | --- | --- | --- |
 | 43 | `test_finite_bandwidth_with_a_small_resampler_fft[*]` (3 parameter sets) | High | B | easy |
-| 77 | `test_overlaps_are_even` (hypothesis); `test_impulse_acquisition[odd_overlap]` | High | B | small |
 | 78 | `test_lo_shift_is_removed_from_the_output[left]`, `[right]` | High | B | design |
 | 79 | `test_reused_iq_can_be_corrected_for_a_wider_analysis_filter` | High | B | design |
 | 90 | `test_upsampled_overlap_covers_the_output_rate_filter_pad` | High | B | small |
@@ -97,8 +96,7 @@ item is open.
 | 59 | `test_probe_soapy_info_with_a_channel_sensor` | High | B (latent) | trivial |
 | 10 | `test_chained_remap_declared_before_its_key_resolves` | Medium | B | moderate |
 | 45 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]` | Medium | B | easy |
-| 80 | `test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`, `[resample_only]` | High | C | moderate |
-| 81 | `test_oaresample_acquisition[resample_filter]`, `[resample_only]` | High | C | small |
+| 80 | `test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`, `[resample_only]`; `test_oaresample_acquisition[resample_filter]`, `[resample_only]` | High | C | moderate |
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
@@ -145,32 +143,6 @@ item is open.
 - **Fix.** Swap the arguments. Whether the pad assertions then hold for
   every capture still needs checking (one extra block of 2064 samples is
   not always more than `filter_pad = 2001` after halving). Easy.
-
-### 77. `_get_resample_overlap` produces odd overlaps for most host-resampled captures
-
-`tests/sensor/test_sensor_compute_corrections.py::test_overlaps_are_even`,
-`::test_impulse_acquisition[odd_overlap]`
-
-- **Mechanism.** `corrections.py:449-456` builds `pad_end = pad_blocks*block_size
-  - analysis_size` with `analysis_size = round(duration*fs_sdr)`, asserts
-  `pad_end % 2 == 0` (which fails whenever `analysis_size` is odd) and returns
-  `pad_end // 2` for each side, which is odd whenever `pad_end` is 2 mod 4.
-  `controller.py:455` `read_iq` then rejects odd overlaps as "not even". Over
-  sample rates of 1 to 20 MS/s, 100 to 40000 output samples and finite or
-  infinite bandwidth, roughly 49% of pairs abort in the assertion and a further
-  24% acquire an odd overlap; about 12% of the domain acquires (the harness
-  presets in `tests/sensor/synthetic_sources.py` were chosen from that 12%).
-  `6.144e6 / 2 ms / bw = inf` is the pinned example (3125 per side).
-- **Why the test is right.** `correct_iq` handles an odd lead pad correctly on a
-  hand-built `AcquiredIQ` (`test_correct_iq_trims_an_odd_lead_pad` passes), so
-  the restriction is only the controller's even-overlap contract disagreeing
-  with the pad splitter. Any `sample_rate`/`duration` a YAML may set with the
-  default `host_resample: true` should acquire.
-- **Impact.** B. In-tree sweeps use sizes that happen to work; the downstream
-  project's 107.52 and 53.76 MS/s captures at 10 ms multiples do too.
-- **Fix.** Round each side up to even and grow the block accordingly, or drop
-  the even requirement in `read_iq` (whose reason is the int16 stride). Small;
-  `_get_resample_overlap`, `read_iq` and `get_read_count` must agree afterwards.
 
 ### 78. `lo_shift` is never undone on the default resample path
 
@@ -482,7 +454,9 @@ tables draw their marks from the module's `scs_cp_layout` builder
 ### 80. `_oaresample` trims the wrong lead and cannot complete
 
 `tests/sensor/test_sensor_compute_corrections.py::test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`,
-`[resample_only]`
+`[resample_only]`; `::test_oaresample_acquisition[resample_filter]`, `[resample_only]`
+(the end-to-end acquisition reaches the same assertion now that `read_iq` accepts
+odd overlaps)
 
 - **Mechanism.** `corrections.py:373-378` slices `offset = nfft_out` samples from
   the front of the `sw.oaresample` output instead of the resampled lead overlap
@@ -497,17 +471,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
 - **Fix.** Trim `round(lead * nfft_out / nfft)` and size the tail consistently;
   `_get_oaresample_overlaps` and `_oaresample` must be re-derived together.
   Moderate.
-
-### 81. `_get_oaresample_overlaps` returns odd overlaps
-
-`tests/sensor/test_sensor_compute_corrections.py::test_oaresample_acquisition[resample_filter]`,
-`[resample_only]`
-
-- **Mechanism.** `corrections.py:401-425` returns `(43750, 9375)` for
-  `RESAMPLE_FILTER` and `(89950, 17075)` for `RESAMPLE_ONLY`; `read_iq` rejects
-  the odd tail. Same contract as item 77 on the experimental path.
-- **Impact.** C (`STRIQT_USE_OARESAMPLE=1` only).
-- **Fix.** Round to even once item 80 settles the trimming. Small.
 
 ### 82. `ZarrIQSource.get_resampler` lets the design pick a rate the file cannot supply
 

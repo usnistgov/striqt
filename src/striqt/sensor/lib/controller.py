@@ -510,8 +510,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         if not isinstance(overlaps, (tuple, list)) or len(overlaps) != 2:
             raise ValueError('overlaps must be a sequence of 2 integers')
         for ol in overlaps:
-            if ol % 2 == 1 or ol < 0 or not isinstance(ol, (np.integer, int)):
-                raise ValueError('overlaps must be non-negative even integers')
+            if ol < 0 or not isinstance(ol, (np.integer, int)):
+                raise ValueError('overlaps must be non-negative integers')
 
         self.backend.trigger(overlaps)
 
