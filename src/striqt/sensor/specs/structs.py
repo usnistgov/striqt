@@ -454,7 +454,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     # duck-type methods and structure of SpecBase
 
     source_id: types.SourceID = ''
-    sweep_index: Union[int, None] = None
+    sweep_index: int = 0
     capture_index: int = 0
 
     # ideally, this union would include sa.Trigger, but that triggers a
