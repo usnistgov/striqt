@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, 74 to 76, and 87); their write-ups are in the git history of this file. Items
+51, 60, 61, 63, 72, 74 to 76, and 87); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -231,7 +231,6 @@ item is open.
 | 68 | `test_split_rejects_a_tuple_field_shorter_than_port`; `test_pairwise_rejects_different_port_counts` | High | C | easy |
 | 70 | `TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports` | High | C | easy |
 | 20 | `test_list_port_direct_is_frozen`; `test_var_tuple_list_is_frozen_on_direct_construction`; `test_freeze_depths_count_dict_list_and_tuple_nesting`; `test_freeze_depths_of_real_specs`; `test_direct_struct_with_list_validates_and_replaces` | High | C | trivial |
-| 63 | `test_negative_sample_rate_is_rejected_on_convert` | High | C | trivial |
 | 64 | `test_descending_range_from_zero_rejected[frame_range]`, `[symbol_range]` | High | C | trivial |
 | 22 | `test_analysis_group_accepted` | High | C | moderate |
 | 24 | `test_recurses_into_frozendict` | High | C | trivial |
@@ -901,19 +900,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   hand-built specs hit it.
 - **Fix.** Add the `VarTupleType` branch. Trivial, but it also changes which
   fields `to_dict(unfreeze=True)` emits as lists in zarr attrs.
-
-### 63. `types.SampleRate` accepts a negative value
-
-`tests/analysis/test_analysis_specs_structs.py::TestCapture::test_negative_sample_rate_is_rejected_on_convert`
-
-- **Mechanism.** `analysis/specs/types.py:69` carries no `gt=0` bound, unlike
-  the sensor's `BackendSampleRate`, so `-1e6` converts.
-- **Why the test is right.** Every consumer does `round(duration * sample_rate)`
-  and a negative rate yields a negative sample count. Asserted on the convert
-  path only, because `Meta` bounds are never checked on direct construction.
-- **Impact.** Sensor sweeps decode through `BackendSampleRate`, which has the
-  bound; only analysis-level specs built directly are open.
-- **Fix.** Add `gt=0`. Trivial.
 
 ### 64. `_validate_range` skips the order check when the start is 0
 
