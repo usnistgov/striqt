@@ -45,11 +45,6 @@ from striqt.analysis.specs.helpers import (
     validation_path,
 )
 
-ATTRS_XFAIL = pytest.mark.xfail(
-    strict=True,
-    reason='get_capture_type_attrs reads raw Annotated aliases, which carry no .extra; '
-    'the metadata is on msgspec.inspect.type_info(cls).fields',
-)
 VAR_TUPLE_DEPTH_XFAIL = pytest.mark.xfail(
     strict=True,
     reason='_inspect_container_depth (analysis/specs/helpers.py:341) handles '
@@ -262,7 +257,6 @@ def test_meta_units_key_only_when_given(units):
     assert meta.extra == expected
 
 
-@ATTRS_XFAIL
 def test_capture_type_attrs():
     attrs = get_capture_type_attrs(ss.specs.SingleToneCapture)
     assert set(attrs) == set(ss.specs.SingleToneCapture.__struct_fields__)

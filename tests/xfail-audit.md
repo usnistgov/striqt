@@ -27,7 +27,7 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
+fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 38, 40, 42, 47,
 51, 60, 61, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
@@ -246,7 +246,6 @@ item is open.
 | 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
 | 89 | `test_log_file_is_json` | High | D | small |
 | 73 | `TestRetry::test_exhausted_tries_sleep_only_between_tries` | High | D | trivial |
-| 38 | `test_capture_type_attrs` | High | D | trivial |
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
 | 48 | `TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields` | High | D | trivial |
@@ -1104,23 +1103,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** `read_retries` uses `delay=0`; other callers pay one extra
   backoff interval before seeing the exception.
 - **Fix.** Sleep only when another try remains. Trivial.
-
-### 38. `get_capture_type_attrs` returns empty attrs
-
-`tests/analysis/test_analysis_specs_helpers.py::test_capture_type_attrs`
-
-- **Mechanism.** `analysis/specs/helpers.py:171` reads `.extra` off the raw
-  `Annotated` alias from `msgspec.structs.fields`, which has none; the
-  metadata is on `msgspec.inspect.type_info(cls).fields`. Every field returns
-  `{}`.
-- **Why the test is right.** The `Meta` docstring and CLAUDE.md say it feeds
-  `standard_name`/`units`.
-- **Impact.** The only caller is `describe_field` behind the per-capture INFO
-  log line, which prints `duration=0.001` instead of `duration=1 ms`. The
-  zarr capture coordinates are built by `_coords_template` through
-  `infer_coord_info`, which reads the metadata correctly, so saved output is
-  unaffected (verified).
-- **Fix.** Iterate `type_info(cls).fields` or reuse `infer_coord_info`. Trivial.
 
 ### 46. Range error text embeds a DataArray repr
 

@@ -21,6 +21,7 @@ from typing import (
     overload,
 )
 import msgspec
+from msgspec import inspect as mi
 from striqt.waveform.lib import util
 
 _T = TypeVar('_T')
@@ -335,26 +336,34 @@ def lru_cache_on_converted(
     return wrapper
 
 
+def _unwrap_type_info(type_: mi.Type) -> tuple[dict[str, Any], list[mi.Type]]:
+    """strip `Metadata` and `Optional` wrappers from `type_` into (attrs, member types)."""
+    attrs: dict[str, Any] | None = None
+    types = [type_]
+
+    while len(types) == 1:
+        inner = types[0]
+        if isinstance(inner, mi.Metadata):
+            if attrs is None:
+                attrs = inner.extra or {}
+            types = [inner.type]
+        elif isinstance(inner, mi.UnionType):
+            skip = (mi.NoneType, mi.VarTupleType)
+            types = [t for t in inner.types if not isinstance(t, skip)]
+        else:
+            break
+
+    return attrs or {}, types
+
+
 @util.lru_cache()
 def get_capture_type_attrs(capture_cls: type[msgspec.Struct]) -> dict[str, Any]:
-    """return attrs metadata for each field in `capture`"""
-    attrs = {}
+    """return the `Meta` attrs (`standard_name`, `units`) of each field in `capture_cls`.
 
-    for field in msgspec.structs.fields(capture_cls):
-        if isinstance(field.type, msgspec.inspect.UnionType):
-            types = field.type.types
-        else:
-            types = [field.type]
-
-        for type_ in types:
-            type_extra = getattr(type_, 'extra', {})
-            if len(type_extra) > 0:
-                attrs[field.name] = type_extra
-                break
-        else:
-            attrs[field.name] = {}
-
-    return attrs
+    The dict is cached and shared between calls, so callers must not mutate it.
+    """
+    fields = cast('mi.StructType', mi.type_info(capture_cls)).fields
+    return {field.name: _unwrap_type_info(field.type)[0] for field in fields}
 
 
 @util.lru_cache()
@@ -546,8 +555,6 @@ def infer_coord_info(
     type_: msgspec.inspect.Type, allow_timestamps=True
 ) -> tuple[dict, Any]:
     """returns an (attrs, default_value) pair for the given msgspec field type"""
-    from msgspec import inspect as mi
-
     if allow_timestamps or TYPE_CHECKING:
         # don't force pandas imports, for lazy import support
         from pandas import Timestamp
@@ -579,16 +586,12 @@ def infer_coord_info(
             except Exception as ex:
                 name = type_key.cls.__qualname__
                 raise TypeError(f'failed to make default for type {name!r}') from ex
-    elif isinstance(type_key, mi.Metadata):
-        info = infer_coord_info(type_key.type, allow_timestamps)[1]
-        return type_key.extra or {}, info
     elif isinstance(type_key, mi.LiteralType):
         return {}, type(type_key.values[0])
-    elif isinstance(type_key, mi.UnionType):
-        UNION_SKIP = (mi.NoneType, mi.VarTupleType)
-        types = [t for t in type_key.types if not isinstance(t, UNION_SKIP)]
+    elif isinstance(type_key, (mi.Metadata, mi.UnionType)):
+        attrs, types = _unwrap_type_info(type_key)
         if len(types) == 1:
-            return infer_coord_info(types[0], allow_timestamps)
+            return attrs, infer_coord_info(types[0], allow_timestamps)[1]
         else:
             names = tuple(type(t).__qualname__ for t in types)
             raise TypeError(
