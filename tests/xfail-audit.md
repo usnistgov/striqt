@@ -28,7 +28,7 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
 fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, and 72 to 76); their write-ups are in the git history of this file. Items
+51, 60, 61, 72 to 76, and 89); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -244,7 +244,6 @@ item is open.
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
 | 31 | `TestIqToBinPower.test_negative_axis` | Medium | C | trivial |
 | 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
-| 89 | `test_log_file_is_json` | High | D | small |
 | 38 | `test_capture_type_attrs` | High | D | trivial |
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
@@ -1077,21 +1076,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Fix.** Normalise at entry, together with items 31 and 33. Easy.
 
 ## Tier D: cosmetic
-
-### 89. The sweep log file is not valid JSON
-
-`tests/sensor/test_sensor_resources.py::test_log_file_is_json`
-
-- **Mechanism.** `sensor/lib/util.py:466-473` `_RotatingJSONFileHandler.emit`
-  writes `',\n'` after every record and `close()` appends `']'`, so the array
-  ends with a trailing comma and `json.loads` rejects it; only YAML accepts it,
-  which the passing twin `test_log_path_records_a_yaml_array_at_the_log_level`
-  relies on. `self.empty` is unused, so appending to an existing file writes a
-  second `[`, and rotation never writes the brackets.
-- **Why the test is right.** `log_to_file` and CLAUDE.md describe the file as a
-  JSON array.
-- **Impact.** D.
-- **Fix.** Write the separator before each record after the first. Small.
 
 ### 38. `get_capture_type_attrs` returns empty attrs
 

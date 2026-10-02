@@ -466,9 +466,10 @@ def log_to_file(log_path: str | Path, level_name: str):
                 self.stream.write('[\n')
 
         def emit(self, record: logging.LogRecord):
-            super().emit(record)
-            if self.stream:
+            if self.stream and not self.empty:
                 self.stream.write(',\n')
+            self.empty = False
+            super().emit(record)
 
         def close(self):
             if self.stream:
