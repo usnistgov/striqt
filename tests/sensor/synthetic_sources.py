@@ -42,8 +42,8 @@ SIGNAL_KWS = {
     'dirac_delta': ('time', 'power'),
 }
 
-# the four signal paths of correct_iq. Measured overlaps from SOURCE: 6250/6250,
-# 350/350, 512/512 and 12800/12800 at fs_sdr 6.25e6, 6.25e6, 15.36e6 and 7.68e6.
+# the four signal paths of correct_iq. Measured overlaps from SOURCE: 3125/3125,
+# 350/350, 512/512 and 4608/4608 at fs_sdr 6.25e6, 6.25e6, 15.36e6 and 7.68e6.
 # Both durations are multiples of the 1/8000 s detector period.
 RESAMPLE_FILTER = {
     'port': (0, 1),
@@ -80,7 +80,7 @@ PRESETS = {
 ONE_PORT = {**SCALE_ONLY, 'port': 0}
 
 # a small lo_shift design from the 125 MHz clock:
-# fs_sdr 9.615 MS/s, lo_offset 1.661 MHz, 25000 samples per port
+# fs_sdr 9.615 MS/s, lo_offset 1.661 MHz, 12500 samples per port
 LO_SHIFT_CAPTURE = {
     'port': (0, 1),
     'sample_rate': 7.68e6,
