@@ -39,18 +39,20 @@ def test_cwd_follows_the_spec_directory(tmp_path, monkeypatch):
 # %% test_only
 
 
-def test_test_only_omits_the_peripherals():
-    """current behavior, not a contract: the peripherals are not opened"""
-    with ss.open_resources(tone_sweep(OFFSETS), None, test_only=True) as res:
-        assert 'peripherals' not in res
+class BindingPeripherals(ss.peripherals.NoPeripherals):
+    def open(self):
+        raise RuntimeError("the binding's peripherals were opened")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=KeyError,
-    reason="open_resources(test_only=True) omits the 'peripherals' resource that "
-    '_acquire_both indexes unconditionally (resources.py:146-151, execute.py:235)',
-)
+def test_test_only_opens_no_peripherals(monkeypatch):
+    """test_only substitutes the no-op NoPeripherals for the binding's peripherals"""
+    sweep = tone_sweep(OFFSETS)
+    binding = ss.lib.bindings.get_controller(sweep).sensor
+    monkeypatch.setattr(binding, 'peripherals_cls', BindingPeripherals)
+    with ss.open_resources(sweep, None, test_only=True) as res:
+        assert type(res['peripherals']) is ss.peripherals.NoPeripherals
+
+
 def test_test_only_resources_run_a_sweep():
     sweep = tone_sweep(OFFSETS)
     with ss.open_resources(sweep, None, test_only=True) as res:
@@ -132,12 +134,6 @@ def test_log_path_records_a_yaml_array_at_the_log_level(tmp_path):
     assert 'below the log level' not in by_message
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=json.JSONDecodeError,
-    reason="_RotatingJSONFileHandler.emit appends ',\\n' after every record, so the "
-    'array that close() terminates ends in a trailing comma (sensor/lib/util.py:466-473)',
-)
 def test_log_file_is_json(tmp_path):
     records = json.loads(_run_with_log(tmp_path))
     assert 'marker record' in {r['message'] for r in records}

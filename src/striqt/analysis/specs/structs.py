@@ -309,14 +309,16 @@ class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
 def _validate_range(
     name: str, value: int | tuple[int, int | None], path: tuple[str, ...] = ()
 ) -> None:
-    if not isinstance(value, tuple) or value[0] <= 0:
+    if not isinstance(value, tuple):
         return
     start, stop = value
     if stop is None:
-        raise helpers.SpecValidationError(
-            'Expected an end value, since `start` is greater than 0',
-            path + (f'.{name}',),
-        )
+        if start > 0:
+            raise helpers.SpecValidationError(
+                'Expected an end value, since `start` is greater than 0',
+                path + (f'.{name}',),
+            )
+        return
     if stop < start:
         raise helpers.SpecValidationError(
             'Expected an end value at or after `start`', path + (f'.{name}',)
