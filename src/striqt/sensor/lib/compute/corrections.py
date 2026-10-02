@@ -32,7 +32,7 @@ if IGNORE_HIGHSIDE_LO:
         '(shell STRIQT_IGNORE_HIGHSIDE_LO=1)'
     )
 
-# oaresample is experimental, and can leave a residual time offset
+# experimental: resample and low-pass in one STFT pass instead of _resample and the FIR
 USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', 0))
 if USE_OARESAMPLE:
     warnings.warn('experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)')
@@ -182,10 +182,7 @@ def _get_resampler_overlaps(
     """
 
     if USE_OARESAMPLE:
-        oa_pad_low, oa_pad_high = _get_oaresample_overlaps(
-            capture, setup.master_clock_rate
-        )
-        return (oa_pad_low, oa_pad_high + min_overlap)
+        return _get_oaresample_overlaps(capture, setup.master_clock_rate, min_overlap)
     else:
         return _get_resample_overlap(capture, setup, min_overlap)
 
@@ -446,39 +443,59 @@ def _resample(
 def _oaresample(
     iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
+    """resample `iq.pre_align` in one STFT pass and return it with its lead offset.
+
+    The acquisition must hold the capture plus the pads that
+    `_get_oaresample_overlaps` gives for `min_overlap`. The returned waveform starts
+    at the lead pad at `capture.sample_rate`, low-passed to `analysis_bandwidth` when
+    that is finite and shifted by the design's `lo_offset`; the offset is the
+    resampled lead pad, and the resampled tail pad is left for `correct_iq` to trim.
+
+    Raises:
+        ValueError: the acquisition is shorter than the capture plus its pads
+    """
     x = iq.pre_align
     source_spec = iq.source_spec
     capture = iq.capture
-    fs = iq.resampler['fs_sdr']
+    design = iq.resampler
+    fs = design['fs_sdr']
 
     if not isinstance(capture, specs.SensorCapture):
         raise TypeError('iq.capture must be a capture specification')
 
-    x = sw.oaresample(
+    lead, tail = _get_oaresample_overlaps(
+        capture, source_spec.master_clock_rate, min_overlap
+    )
+    size_in = lead + _source_sample_count(capture, design) + tail
+    if x.shape[axis] < size_in:
+        raise ValueError(
+            f'{x.shape[axis]} samples at {fs} S/s are fewer than the {size_in} needed '
+            f'to resample {capture.duration} s with ({lead}, {tail}) overlaps'
+        )
+
+    y = sw.oaresample(
         x,
-        up=iq.resampler['nfft_out'],
-        down=iq.resampler['nfft'],
+        up=design['nfft_out'],
+        down=design['nfft'],
         fs=fs,
-        window=iq.resampler['window'],
+        window=design['window'],
         overwrite_x=overwrite_x,
         axis=axis,
-        frequency_shift=iq.resampler['lo_offset'],
+        frequency_shift=design['lo_offset'],
         filter_bandwidth=capture.analysis_bandwidth,
         transition_bandwidth=FIR_TRANSITION_BW,
         scale=1 if iq.voltage_scale is None else iq.voltage_scale,
     )
-    scale = iq.resampler['nfft_out'] / iq.resampler['nfft']
-    oapad = _get_oaresample_overlaps(capture, source_spec.master_clock_rate)
-    size_out = round(capture.duration * capture.sample_rate) + round(
-        (oapad[1] + min_overlap) * scale
-    )
-    offset = iq.resampler['nfft_out']
 
-    assert size_out + offset <= x.shape[axis]
-    x = sw.axis_slice(x, offset, None, axis=axis)
-    assert x.shape[axis] == size_out
+    return y, round(lead * design['nfft_out'] / design['nfft'])
 
-    return x, None
+
+def _source_sample_count(
+    capture: specs.SensorCapture, design: sw.ResamplerDesign
+) -> int:
+    """return the source-rate sample count of `capture` as `get_read_count` sizes it"""
+    samples_out = round(capture.duration * capture.sample_rate)
+    return round(samples_out * design['nfft'] / design['nfft_out'])
 
 
 def _get_filter_overlap(capture: specs.SensorCapture) -> int:
@@ -505,29 +522,38 @@ def _get_max_trigger_lag(
 
 
 @sa.util.lru_cache()
-def _get_oaresample_overlaps(capture: specs.SensorCapture, master_clock_rate: float):
-    resampler_design = design_resampler(capture, master_clock_rate)
+def _get_oaresample_overlaps(
+    capture: specs.SensorCapture, master_clock_rate: float, min_overlap: int = 0
+) -> tuple[int, int]:
+    """return the (lead, tail) pads, in source samples, that `_oaresample` needs.
 
-    nfft = resampler_design['nfft']
-    nfft_out = resampler_design.get('nfft_out', nfft)
+    Each pad covers one STFT overlap, the span at either end of the `sw.oaresample`
+    output that fewer than the full count of COLA windows reach. The lead resamples to
+    a whole number of output samples so that it trims exactly; the tail also carries
+    `min_overlap` trigger-lag samples (in source samples) and is extended so that the
+    padded acquisition holds the whole number of STFT hops that `sw.oaresample`
+    requires.
+    """
+    design = design_resampler(capture, master_clock_rate)
+    nfft = design['nfft']
+    nfft_out = design['nfft_out']
 
-    samples_out = round(capture.duration * capture.sample_rate)
-    min_samples_in = ceil(samples_out * nfft / resampler_design['nfft_out'])
+    # only the COLA overlap fraction is needed here; the size argument sizes
+    # design_oafilter's own padding
+    overlap_scale = sw.fourier.design_oafilter(
+        nfft, window=design['window'], nfft_out=nfft_out, nfft=nfft, extend=True
+    )[2]
+    noverlap = round(nfft * overlap_scale)
+    hop = nfft - noverlap
 
-    # round up to an integral number of FFT windows
-    samples_in = ceil(min_samples_in / nfft) * nfft + nfft
+    # resampling by nfft_out / nfft maps only multiples of this onto whole output samples
+    lead_step = nfft // gcd(nfft, nfft_out)
+    lead = sw.util.ceildiv(noverlap, lead_step) * lead_step
 
-    noverlap_out = sw.fourier.design_oafilter(
-        samples_in,
-        window=resampler_design['window'],
-        nfft_out=nfft_out,
-        nfft=nfft,
-        extend=True,
-    )[1]
+    tail = noverlap + min_overlap
+    tail += (nfft - (lead + _source_sample_count(capture, design) + tail)) % hop
 
-    noverlap = ceil(noverlap_out * nfft / nfft_out)
-
-    return (samples_in - min_samples_in) + noverlap + nfft // 2, noverlap
+    return lead, tail
 
 
 @sa.specs.helpers.lru_cache_on_converted(specs.SensorCapture, maxsize=30000)
