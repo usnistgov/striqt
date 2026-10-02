@@ -28,118 +28,6 @@ limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. Items
 are listed in priority order, not numeric order.
 
-Suite state on 2026-09-22, after the pass that consolidated the duplication this
-branch introduced: `1685 passed, 395 skipped, 94 xfailed, 305 subtests` on
-`test39` and `1686 passed, 394 skipped, 94 xfailed, 305 subtests` on `test314`
-(one xarray-version-gated test skips on py39, and one passes there only since the
-canceled-lookup fix of 2026-09-21), from 76 xfail sites (`grep -rn "mark.xfail"
-tests --include='*.py' | wc -l`; a site that marks a parametrized test counts
-once). No xpass.
-
-Suite state on 2026-09-23, after the sweep-validation pass (`waveform-validators`):
-`1925 passed, 395 skipped, 90 xfailed, 311 subtests` on `test39` and
-`1926 passed, 394 skipped, 90 xfailed, 311 subtests` on `test314`. Four strict
-xfails turned into passes and their markers and entries were removed: item 30
-(`design_oafilter` rect/None, the `if`/`elif` chain), item 32 (`iq_to_cyclic_power`
-truncation along the wrong axis) and item 33 (`iq_to_cyclic_power` 1-D input) — the
-latter two by one fix that tests and slices along `axis`. Item 34 (negative axis)
-still xfails. The pass added the corrections checks of `validate_sweep` (sensor) and the
-validator-passes-implies-measurement-runs property test (analysis).
-
-Suite state on 2026-09-24, after the typing pass (ty-checked signatures in
-`tests/test_typing.py`, hints on the functions added since 2026-09-03, rule-named
-suppressions): `1938 passed, 396 skipped, 91 xfailed, 311 subtests` on `test39` and
-`1940 passed, 394 skipped, 91 xfailed, 311 subtests` on `test314`, from 73 xfail sites.
-Relative to 2026-09-23 the new module adds 6 (py39) or 7 (py314) passing node ids (one
-per probe file under `tests/ty_probes/`, the registry-generated probe, and on py314 the
-`ty check src` clean run, which is skipped on py39: `skipped` 395 to 396), plus the
-strict xfail of item 91 (`xfailed` 90 to 91); the remaining +7 passes on each
-interpreter come from the measurement-test regrouping commits (`901fe2d9` to
-`14612673`) that postdate the 2026-09-23 line. The 76 sites quoted on 2026-09-22
-predate that regrouping's marker folds; `grep -rn "mark.xfail" tests --include='*.py'
-| wc -l` gives 72 before the new module and 73 with it. No xpass.
-
-Suite state on 2026-09-24 (evening), after the pyright/pyrefly hint pass and three
-defect fixes: `1944 passed, 396 skipped, 89 xfailed, 311 subtests` on `test39` and `1946
-passed, 394 skipped, 89 xfailed, 311 subtests` on `test314`. `xfailed` fell 91 to 89:
-item 53 lost its `test_port_change_rebuilds_the_stream` node when `RxStream.setup` was
-fixed to close and re-open the stream on a new port set (its `test_capture_changes_port`
-node still xfails, the `==`/`!=` inversion is untouched), and item 72 was withdrawn: the
-tuple form of `adjust_captures` was never a feature (the union alternative and the
-`_get_capture_adjust_map` branch were unfinished strays from unrelated commits), so the
-type is narrowed back to the mapping form and the former xfail is now a rejection row of
-`test_invalid_adjustments_rejected`. The other passes come from the new
-`retry(tries < 1)` tests and the stream re-setup test. No xpass.
-
-Suite state on 2026-09-28, after the `check-sweep` pass: `1955 passed, 396 skipped, 88
-xfailed, 311 subtests` on `test39` and `1957 passed, 394 skipped, 88 xfailed, 311
-subtests` on `test314`, from 70 xfail sites (`xfailed` 89 to 88 for item 11; the
-eleven new passes are the tolerance, default-path and coordinate tests). `sweep_tolerances` now budgets `loop_captures` unchanged
-instead of re-applying `adjust_captures` over the looped fields (three new tests in
-`test_sensor_compute_tolerance.py` and
-`test_check_sweep_budgets_the_looped_field_over_its_adjustment`). Item 11 is retired:
-the `Sink.path` default is `{spec_name}-{start_time}`, matching `get_path_fields` (the
-`doc/reference-sweep.yaml` the old entry cited no longer exists), so a spec without a `sink:` block opens
-(`test_check_sweep_formats_the_default_sink_path`). `list_capture_adjustments` follows
-the same loop-wins rule as `loop_captures` (D28): a field that is both looped and
-adjusted lists the loop's values in loop order, and an adjusted field no loop touches
-lists its adjusted value (`test_check_sweep_lists_the_looped_field_over_its_adjustment`).
-No xpass.
-
-Suite state on 2026-09-28 (later), after the Tier D test consolidation (`85ec5315`,
-`23d8fc78`): `1936 passed, 400 skipped, 88 xfailed, 311 subtests` on `test39` and `1938
-passed, 398 skipped, 88 xfailed, 311 subtests` on `test314`. Collected ids fell 2447 to
-2424: the 24-row `test_validator_rejects_at_the_analysis_path_naming_the_field` table in
-`test_analysis_register.py` kept the two rows that exercise distinct message axes (every
-removed row has a message-matching twin in its measurement module), `test_flush_saves_a_file`
-went as redundant with the calibration lookup tests, and three pairs or triplets folded into
-parametrized tests (`test_timestamps_advance_by_the_samples_read[sawtooth|no_source]`,
-`test_get_array_namespace[numpy|cupy]`, `TestSweepAnalysisValidation::
-test_an_invalid_combination_names_its_origin[looped_capture|adjust_analysis|analysis_loop]`).
-No xfail node id changed; `xfailed` and the 70 sites are unchanged. No xpass.
-
-Suite state on 2026-09-28 (evening), after removing `striqt.analysis.testing.noise`, a
-pure wrapper of `circular_awgn` (`power=noise_psd * sample_rate`): `1909 passed, 376
-skipped, 88 xfailed, 311 subtests` on `test39` and `1911 passed, 374 skipped, 88 xfailed,
-311 subtests` on `test314`. The 51 node ids that went were the `[noise]` rows of the
-`GENERATORS`-table tests in `test_analysis_testing.py` (half of them the skipped cupy
-variants) and `test_noise_is_circular_awgn_at_the_integrated_power`, which asserted the
-relation the wrapper was; every other caller now calls `circular_awgn` with the scaled
-power. No xfail node id changed. No xpass.
-
-Relative to the msgspec-idiom message pass (`1667/395/94/305` and
-`1668/394/94/305`), both interpreters gained 18 passes and nothing else moved:
-+6 in `test_sensor_specs_structs.py::TestSweepLoops` for the new
-`_validate_loop_capture_collisions` and the sharpened duplicate-loop message
-(5 functions, one parametrized on a leading `repeat`), +4 in
-`test_sensor_specs_sequencing.py` for the `only_fields` loop-index regression
-(parametrized), the located missing-required-field error, and a bare `Repeat`
-with no captures, and +8 for the new `TestSlotPeriod` in
-`test_waveform_ofdm.py` covering the extracted `ofdm.slot_period`. `skipped`,
-`xfailed` and `subtests` did not move, so no cupy case was lost and no marker was
-added or removed. The three `_validate_range` tests in
-`TestCellularCyclicAutocorrelator` were rewritten against
-`SpecValidationError` rather than added, which is why they contribute 0.
-
-Relative to the capture-provenance pass that added `loop_capture_origins`
-(`1666/395/95` and `1667/394/95`), that earlier pass gained one pass and lost one
-xfail: fixing the `"global"` wording in the `adjust_captures` source-key error
-retired item 40, whose marker came off `test_source_key_error_names_defaults`.
-
-Earlier in the branch, the pass count rose by 44 from commit 7f56f985 to
-`1667`/`1668`, which is 47 new node ids less 3 retired: +14 for the new
-`tests/analysis/test_analysis_register.py`, +6 for the new
-`tests/waveform/test_waveform_util.py` covering `persistent_cache`'s
-best-effort shelf, +10 net in
-`test_analysis_specs_helpers.py` for `SpecValidationError.locations`/`.at()`
-(two of its existing tests gained parametrize rows and one whose case folded
-into a row went away), +2 parametrize rows on
-`TestSpectrogram::test_non_integer_binning_raises`, +12 for
-`loop_capture_origins` and `describe_capture_origin` in
-`test_sensor_specs_sequencing.py`, and a net 0 in `test_sensor_specs_structs.py`
-where `test_an_invalid_looped_capture_names_its_expanded_index` was renamed to
-`..._names_its_captures_entry_and_loop_point`. `skipped` and `xfailed` did not
-move, so no cupy case was lost and no marker was added or removed.
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
 
@@ -171,8 +59,7 @@ For each xfail I:
   convention (numpy semantics, an unused parameter, an unreachable branch)
   rather than stated anywhere.
 
-Every xfail reason was found to be accurate, with two understatements noted
-inline (cyclic-power negative axis, `oafilter` gain).
+Every xfail reason was found to be accurate.
 
 ### Impact
 
@@ -213,25 +100,18 @@ item is open.
 | 80 | `test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`, `[resample_only]` | High | C | moderate |
 | 81 | `test_oaresample_acquisition[resample_filter]`, `[resample_only]` | High | C | small |
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
-| 83 | `test_mat_two_port` | High | C | easy |
-| 85 | `test_test_only_resources_run_a_sweep` | High | C | easy |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
 | 53 | `test_capture_changes_port` | High | C | easy |
 | 54 | `TestSoapySourceSetup::test_initial_ports_on_a_non_stream_all_source` | High | C | trivial |
 | 70 | `TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports` | High | C | easy |
 | 20 | `test_list_port_direct_is_frozen`; `test_var_tuple_list_is_frozen_on_direct_construction`; `test_freeze_depths_count_dict_list_and_tuple_nesting`; `test_freeze_depths_of_real_specs`; `test_direct_struct_with_list_validates_and_replaces` | High | C | trivial |
-| 64 | `test_descending_range_from_zero_rejected[frame_range]`, `[symbol_range]` | High | C | trivial |
 | 22 | `test_analysis_group_accepted` | High | C | moderate |
 | 24 | `test_recurses_into_frozendict` | High | C | trivial |
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
 | 55 | `TestHardwareTimeSync::test_call_returns_the_sync_time` | High | C | trivial |
 | 57 | `TestRxStreamRead::test_read_without_an_enable_delay` | High | C | trivial |
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
-| 31 | `TestIqToBinPower.test_negative_axis` | Medium | C | trivial |
-| 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
-| 89 | `test_log_file_is_json` | High | D | small |
-| 73 | `TestRetry::test_exhausted_tries_sleep_only_between_tries` | High | D | trivial |
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
 | 48 | `TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields` | High | D | trivial |
@@ -239,7 +119,6 @@ item is open.
 | 56 | `TestHardwareTimeSync::test_unsupported_source_names_itself` | High | D | trivial |
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
 | 39 | `test_calibration_capture_class_has_a_descriptive_name` | High | D | trivial |
-| 50 | `test_air7201b_init_like_matches_its_source_spec` | High | D | trivial |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
 ## Tier B: reachable from plausible YAML or a spec default
@@ -751,17 +630,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Fix.** Add the `VarTupleType` branch. Trivial, but it also changes which
   fields `to_dict(unfreeze=True)` emits as lists in zarr attrs.
 
-### 64. `_validate_range` skips the order check when the start is 0
-
-`tests/analysis/test_analysis_specs_structs.py::TestCellularCyclicAutocorrelator::test_descending_range_from_zero_rejected[frame_range]`, `[symbol_range]`
-
-- **Mechanism.** `analysis/specs/structs.py:282` returns before the
-  `end >= start` check when `start` is 0, so `(0, -5)` becomes `range(0, -5)`,
-  an empty selection, and the measurement silently produces nothing.
-- **Why the test is right.** The existing message "Expected an end value at or
-  after `start`" is the stated rule for every other start.
-- **Fix.** Drop the early return. Trivial.
-
 ### 22. `SoapySource.signal_trigger` rejects the `AnalysisGroup` form
 
 `tests/sensor/test_sensor_specs_structs.py::TestSignalTrigger::test_analysis_group_accepted`
@@ -791,8 +659,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   with lists inside reach it.
 - **Fix.** `isinstance(obj, (dict, frozendict))` in `freeze` and in
   `SpecBase.__post_init__`. Trivial.
-
-
 
 ### 49. Capability struct annotations disagree with the probed values
 
@@ -844,25 +710,7 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   that load two sites are affected.
 - **Fix.** Needs a registry replace-or-namespace policy first. Design decision.
 
-
 ## Tier D: cosmetic
-
-### 38. `get_capture_type_attrs` returns empty attrs
-
-`tests/analysis/test_analysis_specs_helpers.py::test_capture_type_attrs`
-
-- **Mechanism.** `analysis/specs/helpers.py:171` reads `.extra` off the raw
-  `Annotated` alias from `msgspec.structs.fields`, which has none; the
-  metadata is on `msgspec.inspect.type_info(cls).fields`. Every field returns
-  `{}`.
-- **Why the test is right.** The `Meta` docstring and CLAUDE.md say it feeds
-  `standard_name`/`units`.
-- **Impact.** The only caller is `describe_field` behind the per-capture INFO
-  log line, which prints `duration=0.001` instead of `duration=1 ms`. The
-  zarr capture coordinates are built by `_coords_template` through
-  `infer_coord_info`, which reads the metadata correctly, so saved output is
-  unaffected (verified).
-- **Fix.** Iterate `type_info(cls).fields` or reuse `infer_coord_info`. Trivial.
 
 ### 46. Range error text embeds a DataArray repr
 
@@ -930,15 +778,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Surfaces in the JSON schema `$defs`, the `adjust_captures`
   error text, and the `Controller.arm` signature. Not in zarr attrs.
 - **Fix.** Set `__name__` and `__qualname__`. Trivial.
-
-### 50. `air7201b` binds `init_like=Air7101BSourceSpec`
-
-`tests/sensor/test_sensor_sources_deepwave.py::test_air7201b_init_like_matches_its_source_spec`
-
-- **Mechanism.** `bindings.py:149`. `Schema.init_like` is documented as
-  type-hinting only, so the wrong class affects editor hints for the
-  `air7201b` controller and nothing at run time.
-- **Fix.** Name change. Trivial.
 
 ## Tool limitations
 
@@ -1060,66 +899,3 @@ it was standing in for is enabled.
   carries.** `frame_slots: null` at `:14` is not a field of any measurement in
   `fragments/analysis/quick.yaml`, so every `site-cpu` run logs an unused-key
   warning.
-
-## Fixed on 2026-09-21 without a ledger number
-
-- **A canceled source lookup reported a timeout instead of the cancellation.**
-  `controller.lookup.instance` raised
-  `TimeoutError('no controller instance initializing given spec')` when its 0.5 s
-  wait expired, without checking whether the open had been canceled. In
-  `open_resources` the sink, the devices and `_prepare_sweep` run concurrently
-  under `ExceptionStack(cancel_on_except=True)`, so a sink that raised in
-  `__init__` could cancel the open before the source thread registered a
-  controller; `_prepare_sweep`'s `lookup.id` then contributed that `TimeoutError`
-  to the group and `ExceptionStack.handle()` raised an `ExceptionGroup` instead of
-  the sink's own error. `instance` now calls `util.propagate_thread_interrupts()`
-  before raising, which turns a canceled wait into the `ThreadInterruptRequest`
-  that `ExceptionStack` already makes yield to the real error; an uncancelled wait
-  still times out, as the class docstring promises. Confirming test:
-  `tests/sensor/test_sensor_resources.py::test_sink_failure_surfaces_and_closes_the_source[init]`,
-  which failed in all 3 full-suite py314 runs before the fix and passes in 4 of 4
-  after, with 10 of 10 clean `pytest tests/sensor` runs on py314.
-
-## Fixed on 2026-09-18 without a ledger number
-
-Found and fixed in the same change by the sensor test refocus (each has a
-confirming test named in the commit):
-
-- `VirtualSource.read` origin: buffer position `p` now holds generator or file
-  index `p - overlaps[0]`, so corrected sample 0 is generator index 0 for every
-  synthetic and file source (previously `2*overlaps[0]` for tone, noise and
-  sawtooth, compensated only in `DiracDeltaSource`, and `overlaps[0]` for
-  files). `striqt.analysis.testing` generators accept negative `start_index`;
-  noise pre-roll comes from `RandomState(seed + PREROLL_SEED_OFFSET)`.
-- `correct_iq` conjugated `iq.pre_align` in place on the scale-only path even
-  with `overwrite_x=False` (`corrections.py:82`).
-- `buffers._alloc_empty_iq` compared `prior.shape < (ports, count)`
-  lexicographically, reusing too-small or wrong-row-count buffers
-  (`buffers.py:198`); a one-port capture after a two-port capture returned a
-  stale second row.
-- `Controller.acquire` with `reuse_iq=True` called `info.replace(start_time=None)`
-  on `AcquisitionInfo`, which has no such field (`controller.py:611`).
-- `Controller.acquire(overlaps=<tuple>)` raised `UnboundLocalError` for
-  `signal_trigger` (`controller.py:567`).
-- `buffers.get_read_count` sized a resampled read with `ceil` while the pad was
-  built from `round(duration*fs_sdr)`, so a non-integral source-sample count
-  made `_resample` fail `isroundmod` (`buffers.py:144`).
-- `NoSource.read` added `samples_elapsed*sample_period_ns` as a float to a
-  wall-clock `time_ns()` origin, quantizing timestamps to 256 ns
-  (`sources/base.py`).
-- `gpu.sweep_touches_gpu` tested `analysis_bandwidth is not None` (always true)
-  and the loop branch never fired for finite values; `build_warmup_sweep`
-  sized `num_rx_ports = max(port)` (one short) and passed the unhashable
-  `SensorBinding` to `mock_binding`, so no warmup sweep could be built.
-- `EvaluationOptions.extra_attrs` defaulted to a `dataclasses.field` object on
-  a msgspec Struct (`datasets.py:35`).
-- `ZarrTimeAppendSink` tested `'spectrogram' not in analysis` on a non-iterable
-  Struct and could never be constructed (`sinks.py:322`).
-- `TDMSSource` and `ZarrIQSource` were abstract (missing `close`, and for TDMS
-  `get_id`/`get_info`), `TDMSSource.get_waveform` called a dtype object,
-  `TDMSSource` inherited `transport_dtype='float32'`, `MATSource` passed
-  `key=None` over the stream's default, TDMS output indexing overflowed for a
-  non-zero offset, and Zarr's port bound check was `>` instead of `>=`
-  (`sources/file.py`, `specs/structs.py`). None of the three file bindings had
-  ever been instantiable.
-
