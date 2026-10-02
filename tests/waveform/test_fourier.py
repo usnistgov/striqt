@@ -780,6 +780,22 @@ class TestStftFrequencyEditing:
         assert_array_equal(Yo[:, -quarter:], 0)
         assert np.all(Yo[:, quarter:-quarter] != 0)
 
+    def test_downsample_stft_centers_an_odd_width_passband_on_dc(self):
+        fs = 1e6
+        freqs, Y = self._stft(fs)
+        nfft_out = self.NFFT // 2
+        half_width = nfft_out // 4
+        step = fs / self.NFFT
+        # 2 * half_width + 1 passband bins leave an odd number of zeroed bins
+        passband = (-half_width * step, (half_width + 0.5) * step)
+        _, Yo = fourier.downsample_stft(freqs, Y, nfft_out, passband=passband)
+
+        band_in = slice(self.NFFT // 2 - half_width, self.NFFT // 2 + half_width + 1)
+        band_out = slice(nfft_out // 2 - half_width, nfft_out // 2 + half_width + 1)
+        assert_array_equal(Yo[:, band_out], Y[:, band_in])
+        assert_array_equal(Yo[:, : band_out.start], 0)
+        assert_array_equal(Yo[:, band_out.stop :], 0)
+
     def test_downsample_stft_out_buffer(self):
         freqs, Y = self._stft(1.0)
         nfft_out = self.NFFT // 2
@@ -1032,10 +1048,6 @@ class TestOverlapAddFilters:
         y = self._oafilter(x, nfft_out=nfft_out)
         assert y.shape == (round(x.size * nfft_out / self.NFFT),)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='the downsample_stft branch of oafilter doubles the tone amplitude',
-    )
     def test_oafilter_downsample_preserves_level(self):
         nfft_out = self.NFFT // 2
         y = self._oafilter(self._tone(0.05e6), nfft_out=nfft_out)

@@ -1087,7 +1087,7 @@ def oafilter(
             out=y,
         )
 
-    return istft(
+    x = istft(
         y,
         round(x.shape[axis] * nfft_out / nfft),
         nfft=nfft_out or nfft,
@@ -1095,6 +1095,11 @@ def oafilter(
         overwrite_x=True,
         axis=axis,
     )
+
+    if nfft_out != nfft:
+        x *= nfft_out / nfft
+
+    return x
 
 
 def _stft_fir_lowpass(
@@ -1498,9 +1503,10 @@ def _find_downsample_copy_range(
     assert copy_size >= 0, copy_size
     assert copy_in_end - copy_in_start == copy_size
 
-    # copy output indexes
-    output_zeros_size = max(nfft_out - copy_size, 0)
-    copy_out_start = output_zeros_size // 2
+    # copy output indexes, anchored so that the passband center lands on the
+    # output DC bin: splitting the zeroed bins evenly puts it one bin low when
+    # their count is odd, which inverts alternate frames at 50% overlap
+    copy_out_start = nfft_out // 2 - (passband_center - copy_in_start)
     copy_out_end = copy_out_start + copy_size
 
     assert copy_out_end - copy_out_start == copy_size

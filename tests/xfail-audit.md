@@ -27,7 +27,7 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25 to 27, 29, 35 to 37, 40, 42, 47,
+fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25 to 29, 35 to 37, 40, 42, 47,
 51, 60, 61, 66, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
@@ -238,7 +238,6 @@ item is open.
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
 | 55 | `TestHardwareTimeSync::test_call_returns_the_sync_time` | High | C | trivial |
 | 57 | `TestRxStreamRead::test_read_without_an_enable_delay` | High | C | trivial |
-| 28 | `test_oafilter_downsample_preserves_level` | High | C | easy |
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
 | 31 | `TestIqToBinPower.test_negative_axis` | Medium | C | trivial |
 | 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
@@ -991,20 +990,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Every in-tree spec sets a float. A subclass that opts out of
   the delayed start cannot read.
 - **Fix.** `(self.source_spec.rx_enable_delay or 0)`. Trivial.
-
-### 28. `oafilter` with `nfft_out != nfft` scales the level by `nfft / nfft_out`
-
-`tests/waveform/test_fourier.py::TestOverlapAddFilters::test_oafilter_downsample_preserves_level`
-
-- **Mechanism.** The STFT is normalized for `nfft`-point frames and the
-  inverse reconstructs `nfft_out`-point frames (`fourier.py:882-923`).
-  Measured gain is 1, 2, 4 for `nfft_out` of 256, 128, 64, so the xfail
-  reason's "doubles" is the special case of a 2:1 ratio.
-- **Why the test is right.** `oaresample` (`fourier.py:1540`) rescales by the
-  size ratio explicitly, showing the intended convention.
-- **Impact.** No caller passes `nfft_out != nfft`; `oaresample` is a separate
-  implementation and `correct_iq` uses `resample`. Unreachable.
-- **Fix.** Multiply by `nfft_out / nfft`. Easy.
 
 ### 23. A second extensions directory with the same module name is never imported
 
