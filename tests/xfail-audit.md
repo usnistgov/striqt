@@ -27,7 +27,7 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25 to 29, 35 to 37, 40, 42, 47, 50,
+fixed or withdrawn (1 to 5, 7, 11 to 13, 15, 19, 21, 25 to 29, 35 to 37, 40, 42, 47, 50,
 51, 60, 61, 64, 66, 69, 72 to 76, 83, 85, 87, and 89); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
@@ -203,7 +203,6 @@ item is open.
 | 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
-| 13 | `test_fft_bins_odd_count_even_length` | High | B | easy |
 | 44 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]` | High | B | trivial |
 | 52 | `TestSoapySourceClose::test_close_releases_the_stream_and_device` | High | B | trivial |
 | 14 | `test_leading_repeat_is_accepted` | High | B | easy |
@@ -214,7 +213,6 @@ item is open.
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
 | 67 | `test_cuda_unsorted_indices` | High | B (GPU, unverified) | trivial |
 | 59 | `test_probe_soapy_info_with_a_channel_sensor` | High | B (latent) | trivial |
-| 19 | `test_infinite_sample_rate_reports_sample_period_message` | High | B (unlikely) | trivial |
 | 10 | `test_chained_remap_declared_before_its_key_resolves` | Medium | B | moderate |
 | 45 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]` | Medium | B | easy |
 | 80 | `test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`, `[resample_only]` | High | C | moderate |
@@ -450,25 +448,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   coordinate goes missing from the output with no diagnostic.
 - **Fix.** Delete the two `continue` lines. Trivial.
 
-### 13. `binned_mean(fft=True)` raises for some odd bin counts
-
-`tests/waveform/test_waveform_arrays.py::TestBinnedMean::test_fft_bins_odd_count_even_length[8-3]`, `[14-3]`, `[1024-5]`
-
-- **Mechanism.** `arrays.py:139-147`: when `(n//2 - count//2) % count == 0`
-  with odd `count` and even `n`, `count*block_count` is `n+1`, `start` is 0,
-  `stop` is `n+1`, the slice is skipped, and `axis_to_blocks` rejects the
-  unaligned length.
-- **Why the test is right.** The docstring promises fft-aligned bins with
-  truncation of incomplete ones; raising is not one of the documented
-  outcomes.
-- **Impact.** Callers are the spectrogram frequency-bin averaging in
-  `measurements/spectrum.py` (`_cached_spectrogram` and `spectrogram_freqs`; count is
-  `integration_bandwidth / frequency_resolution`, axis 2, `fft=True`) and the
-  SSB spectrogram (count 2). All shipped YAMLs use a ratio of 24. A user who
-  picks an odd ratio such as 45 kHz over 15 kHz gets a `ValueError` for about
-  a third of realistic `nfft` values.
-- **Fix.** Clamp `block_count` so the block span never exceeds `n`. Easy.
-
 ### 44. A single-frequency calibration cannot be looked up
 
 `tests/sensor/test_sensor_calibration.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]`
@@ -611,21 +590,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   lists none, since sweeps run on it; other SoapySDR drivers (bladeRF, USRP
   via UHD) do expose per-channel sensors. Latent.
 - **Fix.** Drop the `[0]`. Trivial.
-
-### 19. `Capture(sample_rate=inf)` raises "math domain error"
-
-`tests/analysis/test_analysis_specs_structs.py::TestCapture::test_infinite_sample_rate_reports_sample_period_message`
-
-- **Mechanism.** `analysis/lib/util.py:50` `math.remainder(inf, 1)` raises
-  `ValueError`, which `isroundmod` does not catch; the duplicate in
-  `waveform/lib/arrays.py:38` has the same gap. `nan` happens to produce the
-  intended message.
-- **Why the test is right.** `Capture.__post_init__` intends its own
-  sample-period message for any non-integer sample count, and the type aliases
-  carry no finiteness constraint.
-- **Impact.** `sample_rate: .inf` in YAML surfaces as
-  `ValidationError: math domain error`. Not a realistic configuration.
-- **Fix.** Return `False` for non-finite ratios in both copies. Trivial.
 
 ### 10. Chained remaps resolve only in declaration order
 

@@ -63,6 +63,8 @@ def get_logger(name_suffix) -> StriqtLogger:
 def isroundmod(value: float, div, atol=1e-6) -> bool:
     ratio = value / div
     try:
+        if not math.isfinite(ratio):
+            return False
         return abs(math.remainder(ratio, 1)) <= atol
     except TypeError:
         import numpy as np
