@@ -3,9 +3,8 @@
 The synthetic bindings call the `striqt.analysis.testing` generators at the source
 sample rate with absolute indices referenced to the corrected capture, so the
 corrected output is the same generator evaluated at `capture.sample_rate` from
-index 0. The presets keep every acquisition under 5e4 samples per port with even
-correction overlaps, which `Controller.read_iq` requires. Not a conftest: importable
-by bare name from the sensor test modules.
+index 0. The presets keep every acquisition under 5e4 samples per port. Not a
+conftest: importable by bare name from the sensor test modules.
 """
 
 from __future__ import annotations
@@ -43,8 +42,8 @@ SIGNAL_KWS = {
     'dirac_delta': ('time', 'power'),
 }
 
-# the four signal paths of correct_iq. Measured overlaps from SOURCE: 6250/6250,
-# 350/350, 512/512 and 12800/12800 at fs_sdr 6.25e6, 6.25e6, 15.36e6 and 7.68e6.
+# the four signal paths of correct_iq. Measured overlaps from SOURCE: 3125/3125,
+# 350/350, 512/512 and 4608/4608 at fs_sdr 6.25e6, 6.25e6, 15.36e6 and 7.68e6.
 # Both durations are multiples of the 1/8000 s detector period.
 RESAMPLE_FILTER = {
     'port': (0, 1),
@@ -80,12 +79,12 @@ PRESETS = {
 }
 ONE_PORT = {**SCALE_ONLY, 'port': 0}
 
-# the smallest lo_shift design from the 125 MHz clock whose overlaps are even:
-# fs_sdr 9.615 MS/s, lo_offset 1.661 MHz, 25000 samples per port
+# an lo_shift design from the 125 MHz clock: fs_sdr 11.364 MS/s (6250/4224-point
+# FFTs), lo_offset 1.6618 MHz (914 bins), 18750 samples per port
 LO_SHIFT_CAPTURE = {
     'port': (0, 1),
     'sample_rate': 7.68e6,
-    'duration': 0.5e-3,
+    'duration': 1e-3,
     'analysis_bandwidth': 3.072e6,
 }
 

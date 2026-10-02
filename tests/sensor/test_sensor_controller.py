@@ -370,8 +370,8 @@ def test_overfilled_buffer_is_a_memory_error(monkeypatch, isolated_lookup):
 
 @pytest.mark.parametrize(
     'overlaps',
-    [(3, 0), (0, 5), (-2, 0), (0, 0, 0), 4],
-    ids=['odd_lead', 'odd_tail', 'negative', 'three_values', 'scalar'],
+    [(2.5, 0), (-2, 0), (0, 0, 0), 4],
+    ids=['fractional', 'negative', 'three_values', 'scalar'],
 )
 def test_read_iq_rejects_invalid_overlaps(overlaps, armed_tone_controller):
     with pytest.raises(ValueError, match='overlaps'):

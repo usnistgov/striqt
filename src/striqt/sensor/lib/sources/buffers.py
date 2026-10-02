@@ -118,8 +118,8 @@ def get_read_count(
     include_holdoff: bool = False,
     overlap: int = 0,
 ) -> int:
-    if overlap % 2 == 1 or overlap < 0 or not isinstance(overlap, (np.integer, int)):
-        raise ValueError('overlap must be a non-negative even integer')
+    if overlap < 0 or not isinstance(overlap, (np.integer, int)):
+        raise ValueError('overlap must be a non-negative integer')
     if sw.isroundmod(capture.duration * capture.sample_rate, 1):
         samples_out = round(capture.duration * capture.sample_rate)
     else:

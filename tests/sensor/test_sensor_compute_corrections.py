@@ -10,7 +10,7 @@ from math import inf, isfinite
 
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 from numeric_checks import (
     FIR_LEAKAGE,
@@ -55,7 +55,7 @@ IMPULSE_TIME = 0.5e-3
 IMPULSE_POWER_DB = -6.0
 
 # 1 MHz lies on the FFT grid of the padded acquisition of both resample presets
-# (25000 and 13200 samples at 6.25 MS/s), so its resample is exact up to roundoff;
+# (18750 and 13200 samples at 6.25 MS/s), so its resample is exact up to roundoff;
 # the Gibbs ripple of an off-grid tone is the kernel's business (tests/waveform)
 TONE_FREQUENCY = 1e6
 # above bw/2 plus the 250 kHz transition band of the analysis filter, below fs/2
@@ -74,21 +74,6 @@ FILTERED_PRESETS = pytest.mark.parametrize(
 )
 RESAMPLED_PRESETS = pytest.mark.parametrize(
     'preset', [RESAMPLE_FILTER, RESAMPLE_ONLY], ids=['resample_filter', 'resample_only']
-)
-
-D1_REASON = (
-    '_get_resample_overlap splits its pad into two equal halves: it asserts '
-    'pad_end % 2 == 0, which fails whenever round(duration*fs_sdr) is odd, and when '
-    'pad_end is 2 mod 4 each half is odd and Controller.read_iq rejects the overlaps '
-    'as not even, so most host-resampled (sample_rate, duration) pairs cannot acquire'
-)
-
-
-D90_REASON = (
-    '_get_resampler_overlaps compares its pad against _get_filter_overlap, which is '
-    'FILTER_SIZE//2 + 1 counted at fs_sdr, but correct_iq applies the FIR after '
-    'resampling, so the transient spans FILTER_SIZE//2 samples of capture.sample_rate; '
-    'whenever fs_sdr > sample_rate the lead overlap is short by that ratio'
 )
 
 
@@ -379,15 +364,6 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
 # %% correct_iq: experimental oaresample path (STRIQT_USE_OARESAMPLE=1)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='_oaresample trims nfft_out samples from the front of the sw.oaresample '
-    'output instead of the resampled lead overlap, then asserts that the remainder '
-    'is exactly the capture plus its tail pad; with the lead that '
-    '_get_oaresample_overlaps requests it never is, so correct_iq cannot complete '
-    'under STRIQT_USE_OARESAMPLE=1',
-)
 @RESAMPLED_PRESETS
 def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags):
     corrections_flags(use_oaresample=True)
@@ -401,13 +377,6 @@ def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags
     assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason='_get_oaresample_overlaps returns odd overlaps (43750, 9375 for the '
-    'resample_filter preset), which Controller.read_iq rejects, so no capture '
-    'acquires under STRIQT_USE_OARESAMPLE=1',
-)
 @RESAMPLED_PRESETS
 def test_oaresample_acquisition(preset, corrections_flags):
     corrections_flags(use_oaresample=True)
@@ -434,13 +403,6 @@ def test_lo_shift_design_moves_the_lo_out_of_band(lo_shift):
     assert abs(design['lo_offset']) + half_bw <= design['fs_sdr'] / 2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='_resample calls sw.resample without shift=, so the lo_offset that '
-    'design_resampler moved the radio LO by (and that the synthetic source '
-    'reproduces) is never removed and the tone stays at frequency_offset + lo_offset',
-)
 @pytest.mark.parametrize(
     'lo_shift, frequency', [('left', 1e6), ('right', -1e6)], ids=['left', 'right']
 )
@@ -608,19 +570,6 @@ def _drawn_capture(sample_rate, count, bandwidth_fraction):
     )
 
 
-def _overlaps_or_skip(capture, min_overlap=0):
-    """the resampler overlaps of `capture`, skipping the example when the design
-    falls into one of the registered defects that abort inside
-    _get_resample_overlap: the swapped ceildiv (xfail-audit #43) or the odd pad
-    (test_overlaps_are_even)"""
-    try:
-        return corrections._get_resampler_overlaps(
-            capture, FUNCTION_SOURCE, min_overlap=min_overlap
-        )
-    except AssertionError:
-        assume(False)
-
-
 @given(
     sample_rate=sample_rates,
     count=sample_counts,
@@ -633,79 +582,83 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
     capture = _drawn_capture(sample_rate, count, bandwidth_fraction)
     trigger = FakeTrigger(0.0, max_lag=max_lag)
     lag_pad = corrections._get_max_trigger_lag(FUNCTION_SOURCE, capture, trigger)
-    lead, tail = _overlaps_or_skip(capture, lag_pad)
+    lead, tail = corrections._get_resampler_overlaps(
+        capture, FUNCTION_SOURCE, min_overlap=lag_pad
+    )
     fs = fs_sdr(capture)
 
     assert lead >= 0 and tail >= 0
-    if isfinite(capture.analysis_bandwidth):
-        # the FIR transient spans FILTER_SIZE//2 output samples. Upsampling designs are
-        # short of that by fs/sample_rate (xfail-audit #90), pinned by
-        # test_upsampled_overlap_covers_the_output_rate_filter_pad
-        assume(fs <= capture.sample_rate)
-        assert lead * capture.sample_rate / fs >= FILTER_SIZE // 2
-    # a trigger shift of up to max_lag reads that far past the capture
-    assert tail >= max_lag * fs
+    # the FIR transient spans FILTER_SIZE//2 samples at the output rate, where
+    # correct_iq applies the filter, at each end of the record
+    filter_out = FILTER_SIZE // 2 if isfinite(capture.analysis_bandwidth) else 0
+    assert lead * capture.sample_rate / fs >= filter_out
+    # a trigger shift of up to max_lag then reads that far past the transient
+    assert tail * capture.sample_rate / fs >= filter_out + max_lag * capture.sample_rate
     # the sum of the two is an overlap that read_iq accepts, and it asks the source
     # for exactly the padded resampler input
     read_count = buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=lead + tail)
     assert read_count == round(capture.duration * fs) + lead + tail
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=D90_REASON)
 def test_upsampled_overlap_covers_the_output_rate_filter_pad():
-    """a capture whose resampler upsamples: 12.065 MS/s from a 12.5 MS/s fs_sdr, where
-    the (2061, 2061) overlaps buy only 1989 of the 2000 output samples the FIR
-    transient spans, so the trimmed output keeps ~11 samples of edge transient at
-    each end"""
+    """a capture whose resampler upsamples, 12.065 MS/s from a 12.5 MS/s fs_sdr, needs
+    fs_sdr/sample_rate times as many source samples as the 2000 output samples that
+    the FIR transient spans at each end"""
     capture = _drawn_capture(12065e3, 24977, 0.5)
-    lead, _ = corrections._get_resampler_overlaps(capture, FUNCTION_SOURCE)
+    lead, tail = corrections._get_resampler_overlaps(capture, FUNCTION_SOURCE)
+    ratio = capture.sample_rate / fs_sdr(capture)
 
-    assert lead * capture.sample_rate / fs_sdr(capture) >= FILTER_SIZE // 2
+    assert lead * ratio >= FILTER_SIZE // 2
+    assert tail * ratio >= FILTER_SIZE // 2
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=D1_REASON)
 @settings(report_multiple_bugs=False, max_examples=50)
 @given(
     sample_rate=sample_rates,
     count=sample_counts,
     bandwidth_fraction=bandwidth_fractions,
 )
-def test_overlaps_are_even(sample_rate, count, bandwidth_fraction):
+def test_overlaps_pad_to_a_whole_resampler_block(
+    sample_rate, count, bandwidth_fraction
+):
+    """the overlaps need not be even or equal: together they pad the source-rate
+    record to a length that resamples to a whole number of output samples, which is
+    what _resample requires, and read_iq reads exactly that padded record"""
     capture = _drawn_capture(sample_rate, count, bandwidth_fraction)
-    design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
-    # the small-FFT case is xfail-audit #43, not this defect
-    assume(
-        not isfinite(capture.analysis_bandwidth)
-        or design['nfft'] >= corrections._get_filter_overlap(capture)
+    lead, tail = corrections._get_resampler_overlaps(capture, FUNCTION_SOURCE)
+    fs = fs_sdr(capture)
+    padded = round(capture.duration * fs) + lead + tail
+
+    assert lead >= 0 and tail >= 0
+    assert sw.isroundmod(padded * capture.sample_rate, fs)
+    assert (
+        buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=lead + tail) == padded
     )
-
-    lead, tail = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
-
-    assert lead % 2 == 0 and tail % 2 == 0
 
 
 DOCUMENTED_OVERLAPS = {
-    'resample_filter': (6250, 6250),
+    'resample_filter': (3125, 3125),
     'resample_only': (350, 350),
     'scale_only': (512, 512),
-    'filter_only': (12800, 12800),
+    'filter_only': (4608, 4608),
 }
 
 
 @pytest.mark.parametrize('name', list(PRESETS))
 def test_preset_overlaps_are_acquirable(name):
-    """The harness presets were chosen to dodge the two overlap defects above. Pin
-    the sizes that synthetic_sources documents, so that a change here shows up as
-    a harness change rather than as unrelated acquisition failures."""
+    """Pin the preset overlaps that synthetic_sources documents, so that a change in
+    the overlap sizing shows up as a harness change rather than as unrelated
+    acquisition failures."""
     capture = preset_capture('single_tone', **PRESETS[name])
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
     assert overlaps == DOCUMENTED_OVERLAPS[name]
 
 
-# %% acquisitions that the overlap defects block
+# %% acquisitions with odd or non-integral source-rate pads
 
-# 6.144 MS/s for 2 ms without an analysis filter pads to (3125, 3125)
-ODD_OVERLAP_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 6.144e6}
+# 6 MS/s for 1 ms without an analysis filter pads to (175, 175): the 25:24 resampler
+# makes the lead a multiple of 25, and 7 of them is odd
+ODD_OVERLAP_CAPTURE = {**RESAMPLE_ONLY, 'duration': 1e-3}
 # 4 MS/s comes from 125 MHz / 31, so 1 ms is 4032.26 source samples
 NONINTEGRAL_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 4e6, 'duration': 1e-3}
 
@@ -713,11 +666,7 @@ NONINTEGRAL_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 4e6, 'duration': 1e-3}
 @pytest.mark.parametrize(
     'preset',
     [
-        pytest.param(
-            ODD_OVERLAP_CAPTURE,
-            id='odd_overlap',
-            marks=pytest.mark.xfail(strict=True, raises=ValueError, reason=D1_REASON),
-        ),
+        pytest.param(ODD_OVERLAP_CAPTURE, id='odd_overlap'),
         pytest.param(NONINTEGRAL_CAPTURE, id='nonintegral_source_duration'),
     ],
 )
@@ -728,7 +677,7 @@ def test_impulse_acquisition(preset):
 
 
 def test_correct_iq_trims_an_odd_lead_pad():
-    """the even-overlap requirement is Controller.read_iq's, not the correction's"""
+    """an odd lead pad is trimmed exactly like an even one"""
     capture = preset_capture('dirac_delta', **ODD_OVERLAP_CAPTURE, time=IMPULSE_TIME)
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
 
@@ -760,10 +709,17 @@ def test_resample_rejects_a_length_that_does_not_divide():
 
 
 def _assert_valid_overlaps(capture):
+    """the overlaps of `capture` from SOAPY_SOURCE cover the FIR transient at the
+    output rate on both sides and pad the record to a whole number of output samples"""
     low, high = corrections.get_correction_overlaps(capture, SOAPY_SOURCE)
-    filter_pad = corrections._get_filter_overlap(capture)
-    assert low >= filter_pad and high >= filter_pad
-    assert low > 0 and high > 0
+    fs = fs_sdr(capture, SOAPY_SOURCE)
+    filter_out = corrections._get_filter_overlap(capture)
+    padded = round(capture.duration * fs) + low + high
+
+    assert low >= 0 and high >= 0
+    assert low * capture.sample_rate / fs >= filter_out
+    assert high * capture.sample_rate / fs >= filter_out
+    assert sw.isroundmod(padded * capture.sample_rate, fs)
 
 
 VALID_OVERLAP_CAPTURES = {
@@ -775,7 +731,7 @@ VALID_OVERLAP_CAPTURES = {
         'host_resample': False,
     },
     # fs_sdr 15.625 MS/s -> 15.36 MS/s designs a 6250-point FFT, larger than the
-    # filter overlap, so the block sizing works out regardless of the ceildiv order
+    # filter overlap, so one FFT is the block
     'finite_bandwidth_with_a_large_resampler_fft': {
         'sample_rate': 15.36e6,
         'analysis_bandwidth': 10e6,
@@ -792,19 +748,13 @@ def test_soapy_capture_overlaps_cover_the_filter(kws):
     _assert_valid_overlaps(_capture(**kws))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='_get_resample_overlap swaps the ceildiv arguments, so a small resampler '
-    'FFT gives a block size of one FFT rather than enough to cover the filter '
-    'overlap; the pad assertions in _get_resample_overlap/_get_resampler_overlaps '
-    'then fail for finite analysis_bandwidth with host_resample',
-)
 @pytest.mark.parametrize(
     'sample_rate, analysis_bandwidth',
     [(MCR, 40e6), (1e6, 0.5e6), (10e6, 8e6)],
 )
 def test_finite_bandwidth_with_a_small_resampler_fft(sample_rate, analysis_bandwidth):
+    """sample rates that divide the master clock design a 258- or 550-point resampler
+    FFT, smaller than the filter transient, so the block is several FFTs"""
     _assert_valid_overlaps(
         _capture(sample_rate=sample_rate, analysis_bandwidth=analysis_bandwidth)
     )
