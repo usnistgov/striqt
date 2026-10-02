@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import weakref
 from threading import Event
 
 import numpy as np
@@ -73,10 +74,34 @@ def test_reopening_an_equal_spec_closes_the_stale_controller(caplog):
         assert 'equal source spec' in warnings[0].getMessage()
         assert stale._closed
         assert not stale.is_open(wait=False)
-        assert lookup._obj[SOURCE] is live
+        assert lookup.instance(SOURCE) is live
         assert live.is_open()
         stale.close()
         assert live.is_open()
+
+
+def test_collecting_an_unreferenced_controller_closes_it_and_frees_its_slot(caplog):
+    lookup = ss.lib.controller.lookup
+    closes = []
+    ctrl = TONE.from_source_spec(SOURCE)
+    backend_close = ctrl.backend.close
+    ctrl.backend.close = lambda: (closes.append(1), backend_close())
+    ref = weakref.ref(ctrl)
+
+    del ctrl
+    # the controller survives in a reference cycle with its ReceiveBuffers until
+    # the collector runs; the registry must not be what keeps it alive
+    gc.collect()
+    assert ref() is None
+    assert closes == [1]
+    assert isinstance(lookup._get(SOURCE), Event)
+
+    with (
+        caplog.at_level(logging.WARNING, logger='striqt.source'),
+        TONE.from_source_spec(SOURCE) as live,
+    ):
+        assert live.is_open()
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
 
 
 def test_source_info_of_a_replaced_controller_is_a_connection_error():
@@ -94,7 +119,7 @@ def test_failed_setup_entry_is_cleared_for_the_next_open(monkeypatch, caplog):
     monkeypatch.setattr(TONE.sensor, 'source_cls', fail)
     with pytest.raises(RuntimeError):
         TONE.from_source_spec(SOURCE)
-    assert isinstance(lookup._obj[SOURCE], Event)
+    assert isinstance(lookup._get(SOURCE), Event)
     monkeypatch.undo()
 
     with (
