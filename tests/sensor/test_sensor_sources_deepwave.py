@@ -40,11 +40,6 @@ def test_bindings_pair_source_specs(name):
     assert ctrl.schema.capture is ss.specs.SoapyCapture
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='bindings.py binds air7201b with init_like=Air7101BSourceSpec',
-)
 def test_air7201b_init_like_matches_its_source_spec():
     assert ss.bindings.air7201b.schema.init_like is deepwave.Air7201BSourceSpec
 
