@@ -79,10 +79,7 @@ item is open.
 
 | # | Test | Confidence | Impact | Fix |
 | --- | --- | --- | --- | --- |
-| 43 | `test_finite_bandwidth_with_a_small_resampler_fft[*]` (3 parameter sets) | High | B | easy |
-| 78 | `test_lo_shift_is_removed_from_the_output[left]`, `[right]` | High | B | design |
 | 79 | `test_reused_iq_can_be_corrected_for_a_wider_analysis_filter` | High | B | design |
-| 90 | `test_upsampled_overlap_covers_the_output_rate_filter_pad` | High | B | small |
 | 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
@@ -96,7 +93,6 @@ item is open.
 | 59 | `test_probe_soapy_info_with_a_channel_sensor` | High | B (latent) | trivial |
 | 10 | `test_chained_remap_declared_before_its_key_resolves` | Medium | B | moderate |
 | 45 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]` | Medium | B | easy |
-| 80 | `test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`, `[resample_only]`; `test_oaresample_acquisition[resample_filter]`, `[resample_only]` | High | C | moderate |
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
@@ -121,56 +117,6 @@ item is open.
 
 ## Tier B: reachable from plausible YAML or a spec default
 
-### 43. `_get_resample_overlap` swaps the `ceildiv` arguments
-
-`tests/sensor/test_sensor_compute_corrections.py::test_finite_bandwidth_with_a_small_resampler_fft[*]`
-
-- **Mechanism.** `corrections.py:441` computes
-  `ceildiv(design['nfft'], filter_pad)`; the block size is meant to be the
-  smallest multiple of `nfft` that covers `filter_pad`
-  (`ceildiv(filter_pad, nfft)`). When the resampler FFT is small (a sample
-  rate that is an integer divisor of the MCR designs `nfft = 258`; 10 MS/s
-  gives 550) the block is a single FFT and either the pad assertion at
-  `corrections.py:162` or the parity assertion at `corrections.py:454` fails.
-  Large FFTs (15.36 MS/s from 125 MHz designs 6250) happen to satisfy both.
-- **Why the test is right.** `get_correction_overlaps` documents that it
-  returns the extra samples the resampler and filter consume; an assertion
-  is not a valid answer for a valid capture.
-- **Impact.** Any capture with a finite `analysis_bandwidth`,
-  `host_resample: true` (the default) and a sample rate that divides the
-  MCR. The in-tree sweeps use 107.52 MS/s and 15.36 MS/s and are unaffected;
-  `air7101b.yaml` too. Reproduced on numpy; the cupy path shares the code.
-- **Fix.** Swap the arguments. Whether the pad assertions then hold for
-  every capture still needs checking (one extra block of 2064 samples is
-  not always more than `filter_pad = 2001` after halving). Easy.
-
-### 78. `lo_shift` is never undone on the default resample path
-
-`tests/sensor/test_sensor_compute_corrections.py::test_lo_shift_is_removed_from_the_output[left]`,
-`[right]`
-
-- **Mechanism.** `design_cola_resampler` moves the tuned LO by
-  `resampler['lo_offset'] = ±(bw/2 + bw_lo/2)` so LO leakage falls outside the
-  analysis band, and `SingleToneSource` synthesizes the signal at
-  `frequency_offset + lo_offset` exactly as an SDR tuned to `fc - lo_offset`
-  would deliver it. `corrections.py:337` `_resample` calls
-  `sw.resample(x, ny, scale=...)` without `shift=`, and `_scale_only` never
-  shifts, so only the experimental `_oaresample` path (which passes
-  `frequency_shift=lo_offset`) recentres the band. Measured: a -1 MHz tone comes
-  out at +0.661 MHz for `lo_shift: right` at 7.68 MS/s / 3.072 MHz bandwidth.
-- **Why the test is right.** `test_lo_shift_design_moves_the_lo_out_of_band`
-  (passing) shows the design does displace the LO by `lo_offset`, so the
-  correction must undo it or the whole capture is off-center by
-  `bw/2 + 125 kHz`.
-- **Impact.** B. `lo_shift` is a `SensorCapture` field and a loop field in the
-  in-tree and downstream calibration YAMLs, but every production value is
-  `none`.
-- **Fix.** Pass `shift=round(lo_offset * N_in / fs_sdr)` to `sw.resample`. The
-  open question is bin alignment: `lo_offset * N_in / fs_sdr` is not an integer
-  for the designs tried (4318.6 bins here), so either `design_cola_resampler`
-  must place `lo_offset` on the padded record's bin grid or the shift must be a
-  time-domain mixer. Design decision.
-
 ### 79. `reuse_iq` under-acquires the filter overlap of a wider analysis bandwidth
 
 `tests/sensor/test_sensor_controller.py::test_reused_iq_can_be_corrected_for_a_wider_analysis_filter`
@@ -180,7 +126,7 @@ item is open.
   `reuse_iq: true` controller hands the first capture's `pre_align` to a second
   capture with a finite `analysis_bandwidth`. `get_correction_overlaps` sized
   that first acquisition for the first capture's filter (512 per side for the
-  unfiltered `SCALE_ONLY` preset, 12800 once a 5 MHz filter is requested), so
+  unfiltered `SCALE_ONLY` preset, 4608 once a 5 MHz filter is requested), so
   `correct_iq` runs out of samples and fails `assert x_pre_align.shape[axis] ==
   size_out` at `corrections.py:116`.
 - **Why the test is right.** Sharing one acquisition across analysis settings is
@@ -192,41 +138,6 @@ item is open.
   captures (needs the sweep's capture list at acquire time) or make
   `is_reusable` compare `analysis_bandwidth` (one line, but narrows reuse to
   less than the docstring promises). Design decision; medium.
-
-### 90. The resampler overlap measures the FIR pad at the wrong sample rate
-
-`tests/sensor/test_sensor_compute_corrections.py::test_upsampled_overlap_covers_the_output_rate_filter_pad`
-
-- **Mechanism.** `sensor/lib/compute/corrections.py:168`
-  `_get_resampler_overlaps` requires its FFT pad to exceed
-  `_get_filter_overlap(capture)` = `FILTER_SIZE//2 + 1`, a count of **fs_sdr**
-  samples, but `correct_iq` runs the 4001-tap FIR *after* resampling
-  (`corrections.py:93-100`), so the transient spans `FILTER_SIZE//2` samples of
-  `capture.sample_rate`. Whenever the design upsamples (`fs_sdr > sample_rate`)
-  the lead and tail overlaps are short by `sample_rate / fs_sdr`. Worked example,
-  reproduced directly: `sample_rate` 12.065 MS/s over 24977 samples with
-  `analysis_bandwidth` 6.0325 MHz gives `fs_sdr` 12.5 MS/s and overlaps
-  (2061, 2061), which buy only 1989.3 of the 2000 output samples needed, so the
-  first and last ~11 samples of the trimmed output keep FIR edge transient.
-- **Why the test is right.** The overlaps exist to absorb the filter transient
-  before the trim; `get_correction_overlaps`' own docstring describes the pad as
-  covering the analysis filter.
-- **How it was found.** By the hypothesis test
-  `test_overlaps_cover_the_filter_and_trigger_pads`, which asserts the same
-  inequality over the drawn capture domain. That test now `assume`s
-  `fs_sdr <= sample_rate` so it does not fail probabilistically; removing the
-  `assume` is how to confirm a fix over the whole domain. Hypothesis keys its
-  example database on the test's source, so editing that test discards the stored
-  counterexample and a green run does not clear this item.
-- **Impact.** B. Reachable from any YAML whose `sample_rate` is not an exact
-  submultiple of the master clock rate, together with a finite
-  `analysis_bandwidth`. None of the four synthetic presets upsamples, so the
-  suite's own captures are unaffected.
-- **Fix.** Scale the required pad to the output rate (compare against
-  `_get_filter_overlap(capture) * fs_sdr / capture.sample_rate`, or count the pad
-  in output samples throughout). Small, but it changes the acquired sample count
-  of every upsampling capture, so `DOCUMENTED_OVERLAPS` and any downstream
-  expectation of a read size move with it.
 
 ### 6. `Phy3GPP` cyclic-prefix layout is wrong at 15 kHz and 60 kHz
 
@@ -451,27 +362,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ## Tier C: Python API only, dead code, or GPU-latent
 
-### 80. `_oaresample` trims the wrong lead and cannot complete
-
-`tests/sensor/test_sensor_compute_corrections.py::test_oaresample_impulse_lands_on_its_output_sample[resample_filter]`,
-`[resample_only]`; `::test_oaresample_acquisition[resample_filter]`, `[resample_only]`
-(the end-to-end acquisition reaches the same assertion now that `read_iq` accepts
-odd overlaps)
-
-- **Mechanism.** `corrections.py:373-378` slices `offset = nfft_out` samples from
-  the front of the `sw.oaresample` output instead of the resampled lead overlap
-  that `_get_oaresample_overlaps` requested, then asserts the remainder equals
-  the capture plus its tail pad. With the requested lead it never does
-  (114744 - 32784 = 81960 versus 28392 for `RESAMPLE_ONLY`). The kernel is
-  right: the impulse sits at exactly `(lead + n0) * nfft_out / nfft` in the raw
-  `oaresample` output.
-- **Why the test is right.** Trimming must remove the lead pad the overlap design
-  asked for; the module comment already admits a "residual time offset".
-- **Impact.** C. Only under `STRIQT_USE_OARESAMPLE=1`, documented experimental.
-- **Fix.** Trim `round(lead * nfft_out / nfft)` and size the tail consistently;
-  `_get_oaresample_overlaps` and `_oaresample` must be re-derived together.
-  Moderate.
-
 ### 82. `ZarrIQSource.get_resampler` lets the design pick a rate the file cannot supply
 
 `tests/sensor/test_sensor_sources_file.py::test_zarr_resampler_pins_file_rate`
@@ -490,7 +380,7 @@ odd overlaps)
   fixes the design, but `_get_resample_overlap` (`corrections.py:430`) and
   `buffers.get_read_count` (`buffers.py:136`) derive `nfft`/`fs_sdr` from
   `design_resampler(capture, setup.master_clock_rate)` and would then disagree
-  with the backend's design (and hit item 77). `FileCapture` forbids
+  with the backend's design. `FileCapture` forbids
   `backend_sample_rate`, yet the overlap machinery has no access to the backend.
   Design decision; the xfail is kept whole so that it records that file
   resampling is broken end to end, not only the design.
