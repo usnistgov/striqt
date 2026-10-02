@@ -319,6 +319,8 @@ def retry(
                     return f(*args, **kwargs)
                 except excs as e:
                     remaining -= 1
+                    if remaining == 0:
+                        raise
                     if not notified and logger is not None:
                         etype = type(e).__qualname__
                         msg = f"caught '{etype}' on first call to '{do_retry.__name__}' - repeating the call {tries - 1} more times or until no exception is raised"
@@ -329,8 +331,6 @@ def retry(
                     exception_func(*args, **kwargs)
                     time.sleep(active_delay)
                     active_delay = active_delay * backoff
-                    if remaining == 0:
-                        raise
 
         return do_retry
 
@@ -466,9 +466,10 @@ def log_to_file(log_path: str | Path, level_name: str):
                 self.stream.write('[\n')
 
         def emit(self, record: logging.LogRecord):
-            super().emit(record)
-            if self.stream:
+            if self.stream and not self.empty:
                 self.stream.write(',\n')
+            self.empty = False
+            super().emit(record)
 
         def close(self):
             if self.stream:

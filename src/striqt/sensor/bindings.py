@@ -146,7 +146,7 @@ air7201b = bind_sensor(
     Sensor(source_cls=sources.deepwave.Airstack1Source),
     Schema(
         source=sources.deepwave.Air7201BSourceSpec,
-        init_like=sources.deepwave.Air7101BSourceSpec,
+        init_like=sources.deepwave.Air7201BSourceSpec,
         capture=specs.SoapyCapture,
         arm_like=specs.SoapyCapture,
         peripherals=specs.NoPeripherals,

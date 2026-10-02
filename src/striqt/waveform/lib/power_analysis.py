@@ -554,6 +554,9 @@ def iq_to_bin_power(
 
     xp = array_namespace(iq)
 
+    if axis < 0:
+        axis = iq.ndim + axis
+
     if truncate or isroundmod(Tbin, Ts):
         N = round(Tbin / Ts)
     else:
@@ -650,6 +653,9 @@ def iq_to_cyclic_power(
     # apply the detector statistic
     xp = array_namespace(x)
 
+    if axis < 0:
+        axis = x.ndim + axis
+
     # compute the binned power ourselves
     if detectors is None:
         raise ValueError(
@@ -667,9 +673,6 @@ def iq_to_cyclic_power(
         raise ValueError(
             'cyclic period must be positive integer multiple of the detector period'
         )
-
-    if axis < 0:
-        axis = x.ndim + axis
 
     power_shape = power[detectors[0]].shape
 

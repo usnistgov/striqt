@@ -339,15 +339,6 @@ def test_mat_loop_repeats_file(mat_files):
     np.testing.assert_array_equal(to_numpy(corrected.pre_align), expected)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason=(
-        'MATSource.get_waveform returns every row of the file regardless of `port`, '
-        'so VirtualSource.read cannot assign the (rows, count) result into one '
-        'port buffer'
-    ),
-)
 def test_mat_two_port(mat_files):
     """a two-row file supplies ports 0 and 1 from rows 0 and 1"""
     capture = file_capture()

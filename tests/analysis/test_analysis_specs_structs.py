@@ -105,29 +105,16 @@ class TestCapture:
     def test_tolerance_is_one_microsample(self):
         Capture(duration=(1000 + 1e-7) / 1e6, sample_rate=1e6)
 
-    def test_nan_sample_rate_gives_sample_period_message(self):
-        raises_on_both_paths(
-            Capture, ValueError, PERIOD_MSG, duration=1e-3, sample_rate=math.nan
-        )
+    def test_nan_sample_rate_is_rejected_on_both_paths(self):
+        with pytest.raises(ValueError, match=PERIOD_MSG):
+            Capture(duration=1e-3, sample_rate=math.nan)
+        with pytest.raises(msgspec.ValidationError, match='sample_rate'):
+            Capture.from_dict({'duration': 1e-3, 'sample_rate': math.nan})
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            'math.remainder(inf, 1) raises "math domain error" inside util.isroundmod '
-            'before Capture can report its own message'
-        ),
-    )
     def test_infinite_sample_rate_reports_sample_period_message(self):
         with pytest.raises(ValueError, match=PERIOD_MSG):
             Capture(duration=1e-3, sample_rate=math.inf)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            'types.SampleRate (analysis/specs/types.py:69) carries no gt=0 bound, '
-            'unlike the sensor BackendSampleRate, so a negative rate converts'
-        ),
-    )
     def test_negative_sample_rate_is_rejected_on_convert(self):
         with pytest.raises(msgspec.ValidationError, match='sample_rate'):
             Capture.from_dict({'duration': 1e-3, 'sample_rate': -1e6})
@@ -205,13 +192,6 @@ class TestCellularCyclicAutocorrelator:
             symbol_range=(1, None),
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            '_validate_range (analysis/specs/structs.py:270) returns before the '
-            'end >= start check when start is 0, so (0, -5) becomes an empty range'
-        ),
-    )
     @pytest.mark.parametrize('field', ['frame_range', 'symbol_range'])
     def test_descending_range_from_zero_rejected(self, field):
         raises_on_both_paths(

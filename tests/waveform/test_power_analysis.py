@@ -763,11 +763,6 @@ class TestIqToBinPower:
         with pytest.raises(ValueError, match='axis=0'):
             iq_to_bin_power(iq, 1.0, 4.0, randomize=True, axis=1)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='iq_to_bin_power applies the detector on axis+1 without normalizing '
-        'a negative axis first',
-    )
     def test_negative_axis(self):
         iq = np.random.default_rng(0).normal(size=(2, 32)).astype(np.complex64)
         assert_array_equal(
@@ -954,12 +949,6 @@ class TestIqToCyclicPower:
         result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0)
         assert result['rms']['mean'].shape == (4,)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='iq_to_cyclic_power(axis=-1) fails upstream in iq_to_bin_power, which '
-        'applies its detector on axis+1 == 0 and so reduces the channel axis (see '
-        'TestIqToBinPower.test_negative_axis)',
-    )
     def test_negative_axis(self):
         iq = np.random.default_rng(0).normal(size=(2, 64)).astype(np.complex64)
         expected = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, axis=1)
