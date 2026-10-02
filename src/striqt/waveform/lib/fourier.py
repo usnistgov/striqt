@@ -354,7 +354,7 @@ def _truncated_buffer(x: Array, shape, dtype=None):
         x = x.view(dtype)
     out_size = np.prod(shape)
     assert x.size >= out_size
-    return x.flatten()[:out_size].reshape(shape)
+    return x.ravel()[:out_size].reshape(shape)
 
 
 # %% FFTs

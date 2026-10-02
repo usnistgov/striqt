@@ -27,7 +27,7 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
+fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25 to 27, 29, 35 to 37, 40, 42, 47,
 51, 60, 61, 66, 72, and 74 to 76); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
@@ -238,7 +238,6 @@ item is open.
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
 | 55 | `TestHardwareTimeSync::test_call_returns_the_sync_time` | High | C | trivial |
 | 57 | `TestRxStreamRead::test_read_without_an_enable_delay` | High | C | trivial |
-| 27 | `TestIstft::test_out_buffer_is_used`; `test_downsample_stft_writes_into_out` | High | C | easy |
 | 28 | `test_oafilter_downsample_preserves_level` | High | C | easy |
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
 | 31 | `TestIqToBinPower.test_negative_axis` | Medium | C | trivial |
@@ -992,21 +991,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Every in-tree spec sets a float. A subclass that opts out of
   the delayed start cannot read.
 - **Fix.** `(self.source_spec.rx_enable_delay or 0)`. Trivial.
-
-### 27. `istft` and `downsample_stft` never write into `out`
-
-`tests/waveform/test_fourier.py::TestIstft::test_out_buffer_is_used`;
-`TestStftFrequencyEditing::test_downsample_stft_writes_into_out`
-
-- **Mechanism.** `_truncated_buffer` (`fourier.py:185`) uses
-  `ndarray.flatten()`, which always copies.
-- **Why the test is right.** `_unstack_stft_windows` documents `out` as the
-  array that receives the result, and `downsample_stft` has a fast path that
-  returns a view of `y` when no zeroing is needed.
-- **Impact.** Nothing on the production path passes `out=` to `istft`;
-  `oafilter` passes `out=y` to `downsample_stft` only when `nfft_out != nfft`,
-  which no production caller does. The `out=` API is inert, not harmful.
-- **Fix.** `reshape(-1)` on a contiguous buffer, with a fallback. Easy.
 
 ### 28. `oafilter` with `nfft_out != nfft` scales the level by `nfft / nfft_out`
 

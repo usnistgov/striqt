@@ -675,10 +675,6 @@ class TestIstft:
         y = fourier.istft(X, size, nfft=nfft, noverlap=nfft // 2)
         assert y.shape == (size,)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='_truncated_buffer flattens (copies) `out`, so istft never writes into it',
-    )
     def test_out_buffer_is_used(self):
         nfft = self.NFFT
         x = np.ones(8 * nfft, dtype=np.complex64)
@@ -796,12 +792,6 @@ class TestStftFrequencyEditing:
         assert Yo.shape == (self.NSEG, nfft_out)
         assert_array_equal(Yo, expected)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason='_truncated_buffer flattens `out` with ndarray.flatten(), which '
-        'copies, so downsample_stft allocates a new array instead of writing '
-        'into the buffer it was given',
-    )
     def test_downsample_stft_writes_into_out(self):
         freqs, Y = self._stft(1.0)
         out = np.empty_like(Y)
