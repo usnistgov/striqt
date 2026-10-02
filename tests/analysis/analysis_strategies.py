@@ -71,10 +71,7 @@ range_starts = st.integers(min_value=0, max_value=50)
 @st.composite
 def valid_frame_ranges(draw):
     start = draw(range_starts)
-    if start > 0:
-        stop = draw(st.integers(min_value=start, max_value=60))
-    else:
-        stop = draw(st.integers(min_value=-5, max_value=60))
+    stop = draw(st.integers(min_value=start, max_value=60))
     return (start, stop)
 
 
@@ -82,7 +79,7 @@ def valid_frame_ranges(draw):
 def valid_symbol_ranges(draw):
     start = draw(range_starts)
     if start == 0:
-        stop = draw(st.one_of(st.none(), st.integers(min_value=-5, max_value=60)))
+        stop = draw(st.one_of(st.none(), st.integers(min_value=0, max_value=60)))
     else:
         stop = draw(st.integers(min_value=start, max_value=60))
     return (start, stop)

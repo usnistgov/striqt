@@ -27,8 +27,8 @@ sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
 xfail so that the `ty` upgrade that closes it surfaces as an xpass. The
 numbers are stable identifiers, so the gaps mark items that have since been
-fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25, 26, 29, 35 to 37, 40, 42, 47,
-51, 60, 61, 72, 74 to 76, and 85); their write-ups are in the git history of this file. Items
+fixed or withdrawn (1 to 5, 7, 11, 12, 15, 21, 25 to 29, 35 to 37, 40, 42, 47,
+51, 60, 61, 64, 66, 69, 72, 74 to 76, 85, and 87); their write-ups are in the git history of this file. Items
 are listed in priority order, not numeric order.
 
 Suite state on 2026-09-22, after the pass that consolidated the duplication this
@@ -200,7 +200,6 @@ item is open.
 | 78 | `test_lo_shift_is_removed_from_the_output[left]`, `[right]` | High | B | design |
 | 79 | `test_reused_iq_can_be_corrected_for_a_wider_analysis_filter` | High | B | design |
 | 90 | `test_upsampled_overlap_covers_the_output_rate_filter_pad` | High | B | small |
-| 66 | `test_zero_stft_by_freq_zeroes_outside_passband[off_grid]`; `test_downsample_stft_passband_zeroing[off_grid]` | High | B | easy |
 | 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
@@ -224,22 +223,17 @@ item is open.
 | 83 | `test_mat_two_port` | High | C | easy |
 | 84 | `test_mat_request_past_end` | High | C | easy |
 | 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
-| 87 | `test_from_delayed_accepts_the_acquisition_info_defaults` | High | C | trivial |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
 | 53 | `test_capture_changes_port` | High | C | easy |
 | 54 | `TestSoapySourceSetup::test_initial_ports_on_a_non_stream_all_source` | High | C | trivial |
-| 68 | `test_split_rejects_a_tuple_field_shorter_than_port`; `test_pairwise_rejects_different_port_counts` | High | C | easy |
 | 70 | `TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports` | High | C | easy |
 | 20 | `test_list_port_direct_is_frozen`; `test_var_tuple_list_is_frozen_on_direct_construction`; `test_freeze_depths_count_dict_list_and_tuple_nesting`; `test_freeze_depths_of_real_specs`; `test_direct_struct_with_list_validates_and_replaces` | High | C | trivial |
-| 63 | `test_negative_sample_rate_is_rejected_on_convert` | High | C | trivial |
 | 64 | `test_descending_range_from_zero_rejected[frame_range]`, `[symbol_range]` | High | C | trivial |
 | 22 | `test_analysis_group_accepted` | High | C | moderate |
 | 24 | `test_recurses_into_frozendict` | High | C | trivial |
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
 | 55 | `TestHardwareTimeSync::test_call_returns_the_sync_time` | High | C | trivial |
 | 57 | `TestRxStreamRead::test_read_without_an_enable_delay` | High | C | trivial |
-| 27 | `TestIstft::test_out_buffer_is_used`; `test_downsample_stft_writes_into_out` | High | C | easy |
-| 28 | `test_oafilter_downsample_preserves_level` | High | C | easy |
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
 | 31 | `TestIqToBinPower.test_negative_axis` | Medium | C | trivial |
 | 34 | `TestIqToCyclicPower.test_negative_axis` | Medium | C | easy |
@@ -254,7 +248,6 @@ item is open.
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
 | 39 | `test_calibration_capture_class_has_a_descriptive_name` | High | D | trivial |
 | 50 | `test_air7201b_init_like_matches_its_source_spec` | High | D | trivial |
-| 69 | `test_capture_type_of_an_unbound_sweep` | High | D | easy |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
 ## Tier B: reachable from plausible YAML or a spec default
@@ -391,21 +384,6 @@ item is open.
   in output samples throughout). Small, but it changes the acquired sample count
   of every upsampling capture, so `DOCUMENTED_OVERLAPS` and any downstream
   expectation of a read size move with it.
-
-### 66. `_freq_band_edges` drops the last in-band bin for an off-grid cutoff
-
-`tests/waveform/test_fourier.py::TestStftFrequencyEditing::test_zero_stft_by_freq_zeroes_outside_passband[off_grid]`,
-`test_downsample_stft_passband_zeroing[off_grid]`
-
-- **Mechanism.** `fourier.py:446` takes the index of the last bin
-  `<= cutoff_hi` as the exclusive stop of the passband, so a cutoff between
-  bins zeroes a bin that lies inside the passband.
-- **Why the test is right.** The on-grid cases pass, and the half-open
-  `[lo, hi)` contract in CLAUDE.md is only true on-grid. The caller
-  `analysis/lib/source.py:83` passes spec-derived passbands that need not
-  fall on the grid.
-- **Fix.** Use `searchsorted(freqs, cutoff_hi)` (or `+ 1`) for the stop.
-  Easy.
 
 ### 6. `Phy3GPP` cyclic-prefix layout is wrong at 15 kHz and 60 kHz
 
@@ -789,19 +767,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
 - **Impact.** C. Only the string form works, which is what every YAML uses.
 - **Fix.** Annotate with `BundledTriggers`. Easy, but a schema change.
 
-### 87. `from_delayed` rejects the `AcquisitionInfo` default `sweep_index=None`
-
-`tests/sensor/test_sensor_compute_datasets.py::test_from_delayed_accepts_the_acquisition_info_defaults`
-
-- **Mechanism.** `datasets.py:194` writes `AcquisitionInfo.sweep_index` (default
-  `None`, typed `Union[int, None]`) into the `int` template that
-  `_coords_template` derives, raising `TypeError`. Only `iterate_sweep`'s
-  `_AcquisitionIndexer` ever sets it, so `compute.analyze` on a bare
-  `Controller.acquire()` result cannot be packaged.
-- **Impact.** C (Python API).
-- **Fix.** Default `sweep_index: int = 0`, or coerce `None` in
-  `build_capture_coords`. One line once decided.
-
 ### 88. An analysis loop over an un-inferable field breaks `from_delayed`
 
 `tests/sensor/test_sensor_compute_datasets.py::test_build_capture_coords_adds_a_window_loop_coordinate`
@@ -852,27 +817,14 @@ tables draw their marks from the module's `scs_cp_layout` builder
   spec. `Controller.from_sweep_spec` always passes `init_rx_ports`.
 - **Fix.** `self.rx_stream.setup(self.device, rx_ports)`. Trivial.
 
-### 68. Ragged per-port tuples are truncated or copied instead of rejected
-
-`tests/sensor/test_sensor_specs_captures.py::test_split_rejects_a_tuple_field_shorter_than_port`,
-`::test_pairwise_rejects_different_port_counts`
-
-- **Mechanism.** `split_capture_ports` zips each tuple field against `port`,
-  so a tuple shorter than `port` is copied whole onto the extra ports;
-  `pairwise_by_port` zips two split lists and truncates to the shorter.
-- **Why the test is right.** Nothing in the specs or docs sanctions ragged
-  tuples; both outcomes silently mis-assign per-port values.
-- **Impact.** The capture validators reject mismatched `gain` tuples, so only
-  fields without a length check (item 70) and hand-built captures reach it.
-- **Fix.** Raise `ValueError` on a length mismatch in both helpers. Easy.
-
 ### 70. `SoapyCapture` does not check the `center_frequency` tuple length
 
 `tests/sensor/test_sensor_specs_structs.py::TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports`
 
 - **Mechanism.** Only `gain` is validated against the port count; a
-  `center_frequency` tuple of the wrong length is accepted and
-  `split_capture_ports` then drops the extras (item 68).
+  `center_frequency` tuple of the wrong length is accepted and only
+  `split_capture_ports` rejects it, with a `ValueError` at run time rather
+  than at spec validation.
 - **Fix.** Extend `_validate_multichannel` to every per-port tuple field.
   Easy.
 
@@ -899,19 +851,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   hand-built specs hit it.
 - **Fix.** Add the `VarTupleType` branch. Trivial, but it also changes which
   fields `to_dict(unfreeze=True)` emits as lists in zarr attrs.
-
-### 63. `types.SampleRate` accepts a negative value
-
-`tests/analysis/test_analysis_specs_structs.py::TestCapture::test_negative_sample_rate_is_rejected_on_convert`
-
-- **Mechanism.** `analysis/specs/types.py:69` carries no `gt=0` bound, unlike
-  the sensor's `BackendSampleRate`, so `-1e6` converts.
-- **Why the test is right.** Every consumer does `round(duration * sample_rate)`
-  and a negative rate yields a negative sample count. Asserted on the convert
-  path only, because `Meta` bounds are never checked on direct construction.
-- **Impact.** Sensor sweeps decode through `BackendSampleRate`, which has the
-  bound; only analysis-level specs built directly are open.
-- **Fix.** Add `gt=0`. Trivial.
 
 ### 64. `_validate_range` skips the order check when the start is 0
 
@@ -992,35 +931,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Every in-tree spec sets a float. A subclass that opts out of
   the delayed start cannot read.
 - **Fix.** `(self.source_spec.rx_enable_delay or 0)`. Trivial.
-
-### 27. `istft` and `downsample_stft` never write into `out`
-
-`tests/waveform/test_fourier.py::TestIstft::test_out_buffer_is_used`;
-`TestStftFrequencyEditing::test_downsample_stft_writes_into_out`
-
-- **Mechanism.** `_truncated_buffer` (`fourier.py:185`) uses
-  `ndarray.flatten()`, which always copies.
-- **Why the test is right.** `_unstack_stft_windows` documents `out` as the
-  array that receives the result, and `downsample_stft` has a fast path that
-  returns a view of `y` when no zeroing is needed.
-- **Impact.** Nothing on the production path passes `out=` to `istft`;
-  `oafilter` passes `out=y` to `downsample_stft` only when `nfft_out != nfft`,
-  which no production caller does. The `out=` API is inert, not harmful.
-- **Fix.** `reshape(-1)` on a contiguous buffer, with a fallback. Easy.
-
-### 28. `oafilter` with `nfft_out != nfft` scales the level by `nfft / nfft_out`
-
-`tests/waveform/test_fourier.py::TestOverlapAddFilters::test_oafilter_downsample_preserves_level`
-
-- **Mechanism.** The STFT is normalized for `nfft`-point frames and the
-  inverse reconstructs `nfft_out`-point frames (`fourier.py:882-923`).
-  Measured gain is 1, 2, 4 for `nfft_out` of 256, 128, 64, so the xfail
-  reason's "doubles" is the special case of a 2:1 ratio.
-- **Why the test is right.** `oaresample` (`fourier.py:1540`) rescales by the
-  size ratio explicitly, showing the intended convention.
-- **Impact.** No caller passes `nfft_out != nfft`; `oaresample` is a separate
-  implementation and `correct_iq` uses `resample`. Unreachable.
-- **Fix.** Multiply by `nfft_out / nfft`. Easy.
 
 ### 23. A second extensions directory with the same module name is never imported
 
@@ -1181,17 +1091,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   type-hinting only, so the wrong class affects editor hints for the
   `air7201b` controller and nothing at run time.
 - **Fix.** Name change. Trivial.
-
-### 69. `get_capture_type` returns the TypeVar for an unbound `Sweep` subclass
-
-`tests/sensor/test_sensor_specs_captures.py::test_capture_type_of_an_unbound_sweep`
-
-- **Mechanism.** The unbound branch uses `get_type_hints`, which does not
-  substitute the generic parameters of
-  `class X(Sweep[FunctionSource, NoPeripherals, SingleToneCapture])`, so the
-  bare `SC` TypeVar is returned.
-- **Impact.** Every in-tree caller passes a bound sweep.
-- **Fix.** Read `__orig_bases__` for the parametrized base. Easy.
 
 ## Tool limitations
 
