@@ -847,7 +847,7 @@ def choose_ssb_offset(
     in order to reduce mis-alignment errors in measurements of aggregate interference.
 
     The underlying heuristic is a triangular weighting function to include energy
-    within +/- 1/4 symbol of each peak. Outside of this range, spectrogram errors
+    within +/- `window_fill/2` symbols of each peak. Outside of this range, spectrogram errors
     due to "ISI" begin to increase quickly.
 
     Args:
