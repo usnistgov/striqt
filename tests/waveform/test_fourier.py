@@ -358,6 +358,7 @@ class TestFrequencySlicing:
         assert fourier._freq_band_edges(64, 1.0, None, None) == (None, None)
 
         ilo, ihi = fourier._freq_band_edges(64, 1.0, -0.25, 0.25)
+        assert isinstance(ilo, int) and isinstance(ihi, int)
         assert ilo == np.searchsorted(freqs, -0.25)
         assert freqs[ilo] >= -0.25 and freqs[ilo - 1] < -0.25
         assert freqs[ihi] <= 0.25 and freqs[ihi + 1] > 0.25
