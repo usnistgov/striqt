@@ -6,7 +6,7 @@ import typing
 from math import inf, isfinite
 from os import cpu_count
 
-from . import power_analysis, util
+from . import power, util
 from .util import np, scipy
 
 from .arrays import (
@@ -885,9 +885,9 @@ def spectrogram(
     ret = stft(norm='power', **dict(locals()))
     if return_axis_arrays:
         freqs, times, X = ret
-        return freqs, times, power_analysis.envtopow(X)
+        return freqs, times, power.envtopow(X)
     else:
-        return power_analysis.envtopow(ret)
+        return power.envtopow(ret)
 
 
 def _stack_stft_windows(

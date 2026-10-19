@@ -1,4 +1,4 @@
-from .lib.power_analysis import (
+from .lib.power import (
     bin_power_rms,
     bin_power_rtol,
     dB_tolerance,

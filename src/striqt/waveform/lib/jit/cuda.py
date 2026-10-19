@@ -2,7 +2,6 @@
 
 import math
 import numba.cuda
-import cupy
 import numba as nb
 
 
@@ -43,39 +42,3 @@ def _corr_at_indices(inds, x, nfft: int, ncp: int, norm: bool, out):
             accum_corr /= inds.shape[0]
 
         out[j] = accum_corr
-
-
-@cupy.fuse()
-def envtopow(x, out):
-    out[:] = cupy.abs(x) ** 2
-    return out
-
-
-@cupy.fuse()
-def lin_to_dB(x, out, scale_ln):
-    out[:] = scale_ln * cupy.log(cupy.abs(x))
-    return out
-
-
-@cupy.fuse()
-def lin_to_dB_noabs(x, out, scale_ln):
-    out[:] = scale_ln * cupy.log(x)
-    return out
-
-
-@cupy.fuse()
-def lin_to_dB_eps(x, out, scale_ln, eps):
-    out[:] = scale_ln * cupy.log(cupy.abs(x) + eps)
-    return out
-
-
-@cupy.fuse()
-def lin_to_dB_eps_noabs(x, out, scale_ln, eps):
-    out[:] = scale_ln * cupy.log(x + eps)
-    return out
-
-
-@cupy.fuse()
-def dBtopow(x: cupy.ndarray, out: cupy.ndarray) -> cupy.ndarray:
-    out[:] = cupy.power(10.0, x / 10)
-    return out
