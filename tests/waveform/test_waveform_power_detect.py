@@ -26,7 +26,7 @@ from numeric_checks import (
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib.arrays import accum_rtol, float_dtype_like
-from striqt.waveform.lib.fourier import peak_factor
+from striqt.waveform.fourier import peak_factor
 from striqt.waveform.lib.power import (
     bin_power_rms,
     bin_power_rtol,

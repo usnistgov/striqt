@@ -28,16 +28,16 @@ def sync_params(
     capture: specs.AnalysisCapture,
     spec: _Cellular5GNRSSBCorrelator,
     kind: Literal['pss', 'sss'],
-) -> sw.ofdm.SyncParams:
+) -> sw.comms_5gnr.SyncParams:
     """return the 3GPP sync layout implied by `spec` for the `kind` of sync signal.
 
-    `kind` selects `sw.ofdm.pss_params` or `sw.ofdm.sss_params`, which resolve the SSB
+    `kind` selects `sw.comms_5gnr.pss_params` or `sw.comms_5gnr.sss_params`, which resolve the SSB
     case (3GPP TS 38.213 §4.1) from `capture.center_frequency`.
     """
     if kind == 'pss':
-        build = sw.ofdm.pss_params
+        build = sw.comms_5gnr.pss_params
     else:
-        build = sw.ofdm.sss_params
+        build = sw.comms_5gnr.sss_params
 
     return build(
         sample_rate=spec.sample_rate,
@@ -131,8 +131,8 @@ _SSB_CORRELATION_COORDS = [
 )
 def validated_5g_ssb_sync_params(
     capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator
-) -> sw.ofdm.SyncParams:
-    """check the SSB correlator sizing of a capture and return its `sw.ofdm.SyncParams`.
+) -> sw.comms_5gnr.SyncParams:
+    """check the SSB correlator sizing of a capture and return its `sw.comms_5gnr.SyncParams`.
 
     The parameters come from `sss_params`, the stricter of the two builders, which
     reaches every check in `pss_params`; one validator therefore serves the PSS and SSS
@@ -173,7 +173,7 @@ def validated_5g_ssb_sync_params(
         ) from ex
 
     try:
-        sw.ofdm.sync_frame_count(size_out, params)
+        sw.comms_5gnr.sync_frame_count(size_out, params)
     except ValueError as ex:
         raise ValueError(
             f'duration must hold whole 10 ms frames for the correlator: {ex} '
@@ -212,7 +212,7 @@ def get_5g_ssb_iq(
         shape (port, sample) at `spec.sample_rate`, in the array namespace of `iq`
     """
 
-    return sw.ofdm.get_5g_ssb_iq(
+    return sw.comms_5gnr.get_5g_ssb_iq(
         iq,
         discovery_periodicity=spec.discovery_periodicity,
         fs_out=spec.sample_rate,
@@ -259,9 +259,9 @@ def correlate_5g_pss(
     ssb_iq = get_5g_ssb_iq(iq, capture=capture, spec=spec)
 
     params = sync_params(capture, spec, 'pss')
-    pss_seq = sw.ofdm.pss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
+    pss_seq = sw.comms_5gnr.pss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
-    return sw.ofdm.correlate_sync_sequence(
+    return sw.comms_5gnr.correlate_sync_sequence(
         ssb_iq, pss_seq, params=params, cell_id_split=1
     )
 
@@ -282,7 +282,7 @@ def choose_pss_sync_offsets(
 
     r = correlate_5g_pss(iq, capture=capture, spec=corr_spec)
     params = sync_params(capture, spec, 'pss')
-    return sw.ofdm.choose_ssb_offset(
+    return sw.comms_5gnr.choose_ssb_offset(
         r,
         params,
         max_beams=spec.max_beams,
@@ -309,7 +309,7 @@ def cellular_5g_pss_sync(
     """return the start-of-waveform delay (in s) detected from the PSS correlation.
 
     The PSS correlation of `cellular_5g_pss_correlation` is reduced by
-    `sw.ofdm.choose_ssb_offset` to one lag per port, or to one lag across the ports
+    `sw.comms_5gnr.choose_ssb_offset` to one lag per port, or to one lag across the ports
     when `per_port` is False, and offset by `delay`. The result is registered as a
     `signal_trigger`, so a source spec can use it to align captures.
 
@@ -381,9 +381,9 @@ def correlate_5g_sss(
     ssb_iq = get_5g_ssb_iq(iq, capture=capture, spec=spec)
 
     params = sync_params(capture, spec, 'sss')
-    sss_seq = sw.ofdm.sss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
+    sss_seq = sw.comms_5gnr.sss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
-    return sw.ofdm.correlate_sync_sequence(
+    return sw.comms_5gnr.correlate_sync_sequence(
         ssb_iq, sss_seq, params=params, cell_id_split=None
     )
 
@@ -404,7 +404,7 @@ def choose_sss_sync_offsets(
 
     r = correlate_5g_sss(iq, capture=capture, spec=corr_spec)
     params = sync_params(capture, spec, 'sss')
-    return sw.ofdm.choose_ssb_offset(
+    return sw.comms_5gnr.choose_ssb_offset(
         r,
         params,
         max_beams=spec.max_beams,
@@ -431,7 +431,7 @@ def cellular_5g_sss_sync(
     """return the start-of-waveform delay (in s) detected from the SSS correlation.
 
     The SSS correlation of `cellular_5g_sss_correlation` is reduced by
-    `sw.ofdm.choose_ssb_offset` to one lag per port, or to one lag across the ports
+    `sw.comms_5gnr.choose_ssb_offset` to one lag per port, or to one lag across the ports
     when `per_port` is False, and offset by `delay`. The result is registered as a
     `signal_trigger`, so a source spec can use it to align captures.
 
@@ -606,7 +606,7 @@ def _burst_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
 
 def _discovery_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
     # TODO: this is normal CP; support extended CP?
-    symbol_period = sw.ofdm.slot_period(spec.subcarrier_spacing) / 14
+    symbol_period = sw.comms_5gnr.slot_period(spec.subcarrier_spacing) / 14
     discovery_symbols = round(spec.discovery_periodicity / symbol_period)
     if discovery_symbols < 1:
         raise ValueError(
@@ -855,7 +855,7 @@ def _get_phy_mapping(
     subcarrier_spacings: float | tuple[float, ...],
     generation: typing.Literal['4G', '5G'] = '4G',
     xp=np,
-) -> dict[float, sw.ofdm.Phy3GPP]:
+) -> dict[float, sw.comms_5gnr.Phy3GPP]:
     seq = (
         subcarrier_spacings
         if isinstance(subcarrier_spacings, tuple)
@@ -865,7 +865,7 @@ def _get_phy_mapping(
     phy = {}
 
     for scs in seq:
-        phy[scs] = sw.ofdm.get_3gpp_phy(
+        phy[scs] = sw.comms_5gnr.get_3gpp_phy(
             subcarrier_spacing=scs,
             channel_bandwidth=channel_bandwidth,
             generation=generation,
@@ -987,7 +987,7 @@ def validated_autocorrelation_lag_count(
 
     symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')
     if symbol_range != 'all':
-        symbols_per_slot = sw.ofdm.Phy3GPP.FFT_PER_SLOT
+        symbols_per_slot = sw.comms_5gnr.Phy3GPP.FFT_PER_SLOT
         if len(symbol_range) == 0:
             raise ValueError(
                 'symbol_range must select at least one symbol '
@@ -1055,7 +1055,9 @@ def cellular_cyclic_autocorrelation(
     frame_range = _get_spec_range(spec.frame_range, 'frame_range')
     symbol_range = _get_spec_range(spec.symbol_range, 'symbol_range')
 
-    def corr_for_slots(phy: sw.ofdm.Phy3GPP, x: Array, slots: tuple[int, ...]) -> Array:
+    def corr_for_slots(
+        phy: sw.comms_5gnr.Phy3GPP, x: Array, slots: tuple[int, ...]
+    ) -> Array:
         cp_inds = phy.index_cyclic_prefix(
             frames=frame_range, symbols=symbol_range, slots=slots
         )
@@ -1065,7 +1067,7 @@ def cellular_cyclic_autocorrelation(
                 f'cyclic prefix index {int(cp_inds.max())} lies past the '
                 f'{x.shape[-1]} samples of the waveform'
             )
-        return sw.ofdm.corr_at_indices(cp_inds, x, phy.nfft, norm=False)
+        return sw.comms_5gnr.correlate_cyclic_shift(cp_inds, x, phy.nfft, norm=False)
 
     max_len = _get_max_corr_size(
         capture, subcarrier_spacings=scs, generation=spec.generation
@@ -1346,7 +1348,7 @@ def validated_resource_grid_sizing(
     spg_spec = _resource_grid_spectrogram_spec(spec)
     sizing = spectrum.validated_spectrogram_sizing(capture, spg_spec)
 
-    slot_period = sw.ofdm.slot_period(spec.subcarrier_spacing)
+    slot_period = sw.comms_5gnr.slot_period(spec.subcarrier_spacing)
     if not spec.average_slots:
         time_bin_averaging = None
     elif sw.isroundmod(slot_period, sizing.hop_period):

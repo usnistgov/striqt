@@ -1,7 +1,8 @@
 """striqt.analysis.measurements.cellular: the 5G NR synchronization, cyclic prefix and
 resource grid measurements.
 
-`tests/waveform/test_waveform_ofdm.py` proves the correlators and the cyclic prefix
+`tests/waveform/test_waveform_comms_sync_5gnr.py` and
+`tests/waveform/test_waveform_comms_cp.py` prove the correlators and the cyclic prefix
 kernel numerically; these tests cover the (capture, spec) validation the measurement
 layer adds, and the coordinates and levels of the spectrogram products. Two frames at
 3.84 MS/s is the smallest capture at which a 30 kHz cell search (case C, 3GPP TS 38.213
@@ -307,7 +308,8 @@ class TestCellular5GSSBSpectrogram:
             ),
             (
                 # half a burst set (one slot) past the discovery period
-                SSB_SPECTROGRAM_PERIODICITY + sw.ofdm.slot_period(SSB_SPECTROGRAM_SCS),
+                SSB_SPECTROGRAM_PERIODICITY
+                + sw.comms_5gnr.slot_period(SSB_SPECTROGRAM_SCS),
                 {},
                 'duration must end on a whole discovery_periodicity or after a complete burst set of 56 symbols',
             ),

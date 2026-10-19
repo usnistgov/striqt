@@ -11,7 +11,7 @@ import numpy as np
 
 @click.command()
 def cli() -> None:
-    """warm the numba JIT caches of the CPU and CUDA `corr_at_indices` kernels.
+    """warm the numba JIT caches of the CPU and CUDA `_corr_at_indices` kernels.
 
     The CPU kernel is compiled for complex64 input. The CUDA kernel is compiled when
     `cupy` imports; any failure there is echoed and skipped rather than raised.
@@ -19,7 +19,7 @@ def cli() -> None:
     """
     import striqt.waveform.lib.jit  # noqa: F401  triggers NUMBA_CACHE_DIR setup + stamp patch
 
-    from striqt.waveform.lib.jit.cpu import _corr_at_indices
+    from striqt.waveform.lib.comms.cp_cpu_jit import _corr_at_indices
 
     nfft, ncp = 64, 16
     inds = np.arange(4, dtype=np.int64)
@@ -33,7 +33,8 @@ def cli() -> None:
 
     try:
         import cupy as cp  # ty: ignore[unresolved-import]
-        from striqt.waveform.lib.jit.cuda import _corr_at_indices as _cuda_corr
+
+        from striqt.waveform.lib.comms.cp_cuda_jit import _corr_at_indices as _cuda_corr
 
         x_gpu = cp.zeros(nfft + ncp + 128, dtype=np.complex64)
         inds_gpu = cp.asarray(inds)

@@ -118,20 +118,20 @@ item is open.
 
 ### 6. `Phy3GPP` cyclic-prefix layout is wrong at 15 kHz and 60 kHz
 
-`tests/waveform/test_waveform_ofdm.py::TestPhy3GPP::test_subframe_cp_layout[15kHz]`,
+`tests/waveform/test_waveform_comms_phy_3gpp.py::TestPhy3GPP::test_subframe_cp_layout[15kHz]`,
 `[60kHz]` (added 2026-09-16: tiles `cp_sizes` over a 1 ms subframe and
 asserts the TS 38.211 5.3.1 rule directly);
-`tests/waveform/test_waveform_ofdm.py::TestPhy3GPP::test_slots_tile_the_frame[15kHz]`,
+`tests/waveform/test_waveform_comms_phy_3gpp.py::TestPhy3GPP::test_slots_tile_the_frame[15kHz]`,
 `[60kHz]`, and `test_lte_and_5g_agree_at_15khz[*]` (5 sample rates); both
 tables draw their marks from the module's `scs_cp_layout` builder
 
-- **Mechanism.** `ofdm.py:1058` adds the extra `16κ` CP samples once per 14
+- **Mechanism.** `comms/phy_3gpp.py:176` adds the extra `16κ` CP samples once per 14
   symbols. TS 38.211 §5.3.1 adds them at `l = 0` and `l = 7·2^μ` of each 1 ms
   subframe: twice per slot at 15 kHz, once per slot at 30 kHz, once every
-  other slot at 60 kHz. `contiguous_size` (`ofdm.py:880`) and the slot grid
-  `contiguous_size * slot` (`ofdm.py:954`) inherit the error, while
-  `frame_size` (`ofdm.py:943`) is computed correctly from the sample rate. The
-  library's own `LTE_MIN_CP_SIZES` table (`ofdm.py:1016`) has the two long CPs
+  other slot at 60 kHz. `contiguous_size` (`comms/core.py:75`) and the slot grid
+  `contiguous_size * slot` (`comms/phy_3gpp.py:69`) inherit the error, while
+  `frame_size` (`comms/phy_3gpp.py:50`) is computed correctly from the sample rate. The
+  library's own `LTE_MIN_CP_SIZES` table (`comms/phy_3gpp.py:133`) has the two long CPs
   per 14 symbols that the 5G path lacks.
 - **Why the test is right.** The class docstring says the 5G model equals LTE
   at 15 kHz and cites TS 38.211; the LTE table in the same file disagrees with
@@ -257,11 +257,11 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 65. `stft(noverlap=0)` is scaled by `1/nfft` relative to the overlapped path
 
-`tests/waveform/test_fourier.py::TestIstft::test_no_overlap_roundtrip_is_identity`
+`tests/waveform/test_waveform_fourier_stft.py::TestIstft::test_no_overlap_roundtrip_is_identity`
 
-- **Mechanism.** With `norm=None` the no-overlap path applies `w / nfft`
-  uncompensated (`fourier.py:558`), while `_stack_stft_windows`
-  (`fourier.py:750`) normalizes the same factor away, so the same segment
+- **Mechanism.** With `norm=None` the no-overlap path of `stft` applies `w / nfft`
+  uncompensated (`lib/fourier/stft.py`), while `_stack_stft_windows` in the same
+  module normalizes the same factor away, so the same segment
   differs by `nfft` between the two supported overlaps and
   `istft(stft(x))` returns `x / nfft` for `noverlap=0`.
 - **Why the test is right.** The previous test fitted an arbitrary gain by
@@ -272,12 +272,12 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 67. The CUDA `_corr_at_indices` stops at the first out-of-range index
 
-`tests/waveform/test_waveform_jit.py::TestCorrAtIndicesKernels::test_cuda_unsorted_indices`
+`tests/waveform/test_waveform_comms_cp.py::TestCorrAtIndicesKernels::test_cuda_unsorted_indices`
 
-- **Mechanism.** `jit/cuda.py:24-25` `break`s at the first out-of-range
-  index pair, while `jit/cpu.py:23-28` zero-fills it and continues.
-  `ofdm.corr_at_indices` flattens a (symbol, slot, frame, cp) meshgrid
-  (`ofdm.py:133`), which is not monotonic, so the kernels disagree whenever a
+- **Mechanism.** `comms/cp_cuda_jit.py:28-29` `break`s at the first out-of-range
+  index pair, while `comms/cp_cpu_jit.py:27-32` zero-fills it and continues.
+  `comms.correlate_cyclic_shift` flattens the (symbol, slot, frame, cp) meshgrid built
+  by `_get_3gpp_index_cyclic_prefix` (`comms/phy_3gpp.py:78`), which is not monotonic, so the kernels disagree whenever a
   valid index follows an invalid one (IQ shorter than the requested frames).
 - **Why the test is right.** The two backends must agree (CLAUDE.md,
   lockstep requirement). The test could not be run here (cupy skips); the

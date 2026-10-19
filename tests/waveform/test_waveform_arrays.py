@@ -14,7 +14,7 @@ from numeric_checks import assert_close, dtype_id, reference_binned_mean, to_num
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib import arrays
-from striqt.waveform.lib.fourier import peak_factor
+from striqt.waveform.fourier import peak_factor
 
 
 class TestIsRoundMod:

@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 from numpy.testing import assert_allclose
 
-from striqt.waveform.lib.fourier import peak_factor
+from striqt.waveform.fourier import peak_factor
 from striqt.waveform.power_analysis import level_tolerance_dB
 
 # %% dtype helpers
