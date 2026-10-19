@@ -1,8 +1,8 @@
 """striqt.waveform.lib.comms.sync_5gnr: the 5G NR synchronization used by the cellular
-measurements. The PSS/SSS sequences, the SSB cases of TS 38.213 Section 4.1, the sync
-parameters, SSB IQ extraction, the correlation grid and the offset choice are each
-checked against an independent restatement of the standard or a synthetic waveform
-carrying a known sync sequence, and the numpy and cupy paths against each other.
+measurements. The checks compare the PSS/SSS sequences, the SSB cases of TS 38.213
+Section 4.1, the sync parameters, SSB IQ extraction, the correlation grid, and the
+offset choice against an independent restatement of the standard or a synthetic
+waveform with a known sync sequence, and the numpy and cupy paths against each other.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ SC_COUNT = 127
 def sync_bins(nfft, offset_bins=0):
     """fft bin indices (in fftfreq order) occupied by a 5G NR sync sequence.
 
-    The PSS/SSS occupy subcarriers 56..182 of the 240-subcarrier SSB, i.e. -64..62
+    The PSS/SSS occupy subcarriers 56..182 of the 240-subcarrier SSB, i.e., -64..62
     relative to the SSB center.
     """
     k = np.arange(-64, 63) + offset_bins
@@ -75,7 +75,7 @@ class TestSyncSequences:
 
     @given(n_id=st.integers(0, 1007))
     def test_sss_is_a_gold_sequence(self, n_id):
-        """TS 38.211 7.4.2.3.1: the product of two shifted m-sequences"""
+        """TS 38.211 7.4.2.3.1: the product of 2 shifted m-sequences"""
         n_id1, n_id2 = divmod(n_id, 3)
         m0 = 15 * (n_id1 // 112) + 5 * n_id2
         m1 = n_id1 % 112
@@ -470,7 +470,7 @@ class TestCorrelateSyncSequence:
             sync_5gnr.correlate_sync_sequence(silent_block(params), pss, params=beyond)
 
     def test_sync_frame_count_rejects_too_few_lags(self):
-        """one slot of 3840 samples less its 4 excess CP samples cannot host a 3840
+        """one slot of 3840 samples less its 4 excess CP samples cannot fit a 3840
         sample lag search"""
         params = dataclasses.replace(
             sync_params(), slot_count=1, corr_size=3840, lag_count=3840

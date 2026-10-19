@@ -26,9 +26,9 @@ else:
 def _next_fast_len(n: int, array_backend: specs.types.ArrayBackend) -> int:
     """return the fast FFT length (in samples) at or above `n` for `array_backend`.
 
-    Falls back to scipy's rule when the backend's own is not importable: a budget for
-    a cupy sweep is still wanted on a host without cupy, and the two rules disagree by
-    a few samples at most, below what the sqrt(log2 N) roundoff model resolves.
+    Falls back to scipy's rule when the backend's own is not importable, so a cupy
+    sweep can be budgeted on a host without cupy. The two rules disagree by a few
+    samples at most, below what the sqrt(log2 N) roundoff model resolves.
     """
     try:
         return corrections._get_next_fast_len(n, array_backend)
@@ -193,11 +193,12 @@ def worst_case_tolerances(
 ) -> dict[str, sa.specs.Tolerance]:
     """return the loosest budget of each analysis product over the captures of a sweep.
 
-    Every field of the result is at least as loose as that field in each entry:
-    `rtol` and both bounds of `on_peak` are no smaller than any entry's, and
-    `off_peak_dBc` is no deeper below the peak than any entry's, since a shallower
-    depth leaves more of the output unchecked; None (everything resolved) is the
-    strictest and loses to any finite depth. `units` are those of the first entry.
+    Every field of the result is at least as loose as that field in each entry.
+    `rtol` and both bounds of `on_peak` are no smaller than any entry's.
+    `off_peak_dBc` is no deeper below the peak than any entry's; a shallower depth
+    leaves more of the output unchecked. None (everything resolved) is the
+    strictest and is replaced by any finite depth. `units` are those of the first
+    entry.
 
     Args:
         entries: ``(capture, tolerances)`` pairs as `sweep_tolerances` returns

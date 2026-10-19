@@ -86,7 +86,7 @@ class _SoapySensorReading(specs.SpecBase, kw_only=True, frozen=True, cache_hash=
 
 
 class _SoapyPortInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    """Holds all capability metadata for a single RX or TX channel."""
+    """Capability metadata for a single RX or TX channel."""
 
     port_info: dict[str, str]
     full_duplex: bool
@@ -223,18 +223,16 @@ def _assign_iq_calibration(iq: specs.AcquiredIQ):
 
 
 def probe_soapy_info(device: SoapySDR.Device, retries: int | None = None) -> SoapyInfo:
-    """
-    Probes a SoapySDR device and returns its capabilities as a nested NamedTuple.
+    """probe a SoapySDR device and return its capabilities as a `SoapyInfo` struct.
 
-    This function mirrors the C++ probing utility, but instead of printing
-    the information, it packages it into a structured Python object for
-    programmatic access.
+    The fields follow the C++ ``SoapySDRUtil --probe`` output, packaged as a struct
+    rather than printed.
 
     Args:
         device: An open SoapySDR.Device
 
     Returns:
-        A RadioInfo named tuple containing capability metadata for the device.
+        A `SoapyInfo` struct of capability metadata for the device.
     """
     global_sensors = {
         key: _SoapySensorReading(
@@ -332,7 +330,7 @@ class RxStream:
         if not ports:
             raise RuntimeError('ports were not specified and stream_all_rx_ports=False')
 
-        # do we need to do anything?
+        # an open stream on the same ports is kept
         if self.stream is None:
             pass
         elif ports == self.ports:
@@ -469,7 +467,7 @@ class RxStream:
             (samples received, start clock timestamp (ns))
         """
 
-        # ensure the proper number of waveform samples was read
+        # translate soapy error codes into exceptions
         if sr.ret >= 0:
             result = sr.ret, sr.timeNs
         elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
@@ -535,7 +533,7 @@ class HardwareTimeSync:
             else:
                 time.sleep(20e-3)
 
-        # PPS transition occurred, should be safe to snag system time and apply it
+        # the PPS edge has passed, so the system time is read well before the next one
         sys_time_now = time.time()
         full_secs = int(sys_time_now)
         frac_secs = sys_time_now - full_secs
@@ -546,7 +544,7 @@ class HardwareTimeSync:
         device.setHardwareTime(time_to_set_ns, 'pps')
 
         if frac_secs > 0.2:
-            # System time and PPS are off, warn caller
+            # system time and PPS disagree by more than 0.2 s
             sa.util.get_logger('source').warning(
                 f'system time and PPS out of sync by {frac_secs:0.2f}s'
             )
@@ -562,7 +560,7 @@ def device_time_source(spec: specs.SoapySource):
 
 
 class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
-    """Applies SoapySDR for device control and acquisition"""
+    """a source backend for device control and acquisition through SoapySDR"""
 
     device: 'SoapySDR.Device'
     rx_stream: RxStream
@@ -578,7 +576,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         if SoapySDR is None:
             raise ImportError('could not import SoapySDR')
 
-        # passing in a tuple works around an instantiation bug on some platforms
+        # a tuple argument avoids an instantiation bug on some platforms
         # https://github.com/pothosware/SoapySDR/issues/472
         devices = SoapySDR.Device((device_kwargs,))
 
@@ -635,8 +633,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             or SoapySDR._SoapySDR.Device_deactivateStream is None
             or SoapySDR.Device is None
         ):
-            # handle partially-deconstructed soapy module observed after
-            # exceptions
+            # the soapy module is partially torn down after some exceptions
             return
 
         self.device.__del__ = lambda: None  # type: ignore
@@ -656,11 +653,11 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         if self.rx_stream is None:
             return  # not connected
         if capture == self._capture and self.spec.gapless:
-            return  # the one case where we leave it running
+            return  # the stream stays enabled only for a gapless repeat of a capture
 
         self.rx_stream.enable(self.device, False)
 
-        # manage changes to the ports
+        # rebuild the stream when the port set changes
         ports_changed = self.rx_stream.capture_changes_port(capture)
         if self._capture is None or ports_changed:
             self.rx_stream.setup(self.device, capture.port)

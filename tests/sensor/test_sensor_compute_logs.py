@@ -16,7 +16,7 @@ from striqt.sensor.lib.compute import logs
 
 AIR = ss.bindings.air7101b
 
-# the capture under test spans two ports at 1 GHz and 2 GHz, and the sweep also
+# the capture under test spans 2 ports at 1 GHz and 2 GHz, and the sweep also
 # visits 2 GHz on port 0 at 30 dB more gain
 CAPTURE = soapy_capture(port=(0, 1), center_frequency=(1e9, 2e9), gain=0.0)
 HIGH_GAIN = soapy_capture(port=0, center_frequency=2e9, gain=30.0)

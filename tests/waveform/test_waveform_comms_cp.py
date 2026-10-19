@@ -2,8 +2,8 @@
 striqt.waveform.lib.comms.cp_cpu_jit and striqt.waveform.lib.comms.cp_cuda_jit: the
 cyclic-prefix correlation against a numpy reference and on a synthetic OFDM waveform.
 
-The CUDA tests skip when cupy is not available; the `cupy.fuse` dB kernels live in
-`lib/power/cuda_jit.py` and are covered through the public dispatcher in
+The CUDA tests skip when cupy is not available. The `cupy.fuse` dB kernels are
+defined in `lib/power/cuda_jit.py` and are covered through the public dispatcher in
 test_waveform_power_convert.py.
 """
 
@@ -56,7 +56,7 @@ def corr_cases(
     """Strategy for (inds, x, nfft, ncp, norm) kernel arguments.
 
     The waveform length is drawn so that some examples run index pairs past the end of
-    `x`, which exercises the kernels' bounds handling; the indices are drawn in
+    `x`, which exercises the kernels' out-of-range branches. The indices are drawn in
     arbitrary order unless `sorted_inds`, so an out-of-range pair may precede a valid
     one. With `ncp_from_inds`, ncp is the number of indices, as cp.correlate_cyclic_shift
     infers it from the last axis of `inds`.

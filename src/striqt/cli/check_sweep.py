@@ -10,7 +10,6 @@ from striqt.sensor.lib import calibration, resources
 @click.command('runtime information about running a sweep')
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
 def cli(yaml_path):
-    # instantiate sweep objects
     import striqt.analysis as sa
 
     sa.util.show_messages(sa.util.logging.WARNING)
@@ -18,7 +17,6 @@ def cli(yaml_path):
 
 
 def run(yaml_path: str):
-    # instantiate sweep objects
     import striqt.sensor as ss
     from pprint import pformat
     from pathlib import Path

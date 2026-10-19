@@ -13,8 +13,8 @@ if typing.TYPE_CHECKING:
     from numbers import Number
     from types import ModuleType
 
-    # bury this type checking in here to avoid lengthening the import time of iqwaveform
-    # if cupy isn't installed
+    # bury this type checking in here to avoid lengthening the import time of
+    # striqt.waveform if cupy isn't installed
     try:
         import cupy as cp  # ty: ignore[unresolved-import]
 

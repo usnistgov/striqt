@@ -68,7 +68,7 @@ class Zipper:
         out_file: str | Path | None = None,
         force: bool = False,
     ) -> Zipper:
-        """instatiate a zipper from an existing zarr directory"""
+        """instantiate a zipper from an existing zarr directory"""
         input_dir = Path(input_dir)
 
         if not input_dir.exists():
@@ -111,7 +111,7 @@ class Zipper:
 
 
 class SinkBase(Generic[specs.SC]):
-    """intake acquisitions one at a time, and parcel data store"""
+    """intake acquisitions one at a time and parcel them to a data store"""
 
     def __init__(
         self,

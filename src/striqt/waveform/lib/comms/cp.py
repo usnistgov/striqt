@@ -64,13 +64,13 @@ def corr_atol(
 ) -> float:
     """bound the absolute roundoff of `correlate_cyclic_shift` against exact arithmetic.
 
-    The bound grows linearly with `n_inds` in unit roundoffs of `dtype`: each
+    The bound grows linearly with `n_inds` in unit roundoffs of `dtype`. Each
     product ``a*conj(b)`` and the power terms are rounded at the input precision
-    before the complex128 accumulation, and the result once more on output. With
-    ``norm=True`` the Cauchy-Schwarz bound ``sum|a||b| <= sqrt(Pa*Pb)`` makes the
-    error relative to a unit-scale output, and `scale` is ignored; with
-    ``norm=False`` it is relative to the largest product magnitude, which the caller
-    passes as ``scale = max|x|**2``.
+    before the complex128 accumulation, and the result is rounded once more on
+    output. With ``norm=True`` the Cauchy-Schwarz bound ``sum|a||b| <= sqrt(Pa*Pb)``
+    makes the error relative to a unit-scale output, and `scale` is ignored. With
+    ``norm=False`` the error is relative to the largest product magnitude, which the
+    caller passes as ``scale = max|x|**2``.
 
     Args:
         dtype: the input dtype (real or complex)

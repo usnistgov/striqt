@@ -52,7 +52,7 @@ def correct_iq(
         signal_trigger: a `signal.analysis.Trigger` instance to implement a
             waveform start alignment, or `None` to default to iq.info.signal_trigger
         axis: the axis of `x` along which to compute the filter
-        overwrite_x: if True, modify the contents of IQ in-place; otherwise, a copy will be returned
+        overwrite_x: if True, modify the contents of IQ in-place; otherwise, a copy is returned
 
     Returns:
         the filtered IQ waveform
@@ -66,7 +66,7 @@ def correct_iq(
         raise TypeError('iq.capture must be a capture specification')
 
     if signal_trigger is None:
-        # TODO: this will need to be fixed along with the definition in iq.info
+        # AcquisitionInfo.signal_trigger is the measurement name, not a Trigger
         signal_trigger = iq.info.signal_trigger  # ty: ignore
 
     max_lag = _get_max_trigger_lag(iq.source_spec, capture, signal_trigger)
@@ -82,14 +82,13 @@ def correct_iq(
 
     if iq.conjugate and not IGNORE_HIGHSIDE_LO:
         # the scale-only path returns the acquisition buffer itself when there is
-        # nothing to scale, so in place is only safe on a fresh array
+        # nothing to scale, so conjugate in place only on a fresh array
         x_pre_filter = _apply_conj(
             x_pre_filter,
             iq.conjugate,
             overwrite_x=overwrite_x or x_pre_filter is not iq.pre_align,
         )
 
-    # apply the filter here and ensure we're working with a copy if needed
     if needs_filter:
         h = sw.design_fir_lpf(
             bw=capture.analysis_bandwidth,
@@ -147,7 +146,7 @@ def get_correction_overlaps(
     ``round(duration * fs_sdr)`` samples to a whole number of resampler FFTs.
 
     Args:
-        capture: the capture whose duration, sample rate and analysis bandwidth size
+        capture: the capture whose duration, sample rate, and analysis bandwidth size
             the record and the filter
         setup: the source whose `master_clock_rate` fixes the resampler design and
             the trigger lag
@@ -190,7 +189,7 @@ def _get_resampler_overlaps(
 def needs_resample(
     analysis_filter: sw.ResamplerDesign, capture: specs.SensorCapture
 ) -> bool:
-    """determine whether host resampling will be needed to filter or resample"""
+    """determine whether host resampling is needed to filter or resample"""
     if not capture.host_resample:
         return False
 
@@ -218,7 +217,6 @@ def design_resampler(
     if USE_OARESAMPLE:
         kwargs['min_fft_size'] = MIN_OARESAMPLE_FFT_SIZE
     else:
-        # this could probably be set to 1?
         kwargs['min_fft_size'] = 256
 
     if str(capture.lo_shift).lower() == 'none':
@@ -250,7 +248,6 @@ def design_resampler(
 
     if capture.host_resample:
         # use GPU DSP to resample from integer divisor of the MCR
-        # fs_sdr, lo_offset, kws  = iqwaveform.fourier.design_cola_resampler(
         design = sw.fourier.design_cola_resampler(
             fs_base=mcr,
             fs_target=capture.sample_rate,
@@ -347,7 +344,7 @@ def _apply_trigger_shifts(x: Array, shifts: Array, size_out: int) -> Array:
         raise ValueError('waveform is too short to align')
 
     if shifts.shape[0] == 1 or len(set(shifts.tolist())) == 1:
-        # fast path: a simple view, if there is only one offset
+        # fast path: a view when there is only one offset
         return x[:, shifts[0] : shifts[0] + size_out]
 
     else:
@@ -445,11 +442,11 @@ def _oaresample(
 ) -> tuple[Array, int | None]:
     """resample `iq.pre_align` in one STFT pass and return it with its lead offset.
 
-    The acquisition must hold the capture plus the pads that
+    The acquisition must contain the capture plus the pads that
     `_get_oaresample_overlaps` gives for `min_overlap`. The returned waveform starts
     at the lead pad at `capture.sample_rate`, low-passed to `analysis_bandwidth` when
-    that is finite and shifted by the design's `lo_offset`; the offset is the
-    resampled lead pad, and the resampled tail pad is left for `correct_iq` to trim.
+    that is finite and shifted by the design's `lo_offset`. The returned offset is the
+    resampled lead pad. The resampled tail pad is left for `correct_iq` to trim.
 
     Raises:
         ValueError: the acquisition is shorter than the capture plus its pads
@@ -527,12 +524,11 @@ def _get_oaresample_overlaps(
 ) -> tuple[int, int]:
     """return the (lead, tail) pads, in source samples, that `_oaresample` needs.
 
-    Each pad covers one STFT overlap, the span at either end of the `sw.oaresample`
+    Each pad covers one STFT overlap: the span at either end of the `sw.oaresample`
     output that fewer than the full count of COLA windows reach. The lead resamples to
-    a whole number of output samples so that it trims exactly; the tail also carries
-    `min_overlap` trigger-lag samples (in source samples) and is extended so that the
-    padded acquisition holds the whole number of STFT hops that `sw.oaresample`
-    requires.
+    a whole number of output samples. The tail adds `min_overlap` trigger-lag samples
+    (in source samples) and is extended until the padded acquisition is a whole
+    number of the STFT hops that `sw.oaresample` requires.
     """
     design = design_resampler(capture, master_clock_rate)
     nfft = design['nfft']
@@ -562,12 +558,12 @@ def _get_resample_overlap(
 ) -> tuple[int, int]:
     """return the (lead, tail) source-rate pad around the record of `capture`.
 
-    The padded record is a whole number of resampler FFTs, so that `_resample` maps
-    it to an integral number of output samples, and that number of FFTs is a fast FFT
-    length. The FIR transient is counted at `capture.sample_rate`, where `correct_iq`
+    The padded record is a whole number of resampler FFTs, and that number of FFTs is
+    a fast FFT length. `_resample` maps such a record to an integral number of output
+    samples. The FIR transient is counted at `capture.sample_rate`, where `correct_iq`
     applies the filter, and converted to source-rate samples through the resampler's
     ``nfft / nfft_out`` ratio. The lead is a multiple of the reduced denominator of
-    that ratio, so its output-rate trim is a whole number of samples; the slack
+    that ratio, so its output-rate trim is a whole number of samples. The slack
     beyond the required pads is split between the two ends.
 
     Args:
@@ -604,7 +600,8 @@ def _get_resample_overlap(
         if tail >= tail_min:
             return (lead, tail)
 
-        # the rounded lead ate the tail's share: one more block adds at least q
+        # rounding the lead to a multiple of q left the tail short; one more block
+        # adds at least q
         min_blocks = pad_blocks + 1
 
 

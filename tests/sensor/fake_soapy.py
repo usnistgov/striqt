@@ -1,11 +1,10 @@
 """a fake SoapySDR module with an Airstack-shaped device, for installation at the
 `striqt.sensor.lib.sources.soapy.SoapySDR` seam.
 
-The device streams a physically meaningful waveform: complex Gaussian noise from a
-receiver with a per-port noise figure after a noise source that a "noise diode" can
-switch on, plus optional CW tones, all through the receiver model in
-`sweep_strategies` so that calibration sweeps run against it have closed-form
-expected results.
+The device streams complex Gaussian noise from a receiver with a per-port noise
+figure after a noise source that a "noise diode" can switch on, plus optional CW
+tones. Both follow the receiver model in `sweep_strategies`, so calibration sweeps
+run against the device have closed-form expected results.
 """
 
 from __future__ import annotations
@@ -437,7 +436,7 @@ class FakeSoapySDR:
         self._SoapySDR = types.SimpleNamespace(Device_deactivateStream=object())
 
     def Device(self, args=None):
-        # the sequence form (SoapySDR issue 472 workaround) returns a list of devices
+        # the sequence form (SoapySDR issue 472) returns a list of devices
         if isinstance(args, (list, tuple)):
             return [self._open(dict(a)) for a in args]
         return self._open(dict(args or {}))

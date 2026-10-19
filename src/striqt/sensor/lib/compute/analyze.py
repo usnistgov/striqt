@@ -99,7 +99,7 @@ def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
 ) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
-    """convenience function to analyze a waveform from a specification.
+    """analyze a waveform according to a sweep specification.
 
     The waveform may be transformed with resampling and calibration
     corrections before evaluation. Acquisition data and metadata
@@ -160,8 +160,8 @@ def analyze(
 def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
     if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
-            # this order is important on some versions/platforms!
-            # https://github.com/numba/numba/issues/6131
+            # numba.cuda must be imported before cupy on some versions/platforms
+            # (https://github.com/numba/numba/issues/6131)
             np.__version__  # reify
             import numba.cuda
             import cupy  # type: ignore

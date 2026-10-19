@@ -73,8 +73,8 @@ class Phy802_16(PhyOFDM):
         """
         Args:
             channel_bandwidth: Channel bandwidth as defined by 802.16-2017
-            alt_sample_rate (_type_, optional): If specified, overrides the 802.16-2017 value with sample rate of recorded data.
-            frame_duration: _description_. Defaults to 5e-3.
+            alt_sample_rate: sample rate (in S/s) of the recorded data, which overrides the 802.16-2017 value when specified.
+            frame_duration: frame duration (in s), one of the 802.16-2017 values. Defaults to 5e-3.
             nfft: the fft size corresponding to the length of the useful portion of each symbol. Defaults to 2048.
             cp_ratio: the size of the cyclic prefix as a fraction of nfft. Defaults to 1/8.
         """
@@ -150,7 +150,7 @@ class Phy802_16(PhyOFDM):
     def index_cyclic_prefix(
         self, *, frames=(0,), symbols: tuple[int, ...] | typing.Literal['all'] = 'all'
     ) -> Array:
-        """build an indexing tensor for performing cyclic prefix correlation across various axes"""
+        """build the index tensor for cyclic prefix correlation over the selected frames and symbols"""
         return _802_16_index_cyclic_prefix(self, frames=frames, symbols=symbols)
 
 
@@ -161,7 +161,7 @@ def _802_16_index_cyclic_prefix(
     frames=(0,),
     symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
 ) -> Array:
-    """build an indexing tensor for performing cyclic prefix correlation across various axes"""
+    """build the index tensor for cyclic prefix correlation over the selected frames and symbols"""
 
     xp = array_namespace(phy.cp_sizes)
     frames = xp.array(frames)
@@ -170,7 +170,7 @@ def _802_16_index_cyclic_prefix(
         symbols, '"symbols" argument', size=phy.symbols_per_frame, xp=xp
     )
 
-    # first build each grid axis separately
+    # build each grid axis separately
     grid = []
 
     # axis 0: symbol number in each frame

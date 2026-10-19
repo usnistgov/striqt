@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""this is installed into the shell PATH environment as configured by pyproject.toml"""
+"""console entry point ``sensor-sweep``, installed on the shell PATH by pyproject.toml"""
 
 import click
 from typing import Callable, Union, TYPE_CHECKING

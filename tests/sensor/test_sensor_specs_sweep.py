@@ -73,7 +73,7 @@ def test_validate_sweep_reports_a_per_source_override():
 def test_validate_sweep_ignores_loops_over_sensor_only_fields(monkeypatch):
     """`snr` is invisible to the analysis layer, so both captures project onto one
     `AnalysisCapture` and the pair is validated once"""
-    # build before patching: Sweep.__post_init__ validates too, and would be counted
+    # build before patching, since Sweep.__post_init__ validates too and would be counted
     sweep = make_sweep(
         captures=(make_capture(),),
         loops=(ss.specs.List(field='snr', values=(10.0, 20.0)),),

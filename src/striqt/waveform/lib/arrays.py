@@ -84,7 +84,7 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
         try:
             xp = array_namespace(x)
         except:
-            # dask workaround
+            # array_namespace does not recognize dask arrays
             xp = np
 
     try:
@@ -125,8 +125,8 @@ def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """return the relative rms roundoff of a sum or mean over `n` terms of `dtype`.
 
     The reduction runs along a contiguous axis, which numpy and cupy accumulate
-    partly in order and partly by tree, so the result grows with the square root of
-    `n` from a floor of a few unit roundoffs of `dtype`; the strided-axis bound is
+    partly in order and partly by tree. The result grows with the square root of
+    `n` from a floor of a few unit roundoffs of `dtype`. The strided-axis bound is
     `accum_rtol`. `n_impl` independent implementations add in quadrature: 1 against
     an exact reference, 2 between two backends.
     """
@@ -140,8 +140,8 @@ def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     # chores/tests/measure_db_accuracy.py as the float32 mean of |x|**2 over n gaussian
     # samples, rms error in units of u at n = 1e3, 1e4, 1e5, 1e6, 4e6: numpy 1.23 gives
     # 0.8, 1.5, 1.1, 4.4, 5.7; numpy 2.5 stays near 0.7; cupy 12.3 on a Tegra X2 gives
-    # 1.0, 1.5, 1.1, 1.8, 2.4. `run` fits the numpy 1.23 curve, the worst of the three,
-    # and `safety` matches the FFT model's margin.
+    # 1.0, 1.5, 1.1, 1.8, 2.4. `run` fits the numpy 1.23 curve, which is the worst of
+    # the three, and `safety` matches the FFT model's margin.
     run = 50_000
     safety = 3
     u = unit_roundoff(dtype)
@@ -151,8 +151,8 @@ def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
 def accum_rtol(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """bound the relative roundoff of a sum or mean over `n` terms of `dtype`.
 
-    The reduction runs along a strided axis, which numpy accumulates in order, so
-    the bound grows linearly with `n` in unit roundoffs of `dtype` (measured 1600 u
+    The reduction runs along a strided axis, which numpy accumulates in order. The
+    bound grows linearly with `n` in unit roundoffs of `dtype` (measured 1600 u
     rms and 2000 u max at n = 1e6, against the 2e6 u of this bound). `n_impl` is 1
     against an exact reference and 2 between two implementations.
     """
@@ -186,7 +186,7 @@ def binned_mean(
         count: bin count to average
         axis: axis along which to implement the binned mean
         truncate: True to truncate incomplete bins at the edges, or False to raise exception
-        reject_extrema: if True, the min and max samples from each bin will be excluded
+        reject_extrema: if True, the min and max samples from each bin are excluded
         fft: if True, bins align with fft bins (centered, instead of left side)
     """
 
@@ -200,8 +200,8 @@ def binned_mean(
         size_left = center_bin - count // 2
         blocks_left = size_left // count
         block_count = 2 * blocks_left + 1
-        # count 1 is exempt: every length is block-aligned, and truncating would
-        # drop the -fs/2 bin from the fftshift layout
+        # count 1 is exempt because every length is then block-aligned and truncating
+        # would drop the -fs/2 bin from the fftshift layout
         while count > 1 and block_count > 1 and count * block_count > x.shape[axis]:
             block_count -= 2
         start = center_bin - (count * block_count) // 2
@@ -276,9 +276,9 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     """
     Create a sliding window view into the array with the given window shape.
 
-    Also known as rolling or moving window, the window slides across all
-    dimensions of the array and extracts subsets of the array at all window
-    positions.
+    The window slides across all dimensions of the array and extracts subsets
+    of the array at all window positions. A sliding window is also called a
+    rolling or moving window.
 
 
     Parameters
@@ -293,18 +293,17 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     axis : int or tuple of int, optional
         Axis or axes along which the sliding window is applied.
         By default, the sliding window is applied to all axes and
-        `window_shape[i]` will refer to axis `i` of `x`.
-        If `axis` is given as a `tuple of int`, `window_shape[i]` will refer to
+        `window_shape[i]` refers to axis `i` of `x`.
+        If `axis` is given as a `tuple of int`, `window_shape[i]` refers to
         the axis `axis[i]` of `x`.
         Single integers `i` are treated as if they were the tuple `(i,)`.
     subok : bool, optional
-        If True, sub-classes will be passed-through, otherwise the returned
-        array will be forced to be a base-class array (default).
+        If True, sub-classes are passed through; otherwise the returned
+        array is forced to a base-class array (default).
     writeable : bool, optional -- not supported
-        When true, allow writing to the returned view. The default is false,
-        as this should be used with caution: the returned view contains the
-        same memory location multiple times, so writing to one location will
-        cause others to change.
+        When true, allow writing to the returned view. The default is false.
+        The returned view contains the same memory location multiple times,
+        so writing to one location changes others.
 
     Returns
     -------
@@ -356,7 +355,7 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     if writeable:
         raise NotImplementedError('Writeable views are not supported.')
 
-    # first convert input to array, possibly keeping subclass
+    # convert input to array, possibly keeping subclass
     x = xp.array(x, copy=False, subok=subok)
 
     out_shape = _sliding_window_output_shape(x.shape, window_shape, axis)
@@ -448,12 +447,12 @@ def histogram_last_axis(
     # Some elements would be off limits, so get a mask for those
     bad_mask = (idx == -1) | (idx == size)
 
-    # We need to use bincount to get bin based counts. To have unique IDs for
-    # each row and not get confused by the ones from other rows, we need to
-    # offset each row by a scale (using row length for this).
+    # bincount counts over a flat array, so each row is offset by a stride that keeps
+    # its indices distinct from those of the other rows
     scaled_idx = size * xp.arange(flat.shape[0])[:, None] + idx
 
-    # Set the bad ones to be last possible index+1 : n_bins*data2D.shape[0]
+    # out-of-range elements go to index `limit`, one past the last bin, which is
+    # dropped below
     limit = size * flat.shape[0]
     scaled_idx[bad_mask] = limit
 
@@ -597,7 +596,7 @@ def configure_cupy():
     if cp is not None:
         import cupy.fft as fft  # ty: ignore[unresolved-import]
 
-        # the FFT plan sets up large caches that don't help us
+        # the FFT plan cache allocates large buffers that striqt does not reuse
         fft.config.get_plan_cache().set_size(0)
         cp.cuda.set_pinned_memory_allocator(None)
 
@@ -649,7 +648,7 @@ class NonStreamContext:
 def array_stream(
     obj: Array, null: bool = False, non_blocking: bool = False, ptds: bool = False
 ) -> cupy.cuda.Stream | NonStreamContext:
-    """returns a cupy.Stream (or a do-nothing stand in) object as appropriate for obj"""
+    """return a `cupy.cuda.Stream` for a cupy `obj`, otherwise a do-nothing stand-in"""
     if is_cupy_array(obj) and cp is not None:
         return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)
     else:

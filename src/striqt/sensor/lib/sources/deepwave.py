@@ -63,9 +63,9 @@ class Airstack1Source(soapy.SoapySource):
         1111 = 15 core_clk cycles delay
         ....
         0000 = 0 core_clk cycles delay
-        In order to move away from the LFMC rollover we need to set bits 11:8
-        of the SYSREF handling register which is at address 0x0004_0010.
-        This register needs to be set before we try to sync the JESD204B bus.
+        Bits 11:8 of the SYSREF handling register at address 0x0004_0010 move the
+        delay away from the LMFC rollover. The register must be written before the
+        JESD204B bus is synchronized.
 
         Ref: https://docs.deepwavedigital.com/Tutorials/8_triggered_signal_stream/#maintaining-fixed-delay-between-calibrations
         """
@@ -78,21 +78,16 @@ class Airstack1Source(soapy.SoapySource):
         for bit in bit_range:
             field_mask |= 1 << bit
 
-        # Read curr value
         reg = self.device.readRegister('FPGA', addr)
-        # Clear the bit field
         reg &= ~field_mask
-        # Set values of mask, dropping extra bits
         field_val_mask = (value << start_bit) & field_mask
 
-        # Set the bits
         reg |= field_val_mask
-        # Write reg back
         self.device.writeRegister('FPGA', addr, reg)
 
     def get_id(self) -> str:
-        # as of 1.0.0, AirStack doesn't seem to return a serial through Soapy
-        # instead, take the Jetson ethernet MAC address as the radio id.
+        # AirStack 1.0.0 returns no serial through Soapy, so the Jetson eth0 MAC
+        # address is the radio id
         try:
             if_addrs = psutil.net_if_addrs()['eth0']
         except KeyError:

@@ -55,7 +55,7 @@ def test_results_follow_the_capture_order(subtests):
 def test_results_follow_the_capture_order_cupy(array_backend, subtests):
     """the cupy source draws the same generator; scale-only correction leaves the
     tone samples as the generator's complex exponential, which rounds once per
-    phase product, cosine, sine and float32 cast on each backend"""
+    phase product, cosine, sine, and float32 cast on each backend"""
     captures = tone_captures(OFFSETS)
     source = SOURCE.replace(array_backend=array_backend)
     datasets = run_in_memory(tone_sweep(OFFSETS, source=source))
@@ -108,7 +108,7 @@ YIELD_MODES = {
 @pytest.mark.parametrize('mode', list(YIELD_MODES), ids=list(YIELD_MODES))
 def test_yield_modes(mode):
     """current behavior, not a contract: the pipeline runs N + 2 stages and yields
-    the sink result of every stage when yield_values is set (None for the two
+    the sink result of every stage when yield_values is set (None for the 2
     stages before the first capture reaches the sink), one None per stage when
     only always_yield is set, and nothing otherwise. The iterate_sweep docstring
     describes the leading placeholders differently."""
@@ -152,8 +152,8 @@ class CancellingPeripherals(ss.peripherals.NoPeripherals):
 
 def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
     """a peripheral that requests cancellation during the first acquisition stops
-    the pipeline at the interrupt check after that stage's yield, so exactly one
-    item (the leading None) comes out; the flag is cleared on leaving
+    the pipeline at the interrupt check after that stage's yield, so exactly 1
+    item (the leading None) is yielded; the flag is cleared on leaving
     share_thread_interrupts. The check is a no-op in the main thread, so the sweep
     is consumed in a worker."""
     sweep = tone_sweep(OFFSETS)
@@ -202,7 +202,7 @@ def spectrogram_result(peak_dBm, shape=(1, 4, 8)):
 
 def test_log_cache_info_reports_the_spectrogram_snr(calibration_nc, caplog):
     """the logged SNR is the spectrogram peak above the calibrated system noise
-    k*T*B raised by the noise figure the calibration file holds for the capture's
+    k*T*B raised by the noise figure the calibration file records for the capture's
     port and center frequency (5 dB at port 0, 1 GHz)"""
     capture = soapy_capture()
     noise_dBm = 5.0 + 10 * math.log10(BOLTZMANN_MW * T_REF * NOISE_BANDWIDTH)

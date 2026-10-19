@@ -22,7 +22,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
     analysis_dict = sweep.analysis.to_dict()
     if tuple(analysis_dict.keys()) != (sa.measurements.iq_waveform.__name__,):
-        # everything except iq_clipping requires a warmup
+        # everything except iq_waveform requires a warmup
         return True
 
     # check the inner loop (explicit) values
@@ -45,14 +45,13 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
 
 def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> WarmupSweep:
-    """derive a warmup sweep specification derived from sweep.
+    """derive a warmup sweep specification from `sweep`.
 
-    This is meant to trigger expensive python imports and warm up JIT caches. The goal
-    is to avoid analysis slowdowns later during the execution of the first captures.
+    Running the derived sweep triggers the python imports and JIT compilation that
+    would otherwise slow the analysis of the first captures.
 
-    The derived sweep has the following characteristics:
-        - It is bound to NoPeripheral and NoSink
-        - It contains only one capture, with no loops
+    The derived sweep is bound to `NoPeripherals` and `NoSink`, and contains `count`
+    captures with no loops.
     """
 
     from ..bindings import get_controller, mock_binding
@@ -74,7 +73,6 @@ def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> Warmup
         if n > max_rx_ports:
             max_rx_ports = n
 
-    # then build up the warmup sweep
     b = mock_binding(get_controller(sweep), 'warmup', register=False)
 
     source = warmup.schema.source(

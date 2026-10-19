@@ -136,8 +136,7 @@ class YFactorSink(sinks.SinkBase):
         self.sweep_start_time = None
 
     def close(self, *exc_info):
-        # pointedly, do not flush on close - only after a complete
-        # dataset
+        # flush only after a complete dataset, not on close
         pass
 
     def append(self, capture_result):
@@ -389,8 +388,6 @@ def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
 
 
 def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
-    # TODO: check that this works for xr.DataArray inputs in (enr_dB, Tamb)
-
     from scipy.constants import Boltzmann
 
     k = Boltzmann * 1000  # W/K -> mW/K
@@ -462,7 +459,7 @@ def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
         else:
             del invalid_matches[field]
 
-    # now note the remainder
+    # describe the remaining mismatches
     for field, value in invalid_matches.items():
         try:
             cal.sel({field: value})
@@ -546,10 +543,9 @@ def _lookup_calibration_var(
 
 
 def _get_port_variable(ds: 'xr.DataArray|xr.Dataset') -> str:
-    """return the appropriate name of the port coordinate variable.
+    """return the name of the port coordinate variable, 'port' or 'channel'.
 
-    This is for backward-compatibility with prior versions that used 'channel'
-    instead of 'port' nomenclature.
+    Older calibration files name the coordinate 'channel'.
     """
     if ds is None:
         return compute.PORT_DIM

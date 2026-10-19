@@ -182,8 +182,9 @@ def compute_lock(array=None):
 def hold_logger_outputs():
     """apply redirected streams to log outputs, and restore on exit.
 
-    This is needed because the loggers hold their own references to the original
-    stderr/stdout, so they are not updated on use of contextlib.redirect_ functions.
+    The screen handlers keep their own references to the original stderr and
+    stdout. `contextlib.redirect_stderr` and `contextlib.redirect_stdout` do not
+    update those references.
     """
 
     streams = {}
@@ -205,7 +206,7 @@ _input_lock = threading.RLock()
 
 
 def blocking_input(prompt: str | None = None, /) -> str:
-    """wraps a call to builtin input() to avoid threading issues.
+    """wrap a call to builtin input() for use from multiple threads.
 
     Specifically:
     - A lock protects access to sys.stdin in case of calls from multiple threads
@@ -255,7 +256,7 @@ def elementwise_atol(tolerance: specs.Tolerance, expected_dB: ArrayLike) -> np.n
     `tolerance.on_peak.peak` holds at the output's own peak; deeper elements get the
     two-sided bound of `sw.power_analysis.off_peak_dB_tolerance`, which reaches +inf at
     `off_peak_dBc.peak` below the peak. Without an `off_peak_dBc` there is no amplitude
-    error to grow with depth, and `on_peak.peak` holds everywhere.
+    error to grow with depth. `on_peak.peak` then holds everywhere.
 
     Args:
         expected_dB: the values expected of the output, in dB; their nanmax is the
@@ -272,7 +273,8 @@ def elementwise_atol(tolerance: specs.Tolerance, expected_dB: ArrayLike) -> np.n
     expected_dB = np.asarray(expected_dB, dtype='float64')
     if tolerance.off_peak_dBc is None:
         return np.full(expected_dB.shape, tolerance.on_peak.peak)
-    # the amplitude error at the peak, which `peak` expressed as 20*log10(1 + err)
+    # the amplitude error at the peak, which `off_peak_dBc.peak` expresses as
+    # 20*log10(1 + err)
     err = 10 ** (tolerance.off_peak_dBc.peak / 20)
     additive = tolerance.on_peak.peak - 20 * math.log10(1 + err)
     depth = np.nanmax(expected_dB) - expected_dB

@@ -15,7 +15,7 @@ class Schema(Generic[SS, SP, SC, PS, PC]):
     capture: type[SC]
     peripherals: type[SP]
 
-    # these aren't actually used; they just set up the type hinting properly
+    # unused at runtime; these carry the parameter types for the type checker
     init_like: Callable[PS, Any]
     arm_like: Callable[PC, Any]
 

@@ -19,7 +19,7 @@ if typing.TYPE_CHECKING:
 
 # %% Extra windows
 def _len_guards(M):
-    """Handle small or incorrect window lengths"""
+    """report whether `M` is 0 or 1; raise for a non-integer or negative `M`"""
     if int(M) != M or M < 0:
         raise ValueError('Window length M must be a non-negative integer')
     return M <= 1
@@ -98,12 +98,11 @@ def cosh(M: int, alpha, sym=True) -> np.ndarray:
 def acg(M: int, sigma_t: float, sym=True, dtype='float64'):
     """returns approximate confined gaussian window.
 
-    In practice, this is a close approximation of the Slepian
-    window.
+    The ACG window closely approximates the Slepian window.
 
     Args:
         M: window size, in samples
-        sigma_t: The (3-dB) uncertainy resolution in time bins
+        sigma_t: The (3-dB) uncertainty resolution in time bins
     Reference:
         S. Starosielec, D. Hägele, "Discrete-time windows with minimal RMS bandwidth for given RMS temporal width,
         Signal Processing," Signal Processing Vol. 102, Sept. 2014, Pages 240-246.
@@ -126,7 +125,7 @@ def acg(M: int, sigma_t: float, sym=True, dtype='float64'):
 
 
 def register_extra_windows():
-    """add 'acg', 'cosh', 'modified_bessel', 'knab', and 'taylor' windows to
+    """add 'acg', 'cosh', 'modified_bessel', and 'knab' windows to
     the window functions registered for access by `scipy.signal.get_window`.
     """
     import scipy.signal.windows._windows as _windows
@@ -184,7 +183,7 @@ def _design_window(
         delay = scipy.ndimage.fourier_shift(np.ones_like(w), ntotal // 2)
 
         if ntotal % 2 == 0:
-            # really just [1, -1, 1, -1, 1, ...]
+            # the shift is [1, -1, 1, -1, ...] for even sizes
             delay = delay.real
 
         w = delay * w
@@ -226,7 +225,7 @@ def get_window(
         nwindow: the number of nonzero window samples
         nzero: the number of zero samples appended to the window
         fftshift: True to modulate the window by a half-band shift so that the FFT of
-            a windowed signal comes out in ascending frequency order; the window is
+            a windowed signal is in ascending frequency order; the window is
             then complex when `nwindow + nzero` is odd
         center_zeros: True to split the `nzero` zeros before and after the window
             instead of appending them
@@ -276,19 +275,19 @@ def equivalent_noise_bandwidth(window: WindowSpecType, N, fftbins=True, cached=T
 def find_window_param_from_enbw(
     window_name: str, target: float, *, nfft: int = 4096, atol=1e-6
 ) -> float:
-    """find the parameter that satistifes the specified equivalent-noise bandwidth (ENBW)
+    """find the parameter that satisfies the specified equivalent-noise bandwidth (ENBW)
     for a given single-parameter window.
 
-    The estimate is performed for the given `nfft`; when it is
-    larger, the result will tend to converge toward a central value.
+    The parameter is estimated at the given `nfft`, and converges toward a limiting
+    value as `nfft` grows.
 
-    Typically, where enbw is at least 1.1:
-        * when `window_name == 'dpss'`: the result will be slightly smaller than `(enbw)**2`
-        * when `window_name == 'kaiser'`: the result will be slightly smaller than `pi * (enbw)**2`
+    For `target` of at least 1.1:
+        * when `window_name == 'dpss'`: the result is slightly smaller than `target**2`
+        * when `window_name == 'kaiser'`: the result is slightly smaller than `pi * target**2`
 
     Arguments:
         window_name: one of 'kaiser', 'dpss', or 'chebwin'
-        enbw: the desired equivalent noise bandwidth (in FFT bins)
+        target: the desired equivalent noise bandwidth (in FFT bins)
         nfft: the window size used to estimate ENBW
         atol: the absolute error tolerance in the estimated NW
 

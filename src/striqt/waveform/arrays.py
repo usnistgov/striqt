@@ -17,8 +17,9 @@ from .lib.arrays import (
     unit_roundoff,
 )
 
-# the roundoff models stay reachable as `arrays.accum_rms` etc. but are kept out of
-# the root namespace, which star-imports this module
+# the roundoff models (`accum_rms`, `accum_rtol`, `mean_atol`, `unit_roundoff`) stay
+# reachable from this module but are kept out of the root namespace, which
+# star-imports it
 __all__ = [
     'array_namespace',
     'axis_index',

@@ -1,6 +1,6 @@
-"""strategies, spec factories and shared constants for the analysis tests.
+"""strategies, spec factories, and shared constants for the analysis tests.
 
-Not a conftest: a second rootless conftest would shadow the root one that other test
+Not a conftest. A second rootless conftest would shadow the root one that other test
 directories import by name.
 """
 
@@ -98,7 +98,7 @@ def descending_ranges(draw):
 # reject regions both get exercised: sample counts below one FFT and odd, offsets off
 # the resampler grid, durations that are not whole 10 ms frames, statistic names and
 # quantiles outside [0, 1], frame ranges past the capture, analysis bandwidths above
-# the sample rate. The power bins are fixed: no validator reads them.
+# the sample rate. The power bins are fixed because no validator reads them.
 
 POWER_BINS = {'power_low': -40.0, 'power_high': 10.0, 'power_resolution': 1.0}
 
@@ -114,10 +114,10 @@ CELL_FRAME = round(10e-3 * CELL_FS)
 TDD_20_SLOTS = 'dddsuudddddddsuudddd'
 TDD_10_SLOTS = 'dsuuuuuuuu'
 
-# the STFT nfft is sample_rate/(subcarrier_spacing/2) and has to be a multiple of 28
-# for the 13/28 overlap and 15/28 window fill to land on whole samples; 420 kHz is the
-# smallest rate that satisfies it, which keeps this the cheapest capture that still
-# spans a whole 20 ms discovery period
+# the STFT nfft is sample_rate/(subcarrier_spacing/2) and must be a multiple of 28
+# for the 13/28 overlap and 15/28 window fill to land on whole samples. 420 kHz is the
+# smallest rate that satisfies it, so this is the cheapest capture that spans a whole
+# 20 ms discovery period
 SSB_SPECTROGRAM_SCS = 30e3
 SSB_SPECTROGRAM_FS = 420e3
 SSB_SPECTROGRAM_SAMPLE_RATE = 120e3
@@ -286,8 +286,8 @@ def ssb_spectrogram_pairs(draw):
     fs = draw(st.sampled_from((420e3, 840e3)))
     scs = draw(st.sampled_from((15e3, 30e3)))
     period = draw(st.sampled_from((10e-3, 20e-3)))
-    # the burst set is the first 2 of the 10*scs/15e3 slots in a 10 ms frame, and
-    # the STFT yields its last symbol only once a whole window (2/scs) follows
+    # the burst set is the first 2 of the 10*scs/15e3 slots in a 10 ms frame. The
+    # STFT yields its last symbol only once a whole window (2/scs) follows
     burst = 2e-3 * 15e3 / scs
     trailing_burst = period + 2 * burst + 2 / scs
     valid = {

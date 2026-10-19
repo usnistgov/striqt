@@ -23,7 +23,7 @@ if typing.TYPE_CHECKING:
 class SpectrogramSizing(NamedTuple):
     """the STFT sizing of one capture under a spectrogram spec.
 
-    Instances come from `validated_spectrogram_sizing`. `nfft`, `noverlap`, `nzero`
+    Instances come from `validated_spectrogram_sizing`. `nfft`, `noverlap`, `nzero`,
     and `hop_size` are in samples and `hop_period` in s; `frequency_bin_averaging` and
     `time_bin_averaging` are the bins summed per `integration_bandwidth` and the
     windows averaged per `time_aperture`, each `None` when its field is unset; `enbw`
@@ -46,11 +46,12 @@ def validated_spectrogram_sizing(
 ) -> SpectrogramSizing:
     """check that `spec` divides `capture` evenly, returning the derived STFT sizing.
 
-    Callers may pass any `FrequencyAnalysisSpecBase`, since both arguments are projected
-    onto the fields that determine the sizing, so the result is shared across captures
-    and spectrogram-derived measurements that differ only in fields it does not read.
-    The capture projection is the base `Capture`, not `AnalysisCapture`: nothing here
-    reads `center_frequency`, so one entry covers a whole frequency sweep.
+    Callers may pass any `FrequencyAnalysisSpecBase`. Both arguments are projected
+    onto the fields that determine the sizing, so the cache entry is shared across
+    captures and spectrogram-derived measurements that differ only in fields the
+    sizing does not read. The capture projection is the base `Capture`, not
+    `AnalysisCapture`. Nothing here reads `center_frequency`, so one entry covers a
+    whole frequency sweep.
 
     The window that `sw.spectrogram` builds for complex64 IQ is designed here, so a bad
     window name or parameter fails before acquisition and the disk-cached design
@@ -154,7 +155,7 @@ def validated_spectrogram_sizing(
             f'hop_period: {hop_period}, STFT windows: {window_count})'
         )
 
-    # the design that `sw.spectrogram` will build for complex64 IQ, so a bad window
+    # the design that `sw.spectrogram` builds for complex64 IQ, so a bad window
     # name or parameter fails here and the disk-cached search is paid before
     # acquisition
     sw.get_window(
@@ -242,7 +243,7 @@ def _cached_spectrogram(
 
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
-        # stick with python arithmetic to ensure consistency with axis bounds calculations
+        # python arithmetic here keeps the bounds consistent with the axis coordinates
         spg = sw.fourier.truncate_freqs(
             spg,
             sizing.nfft,
@@ -273,13 +274,13 @@ def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.nda
     sizing = validated_spectrogram_sizing(capture, spec)
     nfft = sizing.nfft
 
-    # use the striqt.waveform.fourier fftfreq for higher precision, which avoids
-    # headaches when merging spectra with different sampling parameters due
-    # to rounding errors.
+    # the striqt.waveform.fourier fftfreq is exact, so spectra with different
+    # sampling parameters merge without rounding mismatches in their frequency
+    # coordinates
     freqs = sw.fftfreq(nfft, capture.sample_rate)
 
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
-        # stick with python arithmetic here for numpy/cupy consistency
+        # python arithmetic here keeps numpy and cupy results identical
         freqs = sw.fourier.truncate_freqs(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
@@ -287,7 +288,7 @@ def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.nda
     if spec.integration_bandwidth is not None:
         freqs = sw.binned_mean(freqs, sizing.frequency_bin_averaging, fft=True)
 
-    # only now downconvert. round to a still-large number of digits
+    # convert to float64 last, rounding to a still-large number of digits
     return freqs.astype('float64').round(16)
 
 
@@ -410,10 +411,10 @@ def spectrogram(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement
 
     The input is the resampled IQ before the `analysis_bandwidth` low-pass filter and
     any trigger alignment; the output array namespace (numpy or cupy) follows it. Per
-    capture, the result has dimensions
-    ``(spectrogram_time, spectrogram_baseband_frequency)``: `spectrogram_time` in s
+    capture, the output has dimensions
+    ``(spectrogram_time, spectrogram_baseband_frequency)``. `spectrogram_time` in s
     runs from the start of the capture at the STFT hop, which `fractional_overlap`
-    and `frequency_resolution` set, and `spectrogram_baseband_frequency` in Hz is the
+    and `frequency_resolution` set. `spectrogram_baseband_frequency` in Hz is the
     FFT grid at `frequency_resolution`, truncated to the `analysis_bandwidth` about
     DC when `trim_stopband` is set and the bandwidth is finite. Values are power in
     dBm per noise bandwidth, which is `frequency_resolution` or, when set,
@@ -500,7 +501,7 @@ def power_spectral_density(
     Each `time_statistic` reduces the `spectrogram` output with the same STFT fields
     (in linear power, unrounded) across its windows at each frequency bin; 'mean' is
     the Welch estimate (P. D. Welch, IEEE Trans. Audio Electroacoust. 15(2), 1967)
-    and a float in ``[0, 1]`` is a quantile. Per capture, the result has dimensions
+    and a float in ``[0, 1]`` is a quantile. Per capture, the output has dimensions
     ``(time_statistic, baseband_frequency)`` in dBm per noise bandwidth, as recorded
     in the `units` and `noise_bandwidth` attrs, stored as float32.
 
@@ -537,7 +538,7 @@ def power_spectral_density(
     psd[:, findquantile] = (
         xp
         .quantile(spg, q, axis=axis)
-        .swapaxes(0, axis)  # quantile bumps the output result to axis 0
+        .swapaxes(0, axis)  # quantile moves the statistic axis to axis 0
         .astype(working_dtype)  #
     )
 
@@ -593,9 +594,9 @@ def spectrogram_histogram(
     """evaluate the fraction of spectrogram pixels that fall in each power bin.
 
     The pixels are those of the `spectrogram` output with the same STFT fields
-    (float32, unrounded), flattened over time and frequency. Per capture, the result
+    (float32, unrounded), flattened over time and frequency. Per capture, the output
     has the dimension ``(spectrogram_power_bin,)`` and sums to 1.
-    `spectrogram_power_bin` holds the bin centers in dBm per noise bandwidth; its
+    `spectrogram_power_bin` is the bin centers in dBm per noise bandwidth; its
     ``-inf`` and ``inf`` entries collect the pixels more than half a bin below
     `power_low` or above `power_high`. The `noise_bandwidth` attr is in Hz.
 
@@ -652,7 +653,7 @@ def spectrogram_ratio_power_bin(
 
     bins, attrs = spectrogram_power_bin(capture, spec)
 
-    # `attrs` is held in a cache that `spectrogram_histogram` shares whenever the two
+    # `attrs` is a cached object that `spectrogram_histogram` shares whenever the two
     # measurements agree on the spectrogram and power bin fields, so relabeling it in
     # place would relabel that measurement's absolute powers as ratios
     return bins, attrs | {'units': attrs['units'].replace('dBm', 'dB')}
@@ -675,10 +676,10 @@ def spectrogram_ratio_histogram(
 
     The spectrograms are the `spectrogram` output with the same STFT fields (float32,
     unrounded), and the ratio is their pixel-by-pixel difference in dB. The capture
-    must hold exactly 2 channels; otherwise `ValueError` is raised. Per capture, the
-    result has the dimension ``(spectrogram_ratio_power_bin,)`` with bin centers in
-    dB; the first channel holds the ratio of the first to the second, and the second
-    channel its inverse. Normalization and the catch-all bins follow
+    must have exactly 2 channels; otherwise `ValueError` is raised. Per capture, the
+    output has the dimension ``(spectrogram_ratio_power_bin,)`` with bin centers in
+    dB; the first output channel is the ratio of the first input channel to the
+    second, and the second its inverse. Normalization and the catch-all bins follow
     `spectrogram_histogram`.
 
     Args:

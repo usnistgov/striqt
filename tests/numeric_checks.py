@@ -1,10 +1,10 @@
 """comparison assertions, float64 oracles and the test-only tolerance policy shared by
 the suite.
 
-The roundoff models live in the library beside the functions they describe, and the
-per-measurement budgets are registered with `striqt.analysis.registry`; tests take
+The roundoff models are defined in the library beside the functions they describe, and
+the per-measurement budgets are registered with `striqt.analysis.registry`; tests take
 their pass criteria from there, so the model the suite enforces is the one the library
-reports. Not a conftest: importable by bare name from every test module.
+reports. Not a conftest; imported by bare name from every test module.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ FLOAT_DTYPES = (np.float32, np.float64)
 
 
 def dtype_id(dtype):
-    """parametrize id for a dtype argument, e.g. 'float32'"""
+    """parametrize id for a dtype argument, e.g., 'float32'"""
     return np.dtype(dtype).name
 
 
@@ -67,7 +67,7 @@ def numpy_and_cupy(cp, func, *args, xp_kwarg=None, **kws):
     """`func` evaluated on numpy arguments and again on their cupy copies.
 
     With `xp_kwarg`, the cupy call also receives the cupy module as that keyword, for
-    functions that take the array namespace explicitly. Returns the two results as
+    functions that take the array namespace explicitly. Returns the 2 results as
     numpy arrays (or tuples of them) for comparison.
     """
     result_np = func(*args, **kws)
@@ -175,10 +175,10 @@ def elementwise_rtol(dtype):
 
 def cross_backend(numpy_budget, cupy_budget):
     """the tolerance on the difference between a numpy and a cupy evaluation, each
-    within its own exact-math budget: independent roundoff adds in quadrature
+    within its own exact-math budget. Independent roundoff adds in quadrature
     (measured 0.83-1.0 of it, chores/tests/measure_fft_accuracy.py).
 
-    Takes two floats, or two `striqt.analysis.specs.Tolerance` of the same units, whose
+    Takes 2 floats, or 2 `striqt.analysis.specs.Tolerance` of the same units, whose
     `off_peak_dBc` combine as the amplitude errors they encode.
     """
     if isinstance(numpy_budget, (int, float)):

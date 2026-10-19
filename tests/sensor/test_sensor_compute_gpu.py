@@ -80,7 +80,7 @@ TOUCHES_GPU = {
 @pytest.mark.parametrize('case', list(TOUCHES_GPU), ids=list(TOUCHES_GPU))
 def test_sweep_touches_gpu(case):
     """iq_waveform alone is a passthrough, so only a calibration, another
-    measurement, host resampling or a finite analysis bandwidth (in a capture or a
+    measurement, host resampling, or a finite analysis bandwidth (in a capture or a
     loop over them) puts work on the GPU"""
     sweep, expected = TOUCHES_GPU[case]
     assert gpu.sweep_touches_gpu(sweep) is expected

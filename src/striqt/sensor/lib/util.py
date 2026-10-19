@@ -119,7 +119,7 @@ class ExceptionStack:
     """Creates a context manager object that accumulates exceptions.
 
     Any exception raised within a `defer()` context is stashed to be raised later.
-    An exception (possibly an ExceptionGroup) is raised when the ExceptionDeferral
+    An exception (possibly an ExceptionGroup) is raised when the ExceptionStack
     context exits, or on a call to `handle()`.
     """
 
@@ -279,7 +279,7 @@ def retry(
 
     Example:
 
-        The following retries the telnet connection 5 times on ConnectionRefusedError::
+        Retry a telnet connection 5 times on ConnectionRefusedError::
 
             import telnetlib
 
@@ -292,8 +292,8 @@ def retry(
                 return t
 
     Arguments:
-        exception_or_exceptions: Exception (sub)class (or tuple of exception classes) to watch for
-        tries: number of times to try before giving up
+        excs: Exception (sub)class (or tuple of exception classes) to watch for
+        tries: number of calls before the exception is raised
         delay: initial delay between retries in seconds
         backoff: backoff to multiply to the delay for each retry
         exception_func: function to call on exception before the next retry

@@ -49,9 +49,8 @@ _json_decoder = msgspec.json.Decoder()
 
 
 def _to_numpy(arr: Any) -> np.ndarray:
-    """Convert array to numpy, handling cupy arrays transparently."""
+    """return `arr` as a numpy array, transferring cupy arrays to the CPU."""
     if hasattr(arr, 'get'):
-        # cupy array - transfer to CPU
         return arr.get()
     return np.asarray(arr)
 
@@ -116,16 +115,14 @@ class WebPlotBackend:
     """
     A plot backend that generates Plotly.js-compatible JSON for WebGL rendering.
 
-    This mirrors the interface of striqt.figures.backend.PlotBackend but outputs
-    data structures suitable for real-time web visualization instead of matplotlib
-    figures.
+    The methods follow `striqt.figures.backend.PlotBackend` and return Plotly trace
+    and layout dicts instead of matplotlib figures.
     """
 
     def __init__(
         self,
         opts: 'sf.specs.SharedPlotOptions',
     ):
-        # Store opts, using defaults if not provided
         self.opts = opts
         self._pending_traces: List[Dict[str, Any]] = []
         self._layout: Dict[str, Any] = {}
@@ -151,27 +148,23 @@ class WebPlotBackend:
         return '_'.join(parts) if parts else 'main'
 
     def _get_col_dim(self, data: xr.DataArray) -> Optional[str]:
-        """Find the dimension to use for column faceting.
+        """return the dimension for column faceting.
 
-        If opts.col is a dimension, use it directly.
-        If opts.col is a coordinate, find the dimension it belongs to.
-        Returns None if no suitable dimension is found.
+        `opts.col` is returned when it is a dimension of `data`. When `opts.col` is a
+        1-D coordinate, its dimension is returned if `data` has more than 1 value
+        along it. The return is None otherwise.
         """
         col = self.opts.col
         if not col:
             return None
 
-        # If col is directly a dimension, use it
         if col in data.dims:
             return col
 
-        # If col is a coordinate, find which dimension it belongs to
         if col in data.coords:
             coord = data.coords[col]
-            # A coordinate's dims tell us which dimension(s) it indexes
             if coord.dims and len(coord.dims) == 1:
                 dim = coord.dims[0]
-                # Only use if the dimension exists in data and has multiple values
                 if dim in data.dims and len(data[dim]) > 1:
                     return cast(str, dim)
 
@@ -201,15 +194,14 @@ class WebPlotBackend:
             cmap: Matplotlib colormap name
             vmin: Minimum value for color scale
             vmax: Maximum value for color scale
-            vstep: If provided, quantize the colormap into discrete levels
-                   spaced by vstep. This creates a stepped/banded colorbar
-                   instead of a continuous gradient.
+            vstep: spacing of the quantized color levels; None selects a
+                   continuous gradient
         """
-        # Handle faceting by iterating over col dimension
         traces = []
         col_dim = self._get_col_dim(data)
 
-        # Compute shared vmin/vmax across ALL data (all ports) for consistent colorbar
+        # the remembered vmin/vmax span every port and every broadcast, so the
+        # subplots share one colorbar scale
         data_np = _to_numpy(data.values)
         if vmin is None:
             current_vmin = float(np.nanmin(data_np))
@@ -226,7 +218,6 @@ class WebPlotBackend:
                 self._remembered_vmax = max(self._remembered_vmax, current_vmax)
             vmax = self._remembered_vmax
 
-        # Build colorscale - quantized if vstep is provided
         if vstep is not None:
             colorscale = _make_quantized_colorscale(cmap, vmin, vmax, vstep)
         else:
@@ -300,18 +291,17 @@ class WebPlotBackend:
             z_data = z_data.reshape(1, -1)
 
         # Plotly heatmap expects z with shape (len(y), len(x))
-        # Final shape validation - z should be (len(y), len(x))
         if z_data.shape != (len(y_data), len(x_data)):
-            # Try transpose if dimensions are swapped
+            # transpose when the axes are swapped
             if z_data.shape == (len(x_data), len(y_data)):
                 z_data = z_data.T
 
-        # Handle Inf values for heatmaps - replace with NaN (Plotly shows as gaps)
+        # inf is replaced with NaN, which Plotly draws as a gap
         if np.issubdtype(z_data.dtype, np.floating):
             z_data = np.where(np.isinf(z_data), np.nan, z_data)
 
-        # Build trace dict - pass numpy arrays directly, Plotly's to_json() will
-        # automatically apply binary encoding for ~50% smaller payloads
+        # numpy arrays are passed as is; Plotly's to_json() encodes them as base64
+        # typed arrays
         trace: Dict[str, Any] = {
             'type': 'heatmap',
             'x': x_data,
@@ -321,7 +311,6 @@ class WebPlotBackend:
             'showscale': show_colorbar,
         }
 
-        # Add colorbar configuration only if showing
         if show_colorbar:
             trace['colorbar'] = {
                 'title': {'text': _format_units_only(data)},
@@ -352,7 +341,6 @@ class WebPlotBackend:
             layout['annotations'] = _format_subplots(data, self.opts)
 
         if n_subplots > 1:
-            # Create subplot grid
             cols = min(n_subplots, self.opts.col_wrap or 4)
             rows = (n_subplots + cols - 1) // cols
 
@@ -392,7 +380,7 @@ class WebPlotBackend:
         **kwargs,
     ) -> Dict[str, Any]:
         """
-        Create line plot traces for Plotly (uses WebGL scattergl for performance).
+        Create line plot traces for Plotly using `scattergl`.
         """
         traces = []
         col_dim = self._get_col_dim(data)
@@ -409,7 +397,6 @@ class WebPlotBackend:
 
         n_subplots = len(data[col_dim].values) if col_dim else 1
 
-        # Compute current data range (excluding inf values)
         data_np = _to_numpy(data.values)
         finite_mask = np.isfinite(data_np)
         if np.any(finite_mask):
@@ -418,11 +405,7 @@ class WebPlotBackend:
         else:
             current_ymin, current_ymax = 0.0, 1.0
 
-        # Build effective ylim by combining caller-specified limits with remembered limits
-        # For ymin: track the minimum (expand downward)
-        # For ymax: track the maximum (expand upward)
-
-        # Handle ymin - use caller-specified value if provided, otherwise use data min
+        # the remembered limits only widen across broadcasts
         candidate_ymin = (
             ylim[0] if (ylim is not None and ylim[0] is not None) else current_ymin
         )
@@ -431,7 +414,6 @@ class WebPlotBackend:
         else:
             self._remembered_ymin = min(self._remembered_ymin, candidate_ymin)
 
-        # Handle ymax - use caller-specified value if provided, otherwise use data max
         candidate_ymax = (
             ylim[1] if (ylim is not None and ylim[1] is not None) else current_ymax
         )
@@ -478,30 +460,23 @@ class WebPlotBackend:
             '#FECB52',
         ]
 
-        # Check if hue is a dimension or coordinate we can iterate over
         hue_is_dim = hue and hue in data.dims
         hue_is_coord = hue and hue in data.coords and hue not in data.dims
 
         if hue_is_dim:
-            # hue is a dimension - iterate over its values
             hue_values = data[hue].values
             for hue_idx, hue_val in enumerate(hue_values):
                 sub = data.sel({hue: hue_val})
-                # Squeeze out the hue dimension, then flatten remaining dims
                 y_data = _to_numpy(sub.values).squeeze()
 
                 # Ensure x and y have matching lengths
                 if y_data.size != x_data.size:
-                    # If y has extra dimensions, try to align with x
                     if x in sub.dims:
-                        # Select along x dimension to get 1D array
                         y_data = _to_numpy(sub.values)
-                        # Flatten all dims except x, keeping x as the last dim
                         x_dim_idx = list(sub.dims).index(x)
-                        # Move x dim to last position and flatten others
                         y_data = np.moveaxis(y_data, x_dim_idx, -1)
                         y_data = y_data.reshape(-1, y_data.shape[-1])
-                        # If still multi-row, take first row (or could average)
+                        # only the first row is plotted when more than one remains
                         if y_data.shape[0] > 1:
                             y_data = y_data[0]
                         y_data = y_data.flatten()
@@ -544,7 +519,8 @@ class WebPlotBackend:
                 hue_values = np.unique(hue_values)
 
             for hue_idx, hue_val in enumerate(hue_values):
-                # For non-dimension coordinates, we can't select - just use the data
+                # a non-dimension coordinate cannot be selected on, so the whole
+                # array is plotted
                 y_data = _to_numpy(data.values).squeeze()
 
                 # Ensure x and y have matching lengths
@@ -580,7 +556,7 @@ class WebPlotBackend:
                     trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
 
                 traces.append(trace)
-                # Only add one trace for non-dimension hue (can't actually split)
+                # a non-dimension hue cannot split the data, so one trace is added
                 break
         else:
             y_data = _to_numpy(data.values).squeeze()
@@ -652,9 +628,7 @@ class WebPlotBackend:
             cols = min(n_subplots, self.opts.col_wrap or 4)
             rows = (n_subplots + cols - 1) // cols
 
-            # Use ylim if fully specified, otherwise compute from data
             if ylim is not None and ylim[0] is not None and ylim[1] is not None:
-                # Both limits provided - use them directly
                 y_range: list[Optional[float]] = [ylim[0], ylim[1]]
             else:
                 # Compute shared y-axis range across all data, excluding inf values
@@ -670,7 +644,6 @@ class WebPlotBackend:
                 y_range_pad = (y_max - y_min) * 0.05
                 y_range = [y_min - y_range_pad, y_max + y_range_pad]
 
-                # Apply ylim overrides if provided
                 if ylim is not None:
                     if ylim[0] is not None:
                         y_range[0] = ylim[0]
@@ -694,7 +667,7 @@ class WebPlotBackend:
                     'domain': x_domain,
                 }
 
-                # Sanitize y_range to ensure no inf values (not valid JSON)
+                # inf is not valid JSON
                 sanitized_y_range = [
                     None if (v is not None and np.isinf(v)) else v for v in y_range
                 ]
@@ -718,7 +691,6 @@ class WebPlotBackend:
                 'title': {'text': _format_label_with_units(data)},
                 'type': yscale,
             }
-            # Apply ylim if provided for single subplot
             if ylim is not None and (ylim[0] is not None or ylim[1] is not None):
                 y_range_single: list[Optional[float]] = [
                     ylim[0]
@@ -737,8 +709,8 @@ class WebPlotBackend:
         """
         Return coordinate/layout kwargs for plotting.
 
-        This mirrors PlotBackend._coord_kws() to provide compatible interface
-        for striqt.figures.data_vars functions.
+        The signature follows `PlotBackend._coord_kws` for the
+        `striqt.figures.data_vars` functions.
         """
         col = self.opts.col
         if col is None and self.opts.row is None:
@@ -757,13 +729,11 @@ class WebPlotBackend:
         xticklabelunits: Union[bool, Literal['auto']] = 'auto',
     ) -> None:
         """
-        Finalize the plot (no-op for web backend, plot data already collected).
+        accept the `PlotBackend.finish` call from the `striqt.figures.data_vars`
+        functions without side effects.
 
-        This mirrors PlotBackend.finish() to provide compatible interface
-        for striqt.figures.data_vars functions.
+        The traces are collected by `heatmap` and `line`.
         """
-        # For web backend, the plot data is already collected in _pending_traces
-        # by heatmap() and line() methods. Nothing more to do here.
         pass
 
     def mark_noise_level(
@@ -774,12 +744,10 @@ class WebPlotBackend:
         where: Literal['x', 'y', 'colorbar'],
     ) -> None:
         """
-        Add noise level markers to the plot.
+        Add noise level markers to the most recent plot as Plotly layout shapes.
 
-        This mirrors PlotBackend.mark_noise_level() to provide compatible interface
-        for striqt.figures.data_vars functions.
-
-        For web backend, we add shape annotations to the Plotly layout.
+        The signature follows `PlotBackend.mark_noise_level` for the
+        `striqt.figures.data_vars` functions.
         """
         from striqt.figures import util
 
@@ -787,18 +755,15 @@ class WebPlotBackend:
         if noise is None:
             return
 
-        # Find the most recent plot data to add noise markers to
         if not self._pending_traces:
             return
 
         plot_data = self._pending_traces[-1]
         layout = plot_data.get('layout', {})
 
-        # Initialize shapes list if not present
         if 'shapes' not in layout:
             layout['shapes'] = []
 
-        # Add noise level lines for each port
         noise_values = (
             _to_numpy(noise.values).flat if isinstance(noise, xr.DataArray) else [noise]
         )
@@ -831,10 +796,9 @@ class WebPlotBackend:
                     'line': {'color': '#eec009', 'width': 1, 'dash': 'dot'},
                 }
             elif where == 'colorbar':
-                # For heatmaps, add a marker on the colorbar
-                # Plotly annotations can't directly reference colorbar values, so we need
-                # to compute the normalized position (0-1) within the colorbar range
-                # and use paper coordinates for the y position
+                # Plotly annotations cannot reference colorbar values, so the marker
+                # is placed in paper coordinates at the normalized (0-1) position
+                # within the colorbar range
                 traces = plot_data.get('traces', [])
                 if traces:
                     # Get the z range from the first trace with a colorbar
@@ -847,13 +811,11 @@ class WebPlotBackend:
                             break
 
                     if zmin is not None and zmax is not None and zmax > zmin:
-                        # Compute normalized position (0-1) within the colorbar range
-                        # Colorbar typically spans from y=0.1 to y=0.9 in paper coords
+                        # assumed colorbar extent in paper coordinates
                         colorbar_bottom = 0.1
                         colorbar_top = 0.9
                         colorbar_height = colorbar_top - colorbar_bottom
 
-                        # Clamp noise value to the colorbar range
                         clamped_noise = max(zmin, min(zmax, noise_float))
                         normalized = (clamped_noise - zmin) / (zmax - zmin)
                         y_paper = colorbar_bottom + normalized * colorbar_height
@@ -896,28 +858,25 @@ class WebPlotBackend:
 def _to_json_serializable(
     arr: Any, preserve_inf: bool = False
 ) -> Union[np.ndarray, list, float, int, str, None]:
-    """Convert arrays to a format suitable for Plotly graph objects.
+    """Convert arrays to Plotly graph object inputs.
 
-    Returns numpy arrays directly for numeric data (Plotly's to_json() will
-    automatically apply binary encoding for ~50% smaller payloads).
-    Falls back to list format for non-numeric arrays.
+    Numeric arrays are returned as contiguous numpy arrays, which Plotly's
+    `to_json()` encodes as base64 typed arrays. Other arrays are returned as lists.
 
-    Handles NaN and Inf values:
-    - NaN -> preserved (Plotly handles as gaps)
-    - Inf -> NaN by default (for line plots where gaps are preferred)
-    - Inf -> preserved if preserve_inf=True (for heatmaps, shown as extreme values)
+    NaN is kept, and Plotly draws it as a gap. Inf is replaced with NaN unless
+    `preserve_inf` is True.
 
     Args:
         arr: The array or value to convert
-        preserve_inf: If True, keep Inf values (for heatmaps).
-                     If False, convert Inf to NaN (for line plots).
+        preserve_inf: True keeps Inf values, which heatmaps draw at the ends of the
+                     color scale. False replaces Inf with NaN.
     """
     # Use large but finite values for Inf when preserving
     _INF_REPLACEMENT = 1e38
     _NEG_INF_REPLACEMENT = -1e38
 
     def _sanitize_value(v):
-        """Convert NaN to None, Inf based on preserve_inf setting."""
+        """convert NaN to None and Inf according to `preserve_inf`."""
         if isinstance(v, float):
             if np.isnan(v):
                 return None
@@ -940,7 +899,7 @@ def _to_json_serializable(
                 result.append(item)
         return result
 
-    # Handle cupy arrays by converting to numpy first
+    # cupy arrays transfer to the CPU
     if hasattr(arr, 'get'):
         arr = arr.get()
 
@@ -948,15 +907,13 @@ def _to_json_serializable(
         # String types - must use list format
         if arr.dtype.kind in ('U', 'S', 'O'):
             return arr.tolist()
-        # Handle datetime64 - must use list format
+        # datetime64 must use list format
         if np.issubdtype(arr.dtype, np.datetime64):
             return [str(x) for x in arr]
-        # Handle timedelta64 - convert to seconds
+        # timedelta64 is converted to seconds
         if np.issubdtype(arr.dtype, np.timedelta64):
             arr = (arr / np.timedelta64(1, 's')).astype(np.float64)
 
-        # For numeric arrays, handle Inf values and return numpy array
-        # Plotly's to_json() will automatically apply binary encoding
         if arr.dtype.kind in ('f', 'i', 'u'):
             arr = np.ascontiguousarray(arr)
             if not preserve_inf and np.issubdtype(arr.dtype, np.floating):
@@ -1035,7 +992,7 @@ def _mpl_to_plotly_colorscale(cmap: str) -> Any:
 
     Returns a Plotly-compatible colorscale - either a string for built-in
     colormaps or a list of [position, color] pairs for custom ones.
-    For colormaps not built into Plotly, extracts colors from matplotlib.
+    Colormaps that Plotly lacks are sampled from matplotlib at 256 points.
     """
     import matplotlib.pyplot as plt
 
@@ -1055,20 +1012,17 @@ def _mpl_to_plotly_colorscale(cmap: str) -> Any:
     if cmap_lower in plotly_builtins:
         return plotly_builtins[cmap_lower]
 
-    # For other colormaps (like cubehelix), extract from matplotlib
     try:
         mpl_cmap = plt.get_cmap(cmap)
     except ValueError:
         # Fallback to viridis if colormap not found
         return 'Viridis'
 
-    # Sample the colormap at 256 points and convert to Plotly format
     n_colors = 256
     colorscale: List[List[Any]] = []
     for i in range(n_colors):
         pos = i / (n_colors - 1)
         rgba = mpl_cmap(pos)
-        # Convert to rgb string format
         r, g, b = int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255)
         colorscale.append([pos, f'rgb({r},{g},{b})'])
 
@@ -1083,8 +1037,8 @@ def _make_quantized_colorscale(
 ) -> List[List[Any]]:
     """Create a quantized (stepped/banded) colorscale for Plotly.
 
-    This creates discrete color bands instead of a continuous gradient,
-    matching the behavior of matplotlib's BoundaryNorm with a resampled colormap.
+    The color bands are discrete, as with matplotlib's `BoundaryNorm` over a
+    resampled colormap.
 
     Args:
         cmap: Matplotlib colormap name
@@ -1099,40 +1053,33 @@ def _make_quantized_colorscale(
 
     import striqt.figures as sf
 
-    # Compute quantized bin edges using striqt's utility function
-    # Pass None for data since vmin/vmax are already provided
+    # data=None is accepted when vmin and vmax are both given
     levels = sf.util.quantized_value_range(None, vmin, vmax, vstep)  # type: ignore[arg-type]
     n_levels = len(levels) - 1
 
     if n_levels < 1:
         n_levels = 1
 
-    # Get the matplotlib colormap and resample to n_levels colors
     try:
         mpl_cmap = plt.get_cmap(cmap).resampled(n_levels)
     except ValueError:
         mpl_cmap = plt.get_cmap('viridis').resampled(n_levels)
 
-    # Build a stepped colorscale where each color band is constant
-    # For n_levels, we need 2*n_levels entries to create flat bands
+    # each band takes 2 entries of the same color, so the colorscale is flat
+    # within a band
     colorscale: List[List[Any]] = []
     for i in range(n_levels):
-        # Normalized position for this band
         pos_start = i / n_levels
         pos_end = (i + 1) / n_levels
 
-        # Get color for this level (sample at center of band)
         rgba = mpl_cmap(i / (n_levels - 1) if n_levels > 1 else 0.5)
         r, g, b = int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255)
         color = f'rgb({r},{g},{b})'
 
-        # Add two entries with same color to create a flat band
         colorscale.append([pos_start, color])
         if i < n_levels - 1:
-            # For all but the last band, add the end position with same color
             colorscale.append([pos_end, color])
         else:
-            # Last band ends at 1.0
             colorscale.append([1.0, color])
 
     return colorscale
@@ -1154,7 +1101,7 @@ def get_data_plots_registry():
 # FastAPI Application
 # ---------------------------------------------------------------------------
 
-# Global state for the web server (typed for improved IDE support and type checking)
+# global state for the web server
 _app_state: AppState = {
     'delayed_dataset': None,
     'plotter': None,
@@ -1185,7 +1132,6 @@ app = FastAPI(
 )
 
 
-# Path to HTML template file
 _HTML_TEMPLATE_PATH = Path(__file__).parent / 'web-plotter.html'
 
 
@@ -1229,7 +1175,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         'spec_filename': _app_state['spec_filename'],
                     }).decode()
                 )
-                # If we have data, also trigger a plot update for this client
+                # push the current plot to the new client when data exists
                 if _app_state['delayed_dataset'] is not None:
                     await broadcast_plot_update()
             elif msg['type'] == 'select_variable':
@@ -1254,14 +1200,12 @@ async def websocket_endpoint(websocket: WebSocket):
 async def broadcast_plot_update():
     """Broadcast plot data to all connected clients.
 
-    Uses a flag-based approach to prevent queue buildup when the display
-    falls behind the data acquisition rate. If a broadcast is already in
-    progress, new requests are skipped but the data_updated flag ensures
-    the latest data will be sent when the current broadcast completes.
+    Requests that arrive while a broadcast is in progress set `data_updated`
+    instead of queuing. One more broadcast follows when the current one
+    completes, so the display does not fall behind the acquisition rate.
     """
-    # Skip if a broadcast is already in progress
     if _app_state['broadcast_pending']:
-        _app_state['data_updated'] = True  # Mark that we have newer data
+        _app_state['data_updated'] = True
         return
 
     _app_state['broadcast_pending'] = True
@@ -1271,7 +1215,7 @@ async def broadcast_plot_update():
     finally:
         _app_state['broadcast_pending'] = False
 
-        # If new data arrived while we were broadcasting, schedule another update
+        # data that arrived during the broadcast is sent in one more pass
         if _app_state['data_updated']:
             _app_state['data_updated'] = False
             # Use create_task to avoid recursion depth issues
@@ -1279,7 +1223,7 @@ async def broadcast_plot_update():
 
 
 async def _do_broadcast_if_needed():
-    """Helper to trigger another broadcast if data was updated."""
+    """broadcast again when data arrived during the previous broadcast."""
     if (
         _app_state['delayed_dataset'] is not None
         and not _app_state['broadcast_pending']
@@ -1300,13 +1244,11 @@ def _prepare_plot_data_sync(
     variable: str,
     data_select: Dict[str, Any],
 ) -> tuple[list[Dict[str, Any]], CoordinatesData]:
-    """Synchronous helper to prepare plot data - runs in thread pool.
+    """prepare plot traces and coordinates for one variable, for a worker thread.
 
-    This function performs CPU/GPU-bound work that would block the event loop:
-    - Coordinate extraction from the delayed dataset
-    - Materializing delayed computations (GPU transfer on TX2i)
-    - Running the plot function to generate traces
-    - JSON-serializable data preparation
+    The work blocks the event loop if run there: coordinate extraction,
+    materializing the delayed dataset (a GPU transfer on the TX2i), and the plot
+    function.
 
     Args:
         result: Delayed dataset from acquisition
@@ -1320,7 +1262,7 @@ def _prepare_plot_data_sync(
     """
     from striqt.sensor.lib import compute
 
-    plotter.reset()  # Clear traces/layout but keep vmin/vmax memory
+    plotter.reset()
 
     # Extract capture coordinates (deferred from update_dataset to reduce acquisition thread work)
     coordinates = _extract_capture_coordinates(result)
@@ -1331,16 +1273,14 @@ def _prepare_plot_data_sync(
     delayed = _select_delayed_variable(result, variable)
     ds = compute.from_delayed(delayed).set_xindex('port')
 
-    # Apply data selection from PlotOptions.data.select
-    # Filter to only include keys that are valid indexes in this dataset
+    # keys that are not indexes of this dataset are dropped from the selection
     if data_select:
         valid_indexes = set(ds.indexes.keys())
         filtered_select = {k: v for k, v in data_select.items() if k in valid_indexes}
         if filtered_select:
             ds = ds.sel(filtered_select)
 
-    # Call the striqt.figures.data_vars function with our WebPlotBackend
-    # The function will call plotter.heatmap/line and plotter.finish
+    # the data_vars function calls plotter.heatmap or plotter.line, then plotter.finish
     plot_func(ds, cast('sf.backend.PlotBackend', plotter))
 
     plot_data = plotter.get_plot_data()
@@ -1358,11 +1298,10 @@ def _serialize_plot_message(
 ) -> str:
     """Serialize plot message using Plotly's binary encoding for numpy arrays.
 
-    Plotly's fig.to_json() emits numpy arrays as base64 typed-array specs. We let
-    Plotly own that step, decode its output with msgspec, wrap it in the outer
-    message, and re-encode with msgspec. By the time msgspec sees the data it is
-    all plain JSON-native types (dicts, lists, base64 strings), so the strict
-    non-finite-float handling is not a concern here.
+    Plotly's `fig.to_json()` emits numpy arrays as base64 typed-array specs. Its
+    output is decoded with msgspec, wrapped in the outer message, and re-encoded
+    with msgspec. The decoded data are plain JSON types (dicts, lists, and base64
+    strings), so msgspec's strict non-finite-float handling does not apply.
     """
     serialized_plots = []
     for plot in plot_data:
@@ -1418,9 +1357,8 @@ async def _do_broadcast():
             )
 
             if not plot_data:
-                # No plot data was generated - likely the function uses
-                # matplotlib-specific code (FacetGrid, ax=) that doesn't work
-                # with WebPlotBackend
+                # an empty result means the plot function drew with matplotlib
+                # calls (FacetGrid, ax=) that WebPlotBackend does not implement
                 error_message = _json_encoder.encode({
                     'type': 'error',
                     'message': f"'{variable}' uses matplotlib-specific plotting that isn't supported in web view yet",
@@ -1442,7 +1380,6 @@ async def _do_broadcast():
                 _app_state['spec_filename'],
             )
 
-            # Broadcast to all connected clients
             disconnected = set()
             for ws in _app_state['websockets']:
                 try:
@@ -1457,7 +1394,6 @@ async def _do_broadcast():
 
             traceback.print_exc()
 
-            # Send error to clients
             error_message = _json_encoder.encode({
                 'type': 'error',
                 'message': f"Error plotting '{variable}': {str(e)}",
@@ -1489,7 +1425,7 @@ def _get_field_origins(cls: type) -> Dict[str, type]:
     for klass in reversed(mro):
         struct_fields: Tuple[str, ...] = klass.__struct_fields__  # ty: ignore
         for field_name in struct_fields:
-            # First class to define it wins (since we're going base->derived)
+            # the base-most class that defines the field wins
             if field_name not in field_origins:
                 field_origins[field_name] = klass
 
@@ -1516,14 +1452,11 @@ def _extract_extra_coords(
     if extra_coords is None:
         return {}
 
-    # Get field origins from the extra_coords type
     field_origins = _get_field_origins(type(extra_coords))
 
-    # Group fields by their defining class
     grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
 
     for field_name, defining_class in field_origins.items():
-        # Skip signal_trigger
         if field_name == 'signal_trigger':
             continue
 
@@ -1531,10 +1464,9 @@ def _extract_extra_coords(
         if value is None:
             continue
 
-        # Format the value
         formatted_value = _format_coord_value(value)
 
-        # Try to get unit from type hints or attrs (AcquisitionInfo fields typically don't have units)
+        # AcquisitionInfo fields carry no units
         unit = ''
 
         coord_dict = {
@@ -1578,25 +1510,20 @@ def _extract_capture_coordinates(
     splits = ss.specs.captures.split_capture_ports(result.capture)
     port_count = len(splits)
 
-    # Get field origins from the capture spec
     field_origins = _get_field_origins(type(result.capture))
 
-    # Group coordinates by their defining class (only include fields from capture spec)
     grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
 
     for field_name, defining_class in field_origins.items():
-        # Only include if this field exists as a coordinate in the dataset
         if field_name not in capture_coords:
             continue
 
         coord = capture_coords[field_name]
         value = coord.values
 
-        # Get unit from attrs
         unit = coord.attrs.get('units', '')
 
         # Format values as a list (one per port if multi-valued)
-        # Apply SI prefix for numeric values with units
         if value.ndim == 0:
             # Scalar value - same for all ports
             raw_values = [value.item()] * port_count
@@ -1613,7 +1540,6 @@ def _extract_capture_coordinates(
 
         # Apply SI prefix formatting for numeric values with units
         if raw_values is not None and unit:
-            # Check if all values are numeric (float/int)
             numeric_vals = [
                 float(v)
                 for v in raw_values
@@ -1626,7 +1552,6 @@ def _extract_capture_coordinates(
                 values = [
                     _format_value_with_prefix(float(v), pow10) for v in raw_values
                 ]
-                # Update unit with prefix
                 unit = f'{prefix}{unit}'
             else:
                 # Mixed or non-numeric - format without SI prefix
@@ -1651,7 +1576,6 @@ def _extract_capture_coordinates(
         class_name = f'{defining_class.__module__}.{defining_class.__name__}'
         grouped[class_name].append(coord_dict)
 
-    # Extract extra_coords (AcquisitionInfo fields)
     extra_coords_groups = _extract_extra_coords(result)
 
     return cast(
@@ -1677,12 +1601,10 @@ def _get_si_prefix_for_values(values: List[float], unit: str) -> tuple[int, str]
     if unit.lower().startswith('db'):
         return 0, ''
 
-    # Filter to finite non-zero values
     finite_vals = [abs(v) for v in values if np.isfinite(v) and v != 0]
     if not finite_vals:
         return 0, ''
 
-    # Use smallest absolute value to determine prefix
     min_val = min(finite_vals)
 
     # Calculate power of 1000 (engineering notation)
@@ -1703,10 +1625,9 @@ def _format_value_with_prefix(value: float, pow10: int) -> str:
 
     scaled = value / (10.0**pow10)
 
-    # Handle rounding to 1000 case
     if abs(scaled) >= 1000 and pow10 < max(_ENG_PREFIXES.keys()):
         scaled /= 1000
-        # Note: we don't adjust pow10 here since we want consistent prefix
+        # pow10 is not advanced because every value shares one prefix
 
     return f'{scaled:.4g}'
 
@@ -1714,12 +1635,10 @@ def _format_value_with_prefix(value: float, pow10: int) -> str:
 def _format_coord_value(value: Any) -> str:
     """Format a single coordinate value for display (without SI prefix)."""
     if isinstance(value, (np.floating, float)):
-        # Format floats nicely
         if abs(value) >= 1e6 or (abs(value) < 1e-3 and value != 0):
             return f'{value:.3e}'
         return f'{value:.4g}'
     if isinstance(value, np.datetime64):
-        # Format datetime
         return str(value)[:19]  # Trim to seconds
     if isinstance(value, np.timedelta64):
         # Convert to seconds
@@ -1736,9 +1655,9 @@ def _build_variable_labels_from_registry(
 ) -> Dict[str, str]:
     """Build a mapping from variable names to human-readable labels.
 
-    This is called once at startup to avoid repeated introspection on every capture.
-    It iterates over the analysis spec fields and looks up the corresponding
-    spec class in the registry to derive labels.
+    The labels come from the registry's spec class names for the fields set in
+    `analysis_spec`. A field without a registry entry falls back to its
+    title-cased name.
 
     Args:
         analysis_spec: The analysis specification from the sweep spec (spec.analysis)
@@ -1755,7 +1674,6 @@ def _build_variable_labels_from_registry(
     for spec_type, info in registry.items():
         name_to_class[info.name] = spec_type.__name__
 
-    # Iterate over the analysis spec fields
     for field_name in analysis_spec.__struct_fields__:
         value = getattr(analysis_spec, field_name)
         if value is not None:
@@ -1794,8 +1712,7 @@ def _spec_class_to_label(class_name: str) -> str:
     for abbrev, replacement in abbreviations:
         result = result.replace(abbrev, replacement)
 
-    # Insert spaces before uppercase letters (handles CamelCase)
-    # But preserve consecutive uppercase (acronyms)
+    # split CamelCase at lowercase-to-uppercase boundaries, keeping acronyms intact
     result = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', result)
     result = re.sub(r'(?<=[A-Z])(?=[A-Z][a-z])', ' ', result)
 
@@ -1806,14 +1723,12 @@ def _spec_class_to_label(class_name: str) -> str:
 
 
 def update_dataset(result: 'ss.lib.compute.DelayedDataset'):
-    """Update the dataset and trigger broadcast to clients.
+    """store the dataset and refresh the list of plottable variables.
 
-    Note: Variable labels are built once at startup in run_server() using
-    _build_variable_labels_from_registry(), not on every capture.
+    Variable labels are built once by `run_server`, not here.
     """
     _app_state['delayed_dataset'] = result
 
-    # Update available variables based on what's in the dataset
     data_plots = get_data_plots_registry()
     available = [n for n in result.delayed.keys() if n in data_plots]
 
@@ -1851,7 +1766,7 @@ def run_server(
     else:
         raise click.ClickException('expected file to have .json or .yaml suffix')
 
-    # Disable sink to handle data ourselves
+    # NoSink replaces the configured sink; on_data receives the results instead
     spec = spec.replace(
         extensions=spec.extensions.replace(sink='striqt.sensor.sinks.NoSink')
     )
@@ -1879,15 +1794,13 @@ def run_server(
 
     _app_state['plot_opts'] = plot_opts
     _app_state['plotter'] = WebPlotBackend(plot_opts.plotter)
-    # Store data selection dict for xarray.sel() - will be filtered to valid indexes per variable
+    # the selection is filtered to valid indexes per variable in _prepare_plot_data_sync
     _app_state['data_select'] = dict(plot_opts.data.select)
 
-    # Build variable labels once at startup from the analysis spec and registry
     _app_state['variable_labels'] = _build_variable_labels_from_registry(
         spec.analysis, sa.registry
     )
 
-    # Event loop for async operations
     loop = asyncio.new_event_loop()
 
     def acquisition_loop():
@@ -1895,7 +1808,6 @@ def run_server(
 
         def on_data(result: 'ss.lib.compute.DelayedDataset') -> None:
             """Callback when new data arrives."""
-            # Store capture spec for field origin introspection
             update_dataset(result)
 
             # Schedule broadcast on the event loop
@@ -1913,15 +1825,12 @@ def run_server(
                 for _ in sweep:
                     pass
 
-    # Start acquisition in background thread
     acq_thread = threading.Thread(target=acquisition_loop, daemon=True)
     acq_thread.start()
 
-    # Run uvicorn with the event loop
     config = uvicorn.Config(app, host=host, port=port, loop='asyncio')
     server = uvicorn.Server(config)
 
-    # Run the server
     loop.run_until_complete(server.serve())
 
 

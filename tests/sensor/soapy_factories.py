@@ -1,8 +1,8 @@
 """factories for SoapySDR-backed spec instances and the fake device, shared by the
 sensor tests.
 
-Not a conftest: importable by bare name from the sensor test modules only; fixtures
-live in the root conftest.
+Not a conftest. The sensor test modules import it by bare name; fixtures are
+defined in the root conftest.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def source_spec(**overrides) -> ss.specs.SoapySource:
     Field overrides are passed through; overrides of the class attributes
     `rx_enable_delay`, `stream_all_rx_ports`, `transport_dtype`,
     `shared_rx_sample_clock` and `transient_holdoff_time` select a cached SoapySource
-    subclass that carries them.
+    subclass that defines them.
     """
     class_attrs = tuple(
         sorted((k, overrides.pop(k)) for k in list(overrides) if k in _CLASS_ATTRS)

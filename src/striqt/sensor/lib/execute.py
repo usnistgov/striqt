@@ -1,4 +1,4 @@
-"""implement sensor anlysis sweeps as parallel (acquisition, analysis, sink)"""
+"""implement sensor analysis sweeps as parallel (acquisition, analysis, sink)"""
 
 from __future__ import annotations as __
 
@@ -30,7 +30,7 @@ def iterate_sweep(
 
     Data acquisition, analysis, and sink operations each run in parallel in
     separate threads. Normally, the iterator yields a result for each
-    of the N captures after it is handled by the sink:
+    of the N captures after the sink has appended it:
 
     ```
     0. `(Acquire 0)`
@@ -42,7 +42,7 @@ def iterate_sweep(
     ```
 
     With the `always_yield` argument, the iterator yields `None` to support
-    status information in the 2 steps that do not yield anlaysis results:
+    status information in the 2 steps that do not yield analysis results:
 
     ```
     0. `(Acquire 0)` ➔ yield `None`
@@ -54,14 +54,14 @@ def iterate_sweep(
     ```
 
     The type of each yielded result depends on the return value of `sink.append`.
-    To to minimize memory usage, the yield values can also be explicitly set to
+    To minimize memory usage, the yield values can also be explicitly set to
     `None` with `yield_values`.
 
     Args:
         resources: dictionary of open resources returned by open_resources
         always_yield: if True, yield `None` on steps that produce no analysis
-        always_values: if False, yield will return `None` instead of the sink result
-        loop: if True, the sweep will repeat at the beginning after last capture
+        yield_values: if False, yield `None` instead of the sink result
+        loop: if True, the sweep repeats from the beginning after the last capture
 
     Returns:
         An iterator of analyzed data or None
@@ -81,7 +81,7 @@ def iterate_sweep(
         correction=True,
         cache_callback=log,
         as_xarray='delayed',
-        block_each=True,  # important: data corruption observed otherwise
+        block_each=True,  # data corruption has been observed otherwise
     )
 
     iq = None
@@ -126,7 +126,7 @@ def iterate_sweep(
                 if iq is None:
                     analysis = None  # first and last iterations
                 else:
-                    # cupy/cuda wants this in the foreground
+                    # cupy/cuda analysis must run in the foreground thread
                     analysis = compute.analyze(iq, compute_opts)
                     assert isinstance(analysis, compute.DelayedDataset)
 
@@ -277,7 +277,7 @@ def _log_cache_info(
     else:
         info_fields = ('port',)
 
-    # convert to dB after this function
+    # converted to dB below
     peaks = spg.max(axis=tuple(range(1, spg.ndim)))
     noise = lookup_system_noise_power(
         cal,

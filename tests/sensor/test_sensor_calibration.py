@@ -64,8 +64,8 @@ TOGGLE_MSG = 'noise_diode_enabled must be the first specified loop'
 class TestNoiseDiodeToggle:
     @given(ordering=st.permutations(list(CAL_LOOP_VALUES)), data=st.data())
     def test_explicit_toggle_position(self, ordering, data):
-        """the toggle is accepted where calibration.py inserts it: outermost, or just
-        inside a port loop"""
+        """the toggle is accepted where calibration.py inserts it: outermost, or
+        immediately inside a port loop"""
         count = data.draw(st.integers(min_value=0, max_value=len(ordering)))
         names = ordering[:count]
         loops = [ss.specs.List(field=f, values=CAL_LOOP_VALUES[f]) for f in names]
@@ -484,7 +484,7 @@ def _flush_model_captures(path):
 @pytest.fixture(scope='module')
 def flushed_calibration(fake_sweep_runner, tmp_path_factory) -> FakeRun:
     """the calibration YFactorSink.flush saves from a full grid of model captures,
-    as a FakeRun with the sweep but no prompts, fake device or results"""
+    as a FakeRun with the sweep but no prompts, fake device, or results"""
     # the runner stubs the source id lookup that the sink's path formatting performs
     path = tmp_path_factory.mktemp('yfactor') / 'flushed.nc'
     sweep = _flush_model_captures(path)
@@ -604,8 +604,8 @@ def fake_calibration_run(fake_sweep_runner) -> FakeRun:
 
 @pytest.fixture
 def fake_model(fake_calibration_run):
-    """the fake device's signal model with the noise diodes, which the calibration
-    sweep leaves on, switched off; tones set by the test are cleared afterwards"""
+    """the fake device's signal model with the noise diodes switched off after the
+    calibration sweep leaves them on; tones set by the test are cleared afterwards"""
     model = fake_calibration_run.fake.model
     model.diode_on.clear()
     yield model
@@ -687,7 +687,7 @@ class TestFakeMeasurementSweep:
         rms = _rms_dBm(ds).values
         assert rms[0] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
         assert rms[2] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
-        # noise only: the FIR passband is not exactly 40 MHz wide
+        # wider tolerance for the noise-only port, whose FIR passband is not exactly 40 MHz
         assert rms[1] == pytest.approx(_expected_dBm(1, 40e6), abs=0.15)
         assert ds.system_noise.attrs['units'] == 'dBm/Hz'
         assert ds.system_noise.values == pytest.approx(

@@ -35,8 +35,8 @@ class SpecBase(
     """Base type for structures that support validated
     (de)serialization.
 
-    It is a `msgspec.Struct` class with some often-used utility
-    methods that fix encoding and decoding hooks for extra types.
+    It is a `msgspec.Struct` with methods that set the encoding and decoding hooks
+    for extra types.
     """
 
     def replace(self, **attrs) -> Self:
@@ -112,7 +112,7 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 
 
 class AnalysisCapture(Capture, kw_only=True, frozen=True):
-    """hold the capture fields that measurements and coordinate factories may read.
+    """define the capture fields that measurements and coordinate factories may read.
 
     Measurement validators take this projection of a (potentially much larger)
     sensor capture, so captures differing only in fields the analysis layer ignores
@@ -158,9 +158,9 @@ class Tolerance(SpecBase, kw_only=True, frozen=True):
 
     A tolerance function derives this from a (capture, spec) pair alone, so `on_peak`
     holds at an element at full scale and `off_peak_dBc` is relative to the output's
-    own peak; neither can depend on the values produced. The peak is the
-    matched-filter bin of the matched input, e.g. a tone's FFT bin or an impulse's
-    detector sample; `off_peak_dBc` governs the other bins, and elements deeper than
+    own peak. Neither can depend on the values produced. The peak is the
+    matched-filter bin of the matched input, e.g., a tone's FFT bin or an impulse's
+    detector sample. `off_peak_dBc` governs the other bins, and elements deeper than
     `off_peak_dBc.peak` are not resolved by the budget.
     """
 

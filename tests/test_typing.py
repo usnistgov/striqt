@@ -1,13 +1,13 @@
 """what the type checker sees at striqt's keyword-unpacking sites.
 
-Measurement signatures, coordinate factories, `Controller` construction and `arm`,
-the cache and `retry` decorators and the `Unpack[TypedDict]` forwarders all get their
-static types through generic wrappers that never run at test time, so a broken
-Protocol or a lost `ParamSpec` would otherwise be silent. Each probe under
-`tests/ty_probes/` is ordinary typed code that must check clean: an accepted call
-asserts its result with `assert_type`, and a rejected call carries
-`# ty: ignore[<rule>]`, which ty reports as unused if the rejection ever stops. The
-probe over the registered measurements is generated from `sa.registry`.
+Generic wrappers that never run at test time give the static types of measurement
+signatures, coordinate factories, `Controller` construction and `arm`, the cache and
+`retry` decorators, and the `Unpack[TypedDict]` forwarders. A broken Protocol or a
+lost `ParamSpec` is silent at run time. Each probe under `tests/ty_probes/` is
+ordinary typed code that must check clean: an accepted call asserts its result with
+`assert_type`, and a rejected call is marked `# ty: ignore[<rule>]`, which ty reports
+as unused if the rejection ever stops. The probe over the registered measurements is
+generated from `sa.registry`.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ PROBE_DIR = pathlib.Path(__file__).with_name('ty_probes')
 
 
 def ty_check(target: pathlib.Path | str) -> subprocess.CompletedProcess[str]:
-    # --project is required: without it ty takes the target's directory as the
+    # --project is required. Without it ty takes the target's directory as the
     # project, so [tool.ty] in pyproject.toml does not apply
     command = [
         sys.executable,
@@ -101,8 +101,8 @@ def registry_probe() -> str:
         'def probe(iq: np.ndarray, cap: sa.specs.Capture) -> None:',
     ]
     for spec_type, info in sa.registry.items():
-        # <module>.<name> rather than sa.measurements.<name>: cellular_5g_sss_sync is
-        # registered but not exported
+        # <module>.<name> rather than sa.measurements.<name> because
+        # cellular_5g_sss_sync is registered but not exported
         func = f'{info.func.__module__}.{info.name}'
         fields = msgspec.structs.fields(spec_type)
         required = [f.name for f in fields if f.required]

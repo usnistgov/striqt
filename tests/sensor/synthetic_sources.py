@@ -4,7 +4,7 @@ The synthetic bindings call the `striqt.analysis.testing` generators at the sour
 sample rate with absolute indices referenced to the corrected capture, so the
 corrected output is the same generator evaluated at `capture.sample_rate` from
 index 0. The presets keep every acquisition under 5e4 samples per port. Not a
-conftest: importable by bare name from the sensor test modules.
+conftest. The sensor test modules import it by bare name.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ SIGNAL_KWS = {
     'dirac_delta': ('time', 'power'),
 }
 
-# the four signal paths of correct_iq. Measured overlaps from SOURCE: 3125/3125,
+# the 4 signal paths of correct_iq. Measured overlaps from SOURCE: 3125/3125,
 # 350/350, 512/512 and 4608/4608 at fs_sdr 6.25e6, 6.25e6, 15.36e6 and 7.68e6.
 # Both durations are multiples of the 1/8000 s detector period.
 RESAMPLE_FILTER = {
@@ -225,7 +225,7 @@ def acquire_corrected(
     `source` when given.
 
     `raw.pre_align` is [lead overlap | round(duration*fs_sdr) | tail overlap] at
-    fs_sdr; `corrected` holds the pre_filter, pre_align and (with a trigger) aligned
+    fs_sdr; `corrected` fills the pre_filter, pre_align, and (with a trigger) aligned
     stages at capture.sample_rate.
     """
     if isinstance(binding, str):
@@ -265,7 +265,7 @@ def expected_corrected(binding: str, capture, *, count=None, xp=np):
     """the corrected waveform of `capture` under the uniform time origin: the
     generator at capture.sample_rate from index 0.
 
-    None for noise: only its power survives resampling, since the source draws it
+    None for noise. Only its power survives resampling, since the source draws it
     at fs_sdr.
     """
     if binding == 'noise':

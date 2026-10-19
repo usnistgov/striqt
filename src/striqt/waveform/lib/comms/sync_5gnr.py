@@ -1,11 +1,10 @@
 """5G NR synchronization against the synchronization signal block (SSB).
 
 The PSS and SSS m-sequences (3GPP TS 38.211 §7.4.2) are rendered as time-domain
-correlation templates at a given sample rate, the SSB symbol positions follow the
-cell search cases of TS 38.213 §4.1, the SSB band is extracted from wideband IQ
-by recentering and resampling, and the correlation of that IQ against the
-templates yields a (coarse lag, fine lag) grid from which an SSB start offset is
-chosen.
+correlation templates at a given sample rate. The SSB symbol positions follow the
+cell search cases of TS 38.213 §4.1. The SSB band is extracted from wideband IQ
+by recentering and resampling. The correlation of that IQ against the templates
+yields a (coarse lag, fine lag) grid from which an SSB start offset is chosen.
 """
 
 from __future__ import annotations as __
@@ -168,7 +167,7 @@ def _generate_5g_nr_sync_sequence(
     if center_frequency is None or center_frequency == 0:
         frequency_offset = 0
     elif isroundmod(center_frequency, subcarrier_spacing):
-        # check frequency bounds later via pad_*
+        # pad_lo and pad_hi below enforce the frequency bounds
         frequency_offset = round(center_frequency / subcarrier_spacing)
     else:
         raise ValueError(
@@ -219,9 +218,8 @@ def pss_5g_nr(
 ):
     """compute the PSS correlation sequences at the given sample rate for each N_id2.
 
-    The sequence can be convolved with an IQ waveform of the same sample rate
-    along the last axis to compute a synchronization correlation sequence. The
-    result would be normalized to the IQ input power.
+    Convolution with an IQ waveform of the same sample rate along the last axis
+    gives a synchronization correlation normalized to the IQ input power.
 
     Args:
         sample_rate: the desired output sample rate (in S/s), a multiple of subcarrier_spacing and at least (127*subcarrier_spacing)
@@ -253,11 +251,10 @@ def sss_5g_nr(
     xp=None,
     dtype='complex64',
 ):
-    """compute the PSS correlation sequences at the given sample rate for each N_id2.
+    """compute the SSS correlation sequences at the given sample rate for each cell ID.
 
-    The sequence can be convolved with an IQ waveform of the same sample rate
-    along the last axis to compute a synchronization correlation sequence. The
-    result would be normalized to the IQ input power.
+    Convolution with an IQ waveform of the same sample rate along the last axis
+    gives a synchronization correlation normalized to the IQ input power.
 
     Args:
         sample_rate: the desired output sample rate (in S/s), a multiple of subcarrier_spacing and at least (127*subcarrier_spacing)
@@ -289,9 +286,9 @@ def index_pss_symbols(
     A tuple or list in `symbol_indexes` is returned unchanged. ``'auto'`` selects
     the cell search case from `subcarrier_spacing`: 15 kHz is case A, 30 kHz is
     case C and requires `shared_spectrum`, 120 kHz is case D, 240 kHz is case E,
-    480 kHz is case F, and 960 kHz is case G. The strings ``'a'``, ``'b'`` and
+    480 kHz is case F, and 960 kHz is case G. The strings ``'a'``, ``'b'``, and
     ``'c'`` select that case directly. `shared_spectrum` is accepted for cases A
-    and C only. For cases A, B and C, `center_frequency` at or below 3 GHz (1.88 GHz
+    and C only. For cases A, B, and C, `center_frequency` at or below 3 GHz (1.88 GHz
     for case C) selects the reduced candidate count of the standard.
 
     Args:
@@ -308,7 +305,7 @@ def index_pss_symbols(
         increasing order
 
     Raises:
-        TypeError: `symbol_indexes` is not a str, tuple or list
+        TypeError: `symbol_indexes` is not a str, tuple, or list
         ValueError: 30 kHz spacing with ``'auto'`` and `shared_spectrum` False,
             a spacing without a standardized case, an unknown case string, or
             `shared_spectrum` with a case other than A or C
@@ -362,8 +359,8 @@ def index_pss_symbols(
         if shared_spectrum:
             nrange = range(5)
         else:
-            # for center frequencies < 3 GHz (or 1.88 GHz in unpaired operation)
-            # the upper 2 can be ignored
+            # the upper 2 candidates are unused below 3 GHz (1.88 GHz in unpaired
+            # operation)
             if center_frequency is None or center_frequency > 3e9:
                 nrange = range(4)
             else:
@@ -384,9 +381,11 @@ def index_pss_symbols(
             if center_frequency is None or center_frequency > 1.88e9:
                 nrange = range(4)
             else:
-                # NOTE: In theory, TDD between 1.88 - 3 GHz should also go here
+                # TS 38.213 §4.1 also assigns paired-spectrum operation between 1.88
+                # and 3 GHz to this branch, which the center frequency alone cannot
+                # identify
                 nrange = range(2)
-    # Below here FR-2
+    # cases D through G are FR2
     elif case == 'd':
         offsets = [4, 8, 16, 20]
         mult = 28
@@ -540,8 +539,8 @@ def get_5g_ssb_iq(
     max_block_count: int | None = None,
     oaresample: bool = False,
 ) -> Array:
-    """return a sync block waveform, which returns IQ that is recentered
-    at baseband frequency spec.frequency_offset and downsampled to spec.sample_rate."""
+    """return the SSB band of `iq`, recentered from `frequency_offset` to baseband
+    and resampled from `fs_in` to `fs_out`."""
 
     xp = arrays.array_namespace(iq)
 
@@ -601,7 +600,7 @@ def sync_frame_count(sample_count: int, params: SyncParams) -> int:
 
     Raises:
         ValueError: if `correlate_sync_sequence` could not proceed on the block:
-            it does not hold a whole, nonzero number of frames of `params.frame_size`
+            the block does not contain a whole, nonzero number of frames of `params.frame_size`
             samples, the correlation span `params.corr_size` exceeds a frame, or
             trimming each slot's excess cyclic prefix from that span would leave
             fewer than `params.lag_count` correlation samples
@@ -644,8 +643,8 @@ def correlate_sync_sequence(
 
     Args:
         ssb_iq: The synchronization block IQ waveform (e.g., from `get_5g_ssb_iq`)
-        sync_seq: The reference sequence (e.g. from `striqt.waveform.comms_5gnr.pss_5g_nr` or `striqt.waveform.comms_5gnr.sss_5g_nr`)
-        params: The cell synchronization parameters (e.g. from `striqt.waveform.comms_5gnr.pss_params` or `striqt.waveform.comms_5gnr.sss_params`)
+        sync_seq: The reference sequence (e.g., from `striqt.waveform.comms_5gnr.pss_5g_nr` or `striqt.waveform.comms_5gnr.sss_5g_nr`)
+        params: The cell synchronization parameters (e.g., from `striqt.waveform.comms_5gnr.pss_params` or `striqt.waveform.comms_5gnr.sss_params`)
 
     Returns:
         correlator across parameters:
@@ -668,7 +667,8 @@ def correlate_sync_sequence(
     # pad_size = template_bcast.shape[-1]
     # template_bcast  = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
 
-    # TODO: this would need to support multiple different prefixes for 4G LTE
+    # the single offset is specific to the 5G NR prefix layout and does not cover
+    # 4G LTE
     offs = (
         round(params.sample_rate / params.subcarrier_spacing) + 2 * params.min_cp_size
     )
@@ -691,7 +691,7 @@ def correlate_sync_sequence(
     Rperslot = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
     R = Rperslot.reshape(R.shape[:-1] + (-1,))
 
-    # take the desired symbol indexes from a sliding window views on the correlation sequence
+    # take the desired symbol indexes from sliding window views on the correlation sequence
     # final dims (port index, cell Nid, sync block index, beam index, IQ sample index)
     start_inds = xp.array(params.symbol_indexes) * params.short_symbol_size
 
@@ -728,7 +728,7 @@ def weighted_ssb_detect(
 
     xp = arrays.array_namespace(rssb)
 
-    # first, establish the needed dimensions
+    # establish the needed dimensions
     if rssb.ndim == 4:
         # assume a missing dimension is the port index
         rssb = rssb[np.newaxis, ...]
@@ -737,7 +737,7 @@ def weighted_ssb_detect(
     symbol_count = round(params.lag_count / params.short_symbol_size)
     rssb = rssb.reshape(rssb.shape[:-1] + (symbol_count, -1))
 
-    # then, select beams
+    # select beams
     if max_beams is None or max_beams >= rssb.shape[BEAM_DIM]:
         pass
     else:
@@ -753,15 +753,14 @@ def weighted_ssb_detect(
     if not per_port:
         r = r.mean(axis=PORT_DIM, keepdims=True)
 
-    # it's tempting to use .min on SYNC_DIM to reduce thermal noise impacts.
-    # however, this relies on fairly close sample clock alignment with the
-    # base station.
+    # .min on SYNC_DIM would reduce thermal noise but requires close sample clock
+    # alignment with the base station
     r = r.mean(axis=(NID2_DIM, BEAM_DIM), keepdims=True)
     r = xp.median(r, axis=SYNC_DIM, keepdims=True)
     rmed = xp.median(r, axis=(FINE_LAG_DIM), keepdims=True)
 
-    # to avoid spectral bleeding from individual strong sources,
-    # consider only obvious peaks with at least 3 dB prominence
+    # only peaks with at least 3 dB prominence count, which limits spectral bleeding
+    # from individual strong sources
     rpeak = r.copy()
     limits = r.max((FINE_LAG_DIM, COARSE_LAG_DIM), keepdims=True)
     threshold = xp.clip(2 * rmed, a_min=limits / 2, a_max=None)
@@ -800,18 +799,18 @@ def choose_ssb_offset(
     window: WindowSpecType = 'triang',
     window_fill: float | Fraction = 1,
 ) -> Array:
-    """Given correlator output, apply averaging reductions to {NID2, SSB, beam} indexes
-    and a weighting function to the lag.
+    """return the SSB start offset (in samples) from correlator output averaged over
+    the {NID2, SSB, beam} indexes and weighted across lag.
 
-    The approach is to use a weighted average of nearby peaks across lag
-    in order to reduce mis-alignment errors in measurements of aggregate interference.
+    A weighted average of nearby peaks across lag reduces misalignment errors in
+    measurements of aggregate interference.
 
-    The underlying heuristic is a triangular weighting function to include energy
-    within +/- `window_fill/2` symbols of each peak. Outside of this range, spectrogram errors
-    due to "ISI" begin to increase quickly.
+    The triangular weighting includes energy within +/- `window_fill/2` symbols of
+    each peak. Outside that range, spectrogram errors due to inter-symbol
+    interference increase quickly.
 
     Args:
-        rssb: output from
+        rssb: output from `correlate_sync_sequence`
         window: the window function to use for weighting
         per_port: whether to return a weighted correlation separately per port
         window_fill: the fraction of the window to apply
@@ -826,7 +825,7 @@ def choose_ssb_offset(
     weighted_fine = offsets.mean(axis=COARSE_LAG_DIM)
     ifine = weighted_fine.argmax(-1)
 
-    # evaluate the symbol index offset
-    isymbol = nfine * offsets.max(FINE_LAG_DIM).argmax(-1)  # the peakiest symbol or 0
+    # evaluate the symbol index offset: the symbol with the largest peak, or 0
+    isymbol = nfine * offsets.max(FINE_LAG_DIM).argmax(-1)
 
     return ifine + isymbol

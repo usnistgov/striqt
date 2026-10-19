@@ -34,8 +34,7 @@ def get_capture_type(sweep_cls: type[structs.Sweep]) -> type[structs.SensorCaptu
 def split_capture_ports(capture: SC) -> list[SC]:
     """split a multi-channel capture into a list of single-channel captures.
 
-    If capture is not a multi-channel capture (its channel field is just a number),
-    then the returned list will be [capture].
+    A single-port capture (a scalar `port` field) is returned as the only element.
     """
 
     if isinstance(capture.port, numbers.Number):
@@ -65,7 +64,7 @@ def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC |
     # a list with 1 capture per port
     c1_split = split_capture_ports(c1)
 
-    # any changes to the port index
+    # a new capture has no predecessor to pair with
     if c2 is None or is_new:
         c2_split = len(c1_split) * [None]
     else:
@@ -115,15 +114,15 @@ def concat_group_sizes(
 ) -> list[int]:
     """return the minimum sizes of groups of captures that can be concatenated.
 
-    This is important, because some channel analysis results produce a different
-    shape depending on (sample_rate, analysis_bandwidth, duration).
+    Some analysis results have shapes that depend on (sample_rate,
+    analysis_bandwidth, duration).
 
     Returns:
         The list l of sizes of each group such that sum(l) == len(captures)
     """
 
     class C(structs.SensorCapture, frozen=True, forbid_unknown_fields=False):
-        """minimal capture fields that safely ignore fields from subclasses"""
+        """the base capture fields, with subclass fields ignored on conversion"""
 
     remaining = sa.specs.helpers.convert_spec(captures, type=list[C])
     whole_set = set(remaining)
@@ -135,8 +134,8 @@ def concat_group_sizes(
 
     while len(remaining) > 0:
         if count >= min_size and set(pending) == set(counts) == whole_set:
-            # make sure that the pending and remaining captures
-            # will result in equivalent shapes when concatenated
+            # close the group only when both pending and remaining span every
+            # distinct capture
             sizes.append(count)
             count = 0
             pending = []

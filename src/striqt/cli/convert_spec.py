@@ -60,7 +60,6 @@ def _custom_indent(obj, indent_level=2, current_indent=0):
             return '{}'
         items = []
         for k, v in obj.items():
-            # Indent mappings (dictionaries)
             formatted_val = _custom_indent(
                 v, indent_level, current_indent + indent_level
             )
@@ -73,11 +72,10 @@ def _custom_indent(obj, indent_level=2, current_indent=0):
         if not obj:
             return '[]'
         items = [_custom_indent(v, indent_level, current_indent) for v in obj]
-        # Keep lists completely compact on a single line
+        # lists stay on one line
         return '[' + ', '.join(items) + ']'
 
     else:
-        # Base types (strings, numbers, booleans, null)
         return json.dumps(obj)
 
 

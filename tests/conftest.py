@@ -18,12 +18,12 @@ from hypothesis.extra.numpy import array_shapes, arrays
 
 np.seterr(divide='ignore')
 
-# every property test in the suite runs under these settings: the array fixtures
-# below are function scoped, and JIT compilation and GPU transfers make the
-# per-example deadline meaningless. differing_executors is suppressed because the
-# hypothesis plugin recognizes parametrization only through parametrize marks or
-# fixture params, not the pytest_generate_tests call that drives the `xp` fixture
-# (hypothesis issue 3733)
+# every property test in the suite runs under these settings. function_scoped_fixture
+# is suppressed because the array fixtures below are function scoped, and the deadline
+# is removed because JIT compilation and GPU transfers make a per-example deadline
+# meaningless. differing_executors is suppressed because the hypothesis plugin
+# recognizes parametrization only through parametrize marks or fixture params, not the
+# pytest_generate_tests call that drives the `xp` fixture (hypothesis issue 3733)
 settings.register_profile(
     'striqt',
     suppress_health_check=[
@@ -44,11 +44,11 @@ class _MemoryShelf(UserDict):
 def isolated_persistent_cache():
     """Back util.persistent_cache with an in-memory dict for the test session.
 
-    The on-disk shelf is dbm.ndbm on macOS, which corrupts once the cache evicts
-    past its size limit (the window-parameter searches alone write dozens of
-    entries per call) or when two test processes write concurrently, after which
-    every later get_window call on the machine fails. Tests also should not
-    leave one-off entries in the developer's cache.
+    The on-disk shelf is dbm.ndbm on macOS. That backend corrupts once the cache
+    evicts past its size limit (the window-parameter searches alone write dozens of
+    entries per call) or when 2 test processes write concurrently. After either,
+    every later get_window call on the machine fails. Tests also must not leave
+    one-off entries in the developer's cache.
     """
     from striqt.waveform.lib import util
 
@@ -75,7 +75,7 @@ def _get_cupy():
 
     try:
         try:
-            # this needs to happen first or a linking error happens on py39 jetson
+            # importing numba.cuda before cupy avoids a linking error on the py39 Jetson
             import numba.cuda  # noqa: F401
         except ImportError:
             pass
@@ -183,7 +183,7 @@ scalars = st.one_of(st.none(), st.booleans(), bounded_ints, finite_floats, short
 
 
 def float_dtypes(dtype=None):
-    """float32 and float64, or just `dtype` when given"""
+    """float32 and float64, or only `dtype` when given"""
     if dtype is None:
         return st.sampled_from([np.float32, np.float64])
     return st.just(dtype)
@@ -251,7 +251,7 @@ def envelope_arrays(
 ):
     """envelope (amplitude) values with magnitude in [min_magnitude, max_magnitude].
 
-    With `include_complex`, half of the examples carry a uniformly drawn phase.
+    With `include_complex`, half of the examples have a uniformly drawn phase.
     """
 
     @st.composite
@@ -443,7 +443,7 @@ def armed_tone_controller(isolated_lookup):
 
 
 def assert_source_released(lookup, sweep):
-    """the controller registry no longer holds an open controller for the sweep's
+    """assert that the controller registry has no open controller for the sweep's
     source, so the next open does not find a closed one"""
     import striqt.sensor as ss
 
@@ -498,7 +498,7 @@ def construct_both(cls, **kws):
 
 
 def _spec_kws_to_builtins(kws: dict) -> dict:
-    # nested capture specs carry frozendict fields, which need the specs' enc_hook
+    # nested capture specs have frozendict fields, which need the specs' enc_hook
     import striqt.analysis as sa
 
     return msgspec.to_builtins(kws, enc_hook=sa.specs.helpers._enc_hook)
@@ -698,11 +698,11 @@ def fake_sweep_runner(tmp_path_factory):
 
     `replace` fields are applied to the sweep spec before it runs; the sink path is
     replaced by `output_name` under a fresh temporary directory. `FakeRun.prompts`
-    holds only the prompts of that run and `FakeRun.results` the sink output
+    lists only the prompts of that run, and `FakeRun.results` is the sink output
     concatenated along `capture` (an empty list when the sink yields nothing).
 
     A module that uses this fixture must not also use the function-scoped
-    `fake_soapy` fixture: the second install_fake_soapy would shadow the first.
+    `fake_soapy` fixture. A second install_fake_soapy shadows the first.
     """
     import re
     from pathlib import Path
@@ -758,7 +758,7 @@ def restore_logging_state():
     log_to_file, log_capture_context and StriqtLogger mutate.
 
     Only the adapters that existed at setup are restored. Adapters created during
-    the test are left as they are: they come from the lazy import of a striqt
+    the test are left as they are. They come from the lazy import of a striqt
     package, and the modules that import them at module level would otherwise
     find their adapter deleted.
     """
@@ -812,7 +812,8 @@ HARDWARE_ENV = 'STRIQT_TEST_HARDWARE'
 
 
 def pytest_configure(config):
-    # registered here rather than in pyproject.toml: pytest 8 ignores [tool.pytest]
+    # registered here rather than in pyproject.toml because pytest 8 ignores
+    # [tool.pytest]
     config.addinivalue_line(
         'markers', f'hardware: needs an attached SDR; opt in with {HARDWARE_ENV}=1'
     )

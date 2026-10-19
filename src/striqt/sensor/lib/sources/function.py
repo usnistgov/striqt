@@ -65,9 +65,9 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
 
         Callers generate all `ports` rows and keep one, rather than asking for a
         single port, so that a multi-port acquisition reproduces one generator call
-        with the same `ports`: the noise draws interleave port-by-port within each
+        with the same `ports`. The noise draws interleave port-by-port within each
         sample, so one row of an N-port call is not the result of any smaller call.
-        The cost is that each port of an N-port capture draws all N ports.
+        Each port of an N-port capture therefore draws all N ports.
         """
         ports = self._capture.port
 

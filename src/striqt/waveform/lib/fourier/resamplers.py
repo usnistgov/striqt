@@ -1,5 +1,5 @@
-"""Rational resampling: the COLA resampler design that picks radio sample rate, LO offset
-and FFT sizes, and the FFT (`resample`) and STFT overlap-add (`oaresample`)
+"""Rational resampling: the COLA resampler design that selects radio sample rate, LO
+offset, and FFT sizes, and the FFT (`resample`) and STFT overlap-add (`oaresample`)
 implementations of it.
 """
 
@@ -70,14 +70,14 @@ def design_cola_resampler(
     window=None,
     fs_sdr: typing.Optional[float] = None,
 ) -> ResamplerDesign:
-    """design the radio sample rate, LO offset and COLA FFT sizes of a resampler.
+    """design the radio sample rate, LO offset, and COLA FFT sizes of a resampler.
 
     The design resamples from the radio rate ``fs_sdr`` (an integer division of
     `fs_base`, unless given) to `fs_target` with FFT sizes in the ratio
     ``nfft / nfft_out == fs_sdr / fs_target`` exactly, both divisible by the COLA
     divisor of `window`. With `shift`, the radio is to be tuned ``lo_offset`` below
-    the center frequency so that its LO leakage falls outside the protected band,
-    and ``fs_sdr`` is raised so that the `fs_target`-wide output band around
+    the center frequency so that its LO leakage falls outside the protected band.
+    ``fs_sdr`` is then raised so that the `fs_target`-wide output band around
     ``lo_offset`` fits inside the radio's Nyquist band. The magnitude of
     ``lo_offset`` is ``bw / 2 + bw_lo / 2`` rounded up to a whole number of
     ``fs_sdr / nfft`` bins, so a radio tuned by it is offset by up to one bin more
@@ -94,7 +94,7 @@ def design_cola_resampler(
             LO shift, which leaves room for the bin rounding of ``lo_offset``
         min_fft_size: the smallest ``nfft_out`` candidate considered
         shift: ``'left'`` or ``'right'`` moves the LO leakage below or above the
-            protected band; ``'none'``, None or False leaves it at the center
+            protected band; ``'none'``, None, or False leaves it at the center
         avoid_primes: whether to reject ``nfft_out`` candidates that are large
             primes, which the FFT computes slowly
         window: a key of the COLA window divisor table; None selects ``'hamming'``
@@ -149,7 +149,8 @@ def design_cola_resampler(
 
     resample_ratio = fs_sdr / fs_target
 
-    # the following returns the modulos closest to either 0 or 1, accommodating downward rounding errors (e.g., 0.999)
+    # isroundmod admits ratios that round to a whole number, which covers downward
+    # rounding errors (e.g., 0.999)
     trial_noverlap = resample_ratio * np.arange(1, OLA_MAX_FFT_SIZE + 1)
     check_mods = isroundmod(trial_noverlap, 1) & (
         trial_noverlap > min_fft_size * resample_ratio
@@ -171,7 +172,7 @@ def design_cola_resampler(
         nfft_out *= divisor
         nfft_in *= divisor
 
-    # the following LO shift arguments assume that a hamming COLA window is used
+    # the LO shift arguments below assume a hamming COLA window
     if shift == 'left':
         sign = -1
     elif shift == 'right':
@@ -300,7 +301,7 @@ def resample(
 ) -> _AT:
     """partial reimplementation of scipy.signal.resample optimized for reduced memory.
 
-    No new buffers are allocated when downsampling if `overwrite_x` is `False`.
+    No new buffers are allocated when downsampling if `overwrite_x` is `True`.
     """
     if domain not in ('time', 'freq', 'frequency'):
         raise ValueError(
@@ -328,8 +329,7 @@ def resample(
     resample_scale = float(nfft_out) / float(nfft_in) * scale
 
     if domain == 'time':
-        # apply fftshift in the time domain, where we can avoid a copy.
-        # the fftshift is needed to enable clean slice-driven downsampling
+        # fftshift in the time domain avoids a copy and makes downsampling a slice
         x = time_fftshift(x, resample_scale, overwrite_x=overwrite_x, axis=axis)
         y = fft(x, axis=axis, overwrite_x=True, out=x)
     else:
@@ -347,9 +347,7 @@ def resample(
         y = axis_slice(y, *bounds, axis=axis)
 
     elif nfft_out > nfft_in:
-        # upsample by zero-padding frequency.
-        # this requires a copy, since not all platforms support the
-        # fft `out` argument is non-standard
+        # upsample by zero-padding frequency, which allocates a copy
         pad_left = (nfft_out - nfft_in) // 2
         pad_right = pad_left + (nfft_out - nfft_in) % 2
         y = pad_along_axis(y, [[pad_left, pad_right]], axis=axis)

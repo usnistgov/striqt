@@ -11,11 +11,11 @@ import numba as nb
 
 @numba.cuda.jit(cache=True)
 def _corr_at_indices(inds, x, nfft: int, ncp: int, norm: bool, out):
-    # iterate on parallel across the points in the output correlation
+    # iterate in parallel across the points in the output correlation
     j = numba.cuda.grid(1)
 
     if j < nfft + ncp:
-        # from here on, the numba code is identical to _corr_at_indices_cpu
+        # the accumulation below follows `cp_cpu_jit._corr_at_indices`
         accum_corr = nb.complex128(0 + 0j)
         accum_power_a = nb.float64(0.0)
         accum_power_b = nb.float64(0.0)

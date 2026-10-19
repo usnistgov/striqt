@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .typing import P, PassThroughWrapper, R, SourceOpenCallback
     import xarray as xr
 
-    # python < 3.10 workaround
+    # the Generic parameters are for type checking only on python < 3.10
 
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """Sensor resources needed to run a sweep"""
@@ -53,7 +53,7 @@ if TYPE_CHECKING:
         format_path: specs.paths.PathFormatter | None
 
 else:
-    # python < 3.10 workaround
+    # the Generic parameters are for type checking only on python < 3.10
     class Resources(typing_extensions.TypedDict):
         """Sensor resources needed to run a sweep"""
 
@@ -122,7 +122,7 @@ class ConnectionManager(
     def resources(self) -> Resources[SS, SP, SC, PS, PC]:
         missing = Resources.__required_keys__ - set(self._resources.keys())
 
-        # TODO: troubleshoot why runtime __required_keys__ includes NotRequired fields
+        # at runtime, __required_keys__ includes the NotRequired fields
         missing = missing - {'peripherals', 'except_context'}
         if len(missing) == 0:
             return cast(Resources[SS, SP, SC, PS, PC], self._resources)
@@ -164,7 +164,7 @@ def _open_devices(
             # AbstractContextManager
             conn.enter_context(peripherals)  # ty: ignore[invalid-argument-type]
 
-    # the peripherals wait until both the source and the
+    # setup runs only after both the source and the peripherals are open
     peripherals.setup(spec.captures, spec.loops)
 
 
@@ -187,12 +187,12 @@ def open_resources(
 ) -> ConnectionManager[SS, SP, SC, PS, PC]:
     """open the sensor hardware and software contexts needed to run the given sweep.
 
-    The returned Connections object contains the resulting context. All of its resources
-    are then open and ready to run the sweep.
+    The resources of the returned `ConnectionManager` are open and ready to run the
+    sweep.
     """
 
     from .compute import prepare_compute
-    import numpy as np  # python < 3.15 workaround import concurrency bugs
+    import numpy as np  # avoids import concurrency bugs on python < 3.15
 
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')
@@ -216,7 +216,7 @@ def open_resources(
         with exc.defer():
             # foreground thread 1: initialize warmup sweeps
             try:
-                # prioritize compute as we get started; load up buffers
+                # prioritize compute during startup; load up buffers
                 compute_iter = prepare_compute(spec, skip_warmup=test_only)
                 next(compute_iter)
             except Exception:
@@ -242,7 +242,7 @@ def open_resources(
         with exc.defer():
             # finish any warmups
             try:
-                # prioritize compute as we get started; load up buffers
+                # prioritize compute during startup; load up buffers
                 for _ in compute_iter:
                     pass
             except Exception:

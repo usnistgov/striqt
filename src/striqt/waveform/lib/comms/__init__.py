@@ -2,8 +2,8 @@
 synchronization.
 
 The frame models in `phy_3gpp` and `phy_802_16` give the sample indices of cyclic
-prefixes and symbols, `cp.correlate_cyclic_shift` correlates a waveform at those
-indices, and `sync_5gnr` builds PSS/SSS templates and locates synchronization signal
+prefixes and symbols. `cp.correlate_cyclic_shift` correlates a waveform at those
+indices. `sync_5gnr` builds PSS/SSS templates and locates synchronization signal
 blocks in captured IQ.
 """
 

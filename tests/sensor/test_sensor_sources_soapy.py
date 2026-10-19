@@ -197,7 +197,7 @@ HEADROOM_CASES = {
 
 @pytest.mark.parametrize('limit', list(HEADROOM_CASES), ids=list(HEADROOM_CASES))
 def test_headroom_has_one_int8_entry_per_port(limit, xp):
-    """only the limits the source sets are reported, and port 1 has the more room:
+    """only the limits the source sets are reported, and port 1 has more headroom:
     a smaller peak below the ADC limit, and 30 dB less gain into the intermod model"""
     source, capture, peaks = HEADROOM_CASES[limit]
     info = soapy.compute_overload_info(_samples(xp, peaks), source, capture)

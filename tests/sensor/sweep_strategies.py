@@ -1,6 +1,6 @@
 """strategies and factories for the sweep and capture helper tests.
 
-Not a conftest: a second rootless conftest would shadow the root one that other test
+Not a conftest. A second rootless conftest would shadow the root one that other test
 directories import by name.
 """
 
@@ -209,7 +209,7 @@ def loop_fields(sweep) -> list:
 # A receiver with power gain G after a noise source at temperature Tsource, with
 # effective input noise temperature Te, has rms output power in full-scale units
 #   P = G * k * (Tsource + Te) * B
-# so the Y-factor method should recover noise_figure == nf_dB and
+# so the Y-factor method recovers noise_figure == nf_dB and
 # power_correction == 1/G exactly.
 
 BOLTZMANN_MW = 1.380649e-23 * 1e3
@@ -271,7 +271,7 @@ def make_yfactor_dataset(
     time_count=4,
     **gain_kws,
 ):
-    """a calibration dataset shaped as YFactorSink.flush has it before the corrections:
+    """a calibration dataset shaped as YFactorSink.flush receives it before the corrections:
     one dimension per calibration field plus noise_diode_enabled, and a constant
     channel_power_time_series drawn from the receiver model"""
     import xarray as xr

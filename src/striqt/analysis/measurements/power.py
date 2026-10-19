@@ -52,8 +52,8 @@ def validated_channel_power_binning(
 ) -> ChannelPowerBinning:
     """return the detector binning of `capture` under `spec`, checking it tiles evenly.
 
-    `sw.iq_to_bin_power` and `sw.axis_to_blocks` apply the same two rules once IQ is
-    in hand; checking them here moves the failure ahead of the acquisition.
+    `sw.iq_to_bin_power` and `sw.axis_to_blocks` apply the same two rules to the IQ;
+    checking them here moves the failure ahead of the acquisition.
 
     Raises:
         ValueError: if `detector_period` is not a whole number of samples, `duration`
@@ -177,8 +177,8 @@ def channel_power_time_series(
     """evaluate a time series of binned channel power for each power detector.
 
     Each detector reduces the instantaneous power ``|iq|**2`` over consecutive blocks
-    of `detector_period` ('rms' the mean, 'peak' the maximum), and the result is
-    converted to dBm. Per capture, the result has dimensions
+    of `detector_period` ('rms' the mean, 'peak' the maximum), and the reduced power
+    is converted to dBm. Per capture, the output has dimensions
     ``(power_detector, time_elapsed)``, with `time_elapsed` in s from the start of the
     capture in steps of `detector_period`. The capture `duration` must be a whole
     number of detector periods and `detector_period` a whole number of samples at
@@ -201,8 +201,8 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
 
     The finite centers run from `power_low` toward `power_high` in steps of
     `power_resolution`, bracketed by ``-inf`` and ``inf``. The last finite center is
-    `power_high` or lies within half a step below it. The result is cached and shared
-    between callers, so it must not be modified in place.
+    `power_high` or lies within half a step below it. The returned array is cached and
+    shared between callers, so it must not be modified in place.
 
     Returns:
         1-D array in the namespace `xp`: the grid points with one extra element at
@@ -225,8 +225,8 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 
     Edges sit midway between adjacent grid points, so the first and last edges are
     ``-inf`` and ``inf`` and the finite edges extend half a step below `power_low` and
-    half a step above `power_high`. The result is cached and shared between callers,
-    so it must not be modified in place.
+    half a step above `power_high`. The returned array is cached and shared between
+    callers, so it must not be modified in place.
 
     Returns:
         1-D array in the namespace `xp`, one element longer than `make_power_bins`
@@ -280,9 +280,9 @@ def channel_power_histogram(
     """evaluate the fraction of channel power readings that fall in each power bin.
 
     The readings are those of `channel_power_time_series` with the same detector
-    fields. Per capture, the result has dimensions
+    fields. Per capture, the output has dimensions
     ``(power_detector, channel_power_bin)`` and sums to 1 over the bins of each
-    detector. `channel_power_bin` holds the bin centers in dBm; its ``-inf`` and
+    detector. `channel_power_bin` is the bin centers in dBm; its ``-inf`` and
     ``inf`` entries collect the readings more than half a bin below `power_low` or
     above `power_high`.
 
@@ -338,11 +338,11 @@ def validated_cyclic_lag_count(
 ) -> int:
     """check that the sample, detector and cycle periods nest evenly.
 
-    `sw.iq_to_cyclic_power` applies these same three rules once IQ is in hand; checking
-    them here moves the failure ahead of the acquisition.
+    `sw.iq_to_cyclic_power` applies these same three rules to the IQ; checking them
+    here moves the failure ahead of the acquisition.
 
     Returns:
-        the number of detector bins in one cycle, i.e. the length of `cyclic_lag`
+        the number of detector bins in one cycle, i.e., the length of `cyclic_lag`
 
     Raises:
         ValueError: if `detector_period` is not a whole number of samples,
@@ -447,26 +447,26 @@ def cyclic_channel_power(
 ) -> Measurement:
     """evaluate cyclic statistics of channel power across the cycles in a capture.
 
-    Each power detector bins the capture on `detector_period`; the binned series is
+    Each power detector bins the capture on `detector_period`. The binned series is
     folded into cycles of `cyclic_period`, and each cyclic statistic reduces across
-    the cycles, following D.G. Kuester et al., "Cyclic Analysis of Power in Radio
-    Channels". Per capture, the result has dimensions
+    the cycles (D.G. Kuester et al., "Cyclic Analysis of Power in Radio Channels").
+    Per capture, the output has dimensions
     ``(power_detector, cyclic_statistic, cyclic_lag)``. The `cyclic_lag` coordinate
     in s starts at 0 and spans one `cyclic_period` in steps of `detector_period`, so
     those two fields alone set the trace length, regardless of the capture
     `duration`.
 
     Signals whose period divides `cyclic_period` (10 ms covers TDD cellular frames,
-    5 ms WiMAX frames and the 1 ms CBRS test ``bin 1`` pulse repetition interval)
-    resolve at fixed lags with little spread between the 'min' and 'max' statistics,
-    so the uplink and downlink levels of a TDD network can be read from disjoint lag
-    windows, while occupancy with an incommensurate period smears across all lags.
+    5 ms WiMAX frames, and the 1 ms CBRS test ``bin 1`` pulse repetition interval)
+    resolve at fixed lags with little spread between the 'min' and 'max' statistics.
+    The uplink and downlink levels of a TDD network can then be read from disjoint
+    lag windows. Occupancy with an incommensurate period smears across all lags.
 
-    Statistics are evaluated in linear power and converted to dBm afterwards. The
+    Statistics are evaluated in linear power and converted to dBm afterward. The
     capture `duration` must be a whole number of cycles, `cyclic_period` a whole
     number of detector periods, and `detector_period` a whole number of samples at
-    `sample_rate`; write it as a fraction (``1/28000`` s is one OFDM symbol at
-    30 kHz subcarrier spacing) to keep that exact.
+    `sample_rate`. A `detector_period` written as a fraction (``1/28000`` s is one
+    OFDM symbol at 30 kHz subcarrier spacing) stays exact.
 
     Args:
     {args}

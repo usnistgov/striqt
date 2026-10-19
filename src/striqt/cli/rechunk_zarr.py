@@ -25,7 +25,6 @@ def cli(zarr_input: str, zarr_output: str | None, chunk_size, compression):
 
 
 def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
-    # yaml first, since it fails fastest
     import striqt.analysis as sa
     from pathlib import Path
 

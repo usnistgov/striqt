@@ -164,7 +164,7 @@ def channel_power_time_series(
 
 @_register_data_var_plot
 def cyclic_channel_power(data: '_DS', plotter: '_PlotBackend', *, noise_line=True):
-    # TODO: refactor to make this implementable with plotter method calls
+    # PlotBackend has no method for this layout, so the FacetGrid is built here
 
     from xarray.plot import FacetGrid
     from . import backend
@@ -194,7 +194,7 @@ def power_spectral_density(
 ) -> _Path | None:
     name = sa.measurements.power_spectral_density.__name__
     _, x = _coord_names(sa.specs.PowerSpectralDensity)
-    # legacy support tweaks
+    # older stores name these 'persistence_spectrum' and 'persistence_statistics'
     if name not in data.data_vars and 'persistence_spectrum' in data.data_vars:
         name = 'persistence_spectrum'
     if hue == 'time_statistic' and 'persistence_statistics' in data:

@@ -1,4 +1,4 @@
-"""closed forms, windowing and seeding of the striqt.analysis.testing generators.
+"""closed forms, windowing, and seeding of the striqt.analysis.testing generators.
 
 The measurement tests assert against the closed forms documented in that module, so
 these tests pin the closed forms themselves: a unit tone of mean power 1, noise of
@@ -226,12 +226,11 @@ def test_sawtooth_follows_the_closed_form(xp, power):
     """At an exact reset (`t == k * period`) the ramp has a jump discontinuity
     from `amplitude` back to `0`. `period` (1e-5) and `FS` (1e6) are not exact
     binary fractions, so `i / FS` at a reset sample only approximates that
-    instant rather than landing on it exactly: the sample is a floating-point
-    tie between the discontinuity's two endpoints, and which side a backend's
-    modulo resolves it to is not guaranteed to agree between `numpy` and
-    `cupy`. Away from the resets the closed form is unambiguous and is checked
-    pointwise; at the resets only the weaker, backend-agnostic invariant --
-    close to `0` or close to `amplitude` -- is checked.
+    instant. The sample is a floating-point tie between the 2 endpoints of the
+    discontinuity, and `numpy` and `cupy` may resolve the modulo to different
+    sides. Away from the resets the closed form is unambiguous and is checked
+    pointwise. At the resets the check is the weaker, backend-agnostic
+    invariant that the sample is close to `0` or close to `amplitude`.
     """
     period = 1e-5
     x = to_numpy(testing.sawtooth(DURATION, FS, period=period, power=power, xp=xp))

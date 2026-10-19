@@ -56,9 +56,9 @@ if TYPE_CHECKING:
         # zarr 2.x
         ZarrStore: TypeAlias = zarr.storage.Store
     elif hasattr(zarr, 'abc'):
-        # zarr 3.x; the hasattr narrowing is what lets ty resolve this branch
-        # under both the zarr 2 and zarr 3 stubs, and the fallback keeps the
-        # alias gradual where neither layout resolves
+        # zarr 3.x. The hasattr narrowing lets ty resolve this branch under both
+        # the zarr 2 and zarr 3 stubs. The fallback keeps the alias gradual where
+        # neither layout resolves.
         ZarrStore: TypeAlias = zarr.abc.store.Store
     else:
         ZarrStore: TypeAlias = Any
@@ -134,8 +134,9 @@ if TYPE_CHECKING:
     class CoordFunc(Protocol[TC, TM, R]):
         __name__: str
 
-        # positional-only: factories cached with `specs.helpers.lru_cache_on_converted`
-        # convert these arguments before the cache lookup, which needs them by position
+        # positional-only because factories cached with
+        # `specs.helpers.lru_cache_on_converted` convert these arguments before the
+        # cache lookup, which needs them by position
         def __call__(self, capture: TC, spec: TM, /) -> R: ...
 
     CoordFuncWrapper: TypeAlias = Callable[[CoordFunc[TC, TM, R]], CoordFunc[TC, TM, R]]

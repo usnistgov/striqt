@@ -30,7 +30,7 @@ def capture_sample_count(capture: specs.Capture) -> int:
 def check_statistics(field: str, statistics: Sequence[str | float]) -> None:
     """raise `ValueError` for any `statistics` entry that is not a supported statistic.
 
-    Supported are 'min', 'max', 'peak', 'mean', 'rms', 'median' and quantiles in
+    Supported are 'min', 'max', 'peak', 'mean', 'rms', 'median', and quantiles in
     ``[0, 1]`` (`sw.power_analysis.stat_ufunc_from_shorthand`); `field` is the spec
     field named in the message.
     """
@@ -60,7 +60,7 @@ def check_frequency_band(
     The checks are those of `sw.fourier.slice_freqs`, whose errors are reworded in
     terms of the spec fields: `offset` must fall on the ``sample_rate / nfft`` grid and
     the band must lie within ``±sample_rate / 2``. `bandwidth` itself is not checked
-    against the grid; it is rounded to the nearest whole number of bins, so a value
+    against the grid. It is rounded to the nearest whole number of bins, so a value
     between grid multiples passes and the returned count reflects the rounding.
 
     Args:
@@ -136,10 +136,10 @@ def level_tolerance(
 
     The peak amplitude error over `size` output elements adds the structured roundoff
     that lands on the matched-filter bin of the matched input: a tone's FFT bin, or an
-    impulse's sample after the resampler. Both arrive the same way, so the term applies
-    whenever there is any amplitude error at all. `off_peak_dBc` holds the depths at
-    which the rms and the peak amplitude errors equal an element's own amplitude;
-    `util.elementwise_atol` diverges at the latter.
+    impulse's sample after the resampler. Both inputs produce that roundoff, so the
+    term applies whenever the amplitude error is nonzero. `off_peak_dBc` contains the
+    depths at which the rms and the peak amplitude errors equal an element's own
+    amplitude; `util.elementwise_atol` diverges at the latter.
 
     Args:
         amplitude_rms: relative rms error of the amplitude the power is taken from

@@ -1,4 +1,4 @@
-"""striqt.sensor.lib.io: reading sweep specs from YAML, JSON and zarr, including the
+"""striqt.sensor.lib.io: reading sweep specs from YAML, JSON, and zarr, including the
 `extensions:` block
 """
 

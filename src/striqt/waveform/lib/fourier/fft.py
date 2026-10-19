@@ -34,16 +34,17 @@ if typing.TYPE_CHECKING:
 
 CPU_COUNT = cpu_count() or 1
 
-# this tunes a tradeoff between CPU and memory consumption
-# as of cupy 12
+# chunking the cuFFT call limits its peak memory use at the cost of CPU time
+# (cupy 12)
 MAX_CUPY_FFT_SAMPLES = None
 
 
 # %% roundoff model
 #
 # The FFT roundoff models below are rms models with fitted constants (see the functions
-# for their provenance); FFT_ROUNDOFF_SAFETY is the margin the tolerances built on them
-# carry, and independent backends' errors add in quadrature (measured 0.83-1.0).
+# for their provenance). FFT_ROUNDOFF_SAFETY is the margin applied to the tolerances
+# built on them. The errors of independent backends add in quadrature (measured
+# 0.83-1.0).
 FFT_ROUNDOFF_SAFETY = 3
 
 
@@ -68,12 +69,12 @@ def fft_roundoff_rms(
         roundoff of `dtype`, that grows with each FFT size in `nffts` and with
         `n_elementwise`, and is larger for cupy than for numpy
     """
-    # Per FFT pass the rms error relative to the output rms is c*eps*sqrt(log2 N), eps
-    # the unit roundoff (Gentleman & Sande 1966; FFTW accuracy notes), and each
-    # elementwise rounding adds (eps/sqrt(3))**2 of error variance. c was fitted with
-    # chores/tests/measure_fft_accuracy.py per backend: pocketfft gives 0.55-0.65 (1.2
-    # for sizes with a prime factor >= 128); cuFFT on a Jetson TX2i reaches 1.9 at
-    # N=512 and 2.1 for Bluestein sizes.
+    # Per FFT pass the rms error relative to the output rms is c*eps*sqrt(log2 N),
+    # where eps is the unit roundoff (Gentleman & Sande 1966; FFTW accuracy notes),
+    # and each elementwise rounding adds (eps/sqrt(3))**2 of error variance. c was
+    # fitted with chores/tests/measure_fft_accuracy.py per backend: pocketfft gives
+    # 0.55-0.65 (1.2 for sizes with a prime factor >= 128); cuFFT on a Jetson TX2i
+    # reaches 1.9 at N=512 and 2.1 for Bluestein sizes.
     c = {'numpy': 1.2, 'cupy': 2.2}[array_backend]
     eps = unit_roundoff(dtype)
     var = n_elementwise * (eps / np.sqrt(3)) ** 2
@@ -90,8 +91,8 @@ def fft_tolerance_rms(
 ) -> float:
     """return the rms tolerance on one backend's error against an exact reference.
 
-    The tolerance is relative to the output rms and exceeds `fft_roundoff_rms`,
-    which documents the arguments, by the module's safety margin.
+    The tolerance is relative to the output rms and exceeds `fft_roundoff_rms` by
+    the module's safety margin. `fft_roundoff_rms` documents the arguments.
     """
     return FFT_ROUNDOFF_SAFETY * fft_roundoff_rms(
         dtype, nffts, n_elementwise, array_backend=array_backend
@@ -107,7 +108,7 @@ def on_peak_roundoff(dtype: DTypeLike) -> float:
     """bound the structured roundoff in the matched-filter bin of the matched input.
 
     The bound is relative to that peak's amplitude and is a fixed multiple of the
-    unit roundoff of `dtype`. This is where roundoff concentrates: the bin of a tone
+    unit roundoff of `dtype`. Roundoff concentrates in that bin: the bin of a tone
     in the frequency domain (an FFT), or the sample of an impulse in the time domain
     (a resampler or detector).
     """
@@ -232,7 +233,7 @@ def _cupy_fftn_helper(
     kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
     args = (None,), (axis,), None, direction
 
-    # TODO: see about upstream question on this
+    # `out=` is honored only by the private `_fft._fftn`, not the public `cupy.fft` API
     if out is None:
         return _fft._fftn(x, out=out, *args, **kws)
     else:
@@ -260,7 +261,7 @@ def fftfreq(
 ) -> Array:
     """compute fftfreq for a specified sample rate.
 
-    This supports varying levels of accuracy:
+    `as_index` selects the accuracy:
     - with as_index=True, the result is accurate to full supported
       floating point precision using fixed-point evaluation
     - with as_index=False, the result is at least as accurate as
@@ -329,7 +330,7 @@ def slice_freqs(
 ) -> slice:
     """return the slice of `bandwidth` about `offset` on an `nfft`-bin frequency axis.
 
-    The axis is the ascending `fftfreq` grid at sample rate `fs`; `fs`, `bandwidth`
+    The axis is the ascending `fftfreq` grid at sample rate `fs`; `fs`, `bandwidth`,
     and `offset` are in Hz. Validators call this for its exceptions.
 
     Raises:

@@ -14,7 +14,7 @@ LAZY_IMPORT_CHECK = textwrap.dedent(
     import striqt.analysis
     import striqt.sensor
 
-    # zarr is not checked: some pytest plugins reify it
+    # zarr is not checked because some pytest plugins reify it
     names = ('scipy', 'xarray', 'pandas', 'dask', 'dask.array')
     print(json.dumps({n: repr(type(sys.modules.get(n))) if n in sys.modules else None for n in names}))
     """

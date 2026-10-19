@@ -155,8 +155,8 @@ def test_get_waveform_is_the_generator_at_the_absolute_index(binding, start_inde
 
 
 def test_host_resampled_capture_generates_at_the_source_rate():
-    """the source runs at the radio's rate, the smallest integer division of the
-    master clock at or above the capture rate: 125 MHz / 20 for 6 MS/s"""
+    """the source runs at the radio's rate, which is the smallest integer division of
+    the master clock at or above the capture rate (125 MHz / 20 for 6 MS/s)"""
     source, _ = _armed_binding(
         'single_tone', sample_rate=6e6, host_resample=True, snr=None
     )
@@ -193,8 +193,8 @@ def test_sawtooth_closed_form_on_a_binary_grid():
 
 
 def test_single_tone_sits_at_the_lo_shifted_frequency():
-    """a lo_shift design moves the radio LO by lo_offset, so what the radio sees at
-    fs_sdr is the tone at frequency_offset + lo_offset"""
+    """a lo_shift design moves the radio LO by lo_offset, so the radio samples the
+    tone at frequency_offset + lo_offset at fs_sdr"""
     frequency_offset = -1e6
     source, capture = _armed_binding(
         'single_tone',
@@ -212,7 +212,7 @@ def test_single_tone_sits_at_the_lo_shifted_frequency():
 
     frequency = frequency_offset + design['lo_offset']
     assert abs(tone_frequency(row[0], fs_sdr) - frequency) < fs_sdr / count
-    # the source multiplies two complex64 tones, each within one unit roundoff, and
+    # the source multiplies 2 complex64 tones, each within one unit roundoff, and
     # the product rounds twice more
     expected = sa.testing.tone(None, fs_sdr, frequency=frequency, count=count)
     assert_close(row, expected, atol=accum_rtol(np.float32, 4))

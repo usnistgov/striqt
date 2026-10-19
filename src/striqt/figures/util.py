@@ -120,13 +120,12 @@ class _SliceLiteralEval(ast.NodeVisitor):
         return self.visit(node.body)
 
     def visit_Constant(self, node):
-        # Python 3.8+ handles literal values as Constants
+        # Python 3.8 and later parse literal values as ast.Constant nodes
         if type(node.value) in self.allowed_constants or isinstance(node.value, tuple):
             return node.value
         raise ValueError(f'Malformed node or string: {node}')
 
     def visit_Name(self, node):
-        # Handle single standalone literals like None, True, False
         if node.id == 'None':
             return None
         elif node.id == 'True':

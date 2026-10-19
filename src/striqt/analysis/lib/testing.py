@@ -66,8 +66,7 @@ def _complex_normal_draws(*, ports: int, size: int, seed: int, xp: ModuleType) -
     Returns:
         an array of shape ``(ports, size)`` and dtype complex64 in the namespace `xp`
     """
-    # RandomState rather than default_rng: it is the generator API that numpy and
-    # cupy share
+    # numpy and cupy share RandomState but not default_rng
     gen = xp.random.RandomState(seed=seed)
     values = gen.standard_normal(size=2 * size * ports).astype('float32')
     return values.view('complex64').reshape(size, ports).T
@@ -79,8 +78,8 @@ def _windowed_normal_draws(
     """generate complex64 standard normal draws at absolute indices from `start_index`.
 
     Indices ``i >= 0`` are the stream from ``RandomState(seed)``; index ``i < 0`` is
-    draw ``-i - 1`` of the stream from ``RandomState(seed + PREROLL_SEED_OFFSET)``,
-    so the pre-roll runs backward from index -1 and is independent of the forward
+    draw ``-i - 1`` of the stream from ``RandomState(seed + PREROLL_SEED_OFFSET)``.
+    The pre-roll runs backward from index -1 and is independent of the forward
     stream.
 
     Returns:
@@ -116,8 +115,8 @@ def tone(
     """generate a unit-amplitude complex tone at `frequency`.
 
     The phase is zero at absolute sample index 0 regardless of `start_index`, and
-    advances `frequency` cycles per second. Mean power is 1, which the power
-    measurements read as 0 dBm, since they treat ``|iq|**2`` as mW.
+    advances `frequency` cycles per second. Mean power is 1. The power measurements
+    treat ``|iq|**2`` as mW and read this as 0 dBm.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
@@ -220,16 +219,16 @@ def circular_awgn(
     The real and imaginary parts are independent and each has variance
     ``power / 2``, so the mean of ``|iq|**2`` is `power`. Each port is an
     independent draw. White noise of power spectral density ``noise_psd`` mW/Hz
-    spread over the full sample rate is ``power=noise_psd * sample_rate``, which is
-    how the sensor's `noise` source calls this.
+    spread over the full sample rate has total power ``noise_psd * sample_rate``,
+    which the sensor's `noise` source passes as `power`.
 
-    The draws are interleaved port-by-port within each sample so that the first
+    The draws are interleaved port-by-port within each sample, so the first
     ``start_index + count`` samples of every port are a prefix of the stream from
-    ``RandomState(seed)``, which is what makes the result windowable. Samples at
-    negative indices come from a second stream seeded ``2**31`` above `seed`,
-    running backward from index -1: they are independent noise of the same power,
-    and a window that crosses index 0 is still the corresponding slice of any
-    longer window. Both seeds must fit the 32-bit range of ``RandomState``, so
+    ``RandomState(seed)``. The prefix property makes the result windowable. Samples
+    at negative indices come from a second stream seeded ``2**31`` above `seed` and
+    running backward from index -1. The pre-roll is independent noise of the same
+    power, and a window that crosses index 0 is still the corresponding slice of
+    any longer window. Both seeds must fit the 32-bit range of ``RandomState``, so
     `seed` must be below ``2**31``.
 
     Args:
@@ -325,8 +324,8 @@ def dirac_delta(
 
     The impulse is real, with the amplitude whose power is `power` dB (1 at 0 dB),
     and sits at the absolute sample index nearest `time` s from the start of the
-    capture; the result is all zeros when that index falls outside the returned
-    window. Each port gets the same samples.
+    capture; the returned array is all zeros when that index falls outside the
+    returned window. Each port gets the same samples.
 
     Args:
         duration: capture duration, in s, used only when `count` is None

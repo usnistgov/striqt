@@ -49,14 +49,14 @@ from striqt.waveform.fourier import on_peak_roundoff
 SOAPY_SOURCE = source_spec()
 
 # 0.5 ms is a whole number of samples at every preset's source and capture rate, so
-# the impulse sits on an output sample: the brick-wall resample of an impulse is
+# the impulse sits on an output sample. The brick-wall resample of an impulse is
 # exactly fs/fs_sdr there and zero on every other output sample
 IMPULSE_TIME = 0.5e-3
 IMPULSE_POWER_DB = -6.0
 
 # 1 MHz lies on the FFT grid of the padded acquisition of both resample presets
 # (18750 and 13200 samples at 6.25 MS/s), so its resample is exact up to roundoff;
-# the Gibbs ripple of an off-grid tone is the kernel's business (tests/waveform)
+# the Gibbs ripple of an off-grid tone is tested at the kernel (tests/waveform)
 TONE_FREQUENCY = 1e6
 # above bw/2 plus the 250 kHz transition band of the analysis filter, below fs/2
 OUT_OF_BAND_FREQUENCY = 2.9e6
@@ -284,7 +284,7 @@ def test_ignore_highside_lo_bypasses_the_conjugate(corrections_flags):
 
 
 def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
-    """the scale-only path hands the acquisition buffer itself on when voltage_scale
+    """the scale-only path returns the acquisition buffer itself when voltage_scale
     is 1, so an in-place conjugate there would corrupt a reused acquisition"""
     capture = preset_capture(
         'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
@@ -601,7 +601,7 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
 
 
 def test_upsampled_overlap_covers_the_output_rate_filter_pad():
-    """a capture whose resampler upsamples, 12.065 MS/s from a 12.5 MS/s fs_sdr, needs
+    """a capture that upsamples a 12.5 MS/s fs_sdr to 12.065 MS/s needs
     fs_sdr/sample_rate times as many source samples as the 2000 output samples that
     the FIR transient spans at each end"""
     capture = _drawn_capture(12065e3, 24977, 0.5)
@@ -622,8 +622,8 @@ def test_overlaps_pad_to_a_whole_resampler_block(
     sample_rate, count, bandwidth_fraction
 ):
     """the overlaps need not be even or equal: together they pad the source-rate
-    record to a length that resamples to a whole number of output samples, which is
-    what _resample requires, and read_iq reads exactly that padded record"""
+    record to a length that resamples to a whole number of output samples, as
+    _resample requires. read_iq reads exactly that padded record"""
     capture = _drawn_capture(sample_rate, count, bandwidth_fraction)
     lead, tail = corrections._get_resampler_overlaps(capture, FUNCTION_SOURCE)
     fs = fs_sdr(capture)
