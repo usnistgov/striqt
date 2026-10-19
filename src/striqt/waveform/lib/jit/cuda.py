@@ -52,50 +52,26 @@ def envtopow(x, out):
 
 
 @cupy.fuse()
-def envtodB(x, out):
-    out[:] = 20 * cupy.log10(cupy.abs(x))
+def lin_to_dB(x, out, scale_ln):
+    out[:] = scale_ln * cupy.log(cupy.abs(x))
     return out
 
 
 @cupy.fuse()
-def envtodB_noabs(x, out):
-    out[:] = 20 * cupy.log10(x)
+def lin_to_dB_noabs(x, out, scale_ln):
+    out[:] = scale_ln * cupy.log(x)
     return out
 
 
 @cupy.fuse()
-def envtodB_eps(x, out, eps):
-    out[:] = 20 * cupy.log10(cupy.abs(x) + eps)
+def lin_to_dB_eps(x, out, scale_ln, eps):
+    out[:] = scale_ln * cupy.log(cupy.abs(x) + eps)
     return out
 
 
 @cupy.fuse()
-def envtodB_eps_noabs(x, out, eps):
-    out[:] = 20 * cupy.log10(x + eps)
-    return out
-
-
-@cupy.fuse()
-def powtodB(x, out):
-    out[:] = 10 * cupy.log10(cupy.abs(x))
-    return out
-
-
-@cupy.fuse()
-def powtodB_eps_noabs(x, out, eps=0.0):
-    out[:] = 10 * cupy.log10(x + eps)
-    return out
-
-
-@cupy.fuse()
-def powtodB_eps(x, out, eps=0.0):
-    out[:] = 10 * cupy.log10(cupy.abs(x) + eps)
-    return out
-
-
-@cupy.fuse()
-def powtodB_noabs(x, out):
-    out[:] = 10 * cupy.log10(x)
+def lin_to_dB_eps_noabs(x, out, scale_ln, eps):
+    out[:] = scale_ln * cupy.log(x + eps)
     return out
 
 

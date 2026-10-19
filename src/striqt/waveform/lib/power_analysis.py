@@ -124,15 +124,22 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
 # %% roundoff model
 #
 # Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
-# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (log10f 2,
+# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (logf 1,
 # powf 8, hypotf 3 ulp) as well as libm (~1 ulp), so the tolerances below hold on both
-# backends and take no array namespace. Measured with
-# chores/tests/measure_db_accuracy.py: libm log10 1.1-1.9 ulp; CUDA libdevice on a
-# Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
+# backends and take no array namespace. The dB conversions evaluate
+# `scale_ln*log(x)` rather than `scale*log10(x)`: on the Jetson TX2i (glibc 2.27) that
+# is 0.55-0.65x the numexpr time in float32 and 0.82x in float64, neutral on the GPU,
+# and more accurate in float64 (chores/tests/profile_log_scaling.py, 2026-10-19).
+# Measured with chores/tests/measure_db_accuracy.py and that script, in spacing ulps
+# (up to twice the `2u*k` factor): libm log 1.8 (float32, Apple and glibc) and 1.0
+# (float64, glibc); CUDA libdevice on the TX2i logf 2.0, log 1.0, powf 5
+# (|x| <= 30 dB), complex |z| 1.6 input ulps.
 HYPOT_ULP = 3
-DB_PER_NEPER = 10 / math.log(10)
-POW_DB_LN_SCALE = 10 * math.log10(10) / math.log(10)
-V_DB_LN_SCALE = 2 * POW_DB_LN_SCALE
+LOG_ULP = 1
+# DB_PER_NEPER rounded to the computation dtype; float32 carries 0.41 ulp
+SCALE_CONST_ULP = 0.5
+# 10/ln(10) correctly rounded; the computed `10 / math.log(10)` is 0.87 ulp off
+DB_PER_NEPER = 4.342944819032518
 
 
 def log_conversion_tol(
@@ -146,11 +153,11 @@ def log_conversion_tol(
     input side of the log becomes an absolute dB error, which is what bounds the
     result near 0 dB where ulps of the output are meaningless.
     """
-    log10_ulp = 2
     u = unit_roundoff(dtype)
-    rtol = 2 * u * (log10_ulp + 0.5)
+    # the log call, the rounded scale constant, and the product rounding
+    rtol = 2 * u * (LOG_ULP + SCALE_CONST_ULP + 0.5)
     input_ulp = (HYPOT_ULP if complex_input else 0) + 0.5
-    atol = (scale / math.log(10)) * 2 * u * input_ulp
+    atol = (DB_PER_NEPER * scale / 10) * 2 * u * input_ulp
     return {
         'rtol': ROUNDOFF_SAFETY * n_impl * rtol,
         'atol': ROUNDOFF_SAFETY * n_impl * atol,
@@ -274,20 +281,12 @@ def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array
         return -20 * np.log10(np.clip(1 - r, 0, None))
 
 
-# fused kernel in `.jit.cuda` for each dB scale, keyed by (abs, bounded)
+# fused kernel in `.jit.cuda`, keyed by (abs, bounded); the dB scale is an argument
 _LOG_KERNELS = {
-    10: {
-        (True, False): 'powtodB',
-        (False, False): 'powtodB_noabs',
-        (True, True): 'powtodB_eps',
-        (False, True): 'powtodB_eps_noabs',
-    },
-    20: {
-        (True, False): 'envtodB',
-        (False, False): 'envtodB_noabs',
-        (True, True): 'envtodB_eps',
-        (False, True): 'envtodB_eps_noabs',
-    },
+    (True, False): 'lin_to_dB',
+    (False, False): 'lin_to_dB_noabs',
+    (True, True): 'lin_to_dB_eps',
+    (False, True): 'lin_to_dB_eps_noabs',
 }
 _LOG_UNITS = {10: unit_linear_to_dB, 20: unit_wave_to_dB}
 
@@ -303,15 +302,20 @@ def _lin_to_dB(
 ) -> _ALN:
     """compute ``scale*log10(abs(x) + eps)`` or ``scale*log10(x + eps)``.
 
-    `eps` is 0 unless `bounded`, and then the smallest normal value of the computation
-    dtype for `scale` 10 and its square root for `scale` 20, as a scalar of that dtype.
-    With `overwrite_x`, the result is written into `x` unless `min_dtype` widens it
-    first; a complex `x` overwritten in place comes back as the real view of its
-    buffer (`_real_buffer`) on every backend.
+    The evaluation is ``scale_ln*log(...)`` with ``scale_ln = scale/ln(10)`` rounded
+    to the real computation dtype. `eps` is 0 unless `bounded`, and then the smallest
+    normal value of the computation dtype for `scale` 10 and its square root for
+    `scale` 20, as a scalar of that dtype. With `overwrite_x`, the result is written
+    into `x` unless `min_dtype` widens it first; a complex `x` overwritten in place
+    comes back as the real view of its buffer (`_real_buffer`) on every backend.
     """
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
+    # numpy scalars of the computation dtype keep a float32 evaluation in float32 on
+    # every backend, where a Python float would promote it to double
+    real_dtype = np.dtype(float_dtype_like(values))
+    scale_ln = real_dtype.type(DB_PER_NEPER * (scale // 10))
     if bounded:
         eps = tiny_like(values)
         if scale == 20:
@@ -320,15 +324,18 @@ def _lin_to_dB(
         eps = None
 
     if xp is np:
-        # the expression is one of eight constant strings so the numexpr compile cache
-        # hits; `values` and `eps` are looked up from this frame by name, and a numpy
-        # scalar `eps` keeps a float32 evaluation in float32 where a Python float
-        # would promote it to double
+        # the expression is one of six constant strings so the numexpr compile cache
+        # hits; `values`, `scale_ln` and `eps` are looked up from this frame by name.
+        # numexpr's `real` and `abs` of a complex operand both yield complex128, so
+        # complex input needs `real(...)` and is always converted by magnitude; on a
+        # real operand `real` would upcast through complex128, so it is omitted there
         eps_str = '' if eps is None else '+eps'
-        if abs:
-            expr = f'real({scale}*log10(abs(values){eps_str}))'
+        if np.iscomplexobj(values):
+            expr = f'real(scale_ln*log(abs(values){eps_str}))'
+        elif abs:
+            expr = f'scale_ln*log(abs(values){eps_str})'
         else:
-            expr = f'real({scale}*log10(values{eps_str}))'
+            expr = f'scale_ln*log(values{eps_str})'
         out = _real_buffer(out)
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif _use_cuda_kernels(values):
@@ -336,11 +343,11 @@ def _lin_to_dB(
 
         out = _real_buffer(out)
         use_abs = abs or xp.iscomplexobj(values)
-        kernel = getattr(cuda, _LOG_KERNELS[scale][use_abs, eps is not None])
+        kernel = getattr(cuda, _LOG_KERNELS[use_abs, eps is not None])
         if eps is None:
-            kernel(values, out)
+            kernel(values, out, scale_ln)
         else:
-            kernel(values, out, eps)
+            kernel(values, out, scale_ln, eps)
         values = out
     else:
         # torch, dask, ...
@@ -348,8 +355,8 @@ def _lin_to_dB(
             values = xp.abs(values, out=out)
         if eps is not None:
             values += eps
-        values = xp.log10(values, out=out)
-        values *= scale
+        values = xp.log(values, out=out)
+        values *= scale_ln
 
     return _repackage_arraylike(values, x, unit_transform=_LOG_UNITS[scale])
 

@@ -386,7 +386,9 @@ def main():
 
     print(
         '\nInterpretation: rel ulp should stay within the per-function ulp budget of the'
-        ' tests (library log10/pow/hypot error plus one rounding for the scale factor);'
+        ' tests (for the dB conversions: the library log error, the rounding of the'
+        ' scale constant to the computation dtype, and one product rounding; for the'
+        ' linear conversions: the library pow/hypot error);'
         ' abs/u_in should stay within a few units for real inputs and within the hypot'
         ' budget for complex inputs. Reductions report absolute dB error in units of u.'
         ' In the binned power mean table, rms/u should stay below rms model/u and max/u'

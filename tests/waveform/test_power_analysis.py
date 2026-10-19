@@ -215,10 +215,15 @@ class TestConversionIdentities:
         assert_close(envtopow(env), np.abs(env) ** 2, rtol=rtol)
 
     @by_log_conversion
+    @for_each_float_dtype
     @given(x=positive_power_arrays(dtype=np.float64))
-    def test_log_conversion_is_scaled_log10(self, func, scale, x):
-        tol = log_conversion_tol(x.dtype, scale, n_impl=2)
-        assert_close(func(x), scale * np.log10(x), **tol)
+    def test_log_conversion_is_scaled_log10(self, func, scale, dtype, x):
+        """Property: func(x) = scale*log10(x) within the exact-math budget of `dtype`,
+        with the oracle evaluated in float64 from the `dtype`-quantized input."""
+        x = x.astype(dtype)
+        expected = scale * np.log10(x.astype(np.float64))
+        tol = log_conversion_tol(dtype, scale, n_impl=1)
+        assert_close(func(x), expected, **tol)
 
 
 class TestAlgebraicProperties:
