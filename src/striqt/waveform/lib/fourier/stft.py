@@ -341,7 +341,7 @@ def zero_stft_by_freq(
 
     freq_step = float(freqs[1] - freqs[0])
     fs = xstft.shape[axis + 1] * freq_step
-    ilo, ihi = _freq_band_edges(freqs.size, fs, *passband, xp=xp)
+    ilo, ihi = _freq_band_edges(freqs.size, fs, *passband)
 
     xp.copyto(axis_slice(xstft, 0, ilo, axis=axis + 1), 0)
     xp.copyto(axis_slice(xstft, ihi, None, axis=axis + 1), 0)
