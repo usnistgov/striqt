@@ -27,7 +27,7 @@ from ..arrays import (
 if typing.TYPE_CHECKING:
     import numexpr as ne
 
-    from typing import Callable, TypeVar, Union
+    from typing import TypeVar, Union
 
     from ..typing import ArrayLike, Array, _ALN, Dims, DTypeLike
 
@@ -233,15 +233,6 @@ def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array
         return -20 * np.log10(np.clip(1 - r, 0, None))
 
 
-def _cuda_log_kernel(abs: bool, bounded: bool) -> Callable[..., Array]:
-    """select the fused kernel in `cuda_jit` for one dB conversion."""
-    from . import cuda_jit
-
-    if bounded:
-        return cuda_jit.lin_to_dB_eps if abs else cuda_jit.lin_to_dB_eps_noabs
-    return cuda_jit.lin_to_dB if abs else cuda_jit.lin_to_dB_noabs
-
-
 def _lin_to_dB(
     x: _ALN,
     *,
@@ -290,9 +281,11 @@ def _lin_to_dB(
         out = _real_buffer(out)
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif _use_cuda_kernels(values):
+        from . import cuda_jit
+
         out = _real_buffer(out)
         use_abs = abs or xp.iscomplexobj(values)
-        kernel = _cuda_log_kernel(use_abs, eps is not None)
+        kernel = cuda_jit.get_kernel('lin_to_dB', abs=use_abs, bounded=eps is not None)
         if eps is None:
             kernel(values, out, scale_ln)
         else:
@@ -384,7 +377,7 @@ def dBtopow(
         from . import cuda_jit
 
         out = _real_buffer(out)
-        cuda_jit.dBtopow(values, out)
+        cuda_jit.get_kernel('dBtopow')(values, out)
         values = out
     else:
         # torch, dask, ...
@@ -433,7 +426,7 @@ def envtopow(
         from . import cuda_jit
 
         out = _real_buffer(out)
-        cuda_jit.envtopow(values, out)
+        cuda_jit.get_kernel('envtopow')(values, out)
         values = out
     else:
         # torch, dask, ...

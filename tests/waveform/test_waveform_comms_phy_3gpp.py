@@ -15,7 +15,7 @@ from numeric_checks import assert_close
 from numpy.testing import assert_array_equal
 from waveform_strategies import FS, SCS_5G, khz_id, msps_id, phy_5g
 
-from striqt.waveform.lib import comms
+from striqt.waveform.lib.comms import phy_3gpp
 
 # 3GPP TS 38.211 Table 4.3.2-1: 10 * subcarrier_spacing/15e3 slots per 10 ms frame
 SLOT_PERIODS = {15e3: 1e-3, 30e3: 0.5e-3, 60e3: 0.25e-3, 120e3: 125e-6, 240e3: 62.5e-6}
@@ -62,8 +62,8 @@ class TestPhy3GPP:
     )
     @pytest.mark.parametrize('sample_rate', [1.92e6, 3.84e6, 7.68e6, 15.36e6, 30.72e6])
     def test_lte_and_5g_agree_at_15khz(self, sample_rate):
-        lte = comms.Phy3GPP(1, sample_rate=sample_rate, generation='4G')
-        nr = comms.Phy3GPP(1, sample_rate=sample_rate, generation='5G')
+        lte = phy_3gpp.Phy3GPP(1, sample_rate=sample_rate, generation='4G')
+        nr = phy_3gpp.Phy3GPP(1, sample_rate=sample_rate, generation='5G')
         assert_array_equal(lte.cp_sizes, nr.cp_sizes)
         assert lte.nfft == nr.nfft == round(sample_rate / 15e3)
 
@@ -173,11 +173,11 @@ class TestPhy3GPP:
     )
     def test_argument_errors(self, kws, match):
         with pytest.raises(ValueError, match=match):
-            comms.Phy3GPP(1, **{'sample_rate': FS, **kws})
+            phy_3gpp.Phy3GPP(1, **{'sample_rate': FS, **kws})
 
     def test_default_sample_rate_from_bandwidth(self):
-        assert comms.Phy3GPP(20e6).sample_rate == pytest.approx(30.72e6)
-        assert comms.Phy3GPP(100e6).sample_rate == pytest.approx(153.6e6)
+        assert phy_3gpp.Phy3GPP(20e6).sample_rate == pytest.approx(30.72e6)
+        assert phy_3gpp.Phy3GPP(100e6).sample_rate == pytest.approx(153.6e6)
 
 
 def all_or_some(max_index):
@@ -225,7 +225,7 @@ class TestIndexCyclicPrefix:
         'kws, match',
         [
             ({'slots': 'bogus'}, 'slots'),
-            ({'slots': (comms.Phy3GPP.SCS_TO_SLOTS_PER_FRAME[30e3],)}, 'slots'),
+            ({'slots': (phy_3gpp.Phy3GPP.SCS_TO_SLOTS_PER_FRAME[30e3],)}, 'slots'),
             ({'symbols': (14,)}, 'symbols'),
             ({'symbols': (-15,)}, 'symbols'),
             ({'slots': ((0, 1), (2, 3))}, 'slots'),
@@ -247,13 +247,13 @@ class TestSlotPeriod:
     @pytest.mark.parametrize('scs', list(SLOT_PERIODS), ids=khz_id)
     def test_numerology_values_are_exact(self, scs):
         # sample counts are rounded from this, so a last-bit difference moves a shape
-        assert comms.slot_period(scs) == SLOT_PERIODS[scs]
+        assert phy_3gpp.slot_period(scs) == SLOT_PERIODS[scs]
 
     @pytest.mark.parametrize('scs', SCS_5G, ids=khz_id)
     def test_slot_spans_15_subcarrier_periods(self, scs):
         """TS 38.211 5.3.1: the 14 normal-CP symbols of a slot and their cyclic
         prefixes add up to 15 subcarrier periods"""
-        assert comms.slot_period(scs) * FS == 15 * round(FS / scs)
+        assert phy_3gpp.slot_period(scs) * FS == 15 * round(FS / scs)
 
 
 class TestCupy:

@@ -1,15 +1,4 @@
 """LTE frame model (via `Phy3GPP` with ``generation='4G'``)."""
 
-from .lib.comms import (
-    Phy3GPP,
-    correlate_cyclic_shift,
-    get_3gpp_phy,
-    slot_period,
-)
-
-__all__ = [
-    'Phy3GPP',
-    'correlate_cyclic_shift',
-    'get_3gpp_phy',
-    'slot_period',
-]
+from .lib.comms.cp import correlate_cyclic_shift
+from .lib.comms.phy_3gpp import Phy3GPP, get_3gpp_phy, slot_period

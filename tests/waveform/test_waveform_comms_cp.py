@@ -19,9 +19,9 @@ from hypothesis import strategies as st
 from numeric_checks import assert_close, numpy_and_cupy, reference_power
 from waveform_strategies import corr_atol_for, cp_case
 
-from striqt.waveform.lib import comms
+from striqt.waveform.lib.comms import cp
 
-# thread block sizing from comms.correlate_cyclic_shift
+# thread block sizing from cp.correlate_cyclic_shift
 THREADS_PER_BLOCK = 32
 
 
@@ -58,7 +58,7 @@ def corr_cases(
     The waveform length is drawn so that some examples run index pairs past the end of
     `x`, which exercises the kernels' bounds handling; the indices are drawn in
     arbitrary order unless `sorted_inds`, so an out-of-range pair may precede a valid
-    one. With `ncp_from_inds`, ncp is the number of indices, as comms.correlate_cyclic_shift
+    one. With `ncp_from_inds`, ncp is the number of indices, as cp.correlate_cyclic_shift
     infers it from the last axis of `inds`.
     """
 
@@ -88,7 +88,7 @@ def corr_cases(
 def assert_matches_reference(out, inds, x, nfft, ncp, norm):
     expected = corr_reference(inds, x, nfft, ncp, norm)
     scale = float(np.abs(x).max() ** 2)
-    atol = comms.corr_atol(x.dtype, inds.size, norm, scale=scale)
+    atol = cp.corr_atol(x.dtype, inds.size, norm, scale=scale)
     assert_close(out, expected, atol=atol)
 
 
@@ -141,7 +141,7 @@ class TestCorrAtIndicesKernels:
 
 
 class TestCorrelateCyclicShiftDispatcher:
-    """comms.correlate_cyclic_shift selects the kernel for the array namespace."""
+    """cp.correlate_cyclic_shift selects the kernel for the array namespace."""
 
     @given(case=corr_cases(ncp_from_inds=True, sorted_inds=True))
     def test_sizes_out_from_inds(self, xp, case):
@@ -149,14 +149,14 @@ class TestCorrelateCyclicShiftDispatcher:
         inds_2d = xp.asarray(inds[np.newaxis, :])
         x_xp = xp.asarray(x)
 
-        out = comms.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm)
+        out = cp.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm)
         assert isinstance(out, xp.ndarray)
         assert out.shape == (nfft + ncp,)
         assert out.dtype == x.dtype
         assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
         buffer = xp.empty(nfft + ncp, dtype=x.dtype)
-        ret = comms.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm, out=buffer)
+        ret = cp.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm, out=buffer)
         assert ret is buffer
         assert_matches_reference(ret, inds, x, nfft, ncp, norm)
 
@@ -169,7 +169,7 @@ class TestCorrelateCyclicShift:
         phy, x, inds = cp_case()
         ncp = int(phy.cp_sizes[1])
 
-        R = np.abs(comms.correlate_cyclic_shift(inds, x, phy.nfft, norm=True))
+        R = np.abs(cp.correlate_cyclic_shift(inds, x, phy.nfft, norm=True))
         assert R.shape == (phy.nfft + ncp,)
 
         # the cyclic prefix is an exact copy of the symbol tail
@@ -184,13 +184,13 @@ class TestCorrelateCyclicShift:
     def test_unnormalized_zero_lag_is_prefix_power(self):
         phy, x, inds = cp_case()
 
-        R = comms.correlate_cyclic_shift(inds, x, phy.nfft, norm=False)
+        R = cp.correlate_cyclic_shift(inds, x, phy.nfft, norm=False)
         power = reference_power(x[inds.ravel()]).mean()
         assert R[0] == pytest.approx(power, abs=corr_atol_for(x, inds.size, norm=False))
         assert R.dtype == x.dtype
 
     def test_corr_atol_model(self):
-        atol = functools.partial(comms.corr_atol, np.float32)
+        atol = functools.partial(cp.corr_atol, np.float32)
         # one rounding per summed product on top of a fixed count of power roundings
         assert atol(8, norm=False) > atol(4, norm=False)
         assert atol(16, norm=False) - atol(8, norm=False) == pytest.approx(
@@ -202,8 +202,8 @@ class TestCorrelateCyclicShift:
             100 * atol(4, norm=False)
         )
         # roundoff follows the real dtype underlying the complex input
-        assert comms.corr_atol(np.complex64, 4, norm=True) == atol(4, norm=True)
-        assert comms.corr_atol(np.complex128, 4, norm=True) < atol(4, norm=True)
+        assert cp.corr_atol(np.complex64, 4, norm=True) == atol(4, norm=True)
+        assert cp.corr_atol(np.complex128, 4, norm=True) < atol(4, norm=True)
 
 
 class TestCupy:
@@ -212,6 +212,6 @@ class TestCupy:
     def test_correlate_cyclic_shift(self, cupy_available):
         phy, x, inds = cp_case(4)
         R_np, R_cp = numpy_and_cupy(
-            cupy_available, comms.correlate_cyclic_shift, inds, x, phy.nfft, norm=False
+            cupy_available, cp.correlate_cyclic_shift, inds, x, phy.nfft, norm=False
         )
         assert_close(R_cp, R_np, atol=corr_atol_for(x, inds.size, norm=False, n_impl=2))

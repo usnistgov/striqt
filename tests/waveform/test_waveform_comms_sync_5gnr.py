@@ -35,7 +35,7 @@ from waveform_strategies import (
 )
 
 from striqt.analysis import testing
-from striqt.waveform.lib import comms
+from striqt.waveform.lib.comms import sync_5gnr
 from striqt.waveform.lib.comms.sync_5gnr import (
     _min_diff,
     _pss_m_sequence,
@@ -98,7 +98,7 @@ class TestSyncSequences:
         nfft = int(phy.nfft)
         cp = int(phy.cp_sizes.min())
 
-        pss = comms.pss_5g_nr(fs, scs)
+        pss = sync_5gnr.pss_5g_nr(fs, scs)
         assert pss.shape == (3, nfft + cp)
         assert pss.dtype == np.complex64
 
@@ -119,7 +119,7 @@ class TestSyncSequences:
         phy = phy_5g(30e3)
         nfft, cp = int(phy.nfft), int(phy.cp_sizes.min())
 
-        pss = comms.pss_5g_nr(FS, 30e3, 5 * 30e3, dtype='complex128')
+        pss = sync_5gnr.pss_5g_nr(FS, 30e3, 5 * 30e3, dtype='complex128')
         assert pss.dtype == np.complex128
         X = np.fft.fft(pss[0, cp:])
         occupied = np.abs(X) > 1e-6
@@ -129,7 +129,7 @@ class TestSyncSequences:
         phy = phy_5g(30e3)
         nfft, cp = int(phy.nfft), int(phy.cp_sizes.min())
 
-        sss = comms.sss_5g_nr(FS, 30e3)
+        sss = sync_5gnr.sss_5g_nr(FS, 30e3)
         assert sss.shape == (1008, nfft + cp)
         assert sss.dtype == np.complex64
         assert_array_equal(sss[:, :cp], 0)
@@ -160,7 +160,7 @@ class TestSyncSequences:
     )
     def test_argument_errors(self, args, match):
         with pytest.raises(ValueError, match=match):
-            comms.pss_5g_nr(*args)
+            sync_5gnr.pss_5g_nr(*args)
 
 
 # TS 38.213 Section 4.1 lists the values of n for cases D and E explicitly
@@ -192,16 +192,16 @@ class TestIndexPssSymbols:
     def test_cell_search_cases(self, args, expected):
         offsets, period, n_values = expected
         table = tuple(o + period * n for n in n_values for o in offsets)
-        assert comms.index_pss_symbols(*args) == table
+        assert sync_5gnr.index_pss_symbols(*args) == table
 
     @pytest.mark.parametrize('scs', [120e3, 240e3, 480e3, 960e3])
     def test_fr2_cases_have_64_candidates(self, scs):
         """TS 38.213 Section 4.1: L_max = 64 for cases D through G"""
-        assert len(comms.index_pss_symbols(scs)) == 64
+        assert len(sync_5gnr.index_pss_symbols(scs)) == 64
 
     def test_explicit_indexes_pass_through(self):
-        assert comms.index_pss_symbols(30e3, symbol_indexes=(3, 9)) == (3, 9)
-        assert comms.index_pss_symbols(30e3, symbol_indexes=[3, 9]) == [3, 9]
+        assert sync_5gnr.index_pss_symbols(30e3, symbol_indexes=(3, 9)) == (3, 9)
+        assert sync_5gnr.index_pss_symbols(30e3, symbol_indexes=[3, 9]) == [3, 9]
 
     @pytest.mark.parametrize(
         'kws, exc, match',
@@ -226,7 +226,7 @@ class TestIndexPssSymbols:
     )
     def test_argument_errors(self, kws, exc, match):
         with pytest.raises(exc, match=match):
-            comms.index_pss_symbols(**{'subcarrier_spacing': 30e3, **kws})
+            sync_5gnr.index_pss_symbols(**{'subcarrier_spacing': 30e3, **kws})
 
 
 class TestSyncParams:
@@ -285,7 +285,7 @@ class TestSyncParams:
 
     def test_sss_params_follow_pss_by_two_symbols(self, subtests):
         pss = sync_params()
-        sss = comms.sss_params(
+        sss = sync_5gnr.sss_params(
             sample_rate=FS, subcarrier_spacing=30e3, shared_spectrum=True
         )
         assert sss.symbol_indexes == [i + 2 for i in pss.symbol_indexes]
@@ -300,7 +300,7 @@ class TestSyncParams:
             with subtests.test(field=name):
                 assert getattr(sss, name) == getattr(pss, name)
 
-        explicit = comms.sss_params(
+        explicit = sync_5gnr.sss_params(
             sample_rate=FS, subcarrier_spacing=30e3, symbol_indexes=(4, 10)
         )
         assert explicit.symbol_indexes == [4, 10]
@@ -400,7 +400,7 @@ class TestCorrelateSyncSequence:
         symbol = params.symbol_indexes[beam]
         embed_symbol(iq, phy, bodies[n_id2], symbol, delay, scale=scale)
 
-        R = comms.correlate_sync_sequence(iq, pss, params=params)
+        R = sync_5gnr.correlate_sync_sequence(iq, pss, params=params)
         assert R.shape == (1, 3, 1, len(params.symbol_indexes), params.lag_count)
         assert R.dtype == np.complex64
 
@@ -418,7 +418,7 @@ class TestCorrelateSyncSequence:
         )
         assert start < params.corr_size
 
-        R = comms.correlate_sync_sequence(iq, pss, params=params)
+        R = sync_5gnr.correlate_sync_sequence(iq, pss, params=params)
         assert R.shape[2] == 3
         mag = np.abs(R)
         assert np.unravel_index(mag.argmax(), mag.shape) == (0, 0, 2, 4, 7)
@@ -426,7 +426,7 @@ class TestCorrelateSyncSequence:
     def test_multiple_ports(self, subtests):
         params, pss, iq = embed_pss_ports([(1, 2, 11), (2, 6, 23)])
 
-        R = comms.correlate_sync_sequence(iq, pss, params=params)
+        R = sync_5gnr.correlate_sync_sequence(iq, pss, params=params)
         assert R.shape[0] == 2
         for port, expected in enumerate([(1, 0, 2, 11), (2, 0, 6, 23)]):
             with subtests.test(port=port):
@@ -439,22 +439,24 @@ class TestCorrelateSyncSequence:
             params, cp_offsets=[0] + [4] * 13, symbol_indexes=[0, 2]
         )
         with pytest.raises(ValueError, match='same excess CP'):
-            comms.correlate_sync_sequence(silent_block(params), pss, params=bad)
+            sync_5gnr.correlate_sync_sequence(silent_block(params), pss, params=bad)
 
     @pytest.mark.parametrize('n_frames', [1, 2, 3])
     def test_sync_frame_count(self, n_frames):
         params = sync_params()
-        assert comms.sync_frame_count(n_frames * params.frame_size, params) == n_frames
+        assert (
+            sync_5gnr.sync_frame_count(n_frames * params.frame_size, params) == n_frames
+        )
 
     def test_sync_frame_count_rejects_a_partial_frame(self):
         params, _, pss, _ = pss_setup()
         match = 'whole number of 10 ms frames'
         with pytest.raises(ValueError, match=match):
-            comms.sync_frame_count(params.frame_size + 1, params)
+            sync_5gnr.sync_frame_count(params.frame_size + 1, params)
         with pytest.raises(ValueError, match=match):
-            comms.sync_frame_count(0, params)
+            sync_5gnr.sync_frame_count(0, params)
         with pytest.raises(ValueError, match=match):
-            comms.correlate_sync_sequence(
+            sync_5gnr.correlate_sync_sequence(
                 silent_block(params)[:, :-1], pss, params=params
             )
 
@@ -465,7 +467,7 @@ class TestCorrelateSyncSequence:
         beyond = sync_params(symbol_indexes=(280,))
         assert beyond.slot_count == 21
         with pytest.raises(ValueError, match=r'21-slot.*\(280,\).*does not fit'):
-            comms.correlate_sync_sequence(silent_block(params), pss, params=beyond)
+            sync_5gnr.correlate_sync_sequence(silent_block(params), pss, params=beyond)
 
     def test_sync_frame_count_rejects_too_few_lags(self):
         """one slot of 3840 samples less its 4 excess CP samples cannot host a 3840
@@ -474,14 +476,14 @@ class TestCorrelateSyncSequence:
             sync_params(), slot_count=1, corr_size=3840, lag_count=3840
         )
         with pytest.raises(ValueError, match='3836 correlation samples, fewer than'):
-            comms.sync_frame_count(params.frame_size, params)
+            sync_5gnr.sync_frame_count(params.frame_size, params)
 
 
 class TestChooseSsbOffset:
     def _correlate(self, delays, scales=None, beam=3, n_id2=1):
         embeds = [(n_id2, beam, delay) for delay in delays]
         params, pss, iq = embed_pss_ports(embeds, scales=scales)
-        return params, comms.correlate_sync_sequence(iq, pss, params=params)
+        return params, sync_5gnr.correlate_sync_sequence(iq, pss, params=params)
 
     @given(
         delay=st.integers(0, 1000),
@@ -490,28 +492,32 @@ class TestChooseSsbOffset:
     @settings(max_examples=20)
     def test_recovers_the_delay(self, delay, window_fill):
         params, R = self._correlate([delay])
-        offset = comms.choose_ssb_offset(R, params, window_fill=window_fill)
+        offset = sync_5gnr.choose_ssb_offset(R, params, window_fill=window_fill)
         assert offset.shape == (1,)
         assert offset[0] == delay
 
         # the port axis is optional
-        assert_array_equal(comms.choose_ssb_offset(R[0], params), offset)
+        assert_array_equal(sync_5gnr.choose_ssb_offset(R[0], params), offset)
 
     def test_last_fine_lag_wraps(self):
         delay = 3 * sync_params().short_symbol_size - 1
         params, R = self._correlate([delay])
-        assert comms.choose_ssb_offset(R, params)[0] == delay
+        assert sync_5gnr.choose_ssb_offset(R, params)[0] == delay
 
     def test_weighted_detect_shape(self):
         params, R = self._correlate([300])
-        weights = comms.weighted_ssb_detect(R, params)
+        weights = sync_5gnr.weighted_ssb_detect(R, params)
         assert weights.shape == (1, params.max_lag_symbols, params.short_symbol_size)
 
     def test_per_port(self):
         params, R = self._correlate([40, 700], scales=[1.0, 3.0])
-        assert_array_equal(comms.choose_ssb_offset(R, params, per_port=True), [40, 700])
+        assert_array_equal(
+            sync_5gnr.choose_ssb_offset(R, params, per_port=True), [40, 700]
+        )
         # the ports are averaged in power, so the stronger one decides
-        assert_array_equal(comms.choose_ssb_offset(R, params, per_port=False), [700])
+        assert_array_equal(
+            sync_5gnr.choose_ssb_offset(R, params, per_port=False), [700]
+        )
 
     def test_max_beams(self):
         """only the first max_beams SSB candidates are searched"""
@@ -519,15 +525,15 @@ class TestChooseSsbOffset:
         iq = silent_block(params)
         embed_symbol(iq, phy, bodies[1], params.symbol_indexes[1], 55)
         embed_symbol(iq, phy, bodies[1], params.symbol_indexes[6], 400, scale=3.0)
-        R = comms.correlate_sync_sequence(iq, pss, params=params)
+        R = sync_5gnr.correlate_sync_sequence(iq, pss, params=params)
 
-        assert comms.choose_ssb_offset(R, params)[0] == 400
-        assert comms.choose_ssb_offset(R, params, max_beams=4)[0] == 55
+        assert sync_5gnr.choose_ssb_offset(R, params)[0] == 400
+        assert sync_5gnr.choose_ssb_offset(R, params, max_beams=4)[0] == 55
 
     def test_rejects_low_dimensional_input(self):
         params, R = self._correlate([0])
         with pytest.raises(TypeError, match='5 dimensions'):
-            comms.weighted_ssb_detect(R[0, 0], params)
+            sync_5gnr.weighted_ssb_detect(R[0, 0], params)
 
     def test_from_capture_rate_waveform(self):
         """the measurement path: capture at 15.36 MS/s, resample to 7.68 MS/s, detect"""
@@ -540,22 +546,22 @@ class TestChooseSsbOffset:
         embed_symbol(iq, phy_in, bodies_in[2], params.symbol_indexes[5], delay_in)
 
         ssb_iq = get_ssb_iq(iq, fs_in=fs_in)
-        R = comms.correlate_sync_sequence(ssb_iq, pss, params=params)
+        R = sync_5gnr.correlate_sync_sequence(ssb_iq, pss, params=params)
         mag = np.abs(R[0])
         n_id2, _, beam, lag = np.unravel_index(mag.argmax(), mag.shape)
         assert (n_id2, beam) == (2, 5)
         assert abs(lag - delay_in // 2) <= 1
-        assert abs(comms.choose_ssb_offset(R, params)[0] - delay_in // 2) <= 1
+        assert abs(sync_5gnr.choose_ssb_offset(R, params)[0] - delay_in // 2) <= 1
 
 
 class TestCupy:
     def test_sync_sequences(self, cupy_available):
         pss_np, pss_cp = numpy_and_cupy(
-            cupy_available, comms.pss_5g_nr, FS, 30e3, xp_kwarg='xp'
+            cupy_available, sync_5gnr.pss_5g_nr, FS, 30e3, xp_kwarg='xp'
         )
         assert_close(pss_cp, pss_np, atol=1e-6)
         sss_np, sss_cp = numpy_and_cupy(
-            cupy_available, comms.sss_5g_nr, FS, 30e3, xp_kwarg='xp'
+            cupy_available, sync_5gnr.sss_5g_nr, FS, 30e3, xp_kwarg='xp'
         )
         assert_close(sss_cp, sss_np, atol=1e-6)
 
@@ -566,11 +572,15 @@ class TestCupy:
         assert_close(ssb_cp, ssb_np, atol=1e-5)
 
         R_np, R_cp = numpy_and_cupy(
-            cupy_available, comms.correlate_sync_sequence, ssb_np, pss, params=params
+            cupy_available,
+            sync_5gnr.correlate_sync_sequence,
+            ssb_np,
+            pss,
+            params=params,
         )
         assert_close(R_cp, R_np, atol=1e-5)
 
         offset_np, offset_cp = numpy_and_cupy(
-            cupy_available, comms.choose_ssb_offset, R_np, params
+            cupy_available, sync_5gnr.choose_ssb_offset, R_np, params
         )
         assert offset_np[0] == offset_cp[0] == 77

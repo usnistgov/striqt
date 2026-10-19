@@ -1,13 +1,4 @@
 """IEEE 802.16-2017 OFDMA frame model."""
 
-from .lib.comms import (
-    Phy802_16,
-    correlate_cyclic_shift,
-    get_802_16_phy,
-)
-
-__all__ = [
-    'Phy802_16',
-    'correlate_cyclic_shift',
-    'get_802_16_phy',
-]
+from .lib.comms.cp import correlate_cyclic_shift
+from .lib.comms.phy_802_16 import Phy802_16, get_802_16_phy
