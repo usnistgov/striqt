@@ -1,4 +1,6 @@
-"""striqt.waveform.lib.jit: the numba correlation kernels against a numpy reference.
+"""striqt.waveform.lib.comms.cp and the numba kernels in
+striqt.waveform.lib.comms.cp_cpu_jit and striqt.waveform.lib.comms.cp_cuda_jit: the
+cyclic-prefix correlation against a numpy reference and on a synthetic OFDM waveform.
 
 The CUDA tests skip when cupy is not available; the `cupy.fuse` dB kernels live in
 `lib/power/cuda_jit.py` and are covered through the public dispatcher in
@@ -7,16 +9,19 @@ test_waveform_power_convert.py.
 
 from __future__ import annotations
 
+import functools
+
 import numpy as np
 import pytest
 from conftest import gaussian_iq, iq_waveforms
 from hypothesis import given
 from hypothesis import strategies as st
-from numeric_checks import assert_close
+from numeric_checks import assert_close, numpy_and_cupy, reference_power
+from waveform_strategies import corr_atol_for, cp_case
 
-from striqt.waveform import ofdm
+from striqt.waveform.lib import comms
 
-# thread block sizing from ofdm.corr_at_indices
+# thread block sizing from comms.corr_at_indices
 THREADS_PER_BLOCK = 32
 
 
@@ -53,7 +58,7 @@ def corr_cases(
     The waveform length is drawn so that some examples run index pairs past the end of
     `x`, which exercises the kernels' bounds handling; the indices are drawn in
     arbitrary order unless `sorted_inds`, so an out-of-range pair may precede a valid
-    one. With `ncp_from_inds`, ncp is the number of indices, as ofdm.corr_at_indices
+    one. With `ncp_from_inds`, ncp is the number of indices, as comms.corr_at_indices
     infers it from the last axis of `inds`.
     """
 
@@ -83,7 +88,7 @@ def corr_cases(
 def assert_matches_reference(out, inds, x, nfft, ncp, norm):
     expected = corr_reference(inds, x, nfft, ncp, norm)
     scale = float(np.abs(x).max() ** 2)
-    atol = ofdm.corr_atol(x.dtype, inds.size, norm, scale=scale)
+    atol = comms.corr_atol(x.dtype, inds.size, norm, scale=scale)
     assert_close(out, expected, atol=atol)
 
 
@@ -92,7 +97,7 @@ class TestCorrAtIndicesKernels:
 
     @given(case=corr_cases())
     def test_cpu(self, case):
-        from striqt.waveform.lib.jit.cpu import _corr_at_indices
+        from striqt.waveform.lib.comms.cp_cpu_jit import _corr_at_indices
 
         inds, x, nfft, ncp, norm = case
         out = np.empty(nfft + ncp, dtype=x.dtype)
@@ -101,7 +106,7 @@ class TestCorrAtIndicesKernels:
 
     @staticmethod
     def _run_cuda(cp, inds, x, nfft, ncp, norm):
-        from striqt.waveform.lib.jit.cuda import _corr_at_indices
+        from striqt.waveform.lib.comms.cp_cuda_jit import _corr_at_indices
 
         x_cp = cp.asarray(x)
         out = cp.empty(nfft + ncp, dtype=x.dtype)
@@ -123,7 +128,7 @@ class TestCorrAtIndicesKernels:
     @pytest.mark.xfail(
         strict=True,
         reason='the CUDA _corr_at_indices breaks out of the index loop at the first '
-        'out-of-range pair (jit/cuda.py:24-25) instead of skipping it like the CPU '
+        'out-of-range pair (comms/cp_cuda_jit.py:28-29) instead of skipping it like the CPU '
         'kernel, so a valid index after an out-of-range one is dropped',
     )
     def test_cuda_unsorted_indices(self, cupy_available):
@@ -136,7 +141,7 @@ class TestCorrAtIndicesKernels:
 
 
 class TestCorrAtIndicesDispatcher:
-    """ofdm.corr_at_indices selects the kernel for the array namespace."""
+    """comms.corr_at_indices selects the kernel for the array namespace."""
 
     @given(case=corr_cases(ncp_from_inds=True, sorted_inds=True))
     def test_sizes_out_from_inds(self, xp, case):
@@ -144,13 +149,69 @@ class TestCorrAtIndicesDispatcher:
         inds_2d = xp.asarray(inds[np.newaxis, :])
         x_xp = xp.asarray(x)
 
-        out = ofdm.corr_at_indices(inds_2d, x_xp, nfft, norm=norm)
+        out = comms.corr_at_indices(inds_2d, x_xp, nfft, norm=norm)
         assert isinstance(out, xp.ndarray)
         assert out.shape == (nfft + ncp,)
         assert out.dtype == x.dtype
         assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
         buffer = xp.empty(nfft + ncp, dtype=x.dtype)
-        ret = ofdm.corr_at_indices(inds_2d, x_xp, nfft, norm=norm, out=buffer)
+        ret = comms.corr_at_indices(inds_2d, x_xp, nfft, norm=norm, out=buffer)
         assert ret is buffer
         assert_matches_reference(ret, inds, x, nfft, ncp, norm)
+
+
+class TestCorrAtIndices:
+    """cyclic prefix correlation on a synthetic OFDM waveform, indexed as the
+    cellular cyclic autocorrelation measurement does"""
+
+    def test_normalized_correlation_peaks_at_zero_lag(self):
+        phy, x, inds = cp_case()
+        ncp = int(phy.cp_sizes[1])
+
+        R = np.abs(comms.corr_at_indices(inds, x, phy.nfft, norm=True))
+        assert R.shape == (phy.nfft + ncp,)
+
+        # the cyclic prefix is an exact copy of the symbol tail
+        assert R[0] == pytest.approx(1, abs=corr_atol_for(x, inds.size, norm=True))
+
+        # partial overlap decays linearly over the prefix length; the remaining
+        # pairs are independent QPSK products that average out
+        lags = np.arange(ncp)
+        assert_close(R[:ncp], 1 - lags / ncp, atol=0.1)
+        assert R[ncp : phy.nfft].max() < 0.1
+
+    def test_unnormalized_zero_lag_is_prefix_power(self):
+        phy, x, inds = cp_case()
+
+        R = comms.corr_at_indices(inds, x, phy.nfft, norm=False)
+        power = reference_power(x[inds.ravel()]).mean()
+        assert R[0] == pytest.approx(power, abs=corr_atol_for(x, inds.size, norm=False))
+        assert R.dtype == x.dtype
+
+    def test_corr_atol_model(self):
+        atol = functools.partial(comms.corr_atol, np.float32)
+        # one rounding per summed product on top of a fixed count of power roundings
+        assert atol(8, norm=False) > atol(4, norm=False)
+        assert atol(16, norm=False) - atol(8, norm=False) == pytest.approx(
+            atol(8, norm=False) - atol(0, norm=False)
+        )
+        # a normalized correlation is bounded by 1 regardless of the input scale
+        assert atol(4, norm=True, scale=100.0) == atol(4, norm=True)
+        assert atol(4, norm=False, scale=100.0) == pytest.approx(
+            100 * atol(4, norm=False)
+        )
+        # roundoff follows the real dtype underlying the complex input
+        assert comms.corr_atol(np.complex64, 4, norm=True) == atol(4, norm=True)
+        assert comms.corr_atol(np.complex128, 4, norm=True) < atol(4, norm=True)
+
+
+class TestCupy:
+    """the dispatcher on cupy against the numpy result"""
+
+    def test_corr_at_indices(self, cupy_available):
+        phy, x, inds = cp_case(4)
+        R_np, R_cp = numpy_and_cupy(
+            cupy_available, comms.corr_at_indices, inds, x, phy.nfft, norm=False
+        )
+        assert_close(R_cp, R_np, atol=corr_atol_for(x, inds.size, norm=False, n_impl=2))

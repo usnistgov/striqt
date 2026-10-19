@@ -6,7 +6,8 @@ import hashlib
 import os
 import pathlib
 
-# must be set before numba is first imported; this module loads before cpu.py or cuda.py
+# must be set before numba is first imported; cp_cpu_jit.py and cp_cuda_jit.py import
+# this module before numba
 if not os.environ.get('NUMBA_CACHE_DIR'):
     try:
         from platformdirs import user_cache_dir

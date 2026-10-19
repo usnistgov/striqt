@@ -1,27 +1,29 @@
+"""5G NR synchronization against the synchronization signal block (SSB).
+
+The PSS and SSS m-sequences (3GPP TS 38.211 §7.4.2) are rendered as time-domain
+correlation templates at a given sample rate, the SSB symbol positions follow the
+cell search cases of TS 38.213 §4.1, the SSB band is extracted from wideband IQ
+by recentering and resampling, and the correlation of that IQ against the
+templates yields a (coarse lag, fine lag) grid from which an SSB start offset is
+chosen.
+"""
+
 from __future__ import annotations as __
 
 import dataclasses
 from fractions import Fraction
 from math import ceil, isclose
-from numbers import Number
 import typing
 
-from . import fourier
-
-from . import arrays, power, util
-from .typing import CellSSBIndexes
-from .util import array_api_compat, np
-from .arrays import (
-    ROUNDOFF_SAFETY,
-    array_namespace,
-    is_cupy_array,
-    isroundmod,
-    pad_along_axis,
-    unit_roundoff,
-)
+from .. import arrays, fourier, power, util
+from ..arrays import array_namespace, is_cupy_array, isroundmod, pad_along_axis
+from ..typing import CellSSBIndexes
+from ..util import np
+from .phy_3gpp import get_3gpp_phy, slot_period
+from .sequences import m_sequence
 
 if typing.TYPE_CHECKING:
-    from .typing import Array, DTypeLike, WindowSpecType
+    from ..typing import Array, WindowSpecType
 
 
 def _min_diff(x: typing.Sequence[int]) -> int | None:
@@ -31,86 +33,6 @@ def _min_diff(x: typing.Sequence[int]) -> int | None:
         return None
 
     return min(b - a for a, b in zip(x, x[1:]))
-
-
-def _isclosetoint(v, atol=1e-6):
-    xp = array_namespace(v)
-    return xp.isclose(v % 1, (0, 1), atol=atol).any()
-
-
-def _index_or_all(inds: tuple[int, ...] | typing.Literal['all'], name, size, xp=None):
-    if xp is None:
-        xp = np
-
-    if isinstance(inds, (tuple, list)):
-        x = xp.array(inds)
-    elif isinstance(inds, str) and inds == 'all':
-        if size is None:
-            raise ValueError('must set max to allow "all" value')
-        x = xp.arange(size)
-    else:
-        raise ValueError(f'{name} argument must be an array of indices or "all"')
-
-    if x.ndim not in (0, 1):
-        raise ValueError(f'{name} argument must be a sequence of indices')
-
-    if x.max() >= size:
-        raise ValueError(f'{name} value {inds} exceeds the maximum {size - 1}')
-    if (-x).max() > size:
-        raise ValueError(f'{name} value {inds} is below the minimum {-size}')
-
-    return x
-
-
-def corr_at_indices(inds, x, nfft, norm=True, out=None):
-    xp = array_namespace(x)
-    assert xp is array_namespace(inds)
-
-    # the number of waveform samples per cyclic prefix
-    ncp = inds.shape[-1]
-    flat_inds = inds.flatten()
-
-    if out is None:
-        out = xp.empty(nfft + ncp, dtype=x.dtype)
-
-    if array_api_compat.is_numpy_array(x):
-        from .jit.cpu import _corr_at_indices as func
-    else:
-        from .jit.cuda import _corr_at_indices
-
-        tpb = 32
-        bpg = max((x.size + (tpb - 1)) // tpb, 1)
-
-        func = _corr_at_indices[bpg, tpb]
-
-    func(flat_inds, x, int(nfft), int(ncp), bool(norm), out)
-
-    return out
-
-
-def corr_atol(
-    dtype: DTypeLike, n_inds: int, norm: bool, scale: float = 1.0, n_impl: int = 1
-) -> float:
-    """bound the absolute roundoff of `corr_at_indices` against exact arithmetic.
-
-    The bound grows linearly with `n_inds` in unit roundoffs of `dtype`: each
-    product ``a*conj(b)`` and the power terms are rounded at the input precision
-    before the complex128 accumulation, and the result once more on output. With
-    ``norm=True`` the Cauchy-Schwarz bound ``sum|a||b| <= sqrt(Pa*Pb)`` makes the
-    error relative to a unit-scale output, and `scale` is ignored; with
-    ``norm=False`` it is relative to the largest product magnitude, which the caller
-    passes as ``scale = max|x|**2``.
-
-    Args:
-        dtype: the input dtype (real or complex)
-        n_inds: the number of index pairs summed at each lag
-        norm: the `corr_at_indices` normalization flag
-        scale: ``max|x|**2`` when `norm` is False
-        n_impl: 1 against exact arithmetic, 2 against a second implementation
-    """
-    u = unit_roundoff(dtype)
-    scale = 1.0 if norm else scale
-    return ROUNDOFF_SAFETY * n_impl * (n_inds + 3) * u * scale
 
 
 @dataclasses.dataclass
@@ -133,18 +55,18 @@ class SyncParams:
 
 
 def _pss_m_sequence(N_id2: int) -> list[int]:
-    """compute the M-sequence used as the 5G-NR primary synchronization sequence.
-
-    These express frequency-domain values of the active subcarriers, spaced at the
-    subcarrier spacing.
+    """return the bipolar PSS m-sequence for `N_id2`.
 
     Args:
-        N_id2: one of (0,1,2), expressing the sector portion of the cell ID
-    """
-    x = [0, 1, 1, 0, 1, 1, 1]
+        N_id2: the sector part of the cell ID, 0 to 2
 
-    for i in range(7, 127):
-        x.append((x[i - 3] + x[i - 7]) % 2)
+    Returns:
+        127 values in {-1, 1}, one per active subcarrier in frequency-domain order
+
+    References:
+        3GPP TS 38.211 §7.4.2.2
+    """
+    x = m_sequence([0, 1, 1, 0, 1, 1, 1], (3, 7), 127)
 
     m = [(n + 43 * N_id2) % 127 for n in range(127)]
 
@@ -154,30 +76,25 @@ def _pss_m_sequence(N_id2: int) -> list[int]:
 
 
 def _sss_m_sequence(N_id: int) -> list[int]:
-    """compute the M-sequence used as the 5G-NR secondary synchronization sequence.
+    """return the bipolar SSS m-sequence for the cell ID `N_id`.
 
-    These express frequency-domain values of the active subcarriers at the
-    channel's subcarrier spacing.
-
-    The cell ID is $N_\text{id} = 3 N_{id}^1 + N_{id}^2$, where $N_{id}^1$
-    is the gnode-b ID and the $N_{id}^2$ is the sector ID as in _pss_m_sequence.
+    The cell ID is ``N_id = 3*N_id1 + N_id2``, where ``N_id1`` is the cell
+    identity group and ``N_id2`` is the sector ID of `_pss_m_sequence`.
 
     Args:
-        N_id: the cell ID in range(1008)
+        N_id: the cell ID, 0 to 1007
 
     Returns:
-        a list of integers in the set {-1, 1} with length 127
-    """
+        127 values in {-1, 1}, one per active subcarrier in frequency-domain order
 
-    x_0 = [1, 0, 0, 0, 0, 0, 0]
-    x_1 = [1, 0, 0, 0, 0, 0, 0]
+    References:
+        3GPP TS 38.211 §7.4.2.3
+    """
+    x_0 = m_sequence([1, 0, 0, 0, 0, 0, 0], (3, 7), 127)
+    x_1 = m_sequence([1, 0, 0, 0, 0, 0, 0], (6, 7), 127)
 
     N_id_1 = N_id // 3
     N_id_2 = N_id % 3
-
-    for i in range(7, 127):
-        x_0.append((x_0[i - 3] + x_0[i - 7]) % 2)
-        x_1.append((x_1[i - 6] + x_1[i - 7]) % 2)
 
     m_0 = 15 * (N_id_1 // 112) + 5 * N_id_2
     m_1 = N_id_1 % 112
@@ -443,15 +360,6 @@ def index_pss_symbols(
     return tuple(inds)
 
 
-def slot_period(subcarrier_spacing: float) -> float:
-    """return the duration (in s) of one 3GPP slot at `subcarrier_spacing`.
-
-    A 10 ms radio frame holds 10 subframes of ``subcarrier_spacing/15e3`` slots each
-    (3GPP TS 38.211 Section 4.3.2).
-    """
-    return 10e-3 / (10 * subcarrier_spacing / 15e3)
-
-
 @util.lru_cache()
 def pss_params(
     *,
@@ -682,10 +590,10 @@ def correlate_sync_sequence(
 ) -> Array:
     """correlate the IQ of a synchronization block against a synchronization sequence.
 
-    Arguments:
+    Args:
         ssb_iq: The synchronization block IQ waveform (e.g., from `get_5g_ssb_iq`)
-        sync_seq: The reference sequence (e.g. from `striqt.waveform.ofdm.pss_5g_nr` or `striqt.waveform.ofdm.sss_5g_nr`)
-        params: The cell synchronization parameters (e.g. from `striqt.waveform.ofdm.pss_params` or `striqt.waveform.ofdm.sss_params`)
+        sync_seq: The reference sequence (e.g. from `striqt.waveform.comms.pss_5g_nr` or `striqt.waveform.comms.sss_5g_nr`)
+        params: The cell synchronization parameters (e.g. from `striqt.waveform.comms.pss_params` or `striqt.waveform.comms.sss_params`)
 
     Returns:
         correlator across parameters:
@@ -870,411 +778,3 @@ def choose_ssb_offset(
     isymbol = nfine * offsets.max(FINE_LAG_DIM).argmax(-1)  # the peakiest symbol or 0
 
     return ifine + isymbol
-
-
-class PhyOFDM:
-    def __init__(
-        self,
-        *,
-        channel_bandwidth: float,
-        sample_rate: float,
-        nfft: float,
-        cp_sizes: Array,
-        frame_duration: float | None = None,
-        contiguous_size: int | None = None,
-    ):
-        xp = array_namespace(cp_sizes)
-
-        self.channel_bandwidth = channel_bandwidth
-        self.sample_rate = sample_rate
-
-        self.nfft: float = nfft
-        self.frame_duration = frame_duration
-
-        self.subcarrier_spacing: float = self.sample_rate / nfft
-        if frame_duration is None:
-            self.frame_size = None
-        else:
-            self.frame_size = round(sample_rate * frame_duration)
-
-        self.cp_sizes = cp_sizes
-
-        if contiguous_size is not None:
-            self.contiguous_size = contiguous_size
-        else:
-            # if not specified, assume no padding is needed to complete a contiguos block of symbols
-            self.contiguous_size = int(np.sum(cp_sizes) + len(cp_sizes) * nfft)
-
-        # build a (start_idx, size) pair for each CP
-        pair_sizes = xp.concatenate((xp.array((0,)), self.cp_sizes + self.nfft))
-        self.cp_start_idx = (pair_sizes.cumsum()).astype(int)[:-1]
-        start_and_size = zip(self.cp_start_idx, self.cp_sizes)
-
-        idx_range = xp.arange(self.contiguous_size).astype(int)
-
-        # indices in the contiguous range that are CP
-        self.cp_idx = xp.concatenate([
-            idx_range[start : start + size] for start, size in start_and_size
-        ])
-
-        # indices in the contiguous range that are not CP
-        self.symbol_idx = xp.setdiff1d(idx_range, self.cp_idx)
-
-    def index_cyclic_prefix(self) -> Array:
-        raise NotImplementedError
-
-
-@util.lru_cache(4)
-def get_3gpp_phy(
-    channel_bandwidth: float,
-    subcarrier_spacing=15e3,
-    generation: typing.Literal['4G', '5G'] = '4G',
-    sample_rate=None,
-    xp=None,
-) -> Phy3GPP:
-    return Phy3GPP(**locals())
-
-
-@util.lru_cache(4)
-def _get_3gpp_index_cyclic_prefix(
-    phy: Phy3GPP,
-    *,
-    frames: tuple[int, ...] = (0,),
-    symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
-    slots: tuple[int, ...] | typing.Literal['all'] = 'all',
-):
-    """build an indexing tensor for performing cyclic prefix correlation across various axes"""
-    xp = array_namespace(phy.cp_sizes)
-
-    frames = xp.array(frames)
-    frame_size = round(phy.sample_rate * 10e-3)
-
-    slot_inds = _index_or_all(
-        slots,
-        '"slots" argument',
-        size=phy.SCS_TO_SLOTS_PER_FRAME[phy.subcarrier_spacing],
-        xp=xp,
-    )
-    symbol_inds = _index_or_all(
-        symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp
-    )
-
-    # first build each grid axis separately
-    grid = []
-
-    # axis 0: symbol number within each slot
-    grid.append(phy.cp_start_idx[symbol_inds])
-
-    # axis 1: slot number
-    grid.append(phy.contiguous_size * slot_inds)
-
-    # axis 2: frame number
-    grid.append(frames * frame_size)
-
-    # axis 3: cp index
-    grid.append(xp.ogrid[0 : phy.cp_sizes[1]])
-
-    # pad the axis dimensions so they can be broadcast together
-    inds, *offsets = xp.meshgrid(*grid, indexing='ij', copy=False)
-
-    # sum all of the index offsets
-    inds = inds.copy()
-    for offset in offsets:
-        inds += offset
-
-    # drop singleton axes only after the sum, so that a single non-zero
-    # frame, slot or symbol selection keeps its offset
-    return inds.squeeze()
-
-
-class Phy3GPP(PhyOFDM):
-    """Sampling and index parameters and lookup tables for 3GPP 5G-NR.
-
-    These are equivalent to LTE if subcarrier_spacing is fixed to 15 kHz
-    and slot length is redefined to match the period of 14 symbols including
-    cyclic prefix.
-
-    References:
-        3GPP TS 38.211.
-    """
-
-    # the remaining 1 "slot" worth of samples per slot are for cyclic prefixes
-    FFT_PER_SLOT = 14
-
-    FFT_SIZE_TO_SUBCARRIERS = {
-        128: 73,
-        256: 181,
-        512: 301,
-        1024: 601,
-        1536: 901,
-        2048: 1201,
-    }
-
-    # "default" sample rates from LTE
-    BW_TO_SAMPLE_RATE = {
-        1.4e6: 1.92e6,
-        3e6: 3.84e6,
-        5e6: 7.68e6,
-        10e6: 15.36e6,
-        15e6: 23.04e6,
-        20e6: 30.72e6,
-        25e6: 38.40e6,
-        30e6: 46.08e6,
-        40e6: 61.44e6,
-        60e6: 92.16e6,
-        80e6: 122.88e6,
-        100e6: 153.6e6,
-    }
-
-    # Slot structure including cyclic prefix (CP) indices are specified in
-    # 3GPP TS 38.211, Section 5.3.1. Below are the sizes of all CPs (in samples)
-    # in 1 slot for FFT size 128 at 15 kHz SCS. CP size then scales proportionally
-    # to FFT size. 1 slot is the minimum number of contiguous symbols in a sequence.
-    LTE_MIN_CP_SIZES = (10, 9, 9, 9, 9, 9, 9, 10, 9, 9, 9, 9, 9, 9)
-
-    SCS_TO_SLOTS_PER_FRAME = {15e3: 10, 30e3: 20, 60e3: 40}
-
-    # TODO: add 5G FR2 SCS values
-    SUBCARRIER_SPACINGS = {15e3, 30e3, 60e3}
-
-    def __init__(
-        self,
-        channel_bandwidth: float,
-        subcarrier_spacing=15e3,
-        generation: typing.Literal['4G', '5G'] = '4G',
-        sample_rate=None,
-        xp=None,
-    ):
-        if xp is None:
-            xp = np
-
-        if subcarrier_spacing not in self.SUBCARRIER_SPACINGS:
-            raise ValueError(
-                f'subcarrier_spacing must be one of {self.SUBCARRIER_SPACINGS}'
-            )
-
-        if sample_rate is None:
-            sample_rate = self.BW_TO_SAMPLE_RATE[channel_bandwidth]
-
-        if isroundmod(sample_rate, subcarrier_spacing):
-            nfft = round(sample_rate / subcarrier_spacing)
-        else:
-            raise ValueError('sample_rate / subcarrier_spacing must be counting number')
-
-        if nfft in self.FFT_SIZE_TO_SUBCARRIERS:
-            self.subcarriers = self.FFT_SIZE_TO_SUBCARRIERS[nfft]
-
-        if generation.upper() == '4G':
-            # assert subcarrier_spacing == 15e3, '4G LTE only supports 15 kHz subcarrier spacing'
-            cp_sizes = nfft * xp.array(self.LTE_MIN_CP_SIZES, dtype=int) // 128
-        elif generation.upper() == '5G':
-            Tc = Fraction(1, 4096 * 480) * 1000  # microsec
-            kappa = 64
-            fs_MHz = Fraction(round(sample_rate), 1_000_000)
-
-            scs_norm = Fraction(round(subcarrier_spacing), 15000)
-            Tcp_us = [kappa * Tc * (144 / scs_norm) + 16 * kappa * Tc] + 13 * [
-                kappa * Tc * (144 / scs_norm)
-            ]
-            cp_fractions = [T * fs_MHz for T in Tcp_us]
-            if any(cp.denominator != 1 for cp in cp_fractions):
-                raise ValueError(
-                    f'sample_rate {sample_rate!r} with subcarrier_spacing '
-                    f'{subcarrier_spacing!r} produces non-integer cyclic prefixes'
-                )
-            cp_sizes = xp.array([cp.numerator for cp in cp_fractions], dtype=int)
-        else:
-            raise ValueError('generation must be "4G" or "5G"')
-
-        super().__init__(
-            channel_bandwidth=channel_bandwidth,
-            nfft=nfft,
-            sample_rate=sample_rate,
-            frame_duration=10e-3,
-            cp_sizes=cp_sizes,
-        )
-
-    def index_cyclic_prefix(
-        self,
-        *,
-        frames: tuple[int, ...] = (0,),
-        symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
-        slots: tuple[int, ...] | typing.Literal['all'] = 'all',
-    ):
-        """build an indexing tensor for performing cyclic prefix correlation across various axes"""
-        return _get_3gpp_index_cyclic_prefix(
-            self, frames=frames, symbols=symbols, slots=slots
-        )
-
-
-@util.lru_cache(4)
-def get_802_16_phy(
-    channel_bandwidth: float,
-    *,
-    alt_sample_rate: float | None = None,
-    frame_duration: float = 5e-3,
-    nfft: float = 2048,
-    cp_ratio: float = 1 / 8,
-    xp=None,
-) -> Phy802_16:
-    return Phy802_16(**locals())
-
-
-class Phy802_16(PhyOFDM):
-    """Sampling and index parameters and lookup tables for IEEE 802.16-2017 OFDMA"""
-
-    VALID_CP_RATIOS = {1 / 32, 1 / 16, 1 / 8, 1 / 4}
-    VALID_FFT_SIZES = {128, 512, 1024, 2048}
-    VALID_FRAME_DURATIONS = {
-        2e-3,
-        2.5e-3,
-        4e-3,
-        5e-3,
-        8e-3,
-        10e-3,
-        12.5e-3,
-        20e-3,
-        25e-3,
-        40e-3,
-        50e-3,
-    }
-
-    SAMPLING_FACTOR_BY_FREQUENCY_DIV = {
-        1.25: 28 / 25,
-        1.5: 28 / 25,
-        1.75e6: 8 / 7,
-        2: 28 / 25,
-        2.75: 28 / 25,
-    }
-
-    def __init__(
-        self,
-        channel_bandwidth: float,
-        *,
-        alt_sample_rate: float | None = None,
-        frame_duration: float = 5e-3,
-        nfft: float = 2048,
-        cp_ratio: float = 1 / 8,
-        xp=None,
-    ):
-        """
-        Args:
-            channel_bandwidth: Channel bandwidth as defined by 802.16-2017
-            alt_sample_rate (_type_, optional): If specified, overrides the 802.16-2017 value with sample rate of recorded data.
-            frame_duration: _description_. Defaults to 5e-3.
-            nfft: the fft size corresponding to the length of the useful portion of each symbol. Defaults to 2048.
-            cp_ratio: the size of the cyclic prefix as a fraction of nfft. Defaults to 1/8.
-        """
-        if xp is None:
-            xp = np
-
-        if not isinstance(channel_bandwidth, Number):
-            raise TypeError('expected numeric value for channel_bandwidth')
-        elif channel_bandwidth < 1.25e6:
-            raise ValueError(
-                'standardized values for channel_bandwidth not supported yet'
-            )
-        elif not isclose(channel_bandwidth % 125e3, 0, abs_tol=1e-6):
-            raise ValueError('channel bandwidth must be set in increments of 125 kHz')
-
-        if nfft not in self.VALID_FFT_SIZES:
-            raise ValueError(f'nfft must be one of {self.VALID_FFT_SIZES}')
-
-        if cp_ratio in self.VALID_CP_RATIOS:
-            self.cp_ratio = cp_ratio
-        else:
-            raise ValueError(f'cp_ratio must be one of {self.VALID_CP_RATIOS}')
-
-        if frame_duration not in self.VALID_FRAME_DURATIONS:
-            raise ValueError(
-                f'frame_duration must be one of {self.VALID_FRAME_DURATIONS}'
-            )
-
-        for freq_divisor, n in self.SAMPLING_FACTOR_BY_FREQUENCY_DIV.items():
-            if isclose(channel_bandwidth % freq_divisor, 0, abs_tol=1e-6):
-                sampling_factor = self.sampling_factor = n
-                break
-        else:
-            # no match with the table - standardized default
-            sampling_factor = self.sampling_factor = 8 / 7
-
-        std_sample_rate = np.floor(sampling_factor * channel_bandwidth / 8000) * 8000
-        cp_size = int(np.rint(cp_ratio * nfft))
-        self.total_symbol_duration = (
-            int(np.rint((1 + cp_ratio) * nfft)) / std_sample_rate
-        )
-        self.symbols_per_frame = int(
-            np.floor(frame_duration / self.total_symbol_duration)
-        )
-
-        if alt_sample_rate is None:
-            sample_rate = std_sample_rate
-        else:
-            scale = alt_sample_rate / std_sample_rate
-
-            if not (_isclosetoint(scale) or _isclosetoint(1 / scale)):
-                raise ValueError(
-                    'alt_sample_rate must be integer multiple or divisor of ofdm sample_rate'
-                )
-            if not _isclosetoint(cp_size * scale):
-                raise ValueError(
-                    'alt_sample_rate is too small to capture any cyclic prefixes'
-                )
-
-            nfft = round(nfft * scale)
-            cp_size = round(cp_size * scale)
-            sample_rate = alt_sample_rate
-
-        super().__init__(
-            channel_bandwidth=channel_bandwidth,
-            nfft=nfft,
-            sample_rate=sample_rate,
-            frame_duration=frame_duration,
-            cp_sizes=xp.full(self.symbols_per_frame, cp_size),
-            contiguous_size=round(frame_duration * sample_rate),
-        )
-
-    def index_cyclic_prefix(
-        self, *, frames=(0,), symbols: tuple[int, ...] | typing.Literal['all'] = 'all'
-    ) -> Array:
-        """build an indexing tensor for performing cyclic prefix correlation across various axes"""
-        return _802_16_index_cyclic_prefix(self, frames=frames, symbols=symbols)
-
-
-@util.lru_cache(4)
-def _802_16_index_cyclic_prefix(
-    phy: Phy802_16,
-    *,
-    frames=(0,),
-    symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
-) -> Array:
-    """build an indexing tensor for performing cyclic prefix correlation across various axes"""
-
-    xp = array_namespace(phy.cp_sizes)
-    frames = xp.array(frames)
-
-    symbol_inds = _index_or_all(
-        symbols, '"symbols" argument', size=phy.symbols_per_frame, xp=xp
-    )
-
-    # first build each grid axis separately
-    grid = []
-
-    # axis 0: symbol number in each frame
-    grid.append(phy.cp_start_idx[symbol_inds])
-
-    # axis 1: frame number
-    grid.append(frames * phy.frame_size)
-
-    # axis 2: cp index
-    grid.append(xp.ogrid[0 : phy.cp_sizes[1]])
-
-    # pad the axis dimensions so they can be broadcast together
-    a = xp.meshgrid(*grid, indexing='ij', copy=False)
-
-    # sum all of the index offsets
-    inds = a[0].copy()
-    for sub in a[1:]:
-        inds += sub
-
-    return inds

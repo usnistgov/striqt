@@ -8,7 +8,8 @@ the `writing-tests` skill; this file is the map of the suite that the skill refe
 - **Kernel numerics at the kernel.** `tests/waveform/test_fourier.py` and
   `test_waveform_power_convert.py`/`test_waveform_power_detect.py` prove the STFT, window
   design, resampling, binned power, the cyclic fold and its selectivity, the dB
-  conversions and the roundoff models. Measurement tests
+  conversions and the roundoff models; the `test_waveform_comms_*.py` modules prove the
+  frame models, the cyclic-prefix correlator and the 5G NR sync pipeline. Measurement tests
   assert what the measurement adds (spec fields → coordinates, dims, dtype, units, axis order,
   detector and statistic selection, documented edge behavior), not the numerics underneath.
 - **Every measurement's dims and dtype come from one registry-driven contract test**: the
@@ -43,6 +44,9 @@ same thing is invisible until the two drift. Look here before writing setup:
   point), `assert_within`, `reference_power`, `cross_backend`, `numpy_and_cupy`,
   `elementwise_rtol`, `levels`, `populated`. No waveform builders and no tolerance formulas
   of its own.
+- `tests/waveform/waveform_strategies.py`: the comms builders (`FS`, `phy_5g`, `sync_params`,
+  `cp_case`, `embed_pss_ports`, `get_ssb_iq`, …) shared by the `test_waveform_comms_*`
+  modules.
 - `tests/analysis/analysis_strategies.py`: analysis spec factories and constants
   (`POWER_BINS`, `CELL_FS`, `CELL_FRAME`, `capture_of`, `registered_tolerance`, the SSB
   spectrogram fixtures).
@@ -69,7 +73,7 @@ same thing is invisible until the two drift. Look here before writing setup:
   `stat_rtol`, `level_tolerance_dB`, `off_peak_dB_tolerance`, …), `striqt.waveform.fourier`
   (`fft_tolerance_rms`, `peak_factor`, `on_peak_roundoff`, `off_peak_floor_dBc`),
   `striqt.waveform.arrays` (`unit_roundoff`, `accum_rms`, `accum_rtol`, `mean_atol`),
-  `striqt.waveform.ofdm` (`corr_atol`); a measurement's budget is its registered tolerance
+  `striqt.waveform.comms` (`corr_atol`); a measurement's budget is its registered tolerance
   (`registered_tolerance` in `analysis_strategies`, `capture_tolerances`/`sweep_tolerances` in
   `striqt.sensor.lib.compute.tolerance`). Module-level constants inside `striqt.waveform.lib`
   (`ROUNDOFF_SAFETY` and friends) are implementation details: never import them.
