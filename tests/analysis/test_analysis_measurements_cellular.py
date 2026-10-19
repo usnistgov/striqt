@@ -308,7 +308,8 @@ class TestCellular5GSSBSpectrogram:
             ),
             (
                 # half a burst set (one slot) past the discovery period
-                SSB_SPECTROGRAM_PERIODICITY + sw.comms.slot_period(SSB_SPECTROGRAM_SCS),
+                SSB_SPECTROGRAM_PERIODICITY
+                + sw.comms_5gnr.slot_period(SSB_SPECTROGRAM_SCS),
                 {},
                 'duration must end on a whole discovery_periodicity or after a complete burst set of 56 symbols',
             ),

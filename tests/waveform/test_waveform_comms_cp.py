@@ -21,7 +21,7 @@ from waveform_strategies import corr_atol_for, cp_case
 
 from striqt.waveform.lib import comms
 
-# thread block sizing from comms.corr_at_indices
+# thread block sizing from comms.correlate_cyclic_shift
 THREADS_PER_BLOCK = 32
 
 
@@ -58,7 +58,7 @@ def corr_cases(
     The waveform length is drawn so that some examples run index pairs past the end of
     `x`, which exercises the kernels' bounds handling; the indices are drawn in
     arbitrary order unless `sorted_inds`, so an out-of-range pair may precede a valid
-    one. With `ncp_from_inds`, ncp is the number of indices, as comms.corr_at_indices
+    one. With `ncp_from_inds`, ncp is the number of indices, as comms.correlate_cyclic_shift
     infers it from the last axis of `inds`.
     """
 
@@ -140,8 +140,8 @@ class TestCorrAtIndicesKernels:
         assert_matches_reference(out, inds, x, nfft, ncp, False)
 
 
-class TestCorrAtIndicesDispatcher:
-    """comms.corr_at_indices selects the kernel for the array namespace."""
+class TestCorrelateCyclicShiftDispatcher:
+    """comms.correlate_cyclic_shift selects the kernel for the array namespace."""
 
     @given(case=corr_cases(ncp_from_inds=True, sorted_inds=True))
     def test_sizes_out_from_inds(self, xp, case):
@@ -149,19 +149,19 @@ class TestCorrAtIndicesDispatcher:
         inds_2d = xp.asarray(inds[np.newaxis, :])
         x_xp = xp.asarray(x)
 
-        out = comms.corr_at_indices(inds_2d, x_xp, nfft, norm=norm)
+        out = comms.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm)
         assert isinstance(out, xp.ndarray)
         assert out.shape == (nfft + ncp,)
         assert out.dtype == x.dtype
         assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
         buffer = xp.empty(nfft + ncp, dtype=x.dtype)
-        ret = comms.corr_at_indices(inds_2d, x_xp, nfft, norm=norm, out=buffer)
+        ret = comms.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm, out=buffer)
         assert ret is buffer
         assert_matches_reference(ret, inds, x, nfft, ncp, norm)
 
 
-class TestCorrAtIndices:
+class TestCorrelateCyclicShift:
     """cyclic prefix correlation on a synthetic OFDM waveform, indexed as the
     cellular cyclic autocorrelation measurement does"""
 
@@ -169,7 +169,7 @@ class TestCorrAtIndices:
         phy, x, inds = cp_case()
         ncp = int(phy.cp_sizes[1])
 
-        R = np.abs(comms.corr_at_indices(inds, x, phy.nfft, norm=True))
+        R = np.abs(comms.correlate_cyclic_shift(inds, x, phy.nfft, norm=True))
         assert R.shape == (phy.nfft + ncp,)
 
         # the cyclic prefix is an exact copy of the symbol tail
@@ -184,7 +184,7 @@ class TestCorrAtIndices:
     def test_unnormalized_zero_lag_is_prefix_power(self):
         phy, x, inds = cp_case()
 
-        R = comms.corr_at_indices(inds, x, phy.nfft, norm=False)
+        R = comms.correlate_cyclic_shift(inds, x, phy.nfft, norm=False)
         power = reference_power(x[inds.ravel()]).mean()
         assert R[0] == pytest.approx(power, abs=corr_atol_for(x, inds.size, norm=False))
         assert R.dtype == x.dtype
@@ -209,9 +209,9 @@ class TestCorrAtIndices:
 class TestCupy:
     """the dispatcher on cupy against the numpy result"""
 
-    def test_corr_at_indices(self, cupy_available):
+    def test_correlate_cyclic_shift(self, cupy_available):
         phy, x, inds = cp_case(4)
         R_np, R_cp = numpy_and_cupy(
-            cupy_available, comms.corr_at_indices, inds, x, phy.nfft, norm=False
+            cupy_available, comms.correlate_cyclic_shift, inds, x, phy.nfft, norm=False
         )
         assert_close(R_cp, R_np, atol=corr_atol_for(x, inds.size, norm=False, n_impl=2))

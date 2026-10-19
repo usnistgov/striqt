@@ -1,4 +1,4 @@
-from . import arrays, comms, fourier, power_analysis
+from . import arrays, comms_5gnr, comms_802_16, comms_lte, fourier, power_analysis
 from .lib import typing, util
 
 from .fourier import (

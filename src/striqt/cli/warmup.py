@@ -11,7 +11,7 @@ import numpy as np
 
 @click.command()
 def cli() -> None:
-    """warm the numba JIT caches of the CPU and CUDA `corr_at_indices` kernels.
+    """warm the numba JIT caches of the CPU and CUDA `_corr_at_indices` kernels.
 
     The CPU kernel is compiled for complex64 input. The CUDA kernel is compiled when
     `cupy` imports; any failure there is echoed and skipped rather than raised.

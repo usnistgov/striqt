@@ -1,6 +1,6 @@
 """Cyclic-prefix correlation at index sets.
 
-`corr_at_indices` dispatches to the numba kernels in the sibling modules
+`correlate_cyclic_shift` dispatches to the numba kernels in the sibling modules
 `cp_cpu_jit` (numpy) and `cp_cuda_jit` (cupy).
 """
 
@@ -15,7 +15,7 @@ if typing.TYPE_CHECKING:
     from ..typing import Array, DTypeLike
 
 
-def corr_at_indices(
+def correlate_cyclic_shift(
     inds: Array, x: Array, nfft: int, norm: bool = True, out: Array | None = None
 ) -> Array:
     """correlate `x` against its `nfft`-sample cyclic shift at the index sets in `inds`.
@@ -62,7 +62,7 @@ def corr_at_indices(
 def corr_atol(
     dtype: DTypeLike, n_inds: int, norm: bool, scale: float = 1.0, n_impl: int = 1
 ) -> float:
-    """bound the absolute roundoff of `corr_at_indices` against exact arithmetic.
+    """bound the absolute roundoff of `correlate_cyclic_shift` against exact arithmetic.
 
     The bound grows linearly with `n_inds` in unit roundoffs of `dtype`: each
     product ``a*conj(b)`` and the power terms are rounded at the input precision
@@ -75,7 +75,7 @@ def corr_atol(
     Args:
         dtype: the input dtype (real or complex)
         n_inds: the number of index pairs summed at each lag
-        norm: the `corr_at_indices` normalization flag
+        norm: the `correlate_cyclic_shift` normalization flag
         scale: ``max|x|**2`` when `norm` is False
         n_impl: 1 against exact arithmetic, 2 against a second implementation
     """

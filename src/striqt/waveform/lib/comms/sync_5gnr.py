@@ -117,9 +117,35 @@ def _generate_5g_nr_sync_sequence(
     xp=None,
     dtype='complex64',
 ):
-    """returns the time-domain PSS sequence.
+    """return time-domain sync sequences for every id from an m-sequence generator.
 
-    The shortest cyclic prefix is prepended.
+    Each sequence is normalized to unit mean power over its 127 active subcarriers
+    and placed on the `sample_rate` FFT grid, centered at `center_frequency`.
+
+    Args:
+        seq_func: maps a sequence id to its 127 bipolar frequency-domain values
+        max_id: sequences are built for ids 0 through `max_id`
+        sample_rate: in S/s; a multiple of `subcarrier_spacing` and at least
+            ``127 * subcarrier_spacing``
+        subcarrier_spacing: in Hz; a multiple of 15e3
+        center_frequency: offset (in Hz) of the sequence center from baseband; a
+            whole multiple of `subcarrier_spacing`, or ``None`` or 0 for centered
+        xp: array namespace of the result; ``None`` selects numpy
+        dtype: complex dtype of the result
+
+    Returns:
+        array of shape ``(max_id + 1, nfft + cp)``, where ``nfft`` is
+        ``sample_rate / subcarrier_spacing`` and ``cp`` is the shortest 5G NR
+        cyclic prefix at `sample_rate`; the leading ``cp`` samples are zero
+
+    Raises:
+        ValueError: `subcarrier_spacing` is not a multiple of 15 kHz
+        ValueError: `sample_rate` is below ``127 * subcarrier_spacing`` or not a
+            multiple of `subcarrier_spacing`
+        ValueError: `center_frequency` is not a whole multiple of
+            `subcarrier_spacing`
+        ValueError: the `center_frequency` shift places part of the sequence
+            outside the Nyquist band
     """
     if xp is None:
         xp = np
@@ -258,18 +284,44 @@ def index_pss_symbols(
     symbol_indexes: CellSSBIndexes = 'auto',
     center_frequency: tuple[float, ...] | float | None = None,
 ) -> tuple[int, ...]:
-    """returns indexes of PSS symbols relative to frame start.
+    """return the symbol indexes of the PSS within a 3GPP TS 38.213 §4.1 SSB burst.
 
-    Optionally, symbol_indexes may be determined by specifying one of the
-    standardized cell search cases in 3GPP TS 138 213: Section 4.1. If
-    symbol_indexes is 'auto', then a case
+    A tuple or list in `symbol_indexes` is returned unchanged. ``'auto'`` selects
+    the cell search case from `subcarrier_spacing`: 15 kHz is case A, 30 kHz is
+    case C and requires `shared_spectrum`, 120 kHz is case D, 240 kHz is case E,
+    480 kHz is case F, and 960 kHz is case G. The strings ``'a'``, ``'b'`` and
+    ``'c'`` select that case directly. `shared_spectrum` is accepted for cases A
+    and C only. For cases A, B and C, `center_frequency` at or below 3 GHz (1.88 GHz
+    for case C) selects the reduced candidate count of the standard.
+
+    Args:
+        subcarrier_spacing: in Hz; one of the SSB subcarrier spacings of the standard
+        shared_spectrum: True selects the shared-spectrum candidate count of cases
+            A and C
+        symbol_indexes: ``'auto'``, a case letter, or an explicit sequence of
+            symbol indexes
+        center_frequency: in Hz; the maximum is used when given as a tuple, and
+            ``None`` selects the full candidate count
+
+    Returns:
+        tuple of symbol indexes relative to the start of the half-frame, in
+        increasing order
+
+    Raises:
+        TypeError: `symbol_indexes` is not a str, tuple or list
+        ValueError: 30 kHz spacing with ``'auto'`` and `shared_spectrum` False,
+            a spacing without a standardized case, an unknown case string, or
+            `shared_spectrum` with a case other than A or C
+
+    References:
+        3GPP TS 38.213 §4.1
     """
     if isinstance(symbol_indexes, str):
         symbol_indexes = symbol_indexes.lower()  # type: ignore
     elif isinstance(symbol_indexes, (tuple, list)):
         return symbol_indexes
     else:
-        raise TypeError('symbol_index has valid type')
+        raise TypeError('symbol_indexes must be a str, tuple or list')
 
     if isinstance(center_frequency, tuple):
         center_frequency = max(center_frequency)
@@ -303,7 +355,7 @@ def index_pss_symbols(
     if shared_spectrum and case not in ('a', 'c'):
         raise ValueError(f'shared_spectrum unsupported by cell search case {case}')
 
-    # The standardized cell search cases in 3GPP TS 138 213: Section 4.1
+    # The standardized cell search cases in 3GPP TS 38.213 §4.1
     if case == 'a':
         offsets = [2, 8]
         mult = 14
@@ -592,8 +644,8 @@ def correlate_sync_sequence(
 
     Args:
         ssb_iq: The synchronization block IQ waveform (e.g., from `get_5g_ssb_iq`)
-        sync_seq: The reference sequence (e.g. from `striqt.waveform.comms.pss_5g_nr` or `striqt.waveform.comms.sss_5g_nr`)
-        params: The cell synchronization parameters (e.g. from `striqt.waveform.comms.pss_params` or `striqt.waveform.comms.sss_params`)
+        sync_seq: The reference sequence (e.g. from `striqt.waveform.comms_5gnr.pss_5g_nr` or `striqt.waveform.comms_5gnr.sss_5g_nr`)
+        params: The cell synchronization parameters (e.g. from `striqt.waveform.comms_5gnr.pss_params` or `striqt.waveform.comms_5gnr.sss_params`)
 
     Returns:
         correlator across parameters:

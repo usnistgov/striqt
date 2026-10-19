@@ -276,7 +276,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 - **Mechanism.** `comms/cp_cuda_jit.py:28-29` `break`s at the first out-of-range
   index pair, while `comms/cp_cpu_jit.py:27-32` zero-fills it and continues.
-  `comms.corr_at_indices` flattens the (symbol, slot, frame, cp) meshgrid built
+  `comms.correlate_cyclic_shift` flattens the (symbol, slot, frame, cp) meshgrid built
   by `_get_3gpp_index_cyclic_prefix` (`comms/phy_3gpp.py:78`), which is not monotonic, so the kernels disagree whenever a
   valid index follows an invalid one (IQ shorter than the requested frames).
 - **Why the test is right.** The two backends must agree (CLAUDE.md,

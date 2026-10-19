@@ -2,13 +2,13 @@
 synchronization.
 
 The frame models (`Phy3GPP`, `Phy802_16`) give the sample indices of cyclic prefixes
-and symbols, `corr_at_indices` correlates a waveform at those indices, and the
+and symbols, `correlate_cyclic_shift` correlates a waveform at those indices, and the
 `sync_5gnr` names build PSS/SSS templates and locate synchronization signal blocks
 in captured IQ.
 """
 
 from .core import PhyOFDM
-from .cp import corr_at_indices, corr_atol
+from .cp import corr_atol, correlate_cyclic_shift
 from .phy_3gpp import Phy3GPP, get_3gpp_phy, slot_period
 from .phy_802_16 import Phy802_16, get_802_16_phy
 from .sequences import m_sequence

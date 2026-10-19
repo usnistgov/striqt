@@ -73,7 +73,7 @@ same thing is invisible until the two drift. Look here before writing setup:
   `stat_rtol`, `level_tolerance_dB`, `off_peak_dB_tolerance`, …), `striqt.waveform.fourier`
   (`fft_tolerance_rms`, `peak_factor`, `on_peak_roundoff`, `off_peak_floor_dBc`),
   `striqt.waveform.arrays` (`unit_roundoff`, `accum_rms`, `accum_rtol`, `mean_atol`),
-  `striqt.waveform.comms` (`corr_atol`); a measurement's budget is its registered tolerance
+  `striqt.waveform.lib.comms` (`corr_atol`); a measurement's budget is its registered tolerance
   (`registered_tolerance` in `analysis_strategies`, `capture_tolerances`/`sweep_tolerances` in
   `striqt.sensor.lib.compute.tolerance`). Module-level constants inside `striqt.waveform.lib`
   (`ROUNDOFF_SAFETY` and friends) are implementation details: never import them.
