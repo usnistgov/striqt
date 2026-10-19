@@ -24,6 +24,7 @@ from .arrays import (
     is_cupy_array,
     isroundmod,
     axis_to_blocks,
+    tiny_like,
     unit_roundoff,
 )
 
@@ -130,6 +131,8 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
 # Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
 HYPOT_ULP = 3
 DB_PER_NEPER = 10 / math.log(10)
+POW_DB_LN_SCALE = 10 * math.log10(10) / math.log(10)
+V_DB_LN_SCALE = 2 * POW_DB_LN_SCALE
 
 
 def log_conversion_tol(
@@ -271,7 +274,7 @@ def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array
         return -20 * np.log10(np.clip(1 - r, 0, None))
 
 
-# fused kernel in `.jit.cuda` for each dB scale, keyed by (abs, eps != 0)
+# fused kernel in `.jit.cuda` for each dB scale, keyed by (abs, bounded)
 _LOG_KERNELS = {
     10: {
         (True, False): 'powtodB',
@@ -294,24 +297,34 @@ def _lin_to_dB(
     *,
     scale: Literal[10, 20],
     abs: bool,
-    eps: float,
+    bounded: bool,
     overwrite_x: bool,
     min_dtype: DTypeLike,
 ) -> _ALN:
     """compute ``scale*log10(abs(x) + eps)`` or ``scale*log10(x + eps)``.
 
+    `eps` is 0 unless `bounded`, and then the smallest normal value of the computation
+    dtype for `scale` 10 and its square root for `scale` 20, as a scalar of that dtype.
     With `overwrite_x`, the result is written into `x` unless `min_dtype` widens it
     first; a complex `x` overwritten in place comes back as the real view of its
-    buffer (`_real_buffer`) on every backend. The numexpr expression is one of eight
-    constant strings so its compile cache still hits, and `values`/`eps` are looked up
-    from this frame by name.
+    buffer (`_real_buffer`) on every backend.
     """
-
-    eps_str = '' if eps == 0 else '+eps'
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
+    if bounded:
+        eps = tiny_like(values)
+        if scale == 20:
+            eps = np.sqrt(eps)
+    else:
+        eps = None
+
     if xp is np:
+        # the expression is one of eight constant strings so the numexpr compile cache
+        # hits; `values` and `eps` are looked up from this frame by name, and a numpy
+        # scalar `eps` keeps a float32 evaluation in float32 where a Python float
+        # would promote it to double
+        eps_str = '' if eps is None else '+eps'
         if abs:
             expr = f'real({scale}*log10(abs(values){eps_str}))'
         else:
@@ -323,8 +336,8 @@ def _lin_to_dB(
 
         out = _real_buffer(out)
         use_abs = abs or xp.iscomplexobj(values)
-        kernel = getattr(cuda, _LOG_KERNELS[scale][use_abs, eps != 0])
-        if eps == 0:
+        kernel = getattr(cuda, _LOG_KERNELS[scale][use_abs, eps is not None])
+        if eps is None:
             kernel(values, out)
         else:
             kernel(values, out, eps)
@@ -333,7 +346,7 @@ def _lin_to_dB(
         # torch, dask, ...
         if abs:
             values = xp.abs(values, out=out)
-        if eps != 0:
+        if eps is not None:
             values += eps
         values = xp.log10(values, out=out)
         values *= scale
@@ -345,11 +358,11 @@ def powtodB(
     x: _ALN,
     *,
     abs: bool = True,
-    eps: float = 0,
+    bounded: bool = False,
     overwrite_x: bool = False,
     min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
-    """compute ``10*log10(abs(x) + eps)``, or ``10*log10(x + eps)`` when `abs` is False.
+    """compute ``10*log10(abs(x))``, or ``10*log10(x)`` when `abs` is False.
 
     The computation is elementwise through numexpr on numpy and fused kernels on
     cupy, in a floating-point dtype no narrower than `min_dtype`.
@@ -358,7 +371,9 @@ def powtodB(
         x: values in linear power units, as a number, array, or pandas/xarray object
         abs: True to convert ``abs(x)``; a complex `x` is converted by magnitude in
             either case
-        eps: an offset added before the logarithm so that zeros map to a finite value
+        bounded: True to floor the result at ``10*log10(tiny)``, where ``tiny`` is the
+            smallest normal value of the computation dtype (about -379 dB in float32
+            and -3077 dB in float64); zeros then map to the floor instead of ``-inf``
         overwrite_x: True to write the result into `x` when its dtype is at least
             `min_dtype`; a complex `x` then returns the real view of its buffer
         min_dtype: the narrowest floating-point dtype of the computation; a narrower
@@ -370,7 +385,12 @@ def powtodB(
         xarray ``units`` attribute converted from linear power to dB)
     """
     return _lin_to_dB(
-        x, scale=10, abs=abs, eps=eps, overwrite_x=overwrite_x, min_dtype=min_dtype
+        x,
+        scale=10,
+        abs=abs,
+        bounded=bounded,
+        overwrite_x=overwrite_x,
+        min_dtype=min_dtype,
     )
 
 
@@ -434,13 +454,40 @@ def envtodB(
     x: _ALN,
     *,
     abs: bool = True,
-    eps: float = 0,
+    bounded: bool = False,
     overwrite_x: bool = False,
     min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
-    """compute `20*log10(abs(x) + eps)` or `20*log10(x + eps)` with speed optimizations"""
+    """compute ``20*log10(abs(x))``, or ``20*log10(x)`` when `abs` is False.
+
+    The computation is elementwise through numexpr on numpy and fused kernels on
+    cupy, in a floating-point dtype no narrower than `min_dtype`.
+
+    Args:
+        x: values in linear amplitude (envelope) units, as a number, array, or
+            pandas/xarray object
+        abs: True to convert ``abs(x)``; a complex `x` is converted by magnitude in
+            either case
+        bounded: True to floor the result at the same dB value as `powtodB` with
+            `bounded`, ``10*log10(tiny)`` for the smallest normal value ``tiny`` of the
+            computation dtype; zeros then map to the floor instead of ``-inf``
+        overwrite_x: True to write the result into `x` when its dtype is at least
+            `min_dtype`; a complex `x` then returns the real view of its buffer
+        min_dtype: the narrowest floating-point dtype of the computation; a narrower
+            `x` is widened to it
+
+    Returns:
+        the dB values, real-valued, in the container type of `x` (a Python number for
+        a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
+        xarray ``units`` attribute converted from amplitude to dB)
+    """
     return _lin_to_dB(
-        x, scale=20, abs=abs, eps=eps, overwrite_x=overwrite_x, min_dtype=min_dtype
+        x,
+        scale=20,
+        abs=abs,
+        bounded=bounded,
+        overwrite_x=overwrite_x,
+        min_dtype=min_dtype,
     )
 
 

@@ -97,6 +97,15 @@ by_log_conversion = pytest.mark.parametrize(
 )
 for_each_float_dtype = pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
 
+# (input dtype, computation dtype) under the default min_dtype='float32'
+BOUNDED_DTYPES = [
+    (np.float16, np.float32),
+    (np.float32, np.float32),
+    (np.float64, np.float64),
+    (np.complex64, np.float32),
+    (np.complex128, np.float64),
+]
+
 
 NAMED_STATS = {
     'min': np.min,
@@ -294,15 +303,18 @@ class TestEdgeCases:
 
     @by_log_conversion
     def test_zero_produces_neg_inf(self, func, scale):
-        assert np.all(func(np.zeros(4, dtype=np.float64), eps=0) == -np.inf)
+        assert np.all(func(np.zeros(4, dtype=np.float64)) == -np.inf)
 
     @by_log_conversion
-    @given(eps=st.floats(min_value=1e-30, max_value=1e-10, allow_nan=False))
-    def test_eps_avoids_neg_inf(self, func, scale, eps):
-        result = func(np.array([0.0], dtype=np.float64), eps=eps)
-        assert np.isfinite(result[0])
-        tol = log_conversion_tol(np.float64, scale, n_impl=2)
-        assert_close(result[0], scale * np.log10(eps), **tol)
+    @pytest.mark.parametrize('dtype, compute_dtype', BOUNDED_DTYPES, ids=dtype_id)
+    def test_bounded_zero_floor_follows_the_computation_dtype(
+        self, xp, func, scale, dtype, compute_dtype
+    ):
+        result = to_numpy(func(as_xp(xp, np.zeros(4, dtype=dtype)), bounded=True))
+        assert result.dtype == compute_dtype
+        floor = 10 * np.log10(float(np.finfo(compute_dtype).tiny))
+        assert np.all(np.isfinite(result))
+        assert_close(result, floor, **log_conversion_tol(compute_dtype, scale))
 
     def test_empty_array(self, subtests):
         empty = np.array([], dtype=np.float64)
@@ -372,8 +384,8 @@ class TestMultiBackend:
         assert_close(dB, 20 * np.log10(np.abs(env)), **tol)
 
 
-class TestAbsAndEpsBranches:
-    """Properties: the `abs` and `eps` arguments of powtodB and envtodB."""
+class TestAbsAndBoundedBranches:
+    """Properties: the `abs` and `bounded` arguments of powtodB and envtodB."""
 
     @by_log_conversion
     @given(x=positive_power_arrays(min_value=1e-6, max_value=1e6, dtype=np.float64))
@@ -392,13 +404,21 @@ class TestAbsAndEpsBranches:
     @by_log_conversion
     @given(
         power=positive_power_arrays(min_value=1e-3, max_value=1e3, dtype=np.float64),
-        eps=st.floats(min_value=1e-9, max_value=1e-3),
         abs=st.booleans(),
+        data=st.data(),
     )
-    def test_eps_is_added_before_log(self, xp, func, scale, power, eps, abs):
-        """Property: the eps offset is applied by every backend's code path."""
-        result = func(as_xp(xp, power), eps=eps, abs=abs)
-        expected = scale * np.log10(power + eps)
+    def test_bound_is_applied_on_every_backend(self, xp, func, scale, power, abs, data):
+        """Property: the floor is applied by every backend's code path."""
+        zero = data.draw(arrays(np.bool_, power.shape))
+        # force one zero rather than assume(zero.any()), which would reject about
+        # half of the draws for 1-element arrays
+        zero.flat[data.draw(st.integers(0, power.size - 1))] = True
+        power = np.where(zero, 0.0, power)
+
+        result = func(as_xp(xp, power), bounded=True, abs=abs)
+
+        expected = np.full(power.shape, 10 * np.log10(float(np.finfo(np.float64).tiny)))
+        expected[~zero] = scale * np.log10(power[~zero])
         tol = log_conversion_tol(np.float64, scale, n_impl=2)
         assert_close(result, expected, **tol)
 
@@ -1010,17 +1030,17 @@ class TestNumpyCupyCrossComparison:
         ids=func_id,
     )
     @pytest.mark.parametrize('abs', [True, False])
-    @pytest.mark.parametrize('eps', [0, 1e-6])
+    @pytest.mark.parametrize('bounded', [False, True], ids=['unbounded', 'bounded'])
     @for_each_float_dtype
     @given(data=st.data())
     def test_log_conversions(
-        self, cupy_available, func, scale, limits, abs, eps, dtype, data
+        self, cupy_available, func, scale, limits, abs, bounded, dtype, data
     ):
         """Cross-comparison on each fused kernel variant."""
         lim = limits[dtype]
         x = data.draw(one_d_powers(min_value=1 / lim, max_value=lim, dtype=dtype))
         result_np, result_cp = numpy_and_cupy(
-            cupy_available, func, x, min_dtype='float32', abs=abs, eps=eps
+            cupy_available, func, x, min_dtype='float32', abs=abs, bounded=bounded
         )
 
         tol = log_conversion_tol(dtype, scale, n_impl=2)

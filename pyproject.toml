@@ -10,7 +10,7 @@ dependencies = [
     "netCDF4",
     "numba",
     "numexpr~=2.8",
-    "numpy>=1.21,<3",
+    "numpy>=1.23.5,<3",
     "pandas>=1.5",
     "scipy>=1.13",
     "xarray>=2024.3",

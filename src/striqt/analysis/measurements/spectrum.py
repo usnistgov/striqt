@@ -197,7 +197,7 @@ def evaluate_spectrogram(
 
     copied = False
     if dB:
-        spg = sw.powtodB(spg, eps=1e-25)
+        spg = sw.powtodB(spg, bounded=True)
         copied = True
 
     if limit_digits is not None:
