@@ -613,22 +613,28 @@ def slice_freqs(
 
 
 @util.lru_cache()
-def _freq_band_edges(n, d, cutoff_low, cutoff_hi, *, xp=None):
-    if xp is None:
-        xp = np
-    freqs = fftfreq(n, d, xp=xp)
+def _freq_band_edges(
+    n: int, d: float, cutoff_low: float | None, cutoff_hi: float | None
+) -> tuple[int | None, int | None]:
+    """return the half-open index bounds of ``[cutoff_low, cutoff_hi)`` on an `fftfreq` grid.
+
+    The grid is the ascending `fftfreq` axis of `n` bins at sample rate `d` (in Hz);
+    the cutoffs are in Hz and need not fall on it. Each bound is `None` when its
+    cutoff is `None`.
+    """
+    freqs = fftfreq(n, d)
 
     if cutoff_low is None:
         ilo = None
     else:
-        ilo = xp.where(freqs >= cutoff_low)[0][0]
+        ilo = int(np.searchsorted(freqs, cutoff_low))
 
     if cutoff_hi is None:
         ihi = None
     elif cutoff_hi >= freqs[-1]:
-        ihi = freqs.size
+        ihi = n
     else:
-        ihi = int(xp.searchsorted(freqs, cutoff_hi))
+        ihi = int(np.searchsorted(freqs, cutoff_hi))
 
     return ilo, ihi
 
@@ -1137,7 +1143,7 @@ def zero_stft_by_freq(
 
     freq_step = float(freqs[1] - freqs[0])
     fs = xstft.shape[axis + 1] * freq_step
-    ilo, ihi = _freq_band_edges(freqs.size, fs, *passband, xp=xp)
+    ilo, ihi = _freq_band_edges(freqs.size, fs, *passband)
 
     xp.copyto(axis_slice(xstft, 0, ilo, axis=axis + 1), 0)
     xp.copyto(axis_slice(xstft, ihi, None, axis=axis + 1), 0)
