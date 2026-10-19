@@ -2,7 +2,7 @@
 """Measure ulp errors of the striqt.waveform.power_analysis conversions per backend.
 
 Run on a machine with a GPU to ground the ulp budgets used by
-tests/waveform/test_power_analysis.py and the reduction roundoff model in
+tests/waveform/test_waveform_power_convert.py and the reduction roundoff model in
 striqt.waveform.lib.arrays. References for the elementwise conversions are computed
 with `decimal` at 40 digits from the exact float inputs, so the reported errors are
 those of the implementation alone (numexpr/libm on CPU, cupy.fuse/CUDA libdevice on
@@ -153,7 +153,7 @@ def _iq_draws(rng, n, draws):
 def _bin_power_mean_errors(xp, iq, strided):
     """per-row relative error of the float32 binned power mean against a float64
     reference, reducing along a contiguous axis (or a strided one, the naive path)"""
-    from striqt.waveform.lib import power_analysis as pa
+    from striqt.waveform.lib import power as pa
 
     ref = (np.abs(iq.astype(np.complex128)) ** 2).mean(axis=1)
     if strided:
@@ -211,7 +211,7 @@ def _lognormal_iq_draws(rng, n, draws):
 def _bin_power_quantile_errors(xp, iq, q):
     """(per-row relative error, result dtype) of the float32 binned power quantile
     against a float64 quantile of the exact powers"""
-    from striqt.waveform.lib import power_analysis as pa
+    from striqt.waveform.lib import power as pa
 
     ref = np.quantile(np.abs(iq.astype(np.complex128)) ** 2, q, axis=1)
     y = pa.iq_to_bin_power(xp.asarray(iq), Ts=1, Tbin=iq.shape[1], kind=q, axis=1)
@@ -220,7 +220,7 @@ def _bin_power_quantile_errors(xp, iq, q):
 
 
 def report_binned_power_quantile(backends, rng, draws=3):
-    from striqt.waveform.lib import power_analysis as pa
+    from striqt.waveform.lib import power as pa
 
     # stat_rtol is the intended model; bin_power_rtol is its predecessor
     stat_rtol = getattr(pa, 'stat_rtol', None)
@@ -261,7 +261,7 @@ def main():
     parser.add_argument('--points', type=int, default=5000)
     args = parser.parse_args()
 
-    from striqt.waveform.lib import power_analysis as pa
+    from striqt.waveform.lib import power as pa
 
     print(f'numpy {np.__version__}')
     backends = {'numpy': (np, None)}
@@ -386,7 +386,9 @@ def main():
 
     print(
         '\nInterpretation: rel ulp should stay within the per-function ulp budget of the'
-        ' tests (library log10/pow/hypot error plus one rounding for the scale factor);'
+        ' tests (for the dB conversions: the library log error, the rounding of the'
+        ' scale constant to the computation dtype, and one product rounding; for the'
+        ' linear conversions: the library pow/hypot error);'
         ' abs/u_in should stay within a few units for real inputs and within the hypot'
         ' budget for complex inputs. Reductions report absolute dB error in units of u.'
         ' In the binned power mean table, rms/u should stay below rms model/u and max/u'

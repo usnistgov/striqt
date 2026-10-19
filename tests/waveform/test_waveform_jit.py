@@ -1,7 +1,8 @@
 """striqt.waveform.lib.jit: the numba correlation kernels against a numpy reference.
 
-The CUDA tests skip when cupy is not available; the `cupy.fuse` dB kernels are covered
-through the public dispatcher in test_power_analysis.
+The CUDA tests skip when cupy is not available; the `cupy.fuse` dB kernels live in
+`lib/power/cuda_jit.py` and are covered through the public dispatcher in
+test_waveform_power_convert.py.
 """
 
 from __future__ import annotations
@@ -122,7 +123,7 @@ class TestCorrAtIndicesKernels:
     @pytest.mark.xfail(
         strict=True,
         reason='the CUDA _corr_at_indices breaks out of the index loop at the first '
-        'out-of-range pair (jit/cuda.py:25-26) instead of skipping it like the CPU '
+        'out-of-range pair (jit/cuda.py:24-25) instead of skipping it like the CPU '
         'kernel, so a valid index after an out-of-range one is dropped',
     )
     def test_cuda_unsorted_indices(self, cupy_available):

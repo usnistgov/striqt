@@ -10,7 +10,7 @@ dependencies = [
     "netCDF4",
     "numba",
     "numexpr~=2.8",
-    "numpy>=1.21,<3",
+    "numpy>=1.23.5,<3",
     "pandas>=1.5",
     "scipy>=1.13",
     "xarray>=2024.3",
@@ -122,13 +122,14 @@ norecursedirs = [
 ]
 
 [tool.coverage.report]
-# numba compiles the decorated python into machine code, so the interpreter never
-# executes those bodies and coverage.py reports them as missed; an excluded decorator
-# line excludes the whole function
+# numba compiles and cupy fuses the decorated python into device/machine code, so the
+# interpreter never executes those bodies and coverage.py reports them as missed; an
+# excluded decorator line excludes the whole function
 exclude_also = [
     "^\\s*@(nb|numba)\\.(njit|jit|vectorize|guvectorize)\\b",
     "^\\s*@(numba\\.)?cuda\\.jit\\b",
     "^\\s*@(njit|jit|vectorize|guvectorize)\\b",
+    "^\\s*@cupy\\.fuse\\b",
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]

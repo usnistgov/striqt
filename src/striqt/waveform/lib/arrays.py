@@ -684,3 +684,17 @@ def convert_np_to_xp(func: _TC) -> _TC:
         return x
 
     return cast(_TC, wrapped)
+
+
+@functools.cache
+def _get_dtype_tiny(dtype: np.dtype[Any]) -> np.floating[Any]:
+    return np.finfo(dtype).tiny
+
+
+def tiny_like(x: Array) -> np.floating[Any]:
+    """return the smallest positive normal value of the real dtype underlying `x.dtype`.
+
+    Returns:
+        a numpy floating scalar of that dtype; a complex `x` selects its component dtype
+    """
+    return _get_dtype_tiny(x.dtype)

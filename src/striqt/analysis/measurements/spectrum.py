@@ -197,7 +197,7 @@ def evaluate_spectrogram(
 
     copied = False
     if dB:
-        spg = sw.powtodB(spg, eps=1e-25)
+        spg = sw.powtodB(spg, bounded=True)
         copied = True
 
     if limit_digits is not None:
@@ -511,7 +511,7 @@ def power_spectral_density(
     spec = specs.PowerSpectralDensity.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 
-    from striqt.waveform.lib.power_analysis import stat_ufunc_from_shorthand
+    from striqt.waveform.lib.power import stat_ufunc_from_shorthand
 
     working_dtype = 'float32'
 

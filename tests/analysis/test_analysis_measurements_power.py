@@ -1,9 +1,10 @@
 """striqt.analysis.measurements.power: the channel power measurements.
 
-`tests/waveform/test_power_analysis.py` property-tests the underlying kernels, so
-these tests cover what the measurement wrapping adds: coordinates, axis order, dtype,
-the dB conversion, and detector and statistic selection. A unit-amplitude tone has
-mean ``|x|**2 == 1``, so the dBm scale is ``10*log10(mean |x|**2)`` with no offset.
+`tests/waveform/test_waveform_power_convert.py` and `test_waveform_power_detect.py`
+property-test the underlying kernels, so these tests cover what the measurement wrapping
+adds: coordinates, axis order, dtype, the dB conversion, and detector and statistic
+selection. A unit-amplitude tone has mean ``|x|**2 == 1``, so the dBm scale is
+``10*log10(mean |x|**2)`` with no offset.
 Tolerances are the ones each measurement registers.
 """
 

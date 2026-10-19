@@ -34,7 +34,7 @@ def check_statistics(field: str, statistics: Sequence[str | float]) -> None:
     ``[0, 1]`` (`sw.power_analysis.stat_ufunc_from_shorthand`); `field` is the spec
     field named in the message.
     """
-    from striqt.waveform.lib.power_analysis import stat_ufunc_from_shorthand
+    from striqt.waveform.lib.power import stat_ufunc_from_shorthand
 
     for statistic in statistics:
         try:

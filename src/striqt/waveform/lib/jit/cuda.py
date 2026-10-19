@@ -2,7 +2,6 @@
 
 import math
 import numba.cuda
-import cupy
 import numba as nb
 
 
@@ -43,63 +42,3 @@ def _corr_at_indices(inds, x, nfft: int, ncp: int, norm: bool, out):
             accum_corr /= inds.shape[0]
 
         out[j] = accum_corr
-
-
-@cupy.fuse()
-def envtopow(x, out):
-    out[:] = cupy.abs(x) ** 2
-    return out
-
-
-@cupy.fuse()
-def envtodB(x, out):
-    out[:] = 20 * cupy.log10(cupy.abs(x))
-    return out
-
-
-@cupy.fuse()
-def envtodB_noabs(x, out):
-    out[:] = 20 * cupy.log10(x)
-    return out
-
-
-@cupy.fuse()
-def envtodB_eps(x, out, eps):
-    out[:] = 20 * cupy.log10(cupy.abs(x) + eps)
-    return out
-
-
-@cupy.fuse()
-def envtodB_eps_noabs(x, out, eps):
-    out[:] = 20 * cupy.log10(x + eps)
-    return out
-
-
-@cupy.fuse()
-def powtodB(x, out):
-    out[:] = 10 * cupy.log10(cupy.abs(x))
-    return out
-
-
-@cupy.fuse()
-def powtodB_eps_noabs(x, out, eps=0.0):
-    out[:] = 10 * cupy.log10(x + eps)
-    return out
-
-
-@cupy.fuse()
-def powtodB_eps(x, out, eps=0.0):
-    out[:] = 10 * cupy.log10(cupy.abs(x) + eps)
-    return out
-
-
-@cupy.fuse()
-def powtodB_noabs(x, out):
-    out[:] = 10 * cupy.log10(x)
-    return out
-
-
-@cupy.fuse()
-def dBtopow(x: cupy.ndarray, out: cupy.ndarray) -> cupy.ndarray:
-    out[:] = cupy.power(10.0, x / 10)
-    return out

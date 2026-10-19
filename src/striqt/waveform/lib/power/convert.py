@@ -1,38 +1,35 @@
-"""Transformations and statistical tools for power time series"""
+"""Elementwise conversions between linear and dB scales for array-like inputs
+(numbers, arrays, and pandas or xarray objects wrapping them), evaluated through
+numexpr on numpy and fused kernels on cupy, with the roundoff models that bound
+their results on both backends."""
 
 from __future__ import annotations as __
 
 import math
 import re
 import typing
-
-# import typing
 import warnings
-from functools import partial
 from numbers import Number
 from types import ModuleType
 from typing import Any, Literal, Optional, Sequence
-from . import util
-from .util import np, pd, xr
+from .. import util
+from ..util import np, pd, xr
 
-from .arrays import (
+from ..arrays import (
     ROUNDOFF_SAFETY,
-    accum_rms,
     array_namespace,
-    axis_slice,
     float_dtype_like,
     is_cupy_array,
-    isroundmod,
-    axis_to_blocks,
+    tiny_like,
     unit_roundoff,
 )
 
 if typing.TYPE_CHECKING:
     import numexpr as ne
 
-    from typing import TypeVar, Union
+    from typing import Callable, TypeVar, Union
 
-    from .typing import ArrayLike, Array, _ALN, _AT, Dims, DTypeLike
+    from ..typing import ArrayLike, Array, _ALN, Dims, DTypeLike
 
     _ALD = TypeVar('_ALD', bound=Union[ArrayLike, xr.Dataset])
 
@@ -76,60 +73,25 @@ def unit_wave_to_linear(s: str):
     return s
 
 
-@util.lru_cache()
-def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Callable:
-    if xp is None:
-        xp = np
-
-    NAMED_UFUNCS = {
-        'min': xp.min,
-        'max': xp.max,
-        'peak': xp.max,
-        'mean': xp.mean,
-        'rms': xp.mean,
-    }
-
-    if hasattr(xp, 'median'):
-        NAMED_UFUNCS['median'] = xp.median
-
-    if isinstance(kind, str):
-        if kind not in NAMED_UFUNCS:
-            valid = NAMED_UFUNCS.keys()
-            raise ValueError(f'kind argument must be one of {valid}')
-        ufunc = partial(NAMED_UFUNCS[kind], axis=axis)
-
-    elif isinstance(kind, Number):
-        if not 0 <= kind <= 1:
-            raise ValueError(f'quantile {kind!r} is outside the range [0, 1]')
-
-        # numpy < 2.3 casts a scalar q to a float32 input's dtype
-        # (numpy.lib._function_base_impl.quantile), which misplaces the virtual
-        # index (n-1)*q by ~n*2**-25 samples in the interpolation. An array q
-        # is not cast, but promotes the result, so it is cast back
-        q = xp.asarray(kind, dtype='float64')
-
-        def ufunc(x: Array, axis: int = axis) -> Array:
-            return xp.quantile(x, q, axis=axis).astype(x.dtype, copy=False)
-
-    elif callable(kind):
-        ufunc = partial(kind, axis=axis)
-
-    else:
-        raise ValueError(f'invalid statistic ufunc "{kind}"')
-
-    return ufunc
-
-
 # %% roundoff model
 #
 # Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
-# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (log10f 2,
+# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (logf 1,
 # powf 8, hypotf 3 ulp) as well as libm (~1 ulp), so the tolerances below hold on both
-# backends and take no array namespace. Measured with
-# chores/tests/measure_db_accuracy.py: libm log10 1.1-1.9 ulp; CUDA libdevice on a
-# Jetson TX2i log10f 2.0, powf 5 (|x| <= 30 dB), complex |z| 1.6 input ulps.
+# backends and take no array namespace. The dB conversions evaluate
+# `scale_ln*log(x)` rather than `scale*log10(x)`: on the Jetson TX2i (glibc 2.27) that
+# is 0.55-0.65x the numexpr time in float32 and 0.82x in float64, neutral on the GPU,
+# and more accurate in float64 (chores/tests/profile_log_scaling.py, 2026-10-19).
+# Measured with chores/tests/measure_db_accuracy.py and that script, in spacing ulps
+# (up to twice the `2u*k` factor): libm log 1.8 (float32, Apple and glibc) and 1.0
+# (float64, glibc); CUDA libdevice on the TX2i logf 2.0, log 1.0, powf 5
+# (|x| <= 30 dB), complex |z| 1.6 input ulps.
 HYPOT_ULP = 3
-DB_PER_NEPER = 10 / math.log(10)
+LOG_ULP = 1
+# DB_PER_NEPER rounded to the computation dtype; float32 carries 0.41 ulp
+SCALE_CONST_ULP = 0.5
+# 10/ln(10) correctly rounded; the computed `10 / math.log(10)` is 0.87 ulp off
+DB_PER_NEPER = 4.342944819032518
 
 
 def log_conversion_tol(
@@ -143,11 +105,11 @@ def log_conversion_tol(
     input side of the log becomes an absolute dB error, which is what bounds the
     result near 0 dB where ulps of the output are meaningless.
     """
-    log10_ulp = 2
     u = unit_roundoff(dtype)
-    rtol = 2 * u * (log10_ulp + 0.5)
+    # the log call, the rounded scale constant, and the product rounding
+    rtol = 2 * u * (LOG_ULP + SCALE_CONST_ULP + 0.5)
     input_ulp = (HYPOT_ULP if complex_input else 0) + 0.5
-    atol = (scale / math.log(10)) * 2 * u * input_ulp
+    atol = (DB_PER_NEPER * scale / 10) * 2 * u * input_ulp
     return {
         'rtol': ROUNDOFF_SAFETY * n_impl * rtol,
         'atol': ROUNDOFF_SAFETY * n_impl * atol,
@@ -271,22 +233,13 @@ def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array
         return -20 * np.log10(np.clip(1 - r, 0, None))
 
 
-# fused kernel in `.jit.cuda` for each dB scale, keyed by (abs, eps != 0)
-_LOG_KERNELS = {
-    10: {
-        (True, False): 'powtodB',
-        (False, False): 'powtodB_noabs',
-        (True, True): 'powtodB_eps',
-        (False, True): 'powtodB_eps_noabs',
-    },
-    20: {
-        (True, False): 'envtodB',
-        (False, False): 'envtodB_noabs',
-        (True, True): 'envtodB_eps',
-        (False, True): 'envtodB_eps_noabs',
-    },
-}
-_LOG_UNITS = {10: unit_linear_to_dB, 20: unit_wave_to_dB}
+def _cuda_log_kernel(abs: bool, bounded: bool) -> Callable[..., Array]:
+    """select the fused kernel in `cuda_jit` for one dB conversion."""
+    from . import cuda_jit
+
+    if bounded:
+        return cuda_jit.lin_to_dB_eps if abs else cuda_jit.lin_to_dB_eps_noabs
+    return cuda_jit.lin_to_dB if abs else cuda_jit.lin_to_dB_noabs
 
 
 def _lin_to_dB(
@@ -294,62 +247,82 @@ def _lin_to_dB(
     *,
     scale: Literal[10, 20],
     abs: bool,
-    eps: float,
+    bounded: bool,
     overwrite_x: bool,
     min_dtype: DTypeLike,
 ) -> _ALN:
     """compute ``scale*log10(abs(x) + eps)`` or ``scale*log10(x + eps)``.
 
-    With `overwrite_x`, the result is written into `x` unless `min_dtype` widens it
-    first; a complex `x` overwritten in place comes back as the real view of its
-    buffer (`_real_buffer`) on every backend. The numexpr expression is one of eight
-    constant strings so its compile cache still hits, and `values`/`eps` are looked up
-    from this frame by name.
+    The evaluation is ``scale_ln*log(...)`` with ``scale_ln = scale/ln(10)`` rounded
+    to the real computation dtype. `eps` is 0 unless `bounded`, and then the smallest
+    normal value of the computation dtype for `scale` 10 and its square root for
+    `scale` 20, as a scalar of that dtype. With `overwrite_x`, the result is written
+    into `x` unless `min_dtype` widens it first; a complex `x` overwritten in place
+    comes back as the real view of its buffer (`_real_buffer`) on every backend.
     """
-
-    eps_str = '' if eps == 0 else '+eps'
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
+    # numpy scalars of the computation dtype keep a float32 evaluation in float32 on
+    # every backend, where a Python float would promote it to double
+    real_dtype = np.dtype(float_dtype_like(values))
+    scale_ln = real_dtype.type(DB_PER_NEPER * (scale // 10))
+    if bounded:
+        eps = tiny_like(values)
+        if scale == 20:
+            eps = np.sqrt(eps)
+    else:
+        eps = None
+
     if xp is np:
-        if abs:
-            expr = f'real({scale}*log10(abs(values){eps_str}))'
+        # the expression is one of six constant strings so the numexpr compile cache
+        # hits; `values`, `scale_ln` and `eps` are looked up from this frame by name.
+        # numexpr's `real` and `abs` of a complex operand both yield complex128, so
+        # complex input needs `real(...)` and is always converted by magnitude; on a
+        # real operand `real` would upcast through complex128, so it is omitted there
+        eps_str = '' if eps is None else '+eps'
+        if np.iscomplexobj(values):
+            expr = f'real(scale_ln*log(abs(values){eps_str}))'
+        elif abs:
+            expr = f'scale_ln*log(abs(values){eps_str})'
         else:
-            expr = f'real({scale}*log10(values{eps_str}))'
+            expr = f'scale_ln*log(values{eps_str})'
         out = _real_buffer(out)
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif _use_cuda_kernels(values):
-        from .jit import cuda
-
         out = _real_buffer(out)
         use_abs = abs or xp.iscomplexobj(values)
-        kernel = getattr(cuda, _LOG_KERNELS[scale][use_abs, eps != 0])
-        if eps == 0:
-            kernel(values, out)
+        kernel = _cuda_log_kernel(use_abs, eps is not None)
+        if eps is None:
+            kernel(values, out, scale_ln)
         else:
-            kernel(values, out, eps)
+            kernel(values, out, scale_ln, eps)
         values = out
     else:
         # torch, dask, ...
         if abs:
             values = xp.abs(values, out=out)
-        if eps != 0:
+        if eps is not None:
             values += eps
-        values = xp.log10(values, out=out)
-        values *= scale
+        values = xp.log(values, out=out)
+        values *= scale_ln
 
-    return _repackage_arraylike(values, x, unit_transform=_LOG_UNITS[scale])
+    return _repackage_arraylike(
+        values,
+        x,
+        unit_transform=unit_linear_to_dB if scale == 10 else unit_wave_to_dB,
+    )
 
 
 def powtodB(
     x: _ALN,
     *,
     abs: bool = True,
-    eps: float = 0,
+    bounded: bool = False,
     overwrite_x: bool = False,
     min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
-    """compute ``10*log10(abs(x) + eps)``, or ``10*log10(x + eps)`` when `abs` is False.
+    """compute ``10*log10(abs(x))``, or ``10*log10(x)`` when `abs` is False.
 
     The computation is elementwise through numexpr on numpy and fused kernels on
     cupy, in a floating-point dtype no narrower than `min_dtype`.
@@ -358,7 +331,9 @@ def powtodB(
         x: values in linear power units, as a number, array, or pandas/xarray object
         abs: True to convert ``abs(x)``; a complex `x` is converted by magnitude in
             either case
-        eps: an offset added before the logarithm so that zeros map to a finite value
+        bounded: True to floor the result at ``10*log10(tiny)``, where ``tiny`` is the
+            smallest normal value of the computation dtype (about -379 dB in float32
+            and -3077 dB in float64); zeros then map to the floor instead of ``-inf``
         overwrite_x: True to write the result into `x` when its dtype is at least
             `min_dtype`; a complex `x` then returns the real view of its buffer
         min_dtype: the narrowest floating-point dtype of the computation; a narrower
@@ -370,14 +345,35 @@ def powtodB(
         xarray ``units`` attribute converted from linear power to dB)
     """
     return _lin_to_dB(
-        x, scale=10, abs=abs, eps=eps, overwrite_x=overwrite_x, min_dtype=min_dtype
+        x,
+        scale=10,
+        abs=abs,
+        bounded=bounded,
+        overwrite_x=overwrite_x,
+        min_dtype=min_dtype,
     )
 
 
 def dBtopow(
     x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
 ) -> _ALN:
-    """compute `10**(x/10)` with speed optimizations"""
+    """compute ``10**(x/10)``.
+
+    The computation is elementwise through numexpr on numpy and a fused kernel on
+    cupy, in a floating-point dtype no narrower than `min_dtype`.
+
+    Args:
+        x: values in dB, as a number, array, or pandas/xarray object
+        overwrite_x: True to write the result into `x` when its dtype is at least
+            `min_dtype`
+        min_dtype: the narrowest floating-point dtype of the computation; a narrower
+            `x` is widened to it
+
+    Returns:
+        the values in linear power units, in the container type of `x` (a Python
+        number for a number, otherwise the array, `pandas` or `xarray` type of `x`,
+        with an xarray ``units`` attribute converted from dB to linear power)
+    """
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
@@ -385,10 +381,10 @@ def dBtopow(
         expr = '10**(values/10)'
         values = ne.evaluate(expr, out=out, casting='unsafe')
     elif _use_cuda_kernels(values):
-        from .jit import cuda
+        from . import cuda_jit
 
         out = _real_buffer(out)
-        cuda.dBtopow(values, out)
+        cuda_jit.dBtopow(values, out)
         values = out
     else:
         # torch, dask, ...
@@ -405,7 +401,24 @@ def dBtopow(
 def envtopow(
     x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
 ) -> _ALN:
-    """Computes abs(x)**2 with speed optimizations"""
+    """compute ``abs(x)**2``.
+
+    The computation is elementwise through numexpr on numpy and a fused kernel on
+    cupy, in a floating-point dtype no narrower than `min_dtype`.
+
+    Args:
+        x: values in linear amplitude (envelope) units, real or complex, as a
+            number, array, or pandas/xarray object
+        overwrite_x: True to write the result into `x` when its dtype is at least
+            `min_dtype`; a complex `x` then returns the real view of its buffer
+        min_dtype: the narrowest floating-point dtype of the computation; a narrower
+            `x` is widened to it
+
+    Returns:
+        the power values, real-valued, in the container type of `x` (a Python number
+        for a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
+        xarray ``units`` attribute converted from amplitude to linear power)
+    """
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
 
@@ -417,10 +430,10 @@ def envtopow(
         if xp.iscomplexobj(values):
             values = values.real
     elif _use_cuda_kernels(values):
-        from .jit import cuda
+        from . import cuda_jit
 
         out = _real_buffer(out)
-        cuda.envtopow(values, out)
+        cuda_jit.envtopow(values, out)
         values = out
     else:
         # torch, dask, ...
@@ -434,13 +447,40 @@ def envtodB(
     x: _ALN,
     *,
     abs: bool = True,
-    eps: float = 0,
+    bounded: bool = False,
     overwrite_x: bool = False,
     min_dtype: 'DTypeLike' = 'float32',
 ) -> _ALN:
-    """compute `20*log10(abs(x) + eps)` or `20*log10(x + eps)` with speed optimizations"""
+    """compute ``20*log10(abs(x))``, or ``20*log10(x)`` when `abs` is False.
+
+    The computation is elementwise through numexpr on numpy and fused kernels on
+    cupy, in a floating-point dtype no narrower than `min_dtype`.
+
+    Args:
+        x: values in linear amplitude (envelope) units, as a number, array, or
+            pandas/xarray object
+        abs: True to convert ``abs(x)``; a complex `x` is converted by magnitude in
+            either case
+        bounded: True to floor the result at the same dB value as `powtodB` with
+            `bounded`, ``10*log10(tiny)`` for the smallest normal value ``tiny`` of the
+            computation dtype; zeros then map to the floor instead of ``-inf``
+        overwrite_x: True to write the result into `x` when its dtype is at least
+            `min_dtype`; a complex `x` then returns the real view of its buffer
+        min_dtype: the narrowest floating-point dtype of the computation; a narrower
+            `x` is widened to it
+
+    Returns:
+        the dB values, real-valued, in the container type of `x` (a Python number for
+        a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
+        xarray ``units`` attribute converted from amplitude to dB)
+    """
     return _lin_to_dB(
-        x, scale=20, abs=abs, eps=eps, overwrite_x=overwrite_x, min_dtype=min_dtype
+        x,
+        scale=20,
+        abs=abs,
+        bounded=bounded,
+        overwrite_x=overwrite_x,
+        min_dtype=min_dtype,
     )
 
 
@@ -486,260 +526,6 @@ def dBlinsum(
     return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
 
 
-def stat_rtol(dtype: DTypeLike, kind: str | float, n_impl: int = 1) -> float:
-    """return the worst-case rtol of the `kind` statistic applied to exact samples.
-
-    `kind` is a shorthand of `stat_ufunc_from_shorthand`. The result is 0 for a
-    selection or a mean, whose accumulation roundoff is `bin_power_rms`, and a fixed
-    multiple of the unit roundoff of `dtype` for a quantile or the median, which
-    interpolate once. `n_impl` is 1 against exact math and 2 against a second
-    implementation.
-
-    Raises:
-        ValueError: if `kind` is an unknown statistic name
-    """
-    if kind in ('mean', 'rms', 'min', 'max', 'peak'):
-        return 0.0
-    elif isinstance(kind, str) and kind != 'median':
-        raise ValueError(f'unknown statistic {kind!r}')
-    return ROUNDOFF_SAFETY * n_impl * unit_roundoff(dtype)
-
-
-def bin_power_rtol(
-    dtype: DTypeLike, n_impl: int = 1, kind: str | float = 'mean'
-) -> float:
-    """return the pre-accumulation rtol of the `kind` statistic of ``|x|**2``.
-
-    The bound covers squaring the envelope of complex samples and `stat_rtol` for the
-    `kind` shorthand of `stat_ufunc_from_shorthand`; the mean's accumulation roundoff
-    is `bin_power_rms`.
-    """
-    envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
-    return envelope + stat_rtol(dtype, kind, n_impl)
-
-
-def bin_power_rms(
-    dtype: DTypeLike, size: int, n_impl: int = 1, kind: str | float = 'mean'
-) -> float:
-    """return the rms accumulation roundoff of the `kind` statistic of ``|x|**2``.
-
-    The roundoff is relative to the result over `size` samples of a contiguous axis:
-    `accum_rms` for the mean (``'rms'`` is the same mean of power), 0 for a
-    selection or a quantile.
-    """
-    if kind in ('mean', 'rms'):
-        return accum_rms(dtype, size, n_impl)
-    return 0.0
-
-
-def iq_to_bin_power(
-    iq: Array,
-    Ts: float,
-    Tbin: float,
-    randomize: bool = False,
-    kind: str = 'mean',
-    truncate=False,
-    axis=0,
-):
-    """computes power along the rows of `iq` (time axis) on bins of duration Tbin.
-
-    Args:
-        iq: complex-valued input waveform samples
-        Ts: sample period of the input waveform
-        Tbin: time duration of the bin size
-        randomize: if True, randomize the start locations of the bins; otherwise, bins are contiguous
-        kind: a named statistic ('max', 'mean', 'median', 'min', 'peak', 'rms'), a quantile, or a callable ufunc
-        truncate: if True, truncate the last samples of `iq` to an integer number of bins
-    """
-
-    xp = array_namespace(iq)
-
-    if axis < 0:
-        axis = iq.ndim + axis
-
-    if truncate or isroundmod(Tbin, Ts):
-        N = round(Tbin / Ts)
-    else:
-        raise ValueError(
-            f'bin period ({Tbin} s) must be multiple of waveform sample period ({Ts})'
-        )
-
-    # instantaneous power, reshaped into bins
-    if randomize:
-        if axis != 0:
-            raise ValueError('only axis=0 is currently supported when randomize=True')
-
-        size = int(np.floor(iq.shape[0] / N))
-        starts = xp.random.randint(0, iq.shape[0] - N, size)
-        offsets = xp.arange(N)
-        iq_blocks = iq[starts[:, np.newaxis] + offsets[np.newaxis, :]]
-    else:
-        iq_blocks = axis_to_blocks(iq, N, axis=axis, truncate=truncate)
-
-    detector = stat_ufunc_from_shorthand(kind, xp=xp, axis=axis + 1)
-    power_bins = envtopow(iq_blocks)
-
-    return detector(power_bins).astype(float_dtype_like(iq))
-
-
-def iq_to_cyclic_power(
-    x: Array,
-    Ts: float,
-    detector_period: float,
-    cyclic_period: float,
-    truncate=False,
-    detectors=('rms', 'peak'),
-    cycle_stats=('min', 'mean', 'max'),
-    axis=0,
-) -> dict[str, dict[str, Array]]:
-    """return cyclic statistics of the channel power of `x` binned along `axis`.
-
-    Channel power along `axis` is first binned with each power detector on
-    `detector_period`, giving a time series of ``K`` detector samples. That series
-    is re-indexed as a matrix of cycles and cycle lags: detector sample ``k`` lands
-    in cycle ``k // L`` at lag ``(k % L) * detector_period``, where
-    ``L = cyclic_period / detector_period`` is the number of detector bins per
-    cycle and ``M = K / L`` is the number of cycles in the capture. Each cyclic
-    statistic then reduces the cycle axis, so the value at lag index ``m``
-    summarizes the ``M`` power samples that share the same time offset from the
-    start of a cycle. The result spans one `cyclic_period` at the resolution of
-    `detector_period` with ``L`` samples per detector and statistic, independent
-    of the capture length.
-
-    Choosing `cyclic_period` as a common multiple of the periods of the expected
-    signals (for example 10 ms for the LCM of TDD cellular frames, 5 ms WiMAX
-    frames and the 1 ms pulse repetition interval of the SPN-43 radar) aligns their
-    features across cycles, so that each resolves at fixed lags while occupancy
-    with an incommensurate period is spread across all lags. Uplink and downlink
-    levels of a TDD network can then be read from disjoint lag windows. Statistics
-    are evaluated in linear power units, so convert to dB afterwards.
-
-    A mismatch ``dT`` between `cyclic_period` and the true signal period, such as
-    a sample clock offset, drifts features by ``M * dT / detector_period`` lags by
-    the end of the capture and bleeds power between neighboring lags. Features
-    stay within one lag while ``M * dT`` is below `detector_period`, which limits
-    the number of cycles ``M``.
-
-    Args:
-        x: complex-valued IQ waveform samples
-        Ts: sample period of the waveform (in s)
-        detector_period: duration of each power detector bin (in s), an integer
-            multiple of `Ts`
-        cyclic_period: duration of one cycle (in s), an integer multiple of
-            `detector_period`
-        truncate: True to drop trailing samples that do not complete a detector bin
-            or a cycle, and to round `detector_period` to the nearest multiple of `Ts`
-        detectors: power detector names accepted by `iq_to_bin_power`
-        cycle_stats: statistics accepted by `stat_ufunc_from_shorthand`, evaluated
-            across cycles (names such as ``'min'``, ``'mean'``, ``'max'``, or
-            quantiles in (0, 1))
-        axis: the time axis of `x`
-
-    Returns:
-        dict keyed on detector, of dicts keyed on cyclic statistic, of arrays in the
-        namespace of `x` with the `axis` dimension replaced by the ``L`` cycle lags,
-        in linear power units
-
-    Raises:
-        ValueError: if `detectors` is None; if `cyclic_period` is not an integer
-            multiple of `detector_period`; or, when `truncate` is False, if
-            `detector_period` is not an integer multiple of `Ts` or the capture
-            does not hold a whole number of cycles
-
-    References:
-        D.G. Kuester et al., "Cyclic Analysis of Power in Radio Channels".
-    """
-
-    # apply the detector statistic
-    xp = array_namespace(x)
-
-    if axis < 0:
-        axis = x.ndim + axis
-
-    # compute the binned power ourselves
-    if detectors is None:
-        raise ValueError(
-            'supply detectors argument to evaluate binned power from time domain IQ'
-        )
-
-    power = {
-        d: iq_to_bin_power(x, Ts, detector_period, kind=d, truncate=truncate, axis=axis)
-        for d in detectors
-    }
-
-    if isroundmod(cyclic_period, detector_period, atol=1e-6):
-        cyclic_detector_bins = round(cyclic_period / detector_period)
-    else:
-        raise ValueError(
-            'cyclic period must be positive integer multiple of the detector period'
-        )
-
-    power_shape = power[detectors[0]].shape
-
-    if power_shape[axis] % cyclic_detector_bins != 0:
-        if truncate:
-            N = (power_shape[axis] // cyclic_detector_bins) * cyclic_detector_bins
-            power = {d: axis_slice(x, 0, N, axis=axis) for d, x in power.items()}
-            power_shape = power[detectors[0]].shape
-        else:
-            raise ValueError(
-                'pass truncate=True to allow truncation to align with cyclic windows'
-            )
-
-    shape_by_cycle = (
-        power_shape[:axis]
-        + (power_shape[axis] // cyclic_detector_bins,)
-        + (cyclic_detector_bins,)
-        + (x.shape[axis + 1 :] if x.ndim > axis else ())
-    )
-
-    power = {d: x.reshape(shape_by_cycle) for d, x in power.items()}
-
-    cycle_stat_ufunc = {
-        kind: stat_ufunc_from_shorthand(kind, xp=xp) for kind in cycle_stats
-    }
-
-    # apply the cyclic statistic
-
-    ret = {}
-
-    for detector, x in power.items():
-        ret[detector] = {}
-        for cycle_stat, func in cycle_stat_ufunc.items():
-            ret[detector][cycle_stat] = func(x, axis=axis)
-
-    return ret
-
-
-def sample_ccdf(a: _AT, edges: _AT, density: bool = True) -> _AT:
-    """computes the fraction (or total number) of samples in `a` that
-    exceed each edge value.
-
-    Args:
-        a: the vector of input samples
-        edges: sample threshold values at which to characterize the distribution
-        density: if True, the sample counts are normalized by `a.size`
-
-    Returns:
-        the empirical complementary cumulative distribution
-    """
-
-    xp = array_namespace(a)
-
-    # 'left' makes the bin interval open-ended on the left side
-    # (the CCDF is "number of samples exceeding interval", and not equal to)
-    edge_inds = xp.searchsorted(edges, a, side='left')
-
-    bin_counts = xp.bincount(edge_inds, minlength=edges.shape[0] + 1)
-    ccdf = (a.shape[0] - bin_counts.cumsum(0))[:-1]
-
-    if density:
-        ccdf = xp.asarray(ccdf, dtype=xp.float64)
-        ccdf /= a.shape[0]
-
-    return ccdf
-
-
 # %% module-local helper functions
 def _infer_contained_array(x: Any) -> Array:
     if hasattr(type(x), 'values'):
@@ -755,16 +541,26 @@ def _infer_contained_array(x: Any) -> Array:
 def _arraylike_with_buffer(
     x: ArrayLike | Number, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
 ) -> 'tuple[Array, Array, ModuleType]':
-    """interpret the array-like input and output buffer arguments.
+    """resolve an array-like input to its array, an output buffer and its namespace.
 
     Args:
-        x: the input array-like or dataframe-like object
-        out: the output buffer, or True to use the extracted array, or False force None
+        x: a number, an array, or a pandas/xarray object wrapping one
+        overwrite_x: True to hand back the array of `x` as the output buffer;
+            ignored for a 0-d array
+        min_dtype: the narrowest floating-point dtype of the computation; an array
+            narrower than it is widened, and the widened copy becomes the buffer
+
     Returns:
-        Array objects pointing to the underlying array-type objects,
-        and the module to work with them
+        ``(values, out, xp)``: the array to compute on, with dtype at least
+        `min_dtype`; the buffer to evaluate into, which is `values` itself when
+        overwriting or widened, a new real-valued array shaped like `values` on the
+        numexpr and fused-kernel paths, and None on dask or any other namespace;
+        and the array namespace of `values`
+
+    Raises:
+        TypeError: if `min_dtype` is None or narrower than float32, or if no array
+            can be associated with the type of `x`
     """
-    # infer the array object and namespace
     if min_dtype is None:
         raise TypeError('must pass a dtype as min_dtype')
     if np.dtype(min_dtype) == np.dtype('float16'):
@@ -824,7 +620,7 @@ def _real_buffer(out: Array) -> Array:
 
 
 def _use_cuda_kernels(values: Array) -> bool:
-    """report whether `values` is evaluated with the fused kernels in `.jit.cuda`.
+    """report whether `values` is evaluated with the fused kernels in `cuda_jit`.
 
     The kernels assign through ``out[:]``, which 0-d arrays do not support, so cupy
     scalars take the generic array-API path.
@@ -858,6 +654,3 @@ def _repackage_arraylike(
         return ret
     else:
         raise TypeError(f'unrecognized input type {type(obj)}')
-
-
-# %%

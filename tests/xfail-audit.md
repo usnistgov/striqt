@@ -274,7 +274,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 `tests/waveform/test_waveform_jit.py::TestCorrAtIndicesKernels::test_cuda_unsorted_indices`
 
-- **Mechanism.** `jit/cuda.py:25-26` `break`s at the first out-of-range
+- **Mechanism.** `jit/cuda.py:24-25` `break`s at the first out-of-range
   index pair, while `jit/cpu.py:23-28` zero-fills it and continues.
   `ofdm.corr_at_indices` flattens a (symbol, slot, frame, cp) meshgrid
   (`ofdm.py:133`), which is not monotonic, so the kernels disagree whenever a

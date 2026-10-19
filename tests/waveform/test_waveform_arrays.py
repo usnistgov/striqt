@@ -10,7 +10,7 @@ from conftest import _cupy, as_xp, float_arrays, shaped_arrays
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import array_shapes
-from numeric_checks import assert_close, reference_binned_mean, to_numpy
+from numeric_checks import assert_close, dtype_id, reference_binned_mean, to_numpy
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.lib import arrays
@@ -91,6 +91,24 @@ class TestFloatDtypeLike:
     def test_min_dtype_is_a_floor(self, dtype, min_dtype, expected):
         x = np.zeros(3, dtype=dtype)
         assert arrays.float_dtype_like(x, min_dtype=min_dtype) == expected
+
+
+class TestTinyLike:
+    @pytest.mark.parametrize(
+        'dtype, real_dtype',
+        [
+            (np.float16, np.float16),
+            (np.float32, np.float32),
+            (np.float64, np.float64),
+            (np.complex64, np.float32),
+            (np.complex128, np.float64),
+        ],
+        ids=dtype_id,
+    )
+    def test_is_finfo_tiny_of_the_real_component(self, dtype, real_dtype):
+        tiny = arrays.tiny_like(np.zeros(3, dtype=dtype))
+        assert type(tiny) is real_dtype
+        assert tiny == np.finfo(real_dtype).tiny
 
 
 # %% roundoff model

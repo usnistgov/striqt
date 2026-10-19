@@ -8,7 +8,7 @@ import typing
 
 from . import fourier
 
-from . import arrays, power_analysis, util
+from . import arrays, power, util
 from .typing import CellSSBIndexes
 from .util import array_api_compat, np
 from .arrays import (
@@ -783,7 +783,7 @@ def weighted_ssb_detect(
     else:
         rssb = arrays.axis_slice(rssb, 0, max_beams, axis=BEAM_DIM)
 
-    r = power_analysis.envtopow(rssb)
+    r = power.envtopow(rssb)
 
     if is_cupy_array(rssb):
         from cupyx.scipy import ndimage  # type: ignore
