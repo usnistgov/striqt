@@ -27,8 +27,8 @@ def _split_preroll(start_index: int, count: int) -> tuple[int, int, int]:
     """split a read request into (zero-fill count, first file index, file sample count).
 
     File index 0 is corrected sample 0, so the part of the request before it is
-    filled with zeros rather than read. All three values are in samples and never
-    negative; the zero-fill and file sample counts sum to `count`, and reading starts
+    filled with zeros rather than read. All 3 values are in samples and never
+    negative. The zero-fill and file sample counts sum to `count`. Reading starts
     at `start_index` when that lies in the file and at sample 0 otherwise.
     """
     fill = min(max(-start_index, 0), count)
@@ -207,7 +207,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
 
 
 class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
-    """a sources of IQ samples from iq_waveform variables in a zarr store"""
+    """a source of IQ samples from iq_waveform variables in a zarr store"""
 
     _waveform: 'xr.DataArray'
     _capture_info: specs.FileAcquisitionInfo
@@ -247,7 +247,7 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
         try:
             port = self._read_coord('port', single=False)
         except KeyError:
-            # legacy files
+            # stores that name the port coordinate `channel`
             port = self._read_coord('channel', single=False)
 
         self._capture_info = specs.FileAcquisitionInfo(

@@ -1,4 +1,4 @@
-"""striqt.sensor.lib.sinks: the sinks written through a real sweep, batch sizing and the
+"""striqt.sensor.lib.sinks: the sinks written through a real sweep, batch sizing, and the
 zip archive path
 """
 
@@ -55,7 +55,7 @@ def test_no_sink_append_returns_its_argument(fake_source_id):
 
 
 def test_batch_tracker_cycles_the_homogeneous_group_sizes():
-    """four identical captures with batches of two: two groups of two, cycling"""
+    """4 identical captures with batches of 2: 2 groups of 2, cycling"""
     tracker = sinks._BatchTracker(tone_captures((1e6,) * 4), min_size=2)
     assert tracker.total_size == 4
     assert tracker.size == 2
@@ -65,7 +65,7 @@ def test_batch_tracker_cycles_the_homogeneous_group_sizes():
 
 def test_batch_tracker_merges_captures_of_different_shape():
     """a group closes only once every distinct capture shape is both pending and
-    still to come, so two 1 ms captures followed by a 2 ms one form one group"""
+    still to come, so 2 captures of 1 ms followed by 1 of 2 ms form a single group"""
     captures = tone_captures((1e6, 2e6)) + (
         preset_capture('single_tone', **{**ONE_PORT, 'duration': 2e-3}, snr=None),
     )
@@ -120,8 +120,8 @@ def test_time_append_sink_requires_a_spectrogram(fake_source_id):
 
 
 def test_time_append_sink_concatenates_the_frames(tmp_path):
-    """two captures written as one batch land in one row whose spectrogram time
-    axis holds both captures' frames back to back on a uniform grid"""
+    """2 captures written as 1 batch form 1 row whose spectrogram time axis
+    contains both captures' frames back to back on a uniform grid"""
     offsets = (1e6, 2e6)
     sweep = zarr_sweep(
         tmp_path / 'spg.zarr',

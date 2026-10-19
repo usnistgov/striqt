@@ -84,8 +84,8 @@ class TestIqWaveform:
         assert da.coords['iq_index'].size == 0
 
     def test_reversed_window_is_empty(self):
-        """current behavior, not a validated contract: a window that ends before it
-        starts yields an empty result rather than an error"""
+        """a window that ends before it starts yields an empty result rather than an
+        error. No contract specifies this outcome."""
         iq = self.waveform()
         da = sa.measurements.iq_waveform(
             iq, capture(), start_time_sec=6e-5, stop_time_sec=2e-5
@@ -96,7 +96,7 @@ class TestIqWaveform:
 
     def test_tolerance_is_the_input_error_on_the_envelope_level(self):
         """the slice adds no error of its own, so exact IQ passes through with a zero
-        budget, and an rms amplitude error `r` in the IQ reads on the envelope level
+        budget. An rms amplitude error `r` in the IQ reads on the envelope level
         ``20*log10|iq|`` as an rms of ``20*log10(1 + r)`` dB with a larger peak over
         the slice"""
         exact = tolerance(sa.specs.IQWaveform())

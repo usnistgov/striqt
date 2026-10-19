@@ -43,7 +43,7 @@ def _get_3gpp_index_cyclic_prefix(
     symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
     slots: tuple[int, ...] | typing.Literal['all'] = 'all',
 ):
-    """build an indexing tensor for performing cyclic prefix correlation across various axes"""
+    """build the index tensor for cyclic prefix correlation over the selected frames, slots, and symbols"""
     xp = array_namespace(phy.cp_sizes)
 
     frames = xp.array(frames)
@@ -59,7 +59,7 @@ def _get_3gpp_index_cyclic_prefix(
         symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp
     )
 
-    # first build each grid axis separately
+    # build each grid axis separately
     grid = []
 
     # axis 0: symbol number within each slot
@@ -98,7 +98,7 @@ class Phy3GPP(PhyOFDM):
         3GPP TS 38.211.
     """
 
-    # the remaining 1 "slot" worth of samples per slot are for cyclic prefixes
+    # a slot is 15 symbol periods of samples: 14 FFTs and 1 period of cyclic prefixes
     FFT_PER_SLOT = 14
 
     FFT_SIZE_TO_SUBCARRIERS = {
@@ -126,15 +126,15 @@ class Phy3GPP(PhyOFDM):
         100e6: 153.6e6,
     }
 
-    # Slot structure including cyclic prefix (CP) indices are specified in
-    # 3GPP TS 38.211, Section 5.3.1. Below are the sizes of all CPs (in samples)
-    # in 1 slot for FFT size 128 at 15 kHz SCS. CP size then scales proportionally
-    # to FFT size. 1 slot is the minimum number of contiguous symbols in a sequence.
+    # Slot structure and cyclic prefix (CP) sizes follow 3GPP TS 38.211, Section
+    # 5.3.1. These are the sizes (in samples) of the 14 CPs in 1 slot for FFT size
+    # 128 at 15 kHz SCS; CP size scales proportionally to FFT size. 1 slot is the
+    # minimum number of contiguous symbols in a sequence.
     LTE_MIN_CP_SIZES = (10, 9, 9, 9, 9, 9, 9, 10, 9, 9, 9, 9, 9, 9)
 
     SCS_TO_SLOTS_PER_FRAME = {15e3: 10, 30e3: 20, 60e3: 40}
 
-    # TODO: add 5G FR2 SCS values
+    # FR1 only; the FR2 spacings (120 kHz and above) are not modeled
     SUBCARRIER_SPACINGS = {15e3, 30e3, 60e3}
 
     def __init__(
@@ -201,7 +201,7 @@ class Phy3GPP(PhyOFDM):
         symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
         slots: tuple[int, ...] | typing.Literal['all'] = 'all',
     ):
-        """build an indexing tensor for performing cyclic prefix correlation across various axes"""
+        """build the index tensor for cyclic prefix correlation over the selected frames, slots, and symbols"""
         return _get_3gpp_index_cyclic_prefix(
             self, frames=frames, symbols=symbols, slots=slots
         )

@@ -21,7 +21,7 @@ class _Shelf(UserDict):
     def _check(self, op: str):
         if op in self.faults:
             # what the macOS dbm backend raises once its file is corrupt, and a
-            # ValueError subclass, which is how it gets mistaken for a bad argument
+            # ValueError subclass, so a caller mistakes it for a bad argument
             raise UnicodeDecodeError('utf-8', b'\x80', 0, 1, 'invalid start byte')
 
     def keys(self):
@@ -92,7 +92,8 @@ def test_an_unreadable_shelf_falls_back_to_computing(shelf, tmp_path):
     with pytest.warns(UserWarning, match='deleted the unusable disk cache'):
         assert square(4) == 16
 
-    # the file holds only recomputable results, so it goes rather than failing again
+    # the file contains only recomputable results, so it is deleted rather than
+    # failing again
     assert not corrupt.exists()
     assert util._cache_shelf_disabled
     # later calls skip the shelf entirely instead of warning once per call
@@ -125,9 +126,9 @@ def test_a_failing_open_falls_back_to_computing(monkeypatch, shelf):
 
 
 def test_the_wrapped_functions_own_error_propagates_unchanged(shelf):
-    """the reason the fallback is worth having: `get_window` raises a bare ValueError
-    for a bad window name, which callers label as a specification error, so a cache
-    fault must never arrive as one of those and vice versa"""
+    """`get_window` raises a bare ValueError for a bad window name, which callers
+    label as a specification error, so a cache fault must never arrive as one of
+    those and vice versa"""
 
     @util.persistent_cache()
     def get_window(name):

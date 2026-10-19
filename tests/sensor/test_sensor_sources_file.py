@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.sources.file: the zarr, MAT and TDMS file sources.
+"""striqt.sensor.lib.sources.file: the zarr, MAT, and TDMS file sources.
 
-All three share the uniform time origin of `VirtualSource.get_waveform`: file index 0
+All 3 share the uniform time origin of `VirtualSource.get_waveform`: file index 0
 is corrected output sample 0, so the lead overlap that `correct_iq` trims is a zero
 pre-roll rather than file data. The oracle for each round trip is the array that was
 written to the file, read back independently of the source under test.
@@ -32,7 +32,7 @@ from striqt.waveform.arrays import accum_rtol
 FS = SCALE_ONLY['sample_rate']
 CENTER_FREQUENCY = 3.7e9
 START_TIME = np.datetime64('2026-01-01T00:00:00', 'ns')
-# the file holds 2 ms; the captures read 0.5 ms so that the tail overlap of a
+# the file spans 2 ms; the captures read 0.5 ms so that the tail overlap of a
 # filtered capture (16640 samples at FS) still lies inside the file
 FILE_DURATION = 2e-3
 FILE_SAMPLES = round(FILE_DURATION * FS)
@@ -77,7 +77,7 @@ def assert_preroll_then_file(waveform, fill, file_rows, **tol):
     ids=['fully_negative', 'straddling', 'ends_at_zero', 'from_zero', 'positive'],
 )
 def test_split_preroll(start_index, count, expected):
-    """the fill is the number of requested indices below zero, the file read
+    """the fill is the number of requested indices below zero; the file read
     starts at the first non-negative one and supplies the rest"""
     assert _split_preroll(start_index, count) == expected
 
@@ -87,8 +87,8 @@ def test_split_preroll(start_index, count, expected):
 
 @pytest.fixture(scope='module')
 def zarr_iq_file(tmp_path_factory):
-    """a zarr store holding the corrected iq_waveform of two 2-port single-tone
-    captures at FS, with the coordinates ZarrIQSource.arm reads from a sensor store"""
+    """a zarr store of the corrected iq_waveform of 2 single-tone captures on 2 ports
+    at FS, with the coordinates ZarrIQSource.arm reads from a sensor store"""
     import xarray as xr
 
     fields = {**SCALE_ONLY, 'duration': FILE_DURATION, 'snr': None}
@@ -220,7 +220,7 @@ def test_zarr_round_trip_scale_only(zarr_iq_file, capture_index):
 
 
 def test_zarr_round_trip_filtered(zarr_iq_file):
-    """the FIR sees the zero pre-roll as a step at index 0, so its ringing spans the
+    """the zero pre-roll is a step at index 0 for the FIR, so its ringing spans the
     first FILTER_SIZE//2 output samples; the interior is the stored tone (in the
     passband) to within the FIR's passband ripple"""
     source = zarr_spec(zarr_iq_file, capture_index=1)
@@ -265,7 +265,7 @@ def test_zarr_resampler_pins_file_rate(zarr_iq_file):
 
 @pytest.fixture(scope='module')
 def mat_files(tmp_path_factory):
-    """legacy .mat files holding a 'waveform' matrix of one and of two tone rows"""
+    """.mat files with a 'waveform' matrix of 1 and of 2 tone rows"""
     from scipy.io import savemat
 
     root = tmp_path_factory.mktemp('mat')

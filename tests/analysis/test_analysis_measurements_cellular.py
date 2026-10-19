@@ -1,4 +1,4 @@
-"""striqt.analysis.measurements.cellular: the 5G NR synchronization, cyclic prefix and
+"""striqt.analysis.measurements.cellular: the 5G NR synchronization, cyclic prefix, and
 resource grid measurements.
 
 `tests/waveform/test_waveform_comms_sync_5gnr.py` and
@@ -67,7 +67,7 @@ def measure(spec, cap: sa.specs.Capture):
 
 @pytest.mark.parametrize('cls', SSB_SPEC_TYPES, ids=SSB_IDS)
 def test_ssb_measurements_share_one_validator(cls):
-    """`sss_params` reaches every check in `pss_params`, so the four registrations
+    """`sss_params` reaches every check in `pss_params`, so the 4 registrations
     resolve their sync layout through one function"""
     assert sa.registry[cls].validate is cellular.validated_5g_ssb_sync_params
 
@@ -176,8 +176,8 @@ AUTOCORRELATION_REJECTED = {
     'case', list(AUTOCORRELATION_REJECTED), ids=list(AUTOCORRELATION_REJECTED)
 )
 def test_autocorrelation_index_out_of_the_capture_is_rejected(case):
-    """`Phy3GPP.index_cyclic_prefix` bounds the symbol axis but not the frame axis,
-    whose indices past the capture the correlation kernel reads as zeros, and an
+    """`Phy3GPP.index_cyclic_prefix` bounds the symbol axis but not the frame axis.
+    The correlation kernel reads frame indices past the capture as zeros. An
     all-uplink frame leaves the downlink correlation with no indices at all"""
     kwargs, message = AUTOCORRELATION_REJECTED[case]
     spec = sa.specs.CellularCyclicAutocorrelator(subcarrier_spacings=SCS, **kwargs)
@@ -237,10 +237,10 @@ def ssb_of(duration, frequency=None, **kwargs):
 def ssb_tone_level_dB() -> float:
     """level of a tone centered on a 15 kHz bin after integration to one 30 kHz bin.
 
-    The STFT window is a boxcar of `window_fill` * nfft samples zero-padded to nfft,
-    whose ENBW is nfft/L bins, so the tone bin alone reads 10*log10(L/nfft). Its
-    Dirichlet kernel is not zero on the neighboring bins, and the integration sums
-    the tone bin with one neighbor holding sinc(L/nfft)**2 of the tone's power.
+    The STFT window is a boxcar of `window_fill` * nfft samples zero-padded to nfft.
+    Its ENBW is nfft/L bins, so the tone bin alone reads 10*log10(L/nfft). Its
+    Dirichlet kernel is not zero on the neighboring bins. The integration sums the
+    tone bin with one neighbor at sinc(L/nfft)**2 of the tone's power.
     """
     _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
     nfft = round(2 * SSB_SPECTROGRAM_FS / SSB_SPECTROGRAM_SCS)
@@ -331,10 +331,10 @@ class TestCellular5GSSBSpectrogram:
 
 # %% cellular_resource_power_histogram
 
-# the cellular resource grid needs sample_rate/(subcarrier_spacing/2) divisible by 28,
-# because its spectrogram overlaps 13/28 of the window and fills 15/28 of it: at 15 kHz
-# subcarriers 210 kHz gives the smallest such FFT (28 bins, hopping 1 symbol of 15
-# samples). 2 ms covers 2 of the 10 slots in the frame, which is all the mask needs.
+# the cellular resource grid requires sample_rate/(subcarrier_spacing/2) divisible by
+# 28, because its spectrogram overlaps 13/28 of the window and fills 15/28 of it. At
+# 15 kHz subcarriers, 210 kHz gives the smallest such FFT (28 bins, hopping 1 symbol of
+# 15 samples). 2 ms covers 2 of the 10 slots in the frame, which is all the mask needs.
 RESOURCE_GRID_FS = 210e3
 RESOURCE_GRID_DURATION = 2e-3
 RESOURCE_GRID_SCS = 15e3
@@ -373,8 +373,8 @@ def test_cellular_resource_power_histogram_link_direction_coordinate():
 
 def test_cellular_resource_power_histogram_all_downlink_frame():
     """an all-downlink frame masks every uplink resource element with nan, which the
-    histogram drops: the uplink row is exactly zero rather than nan, and the downlink
-    row carries the whole fraction"""
+    histogram drops. The uplink row is exactly zero rather than nan, and the downlink
+    row sums to the whole fraction"""
     da = resource_histogram(frame_slots='d' * RESOURCE_GRID_SLOTS)
 
     downlink, uplink = da.values[0]

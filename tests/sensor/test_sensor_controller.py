@@ -325,7 +325,7 @@ def test_one_port_capture_after_a_two_port_capture_has_one_row(isolated_lookup):
 
 
 class HalfReads(BINDINGS['sawtooth'].sensor.source_cls):
-    """delivers at most half of each read request"""
+    """returns at most half of each read request"""
 
     read_calls = 0
 
@@ -338,7 +338,7 @@ class HalfReads(BINDINGS['sawtooth'].sensor.source_cls):
 
 
 class OverReports(BINDINGS['sawtooth'].sensor.source_cls):
-    """reports two more samples than were requested"""
+    """reports 2 more samples than were requested"""
 
     def read(self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'):
         received, time_ns = super().read(
@@ -435,7 +435,7 @@ class TestControllerAcquire:
             assert fake_soapy.devices[0].streams[0].channels == (0, 1)
 
         # -60 dBm through 50 dB of gain is -10 dBfs; port 0 would be noise only.
-        # the model's own noise floor biases the level 0.014 dB above the tone, so
+        # The model's own noise floor biases the level 0.014 dB above the tone, so
         # the bound is that mismatch and not the sample fluctuation
         assert iq.pre_align.shape[0] == 1
         assert dBfs(iq.pre_align)[0] == pytest.approx(-10.0, abs=0.05)

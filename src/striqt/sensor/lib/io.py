@@ -1,4 +1,4 @@
-"""just a stub for now in case we change this in the future"""
+"""file I/O for sweep specifications, calibration data, and zarr stores"""
 
 from __future__ import annotations as __
 
@@ -81,11 +81,11 @@ def read_json_spec(
 ) -> specs.Sweep:
     """Build a specs.Sweep specification object from a json file at the given path.
 
-    This supports the same specifications as a yaml file, but without !include
+    JSON supports the same specifications as yaml, but without !include
     directives.
 
     Args:
-        path: path to the yaml file
+        path: path to the json file
         type: the type of sweep specification to load, or None to use specs.Sweep
         output_path: optional override for the specification's output path
         store_backend: optional override for the specification's output store backend
@@ -117,9 +117,9 @@ def read_zarr_spec(
 
     Only attrs that name `Sweep` fields (plus the binding tag and ``mock_source``)
     are read; other dataset attrs are ignored. The `extensions` block is imported
-    before the sweep is decoded, so a `sensor_binding` it defines is available. As
-    for `read_yaml_spec`, passing the store path to `open_resources` derives the
-    ``{spec_name}`` and ``{parent_name}`` path fields from it.
+    before the sweep is decoded, so a `sensor_binding` it defines is available.
+    Passing the store path to `open_resources` derives the ``{spec_name}`` and
+    ``{parent_name}`` path fields from it, as for `read_yaml_spec`.
 
     Args:
         path: the zarr store, a ``.zarr`` directory or ``.zarr.zip`` archive
@@ -175,7 +175,7 @@ def _convert_zarr_attrs_spec(
         tree['sensor_binding'] = type.__name__
 
     if 'extensions' in tree:
-        # import now, so that sensor_binding keys can use definitions
+        # import before decoding, so that sensor_binding keys can use definitions
         # in extension modules
         ext = specs.Extension.from_dict(tree['extensions'])
         _import_extensions_from_spec(ext, root_dir=extension_root)
@@ -244,7 +244,7 @@ def read_calibration(
         path = format_path(path)
 
     # the result is cached and read from several threads, so leave no open netCDF
-    # handle behind: the HDF5 library is not thread safe in every build
+    # handle behind. The HDF5 library is not thread safe in every build
     with xr.open_dataset(path) as dataset:
         return dataset.load()
 

@@ -46,10 +46,11 @@ class TestColaResamplerDesign:
     @pytest.mark.parametrize('window', ['hamming', 'blackman'])
     @pytest.mark.parametrize('shift', [None, 'none', 'left', 'right'])
     def test_consistency(self, fs_base, fs_target, window, shift):
-        """The rates, FFT sizes and passband of a design are mutually consistent.
+        """The rates, FFT sizes, and passband of a design are mutually consistent.
 
-        The grid omits `bw`, which only sets the passband width, and shift=False,
-        which the design treats exactly like None (unlike the truthy 'none').
+        The grid omits `bw`, which only sets the passband width. It also omits
+        shift=False, which the design treats exactly like None (unlike the truthy
+        'none').
         """
         bw = 10e6
         design = design_cola_resampler(
@@ -167,7 +168,7 @@ class TestResample:
         y = resample(x, nfft_out, shift=shift)
         assert y.shape == (nfft_out,) and y.dtype == x.dtype
         # the band copied to the output starts `shift` bins higher, so the tone
-        # lands `shift` bins lower in the output spectrum
+        # falls `shift` bins lower in the output spectrum
         expected = (k - shift) / nfft_out
         assert abs(tone_frequency(y, 1.0) - expected) <= 1 / nfft_out
         # a bin-centered unit tone comes back as a unit tone; fftshift multiply,
@@ -240,7 +241,7 @@ class TestOaresample:
     )
     def test_downsample_tone(self, f0_bins, shift_bins, scale):
         """As sensor.lib.compute.corrections._oaresample: 2-D (channel, sample)
-        input on axis=1, a bin-grid frequency shift and a voltage scale."""
+        input on axis=1, a bin-grid frequency shift, and a voltage scale."""
         up, down = self.NFFT // 2, self.NFFT
         fs_out = self.FS * up / down
         f0 = f0_bins * self.FS / self.NFFT

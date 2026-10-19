@@ -1,6 +1,6 @@
 """striqt.analysis.lib.register: measurement registration hooks, the validation and
 tolerance walks over an analysis group, and the contract every registered measurement
-honors (dtype, dims, coords and attrs reach the DataArray; the raw path returns the
+follows (dtype, dims, coords, and attrs reach the DataArray; the raw path returns the
 same values).
 
 The hook tests build their own `AnalysisRegistry`, since mutating the live registry
@@ -34,7 +34,7 @@ class OtherToySpec(sa.specs.Analysis, frozen=True, kw_only=True):
 
 
 def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=None):
-    """a registry holding one measurement that records its (capture, spec) calls"""
+    """a registry with one measurement that records its (capture, spec) calls"""
     registry = register.AnalysisRegistry()
 
     @registry.measurement(
@@ -131,7 +131,7 @@ def test_validate_defaults_to_none_and_the_measurement_still_runs():
 
 
 def build_group_registry(*validators, tolerances=(None, None)):
-    """a registry of two measurements, each with the given validator and tolerance"""
+    """a registry of 2 measurements, each with the given validator and tolerance"""
     registry = register.AnalysisRegistry()
     toy_validate, other_validate = validators
     toy_tolerance, other_tolerance = tolerances
@@ -206,7 +206,8 @@ def test_registry_validate_passes_the_projected_capture():
 
 
 def test_registry_validate_is_cached_on_the_projected_capture():
-    """the sensor walker relies on this to keep a long sweep off the critical path"""
+    """the sensor walker relies on the cache to keep a long sweep off the critical
+    path"""
     seen = []
     registry = build_group_registry(lambda capture, spec: seen.append(spec), None)
     group = registry.tospec()(toy=ToySpec())
@@ -334,7 +335,7 @@ def test_registry_tolerances_is_cached_on_the_projected_capture():
 VALIDATED = [info for info in sa.registry.values() if info.validate is not None]
 VALIDATED_IDS = [info.name for info in VALIDATED]
 # the SSS correlators search all 1008 cell ids per accepted example, so their draws
-# cost roughly ten times the others'
+# cost roughly 10 times the others'
 SSS = [info for info in VALIDATED if 'sss' in info.name]
 OTHERS = [info for info in VALIDATED if 'sss' not in info.name]
 
@@ -388,7 +389,7 @@ SPG = {'window': 'boxcar', 'frequency_resolution': FS / NFFT}
 # (capture, spec, the spec or capture field the message must name). Every registered
 # validator raises a bare ValueError, so `registry.validate` has one mechanism to
 # exercise here: `validation_path` wrapping it at the measurement key. One row names
-# a capture field and one a spec field; the per-measurement rejection tables live in
+# a capture field and one a spec field; the per-measurement rejection tables are in
 # the test_analysis_measurements_* modules.
 REJECTED = {
     'spectrogram_shorter_than_nfft': (
@@ -429,8 +430,9 @@ CONTRACT_CAPTURE = sa.specs.Capture(
     duration=4e-3, sample_rate=CONTRACT_FS, analysis_bandwidth=150e3
 )
 
-# 4 ms at 210 kHz is 1 discovery period of 56 symbols at 15 kHz subcarriers, whose
-# first 28 are the SSB burst set, and a whole number of detector and cyclic periods
+# 4 ms at 210 kHz is 1 discovery period of 56 symbols at 15 kHz subcarriers and a
+# whole number of detector and cyclic periods. The first 28 symbols are the SSB burst
+# set.
 CONTRACT_SPECS = (
     sa.specs.Spectrogram(window='hamming', frequency_resolution=7.5e3),
     sa.specs.PowerSpectralDensity(window='hamming', frequency_resolution=7.5e3),
@@ -501,7 +503,7 @@ def test_measurement_attrs(spec):
     for name, value in info.attrs.items():
         assert da.attrs[name] == value
 
-    # the wrapper decodes the keywords into a spec before calling, so the attrs hold
+    # the wrapper decodes the keywords into a spec before calling, so the attrs are
     # the validated field values rather than the ones passed in
     for name, value in spec.validate().to_dict().items():
         assert da.attrs[name] == value
@@ -527,7 +529,7 @@ NO_VALIDATOR = {'iq_waveform'}
 
 def test_every_measurement_has_a_validator():
     """a measurement without a validator silently skips pre-sweep validation, so a
-    new one has to either register `validate=` or be named here"""
+    new one must either register `validate=` or be named here"""
     missing = {
         info.name for info in sa.registry.values() if info.validate is None
     } - NO_VALIDATOR

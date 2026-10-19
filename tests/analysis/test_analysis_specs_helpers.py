@@ -1,5 +1,5 @@
 """striqt.analysis.specs.helpers: frozendict, freezing, Meta, conversion hooks,
-json_schema and coordinate inference"""
+json_schema, and coordinate inference"""
 
 from __future__ import annotations
 
@@ -159,7 +159,7 @@ class TestFreeze:
     def test_depth_converts_only_shallower_levels(self, tree, max_depth):
         result = freeze(tree, max_depth)
         assert listify(result) == listify(tree)
-        # any max_depth <= 1 converts just the root; the rest of the tree is untouched
+        # any max_depth <= 1 converts only the root; the rest of the tree is untouched
         assert has_mutable_below(result) == has_mutable_below(tree, max(max_depth, 1))
         if max_depth <= 1:
             assert result == freeze(tree, 1)
@@ -266,7 +266,7 @@ def test_capture_type_attrs():
     }
     assert attrs['port'] == {'standard_name': 'Input port indices'}
     assert attrs['host_resample'] == {}
-    # the Optional[...] alias of a field still has to reach the attrs
+    # the Optional[...] alias of a field must reach the attrs
     assert attrs['backend_sample_rate']['units'] == 'S/s'
     assert 'standard_name' in attrs['snr']
 
@@ -464,9 +464,9 @@ SOAPY_KWS = {
 
 
 def test_convert_spec_cached_hands_back_an_exact_match_unchanged():
-    """`lru_cache_on_converted` rests on this: projecting a spec that is already the
-    target type must return the same object, so converting it a second time cannot
-    add a second cache entry for what is one value."""
+    """`lru_cache_on_converted` requires that projecting a spec that is already the
+    target type returns the same object. Converting it a second time then cannot add
+    a second cache entry for one value."""
     capture = sa.specs.AnalysisCapture(duration=1e-3, sample_rate=1e6)
     assert convert_spec_cached(sa.specs.AnalysisCapture, capture) is capture
 
@@ -516,8 +516,8 @@ def test_to_analysis_capture_defaults_absent_center_frequency_to_none():
 
 
 def test_to_analysis_capture_collapses_fields_the_analysis_layer_ignores():
-    """this is the whole point of the projection: a sweep looping over a sensor-only
-    field must not multiply the validator cache keys"""
+    """the projection exists so that a sweep looping over a sensor-only field does
+    not multiply the validator cache keys"""
     kws = {'port': 0, 'center_frequency': 3.5e9, 'duration': 1e-3, 'sample_rate': 1e6}
     low = to_analysis_capture(ss.specs.SoapyCapture(gain=0.0, **kws))
     high = to_analysis_capture(ss.specs.SoapyCapture(gain=30.0, **kws))
@@ -608,9 +608,9 @@ def test_a_projected_argument_passed_by_keyword_raises():
 )
 def test_the_cache_is_reachable_through_the_wrapper(clear):
     """functools.wraps does not copy cache_clear or cache_info off an lru_cache
-    wrapper, so the decorator re-exposes them by hand. Without that, a decorated
-    function has no reachable cache: it cannot be reset between measurements, and
-    the global sw.util.cache_info() report cannot see it."""
+    wrapper, so the decorator re-exposes them by hand. Without those attributes a
+    decorated function has no reachable cache. It cannot be reset between
+    measurements, and the global sw.util.cache_info() report cannot see it."""
     calls = []
 
     @lru_cache_on_converted(ss.specs.SensorCapture)
@@ -702,7 +702,7 @@ def test_spec_validation_error_prepend_carries_the_locations_through():
 
 
 def test_spec_validation_error_at_and_prepend_are_independent():
-    """the two axes commute, so a validator may interleave them as it unwinds"""
+    """the 2 axes commute, so a validator may interleave them as it unwinds"""
     exc = SpecValidationError('bad value', ('.spectrogram',))
     interleaved = exc.prepend('.analysis').at(".loops: {'repeat': 0}")
     interleaved = interleaved.prepend('.nfft').at('.captures[0]')
@@ -802,7 +802,7 @@ def test_spec_validation_error_survives_msgspec_decoding(
 ):
     """msgspec re-raises a plain ValueError from __post_init__ as its own
     ValidationError, but a ValidationError subclass propagates unchanged, so the
-    path we assembled stays authoritative"""
+    path assembled in __post_init__ stays authoritative"""
     with pytest.raises(SpecValidationError) as excinfo:
         decode()
 

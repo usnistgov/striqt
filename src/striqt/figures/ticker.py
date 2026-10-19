@@ -29,8 +29,8 @@ def is_decade(x, **kwargs):
 def _log_tick_range(vlo, vhi, count, subs=(1.0,)):
     """use _ticker.LogLocator to generate ticks confined to the specified range.
 
-    Compared to np.logspace, this results in the use of round(er) numbers
-    that are not necessarily evenly spaced.
+    The ticks fall on rounder numbers than `np.logspace` returns. They are not
+    necessarily evenly spaced.
     """
     locator = _ticker.LogLocator(base=10.0, subs=subs, numticks=count)
     ticks = locator.tick_values(vlo, vhi)
@@ -41,8 +41,8 @@ def _log_tick_range(vlo, vhi, count, subs=(1.0,)):
 def _linear_tick_range(vlo, vhi, count, steps=(1.0,)):
     """use _ticker.MaxNLocator to generate ticks in the specified range.
 
-    Compared to np.linspace, this results in the use of round(er) numbers
-    that are not necessarily evenly spaced.
+    The ticks fall on rounder numbers than `np.linspace` returns. They are not
+    necessarily evenly spaced.
     """
     locator = _ticker.MaxNLocator(nbins=count, steps=steps)
     ticks = locator.tick_values(vlo, vhi)
@@ -51,11 +51,10 @@ def _linear_tick_range(vlo, vhi, count, steps=(1.0,)):
 
 @lru_cache()
 def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.ndarray:
-    """prune a sequence of tick marks to the specified count, attempting to spread
-    them out evenly.
+    """prune a sequence of tick marks to `count`, removing the most closely spaced
+    first.
 
-    If `prefer` is passed, it specifies an order of preference for specific tick
-    marks that should be kept in the returned array.
+    `prefer` lists tick marks to keep, in order of preference.
 
     Returns:
         `np.array` of shape `(count,)`
@@ -80,8 +79,8 @@ def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.ndarra
 
 
 class EngFormatter(_ticker.EngFormatter):
-    """Behave as mpl.ticker.EngFormatter, but also support an
-    invariant the unit suffix across the entire axis"""
+    """format ticks as `mpl.ticker.EngFormatter` does, with `unitInTick=False`
+    placing one unit suffix on the axis label instead of in each tick"""
 
     _usetex: bool
     _useMathText: bool
@@ -144,9 +143,8 @@ class EngFormatter(_ticker.EngFormatter):
             pow10 = self.orderOfMagnitude
 
         mant = sign * value / (10.0**pow10)
-        # Taking care of the cases like 999.9..., which may be rounded to 1000
-        # instead of 1 k.  Beware of the corner case of values that are beyond
-        # the range of SI prefixes (i.e. > 'Y').
+        # a mantissa such as 999.9 may round to 1000 and is then carried to the
+        # next prefix, except beyond the largest SI prefix ('Y')
         if (
             abs(float(format(mant, fmt))) >= 1000
             and pow10 < max(self.ENG_PREFIXES)
@@ -253,7 +251,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
         vmin, vmax = min((vmin, vmax)), max((vmin, vmax))
 
         if not np.isfinite(minpos):
-            minpos = 1e-12  # Should rarely (if ever) have a visible effect.
+            minpos = 1e-12  # arbitrary floor well below any plotted probability
 
         ret = (
             minpos if vmin <= minpos else vmin,
@@ -316,7 +314,7 @@ class GammaQQScale(_scale.FuncScale):
         ax.set_scale('gamma-ccdf', k=10)
 
     ```
-    In power measurements, the shape parameter `k` should be set equal to the number of averaged power samples.
+    In power measurements, the shape parameter `k` is the number of averaged power samples.
 
     """
 
@@ -371,9 +369,8 @@ _scale.register_scale(GammaQQScale)
 
 
 def contiguous_segments(df, index_level, threshold=7, relative=True):
-    """Split `df` into a list of DataFrames for which the index values
-    labeled by level `index_level`, have no discontinuities greater
-    than threshold*(median step between index values).
+    """split `df` into DataFrames whose index values at level `index_level` have
+    no step greater than `threshold` times the median step.
     """
     delta = pd.Series(df.index.get_level_values(index_level)).diff()
     if relative:
@@ -387,15 +384,16 @@ def contiguous_segments(df, index_level, threshold=7, relative=True):
 
 
 def _has_tick_label_collision(ax, which: str, spacing_threshold=10):
-    """finds the minimum spacing between tick labels along an axis to check for collisions (overlaps).
+    """return whether adjacent tick labels along an axis are closer than `spacing_threshold`.
 
     Args:
-        ax: matplotlib the axis object
+        ax: the matplotlib axes that owns the tick labels
 
         which: "x" or "y"
 
     Returns:
-        the spacing, in units of the figure render of the axis. negative indicates a collision
+        True when the smallest gap between adjacent tick label boxes, in display
+        pixels, is below `spacing_threshold`
     """
     fig = ax.get_figure()
 
@@ -421,7 +419,7 @@ def _has_tick_label_collision(ax, which: str, spacing_threshold=10):
 
 
 def rotate_ticklabels_on_collision(ax, which: str, angles: list, spacing_threshold=3):
-    # lazy import of submodules seems to cause problems for matplotlib
+    # lazy_import does not work for matplotlib submodules
     from matplotlib import pyplot as plt
 
     def set_rotation(the_ax, angle):
@@ -458,11 +456,13 @@ def rotate_ticklabels_on_collision(ax, which: str, angles: list, spacing_thresho
 
 
 def xaxis_concise_dates(fig, ax, adjacent_offset: bool = True):
-    """fuss with the dates on an x-axis."""
+    """apply concise date formatting to the x-axis, with the date offset prepended
+    to the first tick label when `adjacent_offset` is True.
+    """
 
     from matplotlib import dates, transforms
 
-    # lazy import of submodules seems to cause problems for matplotlib
+    # lazy_import does not work for matplotlib submodules
     from matplotlib import pyplot as plt
 
     formatter = dates.ConciseDateFormatter(dates.AutoDateLocator(), show_offset=True)

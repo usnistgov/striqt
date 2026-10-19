@@ -34,7 +34,7 @@ def get_path_fields(
     source_id: str | Callable[[], str],
     spec_path: Path | str | None = None,
 ) -> dict[str, str]:
-    """return a mapping for string `'{field_name}'.format()` style mapping values"""
+    """return the ``{field_name}`` field values for sink and calibration paths"""
 
     assert isinstance(sweep, structs.Sweep)
 

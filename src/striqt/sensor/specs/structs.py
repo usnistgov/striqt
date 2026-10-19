@@ -103,11 +103,10 @@ class Source(SpecBase, frozen=True, kw_only=True):
     trigger_strobe: Union[float, None] = None
     signal_trigger: Union[str, AnalysisGroup, None] = None
 
-    # in the future, these should probably move to an analysis config
     array_backend: types.ArrayBackend = 'numpy'
 
-    # no hint yet. source implementation expects these to exist, but
-    # this leaves room for subclasses to add schema fields
+    # unannotated so that subclasses can declare them as schema fields; source
+    # implementations read them
     gapless = False
     calibration = None
     if TYPE_CHECKING:
@@ -129,7 +128,7 @@ class SoapySource(Source, frozen=True, kw_only=True):
     adc_overload_limit: types.ADCOverloadLimit = -1
     if_overload_limit: types.IFOverloadLimit = None
 
-    # set this True if the same clock drives acquisition on all RX ports
+    # True when one clock drives acquisition on all RX ports
     shared_rx_sample_clock = True
     rx_enable_delay = 0.0
     gapless: types.GaplessRepeat = False
@@ -368,9 +367,8 @@ AdjustCapturesType = dict[
 
 
 class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
-    # sweep bindings also accept the following tag field in input files, which
-    # msgspec uses to determine the Sweep subclass to instantiate from e.g.
-    # yaml files.
+    # bound sweep subclasses also accept the tag field below in input files, which
+    # msgspec reads to choose the Sweep subclass to decode from, e.g., a yaml file
     #
     # See: ./bindings.py
     #
@@ -402,7 +400,7 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
     def __post_init__(self):
         from . import sequencing, sweep
 
-        # do this first, so that its result can then also be frozen
+        # convert the label keys before super().__post_init__ freezes the struct
         fixed_labels = sequencing._convert_label_lookup_keys(self)
         msgspec.structs.force_setattr(self, 'adjust_captures', fixed_labels)
 
@@ -416,8 +414,8 @@ class CalibrationSweep(
     frozen=True,
     kw_only=True,
 ):
-    """This specialized sweep is fed to the YAML file loader
-    to specify the change in expected capture structure."""
+    """sweep specification for calibration runs, which adds a `calibration` block
+    to the YAML schema."""
 
     options: SweepOptions = SweepOptions(
         skip_warmup=True, reuse_iq=True, loop_only_nyquist=True
@@ -442,14 +440,11 @@ class CalibrationSweep(
 
 
 # %% Non-Sweep specs
-# we really only need a dataclass for internal message-passing.
-# instead, use msgspec.Struct as dataclass here in order to support
-# kw_only=True for python < 3.10.
-#
-# this does not perform validation, which is left to type-checking for this
-# internal message passing
+# a msgspec.Struct stands in for a dataclass here to support kw_only=True on
+# python < 3.10. These structs are internal message passing and are not
+# validated; type checking covers them.
 class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
-    """information about an acquired acquisition"""
+    """information about an acquisition"""
 
     # duck-type methods and structure of SpecBase
 
@@ -457,9 +452,8 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     sweep_index: int = 0
     capture_index: int = 0
 
-    # ideally, this union would include sa.Trigger, but that triggers a
-    # resolution problem in python 3.9. fix this when the minimum python
-    # version. in the meantime, it's a hack.
+    # sa.Trigger is excluded from this union because msgspec fails to resolve it
+    # on python 3.9
     signal_trigger: Union[str, None] = None
 
     def replace(self, **attrs) -> _Self:
@@ -471,7 +465,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
         return msgspec.structs.replace(self, **attrs)
 
     def to_dict(self) -> dict:
-        """return a dictinary representation of `self`"""
+        """return a dictionary representation of `self`"""
         return msgspec.structs.asdict(self)
 
     @classmethod

@@ -49,8 +49,9 @@ class TestStft:
     @settings(max_examples=50)
     @given(x=noise_waveforms(min_size=256, max_size=512), params=stft_parameters())
     def test_output_shape(self, x, params):
-        """the output has the right shape, dtype and frequency axis (min_size=256
-        guarantees len(x) >= max(nperseg))"""
+        """the window count follows the segment step, the bin count is nperseg, the
+        dtype is the input's, and the frequency axis is fftfreq(nperseg, fs)
+        (min_size=256 guarantees len(x) >= max(nperseg))"""
         freqs, times, X = stft(x, truncate=True, **params)
 
         step = params['nperseg'] - params['noverlap']
@@ -90,7 +91,7 @@ class TestStft:
         _, _, X_named = stft(x, fs=1.0, window='hann', nperseg=64)
         _, _, X_array = stft(x, fs=1.0, window=w, nperseg=64)
 
-        # the two paths differ only in the order of the window and 1/nfft multiplies
+        # the 2 paths differ only in the order of the window and 1/nfft multiplies
         sigma = fft_tolerance_rms(np.complex64, [64], n_elementwise=2)
         assert_close(X_array, X_named, sigma=sigma)
 
@@ -165,7 +166,7 @@ class TestIstft:
     @settings(max_examples=30)
     @given(x=iq_waveforms(min_size=8 * NFFT, max_size=16 * NFFT, multiple_of=NFFT))
     def test_no_overlap_roundtrip_is_identity(self, x):
-        """With a rectangular window and no overlap, istft(stft(x)) reproduces x."""
+        """istft(stft(x)) reproduces x with a rectangular window and no overlap."""
         nfft = self.NFFT
         _, _, X = stft(x, fs=1.0, window='rect', nperseg=nfft, noverlap=0)
         y = istft(X, nfft=nfft, noverlap=0)
@@ -230,7 +231,7 @@ class TestStftFrequencyEditing:
         fs = 1e6
         freqs, Y = self._stft(fs)
         hi = fs / 4 + edge_shift_bins * fs / self.NFFT
-        # the passband is half-open: a bin centered on the upper cutoff is zeroed
+        # the passband is half-open, so a bin centered on the upper cutoff is zeroed
         inside = (freqs >= -hi) & (freqs < hi)
 
         Yz = zero_stft_by_freq(freqs, Y.copy(), passband=(-hi, hi))

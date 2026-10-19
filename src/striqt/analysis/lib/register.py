@@ -143,7 +143,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
     ) -> CoordFuncWrapper[TC, TM, R]:
         """register a coordinate factory function.
 
-        The factory function should return an iterable containing coordinate
+        The factory function must return an iterable containing coordinate
         values, or None to indicate a named placeholder for a dimension.
         """
         kws = locals()
@@ -201,13 +201,12 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
         lag_coord_func: CoordFunc,
         name: str | None = None,
     ) -> Callable[[WrappedAnalysis[P, RM]], WrappedAnalysis[P, RM]]:
-        """register a coordinate factory function.
+        """register the decorated measurement as a signal trigger.
 
-        The proper dimension to evaluate in the data is determined from
-        the supplied coordinate factory function.
+        The lag dimension of the measurement output is taken from `lag_coord_func`.
 
         Arguments:
-            coord_factory: the coordinate factory used to define the measurement.
+            lag_coord_func: the coordinate factory of the measurement's lag axis.
         """
 
         def wrapper(
@@ -267,8 +266,8 @@ class AnalysisInfo(NamedTuple):
 class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     """a registry of keyword-only arguments for decorated functions"""
 
-    # a registry is mutated only at import time, so identity is a stable key; dict
-    # inherits __eq__, which would otherwise leave it unhashable
+    # a registry is mutated only at import time, so identity is a stable key. The
+    # `__eq__` of `dict` would otherwise leave the subclass unhashable.
     __hash__ = object.__hash__
 
     caches: dict[AnalysisFunc, list[KwArgCache]]
@@ -302,7 +301,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     ) -> AnalysisFuncWrapper[P]:
         """register the decorated function as the measurement configured by `spec_type`.
 
-        Registration mutates this registry when the decorator is applied: `spec_type`
+        Registration mutates this registry when the decorator is applied. `spec_type`
         becomes a key here and an optional field of the `AnalysisGroup` struct that
         `tospec()` synthesizes, so the measurement gains a key in the ``analysis:``
         block of a sweep spec. Each field of `spec_type` is also recorded in
@@ -339,9 +338,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 attrs returned by the function take precedence
             validate: checks the (capture, spec) combination without touching IQ, so
                 that a sweep can reject a bad combination before it acquires. The
-                return value is ignored here, but by convention it is the derived
-                sizing that the measurement consumes, so the arithmetic has one
-                home; such a validator is named for what it returns (`validated_*`)
+                return value is ignored here. By convention it is the derived sizing
+                that the measurement consumes, so that arithmetic is written once.
+                Such a validator is named for what it returns (`validated_*`)
             tolerance: derives the roundoff error budget of the output from the
                 (capture, spec) combination without touching IQ, as a
                 `specs.Tolerance`, so that a test or a consumer can decide how
@@ -355,7 +354,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             ValueError: when `spec_type` is already registered
             TypeError: when a `coord_factories` entry is not callable; from the
                 returned decorator, when `name` is already registered or `caches`
-                holds something other than `KwArgCache` instances
+                contains something other than `KwArgCache` instances
         """
 
         if isinstance(dims, str):
@@ -405,9 +404,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             ) -> Measurement:
                 from .dataarrays import DelayedDataArray
 
-                # handle the additional argument 'as_xarray' that allows
-                # the return of a _DelayedDataArray result for fast serialization and
-                # xarray object instantiation
+                # 'delayed' defers materialization to xarray until
+                # `DelayedDataArray.to_xarray`
                 if as_xarray not in ('delayed', True, False):
                     raise ValueError(
                         'xarray argument must be one of (True, False, "delayed")'
@@ -459,7 +457,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                         field.type, allow_timestamps=False
                     )
                 except TypeError:
-                    # TODO: this should
                     self.parameter_fields[field.name] = None
                     self.parameter_defaults[field.name] = None
                     continue

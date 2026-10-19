@@ -1,7 +1,7 @@
 """Shared builders for the waveform tests: the comms fixtures (the 3GPP PHY at the
 analysis sample rate, cyclic-prefix cases on a synthetic OFDM waveform, and silent
 synchronization blocks carrying embedded PSS symbols) and the fourier strategies
-(noise waveforms, sample rates, STFT parameters and the cross-backend FFT tolerance).
+(noise waveforms, sample rates, STFT parameters, and the cross-backend FFT tolerance).
 """
 
 from __future__ import annotations

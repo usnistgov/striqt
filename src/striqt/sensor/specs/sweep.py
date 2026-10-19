@@ -1,10 +1,10 @@
 """validation of a `Sweep` after construction.
 
-It runs from `Sweep.__post_init__`, so a constructed sweep is a validated one: loop
-entries and their collisions with the listed captures, measurement names that shadow
-capture fields, and each unique capture against the registered measurements and the
-`correct_iq` signal path. Failures are located in the user's file through the capture
-origins that `sequencing` records.
+Validation runs from `Sweep.__post_init__`, so a constructed sweep is a validated
+one: loop entries and their collisions with the listed captures, measurement names
+that shadow capture fields, and each unique capture against the registered
+measurements and the `correct_iq` signal path. Failures are located in the user's
+file through the capture origins that `sequencing` records.
 """
 
 from __future__ import annotations as __
@@ -197,7 +197,7 @@ def _validate_sweep_corrections(
     `FileCapture` sweeps, whose source rate comes from the file rather than from
     `sweep.source.master_clock_rate`; the analysis filter, which depends only on the
     capture, is still checked. The parity of the padded acquisition that `resample`
-    requires is left to acquisition time: sizing it here would import scipy at spec
+    requires is left to acquisition time. Sizing it here would import scipy at spec
     load, and no design from a hamming COLA pads to an odd length.
 
     Raises:

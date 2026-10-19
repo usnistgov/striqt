@@ -5,8 +5,8 @@ The PSD oracle is the window's own spectrum: a unit tone at fine bin k0 puts
 ``|W(k - k0)|**2 / (nfft * sum(w**2))`` of its power in fine bin k (Parseval), and a
 reported bin integrates the fine bins it spans. For a bin-centered tone with no
 integration this is the ``-10*log10(enbw_bins)`` of tests/analysis; with quick.yaml's
-24-bin integration it is the in-block fraction of the kaiser window, about -0.002 dB,
-with -33 dB spilling into the neighboring block.
+24-bin integration it is the in-block fraction of the kaiser window, about -0.002 dB.
+The remaining -33 dB spills into the neighboring block.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ ports_of = ss.specs.captures.ensure_tuple
 def tone_bin_powers(window, nfft, nzero, tone_bin, bin_centers, half_width):
     """the fraction of a unit tone's power that each reported PSD bin receives.
 
-    `tone_bin`, `bin_centers` and `half_width` are in units of fine (nfft) bins; a
+    `tone_bin`, `bin_centers`, and `half_width` are in units of fine (nfft) bins; a
     reported bin integrates the fine bins within `half_width` of its center. The
     window is `nfft - nzero` samples long and zero-padded to `nfft`, as
     `sw.spectrogram` does for window_fill < 1.
@@ -96,7 +96,7 @@ def window_count(attrs, capture) -> int:
 
 
 def check_tone_psd(psd, freqs, attrs, capture, frequency_offset, snr, err_msg=''):
-    """assert the mean PSD of one port holds a unit tone at `frequency_offset` at the
+    """assert the mean PSD of one port contains a unit tone at `frequency_offset` at the
     modeled level, and nothing else above the noise and roundoff floors"""
     res = attrs['frequency_resolution']
     nfft = round(capture.sample_rate / res)
@@ -219,7 +219,7 @@ def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert 'Numerical tolerance' in out
-    # the block is the title, a rule, the column header and one row per product
+    # the block is the title, a rule, the column header, and one row per product
     block = out.split('Numerical tolerance')[1].split('\n\n')[0]
     groups, header, *rows = block.splitlines()[2:]
     assert 'On-peak tolerance (dB)' in groups and 'Off-peak (dBc)' in groups
@@ -462,7 +462,7 @@ def check_single_tone(ds, capture, subtests):
 
 def check_noise(ds, capture, subtests):
     """only the noise power survives resampling: the PSD is flat at
-    noise_psd * noise_bandwidth per bin, and its mean over ports, windows and bins
+    noise_psd * noise_bandwidth per bin, and its mean over ports, windows, and bins
     averages that many exponential variates (hann bins are correlated over enbw)"""
     attrs = ds.power_spectral_density.attrs
     nfft = round(capture.sample_rate / attrs['frequency_resolution'])
@@ -578,9 +578,9 @@ def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
                 ds.iq_waveform.values,
                 expected,
                 sigma=cross_backend(err['numpy'], err['cupy']),
-                # the resample concentrates its roundoff on the samples that carry the
-                # peak, which an rms-referenced sigma understates by the crest factor -
-                # near 100 for the impulse captures
+                # the resample concentrates its roundoff on the samples at the peak,
+                # which an rms-referenced sigma understates by the crest factor (near
+                # 100 for the impulse captures)
                 atol=cross_backend(peak_roundoff, peak_roundoff)
                 * np.abs(expected).max(),
             )

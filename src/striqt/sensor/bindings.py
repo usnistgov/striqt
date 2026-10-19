@@ -1,7 +1,7 @@
 """
-A registry of data class <-> IQ acquisition control class bindings.
-These are taken to define sensors. Extension classes can implement
-peripherals and expanded data fields elsewhere.
+A registry of bindings between spec classes and IQ acquisition control classes.
+Each binding defines a sensor. Extension modules can bind peripherals and
+additional spec fields.
 """
 
 from . import specs

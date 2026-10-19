@@ -6,7 +6,7 @@ from .typing import Peripherals, SP, SC, SPC
 
 
 class PeripheralsBase(Peripherals[SP, SC]):
-    """dunder-method convenience implementation for the Peripherals protocol"""
+    """context-manager base implementation of the `Peripherals` protocol"""
 
     spec: SP
 
@@ -22,10 +22,10 @@ class PeripheralsBase(Peripherals[SP, SC]):
 
 
 class CalibrationPeripheralsBase(Peripherals[SP, SC], Generic[SP, SC, SPC]):
-    """base class defining the object protocol peripheral hardware support.
+    """base class for the peripheral hardware protocol of a calibration sweep.
 
-    This is implemented primarily through connection management and callback
-    methods for arming and acquisition.
+    Subclasses implement connection management and the callback methods for
+    arming and acquisition.
     """
 
     calibration_spec: SPC | None

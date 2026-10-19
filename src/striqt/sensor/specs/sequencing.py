@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 class CaptureOrigin(NamedTuple):
     """locate an expanded capture in the sweep specification that produced it.
 
-    An error message needs this to name a place in the user's file: the expanded
+    An error message needs this to name a place in the user's file. The expanded
     index alone cannot, since `sweep.captures` and `sweep.loops` are both flattened
     away by the expansion.
     """
@@ -60,7 +60,7 @@ def loop_captures(
     only_fields: tuple[str, ...] | None = None,
     limit: int | None = None,
 ) -> tuple[SC, ...]:
-    """expand `sweep.loops` into the flat tuple of captures that the sweep will run.
+    """expand `sweep.loops` into the flat tuple of captures that the sweep runs.
 
     The loops are nested in declaration order, outermost first, with `sweep.captures`
     innermost, so 2 captures under a 3-point loop give 6 captures ordered
@@ -150,8 +150,8 @@ def loop_capture_origins(
     args, kws = _expansion_args(sweep, source_id, only_fields, limit)
     captures, origins = _expand_capture_loops_with_origins(*args, **kws)
 
-    # not frozendict(zip(...)): dict() from pairs keeps the last value for a repeated
-    # key, and the first origin is the one worth reporting
+    # not frozendict(zip(...)), which keeps the last value for a repeated key; the
+    # first origin is the one to report
     first: dict[SC, CaptureOrigin] = {}
     for capture, origin in zip(captures, origins):
         first.setdefault(capture, origin)
@@ -237,7 +237,7 @@ def _expansion_args(
     """marshal `sweep` into the arguments of `_expand_capture_loops_with_origins`.
 
     Every caller builds the keywords here because `lru_cache` keys on their insertion
-    order: the same values passed in two orders miss the cache, and the sweep expands
+    order. The same values passed in two orders miss the cache, and the sweep expands
     twice into captures that are equal but not identical.
 
     Returns:
@@ -320,9 +320,9 @@ def _expand_capture_loops_with_origins(
             new = [_merge_capture_updates(defaults, loop_point)]
 
         if adjust is not None:
-            # we needed to get a first cut at the loops so that adjust_captures
-            # can work on the looped capture. here we adjust the captures, but
-            # make sure loops have the highest priority at the end
+            # adjust_captures keys on the looped capture, so the loop point is
+            # applied before it; applying the loop point again last keeps a loop
+            # ahead of any adjustment
             new = (
                 _merge_capture_updates(
                     c, adjust_captures(c, adjust, source_id), loop_point
@@ -366,7 +366,7 @@ def _expand_capture_loops_with_origins(
         expanded = tuple(c for c, _ in keep)
         origins = [o for _, o in keep]
 
-    # only now is the position in the returned tuple known
+    # the position in the returned tuple is known only after the nyquist filter
     numbered = tuple(o._replace(capture_index=i) for i, o in enumerate(origins))
 
     return expanded, numbered
@@ -518,7 +518,7 @@ def _expanded_capture_error(
 
 
 def _merge_analysis_loops(points: _LoopPointsDict) -> dict[str, Any]:
-    """apply any loops where isin == 'analysis' into capture.adjust_captures"""
+    """apply any loops where isin == 'analysis' into capture.adjust_analysis"""
 
     updates: dict[str, Any] = {}
     analysis_updates = {}
@@ -536,8 +536,8 @@ def _merge_analysis_loops(points: _LoopPointsDict) -> dict[str, Any]:
 def _merge_capture_updates(*dicts: dict[str, Any]) -> dict[str, Any]:
     """merge the given dicts as `dicts[0] | dicts[1] | ... | dicts[len(dicts)]`.
 
-    Handles 'adjust_analysis' field similarly across dicts, if present, is
-    is merged separately and set in the return.
+    The ``'adjust_analysis'`` entries of the dicts are merged the same way into one
+    mapping in the result.
     """
     capture = {}
     adjust_analysis = {}
@@ -580,7 +580,6 @@ def adjust_captures(
             field = fields[0]
         else:
             # a tuple key in lookup_spec
-            # There is probably a clearer way to to this
             values = [get_key(f, name) for f in fields]
             size = max(len(obj) if isinstance(obj, tuple) else 1 for obj in values)
             values = (captures.ensure_tuple(v, size) for v in values)
@@ -661,7 +660,7 @@ def list_capture_adjustments(
     """list the unique values of each adjusted capture field across the sweep.
 
     The values are read from the expanded captures, so they are what the runner
-    produces: a loop over an adjusted field wins over the adjustment (see
+    produces. A loop over an adjusted field wins over the adjustment (see
     `loop_captures`), and the listing shows the loop values in loop order. A
     `CaptureRemap` miss that leaves the field unset contributes nothing for that
     capture, as in `adjust_captures`.
@@ -694,7 +693,7 @@ def list_capture_adjustments(
 
 
 def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesType:
-    """convert label lookup keys types to match corresponding capture fields"""
+    """convert label lookup key types to match the corresponding capture fields"""
 
     result = {}
     capture_cls = captures.get_capture_type(type(sweep))

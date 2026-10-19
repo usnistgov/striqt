@@ -190,7 +190,7 @@ def test_prepare_compute_yields_once_without_a_warmup(skip_warmup, sweep):
 @pytest.mark.namespaces('cupy')
 def test_prepare_compute_runs_a_warmup_sweep_on_cupy(array_backend):
     """the warmup is one capture through iterate_sweep(always_yield=True), so its
-    three pipeline stages yield two placeholders and one result"""
+    3 pipeline stages yield 2 placeholders and 1 result"""
     source = SOURCE.replace(array_backend=array_backend)
     sweep = preset_sweep(
         'single_tone',

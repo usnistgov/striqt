@@ -1,4 +1,4 @@
-"""striqt.analysis.lib.util: logging adapters, stopwatch, compute lock and small
+"""striqt.analysis.lib.util: logging adapters, stopwatch, compute lock, and small
 helpers
 """
 

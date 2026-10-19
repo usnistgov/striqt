@@ -19,7 +19,7 @@ GENERATORS = [([0, 1, 1, 0, 1, 1, 1], (3, 7)), ([1, 0, 0, 0, 0, 0, 0], (6, 7))]
 
 @pytest.mark.parametrize('initial, taps', GENERATORS, ids=['pss', 'sss_x1'])
 def test_balance(initial, taps):
-    """a maximal-length sequence of degree 7 holds 2**6 ones and 2**6 - 1 zeros"""
+    """a maximal-length sequence of degree 7 contains 2**6 ones and 2**6 - 1 zeros"""
     x = np.array(m_sequence(initial, taps, PERIOD), dtype=int)
     assert x.shape == (PERIOD,)
     assert x.sum() == 64

@@ -97,10 +97,10 @@ class TestChannelPowerTimeSeries:
         np.testing.assert_array_equal(da.coords['time_elapsed'].values, expected)
 
     def test_sawtooth_peak_exceeds_rms_by_the_ramp_ratio(self):
-        # a ramp of N samples reaching amplitude A takes the values A*i/N, whose peak
-        # power is (A*(N-1)/N)**2 and mean power A**2*(N-1)*(2*N-1)/(6*N**2); the ratio
-        # 6*(N-1)/(2*N-1) approaches the continuous-ramp value of 3 as N grows. A whole
-        # number of ramps per detector bin makes it exact.
+        # a ramp of N samples reaching amplitude A takes the values A*i/N. Its peak
+        # power is (A*(N-1)/N)**2 and its mean power A**2*(N-1)*(2*N-1)/(6*N**2), so
+        # the ratio 6*(N-1)/(2*N-1) approaches the continuous-ramp value of 3 as N
+        # grows. A whole number of ramps per detector bin makes it exact.
         period = 1e-3
         n = round(period * FS)
         duration = 2 * period
@@ -111,7 +111,7 @@ class TestChannelPowerTimeSeries:
 
         ratio_dB = da.sel(power_detector='peak') - da.sel(power_detector='rms')
         expected = 10 * np.log10(6 * (n - 1) / (2 * n - 1))
-        # the ratio subtracts two levels that each carry the registered budget
+        # the ratio subtracts 2 levels, each within the registered budget
         tol = tolerance(
             CPTS_SPEC.replace(detector_period=detector_period), duration=duration
         )
@@ -167,10 +167,10 @@ class TestChannelPowerTimeSeries:
         ],
     )
     def test_unevenly_tiled_capture_is_rejected(self, kwargs, duration, message):
-        """`detector_period` is 10/3 samples at `sample_rate`, then the capture is 10.5
-        detector periods long, then a detector `stat_ufunc_from_shorthand` does not
-        know. `iq_to_bin_power` and `axis_to_blocks` reject all three once they have
-        IQ; the validator rejects them before any is acquired."""
+        """the cases are a `detector_period` of 10/3 samples at `sample_rate`, a
+        capture 10.5 detector periods long, and a detector `stat_ufunc_from_shorthand`
+        does not know. `iq_to_bin_power` and `axis_to_blocks` reject all 3 once they
+        have IQ; the validator rejects them before any is acquired."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(
             msgspec.ValidationError, match=re.escape(message)
@@ -202,7 +202,7 @@ class TestChannelPowerTimeSeries:
 
     def test_tolerance_accumulates_over_the_detector_bin_not_the_capture(self):
         """each level averages `detector_period * sample_rate` power samples, so the
-        rms budget grows with the detector period; a longer capture at the same
+        rms budget grows with the detector period. A longer capture at the same
         detector period only adds levels, which widens the worst case but not the rms"""
         base = tolerance(CPTS_SPEC)
         longer_bin = tolerance(
@@ -292,10 +292,10 @@ class TestCyclicChannelPower:
         ],
     )
     def test_unevenly_nested_periods_are_rejected(self, kwargs, duration, message):
-        """the three couplings the docstring states: `duration` is 1.5 cycles,
+        """the 3 couplings the measurement docstring states: `duration` is 1.5 cycles,
         `cyclic_period` is 2.5 detector periods, and `detector_period` is 10/3 samples
         at `sample_rate`; then a detector and a quantile that the statistic table does
-        not implement. Each is caught before any IQ is touched, so the error carries
+        not implement. Each is caught before any IQ is touched, so the error names
         the measurement's field path."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(
@@ -356,7 +356,7 @@ class TestCyclicChannelPower:
         assert one_cycle.on_peak.peak > tolerance(CPTS_SPEC).on_peak.peak
 
     def test_quantile_statistic_adds_an_interpolation_rounding(self):
-        """a quantile interpolates between two cycle samples where a selection returns
+        """a quantile interpolates between 2 cycle samples where a selection returns
         one exactly. The tuples have equal length because the peak term also grows
         with the number of output elements."""
         selections = tolerance(
@@ -502,7 +502,7 @@ def test_registered_tolerance_is_a_dB_budget_that_grows_with_input_error(spec):
 @pytest.mark.parametrize('spec', POWER_SPECS, ids=POWER_IDS)
 @pytest.mark.parametrize('input_error', [0.0, 1e-4], ids=['exact', 'noisy'])
 def test_tolerance_is_backend_independent_since_no_fft_is_involved(spec, input_error):
-    """the detectors square, bin and take a log elementwise on either backend, so the
+    """the detectors square, bin, and take a log elementwise on either backend, so the
     budget has no backend term of its own; the FFT roundoff that separates cupy from
     numpy reaches these measurements only through the caller's `input_error`"""
     numpy_tol = tolerance(spec, input_error=input_error, array_backend='numpy')

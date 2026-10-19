@@ -99,7 +99,7 @@ def cellular_ssb_start_time(
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator | specs.Cellular5GNRSSSCorrelator,
 ) -> np.ndarray:
-    # the bare Capture projection carries no center_frequency, so the cell search
+    # the bare Capture projection has no center_frequency, so the cell search
     # case is resolved here as for an unknown band
     params = sync_params(capture, spec, 'pss')
     count = ssb_block_count(params.duration, spec)
@@ -134,9 +134,9 @@ def validated_5g_ssb_sync_params(
 ) -> sw.comms_5gnr.SyncParams:
     """check the SSB correlator sizing of a capture and return its `sw.comms_5gnr.SyncParams`.
 
-    The parameters come from `sss_params`, the stricter of the two builders, which
-    reaches every check in `pss_params`; one validator therefore serves the PSS and SSS
-    measurements alike. Building them warms the `get_3gpp_phy` design that the
+    `sss_params` is the stricter of the two builders and reaches every check in
+    `pss_params`, so one validator serves the PSS and SSS measurements. Building the
+    parameters warms the `get_3gpp_phy` design that the
     correlators would otherwise pay for after the acquisition. The resampler sizes
     checked are those `get_5g_ssb_iq` produces from the whole capture.
 
@@ -144,7 +144,7 @@ def validated_5g_ssb_sync_params(
         ValueError: if `spec.frequency_offset` is not a multiple of the resampler
             frequency step (the reciprocal of the capture duration), if the capture
             cannot be resampled to `spec.sample_rate` about that offset, or if the
-            resampled block does not hold whole 10 ms frames
+            resampled block does not contain whole 10 ms frames
     """
     params = sync_params(capture, spec, 'sss')
 
@@ -200,8 +200,8 @@ def get_5g_ssb_iq(
 
     The band centered at `spec.frequency_offset` (in Hz from the capture center) is
     shifted to 0 Hz and resampled from `capture.sample_rate` to `spec.sample_rate`. The
-    result is cached per (capture, `spec`) by `ssb_iq_cache`, so the PSS and SSS
-    correlators share one resampling.
+    returned array is cached per (capture, `spec`) by `ssb_iq_cache`, so the PSS and
+    SSS correlators share one resampling.
 
     Args:
         iq: shape (port, sample), at `capture.sample_rate`
@@ -233,7 +233,7 @@ def cellular_stft_window_fractions(
     The fractions hold only at a frequency resolution of half the subcarrier spacing,
     where one FFT window spans 2 subcarrier periods and a slot spans 15 of them (3GPP TS
     38.211 §5.3.1). `window_fill` is the mean share of one window occupied by a single
-    OFDM symbol and its cyclic prefix, which the hop then matches; `fractional_overlap`
+    OFDM symbol and its cyclic prefix, which the hop then matches. `fractional_overlap`
     is the remainder, so the two fractions lie in (0, 1) and sum to 1. `cyclic_prefix`
     selects the 14- or 12-symbol slot.
     """
@@ -310,7 +310,7 @@ def cellular_5g_pss_sync(
 
     The PSS correlation of `cellular_5g_pss_correlation` is reduced by
     `sw.comms_5gnr.choose_ssb_offset` to one lag per port, or to one lag across the ports
-    when `per_port` is False, and offset by `delay`. The result is registered as a
+    when `per_port` is False, and offset by `delay`. The measurement is registered as a
     `signal_trigger`, so a source spec can use it to align captures.
 
     Args:
@@ -342,7 +342,7 @@ def cellular_5g_pss_correlation(
     The IQ is shifted and resampled to the sync block by `get_5g_ssb_iq`, then
     cross-correlated with the PSS sequence of each cell sector ID. The output is the
     complex correlation (in √mW per `sample_rate` of bandwidth) with dimensions
-    `cellular_cell_id2`, `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index`
+    `cellular_cell_id2`, `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index`,
     and `cellular_ssb_lag` (in s), truncated to the first `max_block_count` sync blocks
     when that is set.
 
@@ -432,7 +432,7 @@ def cellular_5g_sss_sync(
 
     The SSS correlation of `cellular_5g_sss_correlation` is reduced by
     `sw.comms_5gnr.choose_ssb_offset` to one lag per port, or to one lag across the ports
-    when `per_port` is False, and offset by `delay`. The result is registered as a
+    when `per_port` is False, and offset by `delay`. The measurement is registered as a
     `signal_trigger`, so a source spec can use it to align captures.
 
     Args:
@@ -464,7 +464,7 @@ def cellular_5g_sss_correlation(
     The IQ is shifted and resampled to the sync block by `get_5g_ssb_iq`, then
     cross-correlated with the SSS sequences. The output is the complex correlation (in
     √mW per `sample_rate` of bandwidth) with dimensions `cellular_cell_id2`,
-    `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index` and `cellular_ssb_lag`
+    `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index`, and `cellular_ssb_lag`
     (in s), truncated to the first `max_block_count` sync blocks when that is set.
 
     References:
@@ -556,7 +556,7 @@ def validated_ssb_spectrogram_sizing(
 ) -> spectrum.SpectrogramSizing:
     """check the STFT sizing of the SSB spectrogram and return it.
 
-    The 3GPP cell-search parameters are not consulted: the measurement lays symbols out
+    The 3GPP cell-search parameters are not consulted. The measurement lays symbols out
     from `subcarrier_spacing` and `discovery_periodicity` alone, and unlike the
     correlators it has no `symbol_indexes` field to pick a search case with.
 
@@ -600,12 +600,12 @@ def validated_ssb_spectrogram_sizing(
 
 
 def _burst_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
-    """return the OFDM symbol count of the first 2 ms of a frame, the SSB burst set"""
+    """return the OFDM symbol count of the SSB burst set in the first 2 ms of a frame"""
     return round(28 * spec.subcarrier_spacing / 15e3)
 
 
 def _discovery_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
-    # TODO: this is normal CP; support extended CP?
+    # normal cyclic prefix only (14 symbols per slot)
     symbol_period = sw.comms_5gnr.slot_period(spec.subcarrier_spacing) / 14
     discovery_symbols = round(spec.discovery_periodicity / symbol_period)
     if discovery_symbols < 1:
@@ -650,7 +650,7 @@ def cellular_5g_ssb_spectrogram(
 
     The output is power spectral density (in dB, float16) with dimensions
     `cellular_ssb_index` (burst set within the capture), `cellular_ssb_symbol_index`
-    (OFDM symbol within the burst set) and `cellular_ssb_baseband_frequency` (in Hz,
+    (OFDM symbol within the burst set), and `cellular_ssb_baseband_frequency` (in Hz,
     relative to `frequency_offset`).
 
     References:
@@ -673,7 +673,7 @@ def cellular_5g_ssb_spectrogram(
         dtype='float16',
     )
 
-    # keep only the first two slots in the frame
+    # keep only the first 2 slots in the frame
     symbol_index = np.arange(spg.shape[1])
     mask_time = (symbol_index % discovery_symbols) < symbol_count
     spg = spg[:, mask_time]
@@ -723,17 +723,17 @@ def tdd_config_from_str(
 ) -> NormalizedTDDSlotConfig:
     """generate a symbol-by-symbol sequence of masking arrays for uplink and downlink.
 
-    The number of slots given in the frame match the appropriate number for a given
-    5G NR or LTE subcarrier spacing.
+    `frame_slots` must have the slot count of one 10 ms frame at `subcarrier_spacing`
+    for 5G NR or LTE.
 
     Arguments:
         frame_slots: a string composed of the characters {'d', 'u', 's'} that
             indicate the sequence of slots in 1 cellular frame (or None for all downlink)
-        special_symbols: the a string composed of the characters {'d', 'u', 'f'} that
+        special_symbols: a string composed of the characters {'d', 'u', 'f'} that
             indicate the sequence of symbol types in the special slot (or None for all downlink)
 
     Returns:
-        a NormalizedTDDSlotConfig object containing more detailed parameters
+        the `NormalizedTDDSlotConfig` with the per-symbol code maps and slot indexes
     """
 
     expect_slot_count = round(10 * subcarrier_spacing / 15e3)
@@ -946,10 +946,10 @@ def validated_autocorrelation_lag_count(
 
     `tdd_config_from_str` owns the `frame_slots` rules and `_get_spec_range` the
     open-ended-range rule. The lag axis length is the longest, across the requested
-    subcarrier spacings, of each spacing's shortest OFDM symbol (in samples), and
-    computing it warms the `get_3gpp_phy` design for each of them. The index bounds are
+    subcarrier spacings, of each spacing's shortest OFDM symbol (in samples).
+    Computing it warms the `get_3gpp_phy` design for each of them. The index bounds are
     those of `Phy3GPP.index_cyclic_prefix`, whose frame axis is not bounds-checked
-    against the waveform: a frame past the end of the capture reads zeros into the
+    against the waveform. A frame past the end of the capture reads zeros into the
     correlation.
 
     Raises:
@@ -1032,7 +1032,7 @@ def cellular_cyclic_autocorrelation(
     {args}
 
     Returns:
-        an float32-valued array with matching the array type of `iq`
+        a float32 array in the array namespace of `iq`
     """
 
     spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
@@ -1170,7 +1170,6 @@ def apply_mask(
     """
 
     if isinstance(link_direction, str):
-        # ensure link_direction is a tuple
         link_direction = (link_direction,)
 
     if (
@@ -1236,12 +1235,12 @@ def build_tdd_link_symbol_masks(
             None masks them from both
 
     Returns:
-        float32 array of shape (len(`link_direction`), `count`), holding 1 where a
+        float32 array of shape (len(`link_direction`), `count`), with 1 where a
         symbol carries the link direction and NaN elsewhere
 
     Raises:
         ValueError: if `frame_slots` has the wrong length for `subcarrier_spacing` or
-            either string holds characters outside its alphabet
+            either string contains characters outside its alphabet
     """
 
     tdd_config = tdd_config_from_str(
@@ -1319,8 +1318,8 @@ def validated_resource_grid_sizing(
     """check the frame layout and STFT sizing of the resource grid and return them.
 
     `tdd_config_from_str` owns the `frame_slots` and `special_symbols` rules. Slot
-    averaging must land on a whole number of STFT hops, a check the spectrogram sizing
-    cannot make because the time aperture is derived here rather than given.
+    averaging must land on a whole number of STFT hops. The spectrogram sizing cannot
+    make that check because the time aperture is derived here rather than given.
 
     Raises:
         ValueError: if `frame_slots` requests a special slot without `special_symbols`,
@@ -1432,8 +1431,8 @@ def cellular_resource_power_histogram(
         xp=xp,
     )
 
-    # apply the time binning only now, to allow for averaging
-    # across mask boundaries
+    # the time binning follows the mask to allow for averaging across mask
+    # boundaries
     if sizing.time_bin_averaging is not None:
         masked_spgs = sw.binned_mean(
             masked_spgs, sizing.time_bin_averaging, axis=2, fft=False

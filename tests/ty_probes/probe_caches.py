@@ -45,7 +45,8 @@ def probe(cap: sa.specs.Capture, spec: sa.specs.ChannelPowerTimeSeries) -> None:
     stacked('x')  # ty: ignore[invalid-argument-type]
 
     assert_type(converted(cap, spec), list[float])
-    # the converted leading argument is `Any` on purpose: the cache converts it first
+    # the converted leading argument is `Any` on purpose because the cache converts
+    # it first
     converted(object(), spec)
     converted(cap, cap)  # ty: ignore[invalid-argument-type]
     converted(cap, spec, n='x')  # ty: ignore[invalid-argument-type]

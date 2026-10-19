@@ -79,7 +79,7 @@ POSITIVE_SCALARS = st.floats(
     min_value=1e-10, max_value=1e10, allow_nan=False, allow_infinity=False
 )
 
-# (function, dB per decade) for the two logarithmic conversions
+# (function, dB per decade) for the 2 logarithmic conversions
 LOG_CONVERSIONS = [(powtodB, 10), (envtodB, 20)]
 by_log_conversion = pytest.mark.parametrize(
     'func, scale', LOG_CONVERSIONS, ids=[func_id(f) for f, _ in LOG_CONVERSIONS]
@@ -221,7 +221,8 @@ class TestInPlaceComplexInput:
     def test_overwrite_x_writes_magnitude_dB_into_real_part(
         self, xp, func, scale, dtype
     ):
-        """the result is scale*log10(|z|) in the real dtype of z, held in z's real part"""
+        """the result is scale*log10(|z|) in the real dtype of z, written into z's real
+        part"""
         magnitude = np.array([1e-3, 0.5, 1.0, 2.0, 1e3], dtype=np.float64)
         phase = np.linspace(0, np.pi, magnitude.size)
         z = as_xp(xp, (magnitude * np.exp(1j * phase)).astype(dtype))
@@ -235,7 +236,7 @@ class TestInPlaceComplexInput:
 
 
 class TestEdgeCases:
-    """Properties: Behavior at edge cases (zeros, extreme values)."""
+    """Properties: zero inputs, the bounded zero floor, and empty arrays."""
 
     @by_log_conversion
     def test_zero_produces_neg_inf(self, func, scale):
@@ -549,10 +550,10 @@ class TestRoundoffModels:
 
 
 class TestNumpyCupyCrossComparison:
-    """Cross-comparison tests validating numpy and cupy produce close results.
+    """Cross-comparison of the numpy and cupy results of each conversion.
 
     Tolerances come from the ulp budgets in striqt.waveform.lib.power, so a
-    difference larger than the two libraries' rounding bounds fails the test.
+    difference larger than the 2 libraries' rounding bounds fails the test.
     """
 
     @pytest.mark.parametrize(

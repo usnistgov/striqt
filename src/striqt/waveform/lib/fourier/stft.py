@@ -69,11 +69,10 @@ def stft(
     return_axis_arrays=True,
     out=None,
 ) -> tuple[_AT, _AT, _AT]:
-    """Implements a stripped-down subset of scipy.fft.stft in order to avoid
-    some overhead that comes with its generality and allow use of the generic
-    python array-api for interchangable numpy/cupy support.
+    """compute a reduced-parameter STFT in the style of `scipy.signal.stft` on numpy
+    or cupy arrays.
 
-    For additional information, see help for scipy.fft.
+    See `scipy.signal.stft` for the definition.
 
     Args:
         x: input array
@@ -93,11 +92,11 @@ def stft(
     Raises:
         NotImplementedError: if axis != 0
 
-        ValueError: if truncate == False and x.shape[axis] does not hold a whole
+        ValueError: if truncate == False and x.shape[axis] is not a whole
             number of segments at the given nperseg and noverlap
 
     Returns:
-        stft (see scipy.fft.stft)
+        stft (see `scipy.signal.stft`)
 
     """
 
@@ -235,10 +234,9 @@ def _stack_stft_windows(
     axis: int = 0,
     out=None,
 ) -> Array:
-    """add overlapping windows at appropriate offset _to_overlapping_windows, returning a waveform.
+    """stack the overlapping windowed segments of `x` on a new axis at `axis + 1`.
 
-    Compared to the underlying stft implementations in scipy and cupyx.scipy, this has been simplified
-    to a reduced set of parameters for speed.
+    The parameter set is a subset of that of `scipy.signal.stft`.
 
     Args:
         x: the 1-D waveform (or N-D tensor of waveforms)
@@ -270,14 +268,15 @@ def _unstack_stft_windows(
 ) -> Array:
     """reconstruct the time-domain waveform from its STFT representation.
 
-    Compared to the underlying istft implementations in scipy and cupyx.scipy, this has been simplified
-    for speed at the expense of memory consumption.
+    The parameter set is a subset of that of `scipy.signal.istft`. The reconstruction
+    sums whole groups of non-overlapping windows, which costs memory relative to the
+    scipy implementation.
 
     Args:
         y: the stft output, containing at least 2 dimensions
         noverlap: the overlap size that was used to generate the STFT (see scipy.signal.stft)
         axis: the axis of the first dimension of the STFT (the second is at axis+1)
-        out: if specified, the output array that will receive the result. it must have at least the same allocated size as y
+        out: the array that receives the result; it must have at least the allocated size of `y`
     """
 
     xp = array_namespace(y)
@@ -357,12 +356,10 @@ def downsample_stft(
     axis=0,
     out=None,
 ) -> tuple[Array, Array]:
-    """downsample and filter an STFT representation of a filter in the frequency domain.
+    """downsample an STFT in the frequency domain by trimming to `nfft_out` bins.
 
-    * This is rational downsampling by a factor of `nout/xstft.shape[axis+1]`,
-      shifted if necessary to center the passband.
-    * One approach to selecting `nfft_out` for this purpose is the use
-      of `design_ola_filter`.
+    The downsampling ratio is ``nfft_out / y.shape[axis + 1]``, and the kept bins are
+    shifted to center the passband. `design_oafilter` selects an `nfft_out`.
 
     Arguments:
         freqs: the list of FFT bin center frequencies
@@ -370,7 +367,7 @@ def downsample_stft(
         nfft_out: the number of points in the output fft
 
     Returns:
-        A tuple containing the new `freqs` range and trimmed `xstft`
+        A tuple containing the new `freqs` range and the trimmed `y`
     """
     xp = array_namespace(y)
     ax = axis + 1
@@ -388,8 +385,7 @@ def downsample_stft(
     freqs_out = _find_downsampled_freqs(nfft_out, freq_step, xp=xp)
 
     if tuple(bounds_out) == (0, shape_out[ax]) and _same_base_memory(y, out):
-        # fast path: a view if both no zeroing is needed and the
-        # output buffer shares underlying y
+        # fast path: a view when no bins are zeroed and `out` shares memory with `y`
         return freqs_out, axis_slice(y, *bounds_in, axis=ax)
 
     if out is None:
@@ -433,7 +429,7 @@ def _find_downsample_copy_range(
     assert copy_in_end - copy_in_start == copy_size
 
     # copy output indexes, anchored so that the passband center lands on the
-    # output DC bin: splitting the zeroed bins evenly puts it one bin low when
+    # output DC bin. Splitting the zeroed bins evenly would put it one bin low when
     # their count is odd, which inverts alternate frames at 50% overlap
     copy_out_start = nfft_out // 2 - (passband_center - copy_in_start)
     copy_out_end = copy_out_start + copy_size

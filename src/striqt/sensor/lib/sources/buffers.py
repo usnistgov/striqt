@@ -136,7 +136,7 @@ def get_read_count(
 
     if compute.needs_resample(resampler_design, capture):
         nfft = resampler_design['nfft']
-        # round, not ceil: the resampler pad is built from round(duration*fs_sdr)
+        # round, not ceil, to match the resampler pad built from round(duration*fs_sdr)
         min_samples_in = round(samples_out * nfft / resampler_design['nfft_out'])
         samples_in = min_samples_in + overlap
     else:
@@ -198,9 +198,8 @@ def _alloc_empty_iq(
     else:
         samples = all_samples = prior
 
-    # build the list of channel buffers that will actuall be filled with data,
-    # including references to the throwaway buffer of extras in case of
-    # source.setup_spec.stream_all_rx_ports
+    # the channel buffers that the stream fills. under stream_all_rx_ports, ports
+    # outside the capture point at a throwaway buffer
     num_rx_ports = controller.source_info.min_port_count(len(ports))
     if controller.source_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
         if controller.source_spec.transport_dtype == 'complex64':
@@ -241,7 +240,7 @@ def find_trigger_holdoff(
     sample_rate = resampler['fs_sdr']
     min_holdoff = start_overlap
 
-    # transient holdoff if we've rearmed as indicated by the presence of carryover samples
+    # a rearm leaves no carryover samples and requires the transient holdoff
     if buffers.start_time_ns is None:
         min_holdoff = min_holdoff + round(
             source_spec.transient_holdoff_time * sample_rate
@@ -253,7 +252,7 @@ def find_trigger_holdoff(
 
     trigger_strobe_ns = round(trigger_strobe * 1e9)
 
-    # float rounding errors cause problems here; evaluate based on the 1-ns resolution
+    # integer ns arithmetic avoids the float rounding error in the modulo
     excess_time_ns = start_time_ns % trigger_strobe_ns
     holdoff_ns = (trigger_strobe_ns - excess_time_ns) % trigger_strobe_ns
     holdoff = round(holdoff_ns / 1e9 * sample_rate)
@@ -267,7 +266,7 @@ def find_trigger_holdoff(
 
 def cast_iq(spec: specs.Source, buffer: 'Array', acquired_count: int) -> 'Array':
     """cast the buffer to floating point, if necessary"""
-    # array_namespace will categorize cupy pinned memory as numpy
+    # array_namespace categorizes cupy pinned memory as numpy
     dtype_in = np.dtype(spec.transport_dtype)
 
     if spec.array_backend == 'cupy':
@@ -279,13 +278,13 @@ def cast_iq(spec: specs.Source, buffer: 'Array', acquired_count: int) -> 'Array'
         buffer = xp.array(buffer)
     assert xp is not None
 
-    # what follows is some acrobatics to minimize new memory allocation and copy
+    # the views below cast in place to avoid a second allocation and copy
     if dtype_in.kind == 'i':
         # the same memory buffer, interpreted as int16 without casting
         buffer_int16 = buffer.view('int16')[:, : 2 * acquired_count]
         buffer_float32 = buffer.view('float32')[:, : 2 * acquired_count]
 
-        # in-place cast from the int16 samples, filling the extra allocation in self.buffer
+        # in-place cast from the int16 samples, filling the extra allocation in `buffer`
         xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
 
         # re-interpret the interleaved (float32 I, float32 Q) values as a complex value
@@ -315,7 +314,7 @@ def is_reusable(
     Reuse requires the same radio sample rate and LO offset from `design_resampler`
     at `mcr`, an `analysis_bandwidth` that is finite for both or infinite for both,
     and equality on every other field except `sample_rate`, `host_resample`,
-    `backend_sample_rate` and `adjust_analysis`. `None` for either capture is never
+    `backend_sample_rate`, and `adjust_analysis`. `None` for either capture is never
     reusable.
     """
 

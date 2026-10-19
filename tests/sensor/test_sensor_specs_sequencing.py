@@ -219,7 +219,7 @@ def test_a_bad_loop_point_names_its_position_in_the_declared_loops(only_fields):
     bad_index = len(loops) - 1
 
     match = re.escape(f'$.loops[{bad_index}]: Expected `float`, got `str`')
-    # the expansion rather than a Sweep, which no longer constructs with a bad point
+    # the expansion rather than a Sweep, which rejects a bad point at construction
     with pytest.raises(msgspec.ValidationError, match=match):
         S._expand_capture_loops_with_origins(
             (make_capture(),), loops, only_fields=only_fields

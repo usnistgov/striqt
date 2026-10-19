@@ -197,9 +197,9 @@ def decode_from_yaml_file(
         Path to the YAML file.
     type : type, optional
         A type that is a subclass of `striqt.analysis.specs.SpecBase`
-        to decode the object as. If provided, the message will be type checked
+        to decode the object as. If provided, the message is type checked
         and decoded as the specified type. Defaults to `Any`, in which case
-        the message will be decoded using the default YAML types.
+        the message is decoded using the default YAML types.
 
     Returns
     -------
@@ -742,8 +742,8 @@ _YAMLFrozenLoader.add_constructor(
 def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
     """expand the ``!include`` patterns in `node` into sorted absolute paths.
 
-    Relative patterns are globbed under `root_dir`, the directory of the file
-    that contains the tag.
+    Relative patterns are globbed under `root_dir`, which is the directory of the
+    file that contains the tag.
     """
 
     def glob_path(s: str) -> list[str]:

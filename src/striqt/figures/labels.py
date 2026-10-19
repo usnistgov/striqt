@@ -148,9 +148,9 @@ def label_axis(
     ax: typing.Optional['matplotlib.axes.Axes' | list['matplotlib.axes.Axes']] = None,
     fig: typing.Optional['matplotlib.figure.Figure'] = None,
 ):
-    """apply axis labeling based on label and unit metadata in the specified dimension of `a`.
+    """label an axis from the `standard_name` and `units` attrs of `ax_data` or of its coordinate `coord_name`.
 
-    If dimension is None, then labeling is applied from metadata in a.attrs
+    When `coord_name` is None, the units come from `ax_data.attrs`.
     """
 
     from . import ticker
@@ -260,7 +260,7 @@ def label_legend(
     tick_units=True,
     ax: typing.Optional['matplotlib.axes.Axes'] = None,
 ) -> 'matplotlib.legend.Legend':
-    """apply legend labeling based on label and unit metadata in the specified dimension of `a`"""
+    """label a legend from the `standard_name` and `units` attrs of `data` or of its coordinate `coord_name`"""
     from . import ticker
     import matplotlib.pyplot as plt
 
@@ -281,7 +281,7 @@ def label_legend(
         if units is not None and not tick_units:
             standard_name = f'{standard_name} ({units})'
     if units is not None:
-        # TODO: implement tick_units
+        # the formatter ignores tick_units and places the unit in every entry
         formatter = ticker.EngFormatter(unit=units, unitInTick=True)
         legend_data = [formatter(v) for v in values]
     else:

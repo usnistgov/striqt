@@ -1,6 +1,6 @@
 # A plotting environment for notebooks
 
-# Set up the plotting environment for notebooks that convert cleanly
+# Set up the plotting environment for notebooks that are exported
 # to pdf or html output.
 from __future__ import annotations
 import datetime
@@ -55,8 +55,10 @@ FigureCanvasSVG.print_svg, FigureCanvasSVG._ps = (  # type: ignore
 
 @functools.wraps(backend_inline.set_matplotlib_formats)
 def set_matplotlib_formats(formats, *args, **kws):
-    """apply wrappers to inject title (from figure or axis titles) and caption (from set_caption metadata),
-    when available, into image 'Title' metadata
+    """apply wrappers that write the figure title and caption into the image 'Title' metadata.
+
+    The title comes from the figure suptitle or the last axis title. The caption comes
+    from `set_caption`.
     """
 
     backend_inline.set_matplotlib_formats(formats, *args, **kws)
@@ -103,9 +105,10 @@ def set_matplotlib_formats(formats, *args, **kws):
 
 
 def set_caption(*args):
-    """sets the caption in a jupyter notebook for the
+    """set the caption of a figure in a jupyter notebook.
 
-    Usage: either set_caption(fig, text) or set_caption(text) to use the current figure
+    Call as ``set_caption(fig, text)``, or as ``set_caption(text)`` for the current
+    figure.
     """
     global _captions
 

@@ -146,7 +146,7 @@ class TestFftfreq:
     def test_as_index_false_matches_exact(self, nfft, fs):
         exact = fftfreq(nfft, fs)
         approx = fftfreq(nfft, fs, as_index=False)
-        # linspace endpoints carry a few ulps of fs/2
+        # linspace endpoints are off by a few ulps of fs/2
         eps = np.finfo(np.float64).eps
         assert_allclose(approx, exact, rtol=0, atol=8 * eps * fs)
         assert fftfreq(nfft, fs, dtype='float32', as_index=False).dtype == (np.float32)
@@ -273,7 +273,7 @@ class TestOffPeakFloor:
     array namespace.
 
     With an integer number of cycles per segment (and a rectangular window for the
-    STFT) the exact spectrum occupies one bin, the on-peak bin, so every other bin
+    STFT) the exact spectrum occupies the on-peak bin alone, so every other bin
     measures roundoff alone against a float64 reference of the same float32-quantized
     input. For the time-domain outputs of resample and oaconvolve the bins are those
     of the error spectrum, taken in float64 so the analysis adds no roundoff of its
@@ -311,7 +311,7 @@ class TestOffPeakFloor:
         off_peak = np.ones(size, dtype=bool)
         off_peak[int(np.argmax(np.abs(np.fft.fft(out_ref))))] = False
 
-        # unnormalized fft: the unit tone peaks at size
+        # the fft is unnormalized, so the unit tone peaks at size
         self._assert_off_peak_bins(err[off_peak], size, size, sigma)
 
     @staticmethod
@@ -375,7 +375,7 @@ class TestOffPeakFloor:
     )
     def test_oaconvolve_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         x = self._bin_centered_tone(nfft, tone_bin(nfft, bin_fraction))
-        # a unit-gain lowpass; the tone may land in its stopband, so bounds are
+        # a unit-gain lowpass; the tone may fall in its stopband, so bounds are
         # anchored to the input tone rather than the output
         kernel = np.hanning(self.KERNEL_TAPS).astype(np.float32)
         kernel /= kernel.sum()

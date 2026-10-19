@@ -17,7 +17,7 @@ def lazy_import(module_name: str, package=None):
     """postponed import of the module with the specified name.
 
     The import is not performed until the module is accessed in the code. This
-    reduces the total time to import labbench by waiting to import the module
+    reduces the total time to import striqt by waiting to import the module
     until it is used.
     """
     # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
@@ -78,8 +78,8 @@ _caches = {}
 def lru_cache(
     maxsize: int | None = 128, typed: bool = False
 ) -> 'Callable[[Callable[P, R]], LRUWrapped[P, R]]':
-    # presuming that the API is designed to accept only hashable types, set
-    # the type hint to match the wrapped function
+    # the type hint matches the wrapped function, which is assumed to take only
+    # hashable arguments
     func = functools.lru_cache(maxsize, typed)
 
     @functools.wraps(func)
@@ -96,9 +96,10 @@ def _cache_shelf_path() -> str:
 
     dir = Path(platformdirs.user_cache_dir('striqt'))
     dir.mkdir(parents=True, exist_ok=True)
-    # Use version-specific cache file to avoid cross-version pickle issues
+    # pickles written by one Python version may not load in another, so the cache
+    # file is per version
     pyver = f'{sys.version_info.major}.{sys.version_info.minor}'
-    return str(dir / f'calls-py{pyver}.db')  # python 3.9 shelve wants str
+    return str(dir / f'calls-py{pyver}.db')  # python 3.9 shelve requires str
 
 
 _cache_shelf_disabled = False
@@ -107,10 +108,10 @@ _cache_shelf_disabled = False
 def _discard_cache_shelf(ex: BaseException) -> None:
     """disable the disk cache for this process and delete its files.
 
-    A fault in the shelf must never fail a call that has a working uncached path,
-    and it does happen: the macOS dbm backend corrupts once the cache evicts, and
-    the `UnicodeDecodeError` it then raises subclasses `ValueError`, so letting it
-    propagate gets a machine-local fault mistaken for a bad argument several layers
+    A fault in the shelf must never fail a call that has a working uncached path.
+    The macOS dbm backend corrupts once the cache evicts, and the
+    `UnicodeDecodeError` it then raises subclasses `ValueError`. Propagating that
+    error gets a machine-local fault mistaken for a bad argument several layers
     up. The files hold nothing that cannot be recomputed. A `UserWarning` names the
     deleted files and `ex`.
     """
@@ -177,15 +178,15 @@ def persistent_cache(
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """memoize a function's results in a shelf on disk that survives across processes.
 
-    The shelf holds at most `maxsize` entries; which entry is evicted past that
+    The shelf holds at most `maxsize` entries. Which entry is evicted past that
     limit is unspecified, since the access order is rebuilt from the shelf's key
     iteration on every call rather than tracked. `get_window` and `design_fir_lpf`
     stack it under `lru_cache`, which supplies the in-memory LRU behavior.
 
-    The cache is best-effort: a fault reading or writing the shelf (an unpicklable
-    result included) disables it for the process, deletes its files
-    (`_discard_cache_shelf`) and lets the call proceed uncached, so only the wrapped
-    function's own exceptions reach its caller.
+    A fault reading or writing the shelf (an unpicklable result included) disables
+    the cache for the process, deletes its files (`_discard_cache_shelf`), and lets
+    the call proceed uncached. Only the wrapped function's own exceptions reach its
+    caller.
     """
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:

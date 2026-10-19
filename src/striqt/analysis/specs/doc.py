@@ -6,10 +6,7 @@ import types
 
 
 def format_type_hint(hint) -> str:
-    """
-    Recursively formats a Python type hint into a clean, readable string,
-    replacing the need for Sphinx's stringify_annotation.
-    """
+    """format a type hint as a string, recursing into its arguments."""
     # 1. Base cases: None, Any, and Ellipsis
     if hint is None or hint is type(None):
         return 'None'
@@ -22,7 +19,7 @@ def format_type_hint(hint) -> str:
     args = typing.get_args(hint)
 
     if origin:
-        # modern pipe syntax for unions
+        # unions, including the pipe syntax
         if origin is typing.Union or (
             hasattr(types, 'UnionType') and origin is types.UnionType
         ):
@@ -32,7 +29,7 @@ def format_type_hint(hint) -> str:
         if origin is typing.Literal:
             return f'Literal[{", ".join(repr(a) for a in args)}]'
 
-        # Get the clean name of the container (e.g., 'list', 'dict', 'tuple')
+        # the container name without the module path (e.g., 'list', 'dict', 'tuple')
         origin_name = getattr(origin, '__name__', str(origin)).replace('typing.', '')
 
         # Recurse through the arguments
@@ -46,13 +43,12 @@ def format_type_hint(hint) -> str:
     if hasattr(hint, '__name__'):
         return hint.__name__
 
-    # fallback for edge cases
+    # fallback for hints without a `__name__`
     return str(hint).replace('typing.', '')
 
 
 def clean_type_string(type_str):
-    """Applies string replacements to clean up Literal and module paths."""
-    # 1. Clean up Literal
+    """rewrite ``Literal[`` as ``one of [`` in a type string."""
     import re
 
     type_str = re.sub(r'\bLiteral\[', 'one of [', type_str)
@@ -65,9 +61,11 @@ def clean_type_string(type_str):
 
 
 def parse_type_and_meta(hint):
-    """
-    Recursively walks a type hint to extract msgspec.Meta objects.
-    Safely handles Literal values, Ellipsis, Unions, and generic containers.
+    """extract the `msgspec.Meta` objects from a type hint and its arguments.
+
+    Returns:
+        the hint with its `Annotated` wrappers removed, and the list of metas;
+        `Literal` values and Ellipsis are returned unchanged
     """
 
     origin = typing.get_origin(hint)
@@ -111,9 +109,10 @@ def parse_type_and_meta(hint):
 
 @functools.cache
 def describe_msgspec_fields(obj: type[msgspec.Struct]):
-    """
-    Extracts descriptions, constraints, and clean type strings from a msgspec.Struct.
-    Returns a tuple of two dictionaries: (descriptions, types).
+    """return the ``(descriptions, types)`` dicts of a `msgspec.Struct`, keyed by field.
+
+    Descriptions come from `Meta.description` with the constraints appended; types are
+    formatted by `format_type_hint`.
     """
     descriptions = {}
     types = {}
@@ -174,15 +173,14 @@ def describe_msgspec_fields(obj: type[msgspec.Struct]):
 def struct_args_docstring(
     obj, indent_spaces: int = 4, extra_prepend={}, extra_append={}, extra_types={}
 ) -> str:
-    """
-    Generates a 'Args:' docstring block from parsed field metadata.
+    """generate an ``Args:`` docstring block from the field metadata of `obj`.
 
     Args:
         obj: the Struct to document
         indent_spaces (int): The number of spaces to indent the arguments.
 
     Returns:
-        str: A fully formatted Google-style docstring segment.
+        str: the Google-style ``Args:`` entries, one per field, separated by blank lines
     """
     if not isinstance(obj, type):
         obj = type(obj)
@@ -197,8 +195,8 @@ def struct_args_docstring(
     lines = []
     base_indent = ' ' * indent_spaces
 
-    # We iterate over descriptions.keys() assuming describe_msgspec_fields
-    # populates both dictionaries with the exact same keys in the same order.
+    # `describe_msgspec_fields` populates both dicts with the same keys in the same
+    # order, so iterating `descriptions` covers `types`
     for field_name in descriptions.keys():
         type_str = types.get(field_name, 'Any')
         desc = descriptions.get(field_name, '')

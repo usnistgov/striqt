@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 class lookup:
     """asynchronous lookup of controller objects, connection status, or source ID.
 
-    This assumes that a source instantiation is in progress or will be
-    within `timeout` seconds. Otherwise, `TimeoutError` is raised.
+    A source instantiation must be in progress or begin within `timeout` seconds.
+    Otherwise, `TimeoutError` is raised.
     """
 
     _obj: dict[specs.Source, 'PendingSlot'] = defaultdict(Event)
@@ -43,7 +43,7 @@ class lookup:
     def _get(cls, spec: specs.Source) -> PendingController:
         """return the controller, pending event or stored exception for `spec`.
 
-        The registry holds controllers weakly, so a controller that nothing else
+        The registry references controllers weakly, so a controller that nothing else
         references is finalized by the collector and its slot reverts to a pending
         event. A dead reference seen before its callback ran is cleared here.
         """
@@ -71,7 +71,6 @@ class lookup:
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
         elif isinstance(obj, Controller):
-            # already have this source!
             return obj
         else:
             obj.wait(timeout)
@@ -83,9 +82,9 @@ class lookup:
         elif isinstance(obj, Controller):
             return obj
         else:
-            # a canceled open may never register a controller at all; report the
-            # cancellation, which ExceptionStack makes yield to the error that caused
-            # it, rather than a timeout that would mask it
+            # a canceled open may never register a controller at all. Report the
+            # cancellation rather than a timeout. ExceptionStack makes an interrupt
+            # yield to the error that caused it; a timeout would mask that error
             util.propagate_thread_interrupts()
             raise TimeoutError('no controller instance initializing given spec')
 
@@ -481,8 +480,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     ):
         """set the formatter to use to expand calibration file formatting fields.
 
-        This is needed if calibration is defined in the source spec with format fields
-        like `{name}`.
+        A formatter is required when the source spec defines `calibration` with
+        format fields like ``{name}``.
         """
         if format_path is None or isinstance(format_path, specs.paths.PathFormatter):
             self._config.format_path = format_path
@@ -557,11 +556,10 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             request_count = min(chunk_count, remaining)
 
             if (received_count + request_count) > buffer_count:
-                # this could happen if there is a slight mismatch between
-                # the requested and realized sample rate
+                # a slight mismatch between the requested and realized sample rate
+                # can push the request past the buffer
                 break
 
-            # Read the samples from the data buffer
             this_count, ret_time_ns = self.backend.read(
                 stream_bufs,
                 offset=carryover_count + received_count,
@@ -609,9 +607,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
             capture=self._capture,
         )
 
-        # it seems to be important to convert to cupy here in order
-        # to get a full view of the underlying pinned memory. cuda
-        # memory corruption has been observed when waiting until after
+        # convert to cupy before slicing, over the whole pinned buffer. Converting
+        # after the slice has produced CUDA memory corruption
         samples = buffers.cast_iq(self.source_spec, samples, buffer_count)
 
         return samples[:, sample_span], start_ns
@@ -620,7 +617,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     def acquire(self, overlaps: tuple[int, int] | None = None) -> specs.AcquiredIQ:
         """acquire IQ samples needed for the armed capture."""
 
-        self.capture_spec  # ensure we are armed
+        self.capture_spec  # raises AttributeError when no capture is armed
         signal_trigger = None
 
         if isinstance(overlaps, tuple):

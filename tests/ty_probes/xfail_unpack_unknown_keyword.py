@@ -1,7 +1,7 @@
-"""an unknown keyword through `**kwargs: Unpack[TypedDict]` should be rejected.
+"""an unknown keyword through `**kwargs: Unpack[TypedDict]` must be rejected.
 
 ty 0.0.81 lowers the unpacked TypedDict to `**kwargs: object`, so these lines pass
-unflagged and the ignores below are reported unused; `tests/test_typing.py` holds this
+unflagged and the ignores below are reported unused; `tests/test_typing.py` runs this
 probe as a strict xfail until the `ty` pin moves.
 """
 

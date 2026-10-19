@@ -13,8 +13,8 @@ from hypothesis.extra.numpy import array_shapes
 from numeric_checks import assert_close, dtype_id, reference_binned_mean, to_numpy
 from numpy.testing import assert_array_equal
 
-from striqt.waveform.lib import arrays
 from striqt.waveform.fourier import peak_factor
+from striqt.waveform.lib import arrays
 
 
 class TestIsRoundMod:
@@ -133,9 +133,9 @@ class TestRoundoffModels:
 
 class TestBinnedMean:
     def test_strided_axis_reduction_needs_the_in_order_bound(self):
-        """numpy sums a strided axis in order, so a bin that straddles two levels lands
-        outside the contiguous-axis model and inside `accum_rtol`; this is why the
-        tolerance functions pick the bound by the axis a measurement reduces"""
+        """numpy sums a strided axis in order, so the error of a bin that straddles 2
+        levels exceeds the contiguous-axis model and stays inside `accum_rtol`. The
+        tolerance functions pick the bound by the axis a measurement reduces."""
         n = 1_000_000
         x = np.full((2, n, 8), 3e-4, dtype=np.float32)
         x[:, : n // 2] = 1.0

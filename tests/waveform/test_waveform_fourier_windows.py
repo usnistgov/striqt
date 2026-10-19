@@ -121,7 +121,7 @@ class TestEquivalentNoiseBandwidth:
         param = find_window_param_from_enbw(window, target, nfft=1024)
         enbw = equivalent_noise_bandwidth((window, param), 1024)
         # bisect stops at |param error| <= atol=1e-6; the ENBW slope in the
-        # parameter is of order 1, so this is loose by a factor of 100
+        # parameter is of order 1, so rtol=1e-4 is loose by a factor of 100
         assert_allclose(enbw, target, rtol=1e-4)
 
     @pytest.mark.parametrize(

@@ -28,7 +28,7 @@ TerminalGraphics = typing.Literal['sixel', 'kitcat', 'kitty']
 
 
 def select_mpl_backend(style: str | None, interactive: TerminalGraphics | None) -> None:
-    """select a matplotlib backend, and return extra styles to use"""
+    """select a matplotlib backend and apply the terminal style when `interactive` is set"""
 
     from matplotlib import pyplot as plt
     import matplotlib as mpl
@@ -69,9 +69,10 @@ def term_graphics_notice(interactive: str | None):
 
 
 def coerce_column(data: '_T', plotter: 'PlotBackend') -> '_T':
-    """xarray plot routines only return FacetGrid objects"""
+    """add a size-1 `_view` dimension to `data` when the plot options set neither `col` nor `row`"""
     opts = plotter.opts
     if opts.col is None and opts.row is None:
+        # xarray plot routines return a FacetGrid only when faceting
         return data.extend_dims(_view=[''])
     else:
         return data
@@ -298,14 +299,12 @@ class PlotBackend:
                 suptitle, x=labels._get_fig_center_x(grid.fig), ha='center', va='bottom'
             )
 
-        # axes
         labels.label_axis('x', data[x], fig=grid.fig, tick_units=xticklabelunits)
         if y is None:
             labels.label_axis('y', data, fig=grid.fig, tick_units=False)
         else:
             labels.label_axis('y', data[y], fig=grid.fig, tick_units=False)
 
-        # row/col titles
         grid.set_titles('{value}')
         if self.opts.col is None and self.opts.col_label_format is not None:
             for ax in grid.fig.axes:
@@ -356,7 +355,7 @@ class PlotBackend:
             plt.ion()
         elif self.interactive:
             with self.lock:
-                grid.fig.show()  # nab the contextlib output
+                grid.fig.show()  # writes the terminal image payload to stdout
                 plt.close(grid.fig)
 
         self.last_grid = grid

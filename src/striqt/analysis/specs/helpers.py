@@ -168,16 +168,15 @@ def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
 class SpecValidationError(msgspec.ValidationError):
     """signal a spec validation failure with a msgspec-style field path.
 
-    Subclassing `msgspec.ValidationError` is what lets the path survive: msgspec
-    re-raises a plain `ValueError` from `__post_init__` as its own
-    `ValidationError` with its own path, but propagates a `ValidationError`
-    subclass untouched.
+    The subclass of `msgspec.ValidationError` preserves the path. msgspec re-raises
+    a plain `ValueError` from `__post_init__` as its own `ValidationError` with its
+    own path, but propagates a `ValidationError` subclass untouched.
 
     `path` is one nested chain of field accesses within a single document root,
     which renders as msgspec does it (`$.analysis.spectrogram`) and leads the
     message. `locations` are additional sibling roots, rendered as an `at ... on ...`
     trailer in the order given. The split exists because a sweep failure is not
-    located by one chain: the same incompatibility is pinned down jointly by a
+    located by one chain. The same incompatibility is located jointly by a
     `captures:` entry, the `loops:` point that generated it, and the measurement key
     that rejected it. Those are siblings in the document, so collapsing them into
     `path` would render a field chain that does not exist.
@@ -235,11 +234,11 @@ def validation_path(*parts: str) -> Iterator[None]:
 def convert_spec_cached(spec_cls: type[_T], spec: Any) -> _T:
     """project `spec` onto the fields that `spec_cls` declares.
 
-    Results are held in a process-global `lru_cache` of 4096 entries that
+    Results are stored in a process-global `lru_cache` of 4096 entries that
     `striqt.waveform.lib.util.clear_caches` empties.
 
     Returns:
-        an instance of `spec_cls` holding the matching fields of `spec`, or `spec`
+        an instance of `spec_cls` with the matching fields of `spec`, or `spec`
         itself when it is already exactly `spec_cls`, so an argument that was
         projected already adds no second cache entry
     """
@@ -250,7 +249,7 @@ def to_analysis_capture(capture: structs.Capture) -> structs.AnalysisCapture:
     """project a capture down to the fields the analysis layer can read.
 
     Returns:
-        an `AnalysisCapture` holding the matching fields of `capture`, shared through
+        an `AnalysisCapture` with the matching fields of `capture`, shared through
         the cache of `convert_spec_cached`; `capture` itself when it is already
         exactly an `AnalysisCapture`
     """
@@ -294,8 +293,8 @@ def lru_cache_on_converted(
     unprojected argument.
 
     The decorated function annotates the projected arguments with the type its *body*
-    receives, while callers may pass anything `convert_spec` accepts, so the overloads
-    type those positions as `Any`.
+    receives. Callers may pass anything `convert_spec` accepts, so the overloads type
+    those positions as `Any`.
 
     Args:
         spec_types: the struct type that each leading positional argument is
@@ -303,7 +302,7 @@ def lru_cache_on_converted(
         maxsize: the `lru_cache` size, or None for unbounded
 
     Returns:
-        a decorator whose wrapper carries `cache_clear` and `cache_info` and is
+        a decorator whose wrapper exposes `cache_clear` and `cache_info` and is
         registered for `striqt.waveform.lib.util.clear_caches`; the wrapper raises
         `TypeError` when fewer than ``len(spec_types)`` arguments arrive by position
     """
@@ -327,7 +326,7 @@ def lru_cache_on_converted(
 
             return cached(*converted, *args[len(spec_types) :], **kwargs)
 
-        # functools.wraps does not carry these over from the lru_cache wrapper
+        # functools.wraps does not copy these from the lru_cache wrapper
         cast(Any, wrapped).cache_clear = cached.cache_clear
         cast(Any, wrapped).cache_info = cached.cache_info
 
@@ -486,7 +485,7 @@ def unfreeze(
     obj: Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _V,
     max_depth: int | None = None,
 ) -> 'dict[_K, _V]|list[_V]|_V':
-    """Recursively transform dict into frozendict"""
+    """recursively transform tuple and frozendict into list and dict"""
     if isinstance(obj, (list, tuple)):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:
@@ -575,7 +574,7 @@ def infer_coord_info(
         type_key = mi.type_info(type_)
 
     if isinstance(type_key, tuple(BUILTINS.keys())):
-        # dicey if subclasses show up
+        # a subclass of a builtin type would match its base here
         return {}, BUILTINS[type(type_key)]
     elif isinstance(type_key, mi.CustomType):
         if Timestamp is not None:

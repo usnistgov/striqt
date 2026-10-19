@@ -71,7 +71,7 @@ class PhyOFDM:
         if contiguous_size is not None:
             self.contiguous_size = contiguous_size
         else:
-            # if not specified, assume no padding is needed to complete a contiguos block of symbols
+            # the default contiguous block is the symbols and their prefixes with no padding
             self.contiguous_size = int(np.sum(cp_sizes) + len(cp_sizes) * nfft)
 
         # build a (start_idx, size) pair for each CP

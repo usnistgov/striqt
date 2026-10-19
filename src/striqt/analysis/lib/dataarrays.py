@@ -75,9 +75,8 @@ def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str
     pow10 = np.clip(pow10, min(_ENG_PREFIXES), max(_ENG_PREFIXES))
 
     mant = sign * value / (10.0**pow10)
-    # Taking care of the cases like 999.9..., which may be rounded to 1000
-    # instead of 1 k.  Beware of the corner case of values that are beyond
-    # the range of SI prefixes (i.e. > 'Y').
+    # a mantissa like 999.9... rounds to 1000 instead of 1 k, so carry it into the
+    # next prefix. Values at the largest prefix in `_ENG_PREFIXES` are not carried.
     if (
         force_prefix is None
         and abs(float(format(mant, fmt))) >= 1000
@@ -228,7 +227,7 @@ def build_dataarray(
 
     _validate_delayed_ndim(delayed)
 
-    # to bypass initialization overhead, grow from the empty template
+    # grow from the empty template to bypass initialization overhead
     pad = {dim: (0, data.shape[i]) for i, dim in enumerate(template.dims)}
     da = template.pad(pad)
 
@@ -280,9 +279,8 @@ def build_dataarray(
 def _infer_coord_dims(coord_factories: tuple[CoordFunc, ...]) -> tuple[str, ...]:
     """guess dimensions of a dataarray based on its coordinates.
 
-    This orders the dimensions according to (1) first appearance in each
-    the given list of coord factory functions and (2) first location within
-    each factory.
+    This orders the dimensions according to (1) first appearance in the given
+    list of coord factory functions and (2) first location within each factory.
     """
 
     # build an ordered list of unique coordinates
@@ -318,11 +316,11 @@ def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
 
 @dataclasses.dataclass
 class DelayedDataArray(collections.UserDict):
-    """represents the return result from a channel analysis function.
+    """wrap the result returned by a channel analysis function.
 
-    This includes a method to convert to `xarray.DataArray`, which is
-    delayed to leave the GPU time to initiate the evaluation of multiple
-    analyses before we materialize them on the CPU.
+    The conversion to `xarray.DataArray` is delayed to leave the GPU time to
+    initiate the evaluation of multiple analyses before they are materialized on
+    the CPU.
     """
 
     capture: specs.Capture

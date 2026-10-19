@@ -117,8 +117,8 @@ def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
 def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset':
     """concatenate captured datasets into one along a time axis.
 
-    This can be used to e.g. transform a contiguous sequence
-    of spectrogram captures into a single spectrogram.
+    One use is to transform a contiguous sequence of spectrogram captures into a
+    single spectrogram.
 
     Preconditions:
     - all datasets share the same dimension and type.
@@ -204,19 +204,19 @@ def index_dataset(
     *,
     chunks: int | Literal['auto'] | None = None,
 ) -> 'xr.Dataset':
-    """Return an dataset with indexes applied across multiple axes. Apply multiple-coordinate indexing to the dataset.
+    """Return a dataset with indexes applied across multiple axes.
 
     Args:
         ds: the sensor dataset to index
         index_coords:
             A list of coordinate names to index, matching index entries from the sweep
-            sweep `captures` specification, or 'sweep_start_time'. The set of specified
-            coordinates must uniquely specify exactly one capture from captures list.
+            `captures` specification, or 'sweep_start_time'. The set of specified
+            coordinates must uniquely specify exactly one capture from the captures list.
         chunks:
-            If not None, the returned dataset will be backed by dask arrays for
+            If not None, the returned dataset is backed by dask arrays for
             multiprocessing (see `xarray.Dataset.chunk`)
     Returns:
-        A xr.Dataset containing the data and coordinates of `ds` with indexing applied.
+        An xr.Dataset containing the data and coordinates of `ds` with indexing applied.
     """
 
     _check_coord_indexes(ds, index_coords)  # must be before ds.chunk(...)
@@ -234,7 +234,7 @@ def unstack_dataset(
     """Unstack a dataset from a flat list of captures into multiple dimensions.
 
     The dimensions are `['sweep_start_time', *extra_coord_dims, 'port']`.
-    `loop_vars` are introspected by the sweep loop specification from ds.attrs['loops'].
+    `loop_vars` are read from the sweep loop specification in ``ds.attrs['loops']``.
 
     Args:
         ds: the sensor dataset to unstack
@@ -242,7 +242,7 @@ def unstack_dataset(
             A list of coordinate names to transform into dimensions, which must fulfill
             the conditions given for the `index_coords` parameter of `index_dataset`.
         chunks:
-            If not None, the returned dataset will be backed by dask arrays for
+            If not None, the returned dataset is backed by dask arrays for
             multiprocessing (see `xarray.Dataset.chunk`)
 
     Returns:
@@ -302,7 +302,6 @@ def _coords_template(
                 continue
             coord_vars[field.name] = make_var(field)
 
-    # TODO: remove this hardcoded bolt-on fix
     coord_vars.pop('signal_trigger', None)
 
     # templates for analysis loops
@@ -334,11 +333,10 @@ def _check_coord_indexes(ds, index_coords: list[str]):
 
     sub = coords_group.reset_coords()  # .drop_vars('start_time')
     if sub.sizes['capture'] == 1:
-        # success! the specified index fields indexed a unique value
-        # in the first group
+        # the specified index fields select a unique capture in the first group
         return
 
-    # check for easy alternatives
+    # suggest coordinates that would make the index unique
     counts = {n: np.unique(da).tolist() for n, da in sub.data_vars.items()}
     counts = {n: c for n, c in counts.items() if len(c) == sub.sizes['capture']}
 

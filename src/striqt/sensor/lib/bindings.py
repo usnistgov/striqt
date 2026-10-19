@@ -142,9 +142,10 @@ def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
     return dict(registry)
 
 
-# not sw.util.lru_cache: bind_sensor appends to the global tagged_sweeps union, so a
-# cleared cache would re-register the binding and give that union two members with the
-# same tag, which msgspec then refuses to decode
+# functools rather than sw.util.lru_cache, which clear_caches() empties. bind_sensor
+# appends to the global tagged_sweeps union, so a cleared cache would re-register the
+# binding and give that union two members with the same tag, which msgspec refuses to
+# decode
 @functools.lru_cache
 def mock_binding(
     origin: type[Controller], target: str | type[Controller], register: bool = True

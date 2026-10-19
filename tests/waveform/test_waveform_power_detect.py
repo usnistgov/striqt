@@ -25,8 +25,8 @@ from numeric_checks import (
 )
 from numpy.testing import assert_array_equal
 
-from striqt.waveform.lib.arrays import accum_rtol, float_dtype_like
 from striqt.waveform.fourier import peak_factor
+from striqt.waveform.lib.arrays import accum_rtol, float_dtype_like
 from striqt.waveform.lib.power import (
     bin_power_rms,
     bin_power_rtol,
@@ -171,7 +171,7 @@ class TestIqToBinPower:
     def test_quantile_of_a_long_heavy_tailed_bin_is_exact_on_every_numpy(self):
         """numpy < 2.3 casts a scalar q to float32 (numpy.lib._function_base_impl,
         quantile), which shifts the virtual index (n-1)*q by ~n*2**-25 samples before
-        interpolating between the two neighboring order statistics. On a heavy-tailed
+        interpolating between the 2 neighboring order statistics. On a heavy-tailed
         bin of 2**20 samples that read 124 u against a budget of 28 u."""
         n, q = 2**20, 0.999
         rng = np.random.default_rng(0)
@@ -194,7 +194,7 @@ class TestIqToBinPower:
         """Property: each bin is the statistic of |iq|**2 over `size` samples,
         for a 1-D waveform (axis 0) and a (channel, sample) array (axis 1).
 
-        The kinds are one name from each group of BIN_STATS: the aliases are
+        The kinds are one name from each group of BIN_STATS. The aliases are
         covered by TestStatUfuncFromShorthand, and the cupy cross-comparison runs
         every kind because each is a separate kernel there."""
         waveforms = iq_waveforms(
@@ -246,7 +246,7 @@ class TestIqToBinPower:
     @given(data=st.data())
     def test_randomize(self, size, data):
         """Property: every random bin is the mean power of some `size` contiguous
-        samples, i.e. a value of the sliding-window mean of |iq|**2."""
+        samples, i.e., a value of the sliding-window mean of |iq|**2."""
         iq = data.draw(
             iq_waveforms(min_size=4 * size, max_size=32 * size, multiple_of=size)
         )
@@ -341,8 +341,8 @@ class TestIqToCyclicPower:
         self, periods_per_cycle, n_cycles, subtests
     ):
         """A signal whose period divides cyclic_period repeats identically in every
-        cycle, so every statistic returns the one-cycle power envelope, and the lag
-        count is fixed by cyclic_period / detector_period rather than by n_cycles."""
+        cycle, so every statistic returns the one-cycle power envelope. The lag count
+        is fixed by cyclic_period / detector_period rather than by n_cycles."""
         size, lags = 4, 10
         rng = np.random.default_rng(0)
         envelope = rng.uniform(0.5, 2.0, size=(2, lags // periods_per_cycle))
@@ -430,8 +430,8 @@ class TestIqToCyclicPower:
         assert result['rms']['mean'].shape == (2, 4)
 
     def test_truncate_drops_trailing_bins_of_the_time_axis(self, subtests):
-        """A two-port capture at 107.52 MS/s with 1/28 ms detector bins (3840
-        samples) holds 25 bins, which truncate=True folds into 2 cycles of 10 lags
+        """A 2-port capture at 107.52 MS/s with 1/28 ms detector bins (3840
+        samples) contains 25 bins, which truncate=True folds into 2 cycles of 10 lags
         and drops the last 5. A unit-envelope input has power exactly 1 in every
         bin, so each statistic is exactly 1 at every lag."""
         Ts = 1 / 107.52e6
@@ -502,10 +502,10 @@ class TestSampleCcdf:
 
 
 class TestNumpyCupyCrossComparison:
-    """Cross-comparison tests validating numpy and cupy produce close results.
+    """Cross-comparison of the numpy and cupy results of each detector.
 
     Tolerances come from the ulp budgets in striqt.waveform.lib.power, so a
-    difference larger than the two libraries' rounding bounds fails the test.
+    difference larger than the 2 libraries' rounding bounds fails the test.
     """
 
     @for_each_bin_size

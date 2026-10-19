@@ -75,7 +75,7 @@ class TestPhy3GPP:
         """3GPP TS 38.211 5.3.1: normal CP is 144*kappa*2**-mu samples, with an
         extra 16*kappa in the first symbol of a subframe.
 
-        Symbol 7 is left to `test_subframe_cp_layout`: at 15 kHz it carries the
+        Symbol 7 is left to `test_subframe_cp_layout`. At 15 kHz it carries the
         subframe's second extra CP, which Phy3GPP omits.
         """
         nfft = round(sample_rate / scs)
@@ -181,7 +181,7 @@ class TestPhy3GPP:
 
 
 def all_or_some(max_index):
-    """'all' or a tuple of up to four distinct indexes in [0, max_index]"""
+    """'all' or a tuple of up to 4 distinct indexes in [0, max_index]"""
     indexes = st.integers(0, max_index)
     some = st.lists(indexes, min_size=1, max_size=4, unique=True).map(tuple)
     return st.one_of(st.just('all'), some)

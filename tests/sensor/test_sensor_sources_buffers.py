@@ -1,5 +1,5 @@
 """striqt.sensor.lib.sources.buffers: read-count arithmetic, trigger alignment,
-transport casting, IQ reuse and receive buffer allocation
+transport casting, IQ reuse, and receive buffer allocation
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ def test_get_read_count_is_the_source_rate_sample_count_plus_overlap(preset, ove
 
 
 def test_get_read_count_holdoff_adds_transient_and_two_strobe_periods():
-    """the holdoff padding covers the transient plus two strobe periods at the
+    """the holdoff padding covers the transient plus 2 strobe periods at the
     source rate; without include_holdoff neither setting contributes"""
     source = source_spec(
         transient_holdoff_time=HOLDOFF_TIME, trigger_strobe=STROBE_TIME
@@ -161,7 +161,7 @@ def test_cast_iq_complex64_returns_an_equal_copy():
 
 
 def test_cast_iq_int16_interleaved_pairs_become_unscaled_complex64():
-    """transport int16 holds (I, Q) pairs; the cast is exact and leaves the
+    """transport int16 interleaves (I, Q) pairs; the cast is exact and leaves the
     full-scale factor to voltage_scale"""
     source = source_spec(transport_dtype='int16')
     ports, acquired = 2, 300

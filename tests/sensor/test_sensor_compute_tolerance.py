@@ -127,7 +127,7 @@ def test_sweep_tolerances_follow_the_looped_captures():
     for capture, tols in entries:
         assert tols == tolerance.capture_tolerances(capture, sweep.source, ANALYSIS)
     # iq_waveform passes the correction error straight through, so it alone orders the
-    # captures; the spectral products also differ in nfft between the two presets
+    # captures; the spectral products also differ in nfft between the 2 presets
     assert (
         entries[1][1]['iq_waveform'].on_peak.rms
         < entries[0][1]['iq_waveform'].on_peak.rms
@@ -156,7 +156,7 @@ def test_sweep_tolerances_use_the_looped_value_over_an_adjustment(source_id):
         tolerance.capture_tolerances(c, sweep.source, ANALYSIS) for c in expected
     ]
     assert [t for _, t in entries] == budgets
-    # the check discriminates: the adjusted value would have changed the first budget
+    # the adjusted value would have changed the first budget, so the check discriminates
     adjusted = expected[0].replace(lo_shift='right')
     assert tolerance.capture_tolerances(adjusted, sweep.source, ANALYSIS) != budgets[0]
 

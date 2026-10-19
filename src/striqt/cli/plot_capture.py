@@ -73,7 +73,6 @@ def run(
         yaml_text = open(yaml_path, 'rb').read()
         opts = msgspec.yaml.decode(yaml_text, type=sf.specs.PlotOptions, strict=False)
 
-    # spawn processes
     from concurrent import futures
     import os
 
@@ -92,10 +91,8 @@ def run(
         initargs=(zarr_path, opts, interactive, no_save, manager.Lock()),
     )
 
-    # then the heavier data
     dataset = load_data(zarr_path, opts, index=False)
 
-    # run
     import itertools
 
     gb_fields = sf.util.get_groupby_fields(dataset, opts)
@@ -132,7 +129,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
             )
 
     if 'channel' in dataset.coords:
-        # legacy name
+        # older stores name the port coordinate 'channel'
         dataset = dataset.rename_vars({'channel': 'port'})
 
     dataset = sf.util.query_match_at_index(

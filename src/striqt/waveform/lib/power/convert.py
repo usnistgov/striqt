@@ -79,7 +79,7 @@ def unit_wave_to_linear(s: str):
 # relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (logf 1,
 # powf 8, hypotf 3 ulp) as well as libm (~1 ulp), so the tolerances below hold on both
 # backends and take no array namespace. The dB conversions evaluate
-# `scale_ln*log(x)` rather than `scale*log10(x)`: on the Jetson TX2i (glibc 2.27) that
+# `scale_ln*log(x)` rather than `scale*log10(x)`. On the Jetson TX2i (glibc 2.27) that
 # is 0.55-0.65x the numexpr time in float32 and 0.82x in float64, neutral on the GPU,
 # and more accurate in float64 (chores/tests/profile_log_scaling.py, 2026-10-19).
 # Measured with chores/tests/measure_db_accuracy.py and that script, in spacing ulps
@@ -88,7 +88,7 @@ def unit_wave_to_linear(s: str):
 # (|x| <= 30 dB), complex |z| 1.6 input ulps.
 HYPOT_ULP = 3
 LOG_ULP = 1
-# DB_PER_NEPER rounded to the computation dtype; float32 carries 0.41 ulp
+# DB_PER_NEPER rounded to the computation dtype; float32 rounds it by 0.41 ulp
 SCALE_CONST_ULP = 0.5
 # 10/ln(10) correctly rounded; the computed `10 / math.log(10)` is 0.87 ulp off
 DB_PER_NEPER = 4.342944819032518
@@ -102,7 +102,7 @@ def log_conversion_tol(
     Both are fixed multiples of the unit roundoff of `dtype`, and ``atol`` also
     scales with `scale`. `n_impl` is 1 against exact math and 2 against a second
     implementation; `complex_input` adds the roundoff of ``|x|``. Roundoff on the
-    input side of the log becomes an absolute dB error, which is what bounds the
+    input side of the log becomes an absolute dB error, which bounds the
     result near 0 dB where ulps of the output are meaningless.
     """
     u = unit_roundoff(dtype)
@@ -186,7 +186,7 @@ def level_tolerance_dB(sigma: float, power: bool = False) -> float:
     """convert a relative tolerance `sigma` on an output to a level uncertainty in dB.
 
     `sigma` bounds an amplitude ratio (20 dB per decade) unless `power` is True for a
-    power ratio (10 dB per decade, e.g. spectrogram bins). The result is
+    power ratio (10 dB per decade, e.g., spectrogram bins). The result is
     non-negative for non-negative `sigma`.
     """
     return (10 if power else 20) * np.log10(1 + sigma)
@@ -220,13 +220,13 @@ def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array
 
     Roundoff bounds an element's amplitude error relative to the output's *peak*, so
     as a share of the element's own amplitude the bound grows with its depth below the
-    peak. A relative amplitude error ``r`` leaves the power anywhere between
-    ``(1-r)**2`` and ``(1+r)**2`` of its exact value, and the low side is what
-    dominates in dB, diverging as ``r`` approaches 1. So an element deep enough
-    below the peak that roundoff alone could account for all of its amplitude gets
-    an infinite tolerance and goes unchecked - the floor falls out of the bound
-    rather than having to be imposed on top of it. This assumes nothing about the
-    error spreading over an FFT's bins, so it suits any dB-valued output.
+    peak. A relative amplitude error ``r`` leaves the power between ``(1-r)**2``
+    and ``(1+r)**2`` of its exact value. The low side dominates in dB and diverges
+    as ``r`` approaches 1. An element deep enough below the peak that roundoff alone
+    could account for all of its amplitude gets an infinite tolerance and goes
+    unchecked. The floor falls out of the bound rather than being imposed on top of
+    it. The bound assumes nothing about the error spreading over an FFT's bins and
+    suits any dB-valued output.
     """
     r = err * 10 ** (np.asarray(depth_dBc, dtype='float64') / 20)
     with np.errstate(divide='ignore'):
@@ -266,8 +266,8 @@ def _lin_to_dB(
         eps = None
 
     if xp is np:
-        # the expression is one of six constant strings so the numexpr compile cache
-        # hits; `values`, `scale_ln` and `eps` are looked up from this frame by name.
+        # the expression is one of 6 constant strings so the numexpr compile cache
+        # hits; `values`, `scale_ln`, and `eps` are looked up from this frame by name.
         # numexpr's `real` and `abs` of a complex operand both yield complex128, so
         # complex input needs `real(...)` and is always converted by magnitude; on a
         # real operand `real` would upcast through complex128, so it is omitted there
@@ -292,7 +292,7 @@ def _lin_to_dB(
             kernel(values, out, scale_ln, eps)
         values = out
     else:
-        # torch, dask, ...
+        # other array namespaces (torch, dask)
         if abs:
             values = xp.abs(values, out=out)
         if eps is not None:
@@ -380,7 +380,7 @@ def dBtopow(
         cuda_jit.get_kernel('dBtopow')(values, out)
         values = out
     else:
-        # torch, dask, ...
+        # other array namespaces (torch, dask)
         values = xp.divide(
             values,
             10,
@@ -429,7 +429,7 @@ def envtopow(
         cuda_jit.get_kernel('envtopow')(values, out)
         values = out
     else:
-        # torch, dask, ...
+        # other array namespaces (torch, dask)
         values = xp.abs(values, out=out)
         values *= values
 
@@ -522,7 +522,7 @@ def dBlinsum(
 # %% module-local helper functions
 def _infer_contained_array(x: Any) -> Array:
     if hasattr(type(x), 'values'):
-        # first, guess at xarray/pandas types before expensive imports
+        # the attribute checks run before the lazy xarray and pandas imports are forced
         if hasattr(type(x), 'data') and isinstance(x, (xr.DataArray, xr.Dataset)):
             return x.data
         elif isinstance(x, (pd.DataFrame, pd.Series)):
@@ -575,7 +575,7 @@ def _arraylike_with_buffer(
         raise TypeError(f'unable to associate an array with type {type_!r} with input')
     values = typing.cast('Array', values)
 
-    # do we need to upcast?
+    # widen to min_dtype when the input is narrower
     dtype = values.dtype
     if np.dtype(min_dtype) <= dtype:
         promote_dtype = None
@@ -629,8 +629,8 @@ def _repackage_arraylike(
 ) -> _ALN:
     """package `values` into a data type matching `obj`"""
 
-    # accessing each of these forces imports of each module.
-    # work through progressively more expensive imports
+    # each isinstance check forces the import of its module, so the checks run from
+    # the cheapest import to the most expensive
     if isinstance(obj, Number):
         return values.item()
     elif not hasattr(type(obj), 'values'):

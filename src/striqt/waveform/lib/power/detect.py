@@ -191,11 +191,11 @@ def iq_to_cyclic_power(
 
     Choosing `cyclic_period` as a common multiple of the periods of the expected
     signals (for example 10 ms for the LCM of TDD cellular frames, 5 ms WiMAX
-    frames and the 1 ms pulse repetition interval of the SPN-43 radar) aligns their
-    features across cycles, so that each resolves at fixed lags while occupancy
-    with an incommensurate period is spread across all lags. Uplink and downlink
-    levels of a TDD network can then be read from disjoint lag windows. Statistics
-    are evaluated in linear power units, so convert to dB afterwards.
+    frames, and the 1 ms pulse repetition interval of the SPN-43 radar) aligns their
+    features across cycles. Each then resolves at fixed lags, while occupancy with
+    an incommensurate period is spread across all lags. Uplink and downlink levels
+    of a TDD network can then be read from disjoint lag windows. Statistics are
+    evaluated in linear power units, not dB.
 
     A mismatch ``dT`` between `cyclic_period` and the true signal period, such as
     a sample clock offset, drifts features by ``M * dT / detector_period`` lags by
@@ -227,7 +227,7 @@ def iq_to_cyclic_power(
         ValueError: if `detectors` is None; if `cyclic_period` is not an integer
             multiple of `detector_period`; or, when `truncate` is False, if
             `detector_period` is not an integer multiple of `Ts` or the capture
-            does not hold a whole number of cycles
+            does not contain a whole number of cycles
 
     References:
         D.G. Kuester et al., "Cyclic Analysis of Power in Radio Channels".
@@ -239,7 +239,7 @@ def iq_to_cyclic_power(
     if axis < 0:
         axis = x.ndim + axis
 
-    # compute the binned power ourselves
+    # the binned power is computed here from the IQ, so detectors are required
     if detectors is None:
         raise ValueError(
             'supply detectors argument to evaluate binned power from time domain IQ'
