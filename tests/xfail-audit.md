@@ -257,11 +257,11 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 65. `stft(noverlap=0)` is scaled by `1/nfft` relative to the overlapped path
 
-`tests/waveform/test_fourier.py::TestIstft::test_no_overlap_roundtrip_is_identity`
+`tests/waveform/test_waveform_fourier_stft.py::TestIstft::test_no_overlap_roundtrip_is_identity`
 
-- **Mechanism.** With `norm=None` the no-overlap path applies `w / nfft`
-  uncompensated (`fourier.py:558`), while `_stack_stft_windows`
-  (`fourier.py:750`) normalizes the same factor away, so the same segment
+- **Mechanism.** With `norm=None` the no-overlap path of `stft` applies `w / nfft`
+  uncompensated (`lib/fourier/stft.py`), while `_stack_stft_windows` in the same
+  module normalizes the same factor away, so the same segment
   differs by `nfft` between the two supported overlaps and
   `istft(stft(x))` returns `x / nfft` for `noverlap=0`.
 - **Why the test is right.** The previous test fitted an arbitrary gain by

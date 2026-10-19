@@ -44,7 +44,7 @@ import striqt.sensor as ss
 import striqt.waveform as sw
 from striqt.sensor.lib.compute import correction_error, corrections
 from striqt.sensor.lib.sources import buffers
-from striqt.waveform.lib.fourier import on_peak_roundoff
+from striqt.waveform.fourier import on_peak_roundoff
 
 SOAPY_SOURCE = source_spec()
 

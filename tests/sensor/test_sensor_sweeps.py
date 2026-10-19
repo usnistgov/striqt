@@ -47,8 +47,8 @@ import striqt.sensor as ss
 import striqt.waveform as sw
 from striqt.cli import check_sweep, sensor_sweep
 from striqt.sensor.lib.compute import capture_tolerances, correction_error
-from striqt.waveform.lib import fourier
-from striqt.waveform.lib.fourier import off_peak_floor_dBc, on_peak_roundoff
+from striqt.waveform import fourier
+from striqt.waveform.fourier import off_peak_floor_dBc, on_peak_roundoff
 
 # the ports of a capture in row order
 ports_of = ss.specs.captures.ensure_tuple

@@ -2,7 +2,7 @@
 """Measure float32 FFT roundoff constants for the FFT backends used by striqt.
 
 Run on a machine with a GPU to ground the `c` constant in the error model used by
-tests/waveform/test_fourier.py:
+tests/waveform/test_waveform_fourier_fft.py:
 
     rms_rel_error = c * eps * sqrt(log2(N))        (per FFT pass, eps = 2**-24)
 

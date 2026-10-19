@@ -27,7 +27,7 @@ from synthetic_sources import (
 
 import striqt.sensor as ss
 from striqt.sensor.lib import execute, util
-from striqt.waveform.lib import fourier
+from striqt.waveform import fourier
 
 OFFSETS = (1e6, 2e6, 3e6)
 

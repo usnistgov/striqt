@@ -35,7 +35,7 @@ import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis import testing
 from striqt.analysis.measurements.power import make_power_bins
-from striqt.waveform.lib.fourier import fft_tolerance_rms, off_peak_floor_dBc
+from striqt.waveform.fourier import fft_tolerance_rms, off_peak_floor_dBc
 
 # a 64-point FFT over 8 non-overlapping windows: 512 samples, 500 us
 FS = 1.024e6

@@ -5,10 +5,10 @@ the `writing-tests` skill; this file is the map of the suite that the skill refe
 
 ## Where things are tested
 
-- **Kernel numerics at the kernel.** `tests/waveform/test_fourier.py` and
-  `test_waveform_power_convert.py`/`test_waveform_power_detect.py` prove the STFT, window
-  design, resampling, binned power, the cyclic fold and its selectivity, the dB
-  conversions and the roundoff models; the `test_waveform_comms_*.py` modules prove the
+- **Kernel numerics at the kernel.** The `tests/waveform/test_waveform_fourier_*.py`
+  modules and `test_waveform_power_convert.py`/`test_waveform_power_detect.py` prove the
+  STFT, window design, resampling, binned power, the cyclic fold and its selectivity, the
+  dB conversions and the roundoff models; the `test_waveform_comms_*.py` modules prove the
   frame models, the cyclic-prefix correlator and the 5G NR sync pipeline. Measurement tests
   assert what the measurement adds (spec fields → coordinates, dims, dtype, units, axis order,
   detector and statistic selection, documented edge behavior), not the numerics underneath.
@@ -46,7 +46,8 @@ same thing is invisible until the two drift. Look here before writing setup:
   of its own.
 - `tests/waveform/waveform_strategies.py`: the comms builders (`FS`, `phy_5g`, `sync_params`,
   `cp_case`, `embed_pss_ports`, `get_ssb_iq`, …) shared by the `test_waveform_comms_*`
-  modules.
+  modules, and the fourier strategies (`noise_waveforms`, `sample_rates`,
+  `stft_parameters`, `cross_backend_sigma`) shared by the `test_waveform_fourier_*` modules.
 - `tests/analysis/analysis_strategies.py`: analysis spec factories and constants
   (`POWER_BINS`, `CELL_FS`, `CELL_FRAME`, `capture_of`, `registered_tolerance`, the SSB
   spectrogram fixtures).

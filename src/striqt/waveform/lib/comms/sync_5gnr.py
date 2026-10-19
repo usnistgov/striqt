@@ -194,7 +194,7 @@ def _generate_5g_nr_sync_sequence(
     seq_freq = pad_along_axis(m_seqs / norm, [(pad_lo, pad_hi)], axis=1)
 
     seq_freq = xp.fft.fftshift(seq_freq, axes=1)
-    x = fourier.ifft(seq_freq, axis=1, out=seq_freq)
+    x = fourier.fft.ifft(seq_freq, axis=1, out=seq_freq)
 
     # prepend the shortest cyclic prefix
     phy = get_3gpp_phy(
@@ -567,7 +567,7 @@ def get_5g_ssb_iq(
         out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
 
         for i in range(out.shape[0]):
-            out[i] = fourier.oaresample(
+            out[i] = fourier.resamplers.oaresample(
                 iq[i],
                 fs=fs_in,
                 up=up,
@@ -589,7 +589,7 @@ def get_5g_ssb_iq(
         shift = round(iq.shape[1] * frequency_offset / fs_in)
 
         for i in range(out.shape[0]):
-            out[i] = fourier.resample(
+            out[i] = fourier.resamplers.resample(
                 iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
             )
 
@@ -678,7 +678,7 @@ def correlate_sync_sequence(
     R = xp.empty(tuple(R_shape), dtype='complex64')
 
     for cell_id in range(template_bcast.shape[1]):
-        R[:, cell_id] = fourier.oaconvolve(
+        R[:, cell_id] = fourier.filters.oaconvolve(
             iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
         )
     R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
@@ -774,7 +774,7 @@ def weighted_ssb_detect(
     nfill = max(1, 2 * ((round(window_fill * nfine) - 1) // 2) + 1)
     nzero = nfine - nfill
     nzero -= nzero % 2
-    w = fourier.get_window(
+    w = fourier.windows.get_window(
         window,
         nwindow=nfill,
         nzero=nzero,

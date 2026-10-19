@@ -1,13 +1,18 @@
-"""Shared builders for the comms tests: the 3GPP PHY at the analysis sample rate,
-cyclic-prefix cases on a synthetic OFDM waveform, and silent synchronization blocks
-carrying embedded PSS symbols.
+"""Shared builders for the waveform tests: the comms fixtures (the 3GPP PHY at the
+analysis sample rate, cyclic-prefix cases on a synthetic OFDM waveform, and silent
+synchronization blocks carrying embedded PSS symbols) and the fourier strategies
+(noise waveforms, sample rates, STFT parameters and the cross-backend FFT tolerance).
 """
 
 from __future__ import annotations
 
 import numpy as np
+from conftest import iq_waveforms
+from hypothesis import strategies as st
+from numeric_checks import cross_backend
 
 from striqt.waveform.lib import comms
+from striqt.waveform.lib.fourier.fft import fft_tolerance_rms
 
 # the analysis default synchronization block sample rate (15.36e6 / 2)
 FS = 7.68e6
@@ -111,3 +116,40 @@ def get_ssb_iq(iq, fs_in=FS, **kws):
         **kws,
     }
     return comms.get_5g_ssb_iq(iq, **kws)
+
+
+# %% fourier strategies
+def cross_backend_sigma(dtype, nffts, n_elementwise=0):
+    """rms tolerance on the difference between the numpy and cupy results, each within
+    its own backend's FFT roundoff budget"""
+    return cross_backend(
+        fft_tolerance_rms(dtype, nffts, n_elementwise),
+        fft_tolerance_rms(dtype, nffts, n_elementwise, array_backend='cupy'),
+    )
+
+
+def sample_rates(min_rate: float = 1e3, max_rate: float = 100e6):
+    return st.floats(
+        min_value=min_rate, max_value=max_rate, allow_nan=False, allow_infinity=False
+    )
+
+
+def noise_waveforms(min_size=64, max_size=2048, dtype=None):
+    """even-length complex noise spanning the power range of the sensor's inputs"""
+    return iq_waveforms(
+        min_size, max_size, multiple_of=2, dtype=dtype, log_power=(-13, 3)
+    )
+
+
+@st.composite
+def stft_parameters(draw):
+    """Window names and sizes are drawn from short lists so that get_window's
+    persistent on-disk cache does not fill with one-off entries."""
+    nperseg = draw(st.sampled_from([64, 128, 256]))
+    return {
+        'nperseg': nperseg,
+        # stft supports only noverlap == 0 or nperseg // 2
+        'noverlap': draw(st.sampled_from([0, nperseg // 2])),
+        'fs': draw(sample_rates(min_rate=1e3, max_rate=10e6)),
+        'window': draw(st.sampled_from(['hamming', 'hann', 'blackman'])),
+    }
