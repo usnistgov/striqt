@@ -107,7 +107,7 @@ SPECTROGRAM = ss.specs.BundledAnalysis.from_dict({
     'spectrogram': {'window': 'hann', 'frequency_resolution': PSD_RESOLUTION}
 })
 
-NO_SINK = ss.specs.Extension(sink='striqt.sensor.sinks.NoSink')
+NO_SINK = ss.specs.ZarrSink(path=None)
 
 
 def preset_capture(binding: str, **kws):
@@ -124,14 +124,14 @@ def preset_sweep(
     source=SOURCE,
     **replace,
 ):
-    """a sweep spec bound to `binding` that writes nothing (NO_SINK)"""
+    """a sweep spec bound to `binding` that writes nothing unless `sink` is given"""
     cls = BINDINGS[binding].sensor.sweep_spec_cls
+    replace.setdefault('sink', NO_SINK)
     return cls(
         source=source,
         captures=tuple(captures),
         loops=tuple(loops),
         analysis=analysis,
-        extensions=NO_SINK,
         **replace,
     )
 
@@ -287,7 +287,7 @@ def run_in_memory(sweep, *, loop=False, take=None, **replace) -> list:
     one xarray.Dataset per capture (the first `take` with `loop`)"""
     datasets = []
     with ss.open_resources(sweep, None) as resources:
-        # NoSink looks up the controller that open_resources registers
+        # nothing is written even for a sweep whose sink names a path
         replace.setdefault('sink', ss.sinks.NoSink(sweep))
         results = ss.iterate_sweep(resources, loop=loop, **replace)
         for dd in results:

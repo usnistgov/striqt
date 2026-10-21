@@ -12,7 +12,6 @@ import sys
 
 from .controller import Controller, bind_controller
 from .peripherals import NoPeripherals
-from . import sinks
 from .. import specs
 from .typing import Peripherals, PC, PS, SC, SS, SP, SourceBackend, TypeVar
 import msgspec
@@ -36,7 +35,6 @@ class Sensor(Generic[SS, SP, SC]):
     """
 
     source_cls: type[SourceBackend[SS, SC]]
-    sink_cls: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
     sweep_spec_cls: type[specs.ActionSpec[SS, SP]] = specs.Sweep
     peripherals_cls: type[Peripherals[SP, SC]] | type[NoPeripherals[SP, SC]] = (
         NoPeripherals
@@ -46,7 +44,6 @@ class Sensor(Generic[SS, SP, SC]):
         assert issubclass(self.source_cls, SourceBackend)
         assert issubclass(self.sweep_spec_cls, specs.ActionSpec)
         assert issubclass(self.peripherals_cls, Peripherals)
-        assert issubclass(self.sink_cls, sinks.SinkBase)
 
 
 @dataclasses.dataclass()
@@ -142,7 +139,6 @@ def bind_sensor(
         peripherals_cls=cast(
             'type[Peripherals[SP, SC] | NoPeripherals[SP, SC]]', sensor.peripherals_cls
         ),
-        sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),
     )
 
     tagged_cls = _bind_spec_class(key, action_type, schema, binding, tag=True)
@@ -208,7 +204,7 @@ def mock_binding(
 ) -> type[Controller[Any, Any, Any, Any, Any]]:
     """bind `origin`'s sweep and capture types to `target`'s implementation classes.
 
-    The result decodes `origin`'s sweep files but opens `target`'s source, sink, and
+    The result decodes `origin`'s sweep files but opens `target`'s source and
     peripherals.
     """
     mock_name = f'mock_{target}_{origin.sensor.sweep_spec_cls.__name__}'
@@ -224,7 +220,6 @@ def mock_binding(
             source_cls=ctrl_cls.sensor.source_cls,
             peripherals_cls=ctrl_cls.sensor.peripherals_cls,
             sweep_spec_cls=origin.sensor.sweep_spec_cls,
-            sink_cls=ctrl_cls.sensor.sink_cls,
         ),
         specs.Schema(
             source=ctrl_cls.schema.source,

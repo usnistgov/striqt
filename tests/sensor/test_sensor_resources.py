@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 from conftest import FAKE_SOAPY_SPEC, assert_source_released
-from synthetic_sources import NO_SINK, tone_sweep
+from synthetic_sources import tone_sweep
 
 import striqt.analysis as sa
 import striqt.sensor as ss
@@ -60,13 +60,7 @@ def test_test_only_resources_run_a_sweep():
     assert len([r for r in results if r is not None]) == len(OFFSETS)
 
 
-# %% sink selection and failure
-
-
-def test_extensions_sink_dotted_path_selects_the_class():
-    assert NO_SINK.sink == 'striqt.sensor.sinks.NoSink'
-    with ss.open_resources(tone_sweep(OFFSETS), None) as res:
-        assert type(res['sink']) is ss.sinks.NoSink
+# %% sink failure
 
 
 class FailingInitSink(ss.sinks.NoSink):
@@ -82,9 +76,13 @@ class FailingOpenSink(ss.sinks.NoSink):
 @pytest.mark.parametrize(
     'cls', [FailingInitSink, FailingOpenSink], ids=['init', 'open']
 )
-def test_sink_failure_surfaces_and_closes_the_source(cls, isolated_lookup):
-    extension = ss.specs.Extension(sink=f'{__name__}.{cls.__name__}')
-    sweep = tone_sweep(OFFSETS).replace(extensions=extension)
+def test_sink_failure_surfaces_and_closes_the_source(cls, isolated_lookup, monkeypatch):
+    """a sink that fails in the runner's `open_sink` or on entry propagates out of
+    `open_resources`, which releases the source it opened in parallel"""
+    monkeypatch.setattr(
+        ss.lib.actions.SweepRunner, 'open_sink', lambda self, fmt: cls(self.sweep)
+    )
+    sweep = tone_sweep(OFFSETS)
 
     with (
         pytest.raises(RuntimeError, match='simulated sink failure'),
@@ -103,7 +101,8 @@ def test_calibration_is_loaded_from_the_source_spec(fake_soapy_ext, calibration_
 
     spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
     spec = spec.replace(
-        source=spec.source.replace(calibration=calibration_nc), extensions=NO_SINK
+        source=spec.source.replace(calibration=calibration_nc),
+        sink=spec.sink.replace(path=None),
     )
     with ss.open_resources(spec, None) as res:
         assert res['calibration'].equals(xr.load_dataset(calibration_nc))

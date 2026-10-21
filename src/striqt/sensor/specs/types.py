@@ -105,10 +105,6 @@ Period = Annotated[float, Meta('waveform period', 's', ge=0)]
 ReceiveRetries = Annotated[
     int, Meta('number of acquisition retry attempts on stream error', ge=0)
 ]
-SinkClass = Annotated[
-    Union[str, Literal['striqt.sensor.sinks.CaptureAppender']],
-    Meta('Data sink class that implements data storage'),
-]
 SNR = Annotated[
     float, Meta('Add circular white gaussian noise to achieve this SNR', 'dB')
 ]

@@ -270,11 +270,51 @@ def test_plot_options_reject_unknown_fields():
         })
 
 
-def test_extension_sink_is_kept_as_a_string():
-    ext = ss.specs.Extension.from_dict({'sink': 'striqt.sensor.sinks.NoSink'})
-    assert (
-        make_site_sweep(extensions=ext).extensions.sink == 'striqt.sensor.sinks.NoSink'
+def test_extension_rejects_a_sink_key():
+    with pytest.raises(msgspec.ValidationError, match='sink'):
+        ss.specs.Extension.from_dict({'sink': 'striqt.sensor.sinks.NoSink'})
+
+
+# %% Sink and ZarrSink
+
+Sink = ss.specs.Sink
+ZarrSink = ss.specs.ZarrSink
+
+
+@pytest.mark.parametrize(
+    'build', [make_sweep, make_site_sweep], ids=['single_tone', 'site_single_tone']
+)
+def test_sweep_sink_is_a_zarr_sink(build):
+    assert type(build().sink) is ZarrSink
+
+    # direct construction keeps the base Sink until revalidation widens it
+    direct = build(sink=Sink(path='x'))
+    assert direct.sink == Sink(path='x')
+    cls = type(direct)
+    revalidated = (
+        direct.validate(),
+        direct.replace(loops=()),
+        cls.from_dict(direct.to_dict(unfreeze=True)),
     )
+    for spec in revalidated:
+        assert spec.sink == ZarrSink(path='x')
+
+
+def test_calibration_document_keeps_the_base_sink():
+    assert type(make_calibration_sweep().sink) is Sink
+
+    widened = make_calibration_sweep(sink=ZarrSink())
+    with pytest.raises(msgspec.ValidationError, match='store'):
+        widened.validate()
+    with pytest.raises(msgspec.ValidationError, match='store'):
+        widened.replace(loops=())
+
+
+@pytest.mark.parametrize('cls', [Sink, ZarrSink], ids=['sink', 'zarr_sink'])
+def test_sink_path_accepts_null(construct, cls):
+    sink = construct(cls, path=None)
+    assert sink.validate().path is None
+    assert cls.from_dict(sink.to_dict()) == sink
 
 
 # %% CaptureRemap
@@ -360,6 +400,20 @@ class TestSpecChain:
         inherited = set(base.__struct_fields__)
         assert inherited <= set(cls.__struct_fields__)
         assert set(cls.__struct_fields__) - inherited == added
+
+    @pytest.mark.parametrize(
+        'cls, sink_type',
+        [
+            (ss.specs.ActionSpec, Sink),
+            (ss.specs.Sweep, ZarrSink),
+            (ss.specs.ManualYFactorCalibration, Sink),
+        ],
+        ids=['action_spec', 'sweep', 'calibration'],
+    )
+    def test_sink_field_type(self, cls, sink_type):
+        (field,) = [f for f in msgspec.structs.fields(cls) if f.name == 'sink']
+        assert field.type is sink_type
+        assert field.default == sink_type()
 
     @pytest.mark.parametrize(
         'kws, match',

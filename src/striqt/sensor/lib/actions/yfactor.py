@@ -227,8 +227,9 @@ def build_calibration_sweep(
 
     The sweep is the document's capture plan over every port, with the analysis of
     `calibration_analysis`, IQ reuse across the `analysis_bandwidth` points of one
-    radio setting, the Nyquist filter on, and no warmup. It is an instance of the
-    document class's `sweep_cls`.
+    radio setting, the Nyquist filter on, and no warmup. Its `sink` is the document's
+    `Sink` widened to a `ZarrSink`, of which the runner reads only the path and log
+    fields. It is an instance of the document class's `sweep_cls`.
 
     Raises:
         TypeError: if `spec` is not an instance of a bound document class
@@ -242,7 +243,7 @@ def build_calibration_sweep(
         source=spec.source,
         peripherals=spec.peripherals,
         extensions=spec.extensions,
-        sink=spec.sink,
+        sink=specs.ZarrSink.from_spec(spec.sink),
         captures=spec.captures,
         loops=spec.loops,
         adjust_captures=spec.adjust_captures,
@@ -310,8 +311,14 @@ def calibration_fields(
 def corrections_path(
     sweep: specs.Sweep[Any, Any, Any], format_path: specs.paths.PathFormatter | None
 ) -> Path:
-    """return `sweep.sink.path` with its ``{fields}`` formatted."""
+    """return `sweep.sink.path` with its ``{fields}`` formatted.
+
+    Raises:
+        ValueError: if `sweep.sink.path` is None
+    """
     path = sweep.sink.path
+    if path is None:
+        raise ValueError('sink.path is null, so the calibration has no output path')
     if format_path is not None:
         path = format_path(path)
     return Path(path)
@@ -346,21 +353,24 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
     """run a `ManualYFactorCalibration`.
 
     `sweep` is `build_calibration_sweep` of the document; the resources open for
-    it, with a `MemoryCacheSink` that collects the captures. `iterate` confirms the
-    ENR with the operator, then for each port and each diode state prompts the
-    operator to switch the diode and runs the captures of that port through
-    `iterate_captures`, passing the diode state as the pipeline's `extra_data` so
-    that it becomes a variable of every acquisition. It ends by computing and saving
-    the corrections with `save_yfactor_corrections`.
+    it, and `open_sink` returns a `MemoryCacheSink` that collects the captures.
+    `iterate` confirms the ENR with the operator, then for each port and each diode
+    state prompts the operator to switch the diode and runs the captures of that
+    port through `iterate_captures`, passing the diode state as the pipeline's
+    `extra_data` so that it becomes a variable of every acquisition. It ends by
+    computing and saving the corrections with `save_yfactor_corrections`, to the
+    document's `sink.path`; a path of None writes nothing.
     """
 
     spec: specs.ManualYFactorCalibration[SS, SP, SC]
     sweep: specs.Sweep[SS, SP, SC]
-    sink_cls: type[SinkBase[SC]] = MemoryCacheSink
 
     def __init__(self, spec: specs.ManualYFactorCalibration[SS, SP, SC]) -> None:
         self.spec = spec
         self.sweep = build_calibration_sweep(spec)
+
+    def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
+        return MemoryCacheSink(self.sweep)
 
     def iterate(
         self,
@@ -374,8 +384,8 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
 
         The yields are those of `iterate_captures` over each pass. Each pass begins
         with a fresh acquisition (`Controller.discard_iq`); within a pass, `reuse_iq`
-        applies. The corrections are saved only when the sink is a `MemoryCacheSink`;
-        an `extensions.sink` override collects nothing to save.
+        applies. The corrections are saved only when the sink is a `MemoryCacheSink`
+        and the document's `sink.path` is not None.
 
         Raises:
             ValueError: if `loop` is set, since a calibration runs its grid once
@@ -411,10 +421,16 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
             )
 
         sink = resources['sink']
-        if isinstance(sink, MemoryCacheSink):
-            save_yfactor_corrections(
-                sink.pop(),
-                calibration_fields(self.spec, self.sweep),
-                corrections_path(self.sweep, resources['format_path']),
-                enr_dB=self.spec.calibration.enr,
+        if not isinstance(sink, MemoryCacheSink):
+            return
+        if self.spec.sink.path is None:
+            sa.util.get_logger('sink').info(
+                'sink.path is null: the corrections were not written'
             )
+            return
+        save_yfactor_corrections(
+            sink.pop(),
+            calibration_fields(self.spec, self.sweep),
+            corrections_path(self.sweep, resources['format_path']),
+            enr_dB=self.spec.calibration.enr,
+        )

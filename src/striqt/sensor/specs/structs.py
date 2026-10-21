@@ -325,19 +325,33 @@ BundledTriggers = sa.registry.signal_trigger.to_spec()
 
 
 class Sink(SpecBase, frozen=True, kw_only=True):
-    path: str = '{spec_name}-{start_time}'
+    """the output block of every document.
+
+    `path` is the output of the action, with the ``{fields}`` of
+    `specs.paths.PathFormatter` expanded; the action runner selects the file format.
+    A `path` of None writes nothing. `log_path` and `log_level` configure the sweep
+    log file independently of `path`.
+    """
+
+    path: Optional[str] = '{spec_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
-    store: types.StoreFormat = 'directory'
 
-    # zarr store tuning parameters
+
+class ZarrSink(Sink, frozen=True, kw_only=True):
+    """the output block of a `Sweep`: a zarr store appended along `capture`.
+
+    `store` selects a directory or zip store; the remaining fields tune the write
+    batching and chunking of the store.
+    """
+
+    store: types.StoreFormat = 'directory'
     max_threads: Optional[int] = None
     batched_write_count: int = 1
     max_chunk_bytes: int = 50000000
 
 
 class Extension(SpecBase, frozen=True, kw_only=True):
-    sink: Union[types.SinkClass, None] = None
     import_path: Optional[types.ExtensionPath] = None
     import_name: types.ModuleName = None
 
@@ -443,11 +457,13 @@ class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
     `analysis` is evaluated on each expanded capture, with the capture's
     `adjust_analysis` applied on top. `options` selects the warmup, IQ reuse, and
     the `loop_only_nyquist` filter of the expansion. `plot_hint` is read only by
-    `striqt.figures`. Construction validates each unique capture against the
+    `striqt.figures`. `sink` is a `ZarrSink`, which narrows the `Sink` of
+    `ActionSpec`. Construction validates each unique capture against the
     registered measurements and the `correct_iq` signal path (see
     `sweep.validate_sweep`).
     """
 
+    sink: ZarrSink = ZarrSink()
     plot_hint: Union[PlotOptions, None] = None
     analysis: BundledAnalysis = BundledAnalysis()
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)

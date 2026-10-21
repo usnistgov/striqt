@@ -40,7 +40,7 @@ class _BatchTracker:
 class Zipper:
     BUFFER_SIZE = 10 * 1024 * 1024
     temp_dir: str
-    temp_spec: specs.Sink | None
+    temp_spec: specs.ZarrSink | None
 
     def __init__(self, zip_path, sink: SinkBase | None = None, force: bool = False):
         if sink is not None and sink._format_path is not None:
@@ -111,7 +111,11 @@ class Zipper:
 
 
 class SinkBase(Generic[specs.SC]):
-    """intake acquisitions one at a time and parcel them to a data store"""
+    """intake acquisitions one at a time and parcel them to a data store.
+
+    The constructor takes the `Sweep` the sink serves and reads its `sink` block;
+    `open` runs when the sink is entered as a context manager.
+    """
 
     def __init__(
         self,
@@ -131,15 +135,6 @@ class SinkBase(Generic[specs.SC]):
         self._future = None
         self._pending_data: list['xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
-
-        # decide group sizes
-        source_id = controller.lookup.id(sweep_spec.source)
-        captures = specs.sequencing.loop_captures(sweep_spec, source_id)
-        if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], specs.Repeat):
-            captures = sweep_spec.loops[0].count * captures
-        self._batch = _BatchTracker(
-            captures, min_size=sweep_spec.sink.batched_write_count
-        )
 
     def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
@@ -227,9 +222,37 @@ class MemoryCacheSink(SinkBase):
 
 
 class ZarrSinkBase(SinkBase):
+    """write to the zarr store at `sink.path` in batches of `batched_write_count`.
+
+    Raises:
+        ValueError: if `sweep_spec.sink.path` is None
+    """
+
     _zipper: Zipper | None = None
+    _batch: _BatchTracker
+
+    def __init__(
+        self,
+        sweep_spec: specs.Sweep[Any, Any, specs.SC],
+        format_path: specs.paths.PathFormatter | None = None,
+        *,
+        force: bool = False,
+    ):
+        if sweep_spec.sink.path is None:
+            raise ValueError('sink.path is null, but a zarr sink needs an output path')
+
+        super().__init__(sweep_spec, format_path, force=force)
+
+        source_id = controller.lookup.id(sweep_spec.source)
+        captures = specs.sequencing.loop_captures(sweep_spec, source_id)
+        if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], specs.Repeat):
+            captures = sweep_spec.loops[0].count * captures
+        self._batch = _BatchTracker(
+            captures, min_size=sweep_spec.sink.batched_write_count
+        )
 
     def open(self):
+        assert self._spec.path is not None
         path = Path(self._spec.path)
 
         if path.name.lower().endswith('.zarr.zip'):
@@ -325,6 +348,16 @@ class ZarrCaptureSink(ZarrSinkBase):
 
 
 class ZarrTimeAppendSink(ZarrSinkBase):
+    """append the spectrogram of each capture along its time axis.
+
+    No action runner selects this sink; pass an instance through
+    ``iterate_sweep(resources, sink=ZarrTimeAppendSink(sweep))``. Separate write
+    batches are appended along `capture`.
+
+    Raises:
+        ValueError: if `sweep_spec.analysis` has no `spectrogram`
+    """
+
     def __init__(
         self,
         sweep_spec: specs.Sweep,

@@ -24,18 +24,25 @@ class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
     """the contract between a decoded document and the code that opens and runs it.
 
     A runner class is registered for one document type with `registry.runner` and
-    constructed from the decoded document. `open_resources` opens the source,
-    peripherals, and sink for `sweep`, using `sink_cls` unless
-    ``sweep.extensions.sink`` names another class, and `iterate_sweep` calls
-    `iterate` over the open resources. Each runner implements its own constructor
-    and `iterate`; `iterate_captures` is the pipeline they run captures through.
+    constructed from the decoded document. `open_resources` opens the source and
+    peripherals for `sweep` and enters the sink returned by `open_sink`, and
+    `iterate_sweep` calls `iterate` over the open resources. Each runner implements
+    its own constructor, `open_sink`, and `iterate`; `iterate_captures` is the
+    pipeline they run captures through.
     """
 
     spec: TA
     sweep: specs.Sweep[SS, SP, SC]
-    sink_cls: type[SinkBase[SC]]
 
     def __init__(self, spec: TA) -> None: ...
+
+    def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
+        """return the sink that `open_resources` enters for `sweep`, not yet opened.
+
+        The runner selects the implementation. A ``sweep.sink.path`` of None means
+        that nothing is written.
+        """
+        ...
 
     def iterate(
         self,

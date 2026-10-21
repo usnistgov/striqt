@@ -91,14 +91,15 @@ def test_sink_including_a_source_fragment_is_rejected(write_yaml):
 # %% the extensions: block
 
 
+@pytest.mark.parametrize('key', ['sweep_struct', 'sink'])
 def test_legacy_extensions_keys_are_rejected_before_import(
-    write_yaml, isolated_extension_import
+    write_yaml, isolated_extension_import, key
 ):
     text = INLINE_SITE_SPEC.replace(
-        '  import_name: extensions\n', '  import_name: extensions\n  sweep_struct: x\n'
+        '  import_name: extensions\n', f'  import_name: extensions\n  {key}: x\n'
     )
     spec = write_yaml('spec.yaml', text)
-    with pytest.raises(msgspec.ValidationError, match='sweep_struct'):
+    with pytest.raises(msgspec.ValidationError, match=key):
         ss.read_yaml_spec(spec)
     assert 'extensions' not in sys.modules
 
@@ -199,12 +200,17 @@ def test_calibration_sweeps_decode(calibration_sweep, site_calibration_sweep):
     assert sweep.calibration.detector_period == pytest.approx(0.01)
 
 
-# %% output_path override
+# %% output_path and store_backend overrides
 
 
 def test_output_path_overrides_the_sink_path():
     spec = ss.read_yaml_spec(SWEEP_DIR / 'synthetic.yaml', output_path='out.zarr.zip')
     assert spec.sink.path == 'out.zarr.zip'
+
+
+def test_store_backend_is_rejected_for_a_calibration_document():
+    with pytest.raises(TypeError, match='ZarrSink'):
+        ss.read_yaml_spec(SITE_DIR / 'site-calibration.yaml', store_backend='zip')
 
 
 # %% read_zarr_spec
@@ -276,6 +282,20 @@ def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
     spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')
     zarr.open(sa.open_store(path, mode='a')).attrs['junk'] = 1
     assert ss.read_zarr_spec(path) == spec
+
+
+def test_read_zarr_spec_drops_the_removed_extensions_sink_attr(run_sweep_to_zarr):
+    """stores written before the runner selected the sink carry
+    ``extensions.sink`` in their attrs; the reader warns and discards it"""
+    import zarr
+
+    spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')
+    attrs = zarr.open(sa.open_store(path, mode='a')).attrs
+    attrs['extensions'] = {**attrs['extensions'], 'sink': 'striqt.sensor.sinks.NoSink'}
+
+    with pytest.warns(DeprecationWarning, match='extensions.sink'):
+        rebuilt = ss.read_zarr_spec(path)
+    assert rebuilt == spec
 
 
 def test_read_zarr_spec_keeps_the_fields_a_bound_sweep_adds(tmp_path):

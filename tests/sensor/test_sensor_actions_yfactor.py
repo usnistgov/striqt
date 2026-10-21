@@ -4,6 +4,7 @@ analysis, sink, and operator interaction a calibration runner derives from its d
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 from fractions import Fraction
@@ -34,7 +35,6 @@ from sweep_strategies import (
 
 import striqt.sensor as ss
 from striqt.sensor.lib.actions import ManualYFactorRunner, registry, warmup, yfactor
-from striqt.sensor.lib.resources import resolve_sink_cls
 
 H = ss.specs.sequencing
 Repeat = ss.specs.Repeat
@@ -240,7 +240,7 @@ def test_explicit_captures_with_implied_loops():
     assert len(yfactor.calibration_passes(sweep)) == 4
 
 
-# %% sink_cls and calibration_fields
+# %% open_sink and calibration_fields
 
 
 def test_calibration_fields_follow_the_loops_with_the_diode_after_port():
@@ -269,8 +269,15 @@ def test_calibration_fields_put_the_diode_first_without_a_port_loop():
 
 def test_sink_collects_in_memory():
     runner = make_calibration_runner(loops=(PORT_LOOP,))
-    assert runner.sink_cls is ss.sinks.MemoryCacheSink
+    assert isinstance(runner.open_sink(None), ss.sinks.MemoryCacheSink)
     assert yfactor.calibration_fields(runner.spec, runner.sweep) == ['port', TOGGLE]
+
+
+def test_calibration_sweep_widens_the_sink_to_a_zarr_sink():
+    sink = ss.specs.Sink(path='cal.nc', log_path='log.json')
+    runner = make_calibration_runner(sink=sink)
+    assert runner.spec.sink == ss.specs.Sink(path='cal.nc', log_path='log.json')
+    assert runner.sweep.sink == ss.specs.ZarrSink(path='cal.nc', log_path='log.json')
 
 
 def test_corrections_path_is_the_formatted_sink_path(fake_source_id):
@@ -284,10 +291,10 @@ def test_corrections_path_is_the_formatted_sink_path(fake_source_id):
     )
 
 
-def test_extensions_sink_overrides_the_memory_cache():
-    ext = ss.specs.Extension(sink='striqt.sensor.sinks.NoSink')
-    runner = make_calibration_runner(extensions=ext)
-    assert resolve_sink_cls(runner.sweep, runner.sink_cls) is ss.sinks.NoSink
+def test_corrections_path_rejects_a_null_path():
+    runner = make_calibration_runner(sink=ss.specs.Sink(path=None))
+    with pytest.raises(ValueError, match='path'):
+        yfactor.corrections_path(runner.sweep, None)
 
 
 # %% operator prompts
@@ -415,6 +422,48 @@ def test_each_pass_begins_with_a_fresh_acquisition(monkeypatch, scripted_input):
         (3, {TOGGLE: False}),
         (4, {TOGGLE: True}),
     ]
+
+
+def _run_passes_into_a_memory_sink(runner, monkeypatch, scripted_input):
+    """drive every pass of `runner` with no acquisitions into a `MemoryCacheSink`
+    and return the calls made to `save_yfactor_corrections`"""
+    scripted_input['answers'] += ['y'] + [''] * len(
+        yfactor.calibration_passes(runner.spec)
+    )
+    saves = []
+
+    def fake_iterate_captures(resources, **kws):
+        yield from ()
+
+    def record_save(data, calibration_fields, path, *, enr_dB):
+        saves.append({'path': path, 'enr_dB': enr_dB})
+
+    monkeypatch.setattr(yfactor.core, 'iterate_captures', fake_iterate_captures)
+    monkeypatch.setattr(yfactor, 'save_yfactor_corrections', record_save)
+    resources = {
+        'source': _RecordingSource(),
+        'sink': ss.sinks.MemoryCacheSink(runner.sweep),
+        'format_path': None,
+    }
+    list(runner.iterate(resources))
+    return saves
+
+
+def test_null_sink_path_skips_the_save(monkeypatch, scripted_input, caplog):
+    runner = make_calibration_runner(sink=ss.specs.Sink(path=None))
+    caplog.set_level(logging.INFO, logger='striqt.sink')
+    saves = _run_passes_into_a_memory_sink(runner, monkeypatch, scripted_input)
+    assert saves == []
+    assert any('not written' in record.getMessage() for record in caplog.records)
+
+
+def test_sink_path_is_saved_once_after_the_last_pass(
+    monkeypatch, scripted_input, tmp_path
+):
+    path = tmp_path / 'cal.nc'
+    runner = make_calibration_runner(sink=ss.specs.Sink(path=str(path)))
+    saves = _run_passes_into_a_memory_sink(runner, monkeypatch, scripted_input)
+    assert saves == [{'path': path, 'enr_dB': runner.spec.calibration.enr}]
 
 
 def test_iterate_does_not_loop():

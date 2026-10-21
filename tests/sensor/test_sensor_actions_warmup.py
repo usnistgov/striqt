@@ -63,9 +63,11 @@ def test_warmup_sweep_flattens_to_count_captures(count):
     assert type(warm.captures[0]) is type(captures[0])
 
 
-def test_warmup_sweep_preserves_analysis_sink_and_trigger():
+def test_warmup_sweep_preserves_analysis_and_trigger_and_nulls_the_sink_path():
+    """the analysis and the source's trigger are copied; the sink is copied with
+    its path set to None"""
     source = CUPY.replace(signal_trigger='cellular_5g_pss_sync')
-    sink = ss.specs.Sink(path='somewhere.zarr', batched_write_count=3)
+    sink = ss.specs.ZarrSink(path='somewhere.zarr', batched_write_count=3)
     analysis = ss.specs.BundledAnalysis.from_dict({
         **ANALYSIS.to_dict(),
         # shared_spectrum picks SSB case C, which a capture with no center_frequency
@@ -84,11 +86,10 @@ def test_warmup_sweep_preserves_analysis_sink_and_trigger():
     )
     warm = warmup.derive_warmup_sweep(sweep)
     assert warm.analysis == analysis
-    assert warm.sink == sink
+    assert warm.sink == sink.replace(path=None)
     assert warm.source.signal_trigger == 'cellular_5g_pss_sync'
     assert warm.source.master_clock_rate == SOURCE.master_clock_rate
     assert warm.sensor.source_cls is ss.sources.NoSource
-    assert warm.sensor.sink_cls is ss.sinks.NoSink
 
 
 def test_warmup_sweep_is_a_sweep_with_the_origin_capture_type():

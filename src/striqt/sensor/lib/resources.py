@@ -4,7 +4,6 @@ from __future__ import annotations as __
 
 import contextlib
 import functools
-import importlib
 import os
 import sys
 from typing import Any, Callable, cast, ContextManager, Generic, TYPE_CHECKING
@@ -96,34 +95,12 @@ def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
     )
 
 
-def resolve_sink_cls(
-    spec: specs.ActionSpec[Any, Any], default_cls: type[SinkBase] | None
-) -> type[SinkBase]:
-    """return the sink class named by `spec.extensions.sink`, else `default_cls`.
-
-    Raises:
-        TypeError: if neither names a class
-    """
-    if spec.extensions.sink is not None:
-        mod_name, *sub_names, obj_name = spec.extensions.sink.rsplit('.')
-        mod = importlib.import_module(mod_name)
-        for name in sub_names:
-            mod = getattr(mod, name)
-        return getattr(mod, obj_name)
-    elif default_cls is not None:
-        return default_cls
-    else:
-        raise TypeError('no sink class in sensor binding or spec .extensions.sink')
-
-
 def _open_sink(
-    spec: specs.Sweep[Any, Any, SC],
-    default_cls: type[SinkBase] | None,
+    runner: ActionRunner[Any, SS, SP, SC, PS, PC],
     format_path: specs.paths.PathFormatter | None = None,
 ) -> SinkBase[SC]:
     with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
-        sink_cls = resolve_sink_cls(spec, default_cls)
-        return sink_cls(spec, format_path)
+        return runner.open_sink(format_path)
 
 
 class ConnectionManager(
@@ -211,10 +188,9 @@ def open_resources(
     """open the sensor hardware and software contexts needed to run `spec`.
 
     The action runner registered for the type of `spec` is built first; the source,
-    peripherals, sink (the runner's `sink_cls` unless `extensions.sink` overrides
-    it), and warmup are opened for the `Sweep` it derives. The
-    resources of the returned `ConnectionManager` are open and ready for
-    `iterate_sweep`.
+    peripherals, the sink returned by the runner's `open_sink`, and warmup are
+    opened for the `Sweep` it derives. The resources of the returned
+    `ConnectionManager` are open and ready for `iterate_sweep`.
 
     Raises:
         TypeError: if no action runner is registered for the type of `spec`
@@ -244,7 +220,7 @@ def open_resources(
             _open_devices, conn, ctrl_cls, sweep, test_only, fmt
         )
         prep_sweep = util.threadpool.submit(_prepare_sweep, sweep, on_source_opened)
-        sink = util.threadpool.submit(_open_sink, sweep, runner.sink_cls, fmt)
+        sink = util.threadpool.submit(_open_sink, runner, fmt)
 
         with exc.defer():
             # foreground thread 1: initialize warmup sweeps

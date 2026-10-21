@@ -24,15 +24,13 @@ import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import sinks
 
-ZARR_SINK = ss.specs.Extension()
-TIME_APPEND_SINK = ss.specs.Extension(sink='striqt.sensor.sinks.ZarrTimeAppendSink')
+OFFSETS = (1e6, 2e6)
 
 
-def zarr_sweep(path, offsets, *, analysis=IQ_ONLY, extensions=ZARR_SINK, **sink_kws):
-    """a sweep writing to `path` through the binding's default sink (or `extensions`)"""
+def zarr_sweep(path, offsets, *, analysis=IQ_ONLY, **sink_kws):
+    """a tone sweep whose `ZarrSink` writes to `path`"""
     sweep = tone_sweep(offsets, analysis=analysis)
-    sink = ss.specs.Sink(path=str(path), **sink_kws)
-    return sweep.replace(sink=sink, extensions=extensions)
+    return sweep.replace(sink=ss.specs.ZarrSink(path=str(path), **sink_kws))
 
 
 def run_to_store(sweep):
@@ -44,7 +42,7 @@ def run_to_store(sweep):
 # %% NoSink
 
 
-def test_no_sink_append_returns_its_argument(fake_source_id):
+def test_no_sink_append_returns_its_argument():
     sink = ss.sinks.NoSink(tone_sweep((1e6,)))
     token = object()
     assert sink.append(token) is token
@@ -113,8 +111,8 @@ def test_zarr_zip_path_is_archived_and_readable(tmp_path):
 # %% ZarrTimeAppendSink
 
 
-def test_time_append_sink_requires_a_spectrogram(fake_source_id):
-    sweep = zarr_sweep('unused.zarr', (1e6,), extensions=TIME_APPEND_SINK)
+def test_time_append_sink_requires_a_spectrogram():
+    sweep = zarr_sweep('unused.zarr', (1e6,))
     with pytest.raises(ValueError, match='spectrogram'):
         ss.sinks.ZarrTimeAppendSink(sweep)
 
@@ -122,16 +120,19 @@ def test_time_append_sink_requires_a_spectrogram(fake_source_id):
 def test_time_append_sink_concatenates_the_frames(tmp_path):
     """2 captures written as 1 batch form 1 row whose spectrogram time axis
     contains both captures' frames back to back on a uniform grid"""
-    offsets = (1e6, 2e6)
     sweep = zarr_sweep(
-        tmp_path / 'spg.zarr',
-        offsets,
-        analysis=SPECTROGRAM,
-        extensions=TIME_APPEND_SINK,
-        batched_write_count=2,
+        tmp_path / 'spg.zarr', OFFSETS, analysis=SPECTROGRAM, batched_write_count=2
     )
     frames, hop_period = spectrogram_frames(sweep.captures[0], SPECTROGRAM.spectrogram)
-    results = run_to_store(sweep)
+
+    # with a path, the runner's own ZarrCaptureSink would open the same store. A
+    # zarr sink looks up the id of an open source, which orders the two contexts
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    with (
+        ss.open_resources(unsunk, None) as res,
+        ss.sinks.ZarrTimeAppendSink(sweep) as sink,
+    ):
+        results = [ds for ds in ss.iterate_sweep(res, sink=sink) if ds is not None]
 
     stored = sa.load(sweep.sink.path)
     assert stored.sizes['capture'] == 1
@@ -144,6 +145,25 @@ def test_time_append_sink_concatenates_the_frames(tmp_path):
         assert np.array_equal(
             stored.spectrogram.values[0, half], ds.spectrogram.values[0]
         )
+
+
+# %% runner sink selection
+
+
+def test_zarr_sink_rejects_a_null_path():
+    with pytest.raises(ValueError, match='path'):
+        ss.sinks.ZarrCaptureSink(tone_sweep(OFFSETS))
+
+
+def test_null_sink_path_opens_a_no_sink():
+    with ss.open_resources(tone_sweep(OFFSETS), None) as res:
+        assert type(res['sink']) is ss.sinks.NoSink
+
+
+def test_sink_path_opens_a_zarr_capture_sink(tmp_path):
+    sweep = zarr_sweep(tmp_path / 'out.zarr', OFFSETS)
+    with ss.open_resources(sweep, None) as res:
+        assert type(res['sink']) is ss.sinks.ZarrCaptureSink
 
 
 # %% Zipper

@@ -3,6 +3,7 @@
 from __future__ import annotations as __
 
 import sys
+import warnings
 import msgspec
 from pathlib import Path
 from typing import Any, Optional, overload, TYPE_CHECKING
@@ -19,11 +20,21 @@ if TYPE_CHECKING:
 
 
 def open_store(
-    spec: specs.Sink,
+    spec: specs.ZarrSink,
     *,
     format_path: specs.paths.PathFormatter | None = None,
     force=False,
 ) -> ZarrStore:
+    """open the zarr store at `spec.path`, formatted by `format_path`, for appending.
+
+    `spec.store` fixes the suffix to ``.zarr`` or ``.zarr.zip``; with `force` an
+    existing store is truncated.
+
+    Raises:
+        ValueError: if `spec.path` is None
+    """
+    if spec.path is None:
+        raise ValueError('sink.path is null, but a zarr store needs a path')
     spec_path = spec.path
 
     if format_path is not None:
@@ -57,7 +68,7 @@ def read_yaml_spec(
         output_path: optional override for the specification's output path
         type: the document type to decode into, or None to select it by the
             ``sensor_binding`` tag
-        store_backend: optional override for the specification's output store backend
+        store_backend: replaces `sink.store` of a `Sweep` document when given
 
     Returns:
         the decoded document, an instance of the bound `ActionSpec` class
@@ -90,7 +101,7 @@ def read_json_spec(
         type: the document type to decode into, or None to select it by the
             ``sensor_binding`` tag
         output_path: optional override for the specification's output path
-        store_backend: optional override for the specification's output store backend
+        store_backend: replaces `sink.store` of a `Sweep` document when given
 
     Returns:
         the decoded document, an instance of the bound `ActionSpec` class
@@ -131,7 +142,7 @@ def read_zarr_spec(
             fields that class adds to `specs.Sweep`. A saved ``mock_source`` attr
             selects that binding's mock sweep class instead.
         output_path: replaces `sink.path` in the returned spec when given
-        store_backend: replaces `sink.store` in the returned spec when given
+        store_backend: replaces `sink.store` of a `Sweep` document when given
         extension_root: directory that a relative `extensions.import_path` is
             resolved against, or None for the store's directory
 
@@ -150,6 +161,7 @@ def read_zarr_spec(
     if extension_root is None:
         extension_root = Path(path).resolve().parent
 
+    attrs = _drop_removed_extension_sink(attrs)
     sweep_cls = _resolve_sweep_cls(attrs, extension_root, type=type)
 
     # with no registered binding to filter by, the base fields stand in and the
@@ -162,6 +174,25 @@ def read_zarr_spec(
     return _decode_sweep(
         tree, sweep_cls, output_path=output_path, store_backend=store_backend
     )
+
+
+def _drop_removed_extension_sink(attrs: dict[str, Any]) -> dict[str, Any]:
+    """return `attrs` without an ``extensions.sink`` key, which `Extension` does not define.
+
+    Stores written by earlier releases carry the key. A `DeprecationWarning` reports
+    the drop. The sink class the key named is not applied; a caller that wants no
+    output sets ``sink.path`` to None on the returned spec.
+    """
+    extensions = attrs.get('extensions')
+    if not isinstance(extensions, dict) or 'sink' not in extensions:
+        return attrs
+    warnings.warn(
+        'ignoring the removed extensions.sink attr of this data store',
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    extensions = {k: v for k, v in extensions.items() if k != 'sink'}
+    return {**attrs, 'extensions': extensions}
 
 
 def _convert_zarr_attrs_spec(
@@ -249,6 +280,10 @@ def _decode_sweep(
 
     sink = spec.sink
     if store_backend is not None:
+        if not isinstance(sink, specs.ZarrSink):
+            raise TypeError(
+                'store_backend applies only to a Sweep document with a ZarrSink'
+            )
         sink = sink.replace(store=store_backend)
     if output_path is not None:
         sink = sink.replace(path=output_path)

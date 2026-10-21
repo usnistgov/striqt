@@ -50,18 +50,13 @@
     },
     "adjust_captures": {},
     "extensions": {
-        "sink": null,
         "import_path": null,
         "import_name": null
     },
     "sink": {
         "path": "outputs/calibration.nc",
         "log_path": null,
-        "log_level": "info",
-        "store": "directory",
-        "max_threads": null,
-        "batched_write_count": 1,
-        "max_chunk_bytes": 50000000
+        "log_level": "info"
     },
     "peripherals": {},
     "calibration": {

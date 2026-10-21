@@ -5,7 +5,7 @@ additional spec fields.
 """
 
 from . import specs
-from .lib import sources, peripherals, sinks
+from .lib import sources, peripherals
 from .lib.bindings import (
     Sensor,
     SensorBinding,
@@ -18,10 +18,7 @@ from .specs import Schema
 # %% Synthetic data sources for testing/warmup/post-analysis
 warmup = bind_sensor(
     'warmup',
-    Sensor(
-        source_cls=sources.NoSource,
-        sink_cls=sinks.NoSink,
-    ),
+    Sensor(source_cls=sources.NoSource),
     Schema(
         source=specs.NoSource,
         init_like=specs.NoSource,
