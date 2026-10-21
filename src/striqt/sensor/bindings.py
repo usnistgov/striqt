@@ -6,10 +6,14 @@ additional spec fields.
 
 from . import specs
 from .lib import sources, peripherals, sinks
-from .lib.bindings import Sensor, bind_sensor, SensorBinding
+from .lib.bindings import (
+    Sensor,
+    SensorBinding,
+    bind_manual_yfactor_calibration,
+    bind_sensor,
+)
 from .lib.controller import Controller
 from .specs import Schema
-from .lib.calibration import bind_manual_yfactor_calibration
 
 # %% Synthetic data sources for testing/warmup/post-analysis
 warmup = bind_sensor(

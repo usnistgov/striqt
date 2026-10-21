@@ -22,7 +22,6 @@ from synthetic_sources import (
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import compute
-from striqt.sensor.lib.actions import SweepRunner
 
 (CAPTURE,) = tone_captures((1e6,))
 SWEEP = preset_sweep('single_tone', (CAPTURE,), analysis=IQ_ONLY)
@@ -185,8 +184,7 @@ WARMUP_ENABLED = ss.specs.SweepOptions(skip_warmup=False)
     ids=['skip_argument', 'numpy_backend', 'skip_option'],
 )
 def test_prepare_compute_yields_once_without_a_warmup(skip_warmup, sweep):
-    runner = SweepRunner(sweep)
-    assert list(compute.prepare_compute(runner, skip_warmup=skip_warmup)) == [None]
+    assert list(compute.prepare_compute(sweep, skip_warmup=skip_warmup)) == [None]
 
 
 @pytest.mark.namespaces('cupy')
@@ -201,6 +199,6 @@ def test_prepare_compute_runs_a_warmup_sweep_on_cupy(array_backend):
         source=source,
         options=WARMUP_ENABLED,
     )
-    items = list(compute.prepare_compute(SweepRunner(sweep), skip_warmup=False))
+    items = list(compute.prepare_compute(sweep, skip_warmup=False))
     assert [item is None for item in items] == [True, True, False]
     assert isinstance(items[-1], compute.DelayedDataset)

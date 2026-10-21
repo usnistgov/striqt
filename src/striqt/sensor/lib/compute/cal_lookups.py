@@ -1,25 +1,21 @@
+"""lookups into a saved Y-factor calibration for the measurement path.
+
+A measurement sweep reads the netCDF that `actions.yfactor.save_yfactor_corrections`
+wrote and selects the power correction and system noise figure of each capture by
+its radio settings.
+"""
+
 from __future__ import annotations as __
 
-import dataclasses
-import sys
-from typing import cast, Any
+from typing import Any
 from pathlib import Path
 
-from .. import specs as specs
-from . import compute, io
-from .controller import Controller
-from .typing import TypeVar, SP, PS, PC
+from ... import specs
+from .. import io
+from . import corrections
 import striqt.analysis as sa
+from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM
 from striqt.analysis.lib.util import np, pd, xr
-
-
-SS = TypeVar('SS', bound='specs.SoapySource')
-
-
-def compute_y_factor_corrections(
-    dataset: 'xr.Dataset', Tref: float = 290.0
-) -> 'xr.Dataset':
-    return _y_factor_power_corrections(dataset, Tref=Tref)
 
 
 def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
@@ -103,91 +99,9 @@ def lookup_system_noise_power(
         units = f'dBm/{round(B)} Hz'
     return xr.DataArray(
         data=noise_psd,
-        dims=compute.CAPTURE_DIM,
+        dims=CAPTURE_DIM,
         attrs={'name': 'Sensor system noise spectral density', 'units': units},
     )
-
-
-def bind_manual_yfactor_calibration(
-    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, PS, PC]]'
-) -> 'type[Controller[SS, SP, Any, PS, PC]]':
-    """bind a manual Y-factor calibration of the sensor bound as `ctrl_cls`.
-
-    The result is `bind_sensor` with `ctrl_cls`'s own `Sensor` and a `Schema` whose
-    `action` is `specs.ManualYFactorCalibration`; `ManualYFactorRunner` runs it.
-    Sweep files select it with ``sensor_binding: <name>``. The controller class
-    records the caller's module.
-    """
-    from . import bindings
-
-    schema = dataclasses.replace(ctrl_cls.schema, action=specs.ManualYFactorCalibration)
-
-    return bindings.bind_sensor(
-        name,
-        ctrl_cls.sensor,
-        cast(specs.Schema[SS, SP, Any, PS, PC], schema),
-        module=sys._getframe(1).f_globals.get('__name__'),
-    )
-
-
-def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':
-    """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
-
-    # return bandwidth with same shape as dataset.channel_power_time_series
-    bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
-    sample_rate = data.backend_sample_rate.broadcast_like(data).squeeze()
-    where = ~np.isfinite(bw.values)
-    bw.values[where] = sample_rate.values[where]
-    return bw
-
-
-def _y_factor_power_corrections(dataset: 'xr.Dataset', Tref=290.0) -> 'xr.Dataset':
-    from scipy.constants import Boltzmann
-
-    k = Boltzmann * 1000  # W/K -> mW/K
-    enr_dB = dataset.enr.sel(noise_diode_enabled=True, drop=True)
-    enr = 10 ** (enr_dB / 10.0)
-
-    pvt = dataset.channel_power_time_series.drop_vars('capture_index')
-    power = (
-        pvt
-        .sel(power_detector='rms', drop=True)
-        .pipe(sa.dBtopow)
-        .mean(dim='time_elapsed')
-    )
-    power.name = 'RMS power'
-
-    peak = pvt.sel(power_detector='peak', drop=True).max('time_elapsed')
-    avg = pvt.sel(power_detector='rms', drop=True).pipe(sa.dBlinmean, 'time_elapsed')
-    papr = (peak - avg).assign_attrs(units='dB')
-
-    Pon = power.sel(noise_diode_enabled=True, drop=True)
-    Poff = power.sel(noise_diode_enabled=False, drop=True)
-    Y = Pon / Poff
-
-    noise_figure = enr_dB - 10 * np.log10(Y - 1)
-    noise_figure.name = 'Noise figure'
-    noise_figure.attrs = {'units': 'dB'}
-
-    Te = Tref * (10 ** (noise_figure / 10) - 1)
-    Te.name = 'Effective noise temperature'
-    Te.attrs = {'units': 'K'}
-
-    B = _limit_nyquist_bandwidth(Te)
-
-    power_correction = (k * (enr * Tref) * B) / (Pon - Poff)
-    power_correction.name = 'Power scaling correction'
-    power_correction.attrs = {'units': 'mW/fs'}
-
-    return xr.Dataset({
-        'temperature': Te,
-        'noise_figure': noise_figure,
-        'power_correction': power_correction,
-        'p_on': Pon,
-        'p_off': Poff,
-        'papr_on': papr.sel(noise_diode_enabled=True, drop=True),
-        'papr_off': papr.sel(noise_diode_enabled=False, drop=True),
-    })
 
 
 def _summarize_calibration_field(
@@ -230,14 +144,12 @@ def _lookup_calibration_var(
     *,
     xp,
 ):
-    from . import compute
-
     results = []
 
     for c in specs.captures.split_capture_ports(capture):
         assert not isinstance(c.center_frequency, tuple)
 
-        fs = compute.design_resampler(c, master_clock_rate)['fs_sdr']
+        fs = corrections.design_resampler(c, master_clock_rate)['fs_sdr']
         port_key = _get_port_variable(cal_var)
 
         # these capture fields must match the calibration conditions exactly
@@ -259,8 +171,8 @@ def _lookup_calibration_var(
         else:
             exc = None
 
-        if compute.PORT_DIM in sel.coords:
-            sel = sel.dropna(compute.PORT_DIM).squeeze()
+        if PORT_DIM in sel.coords:
+            sel = sel.dropna(PORT_DIM).squeeze()
 
         if exc is not None:
             raise exc
@@ -302,9 +214,9 @@ def _get_port_variable(ds: 'xr.DataArray|xr.Dataset') -> str:
     Older calibration files name the coordinate 'channel'.
     """
     if ds is None:
-        return compute.PORT_DIM
-    if compute.PORT_DIM in ds.coords:
-        return compute.PORT_DIM
+        return PORT_DIM
+    if PORT_DIM in ds.coords:
+        return PORT_DIM
     else:
         # compatibility
         return 'channel'

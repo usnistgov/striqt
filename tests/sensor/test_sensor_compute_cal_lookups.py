@@ -1,28 +1,31 @@
-"""striqt.sensor.lib.calibration: the calibration binding, the Y-factor corrections
-and their lookups, the calibration sink, and the fake closed loop through the runner
+"""striqt.sensor.lib.compute.cal_lookups: the lookups and summaries of a saved Y-factor
+calibration, checked against files that save_yfactor_corrections writes from model
+captures and from the fake closed loop through the calibration runner
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from conftest import FAKE_SOAPY_CALIBRATION_SPEC, FAKE_SOAPY_SPEC, SITE_DIR, FakeRun
+from conftest import FAKE_SOAPY_CALIBRATION_SPEC, FAKE_SOAPY_SPEC, FakeRun
 from pytest_lazy_fixtures import lf
 from soapy_factories import MCR, soapy_capture
 from sweep_strategies import (
     BOLTZMANN_MW,
-    CAL,
+    CORRECTION_VARS,
+    EXACT_DB,
     GAIN_LOOP,
+    INF,
     PORT_LOOP,
     YFACTOR_ENR_DB,
     YFACTOR_GRID,
     YFACTOR_NF_DB,
     CalSourceCls,
+    assert_corrections_match,
     expected_yfactor,
     make_calibration_capture,
     make_calibration_runner,
@@ -34,125 +37,12 @@ from sweep_strategies import (
 )
 
 import striqt.sensor as ss
-from striqt.sensor.lib import calibration
-from striqt.sensor.lib.actions import ManualYFactorRunner, yfactor
+from striqt.sensor.lib.actions import yfactor
+from striqt.sensor.lib.compute import cal_lookups
 from striqt.sensor.lib.compute.datasets import build_capture_coords
 
 H = ss.specs.sequencing
 TOGGLE = 'noise_diode_enabled'
-
-
-# %% bind_manual_yfactor_calibration
-
-
-def test_binding_derives_its_classes_from_the_parent():
-    """the calibration binding is the parent's sensor and spec types under the
-    calibration action: no derived capture, sink, or peripherals class"""
-    parent = ss.bindings.air7101b
-    assert CAL.schema.capture is parent.schema.capture
-    assert CAL.schema.source is parent.schema.source
-    assert CAL.sensor.source_cls is parent.sensor.source_cls
-    assert CAL.sensor.peripherals_cls is parent.sensor.peripherals_cls
-    document_cls = CAL.sensor.sweep_spec_cls
-    assert issubclass(document_cls, ss.specs.ManualYFactorCalibration)
-    assert not issubclass(document_cls, ss.specs.Sweep)
-    assert issubclass(document_cls.sweep_cls, ss.specs.Sweep)
-    assert document_cls.controller is CAL
-
-
-def test_explicit_captures_with_implied_loops():
-    """two explicit captures at different ports give one pass per port, each over
-    its own capture, so the whole calibration acquires 2 ports x 2 states x 1"""
-    sweep = ss.read_yaml_spec(SITE_DIR / 'site-calibration-explicit.yaml')
-    runner = ManualYFactorRunner(sweep)
-    assert 'external_lo_frequency' in sweep.calibration.implied_loops
-    assert runner.ports() == (0, 1)
-    assert [len(H.loop_captures(runner.pass_sweep(p))) for p in (0, 1)] == [1, 1]
-    assert len(runner.passes()) == 4
-
-
-# %% _y_factor_power_corrections
-
-INF = float('inf')
-CORRECTION_VARS = ('noise_figure', 'temperature', 'power_correction')
-# float64 roundoff of the closed-form corrections, expressed in dB
-EXACT_DB = 1e-8
-
-
-def assert_corrections_match(actual, expected, tol_dB=EXACT_DB, names=CORRECTION_VARS):
-    """each correction variable of `actual` matches the model `expected`, which may
-    span fewer dimensions, to within `tol_dB`; temperature and power_correction are
-    compared in dB"""
-    for name in names:
-        result = actual[name].reset_coords(drop=True)
-        model = expected[name].reset_coords(drop=True).broadcast_like(result)
-        if name != 'noise_figure':
-            result, model = 10 * np.log10(result), 10 * np.log10(model)
-        xr.testing.assert_allclose(result, model, rtol=0, atol=tol_dB)
-
-
-class TestYFactorCorrections:
-    def test_recovers_the_receiver_model(self):
-        corrections = calibration._y_factor_power_corrections(make_yfactor_dataset())
-        assert_corrections_match(corrections, expected_yfactor())
-
-    def test_frequency_dependent_noise_figure(self):
-        nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
-        corrections = calibration._y_factor_power_corrections(
-            make_yfactor_dataset(nf_dB=nf)
-        )
-        assert_corrections_match(corrections, expected_yfactor(nf_dB=nf))
-
-    def test_output_is_indexed_by_the_calibration_fields(self):
-        corrections = calibration._y_factor_power_corrections(make_yfactor_dataset())
-        assert set(corrections.dims) == set(YFACTOR_GRID)
-        assert 'noise_diode_enabled' not in corrections.coords
-        assert corrections.noise_figure.attrs['units'] == 'dB'
-        assert corrections.power_correction.attrs['units'] == 'mW/fs'
-
-    def test_papr_and_raw_powers(self):
-        ds = make_yfactor_dataset(papr_dB=7.5)
-        corrections = calibration._y_factor_power_corrections(ds)
-        assert corrections.papr_on.values == pytest.approx(7.5)
-        assert corrections.papr_off.values == pytest.approx(7.5)
-        p_off = yfactor_rms_power(0.0, 5.0, 40e6, diode_on=False)
-        p_on = yfactor_rms_power(0.0, 5.0, 40e6, diode_on=True)
-        point = {'port': 0, 'gain': 0.0, 'center_frequency': 1e9}
-        assert corrections.p_off.sel(point).item() == pytest.approx(p_off, rel=1e-9)
-        assert corrections.p_on.sel(point).item() == pytest.approx(p_on, rel=1e-9)
-
-    def test_infinite_bandwidth_uses_the_nyquist_bandwidth(self):
-        grid = dict(YFACTOR_GRID, analysis_bandwidth=(40e6, INF))
-        corrections = calibration._y_factor_power_corrections(
-            make_yfactor_dataset(grid)
-        )
-        assert_corrections_match(corrections, expected_yfactor(grid))
-
-
-# %% _limit_nyquist_bandwidth
-
-
-def _bandwidth_grid():
-    return xr.DataArray(
-        np.zeros((2, 2)),
-        dims=('analysis_bandwidth', 'backend_sample_rate'),
-        coords={
-            'analysis_bandwidth': [40e6, INF],
-            'backend_sample_rate': [125e6, 62.5e6],
-        },
-    )
-
-
-@pytest.mark.parametrize(
-    'analysis_bandwidth, expected',
-    [(40e6, [40e6, 40e6]), (INF, [125e6, 62.5e6])],
-    ids=['finite', 'infinite'],
-)
-def test_limit_nyquist_bandwidth(analysis_bandwidth, expected):
-    """a finite bandwidth is kept as it is, and an infinite one becomes each
-    backend sample rate"""
-    bw = calibration._limit_nyquist_bandwidth(_bandwidth_grid())
-    assert bw.sel(analysis_bandwidth=analysis_bandwidth).values.tolist() == expected
 
 
 # %% summarize_calibration
@@ -161,11 +51,11 @@ def test_limit_nyquist_bandwidth(analysis_bandwidth, expected):
 @pytest.fixture(scope='module')
 def model_corrections():
     nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
-    return calibration._y_factor_power_corrections(make_yfactor_dataset(nf_dB=nf))
+    return yfactor.compute_y_factor_corrections(make_yfactor_dataset(nf_dB=nf))
 
 
 def test_summarize_selects_the_port_at_maximum_gain(model_corrections):
-    summary = calibration.summarize_calibration(model_corrections, port=1)
+    summary = cal_lookups.summarize_calibration(model_corrections, port=1)
     assert list(summary.columns) == ['NF (dB)', 'Power Corr (dB)']
     assert summary['NF (dB)'].tolist() == [8.0, 8.0]
     assert 'gain' not in summary.index.names
@@ -174,7 +64,7 @@ def test_summarize_selects_the_port_at_maximum_gain(model_corrections):
 
 
 def test_summarize_noise_figure_per_frequency(model_corrections):
-    summary = calibration.summarize_calibration(model_corrections, port=0)
+    summary = cal_lookups.summarize_calibration(model_corrections, port=0)
     by_frequency = summary['NF (dB)'].groupby(level='center_frequency').first()
     assert by_frequency.to_dict() == pytest.approx({1e9: 5.0, 2e9: 7.0})
 
@@ -183,7 +73,7 @@ def test_summarize_noise_figure_per_frequency(model_corrections):
 
 
 def _lookup_pc(path, capture, **kws):
-    return calibration.lookup_power_correction(path, capture, MCR, **kws)
+    return cal_lookups.lookup_power_correction(path, capture, MCR, **kws)
 
 
 @pytest.fixture
@@ -306,7 +196,7 @@ class TestLookupPowerCorrection:
 
 class TestLookupSystemNoisePower:
     def _lookup(self, path, capture, **kws):
-        return calibration.lookup_system_noise_power(path, capture, MCR, **kws)
+        return cal_lookups.lookup_system_noise_power(path, capture, MCR, **kws)
 
     def test_spectral_density_from_the_noise_figure(self, calibration_nc):
         noise = self._lookup(calibration_nc, soapy_capture(port=1))
@@ -332,14 +222,14 @@ class TestLookupSystemNoisePower:
 
 def test_get_port_variable():
     ds = xr.Dataset(coords={'port': [0, 1]})
-    assert calibration._get_port_variable(ds) == 'port'
-    assert calibration._get_port_variable(ds.rename(port='channel')) == 'channel'
-    assert calibration._get_port_variable(None) == 'port'
+    assert cal_lookups._get_port_variable(ds) == 'port'
+    assert cal_lookups._get_port_variable(ds.rename(port='channel')) == 'channel'
+    assert cal_lookups._get_port_variable(None) == 'port'
 
 
 def test_describe_missing_data_lists_only_the_misses(model_corrections):
     exact = {'port': 0, 'gain': 5.0, 'lo_shift': 'left', 'center_frequency': 1e9}
-    text = calibration._describe_missing_data(model_corrections.noise_figure, exact)
+    text = cal_lookups._describe_missing_data(model_corrections.noise_figure, exact)
     assert "'gain'" in text and "'lo_shift'" in text
     assert "'port'" not in text and "'center_frequency'" not in text
 
@@ -347,7 +237,7 @@ def test_describe_missing_data_lists_only_the_misses(model_corrections):
 def test_describe_missing_data_is_empty_when_everything_matches(model_corrections):
     exact = {'port': 0, 'gain': 0.0}
     assert (
-        calibration._describe_missing_data(model_corrections.noise_figure, exact) == ''
+        cal_lookups._describe_missing_data(model_corrections.noise_figure, exact) == ''
     )
 
 
@@ -453,61 +343,6 @@ class TestSavedCorrections:
             'analysis_bandwidth',
             'lo_shift',
         ]
-
-
-# %% operator prompts
-
-
-def _calibration_runner():
-    return make_calibration_runner(
-        calibration=ss.specs.ManualYFactorSpec(enr=20.87, ambient_temperature=290.0)
-    )
-
-
-class TestOperatorPrompts:
-    def test_confirm_enr_names_the_value(self, scripted_input):
-        scripted_input['answers'] += ['y']
-        _calibration_runner().confirm_enr()
-        (prompt,) = scripted_input['prompts']
-        assert 'ENR' in prompt and '20.87' in prompt
-
-    def test_confirm_enr_reprompts_until_answered(self, scripted_input):
-        scripted_input['answers'] += ['maybe', '', 'Y']
-        _calibration_runner().confirm_enr()
-        assert len(scripted_input['prompts']) == 3
-
-    def test_confirm_enr_rejection_raises(self, scripted_input):
-        scripted_input['answers'] += ['N']
-        with pytest.raises(RuntimeError, match='ENR'):
-            _calibration_runner().confirm_enr()
-
-    def test_switch_diode_prompts_per_pass(self, scripted_input):
-        scripted_input['answers'] += ['', '', '']
-        runner = _calibration_runner()
-        runner.switch_diode(0, False)
-        runner.switch_diode(0, True)
-        runner.switch_diode(1, True)
-
-        # conftest.fake_sweep_runner parses this wording to switch the fake diode
-        matches = [
-            re.match(r'(enable|disable) noise diode at port (\d+)', prompt)
-            for prompt in scripted_input['prompts']
-        ]
-        assert [m.groups() for m in matches if m is not None] == [
-            ('disable', '0'),
-            ('enable', '0'),
-            ('enable', '1'),
-        ]
-        assert runner._diode_on is True
-
-    def test_extra_data_carries_the_state_and_the_calibration_block(self):
-        runner = _calibration_runner()
-        runner._diode_on = True
-        assert runner.extra_data(make_calibration_capture()) == {
-            TOGGLE: True,
-            'enr': 20.87,
-            'ambient_temperature': 290.0,
-        }
 
 
 # %% closed loop through the fake SoapySDR device

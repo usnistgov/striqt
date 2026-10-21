@@ -211,7 +211,8 @@ def open_resources(
     """open the sensor hardware and software contexts needed to run `spec`.
 
     The action runner registered for the type of `spec` is built first; the source,
-    peripherals, sink, and warmup are opened for the `Sweep` it derives. The
+    peripherals, sink (the runner's `sink_cls` unless `extensions.sink` overrides
+    it), and warmup are opened for the `Sweep` it derives. The
     resources of the returned `ConnectionManager` are open and ready for
     `iterate_sweep`.
 
@@ -243,13 +244,13 @@ def open_resources(
             _open_devices, conn, ctrl_cls, sweep, test_only, fmt
         )
         prep_sweep = util.threadpool.submit(_prepare_sweep, sweep, on_source_opened)
-        sink = util.threadpool.submit(runner.build_sink, fmt)
+        sink = util.threadpool.submit(_open_sink, sweep, runner.sink_cls, fmt)
 
         with exc.defer():
             # foreground thread 1: initialize warmup sweeps
             try:
                 # prioritize compute during startup; load up buffers
-                compute_iter = prepare_compute(runner, skip_warmup=test_only)
+                compute_iter = prepare_compute(sweep, skip_warmup=test_only)
                 next(compute_iter)
             except Exception:
                 util.cancel_threads()

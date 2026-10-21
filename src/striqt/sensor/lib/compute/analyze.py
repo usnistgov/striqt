@@ -19,7 +19,6 @@ import msgspec
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from ..actions.core import ActionRunner
     from ..typing import Array
     from .datasets import DelayedDataset
 
@@ -162,17 +161,15 @@ def analyze(
 
 
 def prepare_compute(
-    runner: ActionRunner[Any, Any, Any, Any, Any, Any], skip_warmup: bool = False
+    spec: specs.Sweep[Any, Any, Any], skip_warmup: bool = False
 ) -> Generator[xr.Dataset | DelayedDataset | None]:
-    """import the compute backend of `runner.sweep` and run its warmup sweep, if any.
+    """import the compute backend of `spec` and run its warmup sweep, if any.
 
     The first iteration performs the imports and the cupy configuration. The
-    remaining iterations are those of the warmup sweep that `runner.warmup_sweep`
-    returns, run through a `SweepRunner` over resources opened here; a single
-    `None` is yielded instead when `skip_warmup` is set or no warmup is needed.
+    remaining iterations are those of the warmup sweep that `warmup_sweep_for(spec)`
+    returns, run through a `SweepRunner` over resources opened here; a single `None`
+    is yielded instead when `skip_warmup` is set or no warmup is needed.
     """
-    spec = runner.sweep
-
     if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
             # numba.cuda must be imported before cupy on some versions/platforms
@@ -196,7 +193,7 @@ def prepare_compute(
     if skip_warmup:
         warm = None
     else:
-        warm = runner.warmup_sweep()
+        warm = warmup.warmup_sweep_for(spec)
 
     if warm is None:
         yield from (None,)

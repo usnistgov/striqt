@@ -3,7 +3,7 @@
 The runner acquires the calibration grid once with the noise diode off and once
 with it on at each port, prompting the operator to switch the diode between those
 passes, and generates the `channel_power_time_series` analysis that the Y-factor
-math in `striqt.sensor.lib.calibration` consumes. The diode state reaches the saved
+math here produces and `compute.cal_lookups` reads back. The diode state reaches the saved
 data through the per-capture `extra_data` hook of the pipeline, the captures collect
 in a `MemoryCacheSink`, and `save_yfactor_corrections` computes and writes the
 corrections after the last pass.
@@ -13,15 +13,16 @@ from __future__ import annotations as __
 
 from collections.abc import Generator, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic
 
 import striqt.analysis as sa
-from striqt.analysis.lib.util import pd, xr
+from striqt.analysis.lib.util import np, pd, xr
 from striqt.analysis.specs.helpers import SpecValidationError
 
 from ... import specs
-from .. import calibration, compute, io
-from ..resources import Resources, resolve_sink_cls
+from .. import compute, io
+from ..compute import cal_lookups
+from ..resources import Resources
 from ..sinks import MemoryCacheSink, SinkBase
 from ..typing import PC, PS, SC, SP, SS
 from . import core
@@ -46,10 +47,16 @@ def calibration_analysis(
     period = spec.calibration.detector_period
 
     if period is None:
-        durations = {c.duration for c in spec.captures}
-        for loop in spec.loops:
-            if loop.isin == 'capture' and loop.field == 'duration':
-                durations.update(loop.get_points())
+        # a looped field overrides the captures' own values
+        duration_loops = [
+            loop
+            for loop in spec.loops
+            if loop.isin == 'capture' and loop.field == 'duration'
+        ]
+        if duration_loops:
+            durations = set(duration_loops[0].get_points())
+        else:
+            durations = {c.duration for c in spec.captures}
         if len(durations) != 1:
             raise SpecValidationError(
                 'Expected a `detector_period`, since the captures and loops do not '
@@ -63,6 +70,86 @@ def calibration_analysis(
             'detector_period': period,
             'power_detectors': ('rms', 'peak'),
         }
+    })
+
+
+def _limit_nyquist_bandwidth(data: xr.DataArray) -> xr.DataArray:
+    """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
+
+    # return bandwidth with same shape as dataset.channel_power_time_series
+    bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
+    sample_rate = data.backend_sample_rate.broadcast_like(data).squeeze()
+    where = ~np.isfinite(bw.values)
+    bw.values[where] = sample_rate.values[where]
+    return bw
+
+
+def compute_y_factor_corrections(
+    dataset: xr.Dataset, Tref: float = 290.0
+) -> xr.Dataset:
+    """return the Y-factor noise figure and power correction of each grid point.
+
+    `dataset` is indexed by the calibration fields plus a ``noise_diode_enabled``
+    dimension and holds `channel_power_time_series` (dB, ``rms`` and ``peak``
+    detectors over ``time_elapsed``), `enr` (dB), `analysis_bandwidth` (Hz), and
+    `backend_sample_rate` (S/s). The rms detector is averaged in linear power over
+    the bins before the Y-factor is formed; an infinite `analysis_bandwidth` counts as
+    the backend sample rate.
+
+    Args:
+        dataset: the collected captures as `save_yfactor_corrections` indexes them
+        Tref: the reference temperature (K) of the hot source and the noise figure
+
+    Returns:
+        a dataset over the calibration fields with `noise_figure` (dB),
+        `temperature` (K), `power_correction` (mW per full-scale unit), the linear
+        powers `p_on` and `p_off`, and the diagnostics `papr_on` and `papr_off` (dB)
+    """
+    from scipy.constants import Boltzmann
+
+    k = Boltzmann * 1000  # W/K -> mW/K
+    enr_dB = dataset.enr.sel(noise_diode_enabled=True, drop=True)
+    enr = 10 ** (enr_dB / 10.0)
+
+    pvt = dataset.channel_power_time_series.drop_vars('capture_index')
+    power = (
+        pvt
+        .sel(power_detector='rms', drop=True)
+        .pipe(sa.dBtopow)
+        .mean(dim='time_elapsed')
+    )
+    power.name = 'RMS power'
+
+    peak = pvt.sel(power_detector='peak', drop=True).max('time_elapsed')
+    avg = pvt.sel(power_detector='rms', drop=True).pipe(sa.dBlinmean, 'time_elapsed')
+    papr = (peak - avg).assign_attrs(units='dB')
+
+    Pon = power.sel(noise_diode_enabled=True, drop=True)
+    Poff = power.sel(noise_diode_enabled=False, drop=True)
+    Y = Pon / Poff
+
+    noise_figure = enr_dB - 10 * np.log10(Y - 1)
+    noise_figure.name = 'Noise figure'
+    noise_figure.attrs = {'units': 'dB'}
+
+    Te = Tref * (10 ** (noise_figure / 10) - 1)
+    Te.name = 'Effective noise temperature'
+    Te.attrs = {'units': 'K'}
+
+    B = _limit_nyquist_bandwidth(Te)
+
+    power_correction = (k * (enr * Tref) * B) / (Pon - Poff)
+    power_correction.name = 'Power scaling correction'
+    power_correction.attrs = {'units': 'mW/fs'}
+
+    return xr.Dataset({
+        'temperature': Te,
+        'noise_figure': noise_figure,
+        'power_correction': power_correction,
+        'p_on': Pon,
+        'p_off': Poff,
+        'papr_on': papr.sel(noise_diode_enabled=True, drop=True),
+        'papr_off': papr.sel(noise_diode_enabled=False, drop=True),
     })
 
 
@@ -110,14 +197,14 @@ def save_yfactor_corrections(
     by_field = capture_data.unstack(compute.CAPTURE_DIM)
     by_field[DIODE_FIELD] = by_field[DIODE_FIELD].astype('bool')
 
-    corrections = calibration.compute_y_factor_corrections(by_field)
+    corrections = compute_y_factor_corrections(by_field)
     corrections = corrections.assign_attrs(calibration_fields=fields)
 
     io.save_calibration(path, corrections)
     print(f'saved to {str(path)!r}')
     for port, _ in corrections.groupby('port', squeeze=False):
         print(f'{30 * "▀"} Port {port} at max gain {30 * "▀"}')
-        summary = calibration.summarize_calibration(corrections, port=port)
+        summary = cal_lookups.summarize_calibration(corrections, port=port)
         with pd.option_context('display.max_rows', None, 'display.precision', 2):
             print(summary.sort_index(axis=1).sort_index(axis=0))
 
@@ -128,48 +215,64 @@ def _is_port_loop(loop: specs.LoopSpec) -> bool:
     return loop.isin == 'capture' and loop.field == 'port'
 
 
+def build_calibration_sweep(
+    spec: specs.ManualYFactorCalibration[SS, SP, SC],
+) -> specs.Sweep[SS, SP, SC]:
+    """return the `Sweep` a calibration opens its resources for.
+
+    The sweep is the document's capture plan over every port, with the analysis of
+    `calibration_analysis`, IQ reuse across the `analysis_bandwidth` points of one
+    radio setting, the Nyquist filter on, and no warmup. It is an instance of the
+    document class's `sweep_cls`.
+
+    Raises:
+        TypeError: if `spec` is not an instance of a bound document class
+    """
+    sweep_cls = type(spec).sweep_cls
+    if sweep_cls is None:
+        raise TypeError('the calibration document is not bound to a sensor')
+
+    return sweep_cls(
+        description=spec.description,
+        source=spec.source,
+        peripherals=spec.peripherals,
+        extensions=spec.extensions,
+        sink=spec.sink,
+        captures=spec.captures,
+        loops=spec.loops,
+        adjust_captures=spec.adjust_captures,
+        analysis=calibration_analysis(spec),
+        # reuse_iq lets the analysis_bandwidth points of one radio setting share
+        # an acquisition; the runner discards it at each diode switch, which the
+        # capture spec does not describe (Controller.discard_iq)
+        options=specs.SweepOptions(
+            reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
+        ),
+    )
+
+
 @registry.runner(spec_type=specs.ManualYFactorCalibration)
-class ManualYFactorRunner(
-    core.ActionRunner[specs.ManualYFactorCalibration[SS, SP, SC], SS, SP, SC, PS, PC]
-):
+class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
     """run a `ManualYFactorCalibration`.
 
-    `sweep` is the document's capture plan over every port with the generated
-    analysis; the resources open for it. `iterate` confirms the ENR with the
-    operator, then for each port and each diode state prompts the operator to
-    switch the diode and runs the captures of that port through `iterate_captures`.
-    `extra_data` adds the diode state and the `calibration:` block to every
-    acquisition, `build_sink` returns a `MemoryCacheSink` that collects the
-    captures, and `iterate` ends by computing and saving the corrections with
-    `save_yfactor_corrections`.
+    `sweep` is `build_calibration_sweep` of the document; the resources open for
+    it, with a `MemoryCacheSink` that collects the captures. `iterate` confirms the
+    ENR with the operator, then for each port and each diode state prompts the
+    operator to switch the diode and runs the captures of that port through
+    `iterate_captures`, with `extra_data` adding the diode state and the
+    `calibration:` block to every acquisition. It ends by computing and saving the
+    corrections with `save_yfactor_corrections`.
     """
+
+    spec: specs.ManualYFactorCalibration[SS, SP, SC]
+    sweep: specs.Sweep[SS, SP, SC]
+    sink_cls: type[SinkBase[SC]] = MemoryCacheSink
 
     _diode_on: bool = False
 
-    @classmethod
-    def build_sweep(
-        cls, spec: specs.ManualYFactorCalibration[SS, SP, SC]
-    ) -> specs.Sweep[SS, SP, SC]:
-        sweep_cls = type(spec).sweep_cls
-        if sweep_cls is None:
-            raise TypeError('the calibration document is not bound to a sensor')
-
-        return sweep_cls(
-            description=spec.description,
-            source=spec.source,
-            peripherals=spec.peripherals,
-            extensions=spec.extensions,
-            sink=spec.sink,
-            captures=spec.captures,
-            loops=spec.loops,
-            adjust_captures=spec.adjust_captures,
-            analysis=calibration_analysis(spec),
-            # consecutive passes may start with the capture the previous one ended
-            # with, which the controller would otherwise answer with the reused IQ
-            options=specs.SweepOptions(
-                reuse_iq=False, loop_only_nyquist=True, skip_warmup=True
-            ),
-        )
+    def __init__(self, spec: specs.ManualYFactorCalibration[SS, SP, SC]) -> None:
+        self.spec = spec
+        self.sweep = build_calibration_sweep(spec)
 
     def ports(self) -> tuple[Any, ...]:
         """return the port values of the passes, in the order of a `port` loop or of the captures."""
@@ -211,10 +314,6 @@ class ManualYFactorRunner(
         fields.insert(at, DIODE_FIELD)
         return fields
 
-    def build_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        sink_cls = resolve_sink_cls(self.sweep, MemoryCacheSink)
-        return sink_cls(self.sweep, format_path)
-
     def corrections_path(self, format_path: specs.paths.PathFormatter | None) -> Path:
         """return `sweep.sink.path` with its ``{fields}`` formatted."""
         path = self.sweep.sink.path
@@ -240,9 +339,10 @@ class ManualYFactorRunner(
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
         """run every pass, then compute and save the corrections.
 
-        The yields are those of `iterate_captures` over each pass. The corrections
-        are saved only when the sink is the `MemoryCacheSink` that `build_sink`
-        returns; an `extensions.sink` override collects nothing to save.
+        The yields are those of `iterate_captures` over each pass. Each pass begins
+        with a fresh acquisition (`Controller.discard_iq`); within a pass, `reuse_iq`
+        applies. The corrections are saved only when the sink is a `MemoryCacheSink`;
+        an `extensions.sink` override collects nothing to save.
 
         Raises:
             ValueError: if `loop` is set, since a calibration runs its grid once
@@ -263,6 +363,9 @@ class ManualYFactorRunner(
 
         for port, diode_on in self.passes():
             self.switch_diode(port, diode_on)
+            # the diode state is not a capture field, so the controller cannot see
+            # that the acquisition it would reuse is now stale
+            resources['source'].discard_iq()
             inner = Resources(resources, sweep_spec=pass_sweeps[port])
             yield from core.iterate_captures(
                 inner,

@@ -5,75 +5,36 @@ from __future__ import annotations as __
 import contextlib
 import math
 import itertools
-from typing import Any, Callable, Generator, Generic, TYPE_CHECKING
+from typing import Any, Callable, Generator, Protocol, TYPE_CHECKING
 
 import striqt.waveform as sw
 import striqt.analysis as sa
 from striqt.analysis.lib.util import pd, xr
 
 from .. import compute, util
-from ..compute import gpu
 from ... import specs
-from .. import resources as resources_module
 from ..resources import Resources, AnyResources
 from ..sinks import SinkBase
-from ..calibration import lookup_system_noise_power
+from ..compute.cal_lookups import lookup_system_noise_power
 from ..typing import PC, PS, SC, SP, SS, TA, Unpack
 
 
-class ActionRunner(Generic[TA, SS, SP, SC, PS, PC]):
-    """base class of the actions that `iterate_sweep` runs over open resources.
+class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
+    """the contract between a decoded document and the code that opens and runs it.
 
-    A subclass is registered for one action spec type with `registry.runner` and is
-    constructed from the decoded document, `spec`. `build_sweep` derives the `Sweep`
-    that `open_resources` opens the hardware for and the pipeline runs, `build_sink`
-    the sink for that sweep, `warmup_sweep` the sweep that pays the GPU import and
-    JIT costs first, `extra_data` the per-capture data merged into each acquisition,
-    and `iterate` the generator that runs the action over the open resources.
+    A runner class is registered for one document type with `registry.runner` and
+    constructed from the decoded document. `open_resources` opens the source,
+    peripherals, and sink for `sweep`, using `sink_cls` unless
+    ``sweep.extensions.sink`` names another class, and `iterate_sweep` calls
+    `iterate` over the open resources. Each runner implements its own constructor
+    and `iterate`; `iterate_captures` is the pipeline they run captures through.
     """
 
     spec: TA
     sweep: specs.Sweep[SS, SP, SC]
+    sink_cls: type[SinkBase[SC]]
 
-    def __init__(self, spec: TA) -> None:
-        self.spec = spec
-        self.sweep = self.build_sweep(spec)
-
-    @classmethod
-    def build_sweep(cls, spec: TA) -> specs.Sweep[SS, SP, SC]:
-        """return the `Sweep` that the resources open for and the pipeline runs."""
-        raise NotImplementedError
-
-    def build_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        """return the open sink for `self.sweep`.
-
-        The sink class is the one named by `sweep.extensions.sink`, else the
-        `sink_cls` of the binding that decoded `self.spec`.
-        """
-        sensor = type(self.spec).sensor
-        return resources_module._open_sink(self.sweep, sensor.sink_cls, format_path)
-
-    def warmup_sweep(self) -> specs.Sweep[Any, Any, Any] | None:
-        """return the `Sweep` to run before `self.sweep`, or None when none is needed.
-
-        None when `sweep.options.skip_warmup` is set or the sweep does not use the
-        GPU (`compute.gpu.sweep_touches_gpu`).
-        """
-        if self.sweep.options.skip_warmup or not gpu.sweep_touches_gpu(self.sweep):
-            return None
-
-        from . import warmup
-
-        return warmup.derive_warmup_sweep(self.sweep)
-
-    def extra_data(self, capture: SC) -> dict[str, Any]:
-        """return data to merge into the `extra_data` of the acquisition of `capture`.
-
-        The pipeline calls this once per capture after the source and peripherals
-        have acquired; the keys win over the peripherals' and become data variables
-        on the ``capture`` dimension of the saved dataset.
-        """
-        return {}
+    def __init__(self, spec: TA) -> None: ...
 
     def iterate(
         self,
@@ -83,10 +44,7 @@ class ActionRunner(Generic[TA, SS, SP, SC, PS, PC]):
         yield_values: bool = True,
         loop: bool = False,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-        """run the action over `resources` and yield what the sink's `append` returns.
-
-        The base implementation runs `iterate_captures` over ``resources['sweep_spec']``
-        with `extra_data` as the per-capture hook.
+        """run the action over `resources`, yielding what the sink's `append` returns.
 
         Args:
             resources: the open resources returned by `open_resources`
@@ -94,13 +52,7 @@ class ActionRunner(Generic[TA, SS, SP, SC, PS, PC]):
             yield_values: if False, yield `None` instead of the sink result
             loop: if True, the action repeats from the beginning after the last capture
         """
-        return iterate_captures(
-            resources,
-            extra_data=self.extra_data,
-            always_yield=always_yield,
-            yield_values=yield_values,
-            loop=loop,
-        )
+        ...
 
 
 def iterate_sweep(

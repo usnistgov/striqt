@@ -650,5 +650,6 @@ class TestManualYFactorCalibration:
         }
         with pytest.warns(DeprecationWarning, match='analysis'):
             sweep = CalSweepCls.from_dict(tree)
-        assert sweep.analysis == tree['analysis']
+        assert sweep.analysis is None, 'discarded, so the document stays hashable'
+        assert hash(sweep) == hash(CalSweepCls.from_dict(sweep.to_dict(unfreeze=True)))
         assert sweep.calibration.enr == pytest.approx(YFACTOR_ENR_DB)

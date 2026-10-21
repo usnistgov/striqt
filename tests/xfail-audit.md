@@ -186,9 +186,9 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 44. A single-frequency calibration cannot be looked up
 
-`tests/sensor/test_sensor_calibration.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]`
+`tests/sensor/test_sensor_compute_cal_lookups.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]`
 
-- **Mechanism.** `calibration.py:572` calls `squeeze(drop=True)` before
+- **Mechanism.** `compute/cal_lookups.py:572` calls `squeeze(drop=True)` before
   `dropna('center_frequency')`, so a length-1 `center_frequency` dimension
   is gone by the time it is named, and xarray raises `ValueError`.
 - **Why the test is right.** The exact-match branch below it
@@ -303,13 +303,13 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 45. Lookups require every exact-match field to be a dimension
 
-`tests/sensor/test_sensor_calibration.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]`
+`tests/sensor/test_sensor_compute_cal_lookups.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]`
 
-- **Mechanism.** `calibration.py:554` selects the exact-match fields with
+- **Mechanism.** `compute/cal_lookups.py:554` selects the exact-match fields with
   `sel`, which needs an index. `lo_shift` is a dimension only when it was
   looped; otherwise it is a scalar (or multi-dimensional) coordinate,
   `sel` raises `KeyError`, and `_describe_missing_data` then iterates the
-  0-d coordinate at `calibration.py:521` and raises `TypeError`. xarray
+  0-d coordinate at `compute/cal_lookups.py:521` and raises `TypeError`. xarray
   2026.7 (the `test314` environment) raises `ValueError` from `sel` itself
   instead; the xfail accepts either.
 - **Why the test is right.** The scalar coordinate carries exactly the value
@@ -528,9 +528,9 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 
 ### 46. Range error text embeds a DataArray repr
 
-`tests/sensor/test_sensor_calibration.py::TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz`
+`tests/sensor/test_sensor_compute_cal_lookups.py::TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz`
 
-- **Mechanism.** `calibration.py:580` and `:584` format
+- **Mechanism.** `compute/cal_lookups.py:580` and `:584` format
   `sel.center_frequency.max() / 1e6`, a 0-d `DataArray`, so the message
   reads `exceeds calibration max <xarray.DataArray ...> array(2000.) MHz`.
 - **Fix.** Wrap in `float()`. Trivial.
@@ -598,7 +598,7 @@ it was standing in for is enabled.
 
 ## Observations without an xfail
 
-- **Ambient temperature is not used.** `_y_factor_power_corrections` takes
+- **Ambient temperature is not used.** `actions/yfactor.py:compute_y_factor_corrections` takes
   every temperature from `Tref` (290 K, by convention) and never reads
   `calibration.ambient_temperature`; the tests use a receiver model at 290 K
   and so cannot tell. The user is opening an issue for this. The only code that
@@ -617,7 +617,7 @@ it was standing in for is enabled.
   directory (zarr 2.18's `DirectoryStore` absolutises its own path, so
   directory stores are unaffected). `test_sensor_sweeps` restores the cwd itself.
 
-- **`summarize_calibration` labels a linear column as dB.** `calibration.py:39`
+- **`summarize_calibration` labels a linear column as dB.** `compute/cal_lookups.py:39`
   names the column `Power Corr (dB)` but `_summarize_calibration_field`
   returns `power_correction` unchanged (units `mW/fs`). Whether the label or
   the value is the mistake is a judgment call, so the xfail that recorded it

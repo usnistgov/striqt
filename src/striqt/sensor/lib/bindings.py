@@ -176,6 +176,26 @@ def bind_sensor(
     return cls
 
 
+def bind_manual_yfactor_calibration(
+    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, PS, PC]]'
+) -> 'type[Controller[SS, SP, Any, PS, PC]]':
+    """bind a manual Y-factor calibration of the sensor bound as `ctrl_cls`.
+
+    The result is `bind_sensor` with `ctrl_cls`'s own `Sensor` and a `Schema` whose
+    `action` is `specs.ManualYFactorCalibration`; `ManualYFactorRunner` runs it.
+    Sweep files select it with ``sensor_binding: <name>``. The controller class
+    records the caller's module.
+    """
+    schema = dataclasses.replace(ctrl_cls.schema, action=specs.ManualYFactorCalibration)
+
+    return bind_sensor(
+        name,
+        ctrl_cls.sensor,
+        cast(specs.Schema[SS, SP, Any, PS, PC], schema),
+        module=sys._getframe(1).f_globals.get('__name__'),
+    )
+
+
 def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
     return dict(registry)
 

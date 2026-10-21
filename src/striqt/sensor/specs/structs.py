@@ -465,7 +465,7 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=Tru
     The `calibration:` block is a `ManualYFactorSpec`. The runner acquires the
     expanded captures once with the diode off and once with it on at each port, and
     generates the analysis itself, so the document has no `analysis` or `options`
-    blocks; a legacy `analysis` block is accepted and ignored with a
+    blocks; a legacy `analysis` block is accepted, discarded, and reported with a
     `DeprecationWarning`. More than one capture is accepted only when
     `calibration.implied_loops` names the fields the captures vary, and
     `source.calibration` must be null.
@@ -485,6 +485,8 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=Tru
                 DeprecationWarning,
                 stacklevel=2,
             )
+            # the block is a dict, which the frozen struct's hash cannot include
+            msgspec.structs.force_setattr(self, 'analysis', None)
 
         if len(self.captures) > 1 and not self.calibration.implied_loops:
             raise SpecValidationError(

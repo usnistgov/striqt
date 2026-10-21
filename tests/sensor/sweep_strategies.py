@@ -7,6 +7,7 @@ directories import by name.
 from __future__ import annotations
 
 import numpy as np
+import xarray as xr
 from hypothesis import strategies as st
 from soapy_factories import MCR
 
@@ -366,13 +367,32 @@ def expected_yfactor(grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, *, T0=T_REF, **gain
     })
 
 
+INF = float('inf')
+CORRECTION_VARS = ('noise_figure', 'temperature', 'power_correction')
+# float64 roundoff of the closed-form corrections, expressed in dB
+EXACT_DB = 1e-8
+
+
+def assert_corrections_match(actual, expected, tol_dB=EXACT_DB, names=CORRECTION_VARS):
+    """each correction variable of `actual` matches the model `expected`, which may
+    span fewer dimensions, to within `tol_dB`; temperature and power_correction are
+    compared in dB"""
+    for name in names:
+        result = actual[name].reset_coords(drop=True)
+        model = expected[name].reset_coords(drop=True).broadcast_like(result)
+        if name != 'noise_figure':
+            result, model = 10 * np.log10(result), 10 * np.log10(model)
+        xr.testing.assert_allclose(result, model, rtol=0, atol=tol_dB)
+
+
 def save_yfactor_calibration(
     path, grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, **kws
 ) -> str:
     """write the corrections for make_yfactor_dataset to a netCDF file and return its path"""
-    from striqt.sensor.lib import calibration, io
+    from striqt.sensor.lib import io
+    from striqt.sensor.lib.actions import yfactor
 
-    corrections = calibration._y_factor_power_corrections(
+    corrections = yfactor.compute_y_factor_corrections(
         make_yfactor_dataset(grid, nf_dB, **kws)
     )
     io.save_calibration(path, corrections)

@@ -270,6 +270,22 @@ def test_reuse_iq(reuse_iq, second_capture, shares_buffer, isolated_lookup):
         assert_close(second.pre_align, expected)
 
 
+def test_discard_iq_forces_a_fresh_acquisition(isolated_lookup):
+    """a reusable capture is re-read after discard_iq, so a signal change the capture
+    spec does not describe (a switched noise diode) is not served the stale IQ"""
+    with TONE.from_source_spec(SOURCE, reuse_iq=True) as ctrl:
+        ctrl._arm_spec(REUSABLE)
+        first = ctrl.acquire()
+        ctrl.discard_iq()
+        ctrl._arm_spec(REUSABLE_VARIANT)
+        second = ctrl.acquire()
+        ctrl._arm_spec(REUSABLE)
+        third = ctrl.acquire()
+
+    assert not np.shares_memory(first.pre_align, second.pre_align)
+    assert third.pre_align is second.pre_align, 'reuse resumes after the discard'
+
+
 def test_a_new_analysis_filter_is_acquired_with_its_own_overlap(isolated_lookup):
     """the acquisition is padded for its own filter transient, so a capture that
     adds an analysis filter is acquired afresh and corrects to its full length"""

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ... import specs
 from .. import sinks
+from ..compute import gpu
 from ..resources import Resources
 from ..typing import PC, PS, SC
 
@@ -105,6 +106,19 @@ def derive_warmup_sweep(
     captures = specs.sequencing.loop_captures(looped, limit=count)
 
     return looped.replace(captures=captures, loops=())
+
+
+def warmup_sweep_for(
+    sweep: specs.Sweep[Any, Any, SC],
+) -> specs.Sweep[Any, Any, SC] | None:
+    """return the `Sweep` to run before `sweep`, or None when none is needed.
+
+    None when `sweep.options.skip_warmup` is set or the sweep does not use the GPU
+    (`compute.gpu.sweep_touches_gpu`); otherwise `derive_warmup_sweep(sweep)`.
+    """
+    if sweep.options.skip_warmup or not gpu.sweep_touches_gpu(sweep):
+        return None
+    return derive_warmup_sweep(sweep)
 
 
 def open_warmup_resources(

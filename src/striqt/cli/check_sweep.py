@@ -4,7 +4,8 @@ import typing
 
 import click
 
-from striqt.sensor.lib import calibration, resources
+from striqt.sensor.lib import resources
+from striqt.sensor.lib.compute import cal_lookups
 
 
 @click.command('runtime information about running a sweep')
@@ -45,7 +46,7 @@ def run(yaml_path: str):
         if res['calibration'] is None:
             print('Configured for uncalibrated operation')
         else:
-            summary = calibration.summarize_calibration(res['calibration'])
+            summary = cal_lookups.summarize_calibration(res['calibration'])
             with pd.option_context('display.max_rows', None):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 

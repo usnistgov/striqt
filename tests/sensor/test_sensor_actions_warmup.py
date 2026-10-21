@@ -5,7 +5,7 @@ resources it runs over, and the runner method that decides whether a sweep warms
 from __future__ import annotations
 
 import pytest
-from sweep_strategies import SOURCE, make_calibration_sweep
+from sweep_strategies import SOURCE, as_sweep, make_calibration_sweep
 from synthetic_sources import (
     ANALYSIS,
     IQ_ONLY,
@@ -109,7 +109,7 @@ def test_one_warmup_binding_per_origin():
     assert a.sensor.sweep_spec_cls.__name__ not in ss.lib.bindings.registry
 
 
-# %% ActionRunner.warmup_sweep
+# %% warmup_sweep_for
 
 NO_WARMUP = {
     'skip_option': preset_sweep('single_tone', (scale_only(),), analysis=ANALYSIS),
@@ -123,15 +123,15 @@ NO_WARMUP = {
 
 @pytest.mark.parametrize('case', list(NO_WARMUP), ids=list(NO_WARMUP))
 def test_warmup_sweep_is_none_when_nothing_needs_the_gpu(case):
-    """a sweep that skips the warmup, runs on numpy, only passes IQ through, or is a
-    calibration (whose options skip the warmup) has no warmup"""
+    """a sweep that skips the warmup, runs on numpy, only passes IQ through, or is the
+    sweep a calibration builds (whose options skip the warmup) has no warmup"""
     spec = NO_WARMUP[case]
-    assert registry.lookup(spec)(spec).warmup_sweep() is None
+    assert warmup.warmup_sweep_for(as_sweep(spec)) is None
 
 
 def test_warmup_sweep_derives_from_a_gpu_sweep():
     spec = cupy_sweep((scale_only(),), analysis=ANALYSIS, options=WARMUP_ENABLED)
-    warm = registry.lookup(spec)(spec).warmup_sweep()
+    warm = warmup.warmup_sweep_for(spec)
     assert isinstance(warm, ss.specs.Sweep)
     assert warm.analysis == spec.analysis
 
@@ -140,7 +140,7 @@ def test_a_warmup_has_no_warmup():
     warm = warmup.derive_warmup_sweep(
         cupy_sweep((scale_only(),), analysis=ANALYSIS, options=WARMUP_ENABLED)
     )
-    assert SweepRunner(warm).warmup_sweep() is None
+    assert warmup.warmup_sweep_for(warm) is None
 
 
 # %% open_warmup_resources
