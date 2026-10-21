@@ -84,7 +84,7 @@ def read_yaml_spec(
     """
 
     tree = sa.lib.io.decode_from_yaml_file(path)
-    return _convert_zarr_attrs_spec(
+    return _decode_spec_tree(
         tree,
         Path(path).resolve().parent,
         type=type,
@@ -123,7 +123,7 @@ def read_json_spec(
     with open(path, 'rb') as buf:
         tree = msgspec.json.decode(buf.read(), type=dict)
 
-    return _convert_zarr_attrs_spec(
+    return _decode_spec_tree(
         tree,
         Path(path).resolve().parent,
         type=type,
@@ -213,7 +213,7 @@ def _drop_removed_extension_sink(attrs: dict[str, Any]) -> dict[str, Any]:
     return {**attrs, 'extensions': extensions}
 
 
-def _convert_zarr_attrs_spec(
+def _decode_spec_tree(
     tree: dict[str, Any],
     extension_root: str | Path,
     *,
@@ -372,11 +372,21 @@ def _import_extensions_from_spec(
     format_path: specs.paths.PathFormatter | None = None,
     root_dir: Path | str = '.',
 ) -> None:
-    """import an extension class from a dict representation of structs.Extensions
+    """insert `spec.import_path` into ``sys.path`` and import `spec.import_name`.
 
-    Arguments:
-        spec: specification structure for the extension imports
-        format_path: formatter to fill aliases in the import path
+    Each step is skipped when its field is None. A warning is logged when the
+    imported module registers no sensor binding.
+
+    Args:
+        spec: the `extensions` block of an action spec
+        format_path: expands the ``{fields}`` of `import_path` when given
+        root_dir: the directory a relative `import_path` is resolved against
+
+    Raises:
+        FileNotFoundError: if `root_dir` or the resolved `import_path` does not
+            exist
+        IOError: if `root_dir` is not a directory
+        ModuleNotFoundError: if `import_name` cannot be imported
     """
 
     import importlib

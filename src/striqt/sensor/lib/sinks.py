@@ -1,3 +1,9 @@
+"""sinks that take the analyzed dataset of each capture and write or collect it.
+
+Every sink is constructed from the `Sweep` it writes for and reads that sweep's
+`sink` block. The action runner selects the sink class.
+"""
+
 from __future__ import annotations as __
 
 import itertools as itertools
@@ -297,7 +303,7 @@ class ZarrSinkBase(SinkBase):
 
 
 class ZarrCaptureSink(ZarrSinkBase):
-    """concatenates the data from each capture and dumps to a zarr data store"""
+    """append the dataset of each capture to a zarr store along `capture`."""
 
     def append(self, capture_result: compute.DelayedDataset):
         ret = super().append(capture_result)

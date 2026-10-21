@@ -25,7 +25,7 @@ from sweep_strategies import (
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-from striqt.sensor.lib.io import _convert_zarr_attrs_spec
+from striqt.sensor.lib.io import _decode_spec_tree
 
 FRAGMENTS = SWEEP_DIR / 'fragments'
 
@@ -273,7 +273,7 @@ def test_read_zarr_spec_decodes_fractions(run_sweep_to_zarr):
 @settings(max_examples=25)
 @given(sweep=sweeps())
 def test_attrs_tree_rebuilds_any_sweep(sweep):
-    assert _convert_zarr_attrs_spec(_json_round_trip(sweep), SWEEP_DIR) == sweep
+    assert _decode_spec_tree(_json_round_trip(sweep), SWEEP_DIR) == sweep
 
 
 def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
@@ -318,7 +318,7 @@ def test_read_zarr_spec_keeps_the_fields_a_bound_sweep_adds(tmp_path):
 def test_unknown_tree_keys_are_rejected():
     tree = _json_round_trip(ROUND_TRIP_SWEEPS['single_port'])
     with pytest.raises(msgspec.ValidationError, match='junk'):
-        _convert_zarr_attrs_spec({**tree, 'junk': 1}, SWEEP_DIR)
+        _decode_spec_tree({**tree, 'junk': 1}, SWEEP_DIR)
 
 
 def test_read_zarr_spec_output_overrides(run_sweep_to_zarr):

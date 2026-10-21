@@ -324,7 +324,7 @@ def _flush_model_captures(path):
 
 
 @pytest.fixture(scope='module')
-def flushed_calibration(fake_sweep_runner, tmp_path_factory) -> FakeRun:
+def flushed_calibration(tmp_path_factory) -> FakeRun:
     """the corrections save_yfactor_corrections saves from a full grid of model
     captures, as a FakeRun with the sweep but no prompts, fake device, or results"""
     path = tmp_path_factory.mktemp('yfactor') / 'flushed.nc'
