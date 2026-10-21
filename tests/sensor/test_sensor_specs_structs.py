@@ -419,7 +419,10 @@ class TestSweepLoops:
 
 
 class TestSweepCaptures:
-    @pytest.mark.parametrize('cls', [ss.specs.Sweep, ss.specs.CalibrationSweep])
+    @pytest.mark.parametrize(
+        'cls',
+        [ss.specs.Sweep, ss.specs.CalibrationSweep, ss.specs.ManualYFactorCalibration],
+    )
     def test_bare_sweep_is_not_constructible(self, cls):
         # the TypeError comes from msgspec.structs.fields on the unbound capture
         # TypeVar, not from a guard, so there is no message to match
@@ -482,7 +485,7 @@ class TestSweepAnalysisValidation:
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
     def test_the_warmup_sweep_constructs(self, synthetic_sweep):
-        warmup = ss.lib.compute.gpu.build_warmup_sweep(synthetic_sweep)
+        warmup = ss.lib.actions.derive_warmup_spec(synthetic_sweep)
         assert len(warmup.captures) == 1
 
 

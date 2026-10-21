@@ -1,4 +1,8 @@
-"""striqt.sensor.lib.execute: the acquire/analyze/sink pipeline of iterate_sweep.
+"""striqt.sensor.lib.actions.core: the acquire/analyze/sink pipeline, iterate_captures.
+
+The sequencing and yield-mode cells run through `ss.iterate_sweep`, which dispatches
+a bound `Sweep` to `SweepRunner` and the pipeline; `test_sensor_actions_sweep.py` pins
+that dispatch. The failure cells call the pipeline directly.
 
 The captures are 1-port scale-only tones at distinct offsets, so a result attributed
 to the wrong capture disagrees with its own generator oracle exactly.
@@ -26,7 +30,8 @@ from synthetic_sources import (
 )
 
 import striqt.sensor as ss
-from striqt.sensor.lib import execute, util
+from striqt.sensor.lib import util
+from striqt.sensor.lib.actions import core
 from striqt.waveform import fourier
 
 OFFSETS = (1e6, 2e6, 3e6)
@@ -36,7 +41,7 @@ def index_values(datasets, name) -> list[int]:
     return [int(ds[name].values[0]) for ds in datasets]
 
 
-# %% iterate_sweep: sequencing
+# %% iterate_captures: sequencing
 
 
 def test_results_follow_the_capture_order(subtests):
@@ -94,7 +99,7 @@ def test_empty_captures_yield_nothing():
     assert run_in_memory(preset_sweep('single_tone', (), analysis=IQ_ONLY)) == []
 
 
-# %% iterate_sweep: yield modes
+# %% iterate_captures: yield modes
 
 YIELD_MODES = {
     # (yield_values, always_yield): item types, with N = 3 captures
@@ -110,7 +115,7 @@ def test_yield_modes(mode):
     """current behavior, not a contract: the pipeline runs N + 2 stages and yields
     the sink result of every stage when yield_values is set (None for the 2
     stages before the first capture reaches the sink), one None per stage when
-    only always_yield is set, and nothing otherwise. The iterate_sweep docstring
+    only always_yield is set, and nothing otherwise. The iterate_captures docstring
     describes the leading placeholders differently."""
     (yield_values, always_yield), expected = YIELD_MODES[mode]
     sweep = tone_sweep(OFFSETS)
@@ -124,7 +129,7 @@ def test_yield_modes(mode):
             assert isinstance(item, ss.lib.compute.DelayedDataset)
 
 
-# %% iterate_sweep: failure propagation
+# %% iterate_captures: failure propagation
 
 
 class FailingSink(ss.sinks.NoSink):
@@ -138,7 +143,7 @@ def test_sink_exception_propagates_and_closes_the_source(isolated_lookup):
         pytest.raises(RuntimeError, match='simulated sink failure'),
         ss.open_resources(sweep, None) as res,
     ):
-        list(ss.iterate_sweep(res, sink=FailingSink(sweep)))
+        list(core.iterate_captures(res, sink=FailingSink(sweep)))
 
     assert not res['source'].is_open(wait=False)
     assert_source_released(isolated_lookup, sweep)
@@ -160,7 +165,7 @@ def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
     yielded = []
 
     def consume(res):
-        for item in ss.iterate_sweep(
+        for item in core.iterate_captures(
             res, sink=ss.sinks.NoSink(sweep), peripherals=CancellingPeripherals(sweep)
         ):
             assert item is None, 'no capture reaches the sink before the interrupt'
@@ -212,7 +217,7 @@ def test_log_cache_info_reports_the_spectrogram_snr(calibration_nc, caplog):
     cache = types.SimpleNamespace(name='_cached_spectrogram')
     with caplog.at_level(logging.INFO, logger='striqt.analysis'):
         result = spectrogram_result(PEAK_DBM)
-        execute._log_cache_info(resources, cache, capture, result)
+        core._log_cache_info(resources, cache, capture, result)
 
     messages = [r.getMessage() for r in caplog.records if 'SNR' in r.getMessage()]
     assert len(messages) == 1
@@ -226,5 +231,5 @@ def test_log_cache_info_is_silent_without_calibration(cache_name, caplog):
     resources = air_resources(capture)
     cache = types.SimpleNamespace(name=cache_name)
     with caplog.at_level(logging.DEBUG, logger='striqt.analysis'):
-        execute._log_cache_info(resources, cache, capture, spectrogram_result(PEAK_DBM))
+        core._log_cache_info(resources, cache, capture, spectrogram_result(PEAK_DBM))
     assert caplog.records == []

@@ -24,6 +24,7 @@ warmup = bind_sensor(
         capture=specs.SensorCapture,
         arm_like=specs.SensorCapture,
         peripherals=specs.NoPeripherals,
+        action=specs.Warmup,
     ),
 )
 
@@ -38,15 +39,6 @@ mat_file = bind_sensor(
         arm_like=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
-)
-
-
-schema = Schema(
-    source=specs.MATSource,
-    init_like=specs.MATSource,
-    capture=specs.FileCapture,
-    arm_like=specs.FileCapture,
-    peripherals=specs.NoPeripherals,
 )
 
 

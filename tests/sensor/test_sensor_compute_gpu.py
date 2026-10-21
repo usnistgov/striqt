@@ -1,5 +1,4 @@
-"""striqt.sensor.lib.compute.gpu: whether a sweep needs the GPU warmup, and the
-warmup sweep derived from it"""
+"""striqt.sensor.lib.compute.gpu: whether a sweep needs the GPU warmup"""
 
 from __future__ import annotations
 
@@ -84,63 +83,3 @@ def test_sweep_touches_gpu(case):
     loop over them) puts work on the GPU"""
     sweep, expected = TOUCHES_GPU[case]
     assert gpu.sweep_touches_gpu(sweep) is expected
-
-
-# %% build_warmup_sweep
-
-PORT_LOOP = ss.specs.List(field='port', values=(0, 1))
-
-WARMUP_PORTS = {
-    'port_0': ((scale_only(port=0),), (), 1),
-    'ports_0_1': ((scale_only(port=(0, 1)),), (), 2),
-    'port_1_only': ((scale_only(port=1),), (), 2),
-    'port_loop': ((scale_only(port=0),), (PORT_LOOP,), 2),
-}
-
-
-@pytest.mark.parametrize('case', list(WARMUP_PORTS), ids=list(WARMUP_PORTS))
-def test_warmup_source_has_enough_rx_ports(case):
-    """port numbers index the receiver's ports from 0, so the warmup source needs
-    max(port) + 1 of them for every port a capture or a port loop names"""
-    captures, loops, num_rx_ports = WARMUP_PORTS[case]
-    warmup = gpu.build_warmup_sweep(cupy_sweep(captures, loops=loops))
-    assert isinstance(warmup.source, ss.specs.NoSource)
-    assert warmup.source.num_rx_ports == num_rx_ports
-
-
-@pytest.mark.parametrize('count', [1, 2], ids=['one', 'two'])
-def test_warmup_sweep_flattens_to_count_captures(count):
-    captures = tuple(scale_only(frequency_offset=f) for f in (1e6, 2e6, 3e6))
-    sweep = cupy_sweep(captures, loops=(ss.specs.Repeat(count=2), PORT_LOOP))
-    warmup = gpu.build_warmup_sweep(sweep, count=count)
-    assert warmup.loops == ()
-    assert len(warmup.captures) == count
-    assert type(warmup.captures[0]) is type(captures[0])
-
-
-def test_warmup_sweep_preserves_analysis_sink_and_trigger():
-    source = CUPY.replace(signal_trigger='cellular_5g_pss_sync')
-    sink = ss.specs.Sink(path='somewhere.zarr', batched_write_count=3)
-    analysis = ss.specs.BundledAnalysis.from_dict({
-        **ANALYSIS.to_dict(),
-        # shared_spectrum picks SSB case C, which a capture with no center_frequency
-        # cannot otherwise resolve at 30 kHz
-        'cellular_5g_pss_sync': {
-            'subcarrier_spacing': 30e3,
-            'sample_rate': 7.68e6,
-            'discovery_periodicity': 0.02,
-            'shared_spectrum': True,
-        },
-    })
-    # the correlator needs whole 10 ms frames
-    capture = scale_only(duration=10e-3)
-    sweep = preset_sweep(
-        'single_tone', (capture,), analysis=analysis, source=source, sink=sink
-    )
-    warmup = gpu.build_warmup_sweep(sweep)
-    assert warmup.analysis == analysis
-    assert warmup.sink == sink
-    assert warmup.source.signal_trigger == 'cellular_5g_pss_sync'
-    assert warmup.source.master_clock_rate == SOURCE.master_clock_rate
-    assert warmup.sensor.source_cls is ss.sources.NoSource
-    assert warmup.sensor.sink_cls is ss.sinks.NoSink

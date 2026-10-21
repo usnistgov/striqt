@@ -22,10 +22,11 @@ from conftest import (
 from hypothesis import given
 from hypothesis import strategies as st
 from pytest_lazy_fixtures import lf
-from site_strategies import SiteCalCaptureCls
+from site_strategies import SiteCalCaptureCls, SiteCaptureCls
 from soapy_factories import MCR, soapy_capture
 from sweep_strategies import (
     BOLTZMANN_MW,
+    CAL,
     CAL_LOOP_VALUES,
     GAIN_LOOP,
     NDE_LOOP,
@@ -50,6 +51,7 @@ from sweep_strategies import (
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import calibration
+from striqt.sensor.lib.actions import yfactor
 from striqt.sensor.lib.compute.datasets import build_capture_coords
 
 H = ss.specs.sequencing
@@ -116,17 +118,26 @@ class TestNoiseDiodeToggle:
         assert len(H.loop_captures(sweep)) == 4
 
 
-# %% generated classes
+# %% bind_manual_yfactor_calibration
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason='bind_manual_yfactor_calibration leaves the generated capture class named '
-    'capture_spec_cls (it renames only the peripherals class)',
-)
 def test_calibration_capture_class_has_a_descriptive_name():
-    assert SiteCalCaptureCls.__name__ != 'capture_spec_cls'
+    """the capture class is the parent capture's name with a NoiseDiode suffix, in
+    the parent's module, so it reads as such in the JSON schema and error text"""
+    assert SiteCalCaptureCls.__name__ == f'{SiteCaptureCls.__name__}NoiseDiode'
+    assert SiteCalCaptureCls.__module__ == SiteCaptureCls.__module__
+
+
+def test_binding_derives_its_classes_from_the_parent():
+    parent = ss.bindings.air7101b
+    assert CAL.schema.capture is yfactor.with_noise_diode_field(parent.schema.capture)
+    assert CAL.schema.arm_like is CAL.schema.capture
+    assert CAL.sensor.peripherals_cls.part_classes == (
+        parent.sensor.peripherals_cls,
+        calibration.ManualYFactorPeripheral,
+    )
+    assert issubclass(CAL.sensor.sweep_spec_cls, ss.specs.ManualYFactorCalibration)
+    assert CAL.sensor.sink_cls is calibration.YFactorSink
 
 
 # %% _y_factor_power_corrections

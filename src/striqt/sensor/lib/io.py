@@ -5,7 +5,7 @@ from __future__ import annotations as __
 import sys
 import msgspec
 from pathlib import Path
-from typing import Optional, overload, TYPE_CHECKING
+from typing import Any, Optional, overload, TYPE_CHECKING
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import np, xr
@@ -115,18 +115,19 @@ def read_zarr_spec(
 ) -> specs.Sweep:
     """rebuild the `Sweep` that `iterate_sweep` saved in the attrs of a zarr store.
 
-    Only attrs that name `Sweep` fields (plus the binding tag and ``mock_source``)
-    are read; other dataset attrs are ignored. The `extensions` block is imported
-    before the sweep is decoded, so a `sensor_binding` it defines is available.
-    Passing the store path to `open_resources` derives the ``{spec_name}`` and
-    ``{parent_name}`` path fields from it, as for `read_yaml_spec`.
+    The `extensions` block is imported before the sweep is decoded. A
+    `sensor_binding` that the extension module defines is accepted. Only attrs
+    that name fields of the sweep class being decoded, the binding tag, and
+    ``mock_source`` are read. Other dataset attrs are ignored. Passing the store
+    path to `open_resources` derives the ``{spec_name}`` and ``{parent_name}`` path
+    fields from it, as for `read_yaml_spec`.
 
     Args:
         path: the zarr store, a ``.zarr`` directory or ``.zarr.zip`` archive
         type: the sweep class to decode against, or None to decode against the
-            tagged union of registered sensor bindings and filter attrs by the fields
-            of `specs.Sweep`. A saved ``mock_source`` attr selects that binding's
-            sweep class instead.
+            sweep class bound under the saved `sensor_binding` tag, including any
+            fields that class adds to `specs.Sweep`. A saved ``mock_source`` attr
+            selects that binding's mock sweep class instead.
         output_path: replaces `sink.path` in the returned spec when given
         store_backend: replaces `sink.store` in the returned spec when given
         extension_root: directory that a relative `extensions.import_path` is
@@ -137,55 +138,110 @@ def read_zarr_spec(
         selects
 
     Raises:
-        msgspec.ValidationError: the attrs do not validate as a sweep of that class
+        msgspec.ValidationError: the attrs do not validate as a sweep of that class,
+            or the tag names no registered binding
+        FileNotFoundError: `extensions.import_path` or `extension_root` does not
+            exist
     """
     attrs = sa.lib.io.load_attrs(path)
-    sweep_cls = specs.Sweep if type is None else type
-    fields = set(sweep_cls.__struct_fields__)
-    fields |= {specs.structs.SWEEP_TAG_FIELD, 'mock_source'}
-    tree = {k: v for k, v in attrs.items() if k in fields}
 
     if extension_root is None:
         extension_root = Path(path).resolve().parent
 
-    return _convert_zarr_attrs_spec(
-        tree,
-        extension_root,
-        type=type,
-        output_path=output_path,
-        store_backend=store_backend,
+    sweep_cls = _resolve_sweep_cls(attrs, extension_root, type=type)
+
+    # with no registered binding to filter by, the base fields stand in and the
+    # tagged union reports the unknown tag
+    fields_cls = specs.Sweep if sweep_cls is None else sweep_cls
+    fields = set(fields_cls.__struct_fields__)
+    fields |= {specs.structs.SWEEP_TAG_FIELD, 'mock_source'}
+    tree = {k: v for k, v in attrs.items() if k in fields}
+
+    return _decode_sweep(
+        tree, sweep_cls, output_path=output_path, store_backend=store_backend
     )
 
 
 def _convert_zarr_attrs_spec(
-    tree: dict,
+    tree: dict[str, Any],
     extension_root: str | Path,
     *,
     type: type[specs.Sweep] | None = None,
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
 ) -> specs.Sweep:
-    mock_source = tree.get('mock_source', None)
-    if mock_source is not None:
-        assert 'sensor_binding' in tree, TypeError('missing "sensor_binding"')
-        from .bindings import get_controller
+    """decode a sweep from the dict form of its YAML, JSON, or zarr attrs.
 
-        ctrl_cls = get_controller(tree['sensor_binding'], mock_source)
-        type = ctrl_cls.sensor.sweep_spec_cls
-        tree['sensor_binding'] = type.__name__
+    Imports the `extensions` block of `tree` before decoding. A ``mock_source`` entry
+    rewrites ``tree['sensor_binding']`` in place (see `_resolve_sweep_cls`).
+    """
+    sweep_cls = _resolve_sweep_cls(tree, extension_root, type=type)
+    return _decode_sweep(
+        tree, sweep_cls, output_path=output_path, store_backend=store_backend
+    )
+
+
+def _resolve_sweep_cls(
+    tree: dict[str, Any],
+    extension_root: str | Path,
+    *,
+    type: type[specs.Sweep] | None = None,
+) -> type[specs.Sweep] | None:
+    """return the sweep class for `tree` after importing its `extensions` block.
+
+    The `sensor_binding` tag of `tree` is looked up after the import and may name a
+    binding that the extension module registers. A ``mock_source`` entry selects the
+    mock of that binding and rewrites ``tree['sensor_binding']`` in place to the mock
+    class name. This selection takes precedence over `type`. Otherwise `type` is
+    returned when given. The result is None when `type` is None and the tag names no
+    registered binding.
+
+    Raises:
+        FileNotFoundError: `extensions.import_path` or `extension_root` does not
+            exist
+    """
+    from .bindings import get_controller, get_registry
 
     if 'extensions' in tree:
-        # import before decoding, so that sensor_binding keys can use definitions
-        # in extension modules
         ext = specs.Extension.from_dict(tree['extensions'])
         _import_extensions_from_spec(ext, root_dir=extension_root)
 
-    if type is None:
+    tag = tree.get(specs.structs.SWEEP_TAG_FIELD, None)
+    mock_source = tree.get('mock_source', None)
+
+    if not isinstance(tag, str) or tag not in get_registry():
+        bound_cls = None
+    elif mock_source is not None:
+        bound_cls = get_controller(tag, mock_source).sensor.sweep_spec_cls
+        # msgspec rejects a tagged struct whose tag field does not match the class
+        tree[specs.structs.SWEEP_TAG_FIELD] = bound_cls.__name__
+        return bound_cls
+    else:
+        bound_cls = get_controller(tag).sensor.sweep_spec_cls
+
+    return bound_cls if type is None else type
+
+
+def _decode_sweep(
+    tree: dict[str, Any],
+    sweep_cls: type[specs.Sweep] | None,
+    *,
+    output_path: str | None = None,
+    store_backend: str | None = None,
+) -> specs.Sweep:
+    """decode `tree` as `sweep_cls` and apply the sink path and store overrides.
+
+    When `sweep_cls` is None, `tree` is decoded against the tagged union of all
+    registered bindings.
+
+    Raises:
+        msgspec.ValidationError: `tree` does not validate as `sweep_cls`, or no
+            binding is registered under its tag
+    """
+    if sweep_cls is None:
         from .bindings import get_tagged_sweep_type
 
         sweep_cls = get_tagged_sweep_type()
-    else:
-        sweep_cls = type
 
     spec = sa.specs.helpers.convert_dict(tree, type=sweep_cls)
 

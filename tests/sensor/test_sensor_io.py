@@ -14,7 +14,14 @@ import pytest
 from conftest import SITE_DIR, SWEEP_DIR
 from hypothesis import given, settings
 from site_strategies import SiteCalCaptureCls, SiteCaptureCls
-from sweep_strategies import CalSweepCls, loop_fields, make_capture, make_sweep, sweeps
+from sweep_strategies import (
+    CalSweepCls,
+    loop_fields,
+    make_calibration_sweep,
+    make_capture,
+    make_sweep,
+    sweeps,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
@@ -269,6 +276,23 @@ def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
     spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')
     zarr.open(sa.open_store(path, mode='a')).attrs['junk'] = 1
     assert ss.read_zarr_spec(path) == spec
+
+
+def test_read_zarr_spec_keeps_the_fields_a_bound_sweep_adds(tmp_path):
+    import zarr
+
+    sweep = make_calibration_sweep(
+        calibration=ss.specs.ManualYFactorSpec(enr=20.87, ambient_temperature=296.0)
+    )
+    path = tmp_path / 'out.zarr'
+    zarr.open(sa.open_store(path, mode='w'), mode='w').attrs.update(
+        _json_round_trip(sweep)
+    )
+
+    rebuilt = ss.read_zarr_spec(path)
+    assert type(rebuilt) is CalSweepCls
+    assert rebuilt.calibration.enr == pytest.approx(20.87)
+    assert rebuilt == sweep
 
 
 def test_unknown_tree_keys_are_rejected():

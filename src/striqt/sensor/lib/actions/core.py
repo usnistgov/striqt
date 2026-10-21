@@ -1,21 +1,101 @@
-"""implement sensor analysis sweeps as parallel (acquisition, analysis, sink)"""
+"""the action runner base, the `iterate_sweep` dispatcher, and the acquire/analyze/sink pipeline"""
 
 from __future__ import annotations as __
 
 import contextlib
 import math
 import itertools
-from typing import Any, Generator
+from typing import Any, Generator, Generic, TYPE_CHECKING
 
 import striqt.waveform as sw
 import striqt.analysis as sa
 from striqt.analysis.lib.util import pd, xr
 
-from . import compute, util
-from .. import specs
-from .resources import Resources, AnyResources
-from .calibration import lookup_system_noise_power
-from .typing import PC, PS, SC, SP, SS, Unpack
+from .. import compute, util
+from ..compute import gpu
+from ... import specs
+from ..resources import Resources, AnyResources
+from ..calibration import lookup_system_noise_power
+from ..typing import PC, PS, SC, SP, SS, Unpack
+from .registry import registry
+
+if TYPE_CHECKING:
+    from ..bindings import Sensor
+
+
+class ActionRunner(Generic[SS, SP, SC, PS, PC]):
+    """base class of the actions that `iterate_sweep` runs over open resources.
+
+    A subclass is registered for one action spec type with `registry.runner`.
+    `iterate_sweep` instantiates the runner registered for the type of
+    ``resources['sweep_spec']`` or the nearest of its bases. `warmup_spec` is
+    consulted by `prepare_compute` before the resources open. The `adapt_sensor` and
+    `adapt_schema` hooks run once at bind time. Each receives the `Sensor` or
+    `Schema` a binding is built from and returns the version the action requires.
+    The base implementations return their argument unchanged.
+    """
+
+    resources: Resources[SS, SP, SC, PS, PC]
+
+    @classmethod
+    def adapt_sensor(cls, sensor: Sensor[SS, SP, SC]) -> Sensor[SS, SP, SC]:
+        """return the `Sensor` to bind for this action, derived from `sensor`.
+
+        A subclass replaces the implementation classes that the action requires,
+        such as the sink or peripherals.
+        """
+        return sensor
+
+    @classmethod
+    def adapt_schema(
+        cls, schema: specs.Schema[SS, SP, SC, PS, PC]
+    ) -> specs.Schema[SS, SP, SC, PS, PC]:
+        """return the `Schema` to bind for this action, derived from `schema`.
+
+        A subclass replaces the spec types that the action requires, such as a
+        capture type with an added field.
+        """
+        return schema
+
+    @classmethod
+    def warmup_spec(cls, spec: specs.Sweep[Any, Any, Any]) -> specs.Warmup | None:
+        """return the `Warmup` to run before `spec`, or None when none is needed.
+
+        None when `spec.options.skip_warmup` is set or the sweep does not use the
+        GPU (`compute.gpu.sweep_touches_gpu`).
+        """
+        if spec.options.skip_warmup or not gpu.sweep_touches_gpu(spec):
+            return None
+
+        from . import warmup
+
+        return warmup.derive_warmup_spec(spec)
+
+    def __init__(
+        self,
+        resources: Resources[SS, SP, SC, PS, PC],
+        **replace: Unpack[AnyResources[SS, SP, SC, PS, PC]],
+    ):
+        self.resources = Resources(resources, **replace)
+
+    def iterate(
+        self,
+        *,
+        always_yield: bool = False,
+        yield_values: bool = True,
+        loop: bool = False,
+    ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
+        """run the action and yield what the sink's `append` returns for each capture.
+
+        Args:
+            always_yield: if True, yield `None` on steps that produce no result
+            yield_values: if False, yield `None` instead of the sink result
+            loop: if True, the action repeats from the beginning after the last capture
+        """
+        raise NotImplementedError
+
+    def __iter__(self) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
+        return self.iterate()
 
 
 def iterate_sweep(
@@ -24,9 +104,42 @@ def iterate_sweep(
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
+    **replace: Unpack[AnyResources[SS, SP, SC, PS, PC]],
+) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
+    """run the action registered for the type of ``resources['sweep_spec']``.
+
+    The `ActionRunner` subclass registered for the spec type, or the nearest of its
+    bases, is instantiated with `resources` updated by `replace` and iterated. A
+    plain `Sweep` runs `iterate_captures`, whose docstring describes the yields.
+
+    Args:
+        resources: dictionary of open resources returned by `open_resources`
+        always_yield: if True, yield `None` on steps that produce no result
+        yield_values: if False, yield `None` instead of the sink result
+        loop: if True, the action repeats from the beginning after the last capture
+
+    Returns:
+        the iterator returned by the runner's `iterate`
+
+    Raises:
+        TypeError: if no runner is registered for the spec type or any of its bases
+    """
+    runner_cls = registry.lookup(resources['sweep_spec'])
+    runner = runner_cls(resources, **replace)
+    return runner.iterate(
+        always_yield=always_yield, yield_values=yield_values, loop=loop
+    )
+
+
+def iterate_captures(
+    resources: Resources[SS, SP, SC, PS, PC],
+    *,
+    always_yield: bool = False,
+    yield_values: bool = True,
+    loop: bool = False,
     **replace: 'Unpack[AnyResources[SS, SP, SC, PS, PC]]',
 ) -> Generator['xr.Dataset|compute.DelayedDataset|None']:
-    """an iterator that steps through the execution of a sensor sweep.
+    """step through the captures of a sweep in the acquire, analyze, and sink pipeline.
 
     Data acquisition, analysis, and sink operations each run in parallel in
     separate threads. Normally, the iterator yields a result for each

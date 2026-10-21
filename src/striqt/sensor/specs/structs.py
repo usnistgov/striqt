@@ -298,10 +298,19 @@ class NoPeripherals(Peripherals, frozen=True, kw_only=True):
     pass
 
 
-class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
+class ManualYFactorSpec(Peripherals, frozen=True, kw_only=True):
+    """the `calibration:` block of a manual Y-factor calibration sweep.
+
+    `implied_loops` names capture fields that the operator varies by hand between
+    captures and that are therefore indexed like loop fields in the saved corrections.
+    """
+
     enr: types.ENR
     ambient_temperature: types.AmbientTemperature
     implied_loops: tuple[str, ...] = ()
+
+
+ManualYFactorPeripheral = ManualYFactorSpec
 
 
 # %% Top-level Sweep specifications
@@ -437,6 +446,38 @@ class CalibrationSweep(
                 'Expected `null`, since a calibration sweep cannot itself be calibrated',
                 ('.source', '.calibration'),
             )
+
+
+class ManualYFactorCalibration(
+    CalibrationSweep[SS, SP, SC, ManualYFactorSpec], frozen=True, kw_only=True
+):
+    """sweep specification for a Y-factor calibration with a hand-switched noise diode.
+
+    The `calibration:` block is a `ManualYFactorSpec`. Every capture is acquired
+    with the diode off and with it on. A ``noise_diode_enabled`` loop over
+    ``(False, True)`` is inserted first in `loops`, or second after a leading
+    ``port`` loop, unless the file writes it at one of those positions itself.
+
+    Raises:
+        TypeError: if `loops` already loops ``noise_diode_enabled`` at another
+            position
+    """
+
+    def __post_init__(self) -> None:
+        from . import sweep
+
+        sweep._ensure_loop_at_position(self)
+        super().__post_init__()
+
+
+class Warmup(Sweep[NoSource, NoPeripherals, SC], frozen=True, kw_only=True):
+    """sweep specification for the warmup that runs before a GPU sweep.
+
+    The source is a `NoSource` with enough ports for the captures, and the
+    captures are those of the sweep being prepared, flattened so that running them
+    pays the import and JIT costs of its `analysis` once. `derive_warmup_spec` in
+    `striqt.sensor.lib.actions.warmup` builds one from a sweep.
+    """
 
 
 # %% Non-Sweep specs

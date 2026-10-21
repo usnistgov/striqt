@@ -1,16 +1,17 @@
 from __future__ import annotations as __
 
+import dataclasses
+import sys
 from typing import cast, Any, Sequence, TYPE_CHECKING
 from pathlib import Path
 
 from .. import specs as specs
-from . import compute, io, peripherals, sinks, util
+from . import compute, io, peripherals, sinks
 from .controller import Controller
-from .typing import Peripherals, TypeVar, SC, SP, SPC, PS, PC
+from .typing import TypeVar, SC, SP, PS, PC
 import striqt.analysis as sa
 from striqt.analysis.lib.util import np, pd, xr
 
-import msgspec
 
 if TYPE_CHECKING:
     from . import bindings
@@ -199,7 +200,7 @@ class YFactorSink(sinks.SinkBase):
 
 
 class ManualYFactorPeripheral(
-    peripherals.CalibrationPeripheralsBase[Any, Any, specs.ManualYFactorPeripheral]
+    peripherals.CalibrationPeripheralsBase[Any, Any, specs.ManualYFactorSpec]
 ):
     _last_state = (None, None)
 
@@ -241,139 +242,28 @@ class ManualYFactorPeripheral(
         pass
 
 
-def _calibration_peripherals_cls(
-    ext: type[Peripherals[SP, SC]],
-    cal: type[peripherals.CalibrationPeripheralsBase[Any, Any, SPC]],
-) -> type[peripherals.CalibrationPeripheralsBase[SP, SC, SPC]]:
-    """return a peripheral type for external hardware and calibration"""
-
-    class cls(peripherals.CalibrationPeripheralsBase):
-        _last_state = (None, None)
-        ext: Peripherals[Any, Any]
-        cal: peripherals.CalibrationPeripheralsBase[Any, Any, Any]
-
-        def __init__(self, spec):
-            self.ext = ext(spec)
-            self.cal = cal(spec)
-
-        def open(self):
-            futures = [
-                util.threadpool.submit(self.ext.open),
-                util.threadpool.submit(self.cal.open),
-            ]
-            util.await_and_ignore(futures)
-
-        def setup(
-            self,
-            captures: Sequence[SC],
-            loops: Sequence[specs.LoopSpec],
-        ):
-            self.ext.setup(captures, loops)
-            self.cal.setup(captures, loops)
-
-        def close(self):
-            try:
-                self.ext.close()
-            finally:
-                self.cal.close()
-
-        def arm(self, capture):
-            futs = [
-                util.threadpool.submit(self.ext.arm, capture),
-                util.threadpool.submit(self.cal.arm, capture),
-            ]
-            util.await_and_ignore(futs)
-
-        def acquire(self, capture):
-            ext_fut = util.threadpool.submit(self.ext.acquire, capture)
-            cal_fut = util.threadpool.submit(self.cal.acquire, capture)
-
-            with util.ExceptionStack() as exc:
-                with exc.defer():
-                    ext = ext_fut.result()
-                with exc.defer():
-                    cal = cal_fut.result()
-
-            return ext | cal
-
-    return cls
-
-
 def bind_manual_yfactor_calibration(
     name: str, ctrl_cls: 'type[Controller[SS, SP, Any, PS, PC]]'
 ) -> 'type[Controller[SS, SP, Any, PS, PC]]':
-    """extend an existing binding with a y-factor calibration"""
+    """bind a manual Y-factor calibration of the sensor bound as `ctrl_cls`.
 
+    The result is `bind_sensor` with `ctrl_cls`'s own `Sensor` and a `Schema` whose
+    `action` is `specs.ManualYFactorCalibration`, so the binding's sink, peripherals,
+    and capture spec are the ones `ManualYFactorRunner` derives. Sweep files select
+    it with ``sensor_binding: <name>``. The controller class records the caller's
+    module.
+    """
     from . import bindings
 
-    # binding = ctrl_cls.sensor
-
-    assert ctrl_cls.schema is not None
-    assert issubclass(ctrl_cls.schema.capture, specs.Capture)
-
-    class capture_spec_cls(ctrl_cls.schema.capture, frozen=True, kw_only=True):
-        noise_diode_enabled: specs.types.NoiseDiodeEnabled = False
-
-    class sweep_spec_cls(specs.CalibrationSweep, frozen=True, kw_only=True):
-        calibration: specs.ManualYFactorPeripheral | None = None
-        options = specs.SweepOptions(
-            reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
-        )
-
-        def __post_init__(self):
-            _ensure_loop_at_position(self)
-            super().__post_init__()
-
-    peripherals_cls = _calibration_peripherals_cls(
-        ctrl_cls.sensor.peripherals_cls, ManualYFactorPeripheral
-    )
-    peripherals_cls.__name__ = ManualYFactorPeripheral.__name__
-
-    cal_sensor = bindings.Sensor(
-        source_cls=ctrl_cls.sensor.source_cls,
-        peripherals_cls=peripherals_cls,
-        sweep_spec_cls=sweep_spec_cls,
-        sink_cls=YFactorSink,
-    )
-
-    cal_schema = specs.Schema(
-        source=ctrl_cls.schema.source,
-        capture=capture_spec_cls,
-        peripherals=ctrl_cls.schema.peripherals,
-        init_like=ctrl_cls.schema.init_like,
-        arm_like=ctrl_cls.schema.arm_like,
-    )
+    sensor = dataclasses.replace(ctrl_cls.sensor, sweep_spec_cls=specs.Sweep)
+    schema = dataclasses.replace(ctrl_cls.schema, action=specs.ManualYFactorCalibration)
 
     return bindings.bind_sensor(
         name,
-        cast(bindings.Sensor[SS, SP, Any], cal_sensor),
-        cast(specs.Schema[SS, SP, Any, PS, PC], cal_schema),
+        cast(bindings.Sensor[SS, SP, Any], sensor),
+        cast(specs.Schema[SS, SP, Any, PS, PC], schema),
+        module=sys._getframe(1).f_globals.get('__name__'),
     )
-
-
-def _ensure_loop_at_position(sweep: specs.Sweep):
-    loop_fields = [l.field for l in sweep.loops]
-
-    try:
-        idx = loop_fields.index('noise_diode_enabled')
-    except ValueError:
-        if len(loop_fields) > 0 and loop_fields[0] == 'port':
-            idx = 1
-        else:
-            idx = 0
-
-        toggle_diode = specs.List(field='noise_diode_enabled', values=(False, True))
-        loops = list(sweep.loops)
-        loops.insert(idx, toggle_diode)
-
-        msgspec.structs.force_setattr(sweep, 'loops', tuple(loops))
-    else:
-        if idx == 0:
-            pass
-        elif idx == 1 and loop_fields[0] == 'port':
-            pass
-        else:
-            raise TypeError('noise_diode_enabled must be the first specified loop')
 
 
 def _limit_nyquist_bandwidth(data: 'xr.DataArray') -> 'xr.DataArray':

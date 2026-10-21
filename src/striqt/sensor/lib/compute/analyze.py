@@ -8,7 +8,7 @@ import warnings
 
 from ... import specs
 from .. import sources
-from . import corrections, gpu, datasets
+from . import corrections, datasets
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -175,29 +175,21 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
         message='Mean of empty slice.*',
     )
 
-    if skip_warmup or spec.options.skip_warmup or not gpu.sweep_touches_gpu(spec):
+    from ..actions import registry, warmup
+
+    if skip_warmup:
+        warm = None
+    else:
+        warm = registry.lookup(spec).warmup_spec(spec)
+
+    if warm is None:
         yield from (None,)
         return
 
-    from ... import bindings
-    from .. import execute, resources, sinks
-
-    spec = gpu.build_warmup_sweep(spec)
-
-    if len(spec.captures) == 0:
+    if len(warm.captures) == 0:
         return
 
-    res = resources.Resources(
-        sweep_spec=spec,
-        source=bindings.warmup.from_source_spec(spec.source),
-        peripherals=bindings.warmup.sensor.peripherals_cls(spec),
-        sink=sinks.NoSink(spec),
-        calibration=None,
-        format_path=None,
-    )
+    res = warmup.WarmupRunner.open(warm)
 
     with res['source']:
-        sweep = execute.iterate_sweep(res, always_yield=True, calibration=None)
-
-        for _ in sweep:
-            yield _
+        yield from warmup.WarmupRunner(res).iterate(always_yield=True)

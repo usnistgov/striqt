@@ -403,6 +403,18 @@ def isolated_lookup(monkeypatch):
 
 
 @pytest.fixture
+def isolated_bindings(monkeypatch):
+    """snapshot `ss.lib.bindings.registry` and `tagged_sweeps`, which `bind_sensor`
+    rebinds by name, so a test can bind sensors without leaving them behind"""
+    import striqt.sensor as ss
+
+    bindings = ss.lib.bindings
+    monkeypatch.setattr(bindings, 'registry', dict(bindings.registry))
+    monkeypatch.setattr(bindings, 'tagged_sweeps', bindings.tagged_sweeps)
+    return bindings
+
+
+@pytest.fixture
 def corrections_flags(monkeypatch):
     """set(use_oaresample=None, ignore_highside_lo=None) -> None: override the
     STRIQT_USE_OARESAMPLE / STRIQT_IGNORE_HIGHSIDE_LO switches of

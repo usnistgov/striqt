@@ -15,11 +15,12 @@ import contextlib
 import math
 from typing import Any, Callable, TYPE_CHECKING
 
+import msgspec
+
 import striqt.analysis as sa
 from striqt.analysis.specs.helpers import SpecValidationError, validation_path
 
 from . import sequencing, structs, types
-
 
 if TYPE_CHECKING:
     from ..lib.typing import SC
@@ -92,6 +93,37 @@ def _validate_loops(loops: tuple[structs.LoopSpec, ...]) -> None:
             f'looped in `{first.isin}` at $.loops[{repeated[0]}]',
             ('.loops', f'[{repeated[1]}]'),
         )
+
+
+def _ensure_loop_at_position(sweep: structs.Sweep) -> None:
+    """insert a ``noise_diode_enabled`` toggle loop into `sweep.loops` in place.
+
+    The toggle goes first, or second after a leading `port` loop. A toggle the
+    caller wrote anywhere else is rejected.
+
+    Raises:
+        TypeError: if `sweep.loops` already loops ``noise_diode_enabled`` at
+            another position
+    """
+    loop_fields = [loop.field for loop in sweep.loops]
+
+    try:
+        idx = loop_fields.index('noise_diode_enabled')
+    except ValueError:
+        if len(loop_fields) > 0 and loop_fields[0] == 'port':
+            idx = 1
+        else:
+            idx = 0
+
+        toggle_diode = structs.List(field='noise_diode_enabled', values=(False, True))
+        loops = list(sweep.loops)
+        loops.insert(idx, toggle_diode)
+
+        msgspec.structs.force_setattr(sweep, 'loops', tuple(loops))
+    else:
+        if idx == 0 or (idx == 1 and loop_fields[0] == 'port'):
+            return
+        raise TypeError('noise_diode_enabled must be the first specified loop')
 
 
 _MISSING = object()

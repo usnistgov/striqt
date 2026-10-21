@@ -25,8 +25,13 @@ the same change without giving them a number (listed under "Fixed on 2026-09-18
 without a ledger number" below). Item 90 was added on 2026-09-23 by the
 sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
-xfail so that the `ty` upgrade that closes it surfaces as an xpass. Items
-are listed in priority order, not numeric order.
+xfail so that the `ty` upgrade that closes it surfaces as an xpass. Item 39
+was fixed on 2026-10-21, when `bind_manual_yfactor_calibration` moved to the
+named class factories in `sensor/lib/actions/yfactor.py`
+(`test_calibration_capture_class_has_a_descriptive_name` now pins the naming
+rule), and item 41 in the same change, when `bind_sensor` gained the action hooks
+and its `mock_source` message was corrected. Items are listed in priority order,
+not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -108,10 +113,8 @@ item is open.
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
 | 48 | `TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields` | High | D | trivial |
-| 41 | `test_message_names_the_field` | High | D | trivial |
 | 56 | `TestHardwareTimeSync::test_unsupported_source_names_itself` | High | D | trivial |
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
-| 39 | `test_calibration_capture_class_has_a_descriptive_name` | High | D | trivial |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
 ## Tier B: reachable from plausible YAML or a spec default
@@ -214,7 +217,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 `tests/sensor/test_sensor_calibration.py::TestNoiseDiodeToggle::test_leading_repeat_is_accepted[*]`
 
-- **Mechanism.** `calibration.py:369-393` `_ensure_loop_at_position` only
+- **Mechanism.** `sensor/specs/sweep.py` `_ensure_loop_at_position` only
   allows for a leading `port` loop; `_validate_loops`
   (`sensor/specs/sweep.py`) requires a `Repeat` to be first. The toggle
   is inserted ahead of the `Repeat`, or the helper raises when the `Repeat` is
@@ -573,16 +576,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Nothing in `src/` reads the attribute. Metadata only.
 - **Fix.** `.assign_attrs(by_field.attrs)` on the result. Trivial.
 
-### 41. `BoundSweep` error text says `mock_sensor`
-
-`tests/sensor/test_sensor_bindings.py::TestMockSource::test_message_names_the_field`
-
-- **Mechanism.** `bindings.py:120` names a stale field. `_convert_dict_spec`
-  raises a `KeyError` first, so the CLI never shows this text anyway.
-- **Fix.** String change. Trivial. On 2026-09-16 the stale `mock_sensor`
-  field on `BoundSweep` was renamed and the `SensorBinding` assertion fixed,
-  but the message still says `mock_sensor`, so the xfail stands.
-
 ### 56. Unsupported time source message is not an f-string
 
 `tests/sensor/test_sensor_sources_soapy.py::TestHardwareTimeSync::test_unsupported_source_names_itself`
@@ -599,16 +592,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Mechanism.** `soapy.py:379`, a leftover `print('close stream')`.
 - **Fix.** Delete it, or log at DEBUG on the `source` logger. Trivial.
 
-### 39. The calibration capture class is named `capture_spec_cls`
-
-`tests/sensor/test_sensor_calibration.py::test_calibration_capture_class_has_a_descriptive_name`
-
-- **Mechanism.** `calibration.py:321` defines the class inline and renames
-  only the peripherals class (`calibration.py:339`).
-- **Impact.** Surfaces in the JSON schema `$defs`, the `adjust_captures`
-  error text, and the `Controller.arm` signature. Not in zarr attrs.
-- **Fix.** Set `__name__` and `__qualname__`. Trivial.
-
 ## Tool limitations
 
 Gaps in the checkers and test tooling the suite relies on, not in striqt. They are
@@ -624,7 +607,7 @@ it was standing in for is enabled.
 - **Mechanism.** `ty` 0.0.81 (the `dev` pin) lowers a `**kwargs:
   Unpack[SomeTypedDict]` parameter to `**kwargs: object`: `reveal_type` of
   `sensor/lib/compute/corrections.py:185` `design_resampler` ends in
-  `..., window: str = ..., **kwargs: object`, and `sensor/lib/execute.py:21`
+  `..., window: str = ..., **kwargs: object`, and `sensor/lib/actions/core.py:21`
   `iterate_sweep` in `..., **replace: object`. The known keys keep their
   declared types, so a wrong value (`bw_lo='x'`, `sink=3`) and a missing required
   key are reported, but a keyword that is not in the TypedDict
@@ -694,14 +677,14 @@ it was standing in for is enabled.
   a float32 view, while the int16 path yields exactly `acquired_count`. Harmless
   while `read_iq` passes the full buffer width; tested only at full width.
 
-- **`mock_binding(register=False)` still extends the tagged union.**
-  `lib/bindings.py:129-133` appends the mock `BoundSweep` to `tagged_sweeps`,
-  so after any warmup a YAML with `sensor_binding: mock_warmup_single_tone`
-  decodes.
+- **`mock_binding(register=False)` extended the tagged union** until 2026-10-21.
+  `bind_sensor` now adds a tagged class to `tagged_sweeps` only when it registers
+  the binding, so a YAML with `sensor_binding: mock_warmup_single_tone` no longer
+  decodes after a warmup (`test_unregistered_binding_stays_out_of_the_union`).
 
 - **`cancel_threads()` from a peripheral does not stop a main-thread sweep.**
   `propagate_thread_interrupts` is a no-op on the main thread by design and the
-  function sources never check the flag; `test_sensor_execute.py` consumes
+  function sources never check the flag; `test_sensor_actions_core.py` consumes
   `iterate_sweep` in a worker thread to observe the interrupt.
 
 - **`ZarrTimeAppendSink` concatenates along time only within a batch.**
