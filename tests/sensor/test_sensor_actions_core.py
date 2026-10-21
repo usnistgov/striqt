@@ -137,28 +137,22 @@ class TaggingPeripherals(ss.peripherals.NoPeripherals):
         return {'shared': 'peripheral', 'from_peripheral': 1}
 
 
-def test_extra_data_is_called_per_capture_and_wins_over_the_peripherals():
+def test_extra_data_reaches_every_capture_and_wins_over_the_peripherals():
     sweep = tone_sweep(OFFSETS)
-    seen = []
-
-    def extra_data(capture):
-        seen.append(capture)
-        return {'shared': 'runner', 'offset': capture.frequency_offset}
-
     with ss.open_resources(sweep, None) as res:
         items = core.iterate_captures(
             res,
             sink=ss.sinks.NoSink(sweep),
             peripherals=TaggingPeripherals(sweep),
-            extra_data=extra_data,
+            extra_data={'shared': 'runner', 'state': True},
         )
         results = [item for item in items if item is not None]
 
-    assert seen == list(tone_captures(OFFSETS))
-    for capture, result in zip(seen, results):
+    assert len(results) == len(OFFSETS)
+    for result in results:
         assert result.extra_data['shared'] == 'runner'
         assert result.extra_data['from_peripheral'] == 1
-        assert result.extra_data['offset'] == capture.frequency_offset
+        assert result.extra_data['state'] is True
 
 
 def test_a_shared_indexer_numbers_two_runs_consecutively():
@@ -167,7 +161,7 @@ def test_a_shared_indexer_numbers_two_runs_consecutively():
     its first capture rather than reusing what the first run left armed"""
     n = len(OFFSETS)
     sweep = tone_sweep(OFFSETS)
-    indexer = core._AcquisitionIndexer(2 * n)
+    indexer = core.AcquisitionIndexer(2 * n)
 
     with ss.open_resources(sweep, None) as res:
         sink = ss.sinks.NoSink(sweep)

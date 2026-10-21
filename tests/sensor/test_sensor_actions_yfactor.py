@@ -19,6 +19,7 @@ from sweep_strategies import (
     GAIN_LOOP,
     INF,
     PORT_LOOP,
+    YFACTOR_ENR_DB,
     YFACTOR_GRID,
     CalSweepCls,
     SweepCls,
@@ -46,18 +47,22 @@ DURATION_LOOP = ss.specs.List(field='duration', values=(1e-3, 2e-3))
 
 class TestYFactorCorrections:
     def test_recovers_the_receiver_model(self):
-        corrections = yfactor.compute_y_factor_corrections(make_yfactor_dataset())
+        corrections = yfactor.compute_y_factor_corrections(
+            make_yfactor_dataset(), YFACTOR_ENR_DB
+        )
         assert_corrections_match(corrections, expected_yfactor())
 
     def test_frequency_dependent_noise_figure(self):
         nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
         corrections = yfactor.compute_y_factor_corrections(
-            make_yfactor_dataset(nf_dB=nf)
+            make_yfactor_dataset(nf_dB=nf), YFACTOR_ENR_DB
         )
         assert_corrections_match(corrections, expected_yfactor(nf_dB=nf))
 
     def test_output_is_indexed_by_the_calibration_fields(self):
-        corrections = yfactor.compute_y_factor_corrections(make_yfactor_dataset())
+        corrections = yfactor.compute_y_factor_corrections(
+            make_yfactor_dataset(), YFACTOR_ENR_DB
+        )
         assert set(corrections.dims) == set(YFACTOR_GRID)
         assert 'noise_diode_enabled' not in corrections.coords
         assert corrections.noise_figure.attrs['units'] == 'dB'
@@ -65,7 +70,7 @@ class TestYFactorCorrections:
 
     def test_papr_and_raw_powers(self):
         ds = make_yfactor_dataset(papr_dB=7.5)
-        corrections = yfactor.compute_y_factor_corrections(ds)
+        corrections = yfactor.compute_y_factor_corrections(ds, YFACTOR_ENR_DB)
         assert corrections.papr_on.values == pytest.approx(7.5)
         assert corrections.papr_off.values == pytest.approx(7.5)
         p_off = yfactor_rms_power(0.0, 5.0, 40e6, diode_on=False)
@@ -76,7 +81,9 @@ class TestYFactorCorrections:
 
     def test_infinite_bandwidth_uses_the_nyquist_bandwidth(self):
         grid = dict(YFACTOR_GRID, analysis_bandwidth=(40e6, INF))
-        corrections = yfactor.compute_y_factor_corrections(make_yfactor_dataset(grid))
+        corrections = yfactor.compute_y_factor_corrections(
+            make_yfactor_dataset(grid), YFACTOR_ENR_DB
+        )
         assert_corrections_match(corrections, expected_yfactor(grid))
 
 
@@ -198,13 +205,15 @@ PASS_CASES = {
 def test_passes_are_port_major_with_the_diode_off_then_on(case):
     kws, ports = PASS_CASES[case]
     runner = make_calibration_runner(**kws)
-    assert runner.ports() == ports
-    assert runner.passes() == [(p, on) for p in ports for on in (False, True)]
+    assert yfactor.calibration_ports(runner.spec) == ports
+    assert yfactor.calibration_passes(runner.spec) == [
+        (p, on) for p in ports for on in (False, True)
+    ]
 
 
 def test_pass_sweep_fixes_the_port_and_drops_the_port_loop():
     runner = make_calibration_runner(loops=(Repeat(count=2), PORT_LOOP, GAIN_LOOP))
-    sweep = runner.pass_sweep(1)
+    sweep = yfactor.pass_sweep(runner.sweep, 1)
     assert [loop.field for loop in sweep.loops] == [None, 'gain']
     assert {c.port for c in sweep.captures} == {1}
     assert {c.port for c in H.loop_captures(sweep)} == {1}
@@ -213,8 +222,8 @@ def test_pass_sweep_fixes_the_port_and_drops_the_port_loop():
 def test_pass_sweep_selects_the_captures_of_the_port():
     kws, _ = PASS_CASES['explicit_ports']
     runner = make_calibration_runner(**kws)
-    assert [c.port for c in runner.pass_sweep(0).captures] == [0]
-    assert [c.port for c in runner.pass_sweep(1).captures] == [1]
+    assert [c.port for c in yfactor.pass_sweep(runner.sweep, 0).captures] == [0]
+    assert [c.port for c in yfactor.pass_sweep(runner.sweep, 1).captures] == [1]
 
 
 def test_explicit_captures_with_implied_loops():
@@ -223,9 +232,12 @@ def test_explicit_captures_with_implied_loops():
     sweep = ss.read_yaml_spec(SITE_DIR / 'site-calibration-explicit.yaml')
     runner = ManualYFactorRunner(sweep)
     assert 'external_lo_frequency' in sweep.calibration.implied_loops
-    assert runner.ports() == (0, 1)
-    assert [len(H.loop_captures(runner.pass_sweep(p))) for p in (0, 1)] == [1, 1]
-    assert len(runner.passes()) == 4
+    assert yfactor.calibration_ports(sweep) == (0, 1)
+    pass_sizes = [
+        len(H.loop_captures(yfactor.pass_sweep(runner.sweep, p))) for p in (0, 1)
+    ]
+    assert pass_sizes == [1, 1]
+    assert len(yfactor.calibration_passes(sweep)) == 4
 
 
 # %% sink_cls and calibration_fields
@@ -241,7 +253,7 @@ def test_calibration_fields_follow_the_loops_with_the_diode_after_port():
         enr=20.0, ambient_temperature=290.0, implied_loops=('center_frequency',)
     )
     runner = make_calibration_runner(loops=loops, calibration=cal)
-    assert runner.calibration_fields() == [
+    assert yfactor.calibration_fields(runner.spec, runner.sweep) == [
         'center_frequency',
         'port',
         TOGGLE,
@@ -252,20 +264,24 @@ def test_calibration_fields_follow_the_loops_with_the_diode_after_port():
 
 def test_calibration_fields_put_the_diode_first_without_a_port_loop():
     runner = make_calibration_runner(loops=(GAIN_LOOP,))
-    assert runner.calibration_fields() == [TOGGLE, 'gain']
+    assert yfactor.calibration_fields(runner.spec, runner.sweep) == [TOGGLE, 'gain']
 
 
 def test_sink_collects_in_memory():
     runner = make_calibration_runner(loops=(PORT_LOOP,))
     assert runner.sink_cls is ss.sinks.MemoryCacheSink
-    assert runner.calibration_fields() == ['port', TOGGLE]
+    assert yfactor.calibration_fields(runner.spec, runner.sweep) == ['port', TOGGLE]
 
 
 def test_corrections_path_is_the_formatted_sink_path(fake_source_id):
     runner = make_calibration_runner(sink=ss.specs.Sink(path='cal-{sensor_binding}.nc'))
     fmt = ss.specs.paths.PathFormatter(runner.spec)
-    assert runner.corrections_path(None) == Path('cal-{sensor_binding}.nc')
-    assert runner.corrections_path(fmt) == Path('cal-air7101b_calibration.nc')
+    assert yfactor.corrections_path(runner.sweep, None) == Path(
+        'cal-{sensor_binding}.nc'
+    )
+    assert yfactor.corrections_path(runner.sweep, fmt) == Path(
+        'cal-air7101b_calibration.nc'
+    )
 
 
 def test_extensions_sink_overrides_the_memory_cache():
@@ -274,7 +290,7 @@ def test_extensions_sink_overrides_the_memory_cache():
     assert resolve_sink_cls(runner.sweep, runner.sink_cls) is ss.sinks.NoSink
 
 
-# %% operator prompts and extra_data
+# %% operator prompts
 
 
 def _calibration_runner():
@@ -286,26 +302,25 @@ def _calibration_runner():
 class TestOperatorPrompts:
     def test_confirm_enr_names_the_value(self, scripted_input):
         scripted_input['answers'] += ['y']
-        _calibration_runner().confirm_enr()
+        yfactor.confirm_enr(20.87)
         (prompt,) = scripted_input['prompts']
         assert 'ENR' in prompt and '20.87' in prompt
 
     def test_confirm_enr_reprompts_until_answered(self, scripted_input):
         scripted_input['answers'] += ['maybe', '', 'Y']
-        _calibration_runner().confirm_enr()
+        yfactor.confirm_enr(20.87)
         assert len(scripted_input['prompts']) == 3
 
     def test_confirm_enr_rejection_raises(self, scripted_input):
         scripted_input['answers'] += ['N']
         with pytest.raises(RuntimeError, match='ENR'):
-            _calibration_runner().confirm_enr()
+            yfactor.confirm_enr(20.87)
 
     def test_switch_diode_prompts_per_pass(self, scripted_input):
         scripted_input['answers'] += ['', '', '']
-        runner = _calibration_runner()
-        runner.switch_diode(0, False)
-        runner.switch_diode(0, True)
-        runner.switch_diode(1, True)
+        yfactor.switch_diode(0, False)
+        yfactor.switch_diode(0, True)
+        yfactor.switch_diode(1, True)
 
         # conftest.fake_sweep_runner parses this wording to switch the fake diode
         matches = [
@@ -317,16 +332,6 @@ class TestOperatorPrompts:
             ('enable', '0'),
             ('enable', '1'),
         ]
-        assert runner._diode_on is True
-
-    def test_extra_data_carries_the_state_and_the_calibration_block(self):
-        runner = _calibration_runner()
-        runner._diode_on = True
-        assert runner.extra_data(make_calibration_capture()) == {
-            TOGGLE: True,
-            'enr': 20.87,
-            'ambient_temperature': 290.0,
-        }
 
 
 # %% registry and binding
@@ -387,21 +392,29 @@ class _RecordingSource:
 
 def test_each_pass_begins_with_a_fresh_acquisition(monkeypatch, scripted_input):
     """reuse_iq is on, so the controller would serve the diode-off IQ to an equal
-    diode-on capture; the runner discards the cached acquisition at every switch"""
+    diode-on capture; the runner discards the cached acquisition at every switch and
+    hands the pipeline the new state"""
     runner = make_calibration_runner(loops=(PORT_LOOP,))
-    scripted_input['answers'] += ['y'] + [''] * len(runner.passes())
+    scripted_input['answers'] += ['y'] + [''] * len(
+        yfactor.calibration_passes(runner.spec)
+    )
     source = _RecordingSource()
     seen_passes = []
 
     def fake_iterate_captures(resources, **kws):
-        seen_passes.append((source.discards, runner._diode_on))
+        seen_passes.append((source.discards, dict(kws['extra_data'])))
         yield from ()
 
     monkeypatch.setattr(yfactor.core, 'iterate_captures', fake_iterate_captures)
     resources = {'source': source, 'sink': ss.sinks.NoSink, 'format_path': None}
     list(runner.iterate(resources))
 
-    assert seen_passes == [(1, False), (2, True), (3, False), (4, True)]
+    assert seen_passes == [
+        (1, {TOGGLE: False}),
+        (2, {TOGGLE: True}),
+        (3, {TOGGLE: False}),
+        (4, {TOGGLE: True}),
+    ]
 
 
 def test_iterate_does_not_loop():

@@ -598,15 +598,12 @@ it was standing in for is enabled.
 
 ## Observations without an xfail
 
-- **Ambient temperature is not used.** `actions/yfactor.py:compute_y_factor_corrections` takes
-  every temperature from `Tref` (290 K, by convention) and never reads
-  `calibration.ambient_temperature`; the tests use a receiver model at 290 K
-  and so cannot tell. The user is opening an issue for this. The only code that
-  did take an ambient temperature, `_y_factor_temperature` (and its dead
-  caller `_y_factor_frequency_response_correction`), was removed on
-  2026-09-16; it had defined `Ton = Tref * 10**(ENR/10)` without the `+1`
-  that the IEEE ENR definition implies and that the live formula
-  `NF = ENR_dB - 10 log10(Y - 1)` relies on.
+- **Ambient temperature is not used.** `actions/yfactor.py:compute_y_factor_corrections`
+  takes the ENR and `Tref` (290 K) as arguments and reads nothing else from the
+  `calibration:` block; `ManualYFactorSpec.ambient_temperature` is recorded in the
+  document and nowhere else. Resolved on 2026-10-21 to the extent that the value no
+  longer rides along as a per-capture data variable; whether it should replace
+  `Tref` is still open.
 
 - **`open_resources` never restores the working directory.**
   `resources.py:200` `chdir`s to the spec directory and nothing undoes it, so

@@ -51,7 +51,9 @@ TOGGLE = 'noise_diode_enabled'
 @pytest.fixture(scope='module')
 def model_corrections():
     nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
-    return yfactor.compute_y_factor_corrections(make_yfactor_dataset(nf_dB=nf))
+    return yfactor.compute_y_factor_corrections(
+        make_yfactor_dataset(nf_dB=nf), YFACTOR_ENR_DB
+    )
 
 
 def test_summarize_selects_the_port_at_maximum_gain(model_corrections):
@@ -280,10 +282,8 @@ def _capture_dataset(runner, capture, index, start, diode_on):
     coords = {'power_detector': ['rms', 'peak'], 'time_elapsed': np.arange(4) * 1e-3}
     ds = xr.Dataset({'channel_power_time_series': (pvt_dims, values)}, coords=coords)
     ds = ds.assign_coords(build_capture_coords(capture, info, runner.sweep.loops))
-    runner._diode_on = diode_on
     runner_data = {
-        k: xr.DataArray(v, dims=[]).expand_dims({'capture': 1})
-        for k, v in runner.extra_data(capture).items()
+        yfactor.DIODE_FIELD: xr.DataArray(diode_on, dims=[]).expand_dims({'capture': 1})
     }
     ds = ds.assign(runner_data)
     ds.attrs.update(runner.spec.to_dict(True, allow_tuple_keys=False))
@@ -307,11 +307,15 @@ def _flush_model_captures(path):
     start = pd.Timestamp('2026-09-15T00:00:00')
 
     data = []
-    for port, diode_on in runner.passes():
-        for capture in H.loop_captures(runner.pass_sweep(port), 'beef'):
+    for port, diode_on in yfactor.calibration_passes(runner.spec):
+        pass_sweep = yfactor.pass_sweep(runner.sweep, port)
+        for capture in H.loop_captures(pass_sweep, 'beef'):
             data.append(_capture_dataset(runner, capture, len(data), start, diode_on))
     yfactor.save_yfactor_corrections(
-        data, runner.calibration_fields(), runner.corrections_path(None)
+        data,
+        yfactor.calibration_fields(runner.spec, runner.sweep),
+        yfactor.corrections_path(runner.sweep, None),
+        enr_dB=YFACTOR_ENR_DB,
     )
     return runner.spec
 

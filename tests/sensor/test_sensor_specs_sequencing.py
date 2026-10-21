@@ -339,8 +339,10 @@ def test_calibration_fixture_expansion(calibration_sweep):
     runner = ss.lib.actions.ManualYFactorRunner(calibration_sweep)
     result = S.loop_captures(runner.sweep)
     assert len(result) == 192
+    yfactor = ss.lib.actions.yfactor
     by_pass = [
-        len(S.loop_captures(runner.pass_sweep(port))) for port, _ in runner.passes()
+        len(S.loop_captures(yfactor.pass_sweep(runner.sweep, port)))
+        for port, _ in yfactor.calibration_passes(runner.spec)
     ]
     assert sum(by_pass) == 384
     assert all(

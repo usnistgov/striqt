@@ -4,7 +4,7 @@ The runner acquires the calibration grid once with the noise diode off and once
 with it on at each port, prompting the operator to switch the diode between those
 passes, and generates the `channel_power_time_series` analysis that the Y-factor
 math here produces and `compute.cal_lookups` reads back. The diode state reaches the saved
-data through the per-capture `extra_data` hook of the pipeline, the captures collect
+data as the `extra_data` mapping of each pass of the pipeline, the captures collect
 in a `MemoryCacheSink`, and `save_yfactor_corrections` computes and writes the
 corrections after the last pass.
 """
@@ -85,19 +85,20 @@ def _limit_nyquist_bandwidth(data: xr.DataArray) -> xr.DataArray:
 
 
 def compute_y_factor_corrections(
-    dataset: xr.Dataset, Tref: float = 290.0
+    dataset: xr.Dataset, enr_dB: float, Tref: float = 290.0
 ) -> xr.Dataset:
     """return the Y-factor noise figure and power correction of each grid point.
 
     `dataset` is indexed by the calibration fields plus a ``noise_diode_enabled``
     dimension and holds `channel_power_time_series` (dB, ``rms`` and ``peak``
-    detectors over ``time_elapsed``), `enr` (dB), `analysis_bandwidth` (Hz), and
+    detectors over ``time_elapsed``), `analysis_bandwidth` (Hz), and
     `backend_sample_rate` (S/s). The rms detector is averaged in linear power over
     the bins before the Y-factor is formed; an infinite `analysis_bandwidth` counts as
     the backend sample rate.
 
     Args:
         dataset: the collected captures as `save_yfactor_corrections` indexes them
+        enr_dB: the excess noise ratio (dB) of the noise diode
         Tref: the reference temperature (K) of the hot source and the noise figure
 
     Returns:
@@ -108,7 +109,6 @@ def compute_y_factor_corrections(
     from scipy.constants import Boltzmann
 
     k = Boltzmann * 1000  # W/K -> mW/K
-    enr_dB = dataset.enr.sel(noise_diode_enabled=True, drop=True)
     enr = 10 ** (enr_dB / 10.0)
 
     pvt = dataset.channel_power_time_series.drop_vars('capture_index')
@@ -164,14 +164,19 @@ _DROP_FIELDS = (
 
 
 def save_yfactor_corrections(
-    data: Sequence[xr.Dataset], calibration_fields: Sequence[str], path: Path
+    data: Sequence[xr.Dataset],
+    calibration_fields: Sequence[str],
+    path: Path,
+    *,
+    enr_dB: float,
 ) -> xr.Dataset:
     """compute the Y-factor corrections from the collected captures and save them.
 
     `data` holds one dataset per capture as the sink collected them. They are
     indexed by `calibration_fields` so that each field becomes a dimension, the
-    corrections are computed with `compute_y_factor_corrections`, written to `path`
-    as netCDF with a ``calibration_fields`` attr, and summarized per port on stdout.
+    corrections are computed with `compute_y_factor_corrections` at `enr_dB`, written
+    to `path` as netCDF with a ``calibration_fields`` attr, and summarized per port
+    on stdout.
 
     Returns:
         the saved corrections
@@ -197,7 +202,7 @@ def save_yfactor_corrections(
     by_field = capture_data.unstack(compute.CAPTURE_DIM)
     by_field[DIODE_FIELD] = by_field[DIODE_FIELD].astype('bool')
 
-    corrections = compute_y_factor_corrections(by_field)
+    corrections = compute_y_factor_corrections(by_field, enr_dB)
     corrections = corrections.assign_attrs(calibration_fields=fields)
 
     io.save_calibration(path, corrections)
@@ -251,6 +256,91 @@ def build_calibration_sweep(
     )
 
 
+def calibration_ports(
+    spec: specs.ManualYFactorCalibration[Any, Any, Any],
+) -> tuple[Any, ...]:
+    """return the ports to calibrate, in the order of a `port` loop or of the captures."""
+    for loop in spec.loops:
+        if _is_port_loop(loop):
+            return tuple(loop.get_points())
+
+    ports: list[Any] = []
+    for capture in spec.captures:
+        if capture.port not in ports:
+            ports.append(capture.port)
+    return tuple(ports)
+
+
+def calibration_passes(
+    spec: specs.ManualYFactorCalibration[Any, Any, Any],
+) -> list[tuple[Any, bool]]:
+    """return the ``(port, diode_on)`` of each pass: port-major, diode off then on."""
+    return [(port, on) for port in calibration_ports(spec) for on in (False, True)]
+
+
+def pass_sweep(sweep: specs.Sweep[SS, SP, SC], port: Any) -> specs.Sweep[SS, SP, SC]:
+    """return `sweep` with its captures fixed to `port` and without a `port` loop."""
+    loops = tuple(loop for loop in sweep.loops if not _is_port_loop(loop))
+    if len(loops) < len(sweep.loops):
+        captures = tuple(c.replace(port=port) for c in sweep.captures)
+    else:
+        captures = tuple(c for c in sweep.captures if c.port == port)
+    return sweep.replace(captures=captures, loops=loops)
+
+
+def calibration_fields(
+    spec: specs.ManualYFactorCalibration[Any, Any, Any],
+    sweep: specs.Sweep[Any, Any, Any],
+) -> list[str]:
+    """return the capture fields that index the saved corrections.
+
+    The implied loops of `spec.calibration` come first, then the loop fields of
+    `sweep` in order with the diode state after `port` (or first), and `sample_rate`
+    reads as the acquisition's `backend_sample_rate`.
+    """
+    fields = list(spec.calibration.implied_loops)
+    fields += [loop.field for loop in sweep.loops if loop.field is not None]
+    if 'sample_rate' in fields:
+        fields[fields.index('sample_rate')] = 'backend_sample_rate'
+    at = fields.index('port') + 1 if 'port' in fields else 0
+    fields.insert(at, DIODE_FIELD)
+    return fields
+
+
+def corrections_path(
+    sweep: specs.Sweep[Any, Any, Any], format_path: specs.paths.PathFormatter | None
+) -> Path:
+    """return `sweep.sink.path` with its ``{fields}`` formatted."""
+    path = sweep.sink.path
+    if format_path is not None:
+        path = format_path(path)
+    return Path(path)
+
+
+def confirm_enr(enr: float) -> None:
+    """ask the operator to confirm the noise diode ENR `enr` (dB).
+
+    Raises:
+        RuntimeError: if the operator answers no
+    """
+    prompt = f'Confirm that the noise diode ENR is {enr} dB (y/n): '
+    while True:
+        response = sa.util.blocking_input(prompt)
+        if response.lower() == 'y':
+            return
+        elif response.lower() == 'n':
+            raise RuntimeError('Set the proper noise diode ENR and run again')
+
+
+def switch_diode(port: Any, diode_on: bool) -> None:
+    """prompt the operator to set the noise diode at `port` and wait for enter."""
+    what = f'noise diode at port {port}'
+    if diode_on:
+        sa.util.blocking_input(f'enable {what} and press enter: ')
+    else:
+        sa.util.blocking_input(f'disable {what} and press enter: ')
+
+
 @registry.runner(spec_type=specs.ManualYFactorCalibration)
 class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
     """run a `ManualYFactorCalibration`.
@@ -259,75 +349,18 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
     it, with a `MemoryCacheSink` that collects the captures. `iterate` confirms the
     ENR with the operator, then for each port and each diode state prompts the
     operator to switch the diode and runs the captures of that port through
-    `iterate_captures`, with `extra_data` adding the diode state and the
-    `calibration:` block to every acquisition. It ends by computing and saving the
-    corrections with `save_yfactor_corrections`.
+    `iterate_captures`, passing the diode state as the pipeline's `extra_data` so
+    that it becomes a variable of every acquisition. It ends by computing and saving
+    the corrections with `save_yfactor_corrections`.
     """
 
     spec: specs.ManualYFactorCalibration[SS, SP, SC]
     sweep: specs.Sweep[SS, SP, SC]
     sink_cls: type[SinkBase[SC]] = MemoryCacheSink
 
-    _diode_on: bool = False
-
     def __init__(self, spec: specs.ManualYFactorCalibration[SS, SP, SC]) -> None:
         self.spec = spec
         self.sweep = build_calibration_sweep(spec)
-
-    def ports(self) -> tuple[Any, ...]:
-        """return the port values of the passes, in the order of a `port` loop or of the captures."""
-        for loop in self.spec.loops:
-            if _is_port_loop(loop):
-                return tuple(loop.get_points())
-
-        ports: list[Any] = []
-        for capture in self.spec.captures:
-            if capture.port not in ports:
-                ports.append(capture.port)
-        return tuple(ports)
-
-    def passes(self) -> list[tuple[Any, bool]]:
-        """return the ``(port, diode_on)`` of each pass: port-major, diode off then on."""
-        return [(port, on) for port in self.ports() for on in (False, True)]
-
-    def pass_sweep(self, port: Any) -> specs.Sweep[SS, SP, SC]:
-        """return `sweep` restricted to `port`: its captures fixed to `port`, without a `port` loop."""
-        loops = tuple(loop for loop in self.sweep.loops if not _is_port_loop(loop))
-        if len(loops) < len(self.sweep.loops):
-            captures = tuple(c.replace(port=port) for c in self.sweep.captures)
-        else:
-            captures = tuple(c for c in self.sweep.captures if c.port == port)
-        return self.sweep.replace(captures=captures, loops=loops)
-
-    def calibration_fields(self) -> list[str]:
-        """return the capture fields that index the saved corrections.
-
-        The implied loops come first, then the loop fields in order with the diode
-        state after `port` (or first), and `sample_rate` reads as the acquisition's
-        `backend_sample_rate`.
-        """
-        fields = list(self.spec.calibration.implied_loops)
-        fields += [loop.field for loop in self.sweep.loops if loop.field is not None]
-        if 'sample_rate' in fields:
-            fields[fields.index('sample_rate')] = 'backend_sample_rate'
-        at = fields.index('port') + 1 if 'port' in fields else 0
-        fields.insert(at, DIODE_FIELD)
-        return fields
-
-    def corrections_path(self, format_path: specs.paths.PathFormatter | None) -> Path:
-        """return `sweep.sink.path` with its ``{fields}`` formatted."""
-        path = self.sweep.sink.path
-        if format_path is not None:
-            path = format_path(path)
-        return Path(path)
-
-    def extra_data(self, capture: SC) -> dict[str, Any]:
-        cal = self.spec.calibration
-        return {
-            DIODE_FIELD: self._diode_on,
-            'enr': cal.enr,
-            'ambient_temperature': cal.ambient_temperature,
-        }
 
     def iterate(
         self,
@@ -351,25 +384,27 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
         if loop:
             raise ValueError('a calibration does not loop')
 
-        self.confirm_enr()
+        confirm_enr(self.spec.calibration.enr)
 
         source_id = resources['source'].source_id
-        pass_sweeps = {port: self.pass_sweep(port) for port in self.ports()}
+        sweeps = {
+            port: pass_sweep(self.sweep, port) for port in calibration_ports(self.spec)
+        }
         count = 2 * sum(
             len(specs.sequencing.loop_captures(sweep, source_id))
-            for sweep in pass_sweeps.values()
+            for sweep in sweeps.values()
         )
-        indexer = core._AcquisitionIndexer(count)
+        indexer = core.AcquisitionIndexer(count)
 
-        for port, diode_on in self.passes():
-            self.switch_diode(port, diode_on)
+        for port, diode_on in calibration_passes(self.spec):
+            switch_diode(port, diode_on)
             # the diode state is not a capture field, so the controller cannot see
             # that the acquisition it would reuse is now stale
             resources['source'].discard_iq()
-            inner = Resources(resources, sweep_spec=pass_sweeps[port])
+            inner = Resources(resources, sweep_spec=sweeps[port])
             yield from core.iterate_captures(
                 inner,
-                extra_data=self.extra_data,
+                extra_data={DIODE_FIELD: diode_on},
                 indexer=indexer,
                 always_yield=always_yield,
                 yield_values=yield_values,
@@ -379,30 +414,7 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
         if isinstance(sink, MemoryCacheSink):
             save_yfactor_corrections(
                 sink.pop(),
-                self.calibration_fields(),
-                self.corrections_path(resources['format_path']),
+                calibration_fields(self.spec, self.sweep),
+                corrections_path(self.sweep, resources['format_path']),
+                enr_dB=self.spec.calibration.enr,
             )
-
-    def confirm_enr(self) -> None:
-        """ask the operator to confirm the ENR of `spec.calibration`.
-
-        Raises:
-            RuntimeError: if the operator answers no
-        """
-        enr = self.spec.calibration.enr
-        prompt = f'Confirm that the noise diode ENR is {enr} dB (y/n): '
-        while True:
-            response = sa.util.blocking_input(prompt)
-            if response.lower() == 'y':
-                return
-            elif response.lower() == 'n':
-                raise RuntimeError('Set the proper noise diode ENR and run again')
-
-    def switch_diode(self, port: Any, diode_on: bool) -> None:
-        """prompt the operator to set the noise diode at `port` and record the state."""
-        what = f'noise diode at port {port}'
-        if diode_on:
-            sa.util.blocking_input(f'enable {what} and press enter: ')
-        else:
-            sa.util.blocking_input(f'disable {what} and press enter: ')
-        self._diode_on = diode_on

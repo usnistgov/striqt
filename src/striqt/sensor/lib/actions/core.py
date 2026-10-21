@@ -5,7 +5,8 @@ from __future__ import annotations as __
 import contextlib
 import math
 import itertools
-from typing import Any, Callable, Generator, Protocol, TYPE_CHECKING
+from collections.abc import Mapping
+from typing import Any, Generator, Protocol, TYPE_CHECKING
 
 import striqt.waveform as sw
 import striqt.analysis as sa
@@ -92,8 +93,8 @@ def iterate_captures(
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
-    extra_data: Callable[[SC], dict[str, Any]] | None = None,
-    indexer: _AcquisitionIndexer | None = None,
+    extra_data: Mapping[str, Any] | None = None,
+    indexer: AcquisitionIndexer | None = None,
     **replace: 'Unpack[AnyResources[SS, SP, SC, PS, PC]]',
 ) -> Generator['xr.Dataset|compute.DelayedDataset|None']:
     """step through the captures of a sweep in the acquire, analyze, and sink pipeline.
@@ -134,9 +135,8 @@ def iterate_captures(
         always_yield: if True, yield `None` on steps that produce no analysis
         yield_values: if False, yield `None` instead of the sink result
         loop: if True, the sweep repeats from the beginning after the last capture
-        extra_data: called once per capture after its acquisition with the capture
-            spec; the returned dict is merged into `AcquiredIQ.extra_data` after the
-            peripherals' data, so its keys win
+        extra_data: merged into `AcquiredIQ.extra_data` of every capture after the
+            peripherals' data, whose keys it overrides
         indexer: the counter that stamps `capture_index` and `sweep_index` on each
             acquisition; pass one object to several calls to number their captures
             consecutively. A new counter over this sweep's captures when None.
@@ -168,7 +168,7 @@ def iterate_captures(
         spec, source_id=resources['source'].source_id
     )
     if indexer is None:
-        indexer = _AcquisitionIndexer(len(captures))
+        indexer = AcquisitionIndexer(len(captures))
 
     if len(spec.loops) > 0 and isinstance(spec.loops[0], specs.Repeat):
         captures = spec.loops[0].count * captures
@@ -258,15 +258,32 @@ def _log_progress_contexts(index, count):
             raise
 
 
-class _AcquisitionIndexer:
+class AcquisitionIndexer:
+    """number the acquisitions of one logical sweep.
+
+    `iterate_captures` applies one of these to every acquisition it makes. `apply`
+    stamps `capture_index` and `sweep_index` on the acquisition info and wraps
+    `capture_index` at `captures_per_sweep` into the next `sweep_index`. On a
+    `SoapyAcquisitionInfo` it also copies the first capture's `start_time` of each
+    sweep to `sweep_start_time`. The only state is the position in the sweep. One
+    instance passed to several `iterate_captures` calls numbers their captures as
+    one sweep. `iterate_captures` creates an instance over its own captures when none
+    is passed. `apply` is not thread-safe and must run once per acquisition, in order.
+    """
+
     def __init__(self, captures_per_sweep: int):
+        """
+        Args:
+            captures_per_sweep: the capture count at which `capture_index` wraps to 0
+                and `sweep_index` advances
+        """
         self.capture_count = captures_per_sweep
         self.sweep_index: int = 0
         self.capture_index: int = 0
         self.sweep_start_time: 'pd.Timestamp|None' = None
 
     def apply(self, info: specs.AcquisitionInfo) -> specs.AcquisitionInfo:
-        """return a copy of `info` with updated indexing variables"""
+        """return a copy of `info` stamped with the current indexes, and advance."""
         result = info.replace(
             sweep_index=self.sweep_index, capture_index=self.capture_index
         )
@@ -291,14 +308,13 @@ def _acquire_both(
     res: Resources[Any, Any, SC, PS, PC],
     this: SC,
     next_: SC | None,
-    indexer: _AcquisitionIndexer,
-    extra_data: Callable[[SC], dict[str, Any]] | None = None,
+    indexer: AcquisitionIndexer,
+    extra_data: Mapping[str, Any] | None = None,
 ) -> specs.AcquiredIQ:
     """arm and acquire from the source and peripherals.
 
-    The dict returned by the peripherals, then the dict returned by `extra_data(this)`,
-    are merged into the `extra_data` of the returned acquisition struct in that order.
-    `extra_data` runs on this thread after both acquisitions complete.
+    The dict returned by the peripherals, then `extra_data`, are merged into the
+    `extra_data` of the returned acquisition struct in that order.
     """
 
     assert this is not None
@@ -339,7 +355,7 @@ def _acquire_both(
     iq.info = indexer.apply(iq.info)
     iq.extra_data = iq.extra_data | ext_data
     if extra_data is not None:
-        iq.extra_data = iq.extra_data | extra_data(this)
+        iq.extra_data = iq.extra_data | dict(extra_data)
     return iq
 
 

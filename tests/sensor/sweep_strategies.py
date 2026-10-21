@@ -310,14 +310,13 @@ def make_yfactor_dataset(
     nf_dB=YFACTOR_NF_DB,
     *,
     enr_dB=YFACTOR_ENR_DB,
-    ambient_temperature=T_REF,
     papr_dB=10.0,
     time_count=4,
     **gain_kws,
 ):
     """a calibration dataset shaped as save_yfactor_corrections builds it before the corrections:
     one dimension per calibration field plus noise_diode_enabled, and a constant
-    channel_power_time_series drawn from the receiver model"""
+    channel_power_time_series drawn from the receiver model at enr_dB"""
     import xarray as xr
 
     coords = {'noise_diode_enabled': [False, True]}
@@ -347,8 +346,6 @@ def make_yfactor_dataset(
 
     return xr.Dataset({
         'channel_power_time_series': pvt.assign_coords(capture_index=capture_index),
-        'enr': template + enr_dB,
-        'ambient_temperature': template + ambient_temperature,
     })
 
 
@@ -393,7 +390,7 @@ def save_yfactor_calibration(
     from striqt.sensor.lib.actions import yfactor
 
     corrections = yfactor.compute_y_factor_corrections(
-        make_yfactor_dataset(grid, nf_dB, **kws)
+        make_yfactor_dataset(grid, nf_dB, **kws), kws.get('enr_dB', YFACTOR_ENR_DB)
     )
     io.save_calibration(path, corrections)
     return str(path)
