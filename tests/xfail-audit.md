@@ -29,7 +29,7 @@ xfail so that the `ty` upgrade that closes it surfaces as an xpass. Items 39
 and 41 were fixed on 2026-10-21 by the actions refactor of `striqt.sensor`
 (`sensor/lib/actions/`), and items 14 and 48 retired with it the same day: the
 calibration runner now acquires each port with the diode off and on itself, so no
-loop is inserted (14), and `YFactorSink.flush` assigns `calibration_fields` to the
+loop is inserted (14), and `save_yfactor_corrections` assigns `calibration_fields` to the
 saved corrections (48). Items are listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must

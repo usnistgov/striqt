@@ -212,6 +212,20 @@ class NoSink(SinkBase):
         pass
 
 
+class MemoryCacheSink(SinkBase):
+    """collect every capture's dataset in memory for the runner to take with `pop`.
+
+    Nothing is written; `flush` and `close` are no-ops, so the collected datasets
+    stay available until `pop` is called.
+    """
+
+    def open(self) -> None:
+        pass
+
+    def close(self, *exc_info):
+        pass
+
+
 class ZarrSinkBase(SinkBase):
     _zipper: Zipper | None = None
 

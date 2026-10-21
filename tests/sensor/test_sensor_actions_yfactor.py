@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import math
 from fractions import Fraction
+from pathlib import Path
 
 import msgspec
 import pytest
@@ -20,7 +21,6 @@ from sweep_strategies import (
 )
 
 import striqt.sensor as ss
-from striqt.sensor.lib import calibration
 from striqt.sensor.lib.actions import ManualYFactorRunner, registry, yfactor
 
 Repeat = ss.specs.Repeat
@@ -155,11 +155,17 @@ def test_calibration_fields_put_the_diode_first_without_a_port_loop():
     assert runner.calibration_fields() == [TOGGLE, 'gain']
 
 
-def test_build_sink_is_a_yfactor_sink_with_the_fields(fake_source_id):
+def test_build_sink_collects_in_memory(fake_source_id):
     runner = make_calibration_runner(loops=(PORT_LOOP,))
-    sink = runner.build_sink(None)
-    assert type(sink) is calibration.YFactorSink
-    assert sink.calibration_fields == ('port', TOGGLE)
+    assert type(runner.build_sink(None)) is ss.sinks.MemoryCacheSink
+    assert runner.calibration_fields() == ['port', TOGGLE]
+
+
+def test_corrections_path_is_the_formatted_sink_path(fake_source_id):
+    runner = make_calibration_runner(sink=ss.specs.Sink(path='cal-{sensor_binding}.nc'))
+    fmt = ss.specs.paths.PathFormatter(runner.spec)
+    assert runner.corrections_path(None) == Path('cal-{sensor_binding}.nc')
+    assert runner.corrections_path(fmt) == Path('cal-air7101b_calibration.nc')
 
 
 def test_build_sink_honors_the_extensions_override(fake_source_id):

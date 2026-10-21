@@ -314,7 +314,7 @@ def make_yfactor_dataset(
     time_count=4,
     **gain_kws,
 ):
-    """a calibration dataset shaped as YFactorSink.flush receives it before the corrections:
+    """a calibration dataset shaped as save_yfactor_corrections builds it before the corrections:
     one dimension per calibration field plus noise_diode_enabled, and a constant
     channel_power_time_series drawn from the receiver model"""
     import xarray as xr

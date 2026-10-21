@@ -2,19 +2,15 @@ from __future__ import annotations as __
 
 import dataclasses
 import sys
-from typing import cast, Any, Sequence, TYPE_CHECKING
+from typing import cast, Any
 from pathlib import Path
 
 from .. import specs as specs
-from . import compute, io, sinks
+from . import compute, io
 from .controller import Controller
 from .typing import TypeVar, SP, PS, PC
 import striqt.analysis as sa
 from striqt.analysis.lib.util import np, pd, xr
-
-
-if TYPE_CHECKING:
-    from . import bindings
 
 
 SS = TypeVar('SS', bound='specs.SoapySource')
@@ -110,93 +106,6 @@ def lookup_system_noise_power(
         dims=compute.CAPTURE_DIM,
         attrs={'name': 'Sensor system noise spectral density', 'units': units},
     )
-
-
-class YFactorSink(sinks.SinkBase):
-    """collect the captures of a Y-factor calibration and save the corrections.
-
-    `flush` indexes the collected captures by `calibration_fields`, computes the
-    corrections with `compute_y_factor_corrections`, writes them to `sink.path` as
-    netCDF, and prints a per-port summary. The runner calls `flush` after the last
-    pass; `close` writes nothing.
-    """
-
-    _DROP_FIELDS = (
-        'sweep_start_time',
-        'start_time',
-        'delay',
-        'host_resample',
-        'duration',
-        'sample_rate',
-    )
-
-    def __init__(
-        self,
-        sweep_spec: specs.Sweep[Any, Any, specs.SC],
-        format_path: specs.paths.PathFormatter | None = None,
-        *,
-        calibration_fields: Sequence[str],
-        force: bool = False,
-    ):
-        super().__init__(sweep_spec, format_path, force=force)
-        self.calibration_fields = tuple(calibration_fields)
-
-    def _get_path(self) -> Path | None:
-        path = self._spec.path
-
-        if self._format_path is not None:
-            path = self._format_path(path)
-
-        if path is not None:
-            return Path(path)
-        else:
-            return None
-
-    def open(self) -> None:
-        pass
-
-    def close(self, *exc_info):
-        # the corrections need the whole grid, which only the runner knows is complete
-        pass
-
-    def append(self, capture_result):
-        assert isinstance(capture_result.extra_coords, specs.SoapyAcquisitionInfo)
-        return super().append(capture_result)
-
-    def flush(self):
-        data = self.pop()
-
-        if len(data) == 0:
-            return
-
-        super().flush()
-
-        fields = list(self.calibration_fields)
-        attrs = {'calibration_fields': fields}
-
-        # re-index by radio setting rather than capture; the diode state arrives as a
-        # data variable from the runner, the rest as capture coordinates
-        capture_data = xr.concat(data, compute.CAPTURE_DIM).drop_vars(
-            self._DROP_FIELDS, errors='ignore'
-        )
-        to_coords = [f for f in fields if f in capture_data.data_vars]
-        capture_data = capture_data.set_coords(to_coords).set_xindex(fields)
-
-        # break out each remaining capture coordinate into its own dimension
-        by_field = capture_data.unstack(compute.CAPTURE_DIM)
-        by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')
-
-        corrections = compute_y_factor_corrections(by_field).assign_attrs(attrs)
-
-        path = self._get_path()
-
-        io.save_calibration(path, corrections)
-        print(f'saved to {str(path)!r}')
-        for port, _ in corrections.groupby('port', squeeze=False):
-            print(f'{30 * "▀"} Port {port} at max gain {30 * "▀"}')
-            summary = summarize_calibration(corrections, port=port)
-            with pd.option_context('display.max_rows', None, 'display.precision', 2):
-                print(summary.sort_index(axis=1).sort_index(axis=0))
 
 
 def bind_manual_yfactor_calibration(

@@ -4,6 +4,5 @@ from .lib.calibration import (
     lookup_system_noise_power,
     lookup_power_correction,
     summarize_calibration,
-    YFactorSink,
 )
 from .lib.io import read_calibration

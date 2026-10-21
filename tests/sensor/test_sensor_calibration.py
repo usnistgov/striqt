@@ -35,7 +35,7 @@ from sweep_strategies import (
 
 import striqt.sensor as ss
 from striqt.sensor.lib import calibration
-from striqt.sensor.lib.actions import ManualYFactorRunner
+from striqt.sensor.lib.actions import ManualYFactorRunner, yfactor
 from striqt.sensor.lib.compute.datasets import build_capture_coords
 
 H = ss.specs.sequencing
@@ -351,7 +351,7 @@ def test_describe_missing_data_is_empty_when_everything_matches(model_correction
     )
 
 
-# %% YFactorSink
+# %% save_yfactor_corrections
 
 # the grid covered both by the flushed model captures and by
 # sweeps/fake_soapy-calibration-cpu.yaml
@@ -401,8 +401,8 @@ def _capture_dataset(runner, capture, index, start, diode_on):
 
 
 def _flush_model_captures(path):
-    """YFactorSink.flush on a full grid of model captures, as the runner's passes
-    produce them; returns the calibration document"""
+    """save_yfactor_corrections over a full grid of model captures, as the runner's
+    passes collect them; returns the calibration document"""
     captures = (make_calibration_capture(sample_rate=MCR, host_resample=False),)
     cal = ss.specs.ManualYFactorSpec(enr=YFACTOR_ENR_DB, ambient_temperature=290.0)
     source = CalSourceCls(array_backend='numpy')
@@ -416,30 +416,27 @@ def _flush_model_captures(path):
     )
     start = pd.Timestamp('2026-09-15T00:00:00')
 
-    sink = runner.build_sink(None)
-    sink.open()
-    index = 0
+    data = []
     for port, diode_on in runner.passes():
         for capture in H.loop_captures(runner.pass_sweep(port), 'beef'):
-            sink._pending_data.append(
-                _capture_dataset(runner, capture, index, start, diode_on)
-            )
-            index += 1
-    sink.flush()
+            data.append(_capture_dataset(runner, capture, len(data), start, diode_on))
+    yfactor.save_yfactor_corrections(
+        data, runner.calibration_fields(), runner.corrections_path(None)
+    )
     return runner.spec
 
 
 @pytest.fixture(scope='module')
 def flushed_calibration(fake_sweep_runner, tmp_path_factory) -> FakeRun:
-    """the calibration YFactorSink.flush saves from a full grid of model captures,
-    as a FakeRun with the sweep but no prompts, fake device, or results"""
+    """the corrections save_yfactor_corrections saves from a full grid of model
+    captures, as a FakeRun with the sweep but no prompts, fake device, or results"""
     # the runner stubs the source id lookup that the sink's path formatting performs
     path = tmp_path_factory.mktemp('yfactor') / 'flushed.nc'
     sweep = _flush_model_captures(path)
     return FakeRun(str(path), [], sweep, None, None)
 
 
-class TestYFactorSinkFlush:
+class TestSavedCorrections:
     def test_saved_file_is_usable_for_lookups(self, flushed_calibration):
         capture = soapy_capture(port=1, gain=-10, sample_rate=62.5e6)
         result = _lookup_pc(flushed_calibration.path, capture)
