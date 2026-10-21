@@ -1,6 +1,8 @@
 """schema for the specification of calibration and sweeps"""
 
-# the 'pd' special cases stand in for python 3.15 lazy imports
+# msgspec resolves the string annotations of the exported structs in this namespace,
+# so the modules they name stay bound here; the 'pd' case also stands in for python
+# 3.15 lazy imports
 
 from __future__ import annotations as __
 
@@ -8,7 +10,7 @@ from .structs import *
 
 # only classes, not modules
 for k in list(locals().keys()):
-    if k == 'pd':
+    if k in ('pd', 'msgspec'):
         continue
     if not k[0].upper() == k[0]:
         locals().pop(k)
@@ -16,12 +18,12 @@ del k
 
 from . import captures, paths, sequencing, structs, sweep, types
 from .dataclasses import AcquiredIQ, Schema
-from .structs import SS, SP, SC, SPC
+from .structs import SS, SP, SC
 from .types import Annotated, Meta
 from striqt.analysis.specs import frozendict
 
 for k, obj in list(locals().items()):
-    if k == 'pd':
+    if k in ('pd', 'msgspec'):
         continue
     if getattr(obj, '__module__', '').startswith(__name__):
         obj.__module__ = __name__

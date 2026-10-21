@@ -21,19 +21,26 @@ from .. import specs
 import striqt.analysis as sa
 
 if TYPE_CHECKING:
+    from .actions.core import ActionRunner
     from .typing import P, PassThroughWrapper, R, SourceOpenCallback
     import xarray as xr
 
     # the Generic parameters are for type checking only on python < 3.10
 
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
-        """Sensor resources needed to run a sweep"""
+        """the open resources an action runs over.
+
+        `action_spec` is the decoded document, `runner` the action built from it,
+        and `sweep_spec` the `Sweep` the runner built and the hardware opened for.
+        """
 
         source: controller.Controller[SS, SP, SC, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
+        action_spec: specs.ActionSpec[Any, SP]
         sweep_spec: specs.Sweep[SS, SP, SC]
+        runner: ActionRunner[Any, SS, SP, SC, PS, PC]
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
 
@@ -48,7 +55,9 @@ if TYPE_CHECKING:
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
+        action_spec: specs.ActionSpec[Any, SP]
         sweep_spec: specs.Sweep[SS, SP, SC]
+        runner: ActionRunner[Any, SS, SP, SC, PS, PC]
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
 
@@ -61,7 +70,9 @@ else:
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
+        action_spec: specs.ActionSpec
         sweep_spec: specs.Sweep
+        runner: ActionRunner
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
 
@@ -72,7 +83,9 @@ else:
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
         except_context: typing_extensions.NotRequired[ContextManager]
+        action_spec: specs.ActionSpec
         sweep_spec: specs.Sweep
+        runner: ActionRunner
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
 
@@ -83,23 +96,33 @@ def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
     )
 
 
+def resolve_sink_cls(
+    spec: specs.ActionSpec[Any, Any], default_cls: type[SinkBase] | None
+) -> type[SinkBase]:
+    """return the sink class named by `spec.extensions.sink`, else `default_cls`.
+
+    Raises:
+        TypeError: if neither names a class
+    """
+    if spec.extensions.sink is not None:
+        mod_name, *sub_names, obj_name = spec.extensions.sink.rsplit('.')
+        mod = importlib.import_module(mod_name)
+        for name in sub_names:
+            mod = getattr(mod, name)
+        return getattr(mod, obj_name)
+    elif default_cls is not None:
+        return default_cls
+    else:
+        raise TypeError('no sink class in sensor binding or spec .extensions.sink')
+
+
 def _open_sink(
     spec: specs.Sweep[Any, Any, SC],
     default_cls: type[SinkBase] | None,
     format_path: specs.paths.PathFormatter | None = None,
 ) -> SinkBase[SC]:
     with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
-        if spec.extensions.sink is not None:
-            mod_name, *sub_names, obj_name = spec.extensions.sink.rsplit('.')
-            mod = importlib.import_module(mod_name)
-            for name in sub_names:
-                mod = getattr(mod, name)
-            sink_cls: type[SinkBase] = getattr(mod, obj_name)
-        elif default_cls is not None:
-            sink_cls = default_cls
-        else:
-            raise TypeError('no sink class in sensor binding or spec .extensions.sink')
-
+        sink_cls = resolve_sink_cls(spec, default_cls)
         return sink_cls(spec, format_path)
 
 
@@ -179,16 +202,21 @@ def _prepare_sweep(spec: specs.Sweep, callback: SourceOpenCallback | None = None
 
 @sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
 def open_resources(
-    spec: specs.Sweep[SS, SP, SC],
+    spec: specs.ActionSpec[SS, SP],
     spec_path: str | Path | None = None,
     *,
     test_only: bool = False,
     on_source_opened: SourceOpenCallback | None = None,
 ) -> ConnectionManager[SS, SP, SC, PS, PC]:
-    """open the sensor hardware and software contexts needed to run the given sweep.
+    """open the sensor hardware and software contexts needed to run `spec`.
 
-    The resources of the returned `ConnectionManager` are open and ready to run the
-    sweep.
+    The action runner registered for the type of `spec` is built first; the source,
+    peripherals, sink, and warmup are opened for the `Sweep` it derives. The
+    resources of the returned `ConnectionManager` are open and ready for
+    `iterate_sweep`.
+
+    Raises:
+        TypeError: if no action runner is registered for the type of `spec`
     """
 
     from .compute import prepare_compute
@@ -197,45 +225,49 @@ def open_resources(
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')
 
+    from . import actions
+
     fmt = specs.paths.PathFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
+    runner = actions.registry.lookup(spec)(spec)
+    sweep = runner.sweep
     ctrl_cls = bindings.get_controller(spec)
-    conn = ConnectionManager(sweep_spec=spec)
+    conn = ConnectionManager(sweep_spec=sweep)
 
     exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
         devices = util.threadpool.submit(
-            _open_devices, conn, ctrl_cls, spec, test_only, fmt
+            _open_devices, conn, ctrl_cls, sweep, test_only, fmt
         )
-        prep_sweep = util.threadpool.submit(_prepare_sweep, spec, on_source_opened)
-        sink = util.threadpool.submit(_open_sink, spec, ctrl_cls.sensor.sink_cls, fmt)
+        prep_sweep = util.threadpool.submit(_prepare_sweep, sweep, on_source_opened)
+        sink = util.threadpool.submit(runner.build_sink, fmt)
 
         with exc.defer():
             # foreground thread 1: initialize warmup sweeps
             try:
                 # prioritize compute during startup; load up buffers
-                compute_iter = prepare_compute(spec, skip_warmup=test_only)
+                compute_iter = prepare_compute(runner, skip_warmup=test_only)
                 next(compute_iter)
             except Exception:
                 util.cancel_threads()
                 raise
 
-        if spec.source.calibration is not None:
+        if sweep.source.calibration is not None:
             read_calibration = cast(
                 'Callable[..., xr.Dataset | None]', io.read_calibration
             )
             cal = util.threadpool.submit(
                 _timeit('read calibration')(read_calibration),
-                spec.source.calibration,
+                sweep.source.calibration,
                 fmt,
             )
         else:
             cal = None
-        if spec.sink.log_path is not None:
-            log_setup = util.threadpool.submit(_setup_logging, spec.sink, fmt)
+        if sweep.sink.log_path is not None:
+            log_setup = util.threadpool.submit(_setup_logging, sweep.sink, fmt)
         else:
             log_setup = None
 
@@ -270,7 +302,9 @@ def open_resources(
         conn.__exit__(*sys.exc_info())
         raise
 
-    conn._resources['sweep_spec'] = spec
+    conn._resources['action_spec'] = spec
+    conn._resources['sweep_spec'] = sweep
+    conn._resources['runner'] = runner
     conn._resources['format_path'] = fmt
 
     return conn

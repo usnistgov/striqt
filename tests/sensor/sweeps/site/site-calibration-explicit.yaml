@@ -29,6 +29,7 @@ captures:
 calibration:
   enr: 20.9
   ambient_temperature: 294.5
+  detector_period: 0.01
   implied_loops:
     - port
     - center_frequency
@@ -36,10 +37,6 @@ calibration:
     - analysis_bandwidth
     - external_lo_frequency
     - gain
-
-analysis:
-  channel_power_time_series:
-    detector_period: 0.01
 
 sink:
   path: "../../cals/{site_name}-{parent_name}-{radio_name}.nc"

@@ -37,7 +37,8 @@ SC = TypeVar('SC', bound='specs.SensorCapture')
 SP = TypeVar('SP', bound='specs.Peripherals')
 SPC = TypeVar('SPC', bound='specs.Peripherals')
 _SS = TypeVar('_SS', bound='specs.Source', covariant=True)
-TR = TypeVar('TR', bound='ActionRunner[Any, Any, Any, Any, Any]')
+TA = TypeVar('TA', bound='specs.ActionSpec')
+TR = TypeVar('TR', bound='ActionRunner[Any, Any, Any, Any, Any, Any]')
 
 # %% compute.py
 from striqt.analysis.lib.typing import TAR

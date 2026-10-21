@@ -43,6 +43,26 @@ def make_sweep(captures=(), loops=(), adjust_captures=None, **kws):
     return SweepCls(**make_sweep_kws(captures, loops, adjust_captures, **kws))
 
 
+class ActionCls(
+    ss.specs.ActionSpec[ss.specs.FunctionSource, ss.specs.Peripherals],
+    frozen=True,
+    kw_only=True,
+):
+    """an action spec over SOURCE's type with no captures block"""
+
+
+class PlanCls(
+    ss.specs.CapturePlan[ss.specs.FunctionSource, ss.specs.Peripherals, CaptureCls],
+    frozen=True,
+    kw_only=True,
+):
+    """a capture plan over the single_tone capture class with no analysis or options"""
+
+
+def make_plan(captures=(), loops=(), adjust_captures=None, **kws):
+    return PlanCls(**make_sweep_kws(captures, loops, adjust_captures, **kws))
+
+
 # 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
 SPG = ss.specs.BundledAnalysis.from_dict({
     'spectrogram': {'window': 'hann', 'frequency_resolution': 1e4}
@@ -170,7 +190,6 @@ CalSweepCls = CAL.sensor.sweep_spec_cls
 CalCaptureCls = CAL.schema.capture
 CalSourceCls = CAL.schema.source
 
-NDE_LOOP = ss.specs.List(field='noise_diode_enabled', values=(False, True))
 PORT_LOOP = ss.specs.List(field='port', values=(0, 1))
 GAIN_LOOP = ss.specs.List(field='gain', values=(0, -10))
 CAL_LOOP_VALUES = {'port': (0, 1), 'gain': (0, -10), 'center_frequency': (1e9, 2e9)}
@@ -188,16 +207,40 @@ def make_calibration_capture(**kws):
     return CalCaptureCls(**kws)
 
 
-def make_calibration_sweep_kws(captures=None, loops=(), source=None, **kws) -> dict:
+def make_calibration_sweep_kws(
+    captures=None, loops=(), source=None, calibration=None, **kws
+) -> dict:
     if captures is None:
         captures = (make_calibration_capture(),)
     if source is None:
         source = CalSourceCls()
-    return {'source': source, 'captures': tuple(captures), 'loops': tuple(loops), **kws}
+    if calibration is None:
+        calibration = ss.specs.ManualYFactorSpec(
+            enr=YFACTOR_ENR_DB, ambient_temperature=290.0
+        )
+    return {
+        'source': source,
+        'captures': captures,
+        'loops': loops,
+        'calibration': calibration,
+        **kws,
+    }
 
 
-def make_calibration_sweep(captures=None, loops=(), source=None, **kws):
-    return CalSweepCls(**make_calibration_sweep_kws(captures, loops, source, **kws))
+def make_calibration_sweep(**kws):
+    return CalSweepCls(**make_calibration_sweep_kws(**kws))
+
+
+def as_sweep(spec):
+    """the Sweep that runs for a decoded document: itself, or the one its runner builds"""
+    if isinstance(spec, ss.specs.Sweep):
+        return spec
+    return ss.lib.actions.registry.lookup(spec)(spec).sweep
+
+
+def make_calibration_runner(**kws):
+    """the ManualYFactorRunner of make_calibration_sweep(**kws)"""
+    return ss.lib.actions.ManualYFactorRunner(make_calibration_sweep(**kws))
 
 
 def loop_fields(sweep) -> list:

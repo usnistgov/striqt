@@ -1,5 +1,5 @@
-"""striqt.sensor.lib.calibration: the generated calibration sweep, the Y-factor
-corrections and their lookups, and the calibration sink
+"""striqt.sensor.lib.calibration: the calibration binding, the Y-factor corrections
+and their lookups, the calibration sink, and the fake closed loop through the runner
 """
 
 from __future__ import annotations
@@ -11,36 +11,21 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from conftest import (
-    FAKE_SOAPY_CALIBRATION_SPEC,
-    FAKE_SOAPY_SPEC,
-    SITE_DIR,
-    FakeRun,
-    construct_both,
-    raises_on_both_paths,
-)
-from hypothesis import given
-from hypothesis import strategies as st
+from conftest import FAKE_SOAPY_CALIBRATION_SPEC, FAKE_SOAPY_SPEC, SITE_DIR, FakeRun
 from pytest_lazy_fixtures import lf
-from site_strategies import SiteCalCaptureCls, SiteCaptureCls
 from soapy_factories import MCR, soapy_capture
 from sweep_strategies import (
     BOLTZMANN_MW,
     CAL,
-    CAL_LOOP_VALUES,
     GAIN_LOOP,
-    NDE_LOOP,
     PORT_LOOP,
     YFACTOR_ENR_DB,
     YFACTOR_GRID,
     YFACTOR_NF_DB,
     CalSourceCls,
-    CalSweepCls,
     expected_yfactor,
-    loop_fields,
     make_calibration_capture,
-    make_calibration_sweep,
-    make_calibration_sweep_kws,
+    make_calibration_runner,
     make_yfactor_dataset,
     noise_figure_lookup,
     receiver_gain,
@@ -48,96 +33,42 @@ from sweep_strategies import (
     yfactor_rms_power,
 )
 
-import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import calibration
-from striqt.sensor.lib.actions import yfactor
+from striqt.sensor.lib.actions import ManualYFactorRunner
 from striqt.sensor.lib.compute.datasets import build_capture_coords
 
 H = ss.specs.sequencing
-Repeat = ss.specs.Repeat
 TOGGLE = 'noise_diode_enabled'
-TOGGLE_MSG = 'noise_diode_enabled must be the first specified loop'
-
-
-# %% noise diode loop insertion
-
-
-class TestNoiseDiodeToggle:
-    @given(ordering=st.permutations(list(CAL_LOOP_VALUES)), data=st.data())
-    def test_explicit_toggle_position(self, ordering, data):
-        """the toggle is accepted where calibration.py inserts it: outermost, or
-        immediately inside a port loop"""
-        count = data.draw(st.integers(min_value=0, max_value=len(ordering)))
-        names = ordering[:count]
-        loops = [ss.specs.List(field=f, values=CAL_LOOP_VALUES[f]) for f in names]
-        accepted = True
-        if data.draw(st.booleans()):
-            index = data.draw(st.integers(min_value=0, max_value=len(loops)))
-            loops.insert(index, NDE_LOOP)
-            accepted = index == 0 or (index == 1 and names[0] == 'port')
-        loops = tuple(loops)
-        kws = make_calibration_sweep_kws(loops=loops)
-        if accepted:
-            direct, converted = construct_both(CalSweepCls, **kws)
-            fields = loop_fields(direct)
-            assert fields == loop_fields(converted)
-            assert [f for f in fields if f != TOGGLE] == [
-                l.field for l in loops if l.field != TOGGLE
-            ]
-        else:
-            raises_on_both_paths(CalSweepCls, TypeError, TOGGLE_MSG, **kws)
-
-    def test_replace_loops_reinserts_or_rejects(self):
-        sweep = make_calibration_sweep()
-        with pytest.raises(TypeError, match=TOGGLE_MSG):
-            sweep.replace(loops=(GAIN_LOOP, NDE_LOOP))
-        assert loop_fields(sweep.replace(loops=(PORT_LOOP,))) == ['port', TOGGLE]
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            '_ensure_loop_at_position does not account for a leading Repeat, '
-            'which _validate_loops requires to be first'
-        ),
-    )
-    @pytest.mark.parametrize(
-        'loops, expected',
-        [
-            ((Repeat(count=2), GAIN_LOOP), [None, TOGGLE, 'gain']),
-            ((Repeat(count=2), NDE_LOOP, GAIN_LOOP), [None, TOGGLE, 'gain']),
-        ],
-    )
-    def test_leading_repeat_is_accepted(self, loops, expected):
-        assert loop_fields(make_calibration_sweep(loops=loops)) == expected
-
-    def test_explicit_captures_with_implied_loops(self):
-        sweep = ss.read_yaml_spec(SITE_DIR / 'site-calibration-explicit.yaml')
-        assert loop_fields(sweep) == [TOGGLE, 'lo_shift']
-        assert 'external_lo_frequency' in sweep.calibration.implied_loops
-        assert len(H.loop_captures(sweep)) == 4
 
 
 # %% bind_manual_yfactor_calibration
 
 
-def test_calibration_capture_class_has_a_descriptive_name():
-    """the capture class is the parent capture's name with a NoiseDiode suffix, in
-    the parent's module, so it reads as such in the JSON schema and error text"""
-    assert SiteCalCaptureCls.__name__ == f'{SiteCaptureCls.__name__}NoiseDiode'
-    assert SiteCalCaptureCls.__module__ == SiteCaptureCls.__module__
-
-
 def test_binding_derives_its_classes_from_the_parent():
+    """the calibration binding is the parent's sensor and spec types under the
+    calibration action: no derived capture, sink, or peripherals class"""
     parent = ss.bindings.air7101b
-    assert CAL.schema.capture is yfactor.with_noise_diode_field(parent.schema.capture)
-    assert CAL.schema.arm_like is CAL.schema.capture
-    assert CAL.sensor.peripherals_cls.part_classes == (
-        parent.sensor.peripherals_cls,
-        calibration.ManualYFactorPeripheral,
-    )
-    assert issubclass(CAL.sensor.sweep_spec_cls, ss.specs.ManualYFactorCalibration)
-    assert CAL.sensor.sink_cls is calibration.YFactorSink
+    assert CAL.schema.capture is parent.schema.capture
+    assert CAL.schema.source is parent.schema.source
+    assert CAL.sensor.source_cls is parent.sensor.source_cls
+    assert CAL.sensor.peripherals_cls is parent.sensor.peripherals_cls
+    document_cls = CAL.sensor.sweep_spec_cls
+    assert issubclass(document_cls, ss.specs.ManualYFactorCalibration)
+    assert not issubclass(document_cls, ss.specs.Sweep)
+    assert issubclass(document_cls.sweep_cls, ss.specs.Sweep)
+    assert document_cls.controller is CAL
+
+
+def test_explicit_captures_with_implied_loops():
+    """two explicit captures at different ports give one pass per port, each over
+    its own capture, so the whole calibration acquires 2 ports x 2 states x 1"""
+    sweep = ss.read_yaml_spec(SITE_DIR / 'site-calibration-explicit.yaml')
+    runner = ManualYFactorRunner(sweep)
+    assert 'external_lo_frequency' in sweep.calibration.implied_loops
+    assert runner.ports() == (0, 1)
+    assert [len(H.loop_captures(runner.pass_sweep(p))) for p in (0, 1)] == [1, 1]
+    assert len(runner.passes()) == 4
 
 
 # %% _y_factor_power_corrections
@@ -437,7 +368,7 @@ FLUSH_LOOPS = (
 )
 
 
-def _capture_dataset(sweep, capture, index, start):
+def _capture_dataset(runner, capture, index, start, diode_on):
     """one capture's result as from_delayed shapes it, with the receiver model's power"""
     info = ss.specs.SoapyAcquisitionInfo(
         sweep_start_time=start,
@@ -451,7 +382,6 @@ def _capture_dataset(sweep, capture, index, start):
     if not np.isfinite(bandwidth):
         bandwidth = capture.sample_rate
     nf = noise_figure_lookup(YFACTOR_NF_DB, capture.port, capture.center_frequency)
-    diode_on = capture.noise_diode_enabled
     rms_power = yfactor_rms_power(capture.gain, nf, bandwidth, diode_on=diode_on)
     rms = 10 * np.log10(rms_power)
     values = np.array([[rms] * 4, [rms + 10.0] * 4])[np.newaxis]
@@ -459,37 +389,44 @@ def _capture_dataset(sweep, capture, index, start):
     pvt_dims = ('capture', 'power_detector', 'time_elapsed')
     coords = {'power_detector': ['rms', 'peak'], 'time_elapsed': np.arange(4) * 1e-3}
     ds = xr.Dataset({'channel_power_time_series': (pvt_dims, values)}, coords=coords)
-    ds = ds.assign_coords(build_capture_coords(capture, info, sweep.loops))
-    peripheral_data = {
+    ds = ds.assign_coords(build_capture_coords(capture, info, runner.sweep.loops))
+    runner._diode_on = diode_on
+    runner_data = {
         k: xr.DataArray(v, dims=[]).expand_dims({'capture': 1})
-        for k, v in sweep.calibration.to_dict().items()
+        for k, v in runner.extra_data(capture).items()
     }
-    ds = ds.assign(peripheral_data)
-    ds.attrs.update(sweep.to_dict(True, allow_tuple_keys=False))
+    ds = ds.assign(runner_data)
+    ds.attrs.update(runner.spec.to_dict(True, allow_tuple_keys=False))
     return ds
 
 
 def _flush_model_captures(path):
-    """YFactorSink.flush on a full grid of model captures; returns the sweep"""
+    """YFactorSink.flush on a full grid of model captures, as the runner's passes
+    produce them; returns the calibration document"""
     captures = (make_calibration_capture(sample_rate=MCR, host_resample=False),)
-    cal = ss.specs.ManualYFactorPeripheral(
-        enr=YFACTOR_ENR_DB, ambient_temperature=290.0
-    )
+    cal = ss.specs.ManualYFactorSpec(enr=YFACTOR_ENR_DB, ambient_temperature=290.0)
     source = CalSourceCls(array_backend='numpy')
-    sink = ss.specs.Sink(path=str(path))
-    sweep = make_calibration_sweep(
-        captures=captures, loops=FLUSH_LOOPS, source=source, calibration=cal, sink=sink
+    sink_spec = ss.specs.Sink(path=str(path))
+    runner = make_calibration_runner(
+        captures=captures,
+        loops=FLUSH_LOOPS,
+        source=source,
+        calibration=cal,
+        sink=sink_spec,
     )
     start = pd.Timestamp('2026-09-15T00:00:00')
 
-    sink = calibration.YFactorSink(sweep)
+    sink = runner.build_sink(None)
     sink.open()
-    sink._pending_data = [
-        _capture_dataset(sweep, c, i, start)
-        for i, c in enumerate(H.loop_captures(sweep, 'beef'))
-    ]
+    index = 0
+    for port, diode_on in runner.passes():
+        for capture in H.loop_captures(runner.pass_sweep(port), 'beef'):
+            sink._pending_data.append(
+                _capture_dataset(runner, capture, index, start, diode_on)
+            )
+            index += 1
     sink.flush()
-    return sweep
+    return runner.spec
 
 
 @pytest.fixture(scope='module')
@@ -508,13 +445,6 @@ class TestYFactorSinkFlush:
         result = _lookup_pc(flushed_calibration.path, capture)
         assert result == pytest.approx([1 / receiver_gain(-10)], rel=1e-6)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=KeyError,
-        reason='flush assigns calibration_fields and sweep_start_time attrs to the '
-        'capture data, but compute_y_factor_corrections builds a new Dataset '
-        'without them',
-    )
     def test_saved_attrs_record_the_calibration_fields(self, flushed_calibration):
         saved = ss.lib.io.read_calibration(flushed_calibration.path)
         assert list(saved.attrs['calibration_fields']) == [
@@ -528,56 +458,38 @@ class TestYFactorSinkFlush:
         ]
 
 
-# %% ManualYFactorPeripheral
+# %% operator prompts
 
 
-@pytest.fixture
-def scripted_input(monkeypatch):
-    """answers sa.util.blocking_input from a queue and records the prompts"""
-    script = {'answers': [], 'prompts': []}
-
-    def blocking_input(prompt=None):
-        script['prompts'].append(prompt)
-        return script['answers'].pop(0)
-
-    monkeypatch.setattr(sa.util, 'blocking_input', blocking_input)
-    return script
-
-
-def _calibration_sweep():
-    return make_calibration_sweep(
-        calibration=ss.specs.ManualYFactorPeripheral(
-            enr=20.87, ambient_temperature=290.0
-        )
+def _calibration_runner():
+    return make_calibration_runner(
+        calibration=ss.specs.ManualYFactorSpec(enr=20.87, ambient_temperature=290.0)
     )
 
 
-class TestManualYFactorPeripheral:
-    def test_open_confirms_the_enr(self, scripted_input):
+class TestOperatorPrompts:
+    def test_confirm_enr_names_the_value(self, scripted_input):
         scripted_input['answers'] += ['y']
-        calibration.ManualYFactorPeripheral(_calibration_sweep())
+        _calibration_runner().confirm_enr()
         (prompt,) = scripted_input['prompts']
         assert 'ENR' in prompt and '20.87' in prompt
 
-    def test_open_reprompts_until_answered(self, scripted_input):
+    def test_confirm_enr_reprompts_until_answered(self, scripted_input):
         scripted_input['answers'] += ['maybe', '', 'Y']
-        calibration.ManualYFactorPeripheral(_calibration_sweep())
+        _calibration_runner().confirm_enr()
         assert len(scripted_input['prompts']) == 3
 
-    def test_open_rejects_the_enr(self, scripted_input):
+    def test_confirm_enr_rejection_raises(self, scripted_input):
         scripted_input['answers'] += ['N']
         with pytest.raises(RuntimeError, match='ENR'):
-            calibration.ManualYFactorPeripheral(_calibration_sweep())
+            _calibration_runner().confirm_enr()
 
-    def test_arm_prompts_only_when_the_diode_state_changes(self, scripted_input):
-        scripted_input['answers'] += ['y', '', '', '']
-        periph = calibration.ManualYFactorPeripheral(_calibration_sweep())
-        del scripted_input['prompts'][:]
-
-        periph.arm(make_calibration_capture(port=0, noise_diode_enabled=False))
-        periph.arm(make_calibration_capture(port=0, noise_diode_enabled=False))
-        periph.arm(make_calibration_capture(port=0, noise_diode_enabled=True))
-        periph.arm(make_calibration_capture(port=1, noise_diode_enabled=True))
+    def test_switch_diode_prompts_per_pass(self, scripted_input):
+        scripted_input['answers'] += ['', '', '']
+        runner = _calibration_runner()
+        runner.switch_diode(0, False)
+        runner.switch_diode(0, True)
+        runner.switch_diode(1, True)
 
         # conftest.fake_sweep_runner parses this wording to switch the fake diode
         matches = [
@@ -589,15 +501,15 @@ class TestManualYFactorPeripheral:
             ('enable', '0'),
             ('enable', '1'),
         ]
-        assert len(matches) == 3
+        assert runner._diode_on is True
 
-    def test_acquire_returns_the_calibration_spec(self, scripted_input):
-        scripted_input['answers'] += ['y']
-        periph = calibration.ManualYFactorPeripheral(_calibration_sweep())
-        assert periph.acquire(make_calibration_capture()) == {
+    def test_extra_data_carries_the_state_and_the_calibration_block(self):
+        runner = _calibration_runner()
+        runner._diode_on = True
+        assert runner.extra_data(make_calibration_capture()) == {
+            TOGGLE: True,
             'enr': 20.87,
             'ambient_temperature': 290.0,
-            'implied_loops': (),
         }
 
 

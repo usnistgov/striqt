@@ -46,20 +46,21 @@ def open_store(
 def read_yaml_spec(
     path: str | Path,
     *,
-    type: type[specs.Sweep] | None = None,
+    type: type[specs.ActionSpec] | None = None,
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
-) -> specs.Sweep:
+) -> specs.ActionSpec:
     """Build a Sweep specification object from the specified yaml file.
 
     Args:
         path: path to the yaml file
         output_path: optional override for the specification's output path
-        type: the type of sweep specification to load, or None to use specs.Sweep
+        type: the document type to decode into, or None to select it by the
+            ``sensor_binding`` tag
         store_backend: optional override for the specification's output store backend
 
     Returns:
-        an instance of specs.Sweep
+        the decoded document, an instance of the bound `ActionSpec` class
     """
 
     tree = sa.lib.io.decode_from_yaml_file(path)
@@ -75,10 +76,10 @@ def read_yaml_spec(
 def read_json_spec(
     path: str | Path,
     *,
-    type: type[specs.Sweep] | None = None,
+    type: type[specs.ActionSpec] | None = None,
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
-) -> specs.Sweep:
+) -> specs.ActionSpec:
     """Build a specs.Sweep specification object from a json file at the given path.
 
     JSON supports the same specifications as yaml, but without !include
@@ -86,12 +87,13 @@ def read_json_spec(
 
     Args:
         path: path to the json file
-        type: the type of sweep specification to load, or None to use specs.Sweep
+        type: the document type to decode into, or None to select it by the
+            ``sensor_binding`` tag
         output_path: optional override for the specification's output path
         store_backend: optional override for the specification's output store backend
 
     Returns:
-        an instance of specs.Sweep
+        the decoded document, an instance of the bound `ActionSpec` class
     """
     with open(path, 'rb') as buf:
         tree = msgspec.json.decode(buf.read(), type=dict)
@@ -108,11 +110,11 @@ def read_json_spec(
 def read_zarr_spec(
     path: str | Path,
     *,
-    type: type[specs.Sweep] | None = None,
+    type: type[specs.ActionSpec] | None = None,
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
     extension_root: str | Path | None = None,
-) -> specs.Sweep:
+) -> specs.ActionSpec:
     """rebuild the `Sweep` that `iterate_sweep` saved in the attrs of a zarr store.
 
     The `extensions` block is imported before the sweep is decoded. A
@@ -166,10 +168,10 @@ def _convert_zarr_attrs_spec(
     tree: dict[str, Any],
     extension_root: str | Path,
     *,
-    type: type[specs.Sweep] | None = None,
+    type: type[specs.ActionSpec] | None = None,
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
-) -> specs.Sweep:
+) -> specs.ActionSpec:
     """decode a sweep from the dict form of its YAML, JSON, or zarr attrs.
 
     Imports the `extensions` block of `tree` before decoding. A ``mock_source`` entry
@@ -185,8 +187,8 @@ def _resolve_sweep_cls(
     tree: dict[str, Any],
     extension_root: str | Path,
     *,
-    type: type[specs.Sweep] | None = None,
-) -> type[specs.Sweep] | None:
+    type: type[specs.ActionSpec] | None = None,
+) -> type[specs.ActionSpec] | None:
     """return the sweep class for `tree` after importing its `extensions` block.
 
     The `sensor_binding` tag of `tree` is looked up after the import and may name a
@@ -224,11 +226,11 @@ def _resolve_sweep_cls(
 
 def _decode_sweep(
     tree: dict[str, Any],
-    sweep_cls: type[specs.Sweep] | None,
+    sweep_cls: type[specs.ActionSpec] | None,
     *,
     output_path: str | None = None,
     store_backend: str | None = None,
-) -> specs.Sweep:
+) -> specs.ActionSpec:
     """decode `tree` as `sweep_cls` and apply the sink path and store overrides.
 
     When `sweep_cls` is None, `tree` is decoded against the tagged union of all

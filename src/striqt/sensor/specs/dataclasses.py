@@ -13,8 +13,8 @@ import striqt.analysis as sa
 class Schema(Generic[SS, SP, SC, PS, PC]):
     """the spec types of a sensor binding.
 
-    `action` is the sweep spec type that a bound sweep class subclasses, and so
-    selects which action runs the sweep.
+    `action` is the document type that the bound class subclasses, and so selects
+    the `ActionRunner` that runs it.
     """
 
     source: type[SS]
@@ -25,13 +25,13 @@ class Schema(Generic[SS, SP, SC, PS, PC]):
     init_like: Callable[PS, Any]
     arm_like: Callable[PC, Any]
 
-    action: type[structs.Sweep[SS, SP, SC]] = structs.Sweep
+    action: type[structs.ActionSpec[SS, SP]] = structs.Sweep
 
     def __post_init__(self):
         assert issubclass(self.source, structs.Source)
         assert issubclass(self.capture, structs.SensorCapture)
         assert issubclass(self.peripherals, structs.Peripherals)
-        assert issubclass(self.action, structs.Sweep)
+        assert issubclass(self.action, structs.ActionSpec)
 
 
 @dataclasses.dataclass

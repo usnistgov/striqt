@@ -6,9 +6,9 @@ from typing import cast, Any, Sequence, TYPE_CHECKING
 from pathlib import Path
 
 from .. import specs as specs
-from . import compute, io, peripherals, sinks
+from . import compute, io, sinks
 from .controller import Controller
-from .typing import TypeVar, SC, SP, PS, PC
+from .typing import TypeVar, SP, PS, PC
 import striqt.analysis as sa
 from striqt.analysis.lib.util import np, pd, xr
 
@@ -113,6 +113,14 @@ def lookup_system_noise_power(
 
 
 class YFactorSink(sinks.SinkBase):
+    """collect the captures of a Y-factor calibration and save the corrections.
+
+    `flush` indexes the collected captures by `calibration_fields`, computes the
+    corrections with `compute_y_factor_corrections`, writes them to `sink.path` as
+    netCDF, and prints a per-port summary. The runner calls `flush` after the last
+    pass; `close` writes nothing.
+    """
+
     _DROP_FIELDS = (
         'sweep_start_time',
         'start_time',
@@ -121,6 +129,17 @@ class YFactorSink(sinks.SinkBase):
         'duration',
         'sample_rate',
     )
+
+    def __init__(
+        self,
+        sweep_spec: specs.Sweep[Any, Any, specs.SC],
+        format_path: specs.paths.PathFormatter | None = None,
+        *,
+        calibration_fields: Sequence[str],
+        force: bool = False,
+    ):
+        super().__init__(sweep_spec, format_path, force=force)
+        self.calibration_fields = tuple(calibration_fields)
 
     def _get_path(self) -> Path | None:
         path = self._spec.path
@@ -134,22 +153,15 @@ class YFactorSink(sinks.SinkBase):
             return None
 
     def open(self) -> None:
-        self.sweep_start_time = None
+        pass
 
     def close(self, *exc_info):
-        # flush only after a complete dataset, not on close
+        # the corrections need the whole grid, which only the runner knows is complete
         pass
 
     def append(self, capture_result):
-        ret = super().append(capture_result)
-
         assert isinstance(capture_result.extra_coords, specs.SoapyAcquisitionInfo)
-
-        self.captures_elapsed += 1
-        if self.captures_elapsed == self._batch.total_size:
-            self.flush()
-
-        return ret
+        return super().append(capture_result)
 
     def flush(self):
         data = self.pop()
@@ -159,34 +171,22 @@ class YFactorSink(sinks.SinkBase):
 
         super().flush()
 
-        # re-index by radio setting rather than capture
-        loops = data[0].attrs['loops']
-        implied_loops = (data[0].attrs['calibration'] or {}).get('implied_loops', [])
-        fields = list(implied_loops) + [
-            l['field'] for l in loops if l['field'] is not None
-        ]
-        if 'sample_rate' in fields:
-            i = fields.index('sample_rate')
-            fields[i] = 'backend_sample_rate'
+        fields = list(self.calibration_fields)
+        attrs = {'calibration_fields': fields}
 
-        attrs = {
-            'sweep_start_time': self.sweep_start_time,
-            'calibration_fields': fields,
-        }
-        capture_data = (
-            xr
-            .concat(data, compute.CAPTURE_DIM)
-            .assign_attrs(attrs)
-            .drop_vars(self._DROP_FIELDS, errors='ignore')
-            .set_xindex(fields)
+        # re-index by radio setting rather than capture; the diode state arrives as a
+        # data variable from the runner, the rest as capture coordinates
+        capture_data = xr.concat(data, compute.CAPTURE_DIM).drop_vars(
+            self._DROP_FIELDS, errors='ignore'
         )
+        to_coords = [f for f in fields if f in capture_data.data_vars]
+        capture_data = capture_data.set_coords(to_coords).set_xindex(fields)
 
         # break out each remaining capture coordinate into its own dimension
         by_field = capture_data.unstack(compute.CAPTURE_DIM)
         by_field['noise_diode_enabled'] = by_field.noise_diode_enabled.astype('bool')
 
-        # compute and merge corrections
-        corrections = compute_y_factor_corrections(by_field)
+        corrections = compute_y_factor_corrections(by_field).assign_attrs(attrs)
 
         path = self._get_path()
 
@@ -199,68 +199,23 @@ class YFactorSink(sinks.SinkBase):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 
 
-class ManualYFactorPeripheral(
-    peripherals.CalibrationPeripheralsBase[Any, Any, specs.ManualYFactorSpec]
-):
-    _last_state = (None, None)
-
-    def open(self):
-        assert self.calibration_spec is not None
-
-        enr = self.calibration_spec.enr
-        prompt = f'Confirm that the noise diode ENR is {enr} dB (y/n): '
-        while True:
-            response = sa.util.blocking_input(prompt)
-            if response.lower() == 'y':
-                break
-            elif response.lower() == 'n':
-                raise RuntimeError('Set the proper noise diode ENR and run again')
-
-    def close(self):
-        pass
-
-    def arm(self, capture):
-        state = (capture.port, capture.noise_diode_enabled)
-        if state != self._last_state:
-            what = f'noise diode at port {capture.port}'
-            if capture.noise_diode_enabled:
-                sa.util.blocking_input(f'enable {what} and press enter: ')
-            else:
-                sa.util.blocking_input(f'disable {what} and press enter: ')
-
-        self._last_state = state
-
-    def acquire(self, capture):
-        assert self.calibration_spec is not None
-        return self.calibration_spec.to_dict()
-
-    def setup(
-        self,
-        captures: Sequence[SC],
-        loops: Sequence[specs.LoopSpec],
-    ):
-        pass
-
-
 def bind_manual_yfactor_calibration(
     name: str, ctrl_cls: 'type[Controller[SS, SP, Any, PS, PC]]'
 ) -> 'type[Controller[SS, SP, Any, PS, PC]]':
     """bind a manual Y-factor calibration of the sensor bound as `ctrl_cls`.
 
     The result is `bind_sensor` with `ctrl_cls`'s own `Sensor` and a `Schema` whose
-    `action` is `specs.ManualYFactorCalibration`, so the binding's sink, peripherals,
-    and capture spec are the ones `ManualYFactorRunner` derives. Sweep files select
-    it with ``sensor_binding: <name>``. The controller class records the caller's
-    module.
+    `action` is `specs.ManualYFactorCalibration`; `ManualYFactorRunner` runs it.
+    Sweep files select it with ``sensor_binding: <name>``. The controller class
+    records the caller's module.
     """
     from . import bindings
 
-    sensor = dataclasses.replace(ctrl_cls.sensor, sweep_spec_cls=specs.Sweep)
     schema = dataclasses.replace(ctrl_cls.schema, action=specs.ManualYFactorCalibration)
 
     return bindings.bind_sensor(
         name,
-        cast(bindings.Sensor[SS, SP, Any], sensor),
+        ctrl_cls.sensor,
         cast(specs.Schema[SS, SP, Any, PS, PC], schema),
         module=sys._getframe(1).f_globals.get('__name__'),
     )

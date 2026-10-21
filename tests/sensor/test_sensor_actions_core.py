@@ -129,6 +129,62 @@ def test_yield_modes(mode):
             assert isinstance(item, ss.lib.compute.DelayedDataset)
 
 
+# %% iterate_captures: extra_data and a shared indexer
+
+
+class TaggingPeripherals(ss.peripherals.NoPeripherals):
+    def acquire(self, capture):
+        return {'shared': 'peripheral', 'from_peripheral': 1}
+
+
+def test_extra_data_is_called_per_capture_and_wins_over_the_peripherals():
+    sweep = tone_sweep(OFFSETS)
+    seen = []
+
+    def extra_data(capture):
+        seen.append(capture)
+        return {'shared': 'runner', 'offset': capture.frequency_offset}
+
+    with ss.open_resources(sweep, None) as res:
+        items = core.iterate_captures(
+            res,
+            sink=ss.sinks.NoSink(sweep),
+            peripherals=TaggingPeripherals(sweep),
+            extra_data=extra_data,
+        )
+        results = [item for item in items if item is not None]
+
+    assert seen == list(tone_captures(OFFSETS))
+    for capture, result in zip(seen, results):
+        assert result.extra_data['shared'] == 'runner'
+        assert result.extra_data['from_peripheral'] == 1
+        assert result.extra_data['offset'] == capture.frequency_offset
+
+
+def test_a_shared_indexer_numbers_two_runs_consecutively():
+    """a runner that runs the pipeline several times over the same open resources
+    passes one indexer so the second run continues the capture count and re-arms
+    its first capture rather than reusing what the first run left armed"""
+    n = len(OFFSETS)
+    sweep = tone_sweep(OFFSETS)
+    indexer = core._AcquisitionIndexer(2 * n)
+
+    with ss.open_resources(sweep, None) as res:
+        sink = ss.sinks.NoSink(sweep)
+        first = list(core.iterate_captures(res, sink=sink, indexer=indexer))
+        second = list(core.iterate_captures(res, sink=sink, indexer=indexer))
+
+    datasets = [
+        ss.lib.compute.from_delayed(item) for item in first + second if item is not None
+    ]
+    assert index_values(datasets, 'capture_index') == list(range(2 * n))
+    assert index_values(datasets, 'sweep_index') == [0] * (2 * n)
+    for capture, ds in zip(tone_captures(OFFSETS) * 2, datasets):
+        assert np.array_equal(
+            ds.iq_waveform.values, expected_corrected('single_tone', capture)
+        )
+
+
 # %% iterate_captures: failure propagation
 
 

@@ -1,8 +1,8 @@
 from __future__ import annotations as __
 
-from typing import Any, Generic, Iterable
+from typing import Any, Iterable
 from .. import specs
-from .typing import Peripherals, SP, SC, SPC
+from .typing import Peripherals, SP, SC
 
 
 class PeripheralsBase(Peripherals[SP, SC]):
@@ -12,26 +12,6 @@ class PeripheralsBase(Peripherals[SP, SC]):
 
     def __init__(self, spec: specs.Sweep[Any, SP, SC]):
         self.spec = spec.peripherals
-        self.open()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
-
-class CalibrationPeripheralsBase(Peripherals[SP, SC], Generic[SP, SC, SPC]):
-    """base class for the peripheral hardware protocol of a calibration sweep.
-
-    Subclasses implement connection management and the callback methods for
-    arming and acquisition.
-    """
-
-    calibration_spec: SPC | None
-
-    def __init__(self, spec: specs.CalibrationSweep[Any, SP, SC, SPC]):
-        self.calibration_spec = spec.calibration
         self.open()
 
     def __enter__(self):

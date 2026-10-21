@@ -24,7 +24,6 @@ warmup = bind_sensor(
         capture=specs.SensorCapture,
         arm_like=specs.SensorCapture,
         peripherals=specs.NoPeripherals,
-        action=specs.Warmup,
     ),
 )
 

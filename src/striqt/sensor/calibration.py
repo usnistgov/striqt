@@ -3,9 +3,7 @@ from .lib.calibration import (
     compute_y_factor_corrections,
     lookup_system_noise_power,
     lookup_power_correction,
-    ManualYFactorPeripheral,
     summarize_calibration,
     YFactorSink,
 )
 from .lib.io import read_calibration
-from .lib.peripherals import CalibrationPeripheralsBase

@@ -13,7 +13,7 @@ import msgspec
 import pytest
 from conftest import SITE_DIR, SWEEP_DIR
 from hypothesis import given, settings
-from site_strategies import SiteCalCaptureCls, SiteCaptureCls
+from site_strategies import SiteCaptureCls
 from sweep_strategies import (
     CalSweepCls,
     loop_fields,
@@ -186,17 +186,17 @@ def test_calibration_sweeps_decode(calibration_sweep, site_calibration_sweep):
     assert type(sweep).__name__ == 'site_single_tone_calibration'
     assert sweep.calibration.enr == pytest.approx(20.9)
     assert sweep.source.calibration is None
-    assert isinstance(sweep.captures[0], SiteCalCaptureCls)
-    assert sweep.captures[0].noise_diode_enabled is False
+    assert isinstance(sweep.captures[0], SiteCaptureCls)
+    assert type(sweep).schema.capture is SiteCaptureCls
     assert loop_fields(sweep) == [
         'port',
-        'noise_diode_enabled',
         'sample_rate',
         'center_frequency',
         'gain',
         'analysis_bandwidth',
         'lo_shift',
     ]
+    assert sweep.calibration.detector_period == pytest.approx(0.01)
 
 
 # %% output_path override

@@ -403,6 +403,21 @@ def isolated_lookup(monkeypatch):
 
 
 @pytest.fixture
+def scripted_input(monkeypatch):
+    """answer `sa.util.blocking_input` from a queue of answers and record the prompts"""
+    import striqt.analysis as sa
+
+    script = {'answers': [], 'prompts': []}
+
+    def blocking_input(prompt=None):
+        script['prompts'].append(prompt)
+        return script['answers'].pop(0)
+
+    monkeypatch.setattr(sa.util, 'blocking_input', blocking_input)
+    return script
+
+
+@pytest.fixture
 def isolated_bindings(monkeypatch):
     """snapshot `ss.lib.bindings.registry` and `tagged_sweeps`, which `bind_sensor`
     rebinds by name, so a test can bind sensors without leaving them behind"""

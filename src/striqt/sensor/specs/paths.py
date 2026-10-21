@@ -29,14 +29,28 @@ def get_format_fields(s: str, exclude: tuple[str, ...] = ()) -> list[str]:
 
 @sa.util.lru_cache()
 def get_path_fields(
-    sweep: structs.Sweep,
+    sweep: structs.ActionSpec,
     *,
     source_id: str | Callable[[], str],
     spec_path: Path | str | None = None,
 ) -> dict[str, str]:
-    """return the ``{field_name}`` field values for sink and calibration paths"""
+    """return the ``{field_name}`` values for sink and calibration path templates.
 
-    assert isinstance(sweep, structs.Sweep)
+    Args:
+        sweep: the spec whose type name and `adjust_captures` supply the fields
+        source_id: hex id of the open source, or a callable that returns it
+        spec_path: the file `sweep` was read from, or None when it was not read
+            from a file
+
+    Returns:
+        ``start_time`` (``%Y%m%d-%Hh%Mm%S`` at the time of the call),
+        ``sensor_binding`` (the type name of `sweep`), ``source_id``, and when
+        `spec_path` is given ``spec_name`` and ``parent_name``. When `sweep` is a
+        `CapturePlan`, each fixed string value in its `adjust_captures` for
+        `source_id` (with ``'defaults'`` beneath) is added under its field name.
+    """
+
+    assert isinstance(sweep, structs.ActionSpec)
 
     if isinstance(source_id, str):
         id_ = source_id
@@ -51,8 +65,9 @@ def get_path_fields(
         fields['parent_name'] = Path(spec_path).parent.absolute().name
     fields['source_id'] = id_
 
-    labels = sequencing._get_source_capture_adjustments(sweep.adjust_captures, id_)
-    fields.update(labels)
+    if isinstance(sweep, structs.CapturePlan):
+        labels = sequencing._get_source_capture_adjustments(sweep.adjust_captures, id_)
+        fields.update(labels)
 
     return fields
 
@@ -60,7 +75,7 @@ def get_path_fields(
 class PathFormatter:
     def __init__(
         self,
-        sweep: structs.Sweep,
+        sweep: structs.ActionSpec,
         spec_path: Path | str | None = None,
         id_timeout: float = 5,
     ):

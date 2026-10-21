@@ -25,13 +25,12 @@ the same change without giving them a number (listed under "Fixed on 2026-09-18
 without a ledger number" below). Item 90 was added on 2026-09-23 by the
 sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
-xfail so that the `ty` upgrade that closes it surfaces as an xpass. Item 39
-was fixed on 2026-10-21, when `bind_manual_yfactor_calibration` moved to the
-named class factories in `sensor/lib/actions/yfactor.py`
-(`test_calibration_capture_class_has_a_descriptive_name` now pins the naming
-rule), and item 41 in the same change, when `bind_sensor` gained the action hooks
-and its `mock_source` message was corrected. Items are listed in priority order,
-not numeric order.
+xfail so that the `ty` upgrade that closes it surfaces as an xpass. Items 39
+and 41 were fixed on 2026-10-21 by the actions refactor of `striqt.sensor`
+(`sensor/lib/actions/`), and items 14 and 48 retired with it the same day: the
+calibration runner now acquires each port with the diode off and on itself, so no
+loop is inserted (14), and `YFactorSink.flush` assigns `calibration_fields` to the
+saved corrections (48). Items are listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -89,7 +88,6 @@ item is open.
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
 | 44 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]` | High | B | trivial |
 | 52 | `TestSoapySourceClose::test_close_releases_the_stream_and_device` | High | B | trivial |
-| 14 | `test_leading_repeat_is_accepted` | High | B | easy |
 | 16 | `test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys` | High | B | trivial |
 | 62 | `test_three_deep_adjust_analysis_is_hashable` | High | B | small |
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
@@ -112,7 +110,6 @@ item is open.
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
-| 48 | `TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields` | High | D | trivial |
 | 56 | `TestHardwareTimeSync::test_unsupported_source_names_itself` | High | D | trivial |
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
@@ -212,22 +209,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   single sweep works; opening a second controller in one process, or the
   `Controller.close`/reopen path, relies on the driver tolerating it.
 - **Fix.** Rename the two lookups. Trivial.
-
-### 14. A leading `Repeat` breaks calibration loop insertion
-
-`tests/sensor/test_sensor_calibration.py::TestNoiseDiodeToggle::test_leading_repeat_is_accepted[*]`
-
-- **Mechanism.** `sensor/specs/sweep.py` `_ensure_loop_at_position` only
-  allows for a leading `port` loop; `_validate_loops`
-  (`sensor/specs/sweep.py`) requires a `Repeat` to be first. The toggle
-  is inserted ahead of the `Repeat`, or the helper raises when the `Repeat` is
-  already first.
-- **Why the test is right.** The two constraints are stated in code and are
-  mutually exclusive as written.
-- **Impact.** No in-tree calibration YAML uses `kind: repeat`; any that adds
-  one fails to decode.
-- **Fix.** Offset the insert index by one when the first loop has no field.
-  Easy.
 
 ### 16. Remaps keyed on a fixed numeric alias reject numeric keys
 
@@ -563,18 +544,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   `DecodeError` or `TypeError` ("bytes-like object") rather than a
   `ValidationError` naming the lookup key.
 - **Fix.** Catch and re-raise as `ValidationError` with the key. Trivial.
-
-### 48. The saved calibration loses `calibration_fields`
-
-`tests/sensor/test_sensor_calibration.py::TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields`
-
-- **Mechanism.** `YFactorSink.flush` assigns `calibration_fields` and
-  `sweep_start_time` attrs at `calibration.py:184`, but
-  `_y_factor_power_corrections` returns a new `xr.Dataset`
-  (`calibration.py:458`) that carries none of the input attrs, and that is
-  what `io.save_calibration` writes.
-- **Impact.** Nothing in `src/` reads the attribute. Metadata only.
-- **Fix.** `.assign_attrs(by_field.attrs)` on the result. Trivial.
 
 ### 56. Unsupported time source message is not an f-string
 

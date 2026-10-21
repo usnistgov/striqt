@@ -16,8 +16,10 @@ from sweep_strategies import (
     RESOLUTION_MSG,
     SOURCE,
     SPG,
+    YFACTOR_ENR_DB,
     CalSourceCls,
     CalSweepCls,
+    PlanCls,
     SweepCls,
     list_loop,
     loop_sets,
@@ -323,6 +325,82 @@ class TestCaptureRemap:
         assert remap.replace(lookup={'[3, 4]': 1}).lookup == {(3, 4): 1}
 
 
+# %% ActionSpec, CapturePlan, Sweep: the spec chain
+
+
+class TestSpecChain:
+    @pytest.mark.parametrize(
+        'cls, base, added',
+        [
+            (
+                ss.specs.ActionSpec,
+                sa.specs.SpecBase,
+                {'description', 'source', 'peripherals', 'extensions', 'sink'},
+            ),
+            (
+                ss.specs.CapturePlan,
+                ss.specs.ActionSpec,
+                {'captures', 'loops', 'adjust_captures'},
+            ),
+            (
+                ss.specs.Sweep,
+                ss.specs.CapturePlan,
+                {'plot_hint', 'analysis', 'options'},
+            ),
+            (
+                ss.specs.ManualYFactorCalibration,
+                ss.specs.CapturePlan,
+                {'calibration', 'analysis'},
+            ),
+        ],
+        ids=['action_spec', 'capture_plan', 'sweep', 'calibration'],
+    )
+    def test_each_level_adds_its_blocks(self, cls, base, added):
+        assert issubclass(cls, base)
+        inherited = set(base.__struct_fields__)
+        assert inherited <= set(cls.__struct_fields__)
+        assert set(cls.__struct_fields__) - inherited == added
+
+    @pytest.mark.parametrize(
+        'kws, match',
+        [
+            ({'loops': (Repeat(count=2), Repeat(count=3))}, REPEAT_MSG),
+            (
+                {
+                    'loops': (
+                        List(field='snr', values=(0.0,)),
+                        List(field='snr', values=(1.0,)),
+                    )
+                },
+                f'{DUPLICATE_MSG} `snr`',
+            ),
+            (
+                {
+                    'captures': (
+                        make_capture(frequency_offset=-1e6),
+                        make_capture(frequency_offset=1e6),
+                    ),
+                    'loops': (List(field='frequency_offset', values=(0.0,)),),
+                },
+                COLLISION_MSG,
+            ),
+        ],
+        ids=['repeat_not_first', 'duplicate_field', 'capture_collision'],
+    )
+    def test_capture_plan_validates_its_loops(self, kws, match):
+        raises_on_both_paths(
+            PlanCls, msgspec.ValidationError, match, **make_sweep_kws(**kws)
+        )
+
+    def test_capture_plan_converts_lookup_keys(self, construct):
+        remap = Remap(key='frequency_offset', lookup={'1': 2.0})
+        adjust = {'defaults': {'snr': remap}}
+        plan = construct(PlanCls, **make_sweep_kws(adjust_captures=adjust))
+        lookup = plan.adjust_captures['defaults']['snr'].lookup
+        assert lookup == {1.0: 2.0}
+        assert isinstance(next(iter(lookup)), float)
+
+
 # %% Sweep
 
 
@@ -421,11 +499,16 @@ class TestSweepLoops:
 class TestSweepCaptures:
     @pytest.mark.parametrize(
         'cls',
-        [ss.specs.Sweep, ss.specs.CalibrationSweep, ss.specs.ManualYFactorCalibration],
+        [
+            ss.specs.ActionSpec,
+            ss.specs.CapturePlan,
+            ss.specs.Sweep,
+            ss.specs.ManualYFactorCalibration,
+        ],
     )
     def test_bare_sweep_is_not_constructible(self, cls):
-        # the TypeError comes from msgspec.structs.fields on the unbound capture
-        # TypeVar, not from a guard, so there is no message to match
+        # the TypeError comes from msgspec introspection of the unbound source or
+        # capture TypeVar, not from a guard, so there is no message to match
         with pytest.raises(TypeError):
             cls(source=SOURCE)
 
@@ -485,7 +568,7 @@ class TestSweepAnalysisValidation:
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
     def test_the_warmup_sweep_constructs(self, synthetic_sweep):
-        warmup = ss.lib.actions.derive_warmup_spec(synthetic_sweep)
+        warmup = ss.lib.actions.derive_warmup_sweep(synthetic_sweep)
         assert len(warmup.captures) == 1
 
 
@@ -523,10 +606,10 @@ class TestSweepAdjustCaptures:
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
 
-# %% CalibrationSweep
+# %% ManualYFactorCalibration
 
 
-class TestCalibrationSweep:
+class TestManualYFactorCalibration:
     def test_single_capture_needs_no_implied_loops(self):
         for sweep in construct_both(CalSweepCls, **make_calibration_sweep_kws()):
             assert len(sweep.captures) == 1
@@ -549,10 +632,23 @@ class TestCalibrationSweep:
             CalSweepCls, msgspec.ValidationError, SOURCE_CAL_MSG, **kws
         )
 
-    def test_default_options_loop_only_nyquist(self):
-        loops = (List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)
-        sweep = make_calibration_sweep(loops=loops)
-        bandwidths = {
-            c.analysis_bandwidth for c in ss.specs.sequencing.loop_captures(sweep)
+    def test_calibration_block_is_required(self):
+        kws = make_calibration_sweep_kws()
+        del kws['calibration']
+        with pytest.raises(TypeError, match='calibration'):
+            CalSweepCls(**kws)
+
+    def test_document_has_no_options_and_an_empty_analysis(self):
+        assert 'options' not in CalSweepCls.__struct_fields__
+        assert make_calibration_sweep().analysis is None
+
+    def test_legacy_analysis_block_is_ignored_with_a_warning(self):
+        """the 2026-10 calibration files carry the analysis the runner now generates"""
+        tree = make_calibration_sweep().to_dict(unfreeze=True)
+        tree['analysis'] = {
+            'channel_power_time_series': {'detector_period': 0.01},
         }
-        assert bandwidths == {0.5e6, math.inf}
+        with pytest.warns(DeprecationWarning, match='analysis'):
+            sweep = CalSweepCls.from_dict(tree)
+        assert sweep.analysis == tree['analysis']
+        assert sweep.calibration.enr == pytest.approx(YFACTOR_ENR_DB)

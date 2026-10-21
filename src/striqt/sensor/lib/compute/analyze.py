@@ -3,7 +3,7 @@
 from __future__ import annotations as __
 
 import logging
-from typing import cast, Literal, overload, TYPE_CHECKING
+from typing import Any, cast, Literal, overload, TYPE_CHECKING
 import warnings
 
 from ... import specs
@@ -17,7 +17,11 @@ from striqt.analysis.lib.util import np, xr
 import msgspec
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
+    from ..actions.core import ActionRunner
     from ..typing import Array
+    from .datasets import DelayedDataset
 
 
 SOURCE_ID_NAME = 'source_id'
@@ -157,7 +161,18 @@ def analyze(
         return datasets.from_delayed(ds_delayed)
 
 
-def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
+def prepare_compute(
+    runner: ActionRunner[Any, Any, Any, Any, Any, Any], skip_warmup: bool = False
+) -> Generator[xr.Dataset | DelayedDataset | None]:
+    """import the compute backend of `runner.sweep` and run its warmup sweep, if any.
+
+    The first iteration performs the imports and the cupy configuration. The
+    remaining iterations are those of the warmup sweep that `runner.warmup_sweep`
+    returns, run through a `SweepRunner` over resources opened here; a single
+    `None` is yielded instead when `skip_warmup` is set or no warmup is needed.
+    """
+    spec = runner.sweep
+
     if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
             # numba.cuda must be imported before cupy on some versions/platforms
@@ -175,12 +190,13 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
         message='Mean of empty slice.*',
     )
 
-    from ..actions import registry, warmup
+    from ..actions import sweep as sweep_action
+    from ..actions import warmup
 
     if skip_warmup:
         warm = None
     else:
-        warm = registry.lookup(spec).warmup_spec(spec)
+        warm = runner.warmup_sweep()
 
     if warm is None:
         yield from (None,)
@@ -189,7 +205,8 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
     if len(warm.captures) == 0:
         return
 
-    res = warmup.WarmupRunner.open(warm)
+    warm_runner = sweep_action.SweepRunner(warm)
+    res = warmup.open_warmup_resources(warm_runner)
 
     with res['source']:
-        yield from warmup.WarmupRunner(res).iterate(always_yield=True)
+        yield from warm_runner.iterate(res, always_yield=True)

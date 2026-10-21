@@ -8,6 +8,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pytest_lazy_fixtures import lf
 from sweep_strategies import (
+    as_sweep,
     capture_tuples,
     make_capture,
     port_scalars,
@@ -199,6 +200,6 @@ def test_concat_group_sizes_ignore_subclass_fields(captures, min_size):
 def test_concat_group_sizes_of_fixtures(sweep):
     # a group only closes while every distinct shape is still pending *and* remaining,
     # so mixed sweeps collapse into a single group once any shape runs out
-    captures = ss.specs.sequencing.loop_captures(sweep)
+    captures = ss.specs.sequencing.loop_captures(as_sweep(sweep))
     assert C.concat_group_sizes(captures) == [len(captures)]
     assert C.concat_group_sizes(captures, min_size=10) == [len(captures)]

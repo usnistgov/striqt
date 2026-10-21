@@ -115,7 +115,9 @@ def loop_captures(
             unset.
     """
 
-    args, kws = _expansion_args(sweep, source_id, only_fields, limit)
+    args, kws = _expansion_args(
+        sweep, source_id, only_fields, limit, sweep.options.loop_only_nyquist
+    )
     return _expand_capture_loops_with_origins(*args, **kws)[0]
 
 
@@ -147,7 +149,9 @@ def loop_capture_origins(
         TypeError: an analysis loop point that survived freezing unhashable, which no
             mapping can key on.
     """
-    args, kws = _expansion_args(sweep, source_id, only_fields, limit)
+    args, kws = _expansion_args(
+        sweep, source_id, only_fields, limit, sweep.options.loop_only_nyquist
+    )
     captures, origins = _expand_capture_loops_with_origins(*args, **kws)
 
     # not frozendict(zip(...)), which keeps the last value for a repeated key; the
@@ -212,7 +216,7 @@ def adjust_analysis(
     return sa.specs.helpers.freeze(structs.BundledAnalysis.from_dict(result))
 
 
-def _resolve_capture_cls(sweep: structs.Sweep[Any, Any, SC]) -> type[SC]:
+def _resolve_capture_cls(sweep: structs.CapturePlan[Any, Any, SC]) -> type[SC]:
     if len(sweep.captures) > 0:
         return type(sweep.captures[0])
     elif sweep.sensor is None:
@@ -229,28 +233,38 @@ def _resolve_capture_cls(sweep: structs.Sweep[Any, Any, SC]) -> type[SC]:
 
 
 def _expansion_args(
-    sweep: structs.Sweep[Any, Any, SC],
+    plan: structs.CapturePlan[Any, Any, SC],
     source_id: types.SourceID | None,
     only_fields: tuple[str, ...] | None,
     limit: int | None,
+    loop_only_nyquist: bool,
 ) -> tuple[tuple, dict]:
-    """marshal `sweep` into the arguments of `_expand_capture_loops_with_origins`.
+    """marshal `plan` into the arguments of `_expand_capture_loops_with_origins`.
 
     Every caller builds the keywords here because `lru_cache` keys on their insertion
-    order. The same values passed in two orders miss the cache, and the sweep expands
+    order. The same values passed in two orders miss the cache, and the plan expands
     twice into captures that are equal but not identical.
+
+    Args:
+        plan: the spec whose `captures`, `loops`, and `adjust_captures` are expanded
+        source_id: as `loop_captures`
+        only_fields: as `loop_captures`
+        limit: as `loop_captures`
+        loop_only_nyquist: drop each expanded capture whose finite
+            `analysis_bandwidth` exceeds its `sample_rate`. A `Sweep` passes
+            ``options.loop_only_nyquist``.
 
     Returns:
         ``(args, kws)`` to splat into `_expand_capture_loops_with_origins`, with the
         keys of `kws` in one fixed order
     """
 
-    args = (sweep.captures, sweep.loops, sweep.adjust_captures)
+    args = (plan.captures, plan.loops, plan.adjust_captures)
     kws = {
         'source_id': source_id,
-        'cls': _resolve_capture_cls(sweep),
+        'cls': _resolve_capture_cls(plan),
         'only_fields': only_fields,
-        'loop_only_nyquist': sweep.options.loop_only_nyquist,
+        'loop_only_nyquist': loop_only_nyquist,
         'limit': limit,
     }
     return args, kws
@@ -692,7 +706,9 @@ def list_capture_adjustments(
     return {name: tuple(v.keys()) for name, v in result.items()}
 
 
-def _convert_label_lookup_keys(sweep: structs.Sweep) -> structs.AdjustCapturesType:
+def _convert_label_lookup_keys(
+    sweep: structs.CapturePlan,
+) -> structs.AdjustCapturesType:
     """convert label lookup key types to match the corresponding capture fields"""
 
     result = {}

@@ -3,6 +3,7 @@
 from __future__ import annotations as __
 
 import dataclasses
+import warnings
 from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
 
 import msgspec
@@ -14,7 +15,7 @@ from striqt.analysis.lib.util import pd  # noqa: F401
 from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
 from striqt.analysis.specs.helpers import SpecValidationError
 
-from ..lib.typing import TypeVar, SS, SP, SC, SPC
+from ..lib.typing import TypeVar, SS, SP, SC
 from . import types
 
 
@@ -299,15 +300,20 @@ class NoPeripherals(Peripherals, frozen=True, kw_only=True):
 
 
 class ManualYFactorSpec(Peripherals, frozen=True, kw_only=True):
-    """the `calibration:` block of a manual Y-factor calibration sweep.
+    """the `calibration:` block of a manual Y-factor calibration.
 
     `implied_loops` names capture fields that the operator varies by hand between
     captures and that are therefore indexed like loop fields in the saved corrections.
+    `detector_period` sets the bin of the generated `channel_power_time_series`
+    analysis; it changes only the ``papr_on``/``papr_off`` diagnostics, not the noise
+    figure or the power correction. When None, the bin is the capture `duration`,
+    which requires one duration across the captures and loops.
     """
 
     enr: types.ENR
     ambient_temperature: types.AmbientTemperature
     implied_loops: tuple[str, ...] = ()
+    detector_period: Optional[types.DetectorPeriod] = None
 
 
 ManualYFactorPeripheral = ManualYFactorSpec
@@ -375,38 +381,51 @@ AdjustCapturesType = dict[
 ]
 
 
-class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
-    # bound sweep subclasses also accept the tag field below in input files, which
-    # msgspec reads to choose the Sweep subclass to decode from, e.g., a yaml file
+class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
+    """a top-level document that a sensor binding decodes and an action runs.
+
+    The `source`, `peripherals`, and `sink` blocks name the resources that every
+    action opens. `source` and `peripherals` are the spec types of the binding named
+    by the ``sensor_binding`` tag. `extensions` names an out-of-tree module that the
+    readers in `striqt.sensor.lib.io` import before decoding the rest of the document.
+    """
+
+    # bound subclasses also accept the tag field below in input files, which
+    # msgspec reads to choose the subclass to decode from, e.g., a yaml file
     #
     # See: ./bindings.py
     #
     # sensor_binding: str
 
-    # metadata
     description: Description = Description()
-    plot_hint: Union[PlotOptions, None] = None
-
-    # acquisition and sequencing
     source: SS
-    captures: tuple[SC, ...] = tuple()
-    loops: tuple[LoopSpec, ...] = ()
-    adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
     peripherals: SP = cast(SP, Peripherals())
-
-    # analysis
-    analysis: BundledAnalysis = BundledAnalysis()
-
-    # misc
     extensions: Extension = Extension()
     sink: Sink = Sink()
-    options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
 
-    # to be defined only when subclassing
+    # set only on the subclasses that bind_sensor creates
     schema: ClassVar[Any] = None
     sensor: ClassVar[Any] = None
+    controller: ClassVar[Any] = None
+    sweep_cls: ClassVar[Any] = None
 
-    def __post_init__(self):
+
+class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=True):
+    """an `ActionSpec` with the `captures`, `loops`, and `adjust_captures` blocks.
+
+    `loops` expands over `captures` into the sequence of captures that the action
+    runs (see `sequencing.loop_captures`), and `adjust_captures` applies per-source
+    overrides to each expanded capture. Construction rejects a `repeat` loop that is
+    not the outermost entry, two loops over one field, and a loop over a field that
+    the listed captures set to different values. Lookup keys in `adjust_captures`
+    are converted to the type of the capture field they key on.
+    """
+
+    captures: tuple[SC, ...] = ()
+    loops: tuple[LoopSpec, ...] = ()
+    adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
+
+    def __post_init__(self) -> None:
         from . import sequencing, sweep
 
         # convert the label keys before super().__post_init__ freezes the struct
@@ -414,28 +433,60 @@ class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
         msgspec.structs.force_setattr(self, 'adjust_captures', fixed_labels)
 
         super().__post_init__()
+        sweep._validate_loops(self.loops)
+        sweep._validate_loop_capture_collisions(self.loops, self.captures)
+
+
+class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+    """the document for a plain sweep, and the sweep that every action runs.
+
+    `analysis` is evaluated on each expanded capture, with the capture's
+    `adjust_analysis` applied on top. `options` selects the warmup, IQ reuse, and
+    the `loop_only_nyquist` filter of the expansion. `plot_hint` is read only by
+    `striqt.figures`. Construction validates each unique capture against the
+    registered measurements and the `correct_iq` signal path (see
+    `sweep.validate_sweep`).
+    """
+
+    plot_hint: Union[PlotOptions, None] = None
+    analysis: BundledAnalysis = BundledAnalysis()
+    options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
+
+    def __post_init__(self) -> None:
+        from . import sweep
+
+        super().__post_init__()
         sweep.validate_sweep(self)
 
 
-class CalibrationSweep(
-    Sweep[SS, SP, SC],
-    Generic[SS, SP, SC, SPC],
-    frozen=True,
-    kw_only=True,
-):
-    """sweep specification for calibration runs, which adds a `calibration` block
-    to the YAML schema."""
+class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+    """the document for a Y-factor calibration with a hand-switched noise diode.
 
-    options: SweepOptions = SweepOptions(
-        skip_warmup=True, reuse_iq=True, loop_only_nyquist=True
-    )
-    calibration: Union[SPC, None] = None
+    The `calibration:` block is a `ManualYFactorSpec`. The runner acquires the
+    expanded captures once with the diode off and once with it on at each port, and
+    generates the analysis itself, so the document has no `analysis` or `options`
+    blocks; a legacy `analysis` block is accepted and ignored with a
+    `DeprecationWarning`. More than one capture is accepted only when
+    `calibration.implied_loops` names the fields the captures vary, and
+    `source.calibration` must be null.
+    """
+
+    calibration: ManualYFactorSpec
+    analysis: Any = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
 
-        implied_loops = getattr(self.calibration, 'implied_loops', ())
-        if len(self.captures) > 1 and not implied_loops:
+        if self.analysis is not None:
+            warnings.warn(
+                'the `analysis` block of a calibration is ignored: the calibration '
+                'generates its own analysis. The block is accepted until the next '
+                'release.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        if len(self.captures) > 1 and not self.calibration.implied_loops:
             raise SpecValidationError(
                 'Expected at most one capture in a calibration sweep, unless the '
                 'calibration peripheral declares `implied_loops`',
@@ -446,38 +497,6 @@ class CalibrationSweep(
                 'Expected `null`, since a calibration sweep cannot itself be calibrated',
                 ('.source', '.calibration'),
             )
-
-
-class ManualYFactorCalibration(
-    CalibrationSweep[SS, SP, SC, ManualYFactorSpec], frozen=True, kw_only=True
-):
-    """sweep specification for a Y-factor calibration with a hand-switched noise diode.
-
-    The `calibration:` block is a `ManualYFactorSpec`. Every capture is acquired
-    with the diode off and with it on. A ``noise_diode_enabled`` loop over
-    ``(False, True)`` is inserted first in `loops`, or second after a leading
-    ``port`` loop, unless the file writes it at one of those positions itself.
-
-    Raises:
-        TypeError: if `loops` already loops ``noise_diode_enabled`` at another
-            position
-    """
-
-    def __post_init__(self) -> None:
-        from . import sweep
-
-        sweep._ensure_loop_at_position(self)
-        super().__post_init__()
-
-
-class Warmup(Sweep[NoSource, NoPeripherals, SC], frozen=True, kw_only=True):
-    """sweep specification for the warmup that runs before a GPU sweep.
-
-    The source is a `NoSource` with enough ports for the captures, and the
-    captures are those of the sweep being prepared, flattened so that running them
-    pays the import and JIT costs of its `analysis` once. `derive_warmup_spec` in
-    `striqt.sensor.lib.actions.warmup` builds one from a sweep.
-    """
 
 
 # %% Non-Sweep specs

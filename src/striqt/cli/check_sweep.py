@@ -82,7 +82,7 @@ def run(yaml_path: str):
         print('\n\nNumerical tolerance (worst case over captures):')
         print(80 * '▀')
         budget = ss.lib.compute.worst_case_tolerances(
-            ss.lib.compute.sweep_tolerances(spec, source_id=source_id)
+            ss.lib.compute.sweep_tolerances(res['sweep_spec'], source_id=source_id)
         )
         rows = {}
         for name, tol in budget.items():
@@ -101,7 +101,9 @@ def run(yaml_path: str):
         print(table.to_string(float_format='{:.4g}'.format))
 
         print('\n\nUnique capture field coordinates in output:')
-        labels = ss.specs.sequencing.list_capture_adjustments(spec, source_id)
+        labels = ss.specs.sequencing.list_capture_adjustments(
+            res['sweep_spec'], source_id
+        )
 
         if len(labels) == 0:
             return

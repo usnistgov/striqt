@@ -22,7 +22,9 @@ if TYPE_CHECKING:
 
 
 @sa.util.lru_cache()
-def get_capture_type(sweep_cls: type[structs.Sweep]) -> type[structs.SensorCapture]:
+def get_capture_type(
+    sweep_cls: type[structs.CapturePlan],
+) -> type[structs.SensorCapture]:
     if sweep_cls.sensor is not None:
         return sweep_cls.schema.capture
     else:

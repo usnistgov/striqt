@@ -11,7 +11,14 @@ from pathlib import Path
 import msgspec
 import pytest
 from conftest import SWEEP_DIR
-from sweep_strategies import RESOLUTION_MSG, SOURCE, SPG, make_capture, make_sweep
+from sweep_strategies import (
+    RESOLUTION_MSG,
+    SOURCE,
+    SPG,
+    as_sweep,
+    make_capture,
+    make_sweep,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
@@ -159,10 +166,10 @@ def test_file_sources_skip_the_resampler_design_but_not_the_filter():
 @pytest.mark.parametrize('path', IN_TREE_SWEEPS, ids=lambda p: p.name)
 def test_in_tree_sweeps_still_load(path):
     sweep = ss.read_yaml_spec(path)
-    assert len(ss.specs.sequencing.loop_captures(sweep)) > 0
+    assert len(ss.specs.sequencing.loop_captures(as_sweep(sweep))) > 0
 
 
 @pytest.mark.skipif(not DOWNSTREAM_SWEEP.exists(), reason='not checked in')
 def test_downstream_sweep_still_loads():
     sweep = ss.read_yaml_spec(DOWNSTREAM_SWEEP)
-    assert len(ss.specs.sequencing.loop_captures(sweep)) > 0
+    assert len(ss.specs.sequencing.loop_captures(as_sweep(sweep))) > 0

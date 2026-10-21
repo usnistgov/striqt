@@ -5,7 +5,7 @@ from __future__ import annotations as __
 import contextlib
 import math
 import itertools
-from typing import Any, Generator, Generic, TYPE_CHECKING
+from typing import Any, Callable, Generator, Generic, TYPE_CHECKING
 
 import striqt.waveform as sw
 import striqt.analysis as sa
@@ -14,88 +14,93 @@ from striqt.analysis.lib.util import pd, xr
 from .. import compute, util
 from ..compute import gpu
 from ... import specs
+from .. import resources as resources_module
 from ..resources import Resources, AnyResources
+from ..sinks import SinkBase
 from ..calibration import lookup_system_noise_power
-from ..typing import PC, PS, SC, SP, SS, Unpack
-from .registry import registry
-
-if TYPE_CHECKING:
-    from ..bindings import Sensor
+from ..typing import PC, PS, SC, SP, SS, TA, Unpack
 
 
-class ActionRunner(Generic[SS, SP, SC, PS, PC]):
+class ActionRunner(Generic[TA, SS, SP, SC, PS, PC]):
     """base class of the actions that `iterate_sweep` runs over open resources.
 
-    A subclass is registered for one action spec type with `registry.runner`.
-    `iterate_sweep` instantiates the runner registered for the type of
-    ``resources['sweep_spec']`` or the nearest of its bases. `warmup_spec` is
-    consulted by `prepare_compute` before the resources open. The `adapt_sensor` and
-    `adapt_schema` hooks run once at bind time. Each receives the `Sensor` or
-    `Schema` a binding is built from and returns the version the action requires.
-    The base implementations return their argument unchanged.
+    A subclass is registered for one action spec type with `registry.runner` and is
+    constructed from the decoded document, `spec`. `build_sweep` derives the `Sweep`
+    that `open_resources` opens the hardware for and the pipeline runs, `build_sink`
+    the sink for that sweep, `warmup_sweep` the sweep that pays the GPU import and
+    JIT costs first, `extra_data` the per-capture data merged into each acquisition,
+    and `iterate` the generator that runs the action over the open resources.
     """
 
-    resources: Resources[SS, SP, SC, PS, PC]
+    spec: TA
+    sweep: specs.Sweep[SS, SP, SC]
+
+    def __init__(self, spec: TA) -> None:
+        self.spec = spec
+        self.sweep = self.build_sweep(spec)
 
     @classmethod
-    def adapt_sensor(cls, sensor: Sensor[SS, SP, SC]) -> Sensor[SS, SP, SC]:
-        """return the `Sensor` to bind for this action, derived from `sensor`.
+    def build_sweep(cls, spec: TA) -> specs.Sweep[SS, SP, SC]:
+        """return the `Sweep` that the resources open for and the pipeline runs."""
+        raise NotImplementedError
 
-        A subclass replaces the implementation classes that the action requires,
-        such as the sink or peripherals.
+    def build_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
+        """return the open sink for `self.sweep`.
+
+        The sink class is the one named by `sweep.extensions.sink`, else the
+        `sink_cls` of the binding that decoded `self.spec`.
         """
-        return sensor
+        sensor = type(self.spec).sensor
+        return resources_module._open_sink(self.sweep, sensor.sink_cls, format_path)
 
-    @classmethod
-    def adapt_schema(
-        cls, schema: specs.Schema[SS, SP, SC, PS, PC]
-    ) -> specs.Schema[SS, SP, SC, PS, PC]:
-        """return the `Schema` to bind for this action, derived from `schema`.
+    def warmup_sweep(self) -> specs.Sweep[Any, Any, Any] | None:
+        """return the `Sweep` to run before `self.sweep`, or None when none is needed.
 
-        A subclass replaces the spec types that the action requires, such as a
-        capture type with an added field.
-        """
-        return schema
-
-    @classmethod
-    def warmup_spec(cls, spec: specs.Sweep[Any, Any, Any]) -> specs.Warmup | None:
-        """return the `Warmup` to run before `spec`, or None when none is needed.
-
-        None when `spec.options.skip_warmup` is set or the sweep does not use the
+        None when `sweep.options.skip_warmup` is set or the sweep does not use the
         GPU (`compute.gpu.sweep_touches_gpu`).
         """
-        if spec.options.skip_warmup or not gpu.sweep_touches_gpu(spec):
+        if self.sweep.options.skip_warmup or not gpu.sweep_touches_gpu(self.sweep):
             return None
 
         from . import warmup
 
-        return warmup.derive_warmup_spec(spec)
+        return warmup.derive_warmup_sweep(self.sweep)
 
-    def __init__(
-        self,
-        resources: Resources[SS, SP, SC, PS, PC],
-        **replace: Unpack[AnyResources[SS, SP, SC, PS, PC]],
-    ):
-        self.resources = Resources(resources, **replace)
+    def extra_data(self, capture: SC) -> dict[str, Any]:
+        """return data to merge into the `extra_data` of the acquisition of `capture`.
+
+        The pipeline calls this once per capture after the source and peripherals
+        have acquired; the keys win over the peripherals' and become data variables
+        on the ``capture`` dimension of the saved dataset.
+        """
+        return {}
 
     def iterate(
         self,
+        resources: Resources[SS, SP, SC, PS, PC],
         *,
         always_yield: bool = False,
         yield_values: bool = True,
         loop: bool = False,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-        """run the action and yield what the sink's `append` returns for each capture.
+        """run the action over `resources` and yield what the sink's `append` returns.
+
+        The base implementation runs `iterate_captures` over ``resources['sweep_spec']``
+        with `extra_data` as the per-capture hook.
 
         Args:
+            resources: the open resources returned by `open_resources`
             always_yield: if True, yield `None` on steps that produce no result
             yield_values: if False, yield `None` instead of the sink result
             loop: if True, the action repeats from the beginning after the last capture
         """
-        raise NotImplementedError
-
-    def __iter__(self) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-        return self.iterate()
+        return iterate_captures(
+            resources,
+            extra_data=self.extra_data,
+            always_yield=always_yield,
+            yield_values=yield_values,
+            loop=loop,
+        )
 
 
 def iterate_sweep(
@@ -106,11 +111,10 @@ def iterate_sweep(
     loop: bool = False,
     **replace: Unpack[AnyResources[SS, SP, SC, PS, PC]],
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-    """run the action registered for the type of ``resources['sweep_spec']``.
+    """run the action of ``resources['runner']`` over `resources`.
 
-    The `ActionRunner` subclass registered for the spec type, or the nearest of its
-    bases, is instantiated with `resources` updated by `replace` and iterated. A
-    plain `Sweep` runs `iterate_captures`, whose docstring describes the yields.
+    The runner was built by `open_resources` from the decoded document. A plain
+    `Sweep` runs `iterate_captures`, whose docstring describes the yields.
 
     Args:
         resources: dictionary of open resources returned by `open_resources`
@@ -120,14 +124,13 @@ def iterate_sweep(
 
     Returns:
         the iterator returned by the runner's `iterate`
-
-    Raises:
-        TypeError: if no runner is registered for the spec type or any of its bases
     """
-    runner_cls = registry.lookup(resources['sweep_spec'])
-    runner = runner_cls(resources, **replace)
+    runner = resources['runner']
     return runner.iterate(
-        always_yield=always_yield, yield_values=yield_values, loop=loop
+        Resources(resources, **replace),
+        always_yield=always_yield,
+        yield_values=yield_values,
+        loop=loop,
     )
 
 
@@ -137,6 +140,8 @@ def iterate_captures(
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
+    extra_data: Callable[[SC], dict[str, Any]] | None = None,
+    indexer: _AcquisitionIndexer | None = None,
     **replace: 'Unpack[AnyResources[SS, SP, SC, PS, PC]]',
 ) -> Generator['xr.Dataset|compute.DelayedDataset|None']:
     """step through the captures of a sweep in the acquire, analyze, and sink pipeline.
@@ -168,13 +173,21 @@ def iterate_captures(
 
     The type of each yielded result depends on the return value of `sink.append`.
     To minimize memory usage, the yield values can also be explicitly set to
-    `None` with `yield_values`.
+    `None` with `yield_values`. The attrs of each result are the fields of
+    ``resources['action_spec']``, the decoded document, which differ from those of
+    ``resources['sweep_spec']`` when a runner derived the sweep.
 
     Args:
         resources: dictionary of open resources returned by open_resources
         always_yield: if True, yield `None` on steps that produce no analysis
         yield_values: if False, yield `None` instead of the sink result
         loop: if True, the sweep repeats from the beginning after the last capture
+        extra_data: called once per capture after its acquisition with the capture
+            spec; the returned dict is merged into `AcquiredIQ.extra_data` after the
+            peripherals' data, so its keys win
+        indexer: the counter that stamps `capture_index` and `sweep_index` on each
+            acquisition; pass one object to several calls to number their captures
+            consecutively. A new counter over this sweep's captures when None.
 
     Returns:
         An iterator of analyzed data or None
@@ -190,7 +203,7 @@ def iterate_captures(
     compute_opts = compute.EvaluationOptions(
         sweep_spec=spec,
         registry=sa.registry,
-        extra_attrs=spec.to_dict(True, allow_tuple_keys=False),
+        extra_attrs=resources['action_spec'].to_dict(True, allow_tuple_keys=False),
         correction=True,
         cache_callback=log,
         as_xarray='delayed',
@@ -202,7 +215,8 @@ def iterate_captures(
     captures = specs.sequencing.loop_captures(
         spec, source_id=resources['source'].source_id
     )
-    indexer = _AcquisitionIndexer(len(captures))
+    if indexer is None:
+        indexer = _AcquisitionIndexer(len(captures))
 
     if len(spec.loops) > 0 and isinstance(spec.loops[0], specs.Repeat):
         captures = spec.loops[0].count * captures
@@ -227,7 +241,7 @@ def iterate_captures(
                 acquire = None  # last 2 iterations
             else:
                 acquire = util.threadpool.submit(
-                    _acquire_both, resources, this, next_, indexer
+                    _acquire_both, resources, this, next_, indexer, extra_data
                 )
 
             if analysis is None:
@@ -326,11 +340,13 @@ def _acquire_both(
     this: SC,
     next_: SC | None,
     indexer: _AcquisitionIndexer,
+    extra_data: Callable[[SC], dict[str, Any]] | None = None,
 ) -> specs.AcquiredIQ:
     """arm and acquire from the source and peripherals.
 
-    Any acquired data returned from the peripherals is merged
-    into the `extra_data` of the returned acquisition struct.
+    The dict returned by the peripherals, then the dict returned by `extra_data(this)`,
+    are merged into the `extra_data` of the returned acquisition struct in that order.
+    `extra_data` runs on this thread after both acquisitions complete.
     """
 
     assert this is not None
@@ -343,9 +359,13 @@ def _acquire_both(
         peripherals = util.threadpool.submit(res['peripherals'].arm, c)
         util.await_and_ignore([source, peripherals], 'arm sensor')
 
+    # the previous call armed `this` as its `next_`, except for the first capture of
+    # a call or when `this` differs from what a previous pipeline run left armed
     try:
-        res['source'].capture_spec
+        armed = res['source'].capture_spec
     except AttributeError:
+        armed = None
+    if armed != this:
         arm_both(this)
 
     iq = util.threadpool.submit(res['source'].acquire)
@@ -366,6 +386,8 @@ def _acquire_both(
 
     iq.info = indexer.apply(iq.info)
     iq.extra_data = iq.extra_data | ext_data
+    if extra_data is not None:
+        iq.extra_data = iq.extra_data | extra_data(this)
     return iq
 
 

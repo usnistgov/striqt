@@ -30,22 +30,21 @@ tagged_sweeps: Any = None
 class Sensor(Generic[SS, SP, SC]):
     """the implementation classes of a sensor.
 
-    `sweep_spec_cls` is the action spec type to bind. Leaving it at the default
-    `specs.Sweep` defers to `Schema.action`, and `bind_sensor` rejects a non-default
-    value in both places. A binding selected this way runs the bind-time hooks of
-    the action's runner; an explicit `sweep_spec_cls` is bound as given.
+    `sweep_spec_cls` is the document (action spec) type to bind. Leaving it at the
+    default `specs.Sweep` defers to `Schema.action`, and `bind_sensor` rejects a
+    non-default value in both places.
     """
 
     source_cls: type[SourceBackend[SS, SC]]
     sink_cls: type[sinks.SinkBase[SC]] = sinks.ZarrCaptureSink
-    sweep_spec_cls: type[specs.Sweep[SS, SP, SC]] = specs.Sweep
+    sweep_spec_cls: type[specs.ActionSpec[SS, SP]] = specs.Sweep
     peripherals_cls: type[Peripherals[SP, SC]] | type[NoPeripherals[SP, SC]] = (
         NoPeripherals
     )
 
     def __post_init__(self):
         assert issubclass(self.source_cls, SourceBackend)
-        assert issubclass(self.sweep_spec_cls, specs.Sweep)
+        assert issubclass(self.sweep_spec_cls, specs.ActionSpec)
         assert issubclass(self.peripherals_cls, Peripherals)
         assert issubclass(self.sink_cls, sinks.SinkBase)
 
@@ -57,13 +56,13 @@ class SensorBinding(Sensor[SS, SP, SC]):
     def __post_init__(self) -> None:
         super().__post_init__()
         assert isinstance(self.sweep_spec_cls, type)
-        if not issubclass(self.sweep_spec_cls, specs.Sweep):
-            raise TypeError('sweep_spec_cls is not a Sweep subclass')
+        if not issubclass(self.sweep_spec_cls, specs.ActionSpec):
+            raise TypeError('sweep_spec_cls is not an ActionSpec subclass')
 
 
 def _resolve_action_type(
     sensor: Sensor[Any, Any, Any], schema: specs.Schema[Any, Any, Any, Any, Any]
-) -> type[specs.Sweep[Any, Any, Any]]:
+) -> type[specs.ActionSpec[Any, Any]]:
     """return the action spec type named by `schema.action` or `sensor.sweep_spec_cls`.
 
     A `SensorBinding` names the tagged class of an earlier binding, which is not a
@@ -103,14 +102,16 @@ def bind_sensor(
     `schema`. Its `sensor.sweep_spec_cls` is a subclass of the action spec type
     (`schema.action`, or `sensor.sweep_spec_cls` when set) whose fields `source`,
     `captures`, and `peripherals` are annotated with the schema's types and which
-    is tagged with `key` in the ``sensor_binding`` field. When the action is
-    selected through `schema.action`, the `adapt_sensor` and `adapt_schema` hooks
-    of its registered `ActionRunner` are applied to `sensor` and `schema` first.
-    Passing an existing controller's `sensor` and `schema` with another `action`
-    derives a binding of the same hardware for that action. Decoding a sweep file
+    is tagged with `key` in the ``sensor_binding`` field. Passing an existing
+    controller's `sensor` and `schema` with another `action` derives a binding of
+    the same hardware for that action. Decoding a sweep file
     whose ``sensor_binding`` is `key` produces an instance of that class. A
     registered binding's tagged class is also an arm of the union returned by
     `get_tagged_sweep_type`; an unregistered one is decoded only by explicit type.
+    The tagged class carries the class attributes `sensor` (the `SensorBinding`),
+    `schema`, `controller` (the returned class), and `sweep_cls` (the bound `Sweep`
+    class with the same spec types, which is the class itself when the action is a
+    `Sweep`).
 
     Args:
         key: the ``sensor_binding`` value of sweep files, and the registry key
@@ -135,56 +136,29 @@ def bind_sensor(
 
     action_type = _resolve_action_type(sensor, schema)
 
-    if isinstance(sensor, SensorBinding) or sensor.sweep_spec_cls is specs.Sweep:
-        # the hooks run only when the action is selected through `schema.action`;
-        # `mock_binding` passes an already adapted tagged class as `sweep_spec_cls`
-        from . import actions
-
-        runner_cls = actions.registry.lookup(action_type)
-        sensor = runner_cls.adapt_sensor(sensor)
-        schema = runner_cls.adapt_schema(schema)
-
     binding = SensorBinding(
         source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),
-        sweep_spec_cls=cast('type[specs.Sweep[SS, SP, SC]]', action_type),
+        sweep_spec_cls=cast('type[specs.ActionSpec[SS, SP]]', action_type),
         peripherals_cls=cast(
             'type[Peripherals[SP, SC] | NoPeripherals[SP, SC]]', sensor.peripherals_cls
         ),
         sink_cls=cast(type[sinks.SinkBase[SC]], sensor.sink_cls),
     )
 
-    schema_ = schema
+    tagged_cls = _bind_spec_class(key, action_type, schema, binding, tag=True)
 
-    class BoundSweep(action_type, frozen=True, kw_only=True):  # ty: ignore
-        sensor = binding
-        schema = schema_
+    if issubclass(action_type, specs.Sweep):
+        sweep_cls = tagged_cls
+    else:
+        sweep_cls = _bind_spec_class(f'{key}.sweep', specs.Sweep, schema, binding)
+    _set_class_attrs(tagged_cls, sweep_cls, sweep_cls=sweep_cls)
 
-        mock_source: Optional[str] = None
-        source: schema.source = msgspec.field(
-            default_factory=schema.source  # ty: ignore
-        )
-        captures: tuple[schema.capture, ...] = ()
-        peripherals: schema.peripherals = msgspec.field(
-            default_factory=schema.peripherals
-        )
-
-        def __post_init__(self):
-            if self.mock_source is None:
-                pass
-            elif self.mock_source not in registry.keys():
-                raise TypeError(
-                    f'mock_source {self.mock_source!r}: no sensor was bound with this name. '
-                    f'valid binding names are {tuple(registry)!r}'
-                )
-            super().__post_init__()
-
-    tagged_cls = _subclass_with_tag(key, BoundSweep, specs.SWEEP_TAG_FIELD)
-
-    # in place, so that the `sensor` class attribute of the bound sweep and the
+    # in place, so that the `sensor` class attribute of the bound classes and the
     # controller's `sensor` are the same object
     binding.sweep_spec_cls = tagged_cls
 
     cls = bind_controller(binding, schema)
+    _set_class_attrs(tagged_cls, sweep_cls, controller=cls)
 
     if module is None:
         module = sys._getframe(1).f_globals.get('__name__') or schema.__module__
@@ -215,8 +189,7 @@ def mock_binding(
     """bind `origin`'s sweep and capture types to `target`'s implementation classes.
 
     The result decodes `origin`'s sweep files but opens `target`'s source, sink, and
-    peripherals. `origin`'s tagged sweep class is passed as `sweep_spec_cls`, so no
-    action hooks run again.
+    peripherals.
     """
     mock_name = f'mock_{target}_{origin.sensor.sweep_spec_cls.__name__}'
 
@@ -246,9 +219,9 @@ def mock_binding(
 
 
 def get_controller(
-    key: str | specs.Sweep, mock_source: str | None = None
+    key: str | specs.ActionSpec, mock_source: str | None = None
 ) -> type[Controller]:
-    if isinstance(key, specs.Sweep):
+    if isinstance(key, specs.ActionSpec):
         ctrl_cls = registry[type(key).__name__]
     elif isinstance(key, str):
         ctrl_cls = registry[key]
@@ -261,25 +234,72 @@ def get_controller(
         return ctrl_cls
 
 
-def get_tagged_sweep_type() -> type[specs.Sweep]:
+def get_tagged_sweep_type() -> type[specs.ActionSpec]:
     """return a tagged union type that msgspec can decode"""
     if tagged_sweeps is None:
         raise TypeError('no bindings have been defined')
     return tagged_sweeps
 
 
-def _subclass_with_tag(
-    name: str, cls: type[specs.Sweep], tag_field: str
-) -> type[specs.Sweep]:
-    """build a subclass of binding.sweep_spec for use in a tagged union"""
-    kls = msgspec.defstruct(
-        name,
-        (),
-        bases=(cls,),
-        frozen=True,
-        tag=str,
-        tag_field=tag_field,
-        kw_only=True,
-    )
+def _bind_spec_class(
+    name: str,
+    base: type[specs.ActionSpec[Any, Any]],
+    schema: specs.Schema[Any, Any, Any, Any, Any],
+    binding: SensorBinding[Any, Any, Any],
+    *,
+    tag: bool = False,
+) -> type[specs.ActionSpec[Any, Any]]:
+    """return a subclass of `base` whose spec fields are the types in `schema`.
 
-    return cast(type[specs.Sweep], kls)
+    The class re-annotates `source` and `peripherals`, and `captures` when `base`
+    declares it, adds the ``mock_source`` field, and carries `binding` and `schema`
+    as its `sensor` and `schema` class attributes. With `tag`, the class is an arm
+    of the ``sensor_binding`` tagged union and its tag is `name`.
+
+    Raises:
+        TypeError: from the returned class's constructor, when ``mock_source`` names
+            no registered binding
+    """
+    fields: list[tuple[str, Any, Any]] = [
+        ('mock_source', Optional[str], None),
+        ('source', schema.source, msgspec.field(default_factory=schema.source)),
+        (
+            'peripherals',
+            schema.peripherals,
+            msgspec.field(default_factory=schema.peripherals),
+        ),
+    ]
+    if 'captures' in base.__struct_fields__:
+        fields.append(('captures', tuple[schema.capture, ...], ()))
+
+    def __post_init__(self: Any) -> None:
+        if self.mock_source is not None and self.mock_source not in registry:
+            raise TypeError(
+                f'mock_source {self.mock_source!r}: no sensor was bound with this name. '
+                f'valid binding names are {tuple(registry)!r}'
+            )
+        # a function defined outside a class body has no __class__ cell for super()
+        super(cls, self).__post_init__()
+
+    tag_kws: dict[str, Any] = {}
+    if tag:
+        tag_kws = {'tag': str, 'tag_field': specs.SWEEP_TAG_FIELD}
+
+    cls = msgspec.defstruct(
+        name,
+        fields,
+        bases=(base,),
+        namespace={'__post_init__': __post_init__},
+        frozen=True,
+        kw_only=True,
+        **tag_kws,
+    )
+    _set_class_attrs(cls, sensor=binding, schema=schema)
+    return cast('type[specs.ActionSpec[Any, Any]]', cls)
+
+
+def _set_class_attrs(*classes: type, **attrs: Any) -> None:
+    """set the class attributes `attrs` on each of `classes`"""
+    for cls in classes:
+        for name, value in attrs.items():
+            setattr(cls, name, value)

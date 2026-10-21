@@ -56,6 +56,15 @@ def test_yaml_schema_binding():
     )
 
 
+def test_bound_sweep_names_its_controller_and_sweep_class():
+    """a plain sweep binding's tagged class is its own `sweep_cls`, and both the
+    document and the derived sweep lead back to the controller that opens them"""
+    spec = ss.read_yaml_spec(SWEEP_DIR / 'air7101b.yaml')
+    assert type(spec).controller is ss.bindings.air7101b
+    assert type(spec).sweep_cls is type(spec)
+    assert type(spec).__mro__.index(ss.specs.Sweep) == 1, 'one bound class, no nesting'
+
+
 def test_bound_sweep_and_controller_share_one_binding():
     """`get_controller(spec)` and `type(spec).sensor` must describe the same binding,
     so the class attribute is the controller's `SensorBinding` and names the tagged
@@ -74,22 +83,43 @@ class TestBindSensor:
         ctrl_cls = ss.bindings.bind_sensor(
             'action_test',
             tone_sensor(),
-            tone_schema(action=ss.specs.CalibrationSweep),
+            tone_schema(action=ss.specs.ManualYFactorCalibration),
             register=False,
         )
         sweep_cls = ctrl_cls.sensor.sweep_spec_cls
-        assert issubclass(sweep_cls, ss.specs.CalibrationSweep)
+        assert issubclass(sweep_cls, ss.specs.ManualYFactorCalibration)
         assert sweep_cls.__name__ == 'action_test'
         assert 'calibration' in sweep_cls.__struct_fields__
+
+    def test_a_non_sweep_action_gets_a_companion_sweep_class(self, isolated_bindings):
+        """the runner builds the sweep that runs from the companion, which has the
+        same spec types and binding but is neither tagged nor registered"""
+        schema = tone_schema(action=ss.specs.ManualYFactorCalibration)
+        ctrl_cls = ss.bindings.bind_sensor(
+            'companion_test', tone_sensor(), schema, register=False
+        )
+        document_cls = ctrl_cls.sensor.sweep_spec_cls
+        companion = document_cls.sweep_cls
+        assert companion is not document_cls
+        assert issubclass(companion, ss.specs.Sweep)
+        assert companion.__name__ == 'companion_test.sweep'
+        assert companion.schema is schema
+        assert companion.sensor is ctrl_cls.sensor
+        assert companion.controller is ctrl_cls
+        assert companion.sweep_cls is companion
+        assert 'companion_test.sweep' not in isolated_bindings.registry
+        assert 'mock_source' in companion.__struct_fields__
 
     def test_sweep_spec_cls_still_selects_the_sweep_base(self, isolated_bindings):
         ctrl_cls = ss.bindings.bind_sensor(
             'legacy_test',
-            tone_sensor(sweep_spec_cls=ss.specs.CalibrationSweep),
+            tone_sensor(sweep_spec_cls=ss.specs.ManualYFactorCalibration),
             tone_schema(),
             register=False,
         )
-        assert issubclass(ctrl_cls.sensor.sweep_spec_cls, ss.specs.CalibrationSweep)
+        assert issubclass(
+            ctrl_cls.sensor.sweep_spec_cls, ss.specs.ManualYFactorCalibration
+        )
 
     def test_an_existing_binding_derives_through_schema_action(self, isolated_bindings):
         """a `SensorBinding` names its own tagged class, which is not a base for a
@@ -97,18 +127,18 @@ class TestBindSensor:
         ctrl_cls = ss.bindings.bind_sensor(
             'derived_test',
             TONE.sensor,
-            tone_schema(action=ss.specs.CalibrationSweep),
+            tone_schema(action=ss.specs.ManualYFactorCalibration),
             register=False,
         )
         sweep_cls = ctrl_cls.sensor.sweep_spec_cls
-        assert issubclass(sweep_cls, ss.specs.CalibrationSweep)
+        assert issubclass(sweep_cls, ss.specs.ManualYFactorCalibration)
         assert not issubclass(sweep_cls, TONE.sensor.sweep_spec_cls)
 
     def test_conflicting_action_types_are_rejected(self, isolated_bindings):
         with pytest.raises(TypeError, match=r'sweep_spec_cls.*schema\.action'):
             ss.bindings.bind_sensor(
                 'conflict_test',
-                tone_sensor(sweep_spec_cls=ss.specs.CalibrationSweep),
+                tone_sensor(sweep_spec_cls=ss.specs.ManualYFactorCalibration),
                 tone_schema(action=SweepCls),
                 register=False,
             )

@@ -34,6 +34,7 @@ from sweep_strategies import (
     frequency_bin_range_loop,
     make_capture,
     make_capture_kws,
+    make_plan,
     make_sweep,
     range_loop,
     sweeps,
@@ -315,16 +316,40 @@ def test_loop_only_nyquist_keeps_inf_bandwidth():
     assert bandwidths == [0.5e6, math.inf]
 
 
+@pytest.mark.parametrize(
+    'loop_only_nyquist, expected',
+    [(False, [0.5e6, 2e6, math.inf]), (True, [0.5e6, math.inf])],
+    ids=['keep_all', 'drop_above_nyquist'],
+)
+def test_expansion_args_take_the_nyquist_filter_as_an_argument(
+    loop_only_nyquist, expected
+):
+    # a CapturePlan has no `options`, so the flag can come only from the argument
+    captures = (make_capture(sample_rate=1e6),)
+    loops = (ss.specs.List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)
+    plan = make_plan(captures=captures, loops=loops)
+    args, kws = S._expansion_args(plan, None, None, None, loop_only_nyquist)
+    expanded, _ = S._expand_capture_loops_with_origins(*args, **kws)
+    assert [c.analysis_bandwidth for c in expanded] == expected
+
+
 def test_calibration_fixture_expansion(calibration_sweep):
-    result = S.loop_captures(calibration_sweep)
-    assert len(result) == 384
+    """the document's plan expands over every port; each diode pass of the runner
+    acquires half of it at one port, so the passes together cover it twice"""
+    runner = ss.lib.actions.ManualYFactorRunner(calibration_sweep)
+    result = S.loop_captures(runner.sweep)
+    assert len(result) == 192
+    by_pass = [
+        len(S.loop_captures(runner.pass_sweep(port))) for port, _ in runner.passes()
+    ]
+    assert sum(by_pass) == 384
     assert all(
         not math.isfinite(c.analysis_bandwidth) or c.sample_rate >= c.analysis_bandwidth
         for c in result
     )
     assert all(type(c.sample_rate) is float for c in result)
     # the limit applies before the nyquist filter
-    assert len(S.loop_captures(calibration_sweep, limit=7)) <= 7
+    assert len(S.loop_captures(runner.sweep, limit=7)) <= 7
 
 
 def test_adjustments_apply_before_loops_take_priority():
@@ -360,7 +385,8 @@ def test_source_specific_adjustments_in_loop_captures():
 
 
 def test_site_adjustments_apply_to_calibration_points(site_calibration_sweep):
-    captures = S.loop_captures(site_calibration_sweep, source_id=RADIO_ID)
+    sweep = ss.lib.actions.ManualYFactorRunner(site_calibration_sweep).sweep
+    captures = S.loop_captures(sweep, source_id=RADIO_ID)
     assert {c.radio_name for c in captures} == {'radio02'}
     assert {c.site_name for c in captures} == {'WAPA-north'}
     assert {c.channel_name for c in captures} == {
