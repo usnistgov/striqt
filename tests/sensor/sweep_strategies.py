@@ -314,7 +314,7 @@ def make_yfactor_dataset(
     time_count=4,
     **gain_kws,
 ):
-    """a calibration dataset shaped as save_yfactor_corrections builds it before the corrections:
+    """a calibration dataset as save_yfactor_corrections indexes the collected captures:
     one dimension per calibration field plus noise_diode_enabled, and a constant
     channel_power_time_series drawn from the receiver model at enr_dB"""
     import xarray as xr
@@ -371,9 +371,11 @@ EXACT_DB = 1e-8
 
 
 def assert_corrections_match(actual, expected, tol_dB=EXACT_DB, names=CORRECTION_VARS):
-    """each correction variable of `actual` matches the model `expected`, which may
-    span fewer dimensions, to within `tol_dB`; temperature and power_correction are
-    compared in dB"""
+    """assert that each `names` variable of `actual` matches `expected` within `tol_dB`.
+
+    `expected` may span fewer dimensions than `actual`. `temperature` and
+    `power_correction` are compared in dB.
+    """
     for name in names:
         result = actual[name].reset_coords(drop=True)
         model = expected[name].reset_coords(drop=True).broadcast_like(result)

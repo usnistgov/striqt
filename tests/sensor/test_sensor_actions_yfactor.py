@@ -1,5 +1,6 @@
-"""striqt.sensor.lib.actions.yfactor: the Y-factor corrections, and the sweep, passes,
-analysis, sink, and operator interaction a calibration runner derives from its spec
+"""striqt.sensor.lib.actions.yfactor: the Y-factor corrections, and the calibration
+runner that derives its sweep, passes, analysis, and operator prompts from a
+`ManualYFactorCalibration` spec
 """
 
 from __future__ import annotations
@@ -130,16 +131,17 @@ def test_explicit_detector_period_is_used():
 
 
 def test_default_detector_period_is_the_capture_duration():
-    """one bin per capture: the rms mean that the Y-factor math uses is unchanged,
-    and the PAPR diagnostics collapse to 0 dB"""
+    """the default period is one bin per capture. The rms mean that the Y-factor
+    math uses does not depend on the bin count, and the PAPR diagnostics collapse
+    to 0 dB."""
     sweep = make_calibration_sweep(captures=(make_calibration_capture(duration=2e-3),))
     meas = yfactor.calibration_analysis(sweep).channel_power_time_series
     assert meas.detector_period == Fraction(1, 500)
 
 
 def test_default_detector_period_follows_a_duration_loop():
-    """a looped duration overrides the capture's own, so one loop point is one
-    duration even when the capture says otherwise"""
+    """a looped duration overrides the capture's own. One loop point is one
+    duration even when the capture sets another."""
     loop = ss.specs.List(field='duration', values=(5e-3,))
     sweep = make_calibration_sweep(
         captures=(make_calibration_capture(duration=1e-3),), loops=(loop,)
@@ -149,8 +151,8 @@ def test_default_detector_period_follows_a_duration_loop():
 
 
 def test_default_detector_period_needs_one_duration():
-    """the runner's `validate` runs when the bound spec is constructed, so the
-    `detector_period` error is raised there"""
+    """the bound spec's constructor runs the runner's `validate`, which raises the
+    `detector_period` error"""
     with pytest.raises(msgspec.ValidationError, match=r'calibration\.detector_period'):
         make_calibration_sweep(loops=(DURATION_LOOP,))
 
@@ -238,8 +240,8 @@ def test_pass_sweep_selects_the_captures_of_the_port():
 
 
 def test_explicit_captures_with_implied_loops():
-    """two explicit captures at different ports give one pass per port, each over
-    its own capture, so the whole calibration acquires 2 ports x 2 states x 1"""
+    """2 explicit captures at different ports give one pass per port over that
+    port's capture. The whole calibration acquires 2 ports x 2 states x 1 capture."""
     sweep = ss.read_yaml_spec(SITE_DIR / 'site-calibration-explicit.yaml')
     runner = ManualYFactorRunner(sweep)
     assert 'external_lo_frequency' in sweep.calibration.implied_loops
@@ -356,8 +358,8 @@ class TestOperatorPrompts:
 
 
 def test_binding_derives_its_classes_from_the_parent():
-    """the calibration binding is the parent's sensor and spec types under the
-    calibration action: no derived capture, sink, or peripherals class"""
+    """the calibration binding pairs the parent's sensor and spec types with the
+    calibration action. No capture, sink, or peripherals class is derived."""
     parent = ss.bindings.air7101b
     assert CAL.schema.capture is parent.schema.capture
     assert CAL.schema.source is parent.schema.source
@@ -409,9 +411,9 @@ class _RecordingSource:
 
 
 def test_each_pass_begins_with_a_fresh_acquisition(monkeypatch, scripted_input):
-    """reuse_iq is on, so the controller would serve the diode-off IQ to an equal
-    diode-on capture; the runner discards the cached acquisition at every switch and
-    hands the pipeline the new state"""
+    """the runner calls `discard_iq` before every pass and passes the diode state to
+    the pipeline. With `reuse_iq` on, the controller would otherwise serve the
+    diode-off IQ to the equal diode-on capture."""
     runner = make_calibration_runner(loops=(PORT_LOOP,))
     scripted_input['answers'] += ['y'] + [''] * len(
         yfactor.calibration_passes(runner.spec)

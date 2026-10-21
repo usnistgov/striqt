@@ -562,7 +562,7 @@ class TestSweepCaptures:
     )
     def test_bare_sweep_is_not_constructible(self, cls):
         # the TypeError comes from msgspec introspection of the unbound source or
-        # capture TypeVar, not from a guard, so there is no message to match
+        # capture TypeVar, not from a guard, and carries no message to match
         with pytest.raises(TypeError):
             cls(source=SOURCE)
 
@@ -697,7 +697,8 @@ class TestManualYFactorCalibration:
         assert make_calibration_sweep().analysis is None
 
     def test_legacy_analysis_block_is_ignored_with_a_warning(self):
-        """the 2026-10 calibration files carry the analysis the runner now generates"""
+        """calibration files from before 2026-10 carry the `analysis` block that the
+        runner generates itself"""
         tree = make_calibration_sweep().to_dict(unfreeze=True)
         tree['analysis'] = {
             'channel_power_time_series': {'detector_period': 0.01},

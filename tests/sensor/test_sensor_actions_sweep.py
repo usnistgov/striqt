@@ -1,8 +1,8 @@
 """striqt.sensor.lib.actions.sweep: SweepRunner, and the iterate_sweep dispatch through
 resources['runner'].
 
-The runs use 1-port scale-only tones at distinct offsets, so a result attributed
-to the wrong capture disagrees with its own generator oracle exactly.
+The runs use 1-port scale-only tones at distinct offsets. A result attributed to
+the wrong capture then disagrees with its generator oracle exactly.
 """
 
 from __future__ import annotations
@@ -82,7 +82,8 @@ def test_validate_accepts_every_sweep():
 
 
 class RecordingRunner(SweepRunner):
-    """yields the resources and keyword arguments that reached `iterate`"""
+    """a `SweepRunner` whose `iterate` yields the resources and keyword arguments
+    it received"""
 
     def iterate(self, resources, *, always_yield=False, yield_values=True, loop=False):
         yield (
@@ -92,8 +93,8 @@ class RecordingRunner(SweepRunner):
 
 
 def test_iterate_sweep_runs_the_runner_in_the_resources():
-    """the runner that `open_resources` built decides what runs; the resources reach
-    it with the replacements applied and the modes forwarded"""
+    """`iterate_sweep` calls the `iterate` of ``resources['runner']``. The runner
+    receives the resources with the replacements applied and the modes forwarded."""
     sweep = tone_sweep(OFFSETS)
     runner = RecordingRunner(sweep)
     res = ss.lib.resources.Resources(

@@ -271,8 +271,9 @@ def test_reuse_iq(reuse_iq, second_capture, shares_buffer, isolated_lookup):
 
 
 def test_discard_iq_forces_a_fresh_acquisition(isolated_lookup):
-    """a reusable capture is re-read after discard_iq, so a signal change the capture
-    spec does not describe (a switched noise diode) is not served the stale IQ"""
+    """`discard_iq` makes the next acquisition of a reusable capture read the source
+    again. A signal change that the capture spec does not describe, such as a
+    switched noise diode, would otherwise reach the analysis as the cached IQ."""
     with TONE.from_source_spec(SOURCE, reuse_iq=True) as ctrl:
         ctrl._arm_spec(REUSABLE)
         first = ctrl.acquire()

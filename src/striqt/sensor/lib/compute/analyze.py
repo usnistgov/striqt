@@ -163,12 +163,13 @@ def analyze(
 def prepare_compute(
     spec: specs.Sweep[Any, Any, Any], skip_warmup: bool = False
 ) -> Generator[xr.Dataset | DelayedDataset | None]:
-    """import the compute backend of `spec` and run its warmup sweep, if any.
+    """import the compute backend of `spec`, then run its warmup sweep, if any.
 
-    The first iteration performs the imports and the cupy configuration. The
-    remaining iterations are those of the warmup sweep that `warmup_sweep_for(spec)`
-    returns, run through a `SweepRunner` over resources opened here; a single `None`
-    is yielded instead when `skip_warmup` is set or no warmup is needed.
+    The imports and the cupy configuration run before the first yield. When
+    `skip_warmup` is set or `warmup_sweep_for(spec)` returns None, a single None is
+    yielded. Otherwise the yields are those of a `SweepRunner` over the warmup sweep
+    on the resources of `open_warmup_resources`, and nothing is yielded when that
+    sweep has no captures.
     """
     if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):

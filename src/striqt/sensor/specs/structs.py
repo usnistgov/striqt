@@ -1,4 +1,8 @@
-"""schema for the specification of calibration and sweeps"""
+"""spec structs for sensor actions, their blocks, sources, peripherals, and captures.
+
+msgspec resolves the field annotations at runtime. Field types are written as
+`Union`/`Optional`, with every name they reference bound in this module.
+"""
 
 from __future__ import annotations as __
 
@@ -300,14 +304,15 @@ class NoPeripherals(Peripherals, frozen=True, kw_only=True):
 
 
 class ManualYFactorSpec(Peripherals, frozen=True, kw_only=True):
-    """the `calibration:` block of a manual Y-factor calibration.
+    """the `calibration:` block of a `ManualYFactorCalibration`.
 
     `implied_loops` names capture fields that the operator varies by hand between
-    captures and that are therefore indexed like loop fields in the saved corrections.
-    `detector_period` sets the bin of the generated `channel_power_time_series`
-    analysis; it changes only the ``papr_on``/``papr_off`` diagnostics, not the noise
-    figure or the power correction. When None, the bin is the capture `duration`,
-    which requires one duration across the captures and loops.
+    captures. The saved corrections are indexed by these fields ahead of the loop
+    fields. `detector_period` is the bin of the generated
+    `channel_power_time_series` analysis. The rms detector is averaged over the bins
+    before the Y-factor is formed, and only the ``papr_on``/``papr_off`` diagnostics
+    depend on the bin. When None, the bin is the one `duration` of the captures and
+    loops, and a bound spec with more than one duration is rejected.
     """
 
     enr: types.ENR
@@ -327,10 +332,10 @@ BundledTriggers = sa.registry.signal_trigger.to_spec()
 class Sink(SpecBase, frozen=True, kw_only=True):
     """the output block of every action spec.
 
-    `path` is the output of the action, with the ``{fields}`` of
-    `specs.paths.PathFormatter` expanded; the action runner selects the file format.
-    A `path` of None writes nothing. `log_path` and `log_level` configure the sweep
-    log file independently of `path`.
+    `path` is where the action writes, after the ``{field}`` templates of
+    `specs.paths.PathFormatter` are expanded. The action runner selects the file
+    format. A `path` of None writes nothing. `log_path` and `log_level` configure
+    the log file and do not depend on `path`.
     """
 
     path: Optional[str] = '{spec_name}-{start_time}'
@@ -341,7 +346,7 @@ class Sink(SpecBase, frozen=True, kw_only=True):
 class ZarrSink(Sink, frozen=True, kw_only=True):
     """the output block of a `Sweep`: a zarr store appended along `capture`.
 
-    `store` selects a directory or zip store; the remaining fields tune the write
+    `store` selects a directory or zip store. The remaining fields tune the write
     batching and chunking of the store.
     """
 
@@ -352,6 +357,13 @@ class ZarrSink(Sink, frozen=True, kw_only=True):
 
 
 class Extension(SpecBase, frozen=True, kw_only=True):
+    """the `extensions:` block of an action spec.
+
+    `import_path` is inserted into ``sys.path`` and `import_name` is imported before
+    the rest of the spec is decoded. The module may bind the ``sensor_binding`` that
+    the spec names.
+    """
+
     import_path: Optional[types.ExtensionPath] = None
     import_name: types.ModuleName = None
 
@@ -398,12 +410,12 @@ AdjustCapturesType = dict[
 class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
     """the top-level spec that an action runs.
 
-    An instance is decoded from a file by a sensor binding or constructed from the
-    API. The `source`, `peripherals`, and `sink` blocks name the resources that
-    every action opens. `source` and `peripherals` are the spec types of the
-    binding named by the ``sensor_binding`` tag. `extensions` names an out-of-tree
-    module that the readers in `striqt.sensor.lib.io` import before decoding the
-    rest of the spec.
+    An instance is decoded from a file against the tagged class of a sensor binding
+    or constructed from the API. The `source`, `peripherals`, and `sink` blocks name
+    the resources that every action opens. `source` and `peripherals` are the spec
+    types of the binding named by the ``sensor_binding`` tag. `extensions` names an
+    out-of-tree module that the readers in `striqt.sensor.lib.io` import before
+    decoding the rest of the spec.
     """
 
     # bound subclasses also accept the tag field below in input files, which
@@ -474,7 +486,7 @@ class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=
 
 
 class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
-    """the spec of a plain sweep, and the sweep that every action runs.
+    """the spec of a sweep, and the form every action opens its resources for.
 
     `analysis` is evaluated on each expanded capture, with the capture's
     `adjust_analysis` applied on top. `options` selects the warmup, IQ reuse, and
@@ -502,13 +514,12 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=Tru
     """the spec of a Y-factor calibration with a hand-switched noise diode.
 
     The `calibration:` block is a `ManualYFactorSpec`. The runner acquires the
-    expanded captures once with the diode off and once with it on at each port, and
-    generates the analysis itself, so the spec has no `analysis` or `options`
-    blocks; a legacy `analysis` block is accepted, discarded, and reported with a
-    `DeprecationWarning`. More than one capture is accepted only when
-    `calibration.implied_loops` names the fields the captures vary, and
-    `source.calibration` must be null. A bound spec is also rejected when
-    `ManualYFactorRunner.validate` cannot build its sweep.
+    expanded captures at each port with the diode off and then on, and generates
+    the analysis itself. The spec has no `options` block. An `analysis` block is
+    accepted, discarded, and reported with a `DeprecationWarning`. More than one
+    capture is accepted only when `calibration.implied_loops` names the fields the
+    captures vary, and `source.calibration` must be null. A bound spec is also
+    rejected when `ManualYFactorRunner.validate` cannot build its sweep.
     """
 
     calibration: ManualYFactorSpec

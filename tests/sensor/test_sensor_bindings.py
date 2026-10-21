@@ -57,8 +57,8 @@ def test_yaml_schema_binding():
 
 
 def test_bound_sweep_names_its_controller_and_sweep_class():
-    """a plain sweep binding's tagged class is its own `sweep_cls`, and both the
-    spec and the derived sweep lead back to the controller that opens them"""
+    """the tagged class of a plain sweep binding is its own `sweep_cls`, and its
+    `controller` is the registered controller class"""
     spec = ss.read_yaml_spec(SWEEP_DIR / 'air7101b.yaml')
     assert type(spec).controller is ss.bindings.air7101b
     assert type(spec).sweep_cls is type(spec)
@@ -66,9 +66,8 @@ def test_bound_sweep_names_its_controller_and_sweep_class():
 
 
 def test_bound_sweep_and_controller_share_one_binding():
-    """`get_controller(spec)` and `type(spec).sensor` must describe the same binding,
-    so the class attribute is the controller's `SensorBinding` and names the tagged
-    class itself"""
+    """`type(spec).sensor` is the `SensorBinding` object of `get_controller(spec)`,
+    and its `sweep_spec_cls` is the tagged class"""
     spec = ss.read_yaml_spec(SWEEP_DIR / 'air7101b.yaml')
     ctrl_cls = ss.lib.bindings.get_controller(spec)
     assert type(spec).sensor is ctrl_cls.sensor
@@ -92,8 +91,8 @@ class TestBindSensor:
         assert 'calibration' in sweep_cls.__struct_fields__
 
     def test_a_non_sweep_action_gets_a_companion_sweep_class(self, isolated_bindings):
-        """the runner builds the sweep that runs from the companion, which has the
-        same spec types and binding but is neither tagged nor registered"""
+        """the companion class has the action's spec types and binding and is neither
+        tagged nor registered. The runner builds the sweep that runs from it."""
         schema = tone_schema(action=ss.specs.ManualYFactorCalibration)
         ctrl_cls = ss.bindings.bind_sensor(
             'companion_test', tone_sensor(), schema, register=False
@@ -122,8 +121,8 @@ class TestBindSensor:
         )
 
     def test_an_existing_binding_derives_through_schema_action(self, isolated_bindings):
-        """a `SensorBinding` names its own tagged class, which is not a base for a
-        second binding, so the action comes from the schema"""
+        """the `sweep_spec_cls` of a `SensorBinding` is its tagged class, which is
+        not a base for a second binding. The action comes from the schema."""
         ctrl_cls = ss.bindings.bind_sensor(
             'derived_test',
             TONE.sensor,
@@ -166,8 +165,8 @@ class TestBindSensor:
         assert 'unregistered_test' not in isolated_bindings.registry
 
     def test_unregistered_binding_stays_out_of_the_union(self, isolated_bindings):
-        """`get_controller` cannot find an unregistered binding, so a file that
-        decodes into one could not be run"""
+        """`get_controller` finds registered bindings only. A file that decoded into
+        an unregistered one could not be run."""
         union_before = isolated_bindings.get_tagged_sweep_type()
         ss.bindings.bind_sensor(
             'unregistered_test', tone_sensor(), tone_schema(), register=False
@@ -185,8 +184,8 @@ def test_extension_module_registers_site_bindings(subtests):
 
 
 def test_derived_calibration_binding_records_the_extension_module():
-    """`bind_manual_yfactor_calibration` is called from the extension module, which
-    is where the API documentation must place the controller"""
+    """the extension module calls `bind_manual_yfactor_calibration`, and the API
+    documentation groups the controller under that module"""
     import site_strategies as S
 
     assert S.EXT.site_single_tone_calibration.__module__ == S.EXT.__name__

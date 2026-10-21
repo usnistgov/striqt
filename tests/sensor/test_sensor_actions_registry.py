@@ -1,9 +1,9 @@
 """striqt.sensor.lib.actions.registry: ActionRegistry registration and MRO lookup.
 
-Every test builds its own `ActionRegistry` so that the global instance, which the
-built-in runners populate at import, stays untouched. Instances come from the bound
-`single_tone` class. An unbound `Sweep` subclass has no capture type and cannot be
-instantiated.
+Every test builds its own `ActionRegistry` and leaves the global instance, which
+the built-in runners populate at import, untouched. Spec instances come from the
+bound `single_tone` class. An unbound `Sweep` subclass has no capture type and
+cannot be instantiated.
 """
 
 from __future__ import annotations
@@ -64,8 +64,7 @@ def test_lookup_by_exact_type(spec):
     ids=['type', 'instance'],
 )
 def test_lookup_walks_the_mro_of_a_bound_sweep(spec):
-    """the bound class is 2 subclasses below Sweep (the binding's BoundSweep and
-    its msgspec tagged subclass), and neither is registered"""
+    """the bound class is one subclass below `Sweep` and is not itself registered"""
     reg = ActionRegistry()
     reg.runner(spec_type=ss.specs.Sweep)(RunnerA)
     assert SweepCls.__mro__.index(ss.specs.Sweep) == 1

@@ -324,7 +324,7 @@ def test_loop_only_nyquist_keeps_inf_bandwidth():
 def test_expansion_args_take_the_nyquist_filter_as_an_argument(
     loop_only_nyquist, expected
 ):
-    # a CapturePlan has no `options`, so the flag can come only from the argument
+    # a CapturePlan has no `options`; the argument is the only source of the flag
     captures = (make_capture(sample_rate=1e6),)
     loops = (ss.specs.List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)
     plan = make_plan(captures=captures, loops=loops)
@@ -334,8 +334,9 @@ def test_expansion_args_take_the_nyquist_filter_as_an_argument(
 
 
 def test_calibration_fixture_expansion(calibration_sweep):
-    """the spec's plan expands over every port; each diode pass of the runner
-    acquires half of it at one port, so the passes together cover it twice"""
+    """the runner's sweep expands over both ports to 192 captures. Each of the 4
+    diode passes runs the captures of one port, and the passes together acquire
+    the plan twice."""
     runner = ss.lib.actions.ManualYFactorRunner(calibration_sweep)
     result = S.loop_captures(runner.sweep)
     assert len(result) == 192

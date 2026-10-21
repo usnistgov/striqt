@@ -1,4 +1,8 @@
-"""dynamic imports and context management of multiple resources"""
+"""open the hardware and software resources of an action as one context.
+
+The source, peripherals, sink, calibration file, log file, and compute warmup open
+concurrently in `util.threadpool`. A failure in any of them closes the others.
+"""
 
 from __future__ import annotations as __
 
@@ -29,8 +33,9 @@ if TYPE_CHECKING:
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """the open resources an action runs over.
 
-        `action_spec` is the spec the action runs, `runner` the action built from it,
-        and `sweep_spec` the `Sweep` the runner built and the hardware opened for.
+        `action_spec` is the spec the action runs, and `runner` is the action built
+        from it. `sweep_spec` is the `Sweep` the runner built, which the hardware is
+        open for.
         """
 
         source: controller.Controller[SS, SP, SC, PS, PC]
@@ -187,10 +192,10 @@ def open_resources(
 ) -> ConnectionManager[SS, SP, SC, PS, PC]:
     """open the sensor hardware and software contexts needed to run `spec`.
 
-    The action runner registered for the type of `spec` is built first; the source,
-    peripherals, the sink returned by the runner's `open_sink`, and warmup are
-    opened for the `Sweep` it derives. The resources of the returned
-    `ConnectionManager` are open and ready for `iterate_sweep`.
+    The action runner registered for the type of `spec` is built first. The source,
+    peripherals, the sink from the runner's `open_sink`, and the warmup are opened
+    for the runner's `sweep`. The resources of the returned `ConnectionManager` are
+    open and ready for `iterate_sweep`.
 
     Raises:
         TypeError: if no action runner is registered for the type of `spec`

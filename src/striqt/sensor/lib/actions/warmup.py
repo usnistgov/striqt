@@ -1,10 +1,9 @@
 """the warmup: a one-capture `NoSource` sweep run before a GPU sweep.
 
-The warmup pays the python import and JIT compilation costs of the analysis of the
-first captures of a sweep. `prepare_compute` runs it through a `SweepRunner` while
-`open_resources` opens the hardware, so the sweep here is derived from the one being
-prepared rather than read from a file, and its resources are opened here rather
-than by `open_resources`.
+The warmup pays the python import and JIT compilation costs of the analysis before
+the first hardware capture. `prepare_compute` runs it through a `SweepRunner` while
+`open_resources` opens the hardware. The warmup sweep is derived from the sweep
+being prepared, and its resources are opened here rather than by `open_resources`.
 """
 
 from __future__ import annotations as __
@@ -23,8 +22,8 @@ if TYPE_CHECKING:
     from .core import ActionRunner
 
 
-# functools rather than sw.util.lru_cache, which clear_caches() empties: a cleared
-# cache would bind a second controller and sweep class for the same origin
+# functools rather than sw.util.lru_cache, which clear_caches() empties. A cleared
+# cache would bind a second controller and sweep class for the same origin.
 @functools.lru_cache
 def warmup_binding(
     origin: type[Controller[Any, Any, Any, Any, Any]],
@@ -56,7 +55,7 @@ def warmup_binding(
 def derive_warmup_sweep(
     sweep_spec: specs.Sweep[Any, Any, SC], count: int = 1
 ) -> specs.Sweep[specs.NoSource, specs.NoPeripherals, SC]:
-    """return the `Sweep` whose single run pays the import and JIT costs of `sweep_spec`.
+    """return the `Sweep` whose run pays the import and JIT costs of `sweep_spec`.
 
     The warmup source is a `NoSource` with `max(port) + 1` ports over every port a
     capture or a port loop names, and the `master_clock_rate` and `signal_trigger`

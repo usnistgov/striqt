@@ -29,7 +29,7 @@ def run(yaml_path: str):
     print(f'Opening sensor resources...')
     import sys
 
-    # the paths below are printed from `spec`; the sweep itself writes nothing
+    # `run_spec` writes nothing. The paths printed below come from `spec`.
     run_spec = spec.replace(sink=spec.sink.replace(path=None))
 
     manager = ss.open_resources(run_spec, yaml_path, test_only=True)

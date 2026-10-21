@@ -1,4 +1,4 @@
-"""the action of a plain `Sweep`: its captures through the acquire/analyze/sink pipeline"""
+"""the action that runs a plain `Sweep` as written"""
 
 from __future__ import annotations as __
 
@@ -20,10 +20,9 @@ from .registry import registry
 class SweepRunner(Generic[SS, SP, SC, PS, PC]):
     """run the captures of a `Sweep` through `iterate_captures`.
 
-    `spec` and `sweep` are the same object: the `Sweep` this runner is constructed
-    from is the sweep that runs, so `resources['sweep_spec']` and the
-    `on_source_opened` callback of `open_resources` receive it unchanged. The output
-    is a `ZarrCaptureSink` at `sink.path`, or nothing when the path is None.
+    `spec` and `sweep` are the same object. ``resources['sweep_spec']`` and the
+    `on_source_opened` callback of `open_resources` receive the spec unchanged. The
+    output is a `ZarrCaptureSink` at `sink.path`. A path of None writes nothing.
     """
 
     spec: specs.Sweep[SS, SP, SC]
@@ -35,7 +34,7 @@ class SweepRunner(Generic[SS, SP, SC, PS, PC]):
 
     @classmethod
     def validate(cls, spec: specs.Sweep[SS, SP, SC]) -> None:
-        """accept every `Sweep`: the spec is the sweep that runs."""
+        """accept every `Sweep` without checks."""
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
         if self.sweep.sink.path is None:

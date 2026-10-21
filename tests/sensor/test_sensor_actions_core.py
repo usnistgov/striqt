@@ -1,11 +1,11 @@
 """striqt.sensor.lib.actions.core: the acquire/analyze/sink pipeline, iterate_captures.
 
 The sequencing and yield-mode cells run through `ss.iterate_sweep`, which dispatches
-a bound `Sweep` to `SweepRunner` and the pipeline; `test_sensor_actions_sweep.py` pins
-that dispatch. The failure cells call the pipeline directly.
+a bound `Sweep` to `SweepRunner` and the pipeline (`test_sensor_actions_sweep.py` pins
+that dispatch). The other cells call `iterate_captures` directly.
 
-The captures are 1-port scale-only tones at distinct offsets, so a result attributed
-to the wrong capture disagrees with its own generator oracle exactly.
+The captures are 1-port scale-only tones at distinct offsets. A result attributed to
+the wrong capture then disagrees with its generator oracle exactly.
 """
 
 from __future__ import annotations
@@ -58,9 +58,10 @@ def test_results_follow_the_capture_order(subtests):
 
 @pytest.mark.namespaces('cupy')
 def test_results_follow_the_capture_order_cupy(array_backend, subtests):
-    """the cupy source draws the same generator; scale-only correction leaves the
-    tone samples as the generator's complex exponential, which rounds once per
-    phase product, cosine, sine, and float32 cast on each backend"""
+    """the cupy source draws the same generator as numpy. Scale-only correction
+    leaves the tone samples as the generator's complex exponential, which rounds
+    once each at the phase product, the cosine, the sine, and the float32 cast on
+    each backend."""
     captures = tone_captures(OFFSETS)
     source = SOURCE.replace(array_backend=array_backend)
     datasets = run_in_memory(tone_sweep(OFFSETS, source=source))
@@ -112,11 +113,10 @@ YIELD_MODES = {
 
 @pytest.mark.parametrize('mode', list(YIELD_MODES), ids=list(YIELD_MODES))
 def test_yield_modes(mode):
-    """current behavior, not a contract: the pipeline runs N + 2 stages and yields
-    the sink result of every stage when yield_values is set (None for the 2
-    stages before the first capture reaches the sink), one None per stage when
-    only always_yield is set, and nothing otherwise. The iterate_captures docstring
-    describes the leading placeholders differently."""
+    """the pipeline runs N + 2 stages. With `yield_values` set it yields the sink
+    result of every stage, which is None for the 2 stages before the first capture
+    reaches the sink. With only `always_yield` set it yields one None per stage.
+    With neither it yields nothing."""
     (yield_values, always_yield), expected = YIELD_MODES[mode]
     sweep = tone_sweep(OFFSETS)
     modes = {'yield_values': yield_values, 'always_yield': always_yield}
@@ -156,9 +156,9 @@ def test_extra_data_reaches_every_capture_and_wins_over_the_peripherals():
 
 
 def test_a_shared_indexer_numbers_two_runs_consecutively():
-    """a runner that runs the pipeline several times over the same open resources
-    passes one indexer so the second run continues the capture count and re-arms
-    its first capture rather than reusing what the first run left armed"""
+    """one indexer passed to 2 pipeline runs over the same open resources numbers
+    the second run's captures after the first run's. The second run also re-arms
+    its first capture, which differs from the capture the first run left armed."""
     n = len(OFFSETS)
     sweep = tone_sweep(OFFSETS)
     indexer = core.AcquisitionIndexer(2 * n)
@@ -207,10 +207,10 @@ class CancellingPeripherals(ss.peripherals.NoPeripherals):
 
 def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
     """a peripheral that requests cancellation during the first acquisition stops
-    the pipeline at the interrupt check after that stage's yield, so exactly 1
-    item (the leading None) is yielded; the flag is cleared on leaving
-    share_thread_interrupts. The check is a no-op in the main thread, so the sweep
-    is consumed in a worker."""
+    the pipeline at the interrupt check that follows the first stage's yield. The
+    only item yielded is the leading None. Leaving `share_thread_interrupts` clears
+    the flag. `propagate_thread_interrupts` is a no-op in the main thread, and the
+    sweep is therefore consumed in a worker."""
     sweep = tone_sweep(OFFSETS)
     yielded = []
 

@@ -46,8 +46,8 @@ def get_path_fields(
         ``start_time`` (``%Y%m%d-%Hh%Mm%S`` at the time of the call),
         ``sensor_binding`` (the type name of `sweep`), ``source_id``, and when
         `spec_path` is given ``spec_name`` and ``parent_name``. When `sweep` is a
-        `CapturePlan`, each fixed string value in its `adjust_captures` for
-        `source_id` (with ``'defaults'`` beneath) is added under its field name.
+        `CapturePlan`, each fixed string value in its `adjust_captures` block for
+        `source_id`, falling back to ``'defaults'``, is added under its field name.
     """
 
     assert isinstance(sweep, structs.ActionSpec)

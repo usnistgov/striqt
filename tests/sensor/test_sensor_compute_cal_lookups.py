@@ -1,6 +1,9 @@
 """striqt.sensor.lib.compute.cal_lookups: the lookups and summaries of a saved Y-factor
-calibration, checked against files that save_yfactor_corrections writes from model
-captures and from the fake closed loop through the calibration runner
+calibration.
+
+The lookups are checked against files that `save_yfactor_corrections` writes from
+model captures and from the closed loop through the fake SoapySDR device. The
+Y-factor math itself is covered in `test_sensor_actions_yfactor.py`.
 """
 
 from __future__ import annotations
@@ -291,8 +294,8 @@ def _capture_dataset(runner, capture, index, start, diode_on):
 
 
 def _flush_model_captures(path):
-    """save_yfactor_corrections over a full grid of model captures, as the runner's
-    passes collect them; returns the calibration spec"""
+    """run save_yfactor_corrections over a full grid of model captures in the order
+    the runner's passes collect them, and return the calibration spec"""
     captures = (make_calibration_capture(sample_rate=MCR, host_resample=False),)
     cal = ss.specs.ManualYFactorSpec(enr=YFACTOR_ENR_DB, ambient_temperature=290.0)
     source = CalSourceCls(array_backend='numpy')
@@ -324,7 +327,6 @@ def _flush_model_captures(path):
 def flushed_calibration(fake_sweep_runner, tmp_path_factory) -> FakeRun:
     """the corrections save_yfactor_corrections saves from a full grid of model
     captures, as a FakeRun with the sweep but no prompts, fake device, or results"""
-    # the runner stubs the source id lookup that the sink's path formatting performs
     path = tmp_path_factory.mktemp('yfactor') / 'flushed.nc'
     sweep = _flush_model_captures(path)
     return FakeRun(str(path), [], sweep, None, None)
@@ -363,8 +365,8 @@ def fake_calibration_run(fake_sweep_runner) -> FakeRun:
 
 @pytest.fixture
 def fake_model(fake_calibration_run):
-    """the fake device's signal model with the noise diodes switched off after the
-    calibration sweep leaves them on; tones set by the test are cleared afterwards"""
+    """the fake device's signal model with the noise diodes switched off, which the
+    calibration sweep leaves on. Tones set by the test are cleared afterwards."""
     model = fake_calibration_run.fake.model
     model.diode_on.clear()
     yield model
@@ -375,7 +377,7 @@ class TestFakeCalibrationSweep:
     def test_prompts_follow_the_diode_state(self, fake_calibration_run):
         prompts = fake_calibration_run.prompts
         assert prompts[0].startswith('Confirm that the noise diode ENR is 20.87 dB')
-        # one prompt per (port, state) change; the loop toggles the diode per port
+        # one prompt per (port, diode state) pass
         assert prompts[1:] == [
             'disable noise diode at port 0 and press enter: ',
             'enable noise diode at port 0 and press enter: ',

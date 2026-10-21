@@ -1,8 +1,9 @@
-"""lookups into a saved Y-factor calibration for the measurement path.
+"""lookups into saved Y-factor corrections for a measurement sweep.
 
-A measurement sweep reads the netCDF that `actions.yfactor.save_yfactor_corrections`
-wrote and selects the power correction and system noise figure of each capture by
-its radio settings.
+The netCDF written by `actions.yfactor.save_yfactor_corrections` is indexed by the
+radio settings of the calibration grid. Each lookup matches port, gain, LO shift,
+backend sample rate, and analysis bandwidth exactly and interpolates along center
+frequency.
 """
 
 from __future__ import annotations as __

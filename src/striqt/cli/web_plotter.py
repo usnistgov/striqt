@@ -1766,7 +1766,7 @@ def run_server(
     else:
         raise click.ClickException('expected file to have .json or .yaml suffix')
 
-    # a null sink path writes nothing; on_data receives the results instead
+    # a null sink path writes nothing, and on_data receives the results instead
     spec = spec.replace(sink=spec.sink.replace(path=None))
 
     # the plotter shows the sweep the action runs, which may differ from the spec

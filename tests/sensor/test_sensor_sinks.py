@@ -125,8 +125,9 @@ def test_time_append_sink_concatenates_the_frames(tmp_path):
     )
     frames, hop_period = spectrogram_frames(sweep.captures[0], SPECTROGRAM.spectrogram)
 
-    # with a path, the runner's own ZarrCaptureSink would open the same store. A
-    # zarr sink looks up the id of an open source, which orders the two contexts
+    # the runner's ZarrCaptureSink would open the same store if the sweep it opens
+    # kept the path. A zarr sink looks up the source id in its constructor, which
+    # requires the source to be open first
     unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
     with (
         ss.open_resources(unsunk, None) as res,

@@ -113,8 +113,10 @@ class Zipper:
 class SinkBase(Generic[specs.SC]):
     """intake acquisitions one at a time and parcel them to a data store.
 
-    The constructor takes the `Sweep` the sink serves and reads its `sink` block;
-    `open` runs when the sink is entered as a context manager.
+    A sink is constructed from the `Sweep` it writes for and entered as a context
+    manager before the first `append`. `append` receives the `DelayedDataset` of
+    one capture and returns what the pipeline yields for it. Writes run on 1 worker
+    thread, and `wait` blocks until the pending write completes.
     """
 
     def __init__(
@@ -208,10 +210,9 @@ class NoSink(SinkBase):
 
 
 class MemoryCacheSink(SinkBase):
-    """collect every capture's dataset in memory for the runner to take with `pop`.
+    """collect the dataset of every capture in memory until `pop` is called.
 
-    Nothing is written; `flush` and `close` are no-ops, so the collected datasets
-    stay available until `pop` is called.
+    Nothing is written. `close` leaves the collected datasets in place.
     """
 
     def open(self) -> None:
@@ -222,7 +223,9 @@ class MemoryCacheSink(SinkBase):
 
 
 class ZarrSinkBase(SinkBase):
-    """write to the zarr store at `sink.path` in batches of `batched_write_count`.
+    """write the zarr store at `sink.path` in batches of `batched_write_count` or more.
+
+    A ``.zarr.zip`` path is written through a `Zipper`.
 
     Raises:
         ValueError: if `sweep_spec.sink.path` is None
@@ -350,9 +353,10 @@ class ZarrCaptureSink(ZarrSinkBase):
 class ZarrTimeAppendSink(ZarrSinkBase):
     """append the spectrogram of each capture along its time axis.
 
-    No action runner selects this sink; pass an instance through
-    ``iterate_sweep(resources, sink=ZarrTimeAppendSink(sweep))``. Separate write
-    batches are appended along `capture`.
+    No action runner selects this sink. The caller enters an instance as a context
+    manager and passes it through ``iterate_sweep(resources, sink=...)``. The
+    captures of one write batch share one `capture` index, and each batch is
+    appended along `capture`.
 
     Raises:
         ValueError: if `sweep_spec.analysis` has no `spectrogram`

@@ -13,8 +13,8 @@ import striqt.analysis as sa
 class Schema(Generic[SS, SP, SC, PS, PC]):
     """the spec types of a sensor binding.
 
-    `action` is the action spec type that the bound class subclasses, and so selects
-    the `ActionRunner` that runs it.
+    `action` is the action spec type that `bind_sensor` subclasses. The
+    `ActionRunner` registered for that type runs the bound spec.
     """
 
     source: type[SS]

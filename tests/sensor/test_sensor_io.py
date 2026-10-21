@@ -285,8 +285,8 @@ def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
 
 
 def test_read_zarr_spec_drops_the_removed_extensions_sink_attr(run_sweep_to_zarr):
-    """stores written before the runner selected the sink carry
-    ``extensions.sink`` in their attrs; the reader warns and discards it"""
+    """a store written when ``extensions.sink`` was a spec field carries the key in
+    its attrs. The reader warns and discards it."""
     import zarr
 
     spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')

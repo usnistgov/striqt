@@ -1,4 +1,8 @@
-"""file I/O for sweep specifications, calibration data, and zarr stores"""
+"""file I/O for action specs, calibration data, and zarr stores.
+
+The spec readers import the `extensions` block before decoding, and decode against
+the class bound under the ``sensor_binding`` tag unless a `type` is given.
+"""
 
 from __future__ import annotations as __
 
@@ -61,17 +65,22 @@ def read_yaml_spec(
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
 ) -> specs.ActionSpec:
-    """Build a Sweep specification object from the specified yaml file.
+    """decode the action spec in the yaml file at `path`.
 
     Args:
         path: path to the yaml file
-        output_path: optional override for the specification's output path
         type: the action spec type to decode into, or None to select it by the
             ``sensor_binding`` tag
+        output_path: replaces `sink.path` in the returned spec when given
         store_backend: replaces `sink.store` of a `Sweep` spec when given
 
     Returns:
         the decoded spec, an instance of the bound `ActionSpec` class
+
+    Raises:
+        msgspec.ValidationError: the file does not validate as the spec class
+        TypeError: if `store_backend` is given and the spec's `sink` is not a
+            `ZarrSink`
     """
 
     tree = sa.lib.io.decode_from_yaml_file(path)
@@ -91,20 +100,25 @@ def read_json_spec(
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
 ) -> specs.ActionSpec:
-    """Build a specs.Sweep specification object from a json file at the given path.
+    """decode the action spec in the json file at `path`.
 
-    JSON supports the same specifications as yaml, but without !include
+    JSON supports the same specifications as yaml, but without ``!include``
     directives.
 
     Args:
         path: path to the json file
         type: the action spec type to decode into, or None to select it by the
             ``sensor_binding`` tag
-        output_path: optional override for the specification's output path
+        output_path: replaces `sink.path` in the returned spec when given
         store_backend: replaces `sink.store` of a `Sweep` spec when given
 
     Returns:
         the decoded spec, an instance of the bound `ActionSpec` class
+
+    Raises:
+        msgspec.ValidationError: the file does not validate as the spec class
+        TypeError: if `store_backend` is given and the spec's `sink` is not a
+            `ZarrSink`
     """
     with open(path, 'rb') as buf:
         tree = msgspec.json.decode(buf.read(), type=dict)
@@ -131,9 +145,11 @@ def read_zarr_spec(
     The `extensions` block is imported before the sweep is decoded. A
     `sensor_binding` that the extension module defines is accepted. Only attrs
     that name fields of the sweep class being decoded, the binding tag, and
-    ``mock_source`` are read. Other dataset attrs are ignored. Passing the store
-    path to `open_resources` derives the ``{spec_name}`` and ``{parent_name}`` path
-    fields from it, as for `read_yaml_spec`.
+    ``mock_source`` are read. Other dataset attrs are ignored. An
+    ``extensions.sink`` attr written by an earlier release is dropped with a
+    `DeprecationWarning`. Passing the store path to `open_resources` derives the
+    ``{spec_name}`` and ``{parent_name}`` path fields from it, as for
+    `read_yaml_spec`.
 
     Args:
         path: the zarr store, a ``.zarr`` directory or ``.zarr.zip`` archive
@@ -153,6 +169,8 @@ def read_zarr_spec(
     Raises:
         msgspec.ValidationError: the attrs do not validate as a sweep of that class,
             or the tag names no registered binding
+        TypeError: if `store_backend` is given and the spec's `sink` is not a
+            `ZarrSink`
         FileNotFoundError: `extensions.import_path` or `extension_root` does not
             exist
     """
@@ -177,11 +195,11 @@ def read_zarr_spec(
 
 
 def _drop_removed_extension_sink(attrs: dict[str, Any]) -> dict[str, Any]:
-    """return `attrs` without an ``extensions.sink`` key, which `Extension` does not define.
+    """return `attrs` without the ``extensions.sink`` key of earlier releases.
 
-    Stores written by earlier releases carry the key. A `DeprecationWarning` reports
-    the drop. The sink class the key named is not applied; a caller that wants no
-    output sets ``sink.path`` to None on the returned spec.
+    `Extension` does not define the key. A `DeprecationWarning` reports the drop.
+    The sink class the key named is not applied. A caller that wants no output sets
+    ``sink.path`` to None on the returned spec.
     """
     extensions = attrs.get('extensions')
     if not isinstance(extensions, dict) or 'sink' not in extensions:
@@ -203,10 +221,10 @@ def _convert_zarr_attrs_spec(
     output_path: Optional[str] = None,
     store_backend: Optional[str] = None,
 ) -> specs.ActionSpec:
-    """decode a sweep from the dict form of its YAML, JSON, or zarr attrs.
+    """decode an action spec from the dict form of a YAML or JSON file.
 
-    Imports the `extensions` block of `tree` before decoding. A ``mock_source`` entry
-    rewrites ``tree['sensor_binding']`` in place (see `_resolve_sweep_cls`).
+    The `extensions` block of `tree` is imported before decoding. A ``mock_source``
+    entry rewrites ``tree['sensor_binding']`` in place (see `_resolve_sweep_cls`).
     """
     sweep_cls = _resolve_sweep_cls(tree, extension_root, type=type)
     return _decode_sweep(
@@ -220,14 +238,14 @@ def _resolve_sweep_cls(
     *,
     type: type[specs.ActionSpec] | None = None,
 ) -> type[specs.ActionSpec] | None:
-    """return the sweep class for `tree` after importing its `extensions` block.
+    """return the spec class for `tree` after importing its `extensions` block.
 
-    The `sensor_binding` tag of `tree` is looked up after the import and may name a
-    binding that the extension module registers. A ``mock_source`` entry selects the
-    mock of that binding and rewrites ``tree['sensor_binding']`` in place to the mock
-    class name. This selection takes precedence over `type`. Otherwise `type` is
-    returned when given. The result is None when `type` is None and the tag names no
-    registered binding.
+    The ``sensor_binding`` tag of `tree` is looked up after the import, and may name
+    a binding that the extension module registers. A ``mock_source`` entry with a
+    registered tag selects the mock of that binding, rewrites
+    ``tree['sensor_binding']`` in place to the mock class name, and overrides
+    `type`. Otherwise `type` is returned when given. The result is None when `type`
+    is None and the tag names no registered binding.
 
     Raises:
         FileNotFoundError: `extensions.import_path` or `extension_root` does not
@@ -270,6 +288,8 @@ def _decode_sweep(
     Raises:
         msgspec.ValidationError: `tree` does not validate as `sweep_cls`, or no
             binding is registered under its tag
+        TypeError: if `store_backend` is given and the decoded `sink` is not a
+            `ZarrSink`
     """
     if sweep_cls is None:
         from .bindings import get_tagged_sweep_type

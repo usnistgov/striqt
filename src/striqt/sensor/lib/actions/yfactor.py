@@ -1,12 +1,10 @@
 """the manual Y-factor calibration action.
 
-The runner acquires the calibration grid once with the noise diode off and once
-with it on at each port, prompting the operator to switch the diode between those
-passes, and generates the `channel_power_time_series` analysis that the Y-factor
-math here produces and `compute.cal_lookups` reads back. The diode state reaches the saved
-data as the `extra_data` mapping of each pass of the pipeline, the captures collect
-in a `MemoryCacheSink`, and `save_yfactor_corrections` computes and writes the
-corrections after the last pass.
+The operator switches the noise diode by hand. The runner acquires the capture grid
+of each port once with the diode off and once with it on, and prompts the operator
+between the passes. The diode state is not a capture field. It enters each
+acquisition through the `extra_data` of the pipeline and is a dimension of the
+saved corrections beside the capture fields.
 """
 
 from __future__ import annotations as __
@@ -89,12 +87,12 @@ def compute_y_factor_corrections(
 ) -> xr.Dataset:
     """return the Y-factor noise figure and power correction of each grid point.
 
-    `dataset` is indexed by the calibration fields plus a ``noise_diode_enabled``
-    dimension and holds `channel_power_time_series` (dB, ``rms`` and ``peak``
-    detectors over ``time_elapsed``), `analysis_bandwidth` (Hz), and
-    `backend_sample_rate` (S/s). The rms detector is averaged in linear power over
-    the bins before the Y-factor is formed; an infinite `analysis_bandwidth` counts as
-    the backend sample rate.
+    The dimensions of `dataset` are the calibration fields and
+    ``noise_diode_enabled``. Its variables are `channel_power_time_series` (dB,
+    ``rms`` and ``peak`` detectors over ``time_elapsed``), `analysis_bandwidth`
+    (Hz), and `backend_sample_rate` (S/s). The rms detector is averaged in linear
+    power over ``time_elapsed`` before the Y-factor is formed. An infinite
+    `analysis_bandwidth` counts as the backend sample rate.
 
     Args:
         dataset: the collected captures as `save_yfactor_corrections` indexes them
@@ -172,11 +170,10 @@ def save_yfactor_corrections(
 ) -> xr.Dataset:
     """compute the Y-factor corrections from the collected captures and save them.
 
-    `data` holds one dataset per capture as the sink collected them. They are
-    indexed by `calibration_fields` so that each field becomes a dimension, the
-    corrections are computed with `compute_y_factor_corrections` at `enr_dB`, written
-    to `path` as netCDF with a ``calibration_fields`` attr, and summarized per port
-    on stdout.
+    `data` is one dataset per capture, as the sink collected them. Each of
+    `calibration_fields` becomes a dimension of the concatenated data. The
+    corrections of `compute_y_factor_corrections` at `enr_dB` are written to `path`
+    as netCDF with a ``calibration_fields`` attr and summarized per port on stdout.
 
     Returns:
         the saved corrections
@@ -198,7 +195,6 @@ def save_yfactor_corrections(
     to_coords = [f for f in fields if f in capture_data.data_vars]
     capture_data = capture_data.set_coords(to_coords).set_xindex(fields)
 
-    # break out each remaining capture coordinate into its own dimension
     by_field = capture_data.unstack(compute.CAPTURE_DIM)
     by_field[DIODE_FIELD] = by_field[DIODE_FIELD].astype('bool')
 
@@ -228,10 +224,10 @@ def build_calibration_sweep(
 
     The sweep is the spec's capture plan over every port, with the analysis of
     `calibration_analysis`, IQ reuse across the `analysis_bandwidth` points of one
-    radio setting, the Nyquist filter on, and no warmup. Its `sink` is the spec's
-    `Sink` widened to a `ZarrSink`, of which the runner reads only the path and log
-    fields. It is an instance of the spec class's `sweep_cls`. The result is
-    cached on `spec`.
+    radio setting, `loop_only_nyquist`, and no warmup. Its `sink` is the spec's
+    `Sink` converted to a `ZarrSink` with default store fields. The runner reads
+    only its path and log fields. The sweep is an instance of the spec class's
+    `sweep_cls`, and the result is cached on `spec`.
 
     Raises:
         TypeError: if `spec` is not an instance of a bound action spec class
@@ -254,8 +250,8 @@ def build_calibration_sweep(
         adjust_captures=spec.adjust_captures,
         analysis=calibration_analysis(spec),
         # reuse_iq lets the analysis_bandwidth points of one radio setting share
-        # an acquisition; the runner discards it at each diode switch, which the
-        # capture spec does not describe (Controller.discard_iq)
+        # an acquisition. The runner discards it at each diode switch, which the
+        # capture spec does not describe (Controller.discard_iq).
         options=specs.SweepOptions(
             reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
         ),
@@ -265,7 +261,7 @@ def build_calibration_sweep(
 def calibration_ports(
     spec: specs.ManualYFactorCalibration[Any, Any, Any],
 ) -> tuple[Any, ...]:
-    """return the ports to calibrate, in the order of a `port` loop or of the captures."""
+    """return the ports to calibrate in the order of the `port` loop or the captures."""
     for loop in spec.loops:
         if _is_port_loop(loop):
             return tuple(loop.get_points())
@@ -301,8 +297,8 @@ def calibration_fields(
     """return the capture fields that index the saved corrections.
 
     The implied loops of `spec.calibration` come first, then the loop fields of
-    `sweep` in order with the diode state after `port` (or first), and `sample_rate`
-    reads as the acquisition's `backend_sample_rate`.
+    `sweep` in order. The diode state follows `port`, or comes first when there is no
+    `port` loop. `sample_rate` is renamed to the acquisition's `backend_sample_rate`.
     """
     fields = list(spec.calibration.implied_loops)
     fields += [loop.field for loop in sweep.loops if loop.field is not None]
@@ -357,14 +353,10 @@ def switch_diode(port: Any, diode_on: bool) -> None:
 class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
     """run a `ManualYFactorCalibration`.
 
-    `sweep` is `build_calibration_sweep` of the spec; the resources open for
-    it, and `open_sink` returns a `MemoryCacheSink` that collects the captures.
-    `iterate` confirms the ENR with the operator, then for each port and each diode
-    state prompts the operator to switch the diode and runs the captures of that
-    port through `iterate_captures`, passing the diode state as the pipeline's
-    `extra_data` so that it becomes a variable of every acquisition. It ends by
-    computing and saving the corrections with `save_yfactor_corrections`, to the
-    spec's `sink.path`; a path of None writes nothing.
+    `sweep` is `build_calibration_sweep` of the spec, and the resources open for
+    that sweep. The captures of every pass collect in one `MemoryCacheSink`. After
+    the last pass, the corrections are computed from them and written to the spec's
+    `sink.path` as netCDF. A path of None writes nothing.
     """
 
     spec: specs.ManualYFactorCalibration[SS, SP, SC]
@@ -376,7 +368,12 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
 
     @classmethod
     def validate(cls, spec: specs.ManualYFactorCalibration[SS, SP, SC]) -> None:
-        """build the calibration sweep of `spec`, raising what `build_calibration_sweep` raises."""
+        """build the calibration sweep of `spec`.
+
+        Raises:
+            msgspec.ValidationError: what `build_calibration_sweep` raises
+            TypeError: if `spec` is not an instance of a bound action spec class
+        """
         build_calibration_sweep(spec)
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
@@ -393,12 +390,12 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
         """run every pass, then compute and save the corrections.
 
         The yields are those of `iterate_captures` over each pass. Each pass begins
-        with a fresh acquisition (`Controller.discard_iq`); within a pass, `reuse_iq`
+        with a new acquisition (`Controller.discard_iq`). Within a pass, `reuse_iq`
         applies. The corrections are saved only when the sink is a `MemoryCacheSink`
         and the spec's `sink.path` is not None.
 
         Raises:
-            ValueError: if `loop` is set, since a calibration runs its grid once
+            ValueError: if `loop` is True
             RuntimeError: if the operator rejects the ENR confirmation
         """
         if loop:

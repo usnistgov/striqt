@@ -419,8 +419,8 @@ def scripted_input(monkeypatch):
 
 @pytest.fixture
 def isolated_bindings(monkeypatch):
-    """snapshot `ss.lib.bindings.registry` and `tagged_sweeps`, which `bind_sensor`
-    rebinds by name, so a test can bind sensors without leaving them behind"""
+    """restore the module globals `registry` and `tagged_sweeps` of `ss.lib.bindings`,
+    which `bind_sensor` updates, after the test"""
     import striqt.sensor as ss
 
     bindings = ss.lib.bindings
