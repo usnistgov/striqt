@@ -601,7 +601,7 @@ it was standing in for is enabled.
 - **Ambient temperature is not used.** `actions/yfactor.py:compute_y_factor_corrections`
   takes the ENR and `Tref` (290 K) as arguments and reads nothing else from the
   `calibration:` block; `ManualYFactorSpec.ambient_temperature` is recorded in the
-  document and nowhere else. Resolved on 2026-10-21 to the extent that the value no
+  spec and nowhere else. Resolved on 2026-10-21 to the extent that the value no
   longer rides along as a per-capture data variable; whether it should replace
   `Tref` is still open.
 

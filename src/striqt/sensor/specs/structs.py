@@ -325,7 +325,7 @@ BundledTriggers = sa.registry.signal_trigger.to_spec()
 
 
 class Sink(SpecBase, frozen=True, kw_only=True):
-    """the output block of every document.
+    """the output block of every action spec.
 
     `path` is the output of the action, with the ``{fields}`` of
     `specs.paths.PathFormatter` expanded; the action runner selects the file format.
@@ -396,12 +396,14 @@ AdjustCapturesType = dict[
 
 
 class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
-    """a top-level document that a sensor binding decodes and an action runs.
+    """the top-level spec that an action runs.
 
-    The `source`, `peripherals`, and `sink` blocks name the resources that every
-    action opens. `source` and `peripherals` are the spec types of the binding named
-    by the ``sensor_binding`` tag. `extensions` names an out-of-tree module that the
-    readers in `striqt.sensor.lib.io` import before decoding the rest of the document.
+    An instance is decoded from a file by a sensor binding or constructed from the
+    API. The `source`, `peripherals`, and `sink` blocks name the resources that
+    every action opens. `source` and `peripherals` are the spec types of the
+    binding named by the ``sensor_binding`` tag. `extensions` names an out-of-tree
+    module that the readers in `striqt.sensor.lib.io` import before decoding the
+    rest of the spec.
     """
 
     # bound subclasses also accept the tag field below in input files, which
@@ -422,6 +424,26 @@ class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
     sensor: ClassVar[Any] = None
     controller: ClassVar[Any] = None
     sweep_cls: ClassVar[Any] = None
+
+    def _validate_action(self) -> None:
+        """run the registered action runner's `validate` on this spec.
+
+        Subclasses call this at the end of `__post_init__`, after every field is in
+        its final state. Nothing runs for an unbound spec (`sweep_cls` is None),
+        for a type with no registered runner, or while `striqt.sensor.lib.actions`
+        is not importable.
+        """
+        if type(self).sweep_cls is None:
+            return
+        try:
+            from ..lib.actions.registry import registry
+        except ImportError:
+            return
+        try:
+            runner = registry.lookup(self)
+        except TypeError:
+            return
+        runner.validate(self)
 
 
 class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=True):
@@ -452,7 +474,7 @@ class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=
 
 
 class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
-    """the document for a plain sweep, and the sweep that every action runs.
+    """the spec of a plain sweep, and the sweep that every action runs.
 
     `analysis` is evaluated on each expanded capture, with the capture's
     `adjust_analysis` applied on top. `options` selects the warmup, IQ reuse, and
@@ -473,18 +495,20 @@ class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
 
         super().__post_init__()
         sweep.validate_sweep(self)
+        self._validate_action()
 
 
 class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
-    """the document for a Y-factor calibration with a hand-switched noise diode.
+    """the spec of a Y-factor calibration with a hand-switched noise diode.
 
     The `calibration:` block is a `ManualYFactorSpec`. The runner acquires the
     expanded captures once with the diode off and once with it on at each port, and
-    generates the analysis itself, so the document has no `analysis` or `options`
+    generates the analysis itself, so the spec has no `analysis` or `options`
     blocks; a legacy `analysis` block is accepted, discarded, and reported with a
     `DeprecationWarning`. More than one capture is accepted only when
     `calibration.implied_loops` names the fields the captures vary, and
-    `source.calibration` must be null.
+    `source.calibration` must be null. A bound spec is also rejected when
+    `ManualYFactorRunner.validate` cannot build its sweep.
     """
 
     calibration: ManualYFactorSpec
@@ -515,6 +539,7 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=Tru
                 'Expected `null`, since a calibration sweep cannot itself be calibrated',
                 ('.source', '.calibration'),
             )
+        self._validate_action()
 
 
 # %% Non-Sweep specs

@@ -220,23 +220,28 @@ def _is_port_loop(loop: specs.LoopSpec) -> bool:
     return loop.isin == 'capture' and loop.field == 'port'
 
 
+@sa.util.lru_cache()
 def build_calibration_sweep(
     spec: specs.ManualYFactorCalibration[SS, SP, SC],
 ) -> specs.Sweep[SS, SP, SC]:
     """return the `Sweep` a calibration opens its resources for.
 
-    The sweep is the document's capture plan over every port, with the analysis of
+    The sweep is the spec's capture plan over every port, with the analysis of
     `calibration_analysis`, IQ reuse across the `analysis_bandwidth` points of one
-    radio setting, the Nyquist filter on, and no warmup. Its `sink` is the document's
+    radio setting, the Nyquist filter on, and no warmup. Its `sink` is the spec's
     `Sink` widened to a `ZarrSink`, of which the runner reads only the path and log
-    fields. It is an instance of the document class's `sweep_cls`.
+    fields. It is an instance of the spec class's `sweep_cls`. The result is
+    cached on `spec`.
 
     Raises:
-        TypeError: if `spec` is not an instance of a bound document class
+        TypeError: if `spec` is not an instance of a bound action spec class
+        msgspec.ValidationError: if the captures and loops do not share one
+            `duration` and `calibration.detector_period` is None, or if the sweep
+            fails `validate_sweep`
     """
     sweep_cls = type(spec).sweep_cls
     if sweep_cls is None:
-        raise TypeError('the calibration document is not bound to a sensor')
+        raise TypeError('the calibration spec is not bound to a sensor')
 
     return sweep_cls(
         description=spec.description,
@@ -352,14 +357,14 @@ def switch_diode(port: Any, diode_on: bool) -> None:
 class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
     """run a `ManualYFactorCalibration`.
 
-    `sweep` is `build_calibration_sweep` of the document; the resources open for
+    `sweep` is `build_calibration_sweep` of the spec; the resources open for
     it, and `open_sink` returns a `MemoryCacheSink` that collects the captures.
     `iterate` confirms the ENR with the operator, then for each port and each diode
     state prompts the operator to switch the diode and runs the captures of that
     port through `iterate_captures`, passing the diode state as the pipeline's
     `extra_data` so that it becomes a variable of every acquisition. It ends by
     computing and saving the corrections with `save_yfactor_corrections`, to the
-    document's `sink.path`; a path of None writes nothing.
+    spec's `sink.path`; a path of None writes nothing.
     """
 
     spec: specs.ManualYFactorCalibration[SS, SP, SC]
@@ -368,6 +373,11 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
     def __init__(self, spec: specs.ManualYFactorCalibration[SS, SP, SC]) -> None:
         self.spec = spec
         self.sweep = build_calibration_sweep(spec)
+
+    @classmethod
+    def validate(cls, spec: specs.ManualYFactorCalibration[SS, SP, SC]) -> None:
+        """build the calibration sweep of `spec`, raising what `build_calibration_sweep` raises."""
+        build_calibration_sweep(spec)
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
         return MemoryCacheSink(self.sweep)
@@ -385,7 +395,7 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
         The yields are those of `iterate_captures` over each pass. Each pass begins
         with a fresh acquisition (`Controller.discard_iq`); within a pass, `reuse_iq`
         applies. The corrections are saved only when the sink is a `MemoryCacheSink`
-        and the document's `sink.path` is not None.
+        and the spec's `sink.path` is not None.
 
         Raises:
             ValueError: if `loop` is set, since a calibration runs its grid once

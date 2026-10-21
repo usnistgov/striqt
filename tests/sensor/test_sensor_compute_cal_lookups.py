@@ -292,7 +292,7 @@ def _capture_dataset(runner, capture, index, start, diode_on):
 
 def _flush_model_captures(path):
     """save_yfactor_corrections over a full grid of model captures, as the runner's
-    passes collect them; returns the calibration document"""
+    passes collect them; returns the calibration spec"""
     captures = (make_calibration_capture(sample_rate=MCR, host_resample=False),)
     cal = ss.specs.ManualYFactorSpec(enr=YFACTOR_ENR_DB, ambient_temperature=290.0)
     source = CalSourceCls(array_backend='numpy')

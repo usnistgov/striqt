@@ -334,7 +334,7 @@ def test_expansion_args_take_the_nyquist_filter_as_an_argument(
 
 
 def test_calibration_fixture_expansion(calibration_sweep):
-    """the document's plan expands over every port; each diode pass of the runner
+    """the spec's plan expands over every port; each diode pass of the runner
     acquires half of it at one port, so the passes together cover it twice"""
     runner = ss.lib.actions.ManualYFactorRunner(calibration_sweep)
     result = S.loop_captures(runner.sweep)

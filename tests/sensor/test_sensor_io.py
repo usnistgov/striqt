@@ -208,7 +208,7 @@ def test_output_path_overrides_the_sink_path():
     assert spec.sink.path == 'out.zarr.zip'
 
 
-def test_store_backend_is_rejected_for_a_calibration_document():
+def test_store_backend_is_rejected_for_a_calibration_spec():
     with pytest.raises(TypeError, match='ZarrSink'):
         ss.read_yaml_spec(SITE_DIR / 'site-calibration.yaml', store_backend='zip')
 

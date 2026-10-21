@@ -300,7 +300,7 @@ def test_sweep_sink_is_a_zarr_sink(build):
         assert spec.sink == ZarrSink(path='x')
 
 
-def test_calibration_document_keeps_the_base_sink():
+def test_calibration_spec_keeps_the_base_sink():
     assert type(make_calibration_sweep().sink) is Sink
 
     widened = make_calibration_sweep(sink=ZarrSink())
@@ -692,7 +692,7 @@ class TestManualYFactorCalibration:
         with pytest.raises(TypeError, match='calibration'):
             CalSweepCls(**kws)
 
-    def test_document_has_no_options_and_an_empty_analysis(self):
+    def test_calibration_spec_has_no_options_and_an_empty_analysis(self):
         assert 'options' not in CalSweepCls.__struct_fields__
         assert make_calibration_sweep().analysis is None
 
@@ -704,6 +704,6 @@ class TestManualYFactorCalibration:
         }
         with pytest.warns(DeprecationWarning, match='analysis'):
             sweep = CalSweepCls.from_dict(tree)
-        assert sweep.analysis is None, 'discarded, so the document stays hashable'
+        assert sweep.analysis is None, 'discarded, so the spec stays hashable'
         assert hash(sweep) == hash(CalSweepCls.from_dict(sweep.to_dict(unfreeze=True)))
         assert sweep.calibration.enr == pytest.approx(YFACTOR_ENR_DB)

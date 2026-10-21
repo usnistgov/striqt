@@ -233,7 +233,7 @@ def make_calibration_sweep(**kws):
 
 
 def as_sweep(spec):
-    """the Sweep that runs for a decoded document: itself, or the one its runner builds"""
+    """the Sweep that runs for an action spec: itself, or the one its runner builds"""
     if isinstance(spec, ss.specs.Sweep):
         return spec
     return ss.lib.actions.registry.lookup(spec)(spec).sweep

@@ -66,12 +66,12 @@ def read_yaml_spec(
     Args:
         path: path to the yaml file
         output_path: optional override for the specification's output path
-        type: the document type to decode into, or None to select it by the
+        type: the action spec type to decode into, or None to select it by the
             ``sensor_binding`` tag
-        store_backend: replaces `sink.store` of a `Sweep` document when given
+        store_backend: replaces `sink.store` of a `Sweep` spec when given
 
     Returns:
-        the decoded document, an instance of the bound `ActionSpec` class
+        the decoded spec, an instance of the bound `ActionSpec` class
     """
 
     tree = sa.lib.io.decode_from_yaml_file(path)
@@ -98,13 +98,13 @@ def read_json_spec(
 
     Args:
         path: path to the json file
-        type: the document type to decode into, or None to select it by the
+        type: the action spec type to decode into, or None to select it by the
             ``sensor_binding`` tag
         output_path: optional override for the specification's output path
-        store_backend: replaces `sink.store` of a `Sweep` document when given
+        store_backend: replaces `sink.store` of a `Sweep` spec when given
 
     Returns:
-        the decoded document, an instance of the bound `ActionSpec` class
+        the decoded spec, an instance of the bound `ActionSpec` class
     """
     with open(path, 'rb') as buf:
         tree = msgspec.json.decode(buf.read(), type=dict)
@@ -142,7 +142,7 @@ def read_zarr_spec(
             fields that class adds to `specs.Sweep`. A saved ``mock_source`` attr
             selects that binding's mock sweep class instead.
         output_path: replaces `sink.path` in the returned spec when given
-        store_backend: replaces `sink.store` of a `Sweep` document when given
+        store_backend: replaces `sink.store` of a `Sweep` spec when given
         extension_root: directory that a relative `extensions.import_path` is
             resolved against, or None for the store's directory
 
@@ -282,7 +282,7 @@ def _decode_sweep(
     if store_backend is not None:
         if not isinstance(sink, specs.ZarrSink):
             raise TypeError(
-                'store_backend applies only to a Sweep document with a ZarrSink'
+                'store_backend applies only to a Sweep spec with a ZarrSink'
             )
         sink = sink.replace(store=store_backend)
     if output_path is not None:

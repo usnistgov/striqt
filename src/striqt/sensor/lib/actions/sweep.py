@@ -33,6 +33,10 @@ class SweepRunner(Generic[SS, SP, SC, PS, PC]):
         self.spec = spec
         self.sweep = spec
 
+    @classmethod
+    def validate(cls, spec: specs.Sweep[SS, SP, SC]) -> None:
+        """accept every `Sweep`: the spec is the sweep that runs."""
+
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
         if self.sweep.sink.path is None:
             return NoSink(self.sweep)

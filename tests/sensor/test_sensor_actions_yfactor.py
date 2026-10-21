@@ -1,5 +1,5 @@
 """striqt.sensor.lib.actions.yfactor: the Y-factor corrections, and the sweep, passes,
-analysis, sink, and operator interaction a calibration runner derives from its document
+analysis, sink, and operator interaction a calibration runner derives from its spec
 """
 
 from __future__ import annotations
@@ -149,12 +149,23 @@ def test_default_detector_period_follows_a_duration_loop():
 
 
 def test_default_detector_period_needs_one_duration():
-    sweep = make_calibration_sweep(loops=(DURATION_LOOP,))
+    """the runner's `validate` runs when the bound spec is constructed, so the
+    `detector_period` error is raised there"""
     with pytest.raises(msgspec.ValidationError, match=r'calibration\.detector_period'):
-        yfactor.calibration_analysis(sweep)
+        make_calibration_sweep(loops=(DURATION_LOOP,))
 
 
-# %% build_calibration_sweep
+# %% build_calibration_sweep and validate
+
+
+def test_build_sweep_is_cached_on_the_spec():
+    runner = make_calibration_runner()
+    assert yfactor.build_calibration_sweep(runner.spec) is runner.sweep
+
+
+def test_validate_accepts_a_spec_whose_sweep_builds():
+    doc = make_calibration_sweep(loops=(PORT_LOOP,))
+    assert ss.lib.actions.ManualYFactorRunner.validate(doc) is None
 
 
 def test_build_sweep_is_the_plan_with_generated_analysis_and_fixed_options():
@@ -352,14 +363,14 @@ def test_binding_derives_its_classes_from_the_parent():
     assert CAL.schema.source is parent.schema.source
     assert CAL.sensor.source_cls is parent.sensor.source_cls
     assert CAL.sensor.peripherals_cls is parent.sensor.peripherals_cls
-    document_cls = CAL.sensor.sweep_spec_cls
-    assert issubclass(document_cls, ss.specs.ManualYFactorCalibration)
-    assert not issubclass(document_cls, ss.specs.Sweep)
-    assert issubclass(document_cls.sweep_cls, ss.specs.Sweep)
-    assert document_cls.controller is CAL
+    action_cls = CAL.sensor.sweep_spec_cls
+    assert issubclass(action_cls, ss.specs.ManualYFactorCalibration)
+    assert not issubclass(action_cls, ss.specs.Sweep)
+    assert issubclass(action_cls.sweep_cls, ss.specs.Sweep)
+    assert action_cls.controller is CAL
 
 
-def test_registered_for_calibration_documents_only():
+def test_registered_for_calibration_specs_only():
     assert registry.lookup(CalSweepCls) is ManualYFactorRunner
     assert registry.lookup(SweepCls) is not ManualYFactorRunner
 

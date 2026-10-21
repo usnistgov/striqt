@@ -21,20 +21,33 @@ from ..typing import PC, PS, SC, SP, SS, TA, Unpack
 
 
 class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
-    """the contract between a decoded document and the code that opens and runs it.
+    """the contract between an action spec and the code that opens and runs it.
 
-    A runner class is registered for one document type with `registry.runner` and
-    constructed from the decoded document. `open_resources` opens the source and
-    peripherals for `sweep` and enters the sink returned by `open_sink`, and
-    `iterate_sweep` calls `iterate` over the open resources. Each runner implements
-    its own constructor, `open_sink`, and `iterate`; `iterate_captures` is the
-    pipeline they run captures through.
+    A runner class is registered for one action spec type with `registry.runner`
+    and constructed from an instance of that type, whether decoded from a file or
+    built from the API. `open_resources` opens the source and peripherals for
+    `sweep` and enters the sink returned by `open_sink`, and `iterate_sweep` calls
+    `iterate` over the open resources. Each runner implements its own constructor,
+    `validate`, `open_sink`, and `iterate`; `iterate_captures` is the pipeline they
+    run captures through. A bound spec calls `validate` at the end of its
+    construction (`specs.ActionSpec._validate_action`), so a bound spec that
+    constructs is one its runner can run.
     """
 
     spec: TA
     sweep: specs.Sweep[SS, SP, SC]
 
     def __init__(self, spec: TA) -> None: ...
+
+    @classmethod
+    def validate(cls, spec: TA) -> None:
+        """raise if `spec` cannot be converted to the `Sweep` this runner runs.
+
+        Raises:
+            msgspec.ValidationError: for the field of `spec` that the conversion
+                rejects, with its path
+        """
+        ...
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
         """return the sink that `open_resources` enters for `sweep`, not yet opened.
@@ -73,7 +86,7 @@ def iterate_sweep(
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
     """run the action of ``resources['runner']`` over `resources`.
 
-    The runner was built by `open_resources` from the decoded document. A plain
+    The runner was built by `open_resources` from the action spec. A plain
     `Sweep` runs `iterate_captures`, whose docstring describes the yields.
 
     Args:
@@ -134,7 +147,7 @@ def iterate_captures(
     The type of each yielded result depends on the return value of `sink.append`.
     To minimize memory usage, the yield values can also be explicitly set to
     `None` with `yield_values`. The attrs of each result are the fields of
-    ``resources['action_spec']``, the decoded document, which differ from those of
+    ``resources['action_spec']``, the action spec, which differ from those of
     ``resources['sweep_spec']`` when a runner derived the sweep.
 
     Args:

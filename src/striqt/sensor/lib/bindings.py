@@ -29,7 +29,7 @@ tagged_sweeps: Any = None
 class Sensor(Generic[SS, SP, SC]):
     """the implementation classes of a sensor.
 
-    `sweep_spec_cls` is the document (action spec) type to bind. Leaving it at the
+    `sweep_spec_cls` is the action spec type to bind. Leaving it at the
     default `specs.Sweep` defers to `Schema.action`, and `bind_sensor` rejects a
     non-default value in both places.
     """

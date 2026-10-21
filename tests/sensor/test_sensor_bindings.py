@@ -58,7 +58,7 @@ def test_yaml_schema_binding():
 
 def test_bound_sweep_names_its_controller_and_sweep_class():
     """a plain sweep binding's tagged class is its own `sweep_cls`, and both the
-    document and the derived sweep lead back to the controller that opens them"""
+    spec and the derived sweep lead back to the controller that opens them"""
     spec = ss.read_yaml_spec(SWEEP_DIR / 'air7101b.yaml')
     assert type(spec).controller is ss.bindings.air7101b
     assert type(spec).sweep_cls is type(spec)
@@ -98,9 +98,9 @@ class TestBindSensor:
         ctrl_cls = ss.bindings.bind_sensor(
             'companion_test', tone_sensor(), schema, register=False
         )
-        document_cls = ctrl_cls.sensor.sweep_spec_cls
-        companion = document_cls.sweep_cls
-        assert companion is not document_cls
+        action_cls = ctrl_cls.sensor.sweep_spec_cls
+        companion = action_cls.sweep_cls
+        assert companion is not action_cls
         assert issubclass(companion, ss.specs.Sweep)
         assert companion.__name__ == 'companion_test.sweep'
         assert companion.schema is schema

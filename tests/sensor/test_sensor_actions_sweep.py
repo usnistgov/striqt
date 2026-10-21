@@ -62,7 +62,7 @@ def test_sweep_runner_forwards_the_yield_modes():
     assert items == [None] * (len(OFFSETS) + 2)
 
 
-def test_build_sweep_is_the_document_itself():
+def test_build_sweep_is_the_spec_itself():
     sweep = tone_sweep(OFFSETS)
     runner = SweepRunner(sweep)
     assert runner.sweep is sweep
@@ -71,6 +71,11 @@ def test_build_sweep_is_the_document_itself():
         assert res['sweep_spec'] is sweep
         assert res['action_spec'] is sweep
         assert isinstance(res['runner'], SweepRunner)
+
+
+def test_validate_accepts_every_sweep():
+    sweep = tone_sweep(OFFSETS)
+    assert ss.lib.actions.SweepRunner.validate(sweep) is None
 
 
 # %% iterate_sweep dispatch

@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
         """the open resources an action runs over.
 
-        `action_spec` is the decoded document, `runner` the action built from it,
+        `action_spec` is the spec the action runs, `runner` the action built from it,
         and `sweep_spec` the `Sweep` the runner built and the hardware opened for.
         """
 
