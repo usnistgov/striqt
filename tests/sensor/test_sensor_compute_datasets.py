@@ -118,6 +118,20 @@ def test_from_delayed_accepts_the_acquisition_info_defaults():
     compute.from_delayed(dd)
 
 
+def test_from_delayed_leaves_the_signal_trigger_out_of_the_coordinates():
+    """the acquisition info holds the Trigger object that aligned the capture, which
+    is not a coordinate; the other info fields still are"""
+    trigger = sa.Trigger(
+        'cellular_5g_pss_sync',
+        sa.specs.Cellular5GNPSSSync(subcarrier_spacing=30e3),
+        sa.registry,
+    )
+    info = ss.specs.AcquisitionInfo(signal_trigger=trigger, sweep_index=3)
+    ds = compute.from_delayed(dataclasses.replace(two_port_run()[0], extra_coords=info))
+    assert 'signal_trigger' not in ds.coords
+    assert list(ds.sweep_index.values) == [3, 3]
+
+
 # %% build_capture_coords
 
 

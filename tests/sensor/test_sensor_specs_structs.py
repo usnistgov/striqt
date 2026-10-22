@@ -231,18 +231,29 @@ class TestSignalTrigger:
             SoapySource, ValueError, TRIGGER_MSG, signal_trigger=name, **MCR
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            'signal_trigger is annotated Union[str, AnalysisGroup, None] but '
-            '__post_init__ only accepts registered trigger names'
-        ),
-    )
-    def test_analysis_group_accepted(self):
-        # BundledTriggers() cannot be instantiated on py3.14, so the bare base is used
-        group = sa.specs.AnalysisGroup()
-        source = SoapySource(signal_trigger=group, **MCR)
-        assert isinstance(source.signal_trigger, sa.specs.AnalysisGroup)
+    def test_trigger_bundle_accepted(self, construct):
+        bundle = sa.specs.AnySignalTrigger(
+            cellular_5g_pss_sync=sa.specs.Cellular5GNPSSSync(subcarrier_spacing=30e3)
+        )
+        source = construct(SoapySource, signal_trigger=bundle, **MCR)
+        assert source.signal_trigger == bundle
+
+    @pytest.mark.parametrize('count', [0, 2], ids=['none_enabled', 'two_enabled'])
+    def test_trigger_bundle_must_enable_exactly_one(self, count):
+        kws = {}
+        if count == 2:
+            kws = {
+                'cellular_5g_pss_sync': sa.specs.Cellular5GNPSSSync(
+                    subcarrier_spacing=30e3
+                ),
+                'cellular_5g_sss_sync': sa.specs.Cellular5GNSSSSync(
+                    subcarrier_spacing=30e3
+                ),
+            }
+        bundle = sa.specs.AnySignalTrigger(**kws)
+        raises_on_both_paths(
+            SoapySource, ValueError, 'exactly one trigger', signal_trigger=bundle, **MCR
+        )
 
 
 # %% Loops, plot options and extensions

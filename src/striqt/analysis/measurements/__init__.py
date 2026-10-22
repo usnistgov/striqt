@@ -19,6 +19,21 @@ from .spectrum import (
     spectrogram_ratio_histogram,
 )
 from .shared import registry
+from .. import specs
+from ..lib import register
+
+# every measurement and trigger registered above must have its field on the bundles
+register.check_group_fields(
+    specs.AnyAnalysis, {info.name: spec_type for spec_type, info in registry.items()}
+)
+register.check_group_fields(
+    specs.AnySignalTrigger,
+    {
+        info.name: info.meas_spec_type
+        for key, info in registry.signal_trigger.items()
+        if isinstance(key, str)
+    },
+)
 
 __all__ = [
     'cellular_5g_pss_correlation',

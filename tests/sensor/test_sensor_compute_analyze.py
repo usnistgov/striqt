@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import dataclasses
 
-import msgspec
 import numpy as np
 import pytest
 from sweep_strategies import SOURCE
@@ -26,9 +25,10 @@ from striqt.sensor.lib import compute
 (CAPTURE,) = tone_captures((1e6,))
 SWEEP = preset_sweep('single_tone', (CAPTURE,), analysis=IQ_ONLY)
 
-PSS = ss.specs.BundledAnalysis.from_dict({
+PSS = ss.specs.AnyAnalysis.from_dict({
     'cellular_5g_pss_sync': {'subcarrier_spacing': 30e3}
 })
+PSS_BUNDLE = ss.specs.AnySignalTrigger(cellular_5g_pss_sync=PSS.cellular_5g_pss_sync)
 
 
 def options(**kws):
@@ -139,6 +139,16 @@ TRIGGER_CASES = {
         None,
         ValueError,
     ),
+    'bundle_without_analysis': (
+        SOURCE.replace(signal_trigger=PSS_BUNDLE),
+        None,
+        'pss',
+    ),
+    'bundle_with_other_analysis': (
+        SOURCE.replace(signal_trigger=PSS_BUNDLE),
+        IQ_ONLY,
+        'pss',
+    ),
 }
 
 
@@ -156,17 +166,10 @@ def test_get_trigger_from_spec(case):
         assert trigger.meas_spec == PSS.cellular_5g_pss_sync
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=msgspec.ValidationError,
-    reason='Source.signal_trigger annotates the group form as the fieldless '
-    'AnalysisGroup base, so validation rejects every measurement key and the '
-    'AnalysisGroup branches of get_trigger_from_spec are unreachable '
-    '(sensor/specs/structs.py:105)',
-)
-def test_get_trigger_from_an_analysis_group_trigger():
-    trigger = compute.get_trigger_from_spec(SOURCE.replace(signal_trigger=PSS), None)
-    assert trigger.meas_spec == PSS.cellular_5g_pss_sync
+def test_trigger_bundle_names_its_one_enabled_trigger():
+    trigger = compute.get_trigger_from_spec(SOURCE.replace(signal_trigger=PSS_BUNDLE))
+    assert trigger is not None
+    assert trigger.info.name == 'cellular_5g_pss_sync'
 
 
 # %% prepare_compute

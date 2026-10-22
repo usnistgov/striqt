@@ -413,3 +413,47 @@ class SpectrogramHistogramRatio(
     frozen=True,
 ):
     pass
+
+
+class AnyAnalysis(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):
+    """the ``analysis:`` block of a sweep: one optional field per registered measurement.
+
+    Each field is named for the measurement it configures and holds that
+    measurement's spec, or None to leave the measurement out of the sweep. `to_dict`
+    omits the None fields. The dict and the saved zarr attrs therefore name only the
+    enabled measurements. The registered measurements and these fields must agree one
+    to one, which `striqt.analysis.measurements` checks when it is imported.
+    """
+
+    channel_power_time_series: typing.Optional[ChannelPowerTimeSeries] = None
+    channel_power_histogram: typing.Optional[ChannelPowerHistogram] = None
+    cyclic_channel_power: typing.Optional[CyclicChannelPower] = None
+    spectrogram: typing.Optional[Spectrogram] = None
+    power_spectral_density: typing.Optional[PowerSpectralDensity] = None
+    spectrogram_histogram: typing.Optional[SpectrogramHistogram] = None
+    spectrogram_ratio_histogram: typing.Optional[SpectrogramHistogramRatio] = None
+    cellular_5g_pss_sync: typing.Optional[Cellular5GNPSSSync] = None
+    cellular_5g_pss_correlation: typing.Optional[Cellular5GNRPSSCorrelator] = None
+    cellular_5g_sss_sync: typing.Optional[Cellular5GNSSSSync] = None
+    cellular_5g_sss_correlation: typing.Optional[Cellular5GNRSSSCorrelator] = None
+    cellular_5g_ssb_spectrogram: typing.Optional[Cellular5GNRSSBSpectrogram] = None
+    cellular_cyclic_autocorrelation: typing.Optional[CellularCyclicAutocorrelator] = (
+        None
+    )
+    cellular_resource_power_histogram: typing.Optional[
+        CellularResourcePowerHistogram
+    ] = None
+    iq_waveform: typing.Optional[IQWaveform] = None
+
+
+class AnySignalTrigger(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):
+    """the struct form of a source's ``signal_trigger:``, one optional field per trigger.
+
+    Exactly one field is set. The field names the trigger and holds the spec the
+    trigger runs with. A source with this form aligns captures to a measurement that
+    the sweep's `AnyAnalysis` need not enable. The string form of ``signal_trigger``
+    names a registered trigger and takes its spec from the sweep's analysis instead.
+    """
+
+    cellular_5g_pss_sync: typing.Optional[Cellular5GNPSSSync] = None
+    cellular_5g_sss_sync: typing.Optional[Cellular5GNSSSSync] = None

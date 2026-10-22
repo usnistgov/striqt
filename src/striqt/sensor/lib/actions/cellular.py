@@ -4,7 +4,7 @@ The transform from channel table to radio settings is explicit and runs once, wh
 runner builds its sweep: each capture is matched to the channel with its
 `center_frequency`, its `sample_rate` and `analysis_bandwidth` are derived from that
 channel, the channel's cell parameters are written into the capture's
-`adjust_analysis`, and the analysis block is expanded into a `BundledAnalysis` with the
+`adjust_analysis`, and the analysis block is expanded into an `AnyAnalysis` with the
 parameters that follow from the subcarrier spacing filled in. The sweep's captures
 are the binding's own type, and loops over their fields pass through unchanged.
 """
@@ -155,7 +155,7 @@ def resolve_capture(
     return capture.replace(adjust_analysis=adjust_analysis, **derived)
 
 
-def analysis_parameter_names(analysis: specs.BundledAnalysis) -> frozenset[str]:
+def analysis_parameter_names(analysis: specs.AnyAnalysis) -> frozenset[str]:
     """return the field names of every enabled measurement in `analysis`."""
     names: set[str] = set()
     for meas in analysis.to_dict().values():
@@ -186,15 +186,16 @@ def channel_subcarrier_spacing(channels: Mapping[int, specs.CellChannel]) -> flo
 
 def cellular_analysis(
     spec: specs.Cellular5GNRSweep[Any, Any, Any], subcarrier_spacing: float
-) -> specs.BundledAnalysis:
+) -> specs.AnyAnalysis:
     """return the `Sweep` analysis that `spec.analysis` and `subcarrier_spacing` select.
 
     Each enabled block of `spec.analysis` becomes the measurement of the same role,
     with its free parameters copied and the spacing-dependent parameters filled.
 
     Raises:
-        SpecValidationError: if `spec.source.signal_trigger` names the PSS sync
-            measurement and `spec.analysis.pss_sync` is None
+        SpecValidationError: if `spec.source.signal_trigger` is the PSS sync name and
+            `spec.analysis.pss_sync` is None, or any other trigger name; the struct
+            form of `signal_trigger` carries its own spec and needs no block
     """
     scs = subcarrier_spacing
     blocks = spec.analysis
@@ -262,15 +263,23 @@ def cellular_analysis(
     if blocks.iq_waveform is not None:
         result['iq_waveform'] = blocks.iq_waveform.to_dict()
 
+    # a string trigger takes its spec from the sweep analysis, so the analysis must
+    # enable that measurement; the struct form of signal_trigger brings its own spec
     trigger = spec.source.signal_trigger
-    if trigger == PSS_SYNC_TRIGGER and PSS_SYNC_TRIGGER not in result:
+    if isinstance(trigger, str) and trigger not in result:
+        if trigger == PSS_SYNC_TRIGGER:
+            raise SpecValidationError(
+                f'Expected a `pss_sync` block, since the source triggers on '
+                f'{PSS_SYNC_TRIGGER!r}',
+                ('.analysis', '.pss_sync'),
+            )
         raise SpecValidationError(
-            f'Expected a `pss_sync` block, since the source triggers on '
-            f'{PSS_SYNC_TRIGGER!r}',
-            ('.analysis', '.pss_sync'),
+            f'Expected {PSS_SYNC_TRIGGER!r}, the trigger the cellular analysis '
+            f'generates, or the struct form of signal_trigger, got {trigger!r}',
+            ('.source', '.signal_trigger'),
         )
 
-    return specs.BundledAnalysis.from_dict(result)
+    return specs.AnyAnalysis.from_dict(result)
 
 
 @sa.util.lru_cache()

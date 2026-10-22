@@ -66,8 +66,7 @@ def correct_iq(
         raise TypeError('iq.capture must be a capture specification')
 
     if signal_trigger is None:
-        # AcquisitionInfo.signal_trigger is the measurement name, not a Trigger
-        signal_trigger = iq.info.signal_trigger  # ty: ignore
+        signal_trigger = iq.info.signal_trigger
 
     max_lag = _get_max_trigger_lag(iq.source_spec, capture, signal_trigger)
     resample_kws = {'overwrite_x': overwrite_x, 'min_overlap': max_lag, 'axis': axis}

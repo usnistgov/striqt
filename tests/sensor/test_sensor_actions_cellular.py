@@ -22,6 +22,7 @@ from sweep_strategies import (
 )
 from synthetic_sources import run_in_memory
 
+import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib.actions import Cellular5GNRSweepRunner, cellular, registry
 
@@ -335,6 +336,25 @@ def test_pss_trigger_runs_with_the_pss_sync_block():
     source = SOURCE.replace(signal_trigger=PSS_TRIGGER)
     spec = one_block_sweep('pss_sync', source=source)
     assert PSS_TRIGGER in enabled(cellular.cellular_analysis(spec, SCS))
+
+
+def test_struct_trigger_needs_no_pss_sync_block():
+    """the struct form of signal_trigger carries its own spec, so the derived sweep
+    triggers without the measurement in its analysis"""
+    bundle = ss.specs.AnySignalTrigger(
+        cellular_5g_pss_sync=sa.specs.Cellular5GNPSSSync(subcarrier_spacing=SCS)
+    )
+    spec = one_block_sweep('iq_waveform', source=SOURCE.replace(signal_trigger=bundle))
+    sweep = cellular.build_cellular_sweep(spec)
+    assert PSS_TRIGGER not in enabled(sweep.analysis)
+    trigger = ss.lib.compute.get_trigger_from_spec(sweep.source, sweep.analysis)
+    assert trigger is not None and trigger.info.name == PSS_TRIGGER
+
+
+def test_other_string_trigger_is_rejected():
+    source = SOURCE.replace(signal_trigger='cellular_5g_sss_sync')
+    with pytest.raises(msgspec.ValidationError, match=r'source\.signal_trigger'):
+        one_block_sweep('iq_waveform', source=source)
 
 
 # %% build_cellular_sweep and validate

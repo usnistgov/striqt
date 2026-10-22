@@ -13,10 +13,15 @@ from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKIN
 import msgspec
 
 import striqt.analysis as sa
+from striqt.analysis import Trigger
 
 # pd must be bound here for msgspec to resolve the 'pd.Timestamp' types in `types`
 from striqt.analysis.lib.util import pd  # noqa: F401
-from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
+from striqt.analysis.specs import AnyAnalysis, AnySignalTrigger, Capture, SpecBase
+from striqt.analysis.specs import frozendict
+
+# re-exported through striqt.sensor.specs as the annotation of any analysis bundle
+from striqt.analysis.specs import AnalysisGroup  # noqa: F401
 from striqt.analysis.specs.helpers import SpecValidationError
 
 from ..lib.typing import TypeVar, SS, SP, SC
@@ -106,7 +111,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
 
     # synchronization and triggering
     trigger_strobe: Union[float, None] = None
-    signal_trigger: Union[str, AnalysisGroup, None] = None
+    signal_trigger: Union[str, AnySignalTrigger, None] = None
 
     array_backend: types.ArrayBackend = 'numpy'
 
@@ -149,10 +154,14 @@ class SoapySource(Source, frozen=True, kw_only=True):
             raise ValueError('time_sync_at must be "open" when gapless')
         elif self.receive_retries > 0:
             raise ValueError('receive_retries must be 0 when gapless is enabled')
-        if self.signal_trigger is None:
+        trigger = self.signal_trigger
+        if trigger is None:
             pass
-        elif self.signal_trigger not in registry.signal_trigger:
-            registered = set(registry.signal_trigger)
+        elif isinstance(trigger, AnySignalTrigger):
+            if len(trigger.to_dict()) != 1:
+                raise ValueError('signal_trigger must enable exactly one trigger')
+        elif trigger not in registry.signal_trigger:
+            registered = {k for k in registry.signal_trigger if isinstance(k, str)}
             raise ValueError(f'signal_trigger must be one of {registered!r}')
 
 
@@ -325,8 +334,9 @@ ManualYFactorPeripheral = ManualYFactorSpec
 
 
 # %% Top-level Sweep specifications
-BundledAnalysis = sa.registry.tospec()
-BundledTriggers = sa.registry.signal_trigger.to_spec()
+# compatibility names for the bundles, which striqt.analysis.specs defines
+BundledAnalysis = AnyAnalysis
+BundledTriggers = AnySignalTrigger
 
 
 class Sink(SpecBase, frozen=True, kw_only=True):
@@ -492,7 +502,7 @@ class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
 
     sink: ZarrSink = ZarrSink()
     plot_hint: Union[PlotOptions, None] = None
-    analysis: BundledAnalysis = BundledAnalysis()
+    analysis: AnyAnalysis = AnyAnalysis()
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
 
     def __post_init__(self) -> None:
@@ -762,9 +772,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     sweep_index: int = 0
     capture_index: int = 0
 
-    # sa.Trigger is excluded from this union because msgspec fails to resolve it
-    # on python 3.9
-    signal_trigger: Union[str, None] = None
+    signal_trigger: Union[Trigger, None] = None
 
     def replace(self, **attrs) -> _Self:
         """returns a copy of self with changed attributes.

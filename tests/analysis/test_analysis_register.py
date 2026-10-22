@@ -10,6 +10,7 @@ would leak a measurement into every other test module.
 from __future__ import annotations
 
 from fractions import Fraction
+from typing import Optional
 
 import msgspec
 import numpy as np
@@ -31,6 +32,11 @@ class ToySpec(sa.specs.Analysis, frozen=True, kw_only=True):
 
 class OtherToySpec(sa.specs.Analysis, frozen=True, kw_only=True):
     scale: float = 1.0
+
+
+class ToyGroup(sa.specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True):
+    toy: Optional[ToySpec] = None
+    other_toy: Optional[OtherToySpec] = None
 
 
 def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=None):
@@ -165,7 +171,7 @@ def test_registry_validate_calls_only_the_requested_measurements():
         lambda capture, spec: seen.append('toy'),
         lambda capture, spec: seen.append('other_toy'),
     )
-    group = registry.tospec()(other_toy=OtherToySpec())
+    group = ToyGroup(other_toy=OtherToySpec())
 
     registry.validate(CAPTURE, group)
     assert seen == ['other_toy']
@@ -176,7 +182,7 @@ def test_registry_validate_skips_measurements_without_a_validator():
     registry = build_group_registry(
         None, lambda capture, spec: seen.append('other_toy')
     )
-    group = registry.tospec()(toy=ToySpec(), other_toy=OtherToySpec())
+    group = ToyGroup(toy=ToySpec(), other_toy=OtherToySpec())
 
     registry.validate(CAPTURE, group)
     assert seen == ['other_toy']
@@ -187,7 +193,7 @@ def test_registry_validate_annotates_the_analysis_field_path():
         raise SpecValidationError('nfft must be even', ('.nfft',))
 
     registry = build_group_registry(validate, None)
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     with pytest.raises(SpecValidationError) as excinfo:
         registry.validate(CAPTURE, group)
@@ -199,7 +205,7 @@ def test_registry_validate_annotates_the_analysis_field_path():
 def test_registry_validate_passes_the_projected_capture():
     seen = []
     registry = build_group_registry(lambda capture, spec: seen.append(capture), None)
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     registry.validate(CAPTURE, group)
     assert seen == [sa.specs.helpers.to_analysis_capture(CAPTURE)]
@@ -210,7 +216,7 @@ def test_registry_validate_is_cached_on_the_projected_capture():
     path"""
     seen = []
     registry = build_group_registry(lambda capture, spec: seen.append(spec), None)
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     registry.validate(CAPTURE, group)
     registry.validate(CAPTURE, group)
@@ -231,7 +237,7 @@ def test_validator_errors_are_msgspec_validation_errors():
     registry = build_group_registry(
         lambda capture, spec: (_ for _ in ()).throw(ValueError('nope')), None
     )
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     with pytest.raises(msgspec.ValidationError):
         registry.validate(CAPTURE, group)
@@ -269,7 +275,7 @@ def test_tolerance_is_stored_on_the_info_and_defaults_to_none():
 
 def test_registry_tolerances_is_empty_when_nothing_declares_one():
     registry = build_group_registry(None, None)
-    group = registry.tospec()(toy=ToySpec(), other_toy=OtherToySpec())
+    group = ToyGroup(toy=ToySpec(), other_toy=OtherToySpec())
 
     assert registry.tolerances(CAPTURE, group) == {}
 
@@ -278,7 +284,7 @@ def test_registry_tolerances_keys_declared_measurements_by_name():
     registry = build_group_registry(
         None, None, tolerances=(None, recording_tolerance([]))
     )
-    group = registry.tospec()(toy=ToySpec(), other_toy=OtherToySpec())
+    group = ToyGroup(toy=ToySpec(), other_toy=OtherToySpec())
 
     result = registry.tolerances(CAPTURE, group)
 
@@ -291,7 +297,7 @@ def test_registry_tolerances_skips_measurements_not_in_the_group():
     registry = build_group_registry(
         None, None, tolerances=(recording_tolerance(seen), recording_tolerance(seen))
     )
-    group = registry.tospec()(toy=ToySpec(nfft=4))
+    group = ToyGroup(toy=ToySpec(nfft=4))
 
     registry.tolerances(CAPTURE, group)
 
@@ -305,7 +311,7 @@ def test_registry_tolerances_forwards_backend_and_input_error_as_keywords():
     registry = build_group_registry(
         None, None, tolerances=(recording_tolerance(seen), None)
     )
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     registry.tolerances(CAPTURE, group)
     registry.tolerances(CAPTURE, group, array_backend='cupy', input_error=1e-4)
@@ -321,7 +327,7 @@ def test_registry_tolerances_is_cached_on_the_projected_capture():
     registry = build_group_registry(
         None, None, tolerances=(recording_tolerance(seen), None)
     )
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     registry.tolerances(WideCapture(duration=1e-4, sample_rate=1e6, gain=0.0), group)
     registry.tolerances(WideCapture(duration=1e-4, sample_rate=1e6, gain=10.0), group)
@@ -351,7 +357,7 @@ def check_accepted_pair_runs(info, data):
     once IQ arrives. Pairs they reject are out of scope here; the spot checks below
     cover those."""
     capture, spec = data.draw(VALIDATOR_DOMAINS[info.name], label=info.name)
-    group = sa.registry.tospec()(**{info.name: spec})
+    group = sa.specs.AnyAnalysis(**{info.name: spec})
     try:
         sa.registry.validate(capture, group)
     except SpecValidationError:
@@ -411,7 +417,7 @@ def test_validator_rejects_at_the_analysis_path_naming_the_field(case):
     under `$.analysis`, worded in terms of the spec or capture field at fault"""
     capture, spec, field = REJECTED[case]
     name = sa.registry[type(spec)].name
-    group = sa.registry.tospec()(**{name: spec})
+    group = sa.specs.AnyAnalysis(**{name: spec})
 
     with pytest.raises(SpecValidationError) as excinfo:
         sa.registry.validate(capture, group)
@@ -553,7 +559,58 @@ def test_validators_accept_the_contract_specs(spec):
 
 
 def test_registry_validate_accepts_the_whole_contract_group():
-    group = sa.registry.tospec()(**{
+    group = sa.specs.AnyAnalysis(**{
         sa.registry[type(spec)].name: spec for spec in CONTRACT_SPECS
     })
     sa.registry.validate(CONTRACT_CAPTURE, group)
+
+
+# %% check_group_fields
+
+
+def test_check_group_fields_accepts_a_matching_group():
+    expected = {'toy': ToySpec, 'other_toy': OtherToySpec}
+    assert register.check_group_fields(ToyGroup, expected) is None
+
+
+def test_check_group_fields_reports_a_missing_field():
+    expected = {'toy': ToySpec, 'other_toy': OtherToySpec, 'third': ToySpec}
+    with pytest.raises(TypeError, match=r"missing fields \['third'\]"):
+        register.check_group_fields(ToyGroup, expected)
+
+
+def test_check_group_fields_reports_an_unregistered_field():
+    with pytest.raises(TypeError, match=r"unregistered fields \['other_toy'\]"):
+        register.check_group_fields(ToyGroup, {'toy': ToySpec})
+
+
+def test_check_group_fields_reports_a_wrong_spec_type():
+    expected = {'toy': OtherToySpec, 'other_toy': OtherToySpec}
+    with pytest.raises(TypeError, match=r"wrong spec type \['toy'\]"):
+        register.check_group_fields(ToyGroup, expected)
+
+
+def test_check_group_fields_rejects_a_field_that_is_not_optional():
+    class Bad(sa.specs.AnalysisGroup, frozen=True, kw_only=True):
+        toy: ToySpec = ToySpec()
+
+    with pytest.raises(TypeError, match='Optional'):
+        register.check_group_fields(Bad, {'toy': ToySpec})
+
+
+def test_registry_and_any_analysis_agree():
+    """the import-time guard in striqt.analysis.measurements, asserted by name"""
+    expected = {info.name: spec_type for spec_type, info in sa.registry.items()}
+    register.check_group_fields(sa.specs.AnyAnalysis, expected)
+    assert set(sa.specs.AnyAnalysis.__struct_fields__) == set(expected)
+
+
+def test_trigger_registry_and_any_signal_trigger_agree():
+    expected = {
+        info.name: info.meas_spec_type
+        for key, info in sa.registry.signal_trigger.items()
+        if isinstance(key, str)
+    }
+    register.check_group_fields(sa.specs.AnySignalTrigger, expected)
+    triggers = set(sa.specs.AnySignalTrigger.__struct_fields__)
+    assert triggers <= set(sa.specs.AnyAnalysis.__struct_fields__)

@@ -31,7 +31,7 @@ DIODE_FIELD = 'noise_diode_enabled'
 
 def calibration_analysis(
     spec: specs.ManualYFactorCalibration[Any, Any, Any],
-) -> specs.BundledAnalysis:
+) -> specs.AnyAnalysis:
     """return the analysis a Y-factor calibration runs on each capture.
 
     The analysis is `channel_power_time_series` with the ``rms`` and ``peak``
@@ -63,7 +63,7 @@ def calibration_analysis(
             )
         (period,) = durations
 
-    return specs.BundledAnalysis.from_dict({
+    return specs.AnyAnalysis.from_dict({
         'channel_power_time_series': {
             'detector_period': period,
             'power_detectors': ('rms', 'peak'),

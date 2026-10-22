@@ -30,7 +30,13 @@ and 41 were fixed on 2026-10-21 by the actions refactor of `striqt.sensor`
 (`sensor/lib/actions/`), and items 14 and 48 retired with it the same day: the
 calibration runner now acquires each port with the diode off and on itself, so no
 loop is inserted (14), and `save_yfactor_corrections` assigns `calibration_fields` to the
-saved corrections (48). Items are listed in priority order, not numeric order.
+saved corrections (48). Items 22 and 86 were fixed on 2026-10-22 by replacing the
+`msgspec.defstruct`-generated `BundledAnalysis`/`BundledTriggers` with the hand-written
+`specs.AnyAnalysis`/`specs.AnySignalTrigger` (the old names are aliases):
+`Source.signal_trigger` is annotated with the trigger bundle, `SoapySource.__post_init__`
+accepts it when exactly one trigger is enabled, and `striqt.analysis.measurements` checks
+at import that the registry and the bundles agree (`xfailed` 43 to 41 on both
+interpreters; 35 to 33 markers). Items are listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -96,13 +102,11 @@ item is open.
 | 10 | `test_chained_remap_declared_before_its_key_resolves` | Medium | B | moderate |
 | 45 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]` | Medium | B | easy |
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
-| 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
 | 53 | `test_capture_changes_port` | High | C | easy |
 | 54 | `TestSoapySourceSetup::test_initial_ports_on_a_non_stream_all_source` | High | C | trivial |
 | 70 | `TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports` | High | C | easy |
 | 20 | `test_list_port_direct_is_frozen`; `test_var_tuple_list_is_frozen_on_direct_construction`; `test_freeze_depths_count_dict_list_and_tuple_nesting`; `test_freeze_depths_of_real_specs`; `test_direct_struct_with_list_validates_and_replaces` | High | C | trivial |
-| 22 | `test_analysis_group_accepted` | High | C | moderate |
 | 24 | `test_recurses_into_frozendict` | High | C | trivial |
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
 | 55 | `TestHardwareTimeSync::test_call_returns_the_sync_time` | High | C | trivial |
@@ -346,19 +350,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   Design decision; the xfail is kept whole so that it records that file
   resampling is broken end to end, not only the design.
 
-### 86. `Source.signal_trigger` cannot decode the analysis-group form
-
-`tests/sensor/test_sensor_compute_analyze.py::test_get_trigger_from_an_analysis_group_trigger`
-
-- **Mechanism.** `sensor/specs/structs.py:105` annotates `signal_trigger:
-  Union[str, AnalysisGroup, None]` with the fieldless `AnalysisGroup` base, so
-  `validate()` and YAML decoding reject any measurement key. The
-  `AnalysisGroup` branches of `_get_signal_trigger_name` and
-  `get_trigger_from_spec` (`analyze.py:50-75`) are unreachable through a
-  validated spec; `BundledTriggers` (`structs.py:307`) exists and is unused.
-- **Impact.** C. Only the string form works, which is what every YAML uses.
-- **Fix.** Annotate with `BundledTriggers`. Easy, but a schema change.
-
 ### 88. An analysis loop over an un-inferable field breaks `from_delayed`
 
 `tests/sensor/test_sensor_compute_datasets.py::test_build_capture_coords_adds_a_window_loop_coordinate`
@@ -443,22 +434,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   hand-built specs hit it.
 - **Fix.** Add the `VarTupleType` branch. Trivial, but it also changes which
   fields `to_dict(unfreeze=True)` emits as lists in zarr attrs.
-
-### 22. `SoapySource.signal_trigger` rejects the `AnalysisGroup` form
-
-`tests/sensor/test_sensor_specs_structs.py::TestSignalTrigger::test_analysis_group_accepted`
-
-- **Mechanism.** `sensor/specs/structs.py:148` checks membership in the
-  trigger registry, which fails for a struct. `FunctionSource` accepts it, and
-  `compute/analyze.py:66` implements the group form.
-- **Why the test is right.** The annotation and `analyze.py` both intend it.
-  However the annotation is the bare `AnalysisGroup`, which has no fields, so
-  YAML cannot express it anyway; `BundledTriggers` (`structs.py:307`), the
-  type that should be there, cannot be introspected on py3.9 and is
-  unreferenced.
-- **Impact.** Dead path in production; every YAML uses the string form.
-- **Fix.** Relaxing the check is trivial; making it usable from YAML needs
-  `AlignmentSourceRegistry.to_spec()` fixed and used. Moderate.
 
 ### 24. `freeze` does not recurse into an existing `frozendict`
 

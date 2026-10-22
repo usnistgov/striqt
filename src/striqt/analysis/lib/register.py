@@ -6,7 +6,8 @@ from __future__ import annotations as __
 
 import contextlib
 import functools
-from typing import Any, Callable, cast, Literal, NamedTuple, TYPE_CHECKING, Union
+import typing
+from typing import Any, Callable, cast, Literal, NamedTuple, TYPE_CHECKING
 from fractions import Fraction
 
 import msgspec
@@ -230,11 +231,6 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
 
         return wrapper
 
-    def to_spec(
-        self, base: type[specs.AnalysisGroup] = specs.AnalysisGroup
-    ) -> type[specs.AnalysisGroup]:
-        return to_analysis_spec_type(self, base)
-
 
 PreferIQSource = Literal['aligned', 'pre_filter', 'pre_align']
 
@@ -302,10 +298,12 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         """register the decorated function as the measurement configured by `spec_type`.
 
         Registration mutates this registry when the decorator is applied. `spec_type`
-        becomes a key here and an optional field of the `AnalysisGroup` struct that
-        `tospec()` synthesizes, so the measurement gains a key in the ``analysis:``
-        block of a sweep spec. Each field of `spec_type` is also recorded in
-        `parameter_fields` and `parameter_defaults` for coordinate inference.
+        becomes a key here, and each of its fields is recorded in `parameter_fields`
+        and `parameter_defaults` for coordinate inference. A sweep reaches the
+        measurement through the ``analysis:`` block only when `specs.AnyAnalysis`
+        declares an ``Optional[spec_type]`` field of the same `name`;
+        `striqt.analysis.measurements` checks at import that the registry and that
+        struct agree.
 
         The decorated function is called as ``func(iq, capture, **spec.to_dict())``
         and returns an array, or an ``(array, attrs)`` tuple, whose axes are `dims`.
@@ -503,11 +501,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
     __call__ = measurement
 
-    def tospec(
-        self, base: type[specs.AnalysisGroup] = specs.AnalysisGroup
-    ) -> type[specs.AnalysisGroup]:
-        return to_analysis_spec_type(self, base)
-
     def cache_context(
         self, capture: specs.Capture, callback: Callable | None = None
     ) -> contextlib.AbstractContextManager[contextlib.ExitStack]:
@@ -624,27 +617,42 @@ def cached_registry_context(
             raise
 
 
-def to_analysis_spec_type(
-    registry: AlignmentSourceRegistry | AnalysisRegistry,
-    base: type[specs.AnalysisGroup] = specs.AnalysisGroup,
-) -> type[specs.AnalysisGroup]:
-    """return a Struct subclass type representing a specification for calls to all registered functions"""
+def check_group_fields(
+    group_type: type[specs.AnalysisGroup], expected: dict[str, type[specs.Analysis]]
+) -> None:
+    """raise unless `group_type` has one ``Optional[spec] = None`` field per `expected` entry.
 
-    fields = [
-        (info.name, Union[struct_type, None], None)
-        for struct_type, info in registry.items()
-    ]
+    `striqt.analysis.measurements` runs this on `specs.AnyAnalysis` against the
+    measurement registry and on `specs.AnySignalTrigger` against the trigger
+    registry. A measurement registered without its field, or a field without its
+    measurement, therefore fails at import. Field order is not checked.
 
-    cls = msgspec.defstruct(
-        'Analysis',
-        cast(list[tuple[str, type, Any]], fields),
-        bases=(base,),
-        kw_only=True,
-        omit_defaults=True,
-        frozen=True,
-    )
+    Args:
+        group_type: the struct to check
+        expected: measurement name to spec type, as the registry records them
 
-    return cast(type[specs.AnalysisGroup], cls)
+    Raises:
+        TypeError: naming the field that is not an optional spec with default None,
+            or listing the missing, unregistered, and mismatched field names
+    """
+    actual: dict[str, type] = {}
+    for field in msgspec.structs.fields(group_type):
+        args = set(typing.get_args(field.type))
+        if type(None) not in args or len(args) != 2 or field.default is not None:
+            raise TypeError(
+                f'{group_type.__qualname__}.{field.name} must be an Optional spec type '
+                f'with default None, not {field.type!r}'
+            )
+        (actual[field.name],) = args - {type(None)}
+    if actual != expected:
+        missing = sorted(expected.keys() - actual.keys())
+        extra = sorted(actual.keys() - expected.keys())
+        shared = actual.keys() & expected.keys()
+        mismatched = sorted(k for k in shared if actual[k] is not expected[k])
+        raise TypeError(
+            f'{group_type.__qualname__} does not match the registry: missing fields '
+            f'{missing!r}, unregistered fields {extra!r}, wrong spec type {mismatched!r}'
+        )
 
 
 class Trigger:

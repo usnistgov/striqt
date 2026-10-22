@@ -44,7 +44,8 @@ def get_trigger_from_spec(
     if name is None:
         return None
 
-    if analysis is None and isinstance(setup.signal_trigger, specs.AnalysisGroup):
+    # the spec inside a struct-form trigger takes precedence over the sweep analysis
+    if isinstance(setup.signal_trigger, specs.AnalysisGroup):
         analysis = setup.signal_trigger
 
     if analysis is None:

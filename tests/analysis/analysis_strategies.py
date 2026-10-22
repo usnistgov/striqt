@@ -23,7 +23,7 @@ def registered_tolerance(capture, spec, **kwargs) -> sa.specs.Tolerance:
     """the tolerance registered for the measurement that `spec` selects, fetched
     through the registry walk a consumer would use"""
     name = sa.registry[type(spec)].name
-    group = sa.registry.tospec()(**{name: spec})
+    group = sa.specs.AnyAnalysis(**{name: spec})
     return sa.registry.tolerances(capture, group, **kwargs)[name]
 
 
