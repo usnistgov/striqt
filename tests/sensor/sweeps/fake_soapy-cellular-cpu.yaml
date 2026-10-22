@@ -1,0 +1,60 @@
+# 5G NR channel sweep against the fake SoapySDR device (tests/sensor/fake_soapy.py).
+# The captures name their channel by center_frequency; the runner derives the
+# sample rate (107.52 MS/s and 53.76 MS/s) and analysis bandwidth from cell_channels.
+
+sensor_binding: fake_soapy_cellular
+extensions:
+  import_path: src
+  import_name: fake_soapy_bindings
+
+source:
+  array_backend: numpy
+  time_source: host
+  time_sync_at: acquire
+  clock_source: internal
+  receive_retries: 3
+  adc_overload_limit: -1
+  calibration: null
+  signal_trigger: null
+
+captures:
+  - port: [0, 1]
+    center_frequency: 3750e6
+    gain: -10
+    duration: 10e-3
+    host_resample: false
+    adjust_analysis:
+      max_beams: 2
+  - port: 0
+    center_frequency: 3960e6
+    gain: -10
+    duration: 10e-3
+    host_resample: false
+
+cell_channels:
+  '3750 MHz':
+    center_frequency: 3750e6
+    channel_bandwidth: 100e6
+    subcarrier_spacing: 30e3
+    ssb_frequency_offset: -40.08e6
+    channel_guard_bandwidths: [875e3, 575e3]
+    tdd_frame_slots: dddsuudddddddsuudddd
+    tdd_special_symbols: ddddddfffffffu
+  '3960 MHz':
+    center_frequency: 3960e6
+    channel_bandwidth: 40e6
+    subcarrier_spacing: 30e3
+    ssb_frequency_offset: -10.08e6
+    channel_guard_bandwidths: [505e3, 505e3]
+    tdd_frame_slots: dddsuudddddddsuudddd
+    tdd_special_symbols: ddddddfffffffu
+
+analysis:
+  channel_power_time_series: {}
+  cyclic_channel_power: {}
+  pss_correlation: {}
+  iq_waveform:
+    stop_time_sec: 1e-3
+
+sink:
+  path: "outputs/{spec_name}-{start_time}.zarr.zip"

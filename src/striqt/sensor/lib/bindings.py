@@ -16,6 +16,7 @@ from typing import (
 )
 import dataclasses
 import sys
+import warnings
 
 from .controller import Controller, bind_controller
 from .peripherals import NoPeripherals
@@ -126,7 +127,8 @@ def bind_sensor(
 
     Raises:
         TypeError: if `sensor` or `schema` has the wrong type, if `key` is already
-            registered, or if `sensor.sweep_spec_cls` and `schema.action` disagree
+            registered, if `sensor.sweep_spec_cls` and `schema.action` disagree, or if
+            the action's `check_schema` rejects the spec types
     """
     if not isinstance(sensor, Sensor):
         raise TypeError('sensor argument must be a Sensor instance')
@@ -138,6 +140,7 @@ def bind_sensor(
         raise TypeError(f'a sensor binding named {key!r} was already registered')
 
     action_type = _resolve_action_type(sensor, schema)
+    action_type.check_schema(schema)
 
     binding = SensorBinding(
         source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),
@@ -183,11 +186,17 @@ def bind_manual_yfactor_calibration(
 ) -> 'type[Controller[SS, SP, Any, PS, PC]]':
     """bind a manual Y-factor calibration of the sensor bound as `ctrl_cls`.
 
-    The result is `bind_sensor` with `ctrl_cls`'s `sensor` and its `schema` with
-    `action` set to `specs.ManualYFactorCalibration`, which `ManualYFactorRunner`
-    runs. Sweep files select the binding with ``sensor_binding: <name>``. The
-    controller class records the caller's module.
+    Deprecated: call `bind_sensor` with `ctrl_cls.sensor` and
+    ``dataclasses.replace(ctrl_cls.schema, action=specs.ManualYFactorCalibration)``,
+    which is what this function does. A `DeprecationWarning` is emitted on each call.
+    The controller class records the caller's module.
     """
+    warnings.warn(
+        'bind_manual_yfactor_calibration is deprecated; call bind_sensor with '
+        'dataclasses.replace(ctrl_cls.schema, action=specs.ManualYFactorCalibration)',
+        DeprecationWarning,
+        stacklevel=2,
+    )
     schema = dataclasses.replace(ctrl_cls.schema, action=specs.ManualYFactorCalibration)
 
     return bind_sensor(

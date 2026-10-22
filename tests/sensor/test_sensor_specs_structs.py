@@ -392,8 +392,13 @@ class TestSpecChain:
                 ss.specs.CapturePlan,
                 {'calibration', 'analysis'},
             ),
+            (
+                ss.specs.Cellular5GNRSweep,
+                ss.specs.CapturePlan,
+                {'plot_hint', 'options', 'cell_channels', 'analysis'},
+            ),
         ],
-        ids=['action_spec', 'capture_plan', 'sweep', 'calibration'],
+        ids=['action_spec', 'capture_plan', 'sweep', 'calibration', 'cellular'],
     )
     def test_each_level_adds_its_blocks(self, cls, base, added):
         assert issubclass(cls, base)
@@ -407,8 +412,9 @@ class TestSpecChain:
             (ss.specs.ActionSpec, Sink),
             (ss.specs.Sweep, ZarrSink),
             (ss.specs.ManualYFactorCalibration, Sink),
+            (ss.specs.Cellular5GNRSweep, ZarrSink),
         ],
-        ids=['action_spec', 'sweep', 'calibration'],
+        ids=['action_spec', 'sweep', 'calibration', 'cellular'],
     )
     def test_sink_field_type(self, cls, sink_type):
         (field,) = [f for f in msgspec.structs.fields(cls) if f.name == 'sink']
@@ -708,3 +714,132 @@ class TestManualYFactorCalibration:
         assert sweep.analysis is None, 'discarded, so the spec stays hashable'
         assert hash(sweep) == hash(CalSweepCls.from_dict(sweep.to_dict(unfreeze=True)))
         assert sweep.calibration.enr == pytest.approx(YFACTOR_ENR_DB)
+
+
+# %% CellChannel and Cellular5GNRSweep
+
+CellChannel = ss.specs.CellChannel
+CellularSweepCls = ss.bindings.air7101b_cellular.sensor.sweep_spec_cls
+CELL_FREQ = 3750e6
+
+
+def make_cell_channel(**kws):
+    kws = {'center_frequency': CELL_FREQ, 'channel_bandwidth': 100e6, **kws}
+    return CellChannel(**kws)
+
+
+def make_cell_capture(**kws):
+    kws = {'center_frequency': CELL_FREQ, 'port': (0, 1), 'gain': -10, **kws}
+    return ss.specs.SoapyCapture(duration=0.1, **kws)
+
+
+def make_cellular_sweep_kws(**kws):
+    return {
+        'source': ss.bindings.air7101b.schema.source(),
+        'captures': (make_cell_capture(),),
+        'cell_channels': {'a': make_cell_channel()},
+        **kws,
+    }
+
+
+class TestCellChannel:
+    def test_defaults(self, construct):
+        channel = construct(
+            CellChannel, center_frequency=CELL_FREQ, channel_bandwidth=100e6
+        )
+        assert channel.subcarrier_spacing == pytest.approx(30e3)
+        assert channel.ssb_frequency_offset == pytest.approx(0.0)
+        assert channel.ssb_case is None
+        assert channel.channel_guard_bandwidths == (0.0, 0.0)
+        assert channel.tdd_frame_slots is None
+        assert channel.tdd_special_symbols is None
+        assert channel.min_sample_rate is None
+
+    def test_symbol_indexes_default_to_case_c_at_30khz(self):
+        """3GPP TS 38.213 4.1: case C is the 30 kHz SSB pattern of a TDD FR1 cell"""
+        assert make_cell_channel().ssb_case is None
+        assert make_cell_channel(ssb_case='b').ssb_case == 'b'
+
+    def test_only_30khz_spacing_is_accepted(self):
+        raises_on_both_paths(
+            CellChannel,
+            msgspec.ValidationError,
+            r'subcarrier_spacing',
+            center_frequency=CELL_FREQ,
+            channel_bandwidth=100e6,
+            subcarrier_spacing=15e3,
+        )
+
+    @pytest.mark.parametrize('count', [1, 20], ids=['every_slot', 'frame'])
+    def test_tdd_frame_slots_is_one_slot_or_a_frame(self, construct, count):
+        """3GPP TS 38.211 Table 4.3.2-1: 20 slots per 10 ms frame at 30 kHz"""
+        channel = construct(
+            CellChannel,
+            center_frequency=CELL_FREQ,
+            channel_bandwidth=100e6,
+            tdd_frame_slots='d' * count,
+        )
+        assert len(channel.tdd_frame_slots) == count
+
+    def test_tdd_frame_slots_rejects_a_partial_frame(self):
+        raises_on_both_paths(
+            CellChannel,
+            msgspec.ValidationError,
+            r'tdd_frame_slots.*1 or 20',
+            center_frequency=CELL_FREQ,
+            channel_bandwidth=100e6,
+            tdd_frame_slots='d' * 19,
+        )
+
+
+class TestCellular5GNRAnalysis:
+    def test_every_block_defaults_to_none(self):
+        analysis = ss.specs.Cellular5GNRAnalysis()
+        assert all(getattr(analysis, f) is None for f in analysis.__struct_fields__)
+        assert ss.specs.Cellular5GNRAnalysis.from_dict(analysis.to_dict()) == analysis
+
+    def test_one_block_round_trips(self):
+        block = ss.specs.CellularSpectrogramSpec(window='hamming')
+        analysis = ss.specs.Cellular5GNRAnalysis(spectrogram=block)
+        tree = analysis.to_dict()
+        assert tree['spectrogram']['window'] == 'hamming'
+        assert tree['power_spectral_density'] is None
+        assert ss.specs.Cellular5GNRAnalysis.from_dict(tree) == analysis
+
+
+class TestCellular5GNRSweep:
+    def test_bound_spec_keeps_the_capture_as_given(self):
+        """the spec stores the capture as written. The runner derives
+        `sample_rate` and `analysis_bandwidth` on the sweep it builds."""
+        for sweep in construct_both(CellularSweepCls, **make_cellular_sweep_kws()):
+            assert isinstance(sweep, ss.specs.Cellular5GNRSweep)
+            assert sweep.captures == (make_cell_capture(),)
+            assert sweep.cell_channels == {'a': make_cell_channel()}
+            assert sweep.analysis == ss.specs.Cellular5GNRAnalysis()
+
+    def test_cell_channels_is_required(self):
+        kws = make_cellular_sweep_kws()
+        del kws['cell_channels']
+        with pytest.raises(TypeError, match='cell_channels'):
+            CellularSweepCls(**kws)
+
+    def test_channels_must_have_distinct_center_frequencies(self):
+        channels = {
+            'a': make_cell_channel(),
+            'b': make_cell_channel(channel_bandwidth=20e6),
+        }
+        raises_on_both_paths(
+            CellularSweepCls,
+            msgspec.ValidationError,
+            r"cell_channels\['b'\]\.center_frequency.*'a' and 'b'",
+            **make_cellular_sweep_kws(cell_channels=channels),
+        )
+
+    def test_capture_without_a_channel_is_rejected(self):
+        captures = (make_cell_capture(center_frequency=3800e6),)
+        raises_on_both_paths(
+            CellularSweepCls,
+            msgspec.ValidationError,
+            r'captures\[0\]\.center_frequency',
+            **make_cellular_sweep_kws(captures=captures),
+        )

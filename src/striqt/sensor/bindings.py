@@ -5,6 +5,8 @@ Each binding pairs a source backend with the spec types that configure it. The
 bind further sensors with the same calls.
 """
 
+import dataclasses
+
 from . import specs
 from .lib import sources, peripherals
 from .lib.bindings import (
@@ -132,7 +134,17 @@ air7101b = bind_sensor(
     ),
 )
 
-air7101b_calibration = bind_manual_yfactor_calibration('air7101b_calibration', air7101b)
+air7101b_calibration = bind_sensor(
+    'air7101b_calibration',
+    air7101b.sensor,
+    dataclasses.replace(air7101b.schema, action=specs.ManualYFactorCalibration),
+)
+
+air7101b_cellular = bind_sensor(
+    'air7101b_cellular',
+    air7101b.sensor,
+    dataclasses.replace(air7101b.schema, action=specs.Cellular5GNRSweep),
+)
 
 air7201b = bind_sensor(
     'air7201b',
@@ -146,7 +158,17 @@ air7201b = bind_sensor(
     ),
 )
 
-air7201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', air7201b)
+air7201b_calibration = bind_sensor(
+    'air7201b_calibration',
+    air7201b.sensor,
+    dataclasses.replace(air7201b.schema, action=specs.ManualYFactorCalibration),
+)
+
+air7201b_cellular = bind_sensor(
+    'air7201b_cellular',
+    air7201b.sensor,
+    dataclasses.replace(air7201b.schema, action=specs.Cellular5GNRSweep),
+)
 
 air8201b = bind_sensor(
     'air8201b',
@@ -160,5 +182,14 @@ air8201b = bind_sensor(
     ),
 )
 
+air8201b_calibration = bind_sensor(
+    'air8201b_calibration',
+    air8201b.sensor,
+    dataclasses.replace(air8201b.schema, action=specs.ManualYFactorCalibration),
+)
 
-air8201b_calibration = bind_manual_yfactor_calibration('air8201b_calibration', air8201b)
+air8201b_cellular = bind_sensor(
+    'air8201b_cellular',
+    air8201b.sensor,
+    dataclasses.replace(air8201b.schema, action=specs.Cellular5GNRSweep),
+)

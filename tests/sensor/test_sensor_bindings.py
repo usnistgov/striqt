@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from pathlib import Path
 
@@ -184,12 +185,102 @@ def test_extension_module_registers_site_bindings(subtests):
 
 
 def test_derived_calibration_binding_records_the_extension_module():
-    """the extension module calls `bind_manual_yfactor_calibration`, and the API
+    """the extension module binds its calibration with `bind_sensor`, and the API
     documentation groups the controller under that module"""
     import site_strategies as S
 
     assert S.EXT.site_single_tone_calibration.__module__ == S.EXT.__name__
     assert S.EXT.site_single_tone.__module__ == S.EXT.__name__
+
+
+# %% bind_manual_yfactor_calibration
+
+
+def test_bind_manual_yfactor_calibration_is_deprecated(isolated_bindings):
+    """the function warns and binds what `bind_sensor` binds from the schema with
+    `action` replaced by `ManualYFactorCalibration`"""
+    with pytest.warns(DeprecationWarning, match='bind_sensor'):
+        derived = ss.lib.bindings.bind_manual_yfactor_calibration(
+            'deprecated_cal_test', TONE
+        )
+    direct = ss.bindings.bind_sensor(
+        'direct_cal_test',
+        TONE.sensor,
+        dataclasses.replace(TONE.schema, action=ss.specs.ManualYFactorCalibration),
+        register=False,
+    )
+    assert derived.schema == direct.schema
+    assert derived.schema.action is ss.specs.ManualYFactorCalibration
+    for ctrl_cls in (derived, direct):
+        action_cls = ctrl_cls.sensor.sweep_spec_cls
+        assert action_cls.__mro__[1] is ss.specs.ManualYFactorCalibration
+        assert action_cls.sweep_cls.__mro__[1] is ss.specs.Sweep
+    assert (
+        derived.sensor.sweep_spec_cls.__struct_fields__
+        == direct.sensor.sweep_spec_cls.__struct_fields__
+    )
+    assert derived.__module__ == __name__
+    assert isolated_bindings.registry['deprecated_cal_test'] is derived
+
+
+# %% cellular bindings and ActionSpec.check_schema
+
+CELLULAR = ss.bindings.air7101b_cellular
+
+
+class TestCellularBinding:
+    def test_tagged_class_subclasses_the_cellular_sweep(self):
+        tagged_cls = CELLULAR.sensor.sweep_spec_cls
+        assert tagged_cls.__mro__.index(ss.specs.Cellular5GNRSweep) == 1
+        assert tagged_cls.__name__ == 'air7101b_cellular'
+        assert 'cell_channels' in tagged_cls.__struct_fields__
+
+    def test_companion_sweep_class(self):
+        sweep_cls = CELLULAR.sensor.sweep_spec_cls.sweep_cls
+        assert sweep_cls.__mro__.index(ss.specs.Sweep) == 1
+        assert sweep_cls.__name__ == 'air7101b_cellular.sweep'
+        assert sweep_cls.controller is CELLULAR
+
+    def test_runner_is_the_cellular_runner(self):
+        runner_cls = ss.lib.actions.registry.lookup(CELLULAR.sensor.sweep_spec_cls)
+        assert runner_cls is ss.lib.actions.Cellular5GNRSweepRunner
+
+    def test_registered_under_its_key(self):
+        assert ss.lib.bindings.get_controller('air7101b_cellular') is CELLULAR
+
+    @pytest.mark.parametrize('name', ['air7101b', 'air7201b', 'air8201b'])
+    def test_cellular_binding_shares_the_sensor_of_its_origin(self, name):
+        origin = getattr(ss.bindings, name)
+        cellular = getattr(ss.bindings, f'{name}_cellular')
+        assert cellular.sensor.source_cls is origin.sensor.source_cls
+        assert cellular.schema == dataclasses.replace(
+            origin.schema, action=ss.specs.Cellular5GNRSweep
+        )
+
+
+class TestCheckSchema:
+    def test_cellular_action_needs_a_center_frequency_field(self, isolated_bindings):
+        """`SingleToneCapture` has no `center_frequency`, which `cell_channels` is
+        matched against"""
+        assert 'center_frequency' not in TONE.schema.capture.__struct_fields__
+        with pytest.raises(TypeError, match='center_frequency'):
+            ss.bindings.bind_sensor(
+                'probe',
+                tone_sensor(),
+                tone_schema(action=ss.specs.Cellular5GNRSweep),
+                register=False,
+            )
+
+    def test_cellular_action_accepts_a_capture_with_center_frequency(self):
+        assert ss.specs.Cellular5GNRSweep.check_schema(CELLULAR.schema) is None
+
+    @pytest.mark.parametrize(
+        'action',
+        [ss.specs.ActionSpec, ss.specs.Sweep, ss.specs.ManualYFactorCalibration],
+    )
+    def test_base_actions_accept_any_schema(self, action):
+        for schema in (tone_schema(), CELLULAR.schema):
+            assert action.check_schema(schema) is None
 
 
 # %% BoundSweep.mock_source

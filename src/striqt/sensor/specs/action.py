@@ -1,10 +1,8 @@
-"""validation of a `Sweep` after construction.
+"""validation of an action spec after construction.
 
-Validation runs from `Sweep.__post_init__`, so a constructed sweep is a validated
-one: loop entries and their collisions with the listed captures, measurement names
-that shadow capture fields, and each unique capture against the registered
-measurements and the `correct_iq` signal path. Failures are located in the user's
-file through the capture origins that `sequencing` records.
+A bound spec's `__post_init__` ends by calling into this module. A constructed spec
+is therefore a validated one. Errors are `SpecValidationError`s located at the field of the
+spec that caused them, with a loop point for an expanded capture.
 """
 
 from __future__ import annotations as __
@@ -22,6 +20,30 @@ from . import sequencing, structs, types
 
 if TYPE_CHECKING:
     from ..lib.typing import SC
+
+
+def validate_action(spec: structs.ActionSpec[Any, Any]) -> None:
+    """run the registered action runner's `validate` on a bound action spec.
+
+    The leaf spec classes call this at the end of `__post_init__`, after every field
+    is in its final state. Nothing runs for an unbound spec (`sweep_cls` is None),
+    for a type with no registered runner, or while `striqt.sensor.lib.actions` is not
+    importable.
+
+    Raises:
+        msgspec.ValidationError: whatever the runner's `validate` raises for `spec`
+    """
+    if type(spec).sweep_cls is None:
+        return
+    try:
+        from ..lib.actions.registry import registry
+    except ImportError:
+        return
+    try:
+        runner = registry.lookup(spec)
+    except TypeError:
+        return
+    runner.validate(spec)
 
 
 def validate_sweep(

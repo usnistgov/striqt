@@ -11,7 +11,7 @@ from pathlib import Path
 
 import msgspec
 import pytest
-from conftest import SITE_DIR, SWEEP_DIR
+from conftest import FAKE_SOAPY_CELLULAR_SPEC, SITE_CELLULAR_SPEC, SITE_DIR, SWEEP_DIR
 from hypothesis import given, settings
 from site_strategies import SiteCaptureCls
 from sweep_strategies import (
@@ -198,6 +198,66 @@ def test_calibration_sweeps_decode(calibration_sweep, site_calibration_sweep):
         'lo_shift',
     ]
     assert sweep.calibration.detector_period == pytest.approx(0.01)
+
+
+# %% cellular sweep files
+
+CELLULAR_SPECS = {
+    'fake_soapy': FAKE_SOAPY_CELLULAR_SPEC,
+    'site': SITE_CELLULAR_SPEC,
+}
+
+
+@pytest.mark.parametrize('name', list(CELLULAR_SPECS), ids=list(CELLULAR_SPECS))
+def test_cellular_sweeps_decode(name):
+    """a `sensor_binding` bound with the `Cellular5GNRSweep` action decodes to that
+    action's tagged subclass, whose `sweep_cls` is the companion `Sweep` class with
+    the binding's capture type"""
+    spec = ss.read_yaml_spec(CELLULAR_SPECS[name])
+    cls = type(spec)
+    assert issubclass(cls, ss.specs.Cellular5GNRSweep)
+    assert not issubclass(cls, ss.specs.Sweep)
+    assert issubclass(cls.sweep_cls, ss.specs.Sweep)
+    assert cls.sweep_cls.schema.capture is cls.schema.capture
+    assert all(isinstance(c, cls.schema.capture) for c in spec.captures)
+    assert {c.center_frequency for c in spec.captures} == {
+        ch.center_frequency for ch in spec.cell_channels.values()
+    }
+
+
+def _write_cellular_variant(tmp_path, **replace) -> Path:
+    """write the fake-soapy cellular YAML to `tmp_path` with top-level blocks
+    replaced, and its `extensions.import_path` made absolute"""
+    tree = dict(sa.lib.io.decode_from_yaml_file(FAKE_SOAPY_CELLULAR_SPEC))
+    src_dir = FAKE_SOAPY_CELLULAR_SPEC.parent / tree['extensions']['import_path']
+    tree['extensions'] = {**tree['extensions'], 'import_path': str(src_dir)}
+    tree.update(replace)
+    path = tmp_path / 'variant.yaml'
+    # JSON is YAML, and the frozen loader's tuples have no safe_dump representer
+    path.write_text(json.dumps(tree))
+    return path
+
+
+def test_cellular_center_frequency_loop_is_rejected(tmp_path):
+    """a `center_frequency` loop is rejected at the loop's `field` when the spec is
+    read. The channels of a cellular sweep are listed as captures instead."""
+    tree = sa.lib.io.decode_from_yaml_file(FAKE_SOAPY_CELLULAR_SPEC)
+    values = [c['center_frequency'] for c in tree['captures']]
+    loop = {'kind': 'list', 'field': 'center_frequency', 'values': values}
+    # with two captures at different center frequencies, the CapturePlan check for a
+    # looped field that the captures also set would fire first, at `$.loops[0]`
+    path = _write_cellular_variant(
+        tmp_path, captures=tree['captures'][:1], loops=[loop]
+    )
+    with pytest.raises(msgspec.ValidationError, match=r'loops\[0\]\.field'):
+        ss.read_yaml_spec(path)
+
+
+def test_cellular_hardware_loop_passes_through(tmp_path):
+    loop = {'kind': 'list', 'field': 'gain', 'values': [0, -10]}
+    path = _write_cellular_variant(tmp_path, loops=[loop])
+    spec = ss.read_yaml_spec(path)
+    assert [(lp.field, lp.values) for lp in spec.loops] == [('gain', (0, -10))]
 
 
 # %% output_path and store_backend overrides

@@ -19,7 +19,7 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from conftest import SITE_DIR, SWEEP_DIR
+from conftest import FAKE_SOAPY_CELLULAR_SPEC, SITE_CELLULAR_SPEC, SITE_DIR, SWEEP_DIR
 from numeric_checks import (
     COLA_LEVEL_DB,
     COLA_RIPPLE_DB,
@@ -399,6 +399,104 @@ def test_check_sweep_lists_the_looped_field_over_its_adjustment(
         'host_resample': looped,
         'snr': (spec.adjust_captures['defaults']['snr'],),
     }
+
+
+# %% cellular sweeps: the Sweep that the runner derives from a Cellular5GNRSweep
+
+CELLULAR_SWEEPS = {
+    'fake_soapy': FAKE_SOAPY_CELLULAR_SPEC,
+    'site': SITE_CELLULAR_SPEC,
+}
+
+
+def derived_sample_rates(spec) -> list[float]:
+    """the sample rate of each row of the output, one per port of each capture, from
+    the channel each capture names: the smallest multiple of 896 subcarriers at or
+    above the channel bandwidth plus the 250 kHz transition band"""
+    rates = []
+    for capture in spec.captures:
+        (channel,) = [
+            c
+            for c in spec.cell_channels.values()
+            if c.center_frequency == capture.center_frequency
+        ]
+        step = 896 * channel.subcarrier_spacing
+        rate = math.ceil((channel.channel_bandwidth + 250e3) / step) * step
+        rates += [rate] * len(ports_of(capture.port))
+    return rates
+
+
+@pytest.mark.parametrize('name', list(CELLULAR_SWEEPS), ids=list(CELLULAR_SWEEPS))
+def test_check_sweep_budgets_the_derived_cellular_analysis(
+    name, fake_soapy, monkeypatch, capsys
+):
+    """check-sweep opens a cellular spec through its runner. The printed sink path is
+    formatted, and the tolerance table lists the measurements of the derived `Sweep`
+    analysis rather than the fields of the document's `analysis:` block."""
+    path = CELLULAR_SWEEPS[name]
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(path))
+
+    out = capsys.readouterr().out
+    assert f'for {ss.read_yaml_spec(path).__class__.__name__!r} bindings' in out
+    block = re.search(
+        r'^sink\.path:\n  Input: +(.*)\n  Formatted: +(.*)$', out, re.MULTILINE
+    )
+    assert block is not None, out
+    template, formatted = (ast.literal_eval(v) for v in block.groups())
+    assert formatted.startswith(template.split('{')[0])
+    assert path.stem in formatted
+    assert '{' not in formatted
+
+    spec = ss.read_yaml_spec(path)
+    sweep = ss.lib.actions.cellular.build_cellular_sweep(spec)
+    budgeted = {
+        name
+        for name in sweep.analysis.to_dict()
+        if sa.registry[type(getattr(sweep.analysis, name))].tolerance is not None
+    }
+    assert budgeted, 'the fixture must enable at least one budgeted measurement'
+    enabled = {k for k, v in spec.analysis.to_dict().items() if v is not None}
+    block = out.split('Numerical tolerance')[1].split('\n\n')[0]
+    rows = block.splitlines()[4:]
+    table = {row.split()[0] for row in rows}
+    assert table == budgeted
+    assert table.isdisjoint(enabled - set(sweep.analysis.to_dict()))
+
+
+def test_cli_run_cellular(fake_soapy, tmp_path, monkeypatch):
+    """the fake-soapy cellular sweep writes one store whose rows carry the sample
+    rate and analysis bandwidth derived from each capture's channel, the derived
+    measurements, the document's `cell_channels` as an attr, and attrs that rebuild
+    the document"""
+    path = FAKE_SOAPY_CELLULAR_SPEC
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+    out_path = tmp_path / 'out.zarr.zip'
+
+    sensor_sweep.run(str(path), output_path=str(out_path))
+
+    spec = ss.read_yaml_spec(path, output_path=str(out_path))
+    assert isinstance(spec, ss.specs.Cellular5GNRSweep)
+    assert ss.read_zarr_spec(out_path, extension_root=path.parent) == spec
+    ds = sa.load(out_path)
+
+    rates = derived_sample_rates(spec)
+    assert sorted(set(rates)) == [53.76e6, 107.52e6]
+    assert ds.sample_rate.values.tolist() == rates
+    assert ds.analysis_bandwidth.values.tolist() == [100e6, 100e6, 40e6]
+    assert ds.port.values.tolist() == [0, 1, 0]
+    assert set(ds.attrs['cell_channels']) == {'3750 MHz', '3960 MHz'}
+
+    sweep = ss.lib.actions.cellular.build_cellular_sweep(spec)
+    assert set(sweep.analysis.to_dict()) <= set(ds.data_vars)
+    assert 'cellular_5g_pss_correlation' in ds.data_vars
+    # the default detector period is one OFDM symbol: 28000 per second at 30 kHz
+    # subcarrier spacing with a normal cyclic prefix
+    (duration,) = {c.duration for c in spec.captures}
+    assert ds.sizes['time_elapsed'] == round(duration * 28000)
 
 
 # %% in-memory sweeps against the generators

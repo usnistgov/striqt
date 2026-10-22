@@ -8,6 +8,7 @@ with a fixed hardware id, and a y-factor calibration binding derived from the se
 # ruff: noqa: UP007, UP045  msgspec resolves these annotations at runtime on py3.9
 from __future__ import annotations
 
+import dataclasses
 from math import nan
 from typing import Annotated, Optional, Union
 
@@ -89,6 +90,14 @@ site_survey = bindings.bind_sensor(
     'site_survey', _site_sensor, _schema(SiteSurveyCapture)
 )
 
-site_single_tone_calibration = bindings.bind_manual_yfactor_calibration(
-    'site_single_tone_calibration', site_single_tone
+site_single_tone_calibration = bindings.bind_sensor(
+    'site_single_tone_calibration',
+    _site_sensor,
+    dataclasses.replace(_schema(SiteCapture), action=specs.ManualYFactorCalibration),
+)
+
+site_cellular = bindings.bind_sensor(
+    'site_cellular',
+    _site_sensor,
+    dataclasses.replace(_schema(SiteCapture), action=specs.Cellular5GNRSweep),
 )

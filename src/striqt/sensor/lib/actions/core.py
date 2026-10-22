@@ -34,7 +34,7 @@ class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
     source, the peripherals, and the sink from `open_sink` for `sweep`.
     `iterate_sweep` calls `iterate` over those resources. A bound spec calls
     `validate` at the end of its own construction, through
-    `specs.ActionSpec._validate_action`. Nothing is inherited from the protocol.
+    `specs.action.validate_action`. Nothing is inherited from the protocol.
     """
 
     spec: TA

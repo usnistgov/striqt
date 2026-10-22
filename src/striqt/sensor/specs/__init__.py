@@ -16,7 +16,7 @@ for k in list(locals().keys()):
         locals().pop(k)
 del k
 
-from . import captures, paths, sequencing, structs, sweep, types
+from . import action, captures, paths, sequencing, structs, types
 from .dataclasses import AcquiredIQ, Schema
 from .structs import SS, SP, SC
 from .types import Annotated, Meta

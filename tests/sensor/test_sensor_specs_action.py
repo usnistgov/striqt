@@ -1,4 +1,4 @@
-"""striqt.sensor.specs.sweep: the located errors validate_sweep raises from
+"""striqt.sensor.specs.action: the located errors validate_sweep raises from
 Sweep.__post_init__
 """
 
@@ -48,7 +48,7 @@ DOWNSTREAM_SWEEP = (
 
 
 def test_validate_sweep_accepts_the_synthetic_sweep(synthetic_sweep):
-    assert ss.specs.sweep.validate_sweep(synthetic_sweep) is None
+    assert ss.specs.action.validate_sweep(synthetic_sweep) is None
 
 
 def test_validate_sweep_reports_a_per_source_override():
@@ -61,10 +61,10 @@ def test_validate_sweep_reports_a_per_source_override():
         analysis=SPG,
     )
 
-    assert ss.specs.sweep.validate_sweep(sweep) is None
+    assert ss.specs.action.validate_sweep(sweep) is None
 
     with pytest.raises(msgspec.ValidationError) as excinfo:
-        ss.specs.sweep.validate_sweep(sweep, 'ab12')
+        ss.specs.action.validate_sweep(sweep, 'ab12')
 
     message = str(excinfo.value)
     # the measurement that rejected it, the values the failed rule compared, then the
@@ -93,7 +93,7 @@ def test_validate_sweep_ignores_loops_over_sensor_only_fields(monkeypatch):
         sa.registry, 'validate', lambda capture, analysis: seen.append(capture)
     )
 
-    ss.specs.sweep.validate_sweep(sweep)
+    ss.specs.action.validate_sweep(sweep)
 
     assert len(seen) == 1
 
@@ -106,7 +106,7 @@ def test_validate_sweep_skips_an_empty_analysis(monkeypatch):
         sa.registry, 'validate', lambda capture, analysis: seen.append(capture)
     )
 
-    ss.specs.sweep.validate_sweep(sweep)
+    ss.specs.action.validate_sweep(sweep)
 
     assert seen == []
 

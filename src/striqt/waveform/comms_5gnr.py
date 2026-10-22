@@ -1,7 +1,14 @@
 """5G NR frame model and synchronization."""
 
 from .lib.comms.cp import correlate_cyclic_shift
-from .lib.comms.phy_3gpp import Phy3GPP, get_3gpp_phy, slot_period
+from .lib.comms.phy_3gpp import (
+    NR_FR1_RESOURCE_BLOCKS,
+    Phy3GPP,
+    get_3gpp_phy,
+    nr_occupied_bandwidth,
+    nr_sample_rate,
+    slot_period,
+)
 from .lib.comms.sync_5gnr import (
     SyncParams,
     choose_ssb_offset,

@@ -266,3 +266,94 @@ class TestCupy:
         inds = phy.index_cyclic_prefix(slots=(0, 3))
         assert isinstance(inds, cupy_available.ndarray)
         assert_close(inds, ref.index_cyclic_prefix(slots=(0, 3)))
+
+
+# %% nr_sample_rate
+
+# smallest multiple of 896 * 30e3 = 26.88e6 S/s at or above the 3GPP TS 38.104 channel
+# bandwidth plus a 250 kHz transition band
+NR_RATES_30KHZ = {
+    20e6: 26.88e6,
+    40e6: 53.76e6,
+    60e6: 80.64e6,
+    80e6: 80.64e6,
+    100e6: 107.52e6,
+}
+
+NR_FR1_PAIRS = [
+    pytest.param(scs, bw, id=f'{khz_id(scs)}-{bw / 1e6:g}MHz')
+    for scs, row in phy_3gpp.NR_FR1_RESOURCE_BLOCKS.items()
+    for bw in row
+]
+
+
+class TestNRSampleRate:
+    @pytest.mark.parametrize(
+        'bw, expected',
+        NR_RATES_30KHZ.items(),
+        ids=[f'{bw / 1e6:g}MHz' for bw in NR_RATES_30KHZ],
+    )
+    def test_rates_at_30khz(self, bw, expected):
+        assert phy_3gpp.nr_sample_rate(bw, 30e3) == expected
+
+    def test_min_sample_rate_is_a_lower_bound(self):
+        rate = phy_3gpp.nr_sample_rate(60e6, 30e3, min_sample_rate=107.52e6)
+        assert rate == pytest.approx(107.52e6)
+        rate = phy_3gpp.nr_sample_rate(60e6, 30e3, min_sample_rate=1e6)
+        assert rate == NR_RATES_30KHZ[60e6]
+
+    @pytest.mark.parametrize('scs, bw', NR_FR1_PAIRS)
+    def test_rate_is_the_smallest_step_multiple_above_the_channel(self, scs, bw):
+        step = phy_3gpp.NR_SAMPLE_RATE_STEP_SUBCARRIERS * scs
+        needed = bw + 250e3
+        rate = phy_3gpp.nr_sample_rate(bw, scs)
+        assert rate % step == 0
+        assert rate >= needed
+        assert rate - step < needed
+
+    @pytest.mark.parametrize('scs, bw', NR_FR1_PAIRS)
+    def test_rate_gives_whole_sample_symbols_and_cyclic_prefixes(self, scs, bw):
+        rate = phy_3gpp.nr_sample_rate(bw, scs)
+        phy = phy_3gpp.Phy3GPP(bw, scs, generation='5G', sample_rate=rate)
+        assert phy.nfft == rate / scs
+        assert phy.cp_sizes.dtype.kind == 'i'
+
+    @pytest.mark.parametrize('scs, bw', NR_FR1_PAIRS)
+    def test_rate_fits_the_symbol_grid_at_half_spacing(self, scs, bw):
+        """the cellular spectrograms at SCS/2 resolution fill 15/28 of each hop.
+        A whole-sample window needs a bin period that is a multiple of 28 samples."""
+        rate = phy_3gpp.nr_sample_rate(bw, scs)
+        assert (rate / (scs / 2)) % 28 == 0
+
+    @pytest.mark.parametrize(
+        'kws',
+        [{'channel_bandwidth': 7e6}, {'subcarrier_spacing': 120e3}],
+        ids=['bandwidth', 'spacing'],
+    )
+    def test_unknown_pair_raises(self, kws):
+        kws = {'channel_bandwidth': 20e6, 'subcarrier_spacing': 30e3, **kws}
+        with pytest.raises(ValueError, match=r'TS 38\.104'):
+            phy_3gpp.nr_occupied_bandwidth(**kws)
+        with pytest.raises(ValueError, match=r'TS 38\.104'):
+            phy_3gpp.nr_sample_rate(**kws)
+
+
+class TestNROccupiedBandwidth:
+    def test_100mhz_at_30khz(self):
+        """3GPP TS 38.104 Table 5.3.2-1: N_RB = 273"""
+        n_rb = 273
+        assert phy_3gpp.nr_occupied_bandwidth(100e6, 30e3) == pytest.approx(
+            n_rb * 12 * 30e3
+        )
+
+    def test_resource_block_table_spot_checks(self):
+        """3GPP TS 38.104 Table 5.3.2-1"""
+        assert phy_3gpp.NR_FR1_RESOURCE_BLOCKS[15e3][20e6] == 106
+        assert phy_3gpp.NR_FR1_RESOURCE_BLOCKS[60e3][100e6] == 135
+
+    @pytest.mark.parametrize('scs, bw', NR_FR1_PAIRS)
+    def test_occupied_bandwidth_leaves_a_guard_band(self, scs, bw):
+        """3GPP TS 38.104 Table 5.3.3-1 lists a positive guard band for every
+        entry: the transmission bandwidth is below the channel bandwidth"""
+        occupied = phy_3gpp.nr_occupied_bandwidth(bw, scs)
+        assert 0.75 * bw < occupied < bw

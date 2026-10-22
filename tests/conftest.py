@@ -537,6 +537,7 @@ def _spec_kws_to_builtins(kws: dict) -> dict:
 
 SITE_DIR = SWEEP_DIR / 'site'
 SITE_SPEC = SITE_DIR / 'site-cpu.yaml'
+SITE_CELLULAR_SPEC = SITE_DIR / 'site-cellular.yaml'
 
 
 @pytest.fixture(scope='session')
@@ -615,6 +616,7 @@ def isolated_extension_import():
 
 FAKE_SOAPY_SPEC = SWEEP_DIR / 'fake_soapy-cpu.yaml'
 FAKE_SOAPY_CALIBRATION_SPEC = SWEEP_DIR / 'fake_soapy-calibration-cpu.yaml'
+FAKE_SOAPY_CELLULAR_SPEC = SWEEP_DIR / 'fake_soapy-cellular-cpu.yaml'
 
 
 @pytest.fixture

@@ -396,3 +396,73 @@ def save_yfactor_calibration(
     )
     io.save_calibration(path, corrections)
     return str(path)
+
+
+# %% cellular sweeps
+#
+# The 3750 MHz channel of sweeps/site/site-cellular.yaml: 100 MHz at 30 kHz spacing,
+# so nr_sample_rate derives 107.52 MS/s (4 x 896 x 30 kHz).
+
+CELL_CHANNEL = ss.specs.CellChannel(
+    center_frequency=3750e6,
+    channel_bandwidth=100e6,
+    ssb_frequency_offset=-40.08e6,
+    channel_guard_bandwidths=(875e3, 575e3),
+    tdd_frame_slots='dddsuudddddddsuudddd',
+    tdd_special_symbols='ddddddfffffffu',
+)
+CELL_LABEL = '3750 MHz'
+
+
+def make_cell_channel(**kws):
+    """CELL_CHANNEL with its fields replaced by `kws`, validated"""
+    return ss.specs.CellChannel(**{**CELL_CHANNEL.to_dict(), **kws})
+
+
+def cellular_sweep_cls():
+    """the bound `site_cellular` spec class; importing `site_strategies` registers
+    the site extension module"""
+    from site_strategies import EXT
+
+    return EXT.site_cellular.sensor.sweep_spec_cls
+
+
+def make_cellular_capture(**kws):
+    """a site capture at the CELL_CHANNEL center frequency with `sample_rate` and
+    `analysis_bandwidth` at their defaults, as a cellular sweep requires"""
+    kws = {
+        'port': 0,
+        'center_frequency': CELL_CHANNEL.center_frequency,
+        'gain': -10,
+        'duration': 1e-3,
+        # the antenna_index coordinate is integer, so from_delayed rejects None
+        'antenna_index': 0,
+        **kws,
+    }
+    return cellular_sweep_cls().schema.capture(**kws)
+
+
+def make_cellular_sweep_kws(
+    captures=None, loops=(), cell_channels=None, source=SOURCE, **kws
+) -> dict:
+    if captures is None:
+        captures = (make_cellular_capture(),)
+    if cell_channels is None:
+        cell_channels = {CELL_LABEL: CELL_CHANNEL}
+    return {
+        'source': source,
+        'captures': tuple(captures),
+        'loops': tuple(loops),
+        'cell_channels': cell_channels,
+        'sink': ss.specs.ZarrSink(path=None),
+        **kws,
+    }
+
+
+def make_cellular_sweep(**kws):
+    return cellular_sweep_cls()(**make_cellular_sweep_kws(**kws))
+
+
+def make_cellular_runner(**kws):
+    """the Cellular5GNRSweepRunner of make_cellular_sweep(**kws)"""
+    return ss.lib.actions.Cellular5GNRSweepRunner(make_cellular_sweep(**kws))

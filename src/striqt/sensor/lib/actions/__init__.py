@@ -1,6 +1,7 @@
 """the actions a bound sensor can run over its open resources"""
 
-from . import core, sweep, warmup, yfactor
+from . import cellular, core, sweep, warmup, yfactor
+from .cellular import Cellular5GNRSweepRunner
 from .core import AcquisitionIndexer, ActionRunner, iterate_captures, iterate_sweep
 from .registry import registry
 from .sweep import SweepRunner
