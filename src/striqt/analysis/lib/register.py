@@ -334,7 +334,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             validate: checks the (capture, spec) combination without touching IQ. The
                 return value is ignored here. By convention the return value is the
                 derived sizing that the measurement consumes, and the validator is
-                named for what it returns (`validated_*`)
+                named for that sizing (`validated_*`)
             tolerance: derives the roundoff error budget of the output from the
                 (capture, spec) combination without touching IQ, as a
                 `specs.Tolerance`. The function is called with the keywords

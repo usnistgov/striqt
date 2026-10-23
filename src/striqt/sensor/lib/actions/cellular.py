@@ -107,8 +107,8 @@ def resolve_capture(
     `adjust_analysis` keeps the value of the capture.
 
     Args:
-        capture: a capture of the spec, at its class defaults for `sample_rate` and
-            `analysis_bandwidth`
+        capture: a capture of the spec, with `sample_rate` and `analysis_bandwidth`
+            at the class defaults
         channel: the matched `CellChannel`
         index: the position of `capture` in `spec.captures`, for the error location
         consumed_keys: the analysis parameter names some enabled measurement reads;
@@ -116,7 +116,7 @@ def resolve_capture(
 
     Raises:
         SpecValidationError: if the capture sets a `sample_rate` or
-            `analysis_bandwidth` other than its class default or the derived value
+            `analysis_bandwidth` other than the class default or the derived value
     """
     sample_rate = sw.comms_5gnr.nr_sample_rate(
         channel.channel_bandwidth,
@@ -363,7 +363,7 @@ def cellular_analysis(
 def build_cellular_sweep(
     spec: specs.Cellular5GNRSweep[SS, SP, SC],
 ) -> specs.Sweep[SS, SP, SC]:
-    """return the `Sweep` a cellular sweep opens its resources for.
+    """return the `Sweep` that `open_resources` opens for a `Cellular5GNRSweep`.
 
     The sweep has the spec's captures resolved against `cell_channels`
     (`resolve_capture`), the spec's loops and `adjust_captures` unchanged, and the

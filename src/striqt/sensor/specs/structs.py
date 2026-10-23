@@ -492,7 +492,7 @@ class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=
 
 
 class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
-    """the spec of a sweep, and the form every action opens its resources for.
+    """the spec of a sweep, and the form every action opens resources for.
 
     `analysis` is evaluated on each expanded capture, with the capture's
     `adjust_analysis` applied on top. `options` selects the warmup, IQ reuse, and

@@ -1,8 +1,8 @@
 """the built-in sensor bindings.
 
-Each binding pairs a source backend with the spec types that configure it. The
-``sensor_binding`` key of a sweep file selects a binding by name. Extension modules
-bind further sensors with the same calls.
+Each binding pairs a source backend with the spec types that configure the
+backend. The ``sensor_binding`` key of a sweep file selects a binding by name.
+Extension modules bind further sensors with the same calls.
 """
 
 import dataclasses

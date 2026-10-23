@@ -38,16 +38,17 @@ def get_path_fields(
 
     Args:
         sweep: the spec whose type name and `adjust_captures` supply the fields
-        source_id: hex id of the open source, or a callable that returns it
-        spec_path: the file `sweep` was read from, or None when it was not read
+        source_id: hex id of the open source, or a callable that returns the id
+        spec_path: the file `sweep` was read from, or None when `sweep` was not read
             from a file
 
     Returns:
         ``start_time`` (``%Y%m%d-%Hh%Mm%S`` at the time of the call),
         ``sensor_binding`` (the type name of `sweep`), ``source_id``, and when
         `spec_path` is given ``spec_name`` and ``parent_name``. When `sweep` is a
-        `CapturePlan`, each fixed string value in its `adjust_captures` block for
-        `source_id`, falling back to ``'defaults'``, is added under its field name.
+        `CapturePlan`, each fixed string value in the `adjust_captures` block of
+        `sweep` for `source_id`, falling back to ``'defaults'``, is added under the
+        field name.
     """
 
     assert isinstance(sweep, structs.ActionSpec)

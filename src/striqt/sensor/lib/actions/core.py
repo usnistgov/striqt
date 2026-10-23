@@ -1,4 +1,4 @@
-"""the runner contract and the pipeline that every action runs its captures through.
+"""the runner contract and the capture pipeline that every action runs.
 
 The acquisition of the next capture and the sink write of the previous one run in
 `util.threadpool` while the analysis of the current capture runs in the calling
@@ -27,14 +27,13 @@ from ..typing import PC, PS, SC, SP, SS, TA, Unpack
 
 
 class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
-    """the contract between an action spec and the code that opens and runs it.
+    """the contract between an action spec and the code that runs the spec.
 
     A runner class is registered for one action spec type with `registry.runner`
     and constructed from an instance of that type. `open_resources` opens the
     source, the peripherals, and the sink from `open_sink` for `sweep`.
     `iterate_sweep` calls `iterate` over those resources. A bound spec calls
-    `validate` at the end of its own construction, through
-    `specs.action.validate_action`. Nothing is inherited from the protocol.
+    `validate` at the end of `__post_init__`. Nothing is inherited from the protocol.
     """
 
     spec: TA
@@ -48,7 +47,7 @@ class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
 
         Raises:
             msgspec.ValidationError: for the field of `spec` that the conversion
-                rejects, with its path
+                rejects, located by the path of the field
         """
         ...
 
@@ -147,13 +146,15 @@ def iterate_captures(
         yield_values: if False, yield nothing, or `None` per step with `always_yield`
         loop: if True, the sweep repeats from the beginning after the last capture
         extra_data: merged into the `extra_data` of every acquisition after the
-            peripherals' data, and overrides it on a shared key
+            peripherals' data, and overrides the peripherals' data on a shared key
         indexer: the counter that stamps `capture_index` and `sweep_index` on each
-            acquisition. One object passed to several calls numbers their captures
-            consecutively. None creates a counter over this sweep's captures.
+            acquisition. One object passed to several calls numbers the captures of
+            all of those calls consecutively. None creates a counter over the
+            captures of this sweep.
 
-    Returns:
-        An iterator of analyzed data or None
+    Yields:
+        what `sink.append` returned for each capture, or None, as the steps above
+        describe
     """
 
     resources = Resources(resources, **replace)

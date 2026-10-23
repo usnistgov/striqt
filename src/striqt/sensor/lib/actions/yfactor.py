@@ -223,13 +223,13 @@ def _is_port_loop(loop: specs.LoopSpec) -> bool:
 def build_calibration_sweep(
     spec: specs.ManualYFactorCalibration[SS, SP, SC],
 ) -> specs.Sweep[SS, SP, SC]:
-    """return the `Sweep` a calibration opens its resources for.
+    """return the `Sweep` that `open_resources` opens for a `ManualYFactorCalibration`.
 
     The sweep is the spec's capture plan over every port, with the analysis of
     `calibration_analysis`, IQ reuse across the `analysis_bandwidth` points of one
     radio setting, `loop_only_nyquist`, and no warmup. The `sink` is the spec's
-    `Sink` converted to a `ZarrSink` with default store fields. The runner reads
-    only the path and log fields of `sink`. The sweep is an instance of the
+    `Sink` converted to a `ZarrSink` with default store fields. The store fields
+    of `sink` are unused. The sweep is an instance of the
     `sweep_cls` of the spec class, and the result is cached on `spec`.
 
     Raises:
@@ -284,7 +284,7 @@ def calibration_passes(
 
 
 def pass_sweep(sweep: specs.Sweep[SS, SP, SC], port: Any) -> specs.Sweep[SS, SP, SC]:
-    """return `sweep` with its captures fixed to `port` and without a `port` loop."""
+    """return `sweep` with the captures fixed to `port` and without a `port` loop."""
     loops = tuple(loop for loop in sweep.loops if not _is_port_loop(loop))
     if len(loops) < len(sweep.loops):
         captures = tuple(c.replace(port=port) for c in sweep.captures)

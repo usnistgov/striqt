@@ -164,7 +164,7 @@ def analyze(
 def prepare_compute(
     spec: specs.Sweep[Any, Any, Any], skip_warmup: bool = False
 ) -> Generator[xr.Dataset | DelayedDataset | None]:
-    """import the compute backend of `spec`, then run its warmup sweep, if any.
+    """import the compute backend of `spec`, then run the warmup sweep, if any.
 
     The imports and the cupy configuration run before the first yield. When
     `skip_warmup` is set or `warmup_sweep_for(spec)` returns None, a single None is

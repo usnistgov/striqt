@@ -505,14 +505,17 @@ ABSOLUTE_POWER_UNITS = ('dBm', '√mW')
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
     """every output and power-bin coordinate in absolute power units has a
-    `noise_bandwidth` in Hz and a `long_name` that names the bandwidth; ratios in dB
-    have
-    neither"""
-    _, da = measure(spec, as_xarray=True)
+    `noise_bandwidth` in Hz and a `long_name` that names the bandwidth, except the
+    outputs whose bandwidth is the per-capture `analysis_bandwidth`, which set
+    neither; ratios in dB have neither"""
+    info, da = measure(spec, as_xarray=True)
 
     def check(attrs, what):
         units = attrs.get('units')
-        if units in ABSOLUTE_POWER_UNITS:
+        if str(what) in sa.lib.io._CAPTURE_BANDWIDTH_NAMES:
+            assert 'noise_bandwidth' not in attrs, what
+            assert '/' not in str(attrs.get('long_name', '')), what
+        elif units in ABSOLUTE_POWER_UNITS:
             assert isinstance(attrs.get('noise_bandwidth'), float), what
             assert attrs['noise_bandwidth'] > 0, what
             assert f'({units}/' in attrs['long_name'], what
@@ -520,7 +523,7 @@ def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
         elif units == 'dB':
             assert 'noise_bandwidth' not in attrs, what
 
-    check(da.attrs, da.name)
+    check(da.attrs, info.name)
     for name in da.coords:
         if str(name).endswith('_power_bin'):
             check(da[name].attrs, name)

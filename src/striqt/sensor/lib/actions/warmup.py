@@ -1,9 +1,9 @@
 """the warmup: a one-capture `NoSource` sweep run before a GPU sweep.
 
 The warmup pays the python import and JIT compilation costs of the analysis before
-the first hardware capture. `prepare_compute` runs it through a `SweepRunner` while
-`open_resources` opens the hardware. The warmup sweep is derived from the sweep
-being prepared, and the resources of the warmup sweep are opened by
+the first hardware capture. `prepare_compute` runs the warmup sweep through a
+`SweepRunner` while `open_resources` opens the hardware. The warmup sweep is derived
+from the sweep being prepared, and the resources of the warmup sweep are opened by
 `open_warmup_resources` rather than by `open_resources`.
 """
 

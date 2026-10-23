@@ -69,8 +69,8 @@ def read_yaml_spec(
 
     Args:
         path: path to the yaml file
-        type: the action spec type to decode into, or None to select it by the
-            ``sensor_binding`` tag
+        type: the action spec type to decode into, or None to select the type by
+            the ``sensor_binding`` tag
         output_path: replaces `sink.path` in the returned spec when given
         store_backend: replaces `sink.store` of a `Sweep` spec when given
 
@@ -107,8 +107,8 @@ def read_json_spec(
 
     Args:
         path: path to the json file
-        type: the action spec type to decode into, or None to select it by the
-            ``sensor_binding`` tag
+        type: the action spec type to decode into, or None to select the type by
+            the ``sensor_binding`` tag
         output_path: replaces `sink.path` in the returned spec when given
         store_backend: replaces `sink.store` of a `Sweep` spec when given
 
@@ -237,14 +237,13 @@ def _resolve_sweep_cls(
     *,
     type: type[specs.ActionSpec] | None = None,
 ) -> type[specs.ActionSpec] | None:
-    """return the spec class for `tree` after importing its `extensions` block.
+    """return the spec class of `tree` after importing the `extensions` block of `tree`.
 
-    The ``sensor_binding`` tag of `tree` is looked up after the import, and may name
-    a binding that the extension module registers. A ``mock_source`` entry with a
-    registered tag selects the mock of that binding, rewrites
-    ``tree['sensor_binding']`` in place to the mock class name, and overrides
-    `type`. Otherwise `type` is returned when given. The result is None when `type`
-    is None and the tag names no registered binding.
+    The ``sensor_binding`` tag may name a binding that the extension module registers.
+    A ``mock_source`` entry with a registered tag selects the mock class of that
+    binding, rewrites ``tree['sensor_binding']`` in place to the mock class name, and
+    overrides `type`. Otherwise `type` is returned when given. The result is None when
+    `type` is None and the tag names no registered binding.
 
     Raises:
         FileNotFoundError: `extensions.import_path` or `extension_root` does not
@@ -286,7 +285,7 @@ def _decode_sweep(
 
     Raises:
         msgspec.ValidationError: `tree` does not validate as `sweep_cls`, or no
-            binding is registered under its tag
+            binding is registered under the tag of `tree`
         TypeError: if `store_backend` is given and the decoded `sink` is not a
             `ZarrSink`
     """
@@ -373,8 +372,9 @@ def _import_extensions_from_spec(
 ) -> None:
     """insert `spec.import_path` into ``sys.path`` and import `spec.import_name`.
 
-    Each step is skipped when its field is None. A warning is logged when the
-    imported module registers no sensor binding.
+    The insertion is skipped when `import_path` is None, and the import when
+    `import_name` is None. A warning is logged when the imported module registers no
+    sensor binding.
 
     Args:
         spec: the `extensions` block of an action spec

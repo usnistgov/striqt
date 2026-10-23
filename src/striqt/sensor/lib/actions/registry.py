@@ -45,7 +45,7 @@ class ActionRegistry(dict['type[specs.ActionSpec]', 'type[ActionRunner]']):
         """return the runner registered for the spec type or the nearest base.
 
         Args:
-            spec: an action spec instance, or its type
+            spec: an action spec instance or an action spec type
 
         Raises:
             TypeError: if no class in the MRO of the spec type is registered
