@@ -463,7 +463,7 @@ def _oaresample(
     lead, tail = _get_oaresample_overlaps(
         capture, source_spec.master_clock_rate, min_overlap
     )
-    size_in = lead + _source_sample_count(capture, design) + tail
+    size_in = lead + source_record_size(capture, design) + tail
     if x.shape[axis] < size_in:
         raise ValueError(
             f'{x.shape[axis]} samples at {fs} S/s are fewer than the {size_in} needed '
@@ -485,14 +485,6 @@ def _oaresample(
     )
 
     return y, round(lead * design['nfft_out'] / design['nfft'])
-
-
-def _source_sample_count(
-    capture: specs.SensorCapture, design: sw.ResamplerDesign
-) -> int:
-    """return the source-rate sample count of the record of `capture` under `design`."""
-    samples_out = round(capture.duration * capture.sample_rate)
-    return round(samples_out * design['nfft'] / design['nfft_out'])
 
 
 def _get_filter_overlap(capture: specs.SensorCapture) -> int:
@@ -547,7 +539,7 @@ def _get_oaresample_overlaps(
     lead = sw.util.ceildiv(noverlap, lead_step) * lead_step
 
     tail = noverlap + min_overlap
-    tail += (nfft - (lead + _source_sample_count(capture, design) + tail)) % hop
+    tail += (nfft - (lead + source_record_size(capture, design) + tail)) % hop
 
     return lead, tail
 
