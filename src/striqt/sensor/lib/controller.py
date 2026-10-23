@@ -14,7 +14,7 @@ import striqt.waveform as sw
 from striqt.analysis.lib.util import np
 
 from .sources import base, buffers
-from .typing import SS, SP, SC, S, PC, PS, SourceBackend, TypeVar
+from .typing import SS, SP, SC, SA, S, PC, PS, SourceBackend, TypeVar
 from . import compute, util
 from .. import specs
 
@@ -229,8 +229,8 @@ class ControllerConfig:
 
 def bind_controller(
     binding: 'bindings.SensorBinding[SS, SP, SC]',
-    schema: specs.Schema[SS, SP, SC, PS, PC],
-) -> type[Controller[SS, SP, SC, PS, PC]]:
+    schema: specs.Schema[SS, SP, SC, SA, PS, PC],
+) -> type[Controller[SS, SP, SC, SA, PS, PC]]:
     class cls(Controller, sensor=binding, schema=schema):
         # wrapper shims for customized docstrings
         def __init__(self, *args: PS.args, **kwargs: PS.kwargs):
@@ -248,7 +248,7 @@ def bind_controller(
     return cls
 
 
-class Controller(Generic[SS, SP, SC, PS, PC]):
+class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     """Open the source backend for control and acquisition."""
 
     backend: SourceBackend[SS, SC]
@@ -259,7 +259,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     _closed: bool = False
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
-    schema: ClassVar['specs.Schema[Any, Any, Any, Any, Any]']
+    schema: ClassVar['specs.Schema[Any, Any, Any, Any, Any, Any]']
     sensor: ClassVar['bindings.SensorBinding[Any, Any, Any]']
 
     @sa.util.stopwatch(
@@ -281,7 +281,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         cls,
         *,
         sensor: 'bindings.SensorBinding[SS, SP, SC]',
-        schema: specs.Schema[SS, SP, SC, PS, PC],
+        schema: specs.Schema[SS, SP, SC, SA, PS, PC],
     ):
         """customize documentation on subclassing"""
 
@@ -357,10 +357,10 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
     @classmethod
     def from_sweep_spec(
         cls,
-        spec: specs.Sweep[SS, Any, SC],
+        spec: specs.Sweep[SS, Any, SC, SA],
         format_path: specs.paths.PathFormatter | None = None,
-    ) -> Controller[SS, SP, SC, PS, PC]:
-        self = cast(Controller[SS, SP, SC, PS, PC], object.__new__(cls))
+    ) -> Controller[SS, SP, SC, SA, PS, PC]:
+        self = cast(Controller[SS, SP, SC, SA, PS, PC], object.__new__(cls))
 
         config = ControllerConfig(
             init_rx_ports=specs.captures.get_unique_ports(spec.captures, spec.loops),
@@ -377,8 +377,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         reuse_iq: bool = False,
         rx_ports: tuple[int, ...] | None = None,
         format_path: specs.paths.PathFormatter | None = None,
-    ) -> Controller[SS, SP, SC, PS, PC]:
-        self = cast(Controller[SS, SP, SC, PS, PC], object.__new__(cls))
+    ) -> Controller[SS, SP, SC, SA, PS, PC]:
+        self = cast(Controller[SS, SP, SC, SA, PS, PC], object.__new__(cls))
         config = ControllerConfig(
             init_rx_ports=rx_ports,
             reuse_iq=reuse_iq,

@@ -127,7 +127,7 @@ class SinkBase(Generic[specs.SC]):
 
     def __init__(
         self,
-        sweep_spec: specs.Sweep[Any, Any, specs.SC],
+        sweep_spec: specs.Sweep[Any, Any, specs.SC, Any],
         format_path: specs.paths.PathFormatter | None = None,
         *,
         force: bool = False,
@@ -242,7 +242,7 @@ class ZarrSinkBase(SinkBase):
 
     def __init__(
         self,
-        sweep_spec: specs.Sweep[Any, Any, specs.SC],
+        sweep_spec: specs.Sweep[Any, Any, specs.SC, Any],
         format_path: specs.paths.PathFormatter | None = None,
         *,
         force: bool = False,

@@ -45,7 +45,9 @@ def make_sweep(captures=(), loops=(), adjust_captures=None, **kws):
 
 
 class ActionCls(
-    ss.specs.ActionSpec[ss.specs.FunctionSource, ss.specs.Peripherals],
+    ss.specs.ActionSpec[
+        ss.specs.FunctionSource, ss.specs.Peripherals, ss.specs.BuiltinAnalyses
+    ],
     frozen=True,
     kw_only=True,
 ):
@@ -53,7 +55,12 @@ class ActionCls(
 
 
 class PlanCls(
-    ss.specs.CapturePlan[ss.specs.FunctionSource, ss.specs.Peripherals, CaptureCls],
+    ss.specs.CapturePlan[
+        ss.specs.FunctionSource,
+        ss.specs.Peripherals,
+        CaptureCls,
+        ss.specs.BuiltinAnalyses,
+    ],
     frozen=True,
     kw_only=True,
 ):

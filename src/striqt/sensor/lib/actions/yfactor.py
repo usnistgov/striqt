@@ -22,7 +22,7 @@ from .. import compute, io
 from ..compute import cal_lookups
 from ..resources import Resources
 from ..sinks import MemoryCacheSink, SinkBase
-from ..typing import PC, PS, SC, SP, SS
+from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
 
@@ -30,7 +30,7 @@ DIODE_FIELD = 'noise_diode_enabled'
 
 
 def calibration_analysis(
-    spec: specs.ManualYFactorCalibration[Any, Any, Any],
+    spec: specs.ManualYFactorCalibration[Any, Any, Any, Any],
 ) -> specs.BuiltinAnalyses:
     """return the analysis a Y-factor calibration runs on each capture.
 
@@ -221,8 +221,8 @@ def _is_port_loop(loop: specs.LoopSpec) -> bool:
 
 @sa.util.lru_cache()
 def build_calibration_sweep(
-    spec: specs.ManualYFactorCalibration[SS, SP, SC],
-) -> specs.Sweep[SS, SP, SC]:
+    spec: specs.ManualYFactorCalibration[SS, SP, SC, SA],
+) -> specs.Sweep[SS, SP, SC, SA]:
     """return the `Sweep` that `open_resources` opens for a `ManualYFactorCalibration`.
 
     The sweep is the spec's capture plan over every port, with the analysis of
@@ -262,7 +262,7 @@ def build_calibration_sweep(
 
 
 def calibration_ports(
-    spec: specs.ManualYFactorCalibration[Any, Any, Any],
+    spec: specs.ManualYFactorCalibration[Any, Any, Any, Any],
 ) -> tuple[Any, ...]:
     """return the ports to calibrate in the order of the `port` loop or the captures."""
     for loop in spec.loops:
@@ -277,13 +277,15 @@ def calibration_ports(
 
 
 def calibration_passes(
-    spec: specs.ManualYFactorCalibration[Any, Any, Any],
+    spec: specs.ManualYFactorCalibration[Any, Any, Any, Any],
 ) -> list[tuple[Any, bool]]:
     """return the ``(port, diode_on)`` of each pass: port-major, diode off then on."""
     return [(port, on) for port in calibration_ports(spec) for on in (False, True)]
 
 
-def pass_sweep(sweep: specs.Sweep[SS, SP, SC], port: Any) -> specs.Sweep[SS, SP, SC]:
+def pass_sweep(
+    sweep: specs.Sweep[SS, SP, SC, SA], port: Any
+) -> specs.Sweep[SS, SP, SC, SA]:
     """return `sweep` with the captures fixed to `port` and without a `port` loop."""
     loops = tuple(loop for loop in sweep.loops if not _is_port_loop(loop))
     if len(loops) < len(sweep.loops):
@@ -294,8 +296,8 @@ def pass_sweep(sweep: specs.Sweep[SS, SP, SC], port: Any) -> specs.Sweep[SS, SP,
 
 
 def calibration_fields(
-    spec: specs.ManualYFactorCalibration[Any, Any, Any],
-    sweep: specs.Sweep[Any, Any, Any],
+    spec: specs.ManualYFactorCalibration[Any, Any, Any, Any],
+    sweep: specs.Sweep[Any, Any, Any, Any],
 ) -> list[str]:
     """return the capture fields that index the saved corrections.
 
@@ -313,7 +315,8 @@ def calibration_fields(
 
 
 def corrections_path(
-    sweep: specs.Sweep[Any, Any, Any], format_path: specs.paths.PathFormatter | None
+    sweep: specs.Sweep[Any, Any, Any, Any],
+    format_path: specs.paths.PathFormatter | None,
 ) -> Path:
     """return `sweep.sink.path` with the ``{fields}`` templates formatted.
 
@@ -353,7 +356,7 @@ def switch_diode(port: Any, diode_on: bool) -> None:
 
 
 @registry.runner(spec_type=specs.ManualYFactorCalibration)
-class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
+class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
     """run a `ManualYFactorCalibration`.
 
     `sweep` is `build_calibration_sweep` of the spec, and the resources open for
@@ -362,15 +365,15 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
     `sink.path` as netCDF. A path of None writes nothing.
     """
 
-    spec: specs.ManualYFactorCalibration[SS, SP, SC]
-    sweep: specs.Sweep[SS, SP, SC]
+    spec: specs.ManualYFactorCalibration[SS, SP, SC, SA]
+    sweep: specs.Sweep[SS, SP, SC, SA]
 
-    def __init__(self, spec: specs.ManualYFactorCalibration[SS, SP, SC]) -> None:
+    def __init__(self, spec: specs.ManualYFactorCalibration[SS, SP, SC, SA]) -> None:
         self.spec = spec
         self.sweep = build_calibration_sweep(spec)
 
     @classmethod
-    def validate(cls, spec: specs.ManualYFactorCalibration[SS, SP, SC]) -> None:
+    def validate(cls, spec: specs.ManualYFactorCalibration[SS, SP, SC, SA]) -> None:
         """build the calibration sweep of `spec`.
 
         Raises:
@@ -384,7 +387,7 @@ class ManualYFactorRunner(Generic[SS, SP, SC, PS, PC]):
 
     def iterate(
         self,
-        resources: Resources[SS, SP, SC, PS, PC],
+        resources: Resources[SS, SP, SC, SA, PS, PC],
         *,
         always_yield: bool = False,
         yield_values: bool = True,

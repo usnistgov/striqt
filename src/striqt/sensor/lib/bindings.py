@@ -21,7 +21,7 @@ import warnings
 from .controller import Controller, bind_controller
 from .peripherals import NoPeripherals
 from .. import specs
-from .typing import Peripherals, PC, PS, SC, SS, SP, SourceBackend, TypeVar
+from .typing import Peripherals, PC, PS, SA, SC, SS, SP, SourceBackend, TypeVar
 import msgspec
 
 TC2 = TypeVar('TC2', bound=specs.SensorCapture)
@@ -29,7 +29,7 @@ TP2 = TypeVar('TP2', bound=specs.Peripherals)
 TS2 = TypeVar('TS2', bound=specs.Source)
 
 
-registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any]]'] = {}
+registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any, Any]]'] = {}
 tagged_sweeps: Any = None
 
 
@@ -43,7 +43,7 @@ class Sensor(Generic[SS, SP, SC]):
     """
 
     source_cls: type[SourceBackend[SS, SC]]
-    sweep_spec_cls: type[specs.ActionSpec[SS, SP]] = specs.Sweep
+    sweep_spec_cls: type[specs.ActionSpec[SS, SP, Any]] = specs.Sweep
     peripherals_cls: type[Peripherals[SP, SC]] | type[NoPeripherals[SP, SC]] = (
         NoPeripherals
     )
@@ -66,8 +66,8 @@ class SensorBinding(Sensor[SS, SP, SC]):
 
 
 def _resolve_action_type(
-    sensor: Sensor[Any, Any, Any], schema: specs.Schema[Any, Any, Any, Any, Any]
-) -> type[specs.ActionSpec[Any, Any]]:
+    sensor: Sensor[Any, Any, Any], schema: specs.Schema[Any, Any, Any, Any, Any, Any]
+) -> type[specs.ActionSpec[Any, Any, Any]]:
     """return the action spec type from `schema.action` or `sensor.sweep_spec_cls`.
 
     The `sweep_spec_cls` of a `SensorBinding` is the tagged class of an earlier
@@ -96,11 +96,11 @@ def _resolve_action_type(
 def bind_sensor(
     key: str,
     sensor: Sensor[TS2, TP2, TC2],
-    schema: specs.Schema[SS, SP, SC, PS, PC],
+    schema: specs.Schema[SS, SP, SC, SA, PS, PC],
     register: bool = True,
     *,
     module: Optional[str] = None,
-) -> type[Controller[SS, SP, SC, PS, PC]]:
+) -> type[Controller[SS, SP, SC, SA, PS, PC]]:
     """bind the implementation classes of a sensor to spec types under `key`.
 
     The returned `Controller` subclass has the class attributes `sensor` (a
@@ -145,7 +145,7 @@ def bind_sensor(
 
     binding = SensorBinding(
         source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),
-        sweep_spec_cls=cast('type[specs.ActionSpec[SS, SP]]', action_type),
+        sweep_spec_cls=cast('type[specs.ActionSpec[SS, SP, Any]]', action_type),
         peripherals_cls=cast(
             'type[Peripherals[SP, SC] | NoPeripherals[SP, SC]]', sensor.peripherals_cls
         ),
@@ -183,8 +183,8 @@ def bind_sensor(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, PS, PC]]'
-) -> 'type[Controller[SS, SP, Any, PS, PC]]':
+    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, SA, PS, PC]]'
+) -> 'type[Controller[SS, SP, Any, SA, PS, PC]]':
     """bind a manual Y-factor calibration of the sensor bound as `ctrl_cls`.
 
     Deprecated: call `bind_sensor` with `ctrl_cls.sensor` and
@@ -203,12 +203,12 @@ def bind_manual_yfactor_calibration(
     return bind_sensor(
         name,
         ctrl_cls.sensor,
-        cast(specs.Schema[SS, SP, Any, PS, PC], schema),
+        cast(specs.Schema[SS, SP, Any, SA, PS, PC], schema),
         module=sys._getframe(1).f_globals.get('__name__'),
     )
 
 
-def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
+def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any, Any]]']:
     return dict(registry)
 
 
@@ -217,7 +217,7 @@ def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
 @functools.lru_cache
 def mock_binding(
     origin: type[Controller], target: str | type[Controller], register: bool = True
-) -> type[Controller[Any, Any, Any, Any, Any]]:
+) -> type[Controller[Any, Any, Any, Any, Any, Any]]:
     """bind `origin`'s sweep and capture types to `target`'s implementation classes.
 
     The result decodes `origin`'s sweep files but opens `target`'s source and
@@ -274,12 +274,12 @@ def get_tagged_sweep_type() -> type[specs.ActionSpec]:
 
 def _bind_spec_class(
     name: str,
-    base: type[specs.ActionSpec[Any, Any]],
-    schema: specs.Schema[Any, Any, Any, Any, Any],
+    base: type[specs.ActionSpec[Any, Any, Any]],
+    schema: specs.Schema[Any, Any, Any, Any, Any, Any],
     binding: SensorBinding[Any, Any, Any],
     *,
     tag: bool = False,
-) -> type[specs.ActionSpec[Any, Any]]:
+) -> type[specs.ActionSpec[Any, Any, Any]]:
     """return a subclass of `base` whose spec fields are the types in `schema`.
 
     With `tag`, the class is an arm of the ``sensor_binding`` tagged union under the
@@ -321,7 +321,7 @@ def _bind_spec_class(
         **tag_kws,
     )
     _set_class_attrs(cls, sensor=binding, schema=schema)
-    return cast('type[specs.ActionSpec[Any, Any]]', cls)
+    return cast('type[specs.ActionSpec[Any, Any, Any]]', cls)
 
 
 def _set_class_attrs(*classes: type, **attrs: Any) -> None:

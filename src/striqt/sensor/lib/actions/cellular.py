@@ -22,7 +22,7 @@ from ... import specs
 from .. import compute
 from ..resources import Resources
 from ..sinks import NoSink, SinkBase, ZarrCaptureSink
-from ..typing import PC, PS, SC, SP, SS
+from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
 
@@ -314,7 +314,7 @@ check_all_blocks()
 
 
 def cellular_analysis(
-    spec: specs.Cellular5GNRSweep[Any, Any, Any], subcarrier_spacing: float
+    spec: specs.Cellular5GNRSweep[Any, Any, Any, Any], subcarrier_spacing: float
 ) -> specs.BuiltinAnalyses:
     """return the `Sweep` analysis that `spec.analysis` and `subcarrier_spacing` select.
 
@@ -361,8 +361,8 @@ def cellular_analysis(
 
 @sa.util.lru_cache()
 def build_cellular_sweep(
-    spec: specs.Cellular5GNRSweep[SS, SP, SC],
-) -> specs.Sweep[SS, SP, SC]:
+    spec: specs.Cellular5GNRSweep[SS, SP, SC, SA],
+) -> specs.Sweep[SS, SP, SC, SA]:
     """return the `Sweep` that `open_resources` opens for a `Cellular5GNRSweep`.
 
     The sweep has the spec's captures resolved against `cell_channels`
@@ -414,22 +414,22 @@ def build_cellular_sweep(
 
 
 @registry.runner(spec_type=specs.Cellular5GNRSweep)
-class Cellular5GNRSweepRunner(Generic[SS, SP, SC, PS, PC]):
+class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
     """run a `Cellular5GNRSweep`.
 
     `sweep` is `build_cellular_sweep` of the spec. The output is a `ZarrCaptureSink`
     at `sink.path`, or nothing when the path is None.
     """
 
-    spec: specs.Cellular5GNRSweep[SS, SP, SC]
-    sweep: specs.Sweep[SS, SP, SC]
+    spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]
+    sweep: specs.Sweep[SS, SP, SC, SA]
 
-    def __init__(self, spec: specs.Cellular5GNRSweep[SS, SP, SC]) -> None:
+    def __init__(self, spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]) -> None:
         self.spec = spec
         self.sweep = build_cellular_sweep(spec)
 
     @classmethod
-    def validate(cls, spec: specs.Cellular5GNRSweep[SS, SP, SC]) -> None:
+    def validate(cls, spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]) -> None:
         """build the sweep of `spec`, raising what `build_cellular_sweep` raises."""
         build_cellular_sweep(spec)
 
@@ -440,7 +440,7 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, PS, PC]):
 
     def iterate(
         self,
-        resources: Resources[SS, SP, SC, PS, PC],
+        resources: Resources[SS, SP, SC, SA, PS, PC],
         *,
         always_yield: bool = False,
         yield_values: bool = True,

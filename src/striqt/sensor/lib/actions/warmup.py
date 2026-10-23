@@ -16,7 +16,7 @@ from ... import specs
 from .. import sinks
 from ..compute import gpu
 from ..resources import Resources
-from ..typing import PC, PS, SC
+from ..typing import PC, PS, SA, SC
 
 if TYPE_CHECKING:
     from ..controller import Controller
@@ -27,8 +27,8 @@ if TYPE_CHECKING:
 # cache would bind a second controller and sweep class for the same origin.
 @functools.lru_cache
 def warmup_binding(
-    origin: type[Controller[Any, Any, Any, Any, Any]],
-) -> type[Controller[specs.NoSource, specs.NoPeripherals, Any, Any, Any]]:
+    origin: type[Controller[Any, Any, Any, Any, Any, Any]],
+) -> type[Controller[specs.NoSource, specs.NoPeripherals, Any, Any, Any, Any]]:
     """return the unregistered ``warmup`` binding for the capture type of `origin`.
 
     The binding has the ``warmup`` sensor's implementation classes and source spec
@@ -54,8 +54,8 @@ def warmup_binding(
 
 
 def derive_warmup_sweep(
-    sweep_spec: specs.Sweep[Any, Any, SC], count: int = 1
-) -> specs.Sweep[specs.NoSource, specs.NoPeripherals, SC]:
+    sweep_spec: specs.Sweep[Any, Any, SC, SA], count: int = 1
+) -> specs.Sweep[specs.NoSource, specs.NoPeripherals, SC, SA]:
     """return the `Sweep` whose run pays the import and JIT costs of `sweep_spec`.
 
     The warmup source is a `NoSource` with `max(port) + 1` ports over every port a
@@ -92,7 +92,7 @@ def derive_warmup_sweep(
     )
 
     sweep_cls = cast(
-        'type[specs.Sweep[specs.NoSource, specs.NoPeripherals, SC]]',
+        'type[specs.Sweep[specs.NoSource, specs.NoPeripherals, SC, SA]]',
         binding.sensor.sweep_spec_cls,
     )
     looped = sweep_cls(
@@ -109,8 +109,8 @@ def derive_warmup_sweep(
 
 
 def warmup_sweep_for(
-    sweep: specs.Sweep[Any, Any, SC],
-) -> specs.Sweep[Any, Any, SC] | None:
+    sweep: specs.Sweep[Any, Any, SC, SA],
+) -> specs.Sweep[Any, Any, SC, SA] | None:
     """return the `Sweep` to run before `sweep`, or None when none is needed.
 
     None when `sweep.options.skip_warmup` is set or the sweep does not use the GPU
@@ -122,8 +122,8 @@ def warmup_sweep_for(
 
 
 def open_warmup_resources(
-    runner: ActionRunner[Any, specs.NoSource, specs.NoPeripherals, SC, PS, PC],
-) -> Resources[specs.NoSource, specs.NoPeripherals, SC, PS, PC]:
+    runner: ActionRunner[Any, specs.NoSource, specs.NoPeripherals, SC, SA, PS, PC],
+) -> Resources[specs.NoSource, specs.NoPeripherals, SC, SA, PS, PC]:
     """open the resources that a warmup `runner` iterates over.
 
     The source is a `NoSource` controller for `runner.sweep.source`; the peripherals

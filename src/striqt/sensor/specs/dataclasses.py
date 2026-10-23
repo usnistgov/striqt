@@ -3,14 +3,14 @@ import dataclasses
 from typing import Any, Callable, Generic, Literal
 
 from . import structs, paths
-from ..lib.typing import SS, SC, SP, PS, PC
+from ..lib.typing import SS, SC, SP, SA, PS, PC
 
 import striqt.waveform as sw
 import striqt.analysis as sa
 
 
 @dataclasses.dataclass(frozen=True)
-class Schema(Generic[SS, SP, SC, PS, PC]):
+class Schema(Generic[SS, SP, SC, SA, PS, PC]):
     """the spec types of a sensor binding.
 
     `action` is the action spec type that `bind_sensor` subclasses. The
@@ -25,7 +25,7 @@ class Schema(Generic[SS, SP, SC, PS, PC]):
     init_like: Callable[PS, Any]
     arm_like: Callable[PC, Any]
 
-    action: type[structs.ActionSpec[SS, SP]] = structs.Sweep
+    action: type[structs.ActionSpec[SS, SP, SA]] = structs.Sweep
 
     def __post_init__(self):
         assert issubclass(self.source, structs.Source)

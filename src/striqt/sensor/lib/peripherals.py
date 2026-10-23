@@ -10,7 +10,7 @@ class PeripheralsBase(Peripherals[SP, SC]):
 
     spec: SP
 
-    def __init__(self, spec: specs.Sweep[Any, SP, SC]):
+    def __init__(self, spec: specs.Sweep[Any, SP, SC, Any]):
         self.spec = spec.peripherals
         self.open()
 

@@ -162,7 +162,7 @@ def analyze(
 
 
 def prepare_compute(
-    spec: specs.Sweep[Any, Any, Any], skip_warmup: bool = False
+    spec: specs.Sweep[Any, Any, Any, Any], skip_warmup: bool = False
 ) -> Generator[xr.Dataset | DelayedDataset | None]:
     """import the compute backend of `spec`, then run the warmup sweep, if any.
 

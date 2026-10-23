@@ -53,7 +53,7 @@ class CaptureOrigin(NamedTuple):
 
 
 def loop_captures(
-    sweep: structs.Sweep[Any, Any, SC],
+    sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
     *,
     only_fields: tuple[str, ...] | None = None,
@@ -116,7 +116,7 @@ def loop_captures(
 
 
 def loop_capture_origins(
-    sweep: structs.Sweep[Any, Any, SC],
+    sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
     *,
     only_fields: tuple[str, ...] | None = None,
@@ -208,7 +208,7 @@ def adjust_analysis(
     return sa.specs.helpers.freeze(structs.BuiltinAnalyses.from_dict(result))
 
 
-def _resolve_capture_cls(sweep: structs.CapturePlan[Any, Any, SC]) -> type[SC]:
+def _resolve_capture_cls(sweep: structs.CapturePlan[Any, Any, SC, Any]) -> type[SC]:
     if len(sweep.captures) > 0:
         return type(sweep.captures[0])
     elif sweep.sensor is None:
@@ -225,7 +225,7 @@ def _resolve_capture_cls(sweep: structs.CapturePlan[Any, Any, SC]) -> type[SC]:
 
 
 def _expansion_args(
-    plan: structs.CapturePlan[Any, Any, SC],
+    plan: structs.CapturePlan[Any, Any, SC, Any],
     source_id: types.SourceID | None,
     only_fields: tuple[str, ...] | None,
     limit: int | None,
@@ -652,7 +652,7 @@ def adjust_captures(
 
 @sa.util.lru_cache()
 def list_capture_adjustments(
-    sweep: structs.Sweep[Any, Any, SC], source_id: str
+    sweep: structs.Sweep[Any, Any, SC, Any], source_id: str
 ) -> dict[str, tuple[Any, ...]]:
     """list the unique values of each adjusted capture field across the sweep.
 

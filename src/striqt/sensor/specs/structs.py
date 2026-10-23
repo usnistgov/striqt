@@ -24,7 +24,7 @@ from striqt.analysis.specs import frozendict
 from striqt.analysis.specs import AnalysisGroup  # noqa: F401
 from striqt.analysis.specs.helpers import SpecValidationError, subset_of
 
-from ..lib.typing import TypeVar, SS, SP, SC
+from ..lib.typing import TypeVar, SS, SP, SC, SA
 from . import types
 
 
@@ -421,7 +421,7 @@ AdjustCapturesType = dict[
 ]
 
 
-class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
+class ActionSpec(SpecBase, Generic[SS, SP, SA], frozen=True, kw_only=True):
     """the top-level spec that an action runs.
 
     An instance is decoded from a file against the tagged class of a sensor binding
@@ -464,7 +464,9 @@ class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
         """
 
 
-class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=True):
+class CapturePlan(
+    ActionSpec[SS, SP, SA], Generic[SS, SP, SC, SA], frozen=True, kw_only=True
+):
     """an `ActionSpec` with the `captures`, `loops`, and `adjust_captures` blocks.
 
     `loops` expands over `captures` into the sequence of captures that the action
@@ -491,7 +493,7 @@ class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=
         action._validate_loop_capture_collisions(self.loops, self.captures)
 
 
-class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+class Sweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
     """the spec of a sweep, and the form every action opens resources for.
 
     `analysis` is evaluated on each expanded capture, with the capture's
@@ -516,7 +518,7 @@ class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
         action.validate_action(self)
 
 
-class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+class ManualYFactorCalibration(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
     """the spec of a Y-factor calibration with a hand-switched noise diode.
 
     The `calibration:` block is a `ManualYFactorSpec`. The runner acquires the
@@ -768,7 +770,7 @@ class Cellular5GNRAnalysis(SpecBase, frozen=True, kw_only=True):
     iq_waveform: Optional[CellularIQWaveformSpec] = None
 
 
-class Cellular5GNRSweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+class Cellular5GNRSweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
     """the spec of a sweep over 5G NR channels.
 
     `captures` are the binding's own capture type and name a channel by
