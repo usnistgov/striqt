@@ -538,6 +538,13 @@ class Sweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
         from . import action
 
         super().__post_init__()
+        group = action.analysis_group_type(self)
+        if not isinstance(self.analysis, group):
+            raise SpecValidationError(
+                f'Expected an instance of {group.__name__}, not '
+                f'{type(self.analysis).__name__}',
+                ('.analysis',),
+            )
         action.validate_sweep(self)
         action.validate_action(self)
 
