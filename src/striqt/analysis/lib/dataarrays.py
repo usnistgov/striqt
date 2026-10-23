@@ -26,15 +26,14 @@ PORT_DIM = 'port'
 
 @dataclasses.dataclass
 class AcquiredIQ:
-    """an acquired IQ waveform and the conditioning that measurements may select from.
+    """an acquired IQ waveform `x` with the capture that describes the acquisition.
 
-    `select` returns the waveform conditioned as the preferences request when a stage
-    is available, and the closest available stage otherwise.
+    `select` returns `x` for every preference. A subclass that conditions the
+    waveform (resampling, filtering, trigger alignment) overrides `select`, and a
+    measurement body reaches either through `select_waveform`.
     """
 
-    pre_align: Array
-    pre_filter: Array | None
-    aligned: Array | None
+    x: Array
     capture: specs.Capture | None
 
     def select(
@@ -44,18 +43,15 @@ class AcquiredIQ:
 
         Args:
             prefer_filtered: True for the waveform low-passed to the capture
-                `analysis_bandwidth`, when a filter was applied
+                `analysis_bandwidth`, when the acquisition applies one
             prefer_aligned: True for the waveform shifted by the signal trigger, when
-                a trigger ran
+                the acquisition runs one
 
         Returns:
-            shape (port, sample) array in the namespace of the acquisition
+            shape (port, sample) array in the namespace of `x`; this class returns
+            `x` unchanged
         """
-        if not prefer_filtered and self.pre_filter is not None:
-            return self.pre_filter
-        if prefer_aligned and self.aligned is not None:
-            return self.aligned
-        return self.pre_align
+        return self.x
 
 
 def select_waveform(
@@ -407,7 +403,7 @@ class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
 def _raw_array(iq: Array | AcquiredIQ) -> Array:
     """return the acquired array of `iq`, or `iq` when the argument is an array."""
     if isinstance(iq, AcquiredIQ):
-        return iq.pre_align
+        return iq.x
     return iq
 
 

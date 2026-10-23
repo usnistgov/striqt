@@ -763,9 +763,7 @@ class TestSoapySourceAcquire:
         )
         samples, _, time_ns = self._acquire(source, capture, 64)
         iq = ss.specs.AcquiredIQ(
-            pre_align=samples,
-            pre_filter=None,
-            aligned=None,
+            x=samples,
             capture=capture,
             info=ss.specs.AcquisitionInfo(source_id='x'),
             extra_data={},

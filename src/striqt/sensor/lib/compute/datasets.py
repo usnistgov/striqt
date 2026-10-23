@@ -23,7 +23,6 @@ SOURCE_ID_NAME = 'source_id'
 class EvaluationOptions(sa.EvaluationOptions[TAR], kw_only=True):
     sweep_spec: specs.Sweep
     extra_attrs: dict[str, Any] = msgspec.field(default_factory=dict)
-    correction: bool = False
     cache_callback: Callable | None = None
     expand_dims: Sequence[str] = (CAPTURE_DIM,)
 

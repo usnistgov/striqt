@@ -660,9 +660,7 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
             iq = specs.AcquiredIQ(
                 format_path=self._config.format_path,
-                pre_align=samples,
-                pre_filter=None,
-                aligned=None,
+                x=samples,
                 capture=self.capture_spec,
                 info=info,
                 extra_data={},
