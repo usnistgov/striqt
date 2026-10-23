@@ -3,7 +3,7 @@ from typing import cast, Sequence
 import striqt.analysis as sa
 from . import datasets
 from ... import specs
-from ..typing import SC, SS, SP
+from ..typing import SA, SC, SS, SP
 
 
 def log_info(dd: datasets.DelayedDataset):
@@ -46,7 +46,7 @@ def _adc_overload_message(
 def _if_overload_message(
     extra_data: dict[str, Sequence[float]],
     capture: SC,
-    sweep_spec: specs.Sweep[SS, SP, SC],
+    sweep_spec: specs.Sweep[SS, SP, SC, SA],
 ) -> str | None:
     if 'if_headroom' in extra_data:
         if_headroom = extra_data['if_headroom']

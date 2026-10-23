@@ -138,7 +138,10 @@ def test_unique_ports_ignores_other_loops(captures):
 
 class _UnboundSweep(
     ss.specs.Sweep[
-        ss.specs.FunctionSource, ss.specs.NoPeripherals, ss.specs.SingleToneCapture
+        ss.specs.FunctionSource,
+        ss.specs.NoPeripherals,
+        ss.specs.SingleToneCapture,
+        ss.specs.BuiltinAnalyses,
     ],
     frozen=True,
     kw_only=True,

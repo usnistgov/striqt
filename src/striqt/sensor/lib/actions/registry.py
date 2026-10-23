@@ -19,7 +19,7 @@ class ActionRegistry(dict['type[specs.ActionSpec]', 'type[ActionRunner]']):
     """map from an action spec type to the `ActionRunner` subclass for that type."""
 
     def runner(
-        self, spec_type: type[specs.ActionSpec[Any, Any]]
+        self, spec_type: type[specs.ActionSpec[Any, Any, Any]]
     ) -> Callable[[type[TR]], type[TR]]:
         """register the decorated `ActionRunner` subclass as the runner of `spec_type`.
 
@@ -41,7 +41,7 @@ class ActionRegistry(dict['type[specs.ActionSpec]', 'type[ActionRunner]']):
 
     def lookup(
         self, spec: specs.ActionSpec | type[specs.ActionSpec]
-    ) -> type[ActionRunner[Any, Any, Any, Any, Any, Any]]:
+    ) -> type[ActionRunner[Any, Any, Any, Any, Any, Any, Any]]:
         """return the runner registered for the spec type or the nearest base.
 
         Args:

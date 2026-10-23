@@ -18,7 +18,7 @@ del k
 
 from . import action, captures, paths, sequencing, structs, types
 from .dataclasses import AcquiredIQ, Schema
-from .structs import SS, SP, SC
+from .structs import SS, SP, SC, SA
 from .types import Annotated, Meta
 from striqt.analysis.specs import frozendict
 

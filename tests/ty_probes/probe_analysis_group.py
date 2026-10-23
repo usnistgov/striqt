@@ -1,5 +1,6 @@
 """the analysis and trigger bundles expose their measurement fields to the type checker"""
 
+# ruff: noqa: UP045  msgspec resolves the Quick annotations at runtime on py3.9
 from __future__ import annotations
 
 from typing import Optional
@@ -8,6 +9,22 @@ from typing_extensions import assert_type
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+
+
+class Quick(sa.specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True):
+    spectrogram: Optional[sa.specs.Spectrogram] = None
+
+
+def probe_schema() -> None:
+    schema = ss.specs.Schema(
+        source=ss.specs.FunctionSource,
+        capture=ss.specs.SingleToneCapture,
+        peripherals=ss.specs.Peripherals,
+        init_like=ss.specs.FunctionSource,
+        arm_like=ss.specs.SingleToneCapture,
+        analysis=Quick,
+    )
+    assert_type(schema.analysis, type[Quick])
 
 
 def probe(source: ss.specs.Source) -> None:

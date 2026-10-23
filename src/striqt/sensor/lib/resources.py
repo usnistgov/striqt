@@ -18,7 +18,7 @@ import typing_extensions
 from . import bindings, controller, io, util
 from .peripherals import NoPeripherals
 from .sinks import SinkBase
-from .typing import Peripherals, SS, SP, SC, PS, PC
+from .typing import Peripherals, SS, SP, SC, SA, PS, PC
 from .. import specs
 
 import striqt.analysis as sa
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     # the Generic parameters are for type checking only on python < 3.10
 
-    class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, PS, PC]):
+    class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, SA, PS, PC]):
         """the open resources an action runs over.
 
         `action_spec` is the spec the action runs, and `runner` is the action built
@@ -38,30 +38,30 @@ if TYPE_CHECKING:
         open for.
         """
 
-        source: controller.Controller[SS, SP, SC, PS, PC]
+        source: controller.Controller[SS, SP, SC, SA, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
-        action_spec: specs.ActionSpec[Any, SP]
-        sweep_spec: specs.Sweep[SS, SP, SC]
-        runner: ActionRunner[Any, SS, SP, SC, PS, PC]
+        action_spec: specs.ActionSpec[Any, SP, SA]
+        sweep_spec: specs.Sweep[SS, SP, SC, SA]
+        runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC]
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
 
     class AnyResources(
         typing_extensions.TypedDict,
-        Generic[SS, SP, SC, PS, PC],
+        Generic[SS, SP, SC, SA, PS, PC],
         total=False,
     ):
         """Sensor resources needed to run a sweep"""
 
-        source: controller.Controller[SS, SP, SC, PS, PC]
+        source: controller.Controller[SS, SP, SC, SA, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
         except_context: typing_extensions.NotRequired[ContextManager]
-        action_spec: specs.ActionSpec[Any, SP]
-        sweep_spec: specs.Sweep[SS, SP, SC]
-        runner: ActionRunner[Any, SS, SP, SC, PS, PC]
+        action_spec: specs.ActionSpec[Any, SP, SA]
+        sweep_spec: specs.Sweep[SS, SP, SC, SA]
+        runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC]
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
 
@@ -101,7 +101,7 @@ def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
 
 
 def _open_sink(
-    runner: ActionRunner[Any, SS, SP, SC, PS, PC],
+    runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC],
     format_path: specs.paths.PathFormatter | None = None,
 ) -> SinkBase[SC]:
     with sa.util.stopwatch('open sink', 'sweep', 0.5, util.logging.INFO):
@@ -110,27 +110,27 @@ def _open_sink(
 
 class ConnectionManager(
     contextlib.ExitStack,
-    Generic[SS, SP, SC, PS, PC],
+    Generic[SS, SP, SC, SA, PS, PC],
 ):
-    _resources: AnyResources[SS, SP, SC, PS, PC]
+    _resources: AnyResources[SS, SP, SC, SA, PS, PC]
 
-    def __init__(self, sweep_spec: specs.Sweep[SS, SP, SC]):
+    def __init__(self, sweep_spec: specs.Sweep[SS, SP, SC, SA]):
         super().__init__()
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
     # ExitStack is inherited for its callback registry, but `with` yields the
     # resources it collected rather than the stack itself
-    def __enter__(self) -> Resources[SS, SP, SC, PS, PC]:  # ty: ignore[invalid-method-override]
+    def __enter__(self) -> Resources[SS, SP, SC, SA, PS, PC]:  # ty: ignore[invalid-method-override]
         return self.resources
 
     @util.cached_property
-    def resources(self) -> Resources[SS, SP, SC, PS, PC]:
+    def resources(self) -> Resources[SS, SP, SC, SA, PS, PC]:
         missing = Resources.__required_keys__ - set(self._resources.keys())
 
         # at runtime, __required_keys__ includes the NotRequired fields
         missing = missing - {'peripherals', 'except_context'}
         if len(missing) == 0:
-            return cast(Resources[SS, SP, SC, PS, PC], self._resources)
+            return cast(Resources[SS, SP, SC, SA, PS, PC], self._resources)
         else:
             raise TypeError(f'connections {missing!r} are incomplete')
 
@@ -184,12 +184,12 @@ def _prepare_sweep(spec: specs.Sweep, callback: SourceOpenCallback | None = None
 
 @sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
 def open_resources(
-    spec: specs.ActionSpec[SS, SP],
+    spec: specs.ActionSpec[SS, SP, SA],
     spec_path: str | Path | None = None,
     *,
     test_only: bool = False,
     on_source_opened: SourceOpenCallback | None = None,
-) -> ConnectionManager[SS, SP, SC, PS, PC]:
+) -> ConnectionManager[SS, SP, SC, SA, PS, PC]:
     """open the sensor hardware and software contexts needed to run `spec`.
 
     The action runner registered for the type of `spec` is built first. The source,

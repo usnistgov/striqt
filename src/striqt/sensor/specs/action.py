@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from ..lib.typing import SC
 
 
-def validate_action(spec: structs.ActionSpec[Any, Any]) -> None:
+def validate_action(spec: structs.ActionSpec[Any, Any, Any]) -> None:
     """run the registered action runner's `validate` on a bound action spec.
 
     The leaf spec classes call this at the end of `__post_init__`, after every field
@@ -45,8 +45,22 @@ def validate_action(spec: structs.ActionSpec[Any, Any]) -> None:
     runner.validate(spec)
 
 
+def analysis_group_type(
+    spec: structs.ActionSpec[Any, Any, Any],
+) -> type[sa.specs.AnalysisGroup]:
+    """return the analysis group type of the binding of `spec`.
+
+    The group is `schema.analysis` of the bound class, or `BuiltinAnalyses` for an
+    instance of an unbound spec class.
+    """
+    schema = type(spec).schema
+    if schema is None:
+        return structs.BuiltinAnalyses
+    return schema.analysis
+
+
 def validate_sweep(
-    sweep: structs.Sweep[Any, Any, SC],
+    sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
     """raise on anything in `sweep` that would fail once the sweep ran.
@@ -180,7 +194,7 @@ def _validate_measurement_names(sweep: structs.Sweep) -> None:
 
 
 def _validate_sweep_analysis(
-    sweep: structs.Sweep[Any, Any, SC],
+    sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
     """validate each unique (capture, analysis) combination that `sweep` runs.
@@ -205,7 +219,7 @@ def _validate_sweep_analysis(
 
 
 def _validate_sweep_corrections(
-    sweep: structs.Sweep[Any, Any, SC],
+    sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
     """reject each unique capture that `correct_iq` could not process for `sweep`.
@@ -255,7 +269,7 @@ def _validate_sweep_corrections(
 
 
 def _unique_capture_origins(
-    sweep: structs.Sweep[Any, Any, SC],
+    sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None,
     key: Callable[[SC], Any],
 ) -> Iterator[tuple[SC, structs.AnalysisGroup, sequencing.CaptureOrigin]]:

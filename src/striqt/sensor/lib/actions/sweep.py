@@ -11,13 +11,13 @@ from ... import specs
 from .. import compute
 from ..resources import Resources
 from ..sinks import NoSink, SinkBase, ZarrCaptureSink
-from ..typing import PC, PS, SC, SP, SS
+from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
 
 
 @registry.runner(spec_type=specs.Sweep)
-class SweepRunner(Generic[SS, SP, SC, PS, PC]):
+class SweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
     """run the captures of a `Sweep` through `iterate_captures`.
 
     `spec` and `sweep` are the same object. ``resources['sweep_spec']`` and the
@@ -25,15 +25,15 @@ class SweepRunner(Generic[SS, SP, SC, PS, PC]):
     output is a `ZarrCaptureSink` at `sink.path`. A path of None writes nothing.
     """
 
-    spec: specs.Sweep[SS, SP, SC]
-    sweep: specs.Sweep[SS, SP, SC]
+    spec: specs.Sweep[SS, SP, SC, SA]
+    sweep: specs.Sweep[SS, SP, SC, SA]
 
-    def __init__(self, spec: specs.Sweep[SS, SP, SC]) -> None:
+    def __init__(self, spec: specs.Sweep[SS, SP, SC, SA]) -> None:
         self.spec = spec
         self.sweep = spec
 
     @classmethod
-    def validate(cls, spec: specs.Sweep[SS, SP, SC]) -> None:
+    def validate(cls, spec: specs.Sweep[SS, SP, SC, SA]) -> None:
         """accept every `Sweep` without checks."""
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
@@ -43,7 +43,7 @@ class SweepRunner(Generic[SS, SP, SC, PS, PC]):
 
     def iterate(
         self,
-        resources: Resources[SS, SP, SC, PS, PC],
+        resources: Resources[SS, SP, SC, SA, PS, PC],
         *,
         always_yield: bool = False,
         yield_values: bool = True,

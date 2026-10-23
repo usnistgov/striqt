@@ -300,9 +300,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         """register the decorated function as the measurement configured by `spec_type`.
 
         Registration mutates this registry when the decorator is applied. A sweep
-        reaches the measurement through the ``analysis:`` block only when
-        `specs.BuiltinAnalyses` declares an ``Optional[spec_type]`` field of the same
-        `name`.
+        reaches the measurement through the ``analysis:`` block only when the
+        analysis group of the sensor binding declares an ``Optional[spec_type]``
+        field of the same `name`. `specs.BuiltinAnalyses` is the default group.
 
         The decorated function is called as ``func(iq, capture, **spec.to_dict())``
         and returns an array, or an ``(array, attrs)`` tuple, whose axes are `dims`.
@@ -614,6 +614,30 @@ def cached_registry_context(
             raise
 
 
+def _optional_spec_fields(group_type: type[specs.AnalysisGroup]) -> dict[str, type]:
+    """return the spec type of each ``Optional[spec] = None`` field of `group_type`.
+
+    Raises:
+        TypeError: naming the first field that is not an optional spec with default
+            None, or `group_type` when the struct is defined without
+            ``omit_defaults=True``
+    """
+    actual: dict[str, type] = {}
+    for field in msgspec.structs.fields(group_type):
+        args = set(typing.get_args(field.type))
+        if type(None) not in args or len(args) != 2 or field.default is not None:
+            raise TypeError(
+                f'{group_type.__qualname__}.{field.name} must be an Optional spec type '
+                f'with default None, not {field.type!r}'
+            )
+        (actual[field.name],) = args - {type(None)}
+    if not group_type.__struct_config__.omit_defaults:
+        raise TypeError(
+            f'{group_type.__qualname__} must be defined with omit_defaults=True'
+        )
+    return actual
+
+
 def check_group_fields(
     group_type: type[specs.AnalysisGroup], expected: dict[str, type[specs.Analysis]]
 ) -> None:
@@ -627,17 +651,10 @@ def check_group_fields(
 
     Raises:
         TypeError: naming the field that is not an optional spec with default None,
-            or listing the missing, unregistered, and mismatched field names
+            or `group_type` when defined without ``omit_defaults=True``, or listing
+            the missing, unregistered, and mismatched field names
     """
-    actual: dict[str, type] = {}
-    for field in msgspec.structs.fields(group_type):
-        args = set(typing.get_args(field.type))
-        if type(None) not in args or len(args) != 2 or field.default is not None:
-            raise TypeError(
-                f'{group_type.__qualname__}.{field.name} must be an Optional spec type '
-                f'with default None, not {field.type!r}'
-            )
-        (actual[field.name],) = args - {type(None)}
+    actual = _optional_spec_fields(group_type)
     if actual != expected:
         missing = sorted(expected.keys() - actual.keys())
         extra = sorted(actual.keys() - expected.keys())
@@ -647,6 +664,39 @@ def check_group_fields(
             f'{group_type.__qualname__} does not match the registry: missing fields '
             f'{missing!r}, unregistered fields {extra!r}, wrong spec type {mismatched!r}'
         )
+
+
+def check_group_registered(
+    group_type: type[specs.AnalysisGroup], registry: AnalysisRegistry
+) -> None:
+    """raise unless every field of `group_type` names a measurement of `registry`.
+
+    Each field must be ``Optional[spec] = None`` with `spec` a key of `registry`, and
+    the field name must equal the registered name of that measurement. Any subset of
+    the registered measurements is accepted.
+
+    Args:
+        group_type: the struct to check
+        registry: the registry the measurements of `group_type` must be in
+
+    Raises:
+        TypeError: naming the field that is not an optional spec with default None,
+            `group_type` when defined without ``omit_defaults=True``, the spec type
+            that is not registered, or the field whose name differs from the
+            registered name
+    """
+    for name, spec_type in _optional_spec_fields(group_type).items():
+        info = registry.get(spec_type)
+        if info is None:
+            raise TypeError(
+                f'{group_type.__qualname__}.{name}: {spec_type.__qualname__} is not a '
+                'registered measurement spec type'
+            )
+        if info.name != name:
+            raise TypeError(
+                f'{group_type.__qualname__}.{name} must be named {info.name!r}, the '
+                f'registered name of {spec_type.__qualname__}'
+            )
 
 
 class Trigger:

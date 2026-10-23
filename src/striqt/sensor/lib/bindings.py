@@ -21,15 +21,17 @@ import warnings
 from .controller import Controller, bind_controller
 from .peripherals import NoPeripherals
 from .. import specs
-from .typing import Peripherals, PC, PS, SC, SS, SP, SourceBackend, TypeVar
+from .typing import Peripherals, PC, PS, SA, SC, SS, SP, SourceBackend, TypeVar
 import msgspec
+import striqt.analysis as sa
+from striqt.analysis.lib.register import check_group_registered
 
 TC2 = TypeVar('TC2', bound=specs.SensorCapture)
 TP2 = TypeVar('TP2', bound=specs.Peripherals)
 TS2 = TypeVar('TS2', bound=specs.Source)
 
 
-registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any]]'] = {}
+registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any, Any]]'] = {}
 tagged_sweeps: Any = None
 
 
@@ -43,7 +45,7 @@ class Sensor(Generic[SS, SP, SC]):
     """
 
     source_cls: type[SourceBackend[SS, SC]]
-    sweep_spec_cls: type[specs.ActionSpec[SS, SP]] = specs.Sweep
+    sweep_spec_cls: type[specs.ActionSpec[SS, SP, Any]] = specs.Sweep
     peripherals_cls: type[Peripherals[SP, SC]] | type[NoPeripherals[SP, SC]] = (
         NoPeripherals
     )
@@ -66,8 +68,8 @@ class SensorBinding(Sensor[SS, SP, SC]):
 
 
 def _resolve_action_type(
-    sensor: Sensor[Any, Any, Any], schema: specs.Schema[Any, Any, Any, Any, Any]
-) -> type[specs.ActionSpec[Any, Any]]:
+    sensor: Sensor[Any, Any, Any], schema: specs.Schema[Any, Any, Any, Any, Any, Any]
+) -> type[specs.ActionSpec[Any, Any, Any]]:
     """return the action spec type from `schema.action` or `sensor.sweep_spec_cls`.
 
     The `sweep_spec_cls` of a `SensorBinding` is the tagged class of an earlier
@@ -96,19 +98,20 @@ def _resolve_action_type(
 def bind_sensor(
     key: str,
     sensor: Sensor[TS2, TP2, TC2],
-    schema: specs.Schema[SS, SP, SC, PS, PC],
+    schema: specs.Schema[SS, SP, SC, SA, PS, PC],
     register: bool = True,
     *,
     module: Optional[str] = None,
-) -> type[Controller[SS, SP, SC, PS, PC]]:
+) -> type[Controller[SS, SP, SC, SA, PS, PC]]:
     """bind the implementation classes of a sensor to spec types under `key`.
 
     The returned `Controller` subclass has the class attributes `sensor` (a
     `SensorBinding`) and `schema`. The `sensor.sweep_spec_cls` of the returned class
     is a subclass of the action spec type, tagged with `key` in the
-    ``sensor_binding`` field. In that subclass, `source`, `peripherals`, and (when
-    the action declares the field) `captures` are annotated with the types in
-    `schema`. Decoding a sweep file whose ``sensor_binding`` is `key` produces an
+    ``sensor_binding`` field. In that subclass, `source`, `peripherals`, (when the
+    action declares the field) `captures`, and (when the action is a `Sweep`)
+    `analysis` are annotated with the types in `schema`. Decoding a sweep file whose
+    ``sensor_binding`` is `key` produces an
     instance of that class. The tagged class has the class attributes `sensor` (the
     `SensorBinding`), `schema`, `controller` (the returned class), and `sweep_cls`
     (the bound `Sweep` class with the same spec types; the class itself when the
@@ -121,15 +124,18 @@ def bind_sensor(
     Args:
         key: the ``sensor_binding`` value of sweep files, and the registry key
         sensor: the implementation classes
-        schema: the spec types; `schema.action` selects the action spec type
+        schema: the spec types; `schema.action` selects the action spec type and
+            `schema.analysis` the analysis group
         register: if True, make the binding available by `key` to `get_controller`
         module: the `__module__` recorded on the controller class, which the API
             documentation groups by; the caller's module when None
 
     Raises:
         TypeError: if `sensor` or `schema` has the wrong type, if `key` is already
-            registered, if `sensor.sweep_spec_cls` and `schema.action` disagree, or if
-            the action's `check_schema` rejects the spec types
+            registered, if `sensor.sweep_spec_cls` and `schema.action` disagree, if
+            the action's `check_schema` rejects the spec types, or if a field of
+            `schema.analysis` is not a registered measurement under the registered
+            name
     """
     if not isinstance(sensor, Sensor):
         raise TypeError('sensor argument must be a Sensor instance')
@@ -142,10 +148,11 @@ def bind_sensor(
 
     action_type = _resolve_action_type(sensor, schema)
     action_type.check_schema(schema)
+    check_group_registered(schema.analysis, sa.registry)
 
     binding = SensorBinding(
         source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),
-        sweep_spec_cls=cast('type[specs.ActionSpec[SS, SP]]', action_type),
+        sweep_spec_cls=cast('type[specs.ActionSpec[SS, SP, Any]]', action_type),
         peripherals_cls=cast(
             'type[Peripherals[SP, SC] | NoPeripherals[SP, SC]]', sensor.peripherals_cls
         ),
@@ -183,8 +190,8 @@ def bind_sensor(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, PS, PC]]'
-) -> 'type[Controller[SS, SP, Any, PS, PC]]':
+    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, SA, PS, PC]]'
+) -> 'type[Controller[SS, SP, Any, SA, PS, PC]]':
     """bind a manual Y-factor calibration of the sensor bound as `ctrl_cls`.
 
     Deprecated: call `bind_sensor` with `ctrl_cls.sensor` and
@@ -203,12 +210,12 @@ def bind_manual_yfactor_calibration(
     return bind_sensor(
         name,
         ctrl_cls.sensor,
-        cast(specs.Schema[SS, SP, Any, PS, PC], schema),
+        cast(specs.Schema[SS, SP, Any, SA, PS, PC], schema),
         module=sys._getframe(1).f_globals.get('__name__'),
     )
 
 
-def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
+def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any, Any]]']:
     return dict(registry)
 
 
@@ -217,7 +224,7 @@ def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any]]']:
 @functools.lru_cache
 def mock_binding(
     origin: type[Controller], target: str | type[Controller], register: bool = True
-) -> type[Controller[Any, Any, Any, Any, Any]]:
+) -> type[Controller[Any, Any, Any, Any, Any, Any]]:
     """bind `origin`'s sweep and capture types to `target`'s implementation classes.
 
     The result decodes `origin`'s sweep files but opens `target`'s source and
@@ -243,6 +250,7 @@ def mock_binding(
             peripherals=origin.schema.peripherals,
             arm_like=origin.schema.arm_like,
             init_like=ctrl_cls.schema.init_like,
+            analysis=origin.schema.analysis,
         ),
         register=register,
         module=origin.__module__,
@@ -274,12 +282,12 @@ def get_tagged_sweep_type() -> type[specs.ActionSpec]:
 
 def _bind_spec_class(
     name: str,
-    base: type[specs.ActionSpec[Any, Any]],
-    schema: specs.Schema[Any, Any, Any, Any, Any],
+    base: type[specs.ActionSpec[Any, Any, Any]],
+    schema: specs.Schema[Any, Any, Any, Any, Any, Any],
     binding: SensorBinding[Any, Any, Any],
     *,
     tag: bool = False,
-) -> type[specs.ActionSpec[Any, Any]]:
+) -> type[specs.ActionSpec[Any, Any, Any]]:
     """return a subclass of `base` whose spec fields are the types in `schema`.
 
     With `tag`, the class is an arm of the ``sensor_binding`` tagged union under the
@@ -297,6 +305,14 @@ def _bind_spec_class(
     ]
     if 'captures' in base.__struct_fields__:
         fields.append(('captures', tuple[schema.capture, ...], ()))
+    # only Sweep's `analysis` is the group; the calibration and cellular specs name
+    # their own block under the same field
+    if issubclass(base, specs.Sweep):
+        fields.append((
+            'analysis',
+            schema.analysis,
+            msgspec.field(default_factory=schema.analysis),
+        ))
 
     def __post_init__(self: Any) -> None:
         if self.mock_source is not None and self.mock_source not in registry:
@@ -321,7 +337,7 @@ def _bind_spec_class(
         **tag_kws,
     )
     _set_class_attrs(cls, sensor=binding, schema=schema)
-    return cast('type[specs.ActionSpec[Any, Any]]', cls)
+    return cast('type[specs.ActionSpec[Any, Any, Any]]', cls)
 
 
 def _set_class_attrs(*classes: type, **attrs: Any) -> None:

@@ -13,7 +13,7 @@ import msgspec
 import pytest
 from conftest import FAKE_SOAPY_CELLULAR_SPEC, SITE_CELLULAR_SPEC, SITE_DIR, SWEEP_DIR
 from hypothesis import given, settings
-from site_strategies import SiteCaptureCls
+from site_strategies import EXT, SiteCaptureCls, make_site_sweep
 from sweep_strategies import (
     CalSweepCls,
     loop_fields,
@@ -348,6 +348,27 @@ def test_read_zarr_spec_keeps_the_fields_a_bound_sweep_adds(tmp_path):
     rebuilt = ss.read_zarr_spec(path)
     assert type(rebuilt) is CalSweepCls
     assert rebuilt.calibration.enr == pytest.approx(20.87)
+    assert rebuilt == sweep
+
+
+def test_read_zarr_spec_keeps_the_analysis_group_of_the_binding(tmp_path):
+    """the attrs of a store written by a binding over a restricted group decode
+    `analysis` as that group"""
+    import zarr
+
+    cls = EXT.site_quick.sensor.sweep_spec_cls
+    analysis = EXT.SiteQuickAnalyses.from_dict({
+        'channel_power_time_series': {'detector_period': 1e-4}
+    })
+    sweep = make_site_sweep(cls=cls, analysis=analysis)
+    path = tmp_path / 'out.zarr'
+    zarr.open(sa.open_store(path, mode='w'), mode='w').attrs.update(
+        _json_round_trip(sweep)
+    )
+
+    rebuilt = ss.read_zarr_spec(path)
+    assert type(rebuilt) is cls
+    assert type(rebuilt.analysis) is EXT.SiteQuickAnalyses
     assert rebuilt == sweep
 
 

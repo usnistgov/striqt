@@ -1,20 +1,22 @@
 from __future__ import annotations
 import dataclasses
-from typing import Any, Callable, Generic, Literal
+from typing import Any, Callable, cast, Generic, Literal
 
 from . import structs, paths
-from ..lib.typing import SS, SC, SP, PS, PC
+from ..lib.typing import SS, SC, SP, SA, PS, PC
 
 import striqt.waveform as sw
 import striqt.analysis as sa
 
 
 @dataclasses.dataclass(frozen=True)
-class Schema(Generic[SS, SP, SC, PS, PC]):
+class Schema(Generic[SS, SP, SC, SA, PS, PC]):
     """the spec types of a sensor binding.
 
     `action` is the action spec type that `bind_sensor` subclasses. The
-    `ActionRunner` registered for that type runs the bound spec.
+    `ActionRunner` registered for that type runs the bound spec. `analysis` is the
+    `AnalysisGroup` subclass that the ``analysis:`` block of the bound `Sweep` is
+    decoded against, and the type of the analysis that the other actions generate.
     """
 
     source: type[SS]
@@ -25,13 +27,17 @@ class Schema(Generic[SS, SP, SC, PS, PC]):
     init_like: Callable[PS, Any]
     arm_like: Callable[PC, Any]
 
-    action: type[structs.ActionSpec[SS, SP]] = structs.Sweep
+    action: type[structs.ActionSpec[SS, SP, SA]] = structs.Sweep
+    analysis: type[SA] = dataclasses.field(
+        default=cast('type[SA]', sa.specs.BuiltinAnalyses)
+    )
 
     def __post_init__(self):
         assert issubclass(self.source, structs.Source)
         assert issubclass(self.capture, structs.SensorCapture)
         assert issubclass(self.peripherals, structs.Peripherals)
         assert issubclass(self.action, structs.ActionSpec)
+        assert issubclass(self.analysis, sa.specs.AnalysisGroup)
 
 
 @dataclasses.dataclass
