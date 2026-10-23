@@ -38,6 +38,8 @@ from striqt.analysis.specs.helpers import (
     infer_coord_info,
     inspect_freeze_depths,
     json_schema,
+    spec_subset,
+    subset_of,
     lru_cache_on_converted,
     to_analysis_capture,
     unfreeze,
@@ -794,3 +796,90 @@ def test_spec_validation_error_survives_msgspec_decoding(
     assert excinfo.value.path == ('.nfft',)
     assert excinfo.value.locations == expected_locations
     assert str(excinfo.value) == expected_str
+
+
+# %% subset_of and spec_subset
+
+
+class _Base(msgspec.Struct, frozen=True, kw_only=True):
+    window: str
+    frequency_resolution: float
+    trim_stopband: bool = True
+    detector_period: float = 1.0
+
+
+def test_subset_of_accepts_matching_fields_and_records_the_relation():
+    @subset_of(_Base, without=('frequency_resolution',), optional=('detector_period',))
+    class Block(msgspec.Struct, frozen=True, kw_only=True):
+        window: str
+        trim_stopband: bool = True
+        detector_period: Optional[float] = None
+
+    relation = spec_subset(Block)
+    assert relation is not None
+    assert relation.base is _Base
+    assert relation.without == {'frequency_resolution'}
+    assert relation.optional == {'detector_period'}
+    assert spec_subset(_Base) is None
+
+
+@pytest.mark.parametrize(
+    'body, match',
+    [
+        ({'window': (str, msgspec.NODEFAULT)}, r"missing fields \['trim_stopband'\]"),
+        (
+            {
+                'window': (str, msgspec.NODEFAULT),
+                'trim_stopband': (bool, True),
+                'extra': (int, 0),
+            },
+            r"unexpected fields \['extra'\]",
+        ),
+        (
+            {'window': (int, msgspec.NODEFAULT), 'trim_stopband': (bool, True)},
+            r"'window' type .* differs",
+        ),
+        (
+            {'window': (str, msgspec.NODEFAULT), 'trim_stopband': (bool, False)},
+            r"'trim_stopband' default False differs from True",
+        ),
+    ],
+)
+def test_subset_of_rejects_a_drifted_block(body, match):
+    fields = [(name, type_, default) for name, (type_, default) in body.items()]
+    cls = msgspec.defstruct('Block', fields, frozen=True, kw_only=True)
+    with pytest.raises(TypeError, match=match):
+        subset_of(_Base, without=('frequency_resolution', 'detector_period'))(cls)
+    assert spec_subset(cls) is None
+
+
+def test_subset_of_requires_optional_fields_to_widen_to_none():
+    class Block(msgspec.Struct, frozen=True, kw_only=True):
+        window: str
+        trim_stopband: bool = True
+        detector_period: float = 1.0
+
+    with pytest.raises(TypeError, match=r"'detector_period' is not Optional"):
+        subset_of(
+            _Base, without=('frequency_resolution',), optional=('detector_period',)
+        )(Block)
+
+
+@pytest.mark.parametrize(
+    'kws, match',
+    [
+        ({'without': ('bogus',)}, r"unknown fields \['bogus'\]"),
+        (
+            {'without': ('detector_period',), 'optional': ('detector_period',)},
+            r"outside the subset \['detector_period'\]",
+        ),
+    ],
+)
+def test_subset_of_rejects_names_that_do_not_apply(kws, match):
+    class Block(msgspec.Struct, frozen=True, kw_only=True):
+        window: str
+        frequency_resolution: float
+        trim_stopband: bool = True
+
+    with pytest.raises(TypeError, match=match):
+        subset_of(_Base, **kws)(Block)

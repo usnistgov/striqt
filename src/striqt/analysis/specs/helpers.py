@@ -267,9 +267,9 @@ def subset_of(
             ``Optional`` with a ``None`` default
 
     Raises:
-        TypeError: when the decorated struct is applied to a class whose fields,
-            annotated types, or defaults differ from `base` minus `without`, or when
-            `without` or `optional` names a field that does not apply
+        TypeError: when the fields, annotated types, or defaults of the decorated
+            class differ from those of `base` minus `without`, or when `without` or
+            `optional` names a field that does not exist
     """
     without = frozenset(without)
     optional = frozenset(optional)

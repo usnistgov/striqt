@@ -16,7 +16,7 @@ import msgspec
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.util import xr
-from striqt.analysis.specs.helpers import SpecValidationError
+from striqt.analysis.specs.helpers import SpecValidationError, spec_subset
 
 from ... import specs
 from .. import compute
@@ -239,16 +239,6 @@ PER_CAPTURE = frozenset({
     'symbol_indexes',
 })
 
-# measurement parameters that the cellular analysis leaves at the measurement default:
-# the SSB correlators' internal resample rate and lag search, the window fill of the
-# sync detector, and the 3GPP generation of the autocorrelator
-HIDDEN: dict[str, frozenset[str]] = {
-    'cellular_5g_pss_correlation': frozenset({'sample_rate', 'max_lag_symbols'}),
-    PSS_SYNC_TRIGGER: frozenset({'sample_rate', 'max_lag_symbols', 'window_fill'}),
-    'cellular_5g_ssb_spectrogram': frozenset({'sample_rate'}),
-    'cellular_cyclic_autocorrelation': frozenset({'generation'}),
-}
-
 
 def _optional_inner(field: msgspec.structs.FieldInfo) -> type[msgspec.Struct]:
     """return the struct type `X` of an ``Optional[X]`` field."""
@@ -260,52 +250,45 @@ def _optional_inner(field: msgspec.structs.FieldInfo) -> type[msgspec.Struct]:
 def check_block_fields(
     block_type: type[msgspec.Struct], spec_type: type[msgspec.Struct], name: str
 ) -> None:
-    """raise unless every field of `spec_type` is classified exactly once for `name`.
+    """raise unless the tables for `name` agree with the declaration of `block_type`.
 
-    A measurement field is exposed on `block_type`, in `FIXED[name]`, in
-    `PER_CAPTURE` when the measurement has that field, or in `HIDDEN[name]`;
-    `DEFAULTED[name]` names exposed fields.
+    `block_type` is declared with `subset_of` on `spec_type`. The `FIXED[name]` keys
+    and the `PER_CAPTURE` names that `spec_type` has are among the fields the block
+    omits, and `DEFAULTED[name]` names exactly the fields the block widens to Optional.
+    An omitted field in neither table stays at the measurement default.
 
     Raises:
-        TypeError: naming the unclassified, doubly classified, or mistyped fields
+        TypeError: naming the undeclared block, the mismatched base, or the table
+            entries that the block declaration contradicts
     """
-    spec_fields = {f.name: f.type for f in msgspec.structs.fields(spec_type)}
-    exposed = {f.name: f.type for f in msgspec.structs.fields(block_type)}
+    subset = spec_subset(block_type)
+    if subset is None:
+        raise TypeError(f'{block_type.__name__} is not declared with subset_of')
+    if subset.base is not spec_type:
+        raise TypeError(
+            f'{block_type.__name__} is a subset of {subset.base.__name__}, not of '
+            f'the {name!r} measurement spec {spec_type.__name__}'
+        )
+
+    spec_fields = set(spec_type.__struct_fields__)
     fixed = set(FIXED.get(name, {}))
-    hidden = set(HIDDEN.get(name, frozenset()))
-    per_capture = PER_CAPTURE & set(spec_fields)
+    per_capture = PER_CAPTURE & spec_fields
     defaulted = set(DEFAULTED.get(name, {}))
 
     problems: list[str] = []
-    classified = set(exposed) | fixed | hidden | per_capture
-    if classified != set(spec_fields):
-        problems.extend([
-            f'unclassified {sorted(set(spec_fields) - classified)!r}',
-            f'unknown {sorted(classified - set(spec_fields))!r}',
-        ])
-    for a, b, label in (
-        (set(exposed), fixed, 'exposed and fixed'),
-        (set(exposed), hidden, 'exposed and hidden'),
-        (fixed, hidden, 'fixed and hidden'),
-        (set(exposed), per_capture - fixed, 'exposed and per capture'),
-    ):
-        if a & b:
-            problems.append(f'{label} {sorted(a & b)!r}')
-    if not defaulted <= set(exposed):
+    if not fixed <= subset.without:
+        problems.append(f'fixed but exposed {sorted(fixed - subset.without)!r}')
+    if not per_capture <= subset.without:
         problems.append(
-            f'defaulted but not exposed {sorted(defaulted - set(exposed))!r}'
+            f'per capture but exposed {sorted(per_capture - subset.without)!r}'
         )
-    mistyped = [
-        n
-        for n, t in exposed.items()
-        if n in spec_fields and n not in defaulted and t != spec_fields[n]
-    ]
-    if mistyped:
-        problems.append(f'type differs from the measurement {sorted(mistyped)!r}')
+    if defaulted != subset.optional:
+        problems.append(
+            f'defaulted {sorted(defaulted)!r} differs from optional '
+            f'{sorted(subset.optional)!r}'
+        )
     if problems:
-        raise TypeError(
-            f'{block_type.__name__} vs {spec_type.__name__}: ' + '; '.join(problems)
-        )
+        raise TypeError(f'{block_type.__name__} vs {name!r}: ' + '; '.join(problems))
 
 
 def check_all_blocks() -> None:

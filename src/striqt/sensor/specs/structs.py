@@ -22,7 +22,7 @@ from striqt.analysis.specs import frozendict
 
 # re-exported through striqt.sensor.specs as the annotation of any analysis bundle
 from striqt.analysis.specs import AnalysisGroup  # noqa: F401
-from striqt.analysis.specs.helpers import SpecValidationError
+from striqt.analysis.specs.helpers import SpecValidationError, subset_of
 
 from ..lib.typing import TypeVar, SS, SP, SC
 from . import types
@@ -608,6 +608,15 @@ class CellChannel(SpecBase, frozen=True, kw_only=True):
             )
 
 
+@subset_of(
+    sa.specs.Spectrogram,
+    without=(
+        'frequency_resolution',
+        'fractional_overlap',
+        'window_fill',
+        'integration_bandwidth',
+    ),
+)
 class CellularSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
     window: types.WindowType
     lo_bandstop: Optional[types.LOBandstop] = None
@@ -615,6 +624,15 @@ class CellularSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
     trim_stopband: bool = True
 
 
+@subset_of(
+    sa.specs.PowerSpectralDensity,
+    without=(
+        'frequency_resolution',
+        'fractional_overlap',
+        'window_fill',
+        'integration_bandwidth',
+    ),
+)
 class CellularPowerSpectralDensitySpec(SpecBase, frozen=True, kw_only=True):
     window: types.WindowType
     time_statistic: tuple[Union[str, float], ...] = ('mean',)
@@ -622,6 +640,15 @@ class CellularPowerSpectralDensitySpec(SpecBase, frozen=True, kw_only=True):
     trim_stopband: bool = True
 
 
+@subset_of(
+    sa.specs.CellularResourcePowerHistogram,
+    without=(
+        'subcarrier_spacing',
+        'guard_bandwidths',
+        'frame_slots',
+        'special_symbols',
+    ),
+)
 class CellularResourcePowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
     window: types.WindowType
     power_low: types.PowerBinMin
@@ -633,6 +660,16 @@ class CellularResourcePowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
     lo_bandstop: Optional[types.LOBandstop] = None
 
 
+@subset_of(
+    sa.specs.Cellular5GNRPSSCorrelator,
+    without=(
+        'subcarrier_spacing',
+        'sample_rate',
+        'frequency_offset',
+        'symbol_indexes',
+        'max_lag_symbols',
+    ),
+)
 class CellularPSSCorrelationSpec(SpecBase, frozen=True, kw_only=True):
     discovery_periodicity: float = 20e-3
     delay: float = 0.0
@@ -640,6 +677,17 @@ class CellularPSSCorrelationSpec(SpecBase, frozen=True, kw_only=True):
     max_block_count: Optional[int] = 1
 
 
+@subset_of(
+    sa.specs.Cellular5GNPSSSync,
+    without=(
+        'subcarrier_spacing',
+        'sample_rate',
+        'frequency_offset',
+        'symbol_indexes',
+        'max_lag_symbols',
+        'window_fill',
+    ),
+)
 class CellularPSSSyncSpec(SpecBase, frozen=True, kw_only=True):
     discovery_periodicity: float = 20e-3
     delay: float = 0.0
@@ -648,6 +696,10 @@ class CellularPSSSyncSpec(SpecBase, frozen=True, kw_only=True):
     max_beams: Optional[types.MaxBeams] = None
 
 
+@subset_of(
+    sa.specs.Cellular5GNRSSBSpectrogram,
+    without=('subcarrier_spacing', 'sample_rate', 'frequency_offset'),
+)
 class CellularSSBSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
     window: types.WindowType = 'blackmanharris'
     discovery_periodicity: float = 20e-3
@@ -655,16 +707,19 @@ class CellularSSBSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
     lo_bandstop: Optional[types.LOBandstop] = None
 
 
+@subset_of(sa.specs.CyclicChannelPower, without=('cyclic_period', 'detector_period'))
 class CellularCyclicChannelPowerSpec(SpecBase, frozen=True, kw_only=True):
     power_detectors: types.PowerDetectors = ('rms', 'peak')
     cyclic_statistics: types.CyclicStatistics = ('min', 'mean', 'max')
 
 
+@subset_of(sa.specs.ChannelPowerTimeSeries, optional=('detector_period',))
 class CellularChannelPowerTimeSeriesSpec(SpecBase, frozen=True, kw_only=True):
     detector_period: Optional[types.DetectorPeriod] = None
     power_detectors: types.PowerDetectors = ('rms', 'peak')
 
 
+@subset_of(sa.specs.ChannelPowerHistogram, optional=('detector_period',))
 class CellularChannelPowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
     power_low: types.PowerBinMin
     power_high: types.PowerBinMax
@@ -673,11 +728,16 @@ class CellularChannelPowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
     power_detectors: types.PowerDetectors = ('rms', 'peak')
 
 
+@subset_of(
+    sa.specs.CellularCyclicAutocorrelator,
+    without=('subcarrier_spacings', 'frame_slots', 'generation'),
+)
 class CellularCyclicAutocorrelationSpec(SpecBase, frozen=True, kw_only=True):
     frame_range: Union[int, tuple[int, int]] = (0, 1)
     symbol_range: Union[int, tuple[int, Union[int, None]]] = (0, None)
 
 
+@subset_of(sa.specs.IQWaveform)
 class CellularIQWaveformSpec(SpecBase, frozen=True, kw_only=True):
     start_time_sec: Optional[float] = None
     stop_time_sec: Optional[float] = None
@@ -689,7 +749,8 @@ class Cellular5GNRAnalysis(SpecBase, frozen=True, kw_only=True):
     Each field is named for a measurement. A field set to ``None`` disables the
     measurement. A block enables the measurement and exposes only the parameters that
     the channel does not fix. The remaining parameters are set from the `cell_channels`
-    entry at the center frequency of the capture and from the subcarrier spacing.
+    entry at the center frequency of the capture and from the subcarrier spacing, or
+    stay at the measurement default.
     """
 
     spectrogram: Optional[CellularSpectrogramSpec] = None

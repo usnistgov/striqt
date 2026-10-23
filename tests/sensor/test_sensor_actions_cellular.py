@@ -26,6 +26,7 @@ from synthetic_sources import run_in_memory
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+from striqt.analysis.specs.helpers import subset_of
 from striqt.sensor.lib.actions import Cellular5GNRSweepRunner, cellular, registry
 
 H = ss.specs.sequencing
@@ -374,59 +375,68 @@ class _ToyMeasurement(sa.specs.Analysis, frozen=True, kw_only=True):
     window: str = 'hann'
     frequency_resolution: float = 1.0
     frame_slots: Optional[str] = None
+    detector_period: float = 1.0
     generation: str = '5G'
 
 
+@subset_of(
+    _ToyMeasurement,
+    without=('frequency_resolution', 'frame_slots', 'generation'),
+    optional=('detector_period',),
+)
 class _ToyBlock(ss.specs.SpecBase, frozen=True, kw_only=True):
     window: str = 'hann'
+    detector_period: Optional[float] = None
 
 
-def _classify(**tables):
-    """run check_block_fields with the module tables replaced for the toy name"""
-    saved = {k: getattr(cellular, k) for k in ('FIXED', 'DEFAULTED', 'HIDDEN')}
-    try:
-        for k, table in saved.items():
-            setattr(cellular, k, {'toy': tables.get(k, table.get('toy', {}))})
-        cellular.check_block_fields(_ToyBlock, _ToyMeasurement, 'toy')
-    finally:
-        for k, table in saved.items():
-            setattr(cellular, k, table)
+def _classify(monkeypatch, **tables):
+    """run check_block_fields on the toy block with the module tables replaced"""
+    for k in ('FIXED', 'DEFAULTED'):
+        monkeypatch.setattr(cellular, k, {'toy': tables.get(k, {})})
+    cellular.check_block_fields(_ToyBlock, _ToyMeasurement, 'toy')
 
 
-def test_check_block_fields_accepts_a_complete_classification():
-    """window exposed, frequency_resolution fixed, frame_slots per capture,
-    generation hidden"""
-    _classify(FIXED={'frequency_resolution': lambda scs: scs}, HIDDEN={'generation'})
+def test_check_block_fields_accepts_an_agreeing_classification(monkeypatch):
+    """frequency_resolution fixed, frame_slots per capture, detector_period defaulted,
+    generation omitted with no table entry"""
+    _classify(
+        monkeypatch,
+        FIXED={'frequency_resolution': lambda scs: scs},
+        DEFAULTED={'detector_period': lambda scs: scs},
+    )
 
 
-def test_check_block_fields_reports_an_unclassified_parameter():
-    with pytest.raises(TypeError, match=r"unclassified \['generation'\]"):
-        _classify(FIXED={'frequency_resolution': lambda scs: scs})
-
-
-def test_check_block_fields_reports_a_parameter_classified_twice():
-    with pytest.raises(TypeError, match=r"exposed and fixed \['window'\]"):
+def test_check_block_fields_reports_a_fixed_parameter_the_block_exposes(monkeypatch):
+    with pytest.raises(TypeError, match=r"fixed but exposed \['window'\]"):
         _classify(
-            FIXED={'frequency_resolution': lambda scs: scs, 'window': lambda scs: 'x'},
-            HIDDEN={'generation'},
+            monkeypatch,
+            FIXED={'window': lambda scs: 'x'},
+            DEFAULTED={'detector_period': lambda scs: scs},
         )
 
 
-def test_check_block_fields_reports_a_block_type_that_differs(monkeypatch):
-    class WrongType(ss.specs.SpecBase, frozen=True, kw_only=True):
-        window: int = 0
+def test_check_block_fields_reports_defaulted_optional_disagreement(monkeypatch):
+    with pytest.raises(TypeError, match=r'defaulted \[\] differs from optional'):
+        _classify(monkeypatch, FIXED={'frequency_resolution': lambda scs: scs})
 
-    monkeypatch.setattr(
-        cellular, 'FIXED', {'toy': {'frequency_resolution': lambda scs: scs}}
-    )
-    monkeypatch.setattr(cellular, 'HIDDEN', {'toy': frozenset({'generation'})})
-    with pytest.raises(TypeError, match=r"type differs .*\['window'\]"):
-        cellular.check_block_fields(WrongType, _ToyMeasurement, 'toy')
+
+def test_check_block_fields_rejects_an_undeclared_block():
+    class Plain(ss.specs.SpecBase, frozen=True, kw_only=True):
+        window: str = 'hann'
+
+    with pytest.raises(TypeError, match='not declared with subset_of'):
+        cellular.check_block_fields(Plain, _ToyMeasurement, 'toy')
+
+
+def test_check_block_fields_rejects_a_block_of_another_measurement():
+    with pytest.raises(TypeError, match=r'subset of _ToyMeasurement, not of'):
+        cellular.check_block_fields(_ToyBlock, sa.specs.IQWaveform, 'iq_waveform')
 
 
 def test_every_cellular_block_is_classified():
-    """the check that runs at import, asserted by name: each block's free parameters
-    plus the FIXED, PER_CAPTURE, and HIDDEN names cover its measurement exactly"""
+    """the check that runs at import, asserted by name: each block is a declared
+    subset of the measurement spec of the same name, and the FIXED, PER_CAPTURE, and
+    DEFAULTED tables agree with that declaration"""
     cellular.check_all_blocks()
     assert set(ss.specs.Cellular5GNRAnalysis.__struct_fields__) <= set(
         ss.specs.BuiltinAnalyses.__struct_fields__
