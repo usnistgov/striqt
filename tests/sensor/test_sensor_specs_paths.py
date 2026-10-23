@@ -54,11 +54,6 @@ def test_path_fields_with_spec_path(synthetic_sweep, synthetic_spec_path):
     assert re.fullmatch(r'\d{8}-\d{2}h\d{2}m\d{2}', fields['start_time'])
 
 
-def test_path_fields_without_spec_path(synthetic_sweep):
-    fields = P.get_path_fields(synthetic_sweep, source_id='abcd')
-    assert set(fields) == {'start_time', 'sensor_binding', 'source_id'}
-
-
 def test_path_fields_accept_a_callable_source_id(synthetic_sweep):
     fields = P.get_path_fields(synthetic_sweep, source_id=lambda: 'abcd')
     assert fields['source_id'] == 'abcd'

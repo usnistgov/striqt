@@ -263,7 +263,23 @@ typing.cast(typing.Any, get_window).cache_clear = _cached_design_window.cache_cl
 
 @util.lru_cache()
 def equivalent_noise_bandwidth(window: WindowSpecType, N, fftbins=True, cached=True):
-    """return the equivalent noise bandwidth (ENBW) of a window, in bins"""
+    """return the equivalent noise bandwidth (ENBW) of a window, in bins.
+
+    One bin is ``fs / N`` wide for a window of `N` nonzero samples (F. J. Harris,
+    Proc. IEEE 66(1), 1978), so the ENBW in Hz is the returned value times ``fs / N``.
+    An FFT of the window zero-padded to ``N + nzero`` samples has bins of
+    ``fs / (N + nzero)``, and the same ENBW spans ``(N + nzero) / N`` times as many of
+    those bins.
+
+    Args:
+        window: the window name or ``(name, parameter)`` for `get_window`
+        N: the number of nonzero window samples
+        fftbins: the `get_window` periodic-window flag
+        cached: True to design through the cached `get_window`
+
+    Returns:
+        the ENBW as a float: 1.0 for a rectangular window and larger for every other
+    """
     if cached:
         w = get_window(window, N, fftbins=fftbins)
     else:

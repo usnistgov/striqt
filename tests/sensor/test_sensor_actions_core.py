@@ -275,11 +275,10 @@ def test_log_cache_info_reports_the_spectrogram_snr(calibration_nc, caplog):
     assert 'port: 0' in messages[0]
 
 
-@pytest.mark.parametrize('cache_name', ['_cached_spectrogram', 'ssb_iq_cache'])
-def test_log_cache_info_is_silent_without_calibration(cache_name, caplog):
+def test_log_cache_info_is_silent_for_a_non_spectrogram_cache(calibration_nc, caplog):
     capture = soapy_capture()
-    resources = air_resources(capture)
-    cache = types.SimpleNamespace(name=cache_name)
+    resources = air_resources(capture, calibration_nc)
+    cache = types.SimpleNamespace(name='ssb_iq_cache')
     with caplog.at_level(logging.DEBUG, logger='striqt.analysis'):
         core._log_cache_info(resources, cache, capture, spectrogram_result(PEAK_DBM))
     assert caplog.records == []

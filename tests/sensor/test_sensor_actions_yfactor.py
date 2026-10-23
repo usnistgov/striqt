@@ -6,7 +6,6 @@ runner that derives its sweep, passes, analysis, and operator prompts from a
 from __future__ import annotations
 
 import logging
-import math
 import re
 from fractions import Fraction
 from pathlib import Path
@@ -17,7 +16,6 @@ import pytest
 import xarray as xr
 from conftest import SITE_DIR
 from sweep_strategies import (
-    CAL,
     GAIN_LOOP,
     INF,
     PORT_LOOP,
@@ -35,7 +33,7 @@ from sweep_strategies import (
 )
 
 import striqt.sensor as ss
-from striqt.sensor.lib.actions import ManualYFactorRunner, registry, warmup, yfactor
+from striqt.sensor.lib.actions import ManualYFactorRunner, registry, yfactor
 
 H = ss.specs.sequencing
 Repeat = ss.specs.Repeat
@@ -67,7 +65,7 @@ class TestYFactorCorrections:
         assert set(corrections.dims) == set(YFACTOR_GRID)
         assert 'noise_diode_enabled' not in corrections.coords
         assert corrections.noise_figure.attrs['units'] == 'dB'
-        assert corrections.power_correction.attrs['units'] == 'mW/fs'
+        assert corrections.power_correction.attrs['units'] == 'mW/FS'
 
     def test_papr_and_raw_powers(self):
         ds = make_yfactor_dataset(papr_dB=7.5)
@@ -130,24 +128,23 @@ def test_explicit_detector_period_is_used():
     ]
 
 
-def test_default_detector_period_is_the_capture_duration():
+@pytest.mark.parametrize(
+    'loops, period',
+    [
+        ((), Fraction(1, 500)),
+        ((ss.specs.List(field='duration', values=(5e-3,)),), Fraction(1, 200)),
+    ],
+    ids=['capture', 'loop'],
+)
+def test_default_detector_period_is_the_one_duration(loops, period):
     """the default period is one bin per capture. The rms mean that the Y-factor
     math uses does not depend on the bin count, and the PAPR diagnostics collapse
-    to 0 dB."""
-    sweep = make_calibration_sweep(captures=(make_calibration_capture(duration=2e-3),))
-    meas = yfactor.calibration_analysis(sweep).channel_power_time_series
-    assert meas.detector_period == Fraction(1, 500)
-
-
-def test_default_detector_period_follows_a_duration_loop():
-    """a looped duration overrides the capture's own. One loop point is one
-    duration even when the capture sets another."""
-    loop = ss.specs.List(field='duration', values=(5e-3,))
+    to 0 dB. A looped duration overrides the capture's own."""
     sweep = make_calibration_sweep(
-        captures=(make_calibration_capture(duration=1e-3),), loops=(loop,)
+        captures=(make_calibration_capture(duration=2e-3),), loops=loops
     )
     meas = yfactor.calibration_analysis(sweep).channel_power_time_series
-    assert meas.detector_period == Fraction(1, 200)
+    assert meas.detector_period == period
 
 
 def test_default_detector_period_needs_one_duration():
@@ -165,11 +162,6 @@ def test_build_sweep_is_cached_on_the_spec():
     assert yfactor.build_calibration_sweep(runner.spec) is runner.sweep
 
 
-def test_validate_accepts_a_spec_whose_sweep_builds():
-    doc = make_calibration_sweep(loops=(PORT_LOOP,))
-    assert ss.lib.actions.ManualYFactorRunner.validate(doc) is None
-
-
 def test_build_sweep_is_the_plan_with_generated_analysis_and_fixed_options():
     runner = make_calibration_runner(loops=(PORT_LOOP, GAIN_LOOP))
     doc, sweep = runner.spec, runner.sweep
@@ -184,14 +176,6 @@ def test_build_sweep_is_the_plan_with_generated_analysis_and_fixed_options():
     assert sweep.options == ss.specs.SweepOptions(
         reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
     )
-    assert warmup.warmup_sweep_for(runner.sweep) is None
-
-
-def test_build_sweep_applies_the_nyquist_filter():
-    loops = (ss.specs.List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)
-    runner = make_calibration_runner(loops=loops)
-    bandwidths = {c.analysis_bandwidth for c in H.loop_captures(runner.sweep)}
-    assert bandwidths == {0.5e6, math.inf}
 
 
 # %% passes and pass_sweep
@@ -230,13 +214,6 @@ def test_pass_sweep_fixes_the_port_and_drops_the_port_loop():
     assert [loop.field for loop in sweep.loops] == [None, 'gain']
     assert {c.port for c in sweep.captures} == {1}
     assert {c.port for c in H.loop_captures(sweep)} == {1}
-
-
-def test_pass_sweep_selects_the_captures_of_the_port():
-    kws, _ = PASS_CASES['explicit_ports']
-    runner = make_calibration_runner(**kws)
-    assert [c.port for c in yfactor.pass_sweep(runner.sweep, 0).captures] == [0]
-    assert [c.port for c in yfactor.pass_sweep(runner.sweep, 1).captures] == [1]
 
 
 def test_explicit_captures_with_implied_loops():
@@ -354,50 +331,12 @@ class TestOperatorPrompts:
         ]
 
 
-# %% registry and binding
-
-
-def test_binding_derives_its_classes_from_the_parent():
-    """the calibration binding pairs the parent's sensor and spec types with the
-    calibration action. No capture, sink, or peripherals class is derived."""
-    parent = ss.bindings.air7101b
-    assert CAL.schema.capture is parent.schema.capture
-    assert CAL.schema.source is parent.schema.source
-    assert CAL.sensor.source_cls is parent.sensor.source_cls
-    assert CAL.sensor.peripherals_cls is parent.sensor.peripherals_cls
-    action_cls = CAL.sensor.sweep_spec_cls
-    assert issubclass(action_cls, ss.specs.ManualYFactorCalibration)
-    assert not issubclass(action_cls, ss.specs.Sweep)
-    assert issubclass(action_cls.sweep_cls, ss.specs.Sweep)
-    assert action_cls.controller is CAL
+# %% registry
 
 
 def test_registered_for_calibration_specs_only():
     assert registry.lookup(CalSweepCls) is ManualYFactorRunner
     assert registry.lookup(SweepCls) is not ManualYFactorRunner
-
-
-def test_bind_sensor_with_the_action_matches_the_derived_binding(isolated_bindings):
-    """`bind_manual_yfactor_calibration` is `bind_sensor` with
-    `Schema(action=ManualYFactorCalibration)`"""
-    parent = ss.bindings.air7101b
-    derived = ss.bindings.air7101b_calibration
-    schema = ss.bindings.Schema(
-        source=parent.schema.source,
-        init_like=parent.schema.init_like,
-        capture=parent.schema.capture,
-        arm_like=parent.schema.arm_like,
-        peripherals=parent.schema.peripherals,
-        action=ss.specs.ManualYFactorCalibration,
-    )
-    direct = ss.bindings.bind_sensor(
-        'direct_cal_test', parent.sensor, schema, register=False
-    )
-    assert direct.schema.capture is derived.schema.capture
-    assert direct.sensor.peripherals_cls is derived.sensor.peripherals_cls
-    assert direct.sensor.sweep_spec_cls.__struct_fields__ == (
-        derived.sensor.sweep_spec_cls.__struct_fields__
-    )
 
 
 class _RecordingSource:

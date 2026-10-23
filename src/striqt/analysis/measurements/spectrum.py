@@ -26,8 +26,13 @@ class SpectrogramSizing(NamedTuple):
     Instances come from `validated_spectrogram_sizing`. `nfft`, `noverlap`, `nzero`,
     and `hop_size` are in samples and `hop_period` in s; `frequency_bin_averaging` and
     `time_bin_averaging` are the bins summed per `integration_bandwidth` and the
-    windows averaged per `time_aperture`, each `None` when its field is unset; `enbw`
-    is the noise bandwidth of one output bin in Hz.
+    windows averaged per `time_aperture`, each `None` when the field is unset.
+    `noise_bandwidth` (in Hz) is the bandwidth B in the mean power ``N0 * B`` of one
+    output bin for white noise with power spectral density N0: `frequency_resolution`,
+    or `integration_bandwidth` when bins are summed. `resolution_bandwidth` (in Hz) is
+    the equivalent noise bandwidth of the zero-padded analysis window. A CW tone has
+    ``frequency_resolution / resolution_bandwidth`` of the tone power in one
+    unintegrated bin.
     """
 
     nfft: int
@@ -37,7 +42,8 @@ class SpectrogramSizing(NamedTuple):
     hop_period: float
     frequency_bin_averaging: Optional[int]
     time_bin_averaging: Optional[int]
-    enbw: float
+    noise_bandwidth: float
+    resolution_bandwidth: float
 
 
 @specs.helpers.lru_cache_on_converted(specs.Capture, specs.Spectrogram)
@@ -168,9 +174,16 @@ def validated_spectrogram_sizing(
     )
 
     if spec.integration_bandwidth is None:
-        enbw = spec.frequency_resolution
+        noise_bandwidth = spec.frequency_resolution
     else:
-        enbw = spec.integration_bandwidth
+        noise_bandwidth = spec.integration_bandwidth
+
+    # the window has unit mean power over the padded length, so the mean noise power
+    # in a bin is N0 * frequency_resolution for every window shape. The window shape
+    # sets the ENBW over the nonzero samples, which scales the power of a tone.
+    nwindow = nfft - nzero
+    enbw_bins = float(sw.equivalent_noise_bandwidth(spec.window, nwindow))
+    resolution_bandwidth = enbw_bins * capture.sample_rate / nwindow
 
     return SpectrogramSizing(
         nfft=nfft,
@@ -180,7 +193,8 @@ def validated_spectrogram_sizing(
         hop_period=hop_period,
         frequency_bin_averaging=frequency_bin_averaging,
         time_bin_averaging=time_bin_averaging,
-        enbw=enbw,
+        noise_bandwidth=noise_bandwidth,
+        resolution_bandwidth=resolution_bandwidth,
     )
 
 
@@ -261,10 +275,12 @@ def _cached_spectrogram(
     if sizing.time_bin_averaging is not None:
         spg = sw.binned_mean(spg, sizing.time_bin_averaging, axis=1, fft=False)
 
-    attrs = {
-        'noise_bandwidth': float(sizing.enbw),
-        'units': f'dBm/{sizing.enbw / 1e3:0.0f} kHz',
-    }
+    attrs = shared.bandwidth_attrs(
+        sizing.noise_bandwidth,
+        'dBm',
+        'Power spectral density',
+        resolution_bandwidth=sizing.resolution_bandwidth,
+    )
 
     return spg, attrs
 
@@ -402,7 +418,7 @@ def spectrogram_tolerance(
     dtype='float16',
     caches=spectrogram_cache,
     prefer_iq_source='pre_filter',
-    attrs={'standard_name': 'PSD', 'long_name': 'Power Spectral Density'},
+    attrs={'standard_name': 'PSD'},
     validate=validated_spectrogram_sizing,
     tolerance=spectrogram_tolerance,
 )
@@ -418,10 +434,15 @@ def spectrogram(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement
     FFT grid at `frequency_resolution`, truncated to the `analysis_bandwidth` about
     DC when `trim_stopband` is set and the bandwidth is finite. Values are power in
     dBm per noise bandwidth, which is `frequency_resolution` or, when set,
-    `integration_bandwidth` (adjacent bins summed); the `units` and `noise_bandwidth`
-    attrs record it. `time_aperture` averages consecutive windows, and `lo_bandstop`
-    sets the bins within that bandwidth of DC to ``nan``. Values are rounded to 2
-    decimals and stored as float16. `striqt.waveform.spectrogram` evaluates the STFT.
+    `integration_bandwidth` (adjacent bins summed). The `noise_bandwidth` attr is that
+    bandwidth in Hz, and `long_name` names the bandwidth. White noise with power spectral
+    density N0 has a mean of ``N0 * noise_bandwidth`` in every bin for every `window`.
+    A CW tone has ``frequency_resolution / resolution_bandwidth`` of the tone power in
+    one bin, where the `resolution_bandwidth` attr is the equivalent noise bandwidth (in
+    Hz) of the zero-padded window. `time_aperture` averages consecutive windows, and
+    `lo_bandstop` sets the bins within that bandwidth of DC to ``nan``. Values are
+    rounded to 2 decimals and stored as float16. `striqt.waveform.spectrogram`
+    evaluates the STFT.
 
     Args:
     {args}
@@ -503,7 +524,8 @@ def power_spectral_density(
     the Welch estimate (P. D. Welch, IEEE Trans. Audio Electroacoust. 15(2), 1967)
     and a float in ``[0, 1]`` is a quantile. Per capture, the output has dimensions
     ``(time_statistic, baseband_frequency)`` in dBm per noise bandwidth, as recorded
-    in the `units` and `noise_bandwidth` attrs, stored as float32.
+    in the `noise_bandwidth` attr (in Hz), stored as float32. A power spectral density
+    in dBm/Hz is the output minus ``10 * log10(noise_bandwidth)``.
 
     Args:
     {args}
@@ -550,6 +572,14 @@ def power_spectral_density(
 
     psd = sw.powtodB(psd)
 
+    sizing = validated_spectrogram_sizing(capture, spg_spec)
+    metadata = shared.bandwidth_attrs(
+        sizing.noise_bandwidth,
+        'dBm',
+        'Power spectral density',
+        resolution_bandwidth=sizing.resolution_bandwidth,
+    )
+
     return psd, metadata
 
 
@@ -565,7 +595,8 @@ def spectrogram_power_bin(
 
     Returns:
         the bin centers of `power.make_power_bins` (with ``-inf`` and ``inf`` catch-all
-        bins), and a dict whose ``'units'`` is dBm per the spectrogram noise bandwidth
+        bins), and the attrs of `shared.bandwidth_attrs` for the spectrogram:
+        ``'units'`` of dBm, `noise_bandwidth`, and `resolution_bandwidth` in Hz
     """
     bins = power.make_power_bins(
         power_low=spec.power_low,
@@ -573,9 +604,15 @@ def spectrogram_power_bin(
         power_resolution=spec.power_resolution,
     )
 
-    enbw = validated_spectrogram_sizing(capture, spec).enbw
+    sizing = validated_spectrogram_sizing(capture, spec)
+    attrs = shared.bandwidth_attrs(
+        sizing.noise_bandwidth,
+        'dBm',
+        'Spectrogram bin power',
+        resolution_bandwidth=sizing.resolution_bandwidth,
+    )
 
-    return bins, {'units': f'dBm/{enbw / 1e3:0.0f} kHz'}
+    return bins, attrs
 
 
 @hint_keywords(specs.SpectrogramHistogram)
@@ -598,7 +635,8 @@ def spectrogram_histogram(
     has the dimension ``(spectrogram_power_bin,)`` and sums to 1.
     `spectrogram_power_bin` is the bin centers in dBm per noise bandwidth; its
     ``-inf`` and ``inf`` entries collect the pixels more than half a bin below
-    `power_low` or above `power_high`. The `noise_bandwidth` attr is in Hz.
+    `power_low` or above `power_high`. The `noise_bandwidth` attr (in Hz) is set on
+    the output and on the bin coordinate.
 
     Args:
     {args}
@@ -615,6 +653,7 @@ def spectrogram_histogram(
 
     metadata = dict(metadata)
     metadata.pop('units')
+    metadata.pop('long_name')
 
     xp = sw.array_namespace(iq)
     bin_edges = power.make_power_histogram_bin_edges(
@@ -647,16 +686,13 @@ def spectrogram_ratio_power_bin(
     """return the `spectrogram_ratio_power_bin` coordinate values and attrs.
 
     Returns:
-        the bin centers of `spectrogram_power_bin`, and a copy of its attrs with
-        ``'units'`` relabeled from dBm to dB
+        the bin centers of `spectrogram_power_bin`, and attrs with ``'units'`` of dB
+        and no `noise_bandwidth`
     """
 
-    bins, attrs = spectrogram_power_bin(capture, spec)
+    bins, _ = spectrogram_power_bin(capture, spec)
 
-    # `attrs` is a cached object that `spectrogram_histogram` shares whenever the two
-    # measurements agree on the spectrogram and power bin fields, so relabeling it in
-    # place would relabel that measurement's absolute powers as ratios
-    return bins, attrs | {'units': attrs['units'].replace('dBm', 'dB')}
+    return bins, {'units': 'dB'}
 
 
 @hint_keywords(specs.SpectrogramHistogramRatio)
@@ -702,8 +738,10 @@ def spectrogram_ratio_histogram(
 
     spg[0], spg[1] = spg[0] - spg[1], spg[1] - spg[0]
 
+    # a ratio of powers has no unit or bandwidth
     metadata = dict(metadata)
-    metadata.pop('units')
+    for key in ('units', 'long_name', 'noise_bandwidth', 'resolution_bandwidth'):
+        metadata.pop(key)
 
     xp = sw.array_namespace(iq)
     bin_edges = power.make_power_histogram_bin_edges(

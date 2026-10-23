@@ -101,8 +101,9 @@ def compute_y_factor_corrections(
 
     Returns:
         a dataset over the calibration fields with `noise_figure` (dB),
-        `temperature` (K), `power_correction` (mW per full-scale unit), the linear
-        powers `p_on` and `p_off`, and the diagnostics `papr_on` and `papr_off` (dB)
+        `temperature` (K), `power_correction` (mW per full-scale power unit), the
+        linear powers `p_on` and `p_off`, and the diagnostics `papr_on` and `papr_off`
+        (dB)
     """
     from scipy.constants import Boltzmann
 
@@ -138,7 +139,8 @@ def compute_y_factor_corrections(
 
     power_correction = (k * (enr * Tref) * B) / (Pon - Poff)
     power_correction.name = 'Power scaling correction'
-    power_correction.attrs = {'units': 'mW/fs'}
+    # FS: the full-scale power unit of the uncalibrated detector, 0 dBFS
+    power_correction.attrs = {'units': 'mW/FS'}
 
     return xr.Dataset({
         'temperature': Te,

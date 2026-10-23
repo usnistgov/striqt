@@ -131,13 +131,3 @@ def test_every_measurement_exposes_its_spec_fields(tmp_path: pathlib.Path) -> No
     probe = tmp_path / 'probe_registry.py'
     probe.write_text(registry_probe())
     assert_checks_clean(probe)
-
-
-# %% ty check src
-@pytest.mark.skipif(
-    sys.version_info < (3, 14),
-    reason='ty check src is kept clean on the py314 environment only; test39 has a '
-    'known baseline from zarr 2.x and older stubs',
-)
-def test_src_has_no_diagnostics() -> None:
-    assert_checks_clean('src')

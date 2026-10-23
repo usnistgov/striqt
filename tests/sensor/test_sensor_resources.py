@@ -44,18 +44,13 @@ class BindingPeripherals(ss.peripherals.NoPeripherals):
         raise RuntimeError("the binding's peripherals were opened")
 
 
-def test_test_only_opens_no_peripherals(monkeypatch):
+def test_test_only_opens_no_peripherals_and_runs_the_sweep(monkeypatch):
     """test_only substitutes the no-op NoPeripherals for the binding's peripherals"""
     sweep = tone_sweep(OFFSETS)
     binding = ss.lib.bindings.get_controller(sweep).sensor
     monkeypatch.setattr(binding, 'peripherals_cls', BindingPeripherals)
     with ss.open_resources(sweep, None, test_only=True) as res:
         assert type(res['peripherals']) is ss.peripherals.NoPeripherals
-
-
-def test_test_only_resources_run_a_sweep():
-    sweep = tone_sweep(OFFSETS)
-    with ss.open_resources(sweep, None, test_only=True) as res:
         results = list(ss.iterate_sweep(res, sink=ss.sinks.NoSink(sweep)))
     assert len([r for r in results if r is not None]) == len(OFFSETS)
 
@@ -125,17 +120,14 @@ def _run_with_log(tmp_path) -> str:
     return log_path.read_text()
 
 
-def test_log_path_records_a_yaml_array_at_the_log_level(tmp_path):
-    records = yaml.safe_load(_run_with_log(tmp_path))
+def test_log_path_records_a_json_array_at_the_log_level(tmp_path):
+    text = _run_with_log(tmp_path)
+    records = json.loads(text)
     assert isinstance(records, list)
+    assert yaml.safe_load(text) == records
     by_message = {r['message']: r for r in records}
     assert by_message['marker record']['level'] == 'INFO'
     assert 'below the log level' not in by_message
-
-
-def test_log_file_is_json(tmp_path):
-    records = json.loads(_run_with_log(tmp_path))
-    assert 'marker record' in {r['message'] for r in records}
 
 
 # %% on_source_opened

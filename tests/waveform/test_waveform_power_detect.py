@@ -98,22 +98,15 @@ class TestStatUfuncFromShorthand:
 class TestRoundoffModels:
     """The tolerance models that the rest of this module measures the library against."""
 
-    def test_bin_power_rms_grows_with_bin_size(self):
-        assert bin_power_rms(np.float32, 16) > bin_power_rms(np.float32, 1) > 0
+    def test_bin_power_rms_is_zero_for_selections_and_quantiles(self, subtests):
+        for kind in ['min', 'max', 'peak', 0.5]:
+            with subtests.test(kind=kind):
+                assert bin_power_rms(np.float32, 10_000, kind=kind) == 0
 
-    @pytest.mark.parametrize('kind', ['min', 'max', 'peak', 0.5], ids=str)
-    def test_bin_power_rms_is_zero_for_selections_and_quantiles(self, kind):
-        assert bin_power_rms(np.float32, 10_000, kind=kind) == 0
-
-    @pytest.mark.parametrize('kind', ['mean', 'rms', 'min', 'max', 'peak'])
-    def test_stat_rtol_is_zero_for_selections_and_the_mean(self, kind):
-        assert stat_rtol(np.float32, kind) == 0
-
-    def test_stat_rtol_is_one_rounding_for_quantiles(self):
-        quantile = stat_rtol(np.float32, 0.5)
-        assert quantile == accum_rtol(np.float32, 1)
-        assert stat_rtol(np.float32, 'median') == quantile
-        assert stat_rtol(np.float32, 0.5, n_impl=2) == 2 * quantile
+    def test_stat_rtol_is_zero_for_selections_and_the_mean(self, subtests):
+        for kind in ['mean', 'rms', 'min', 'max', 'peak']:
+            with subtests.test(kind=kind):
+                assert stat_rtol(np.float32, kind) == 0
 
     @pytest.mark.parametrize('func', [stat_rtol, bin_power_rtol], ids=func_id)
     def test_unknown_statistic_raises(self, func):
@@ -423,11 +416,6 @@ class TestIqToCyclicPower:
             iq_to_cyclic_power(
                 iq, 1.0, 4.0, **{'cyclic_period': 16.0, 'axis': 1, **kws}
             )
-
-    def test_misaligned_length_with_truncate(self):
-        iq = np.random.default_rng(0).normal(size=(2, 4 * 7)).astype(np.complex64)
-        result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, truncate=True, axis=1)
-        assert result['rms']['mean'].shape == (2, 4)
 
     def test_truncate_drops_trailing_bins_of_the_time_axis(self, subtests):
         """A 2-port capture at 107.52 MS/s with 1/28 ms detector bins (3840

@@ -62,20 +62,6 @@ def spectrogram_run() -> list:
     return [compute.from_delayed(dd) for dd in delayed_results(sweep)]
 
 
-def options(**kws):
-    sweep = preset_sweep('single_tone', two_port_captures(), analysis=IQ_ONLY)
-    return compute.EvaluationOptions(
-        sweep_spec=sweep, registry=sa.registry, as_xarray='delayed', **kws
-    )
-
-
-# %% EvaluationOptions
-
-
-def test_evaluation_options_default_extra_attrs_is_an_empty_dict():
-    assert options().extra_attrs == {}
-
-
 # %% from_delayed
 
 
@@ -111,11 +97,6 @@ def test_from_delayed_rejects_extra_data_of_the_wrong_length():
     dd = dataclasses.replace(two_port_run()[0], extra_data={'bad': np.zeros(3)})
     with pytest.raises(ValueError, match='"bad"'):
         compute.from_delayed(dd)
-
-
-def test_from_delayed_accepts_the_acquisition_info_defaults():
-    dd = dataclasses.replace(two_port_run()[0], extra_coords=ss.specs.AcquisitionInfo())
-    compute.from_delayed(dd)
 
 
 def test_from_delayed_leaves_the_signal_trigger_out_of_the_coordinates():

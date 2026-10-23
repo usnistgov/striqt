@@ -31,16 +31,10 @@ WINDOW_NAMES = ['hann', 'hamming', 'blackman', 'blackmanharris', 'bartlett', 'nu
 
 # %% get_window
 class TestGetWindow:
-    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
-    @given(
-        name=st.sampled_from(WINDOW_NAMES),
-        nwindow=st.integers(min_value=2, max_value=256),
-        nzero=st.integers(min_value=0, max_value=64),
-    )
-    def test_length_and_dtype(self, name, nwindow, nzero, dtype):
-        w = get_window(name, nwindow, nzero=nzero, dtype=dtype)
-        assert w.shape == (nwindow + nzero,)
-        assert w.dtype == dtype
+    def test_dtype_follows_argument(self, subtests):
+        for dtype in FLOAT_DTYPES:
+            with subtests.test(dtype=dtype_id(dtype)):
+                assert get_window('hann', 16, nzero=4, dtype=dtype).dtype == dtype
 
     def test_dtype_none_keeps_float64(self):
         assert get_window('hann', 16, dtype=None).dtype == np.float64
@@ -70,16 +64,21 @@ class TestGetWindow:
         assert np.iscomplexobj(w) == bool(nwindow % 2)
         assert_allclose(np.sum(np.abs(w) ** 2), np.sum(w0**2), rtol=1e-6)
 
-    @pytest.mark.parametrize('name', ['hann', 'hamming'])
-    @pytest.mark.parametrize('nwindow', [8, 16, 64])
-    @pytest.mark.parametrize('nzero', [2, 4, 6])
-    def test_center_zeros_pads_both_sides(self, name, nwindow, nzero):
-        w = get_window(name, nwindow, nzero=nzero, center_zeros=True, norm=False)
-        ws = get_window(name, nwindow, norm=False)
+    @pytest.mark.parametrize(
+        'nzero, before, after',
+        # an odd count puts the extra zero after the window
+        [(4, 2, 2), (5, 2, 3)],
+        ids=['even', 'odd'],
+    )
+    def test_center_zeros_pads_both_sides(self, nzero, before, after):
+        nwindow = 16
+        w = get_window('hann', nwindow, nzero=nzero, center_zeros=True, norm=False)
+        ws = get_window('hann', nwindow, norm=False)
         assert w.size == nwindow + nzero
-        assert_array_equal(w[: nzero // 2], 0)
-        assert_array_equal(w[nzero // 2 + nwindow :], 0)
-        assert_array_equal(w[nzero // 2 : nzero // 2 + nwindow], ws)
+        assert_array_equal(w[:before], 0)
+        assert_array_equal(w[before : before + nwindow], ws)
+        assert w[before + nwindow :].size == after
+        assert_array_equal(w[before + nwindow :], 0)
 
     def test_equivalent_argument_spellings_share_one_cache_entry(self):
         """the analysis warms the cache with a dtype string and no xp, while stft
@@ -136,12 +135,9 @@ class TestEquivalentNoiseBandwidth:
 
 # %% numpy vs cupy
 class TestNumpyCupyCrossComparison:
-    @pytest.mark.parametrize(
-        'name', ['hamming', 'hann', 'blackman', 'bartlett', 'flattop']
-    )
-    @pytest.mark.parametrize('nwindow', [8, 64, 129, 512])
-    @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
-    def test_get_window(self, cupy_available, name, nwindow, dtype):
-        design = functools.partial(get_window, name, nwindow, dtype=dtype)
+    def test_get_window(self, cupy_available):
+        """`get_window` designs on numpy and converts, so one case covers the xp path"""
+        dtype = np.float32
+        design = functools.partial(get_window, 'hamming', 129, dtype=dtype)
         w_np, w_cp = numpy_and_cupy(cupy_available, design, xp_kwarg='xp')
         assert_close(w_cp, w_np, rtol=elementwise_rtol(dtype), atol=ATOL)

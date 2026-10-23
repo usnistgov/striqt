@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numeric_checks import assert_close, elementwise_rtol
+from sweep_strategies import make_cellular_sweep
 from synthetic_sources import (
     IQ_ONLY,
     ONE_PORT,
@@ -156,15 +157,23 @@ def test_zarr_sink_rejects_a_null_path():
         ss.sinks.ZarrCaptureSink(tone_sweep(OFFSETS))
 
 
-def test_null_sink_path_opens_a_no_sink():
-    with ss.open_resources(tone_sweep(OFFSETS), None) as res:
-        assert type(res['sink']) is ss.sinks.NoSink
-
-
-def test_sink_path_opens_a_zarr_capture_sink(tmp_path):
-    sweep = zarr_sweep(tmp_path / 'out.zarr', OFFSETS)
-    with ss.open_resources(sweep, None) as res:
-        assert type(res['sink']) is ss.sinks.ZarrCaptureSink
+@pytest.mark.parametrize(
+    'make_spec, name, sink_type',
+    [
+        (lambda: tone_sweep(OFFSETS), None, ss.sinks.NoSink),
+        (lambda: tone_sweep(OFFSETS), 'out.zarr', ss.sinks.ZarrCaptureSink),
+        (make_cellular_sweep, None, ss.sinks.NoSink),
+        (make_cellular_sweep, 'out.zarr', ss.sinks.ZarrCaptureSink),
+    ],
+    ids=['sweep_null_path', 'sweep_path', 'cellular_null_path', 'cellular_path'],
+)
+def test_runner_opens_the_sink_that_the_path_selects(
+    tmp_path, make_spec, name, sink_type
+):
+    path = None if name is None else str(tmp_path / name)
+    spec = make_spec().replace(sink=ss.specs.ZarrSink(path=path))
+    with ss.open_resources(spec, None) as res:
+        assert type(res['sink']) is sink_type
 
 
 # %% Zipper
@@ -180,25 +189,17 @@ def make_tree(root: Path) -> set[str]:
     return files
 
 
-def test_zipper_from_zarr_archives_every_file(tmp_path):
+@pytest.mark.parametrize('remove', [True, False], ids=['remove', 'keep'])
+def test_zipper_from_zarr_archives_every_file(tmp_path, remove):
     store = tmp_path / 'data.zarr'
     files = make_tree(store)
-    zipper = sinks.Zipper.from_zarr(store)
-    out = zipper.archive()
+    out = sinks.Zipper.from_zarr(store).archive(remove=remove)
 
     assert Path(out) == tmp_path / 'data.zarr.zip'
     with zipfile.ZipFile(out) as zf:
         assert set(zf.namelist()) == files
         assert zf.read('a/c/0.0') == b'a/c/0.0'
-    assert not store.exists()
-
-
-def test_zipper_archive_can_keep_the_directory(tmp_path):
-    store = tmp_path / 'data.zarr'
-    make_tree(store)
-    sinks.Zipper.from_zarr(store).archive(remove=False)
-    assert store.is_dir()
-    assert (tmp_path / 'data.zarr.zip').exists()
+    assert store.is_dir() == (not remove)
 
 
 def test_zipper_refuses_an_existing_zip_without_force(tmp_path):

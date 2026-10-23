@@ -8,6 +8,7 @@ import dataclasses
 
 import numpy as np
 import pytest
+import xarray as xr
 from sweep_strategies import SOURCE
 from synthetic_sources import (
     ANALYSIS,
@@ -53,20 +54,17 @@ def fresh_raw(stages):
 # %% analyze
 
 
-def test_delayed_result_matches_correct_iq(stages):
-    dd = compute.analyze(
-        fresh_raw(stages), options(correction=True, as_xarray='delayed')
+@pytest.mark.parametrize(
+    'as_xarray, container',
+    [('delayed', compute.DelayedDataset), (True, xr.Dataset)],
+    ids=['delayed', 'dataset'],
+)
+def test_analyze_result_matches_correct_iq(stages, as_xarray, container):
+    result = compute.analyze(
+        fresh_raw(stages), options(correction=True, as_xarray=as_xarray)
     )
-    assert isinstance(dd, compute.DelayedDataset)
-    ds = compute.from_delayed(dd)
-    assert np.array_equal(ds.iq_waveform.values, stages.corrected.pre_align)
-
-
-def test_as_xarray_true_returns_a_dataset(stages):
-    import xarray as xr
-
-    ds = compute.analyze(fresh_raw(stages), options(correction=True, as_xarray=True))
-    assert isinstance(ds, xr.Dataset)
+    assert isinstance(result, container)
+    ds = result if as_xarray is True else compute.from_delayed(result)
     assert np.array_equal(ds.iq_waveform.values, stages.corrected.pre_align)
 
 
@@ -163,13 +161,8 @@ def test_get_trigger_from_spec(case):
     else:
         trigger = compute.get_trigger_from_spec(source, analysis)
         assert isinstance(trigger, sa.Trigger)
+        assert trigger.info.name == 'cellular_5g_pss_sync'
         assert trigger.meas_spec == PSS.cellular_5g_pss_sync
-
-
-def test_trigger_bundle_names_its_one_enabled_trigger():
-    trigger = compute.get_trigger_from_spec(SOURCE.replace(signal_trigger=PSS_BUNDLE))
-    assert trigger is not None
-    assert trigger.info.name == 'cellular_5g_pss_sync'
 
 
 # %% prepare_compute

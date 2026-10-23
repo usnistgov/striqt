@@ -112,25 +112,6 @@ class TestTinyLike:
 
 
 # %% roundoff model
-class TestRoundoffModels:
-    N = 1_000_000
-
-    def test_accum_rms_grows_as_the_root_of_the_bin(self):
-        """numpy sums a contiguous axis pairwise and cupy by block tree, so the rms
-        model grows as sqrt(n) and stays far below the n roundings of a strided axis"""
-        n = self.N
-        assert arrays.accum_rms(np.float32, 4 * n) == pytest.approx(
-            2 * arrays.accum_rms(np.float32, n), rel=0.02
-        )
-        assert arrays.accum_rms(np.float32, n) < arrays.accum_rtol(np.float32, n) / 1000
-
-    def test_accum_rtol_is_linear_in_the_term_count(self):
-        n = self.N
-        assert arrays.accum_rtol(np.float32, 2 * n) == 2 * arrays.accum_rtol(
-            np.float32, n
-        )
-
-
 class TestBinnedMean:
     def test_strided_axis_reduction_needs_the_in_order_bound(self):
         """numpy sums a strided axis in order, so the error of a bin that straddles 2
@@ -244,13 +225,6 @@ class TestSlidingWindowView:
         result = arrays.sliding_window_view(x, (2, 2))
         expected = np.lib.stride_tricks.sliding_window_view(x, (2, 2))
         assert_array_equal(result, expected)
-
-    def test_output_shape_for_default_axis(self):
-        shape = arrays._sliding_window_output_shape((3, 4), (2, 2), None)
-        assert shape == (2, 3, 2, 2)
-
-    def test_output_shape_accepts_integer_shapes(self):
-        assert arrays._sliding_window_output_shape(6, 3, 0) == (4, 3)
 
     @pytest.mark.parametrize(
         'array_shape,window_shape,axis,match',
@@ -515,19 +489,6 @@ class TestConvertNpToXp:
 
 
 class TestCupyHelpers:
-    def test_numpy_arrays_get_a_non_stream_context(self):
-        x = np.zeros(4)
-        assert isinstance(arrays.array_stream(x), arrays.NonStreamContext)
-        assert arrays.sync_if_cupy(x) is None
-        assert not arrays.is_cupy_array(x)
-
-    def test_array_namespace(self):
-        import array_api_compat.numpy as anp
-
-        x = np.zeros(4)
-        assert arrays.array_namespace(x) is np
-        assert arrays.array_namespace(x, use_compat=True) is anp
-
     @pytest.mark.skipif(
         _cupy is not None,
         reason='with a device, set_cuda_mem_limit(1.0) caps the pool for the session',

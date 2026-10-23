@@ -22,11 +22,11 @@ from numeric_checks import (
     tone_frequency,
 )
 from numpy.testing import assert_allclose, assert_array_equal
-from waveform_strategies import cross_backend_sigma, noise_waveforms
+from waveform_strategies import cross_backend_sigma, msps_id, noise_waveforms
 
 from striqt.analysis import testing
 from striqt.waveform.lib.fourier.fft import fft, fft_tolerance_rms, time_fftshift
-from striqt.waveform.lib.fourier.filters import _COLA_WINDOW_SIZE_DIVISOR
+from striqt.waveform.lib.fourier.filters import design_oafilter
 from striqt.waveform.lib.fourier.resamplers import (
     _prime_fft_sizes,
     design_cola_resampler,
@@ -36,21 +36,31 @@ from striqt.waveform.lib.fourier.resamplers import (
     resample_edges,
 )
 
-
 # %% design_cola_resampler and design_fir_resampler
-class TestColaResamplerDesign:
-    @pytest.mark.parametrize('fs_base', [122.88e6, 125e6])
-    @pytest.mark.parametrize(
-        'fs_target', [7.68e6, 15.36e6, 20e6, 30.72e6, 61.44e6, 107.52e6]
+
+# the window enters the design only through its COLA divisor. The hamming rows span
+# the rates and shifts; one blackman row covers the other divisor.
+COLA_DESIGN_CASES = [
+    pytest.param(
+        fs_base,
+        fs_target,
+        'hamming',
+        shift,
+        id=f'{msps_id(fs_base)}-{msps_id(fs_target)}-{shift}',
     )
-    @pytest.mark.parametrize('window', ['hamming', 'blackman'])
-    @pytest.mark.parametrize('shift', [None, 'none', 'left', 'right'])
+    for fs_base in [122.88e6, 125e6]
+    for fs_target in [7.68e6, 15.36e6, 20e6, 30.72e6, 61.44e6, 107.52e6]
+    for shift in [None, 'left', 'right']
+] + [pytest.param(125e6, 15.36e6, 'blackman', None, id='125MSps-15.36MSps-blackman')]
+
+
+class TestColaResamplerDesign:
+    @pytest.mark.parametrize('fs_base, fs_target, window, shift', COLA_DESIGN_CASES)
     def test_consistency(self, fs_base, fs_target, window, shift):
         """The rates, FFT sizes, and passband of a design are mutually consistent.
 
-        The grid omits `bw`, which only sets the passband width. It also omits
-        shift=False, which the design treats exactly like None (unlike the truthy
-        'none').
+        The grid omits `bw`, which only sets the passband width, and the shift
+        spellings False and 'none', which design the same centered passband as None.
         """
         bw = 10e6
         design = design_cola_resampler(
@@ -60,12 +70,18 @@ class TestColaResamplerDesign:
         assert design['fs'] == design['fs_sdr'] <= fs_base
         # the SDR rate is an integer division of the base clock
         assert_allclose(fs_base / design['fs_sdr'], round(fs_base / design['fs_sdr']))
-        assert_allclose(
-            design['nfft'] / design['nfft_out'], design['fs_sdr'] / fs_target
+        # the FFT sizes give the rate ratio exactly, so the resampled rate is fs_target
+        assert design['nfft'] * fs_target == pytest.approx(
+            design['nfft_out'] * design['fs_sdr'], rel=1e-12
         )
-
-        divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
-        assert design['nfft'] % divisor == 0 and design['nfft_out'] % divisor == 0
+        # both sizes satisfy the COLA overlap constraint that the window imposes
+        for nfft, nfft_out in [
+            (design['nfft'], design['nfft_out']),
+            (design['nfft_out'], design['nfft']),
+        ]:
+            design_oafilter(
+                nfft, window=window, nfft_out=nfft_out, nfft=nfft, extend=True
+            )
         assert design['window'] == window
 
         lo, hi = design['passband']

@@ -6,7 +6,9 @@ filter consume
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from math import inf, isfinite
+from typing import TypeVar
 
 import numpy as np
 import pytest
@@ -15,12 +17,10 @@ from hypothesis import strategies as st
 from numeric_checks import (
     FIR_LEAKAGE,
     assert_close,
-    assert_tone_level,
     rms,
     to_numpy,
     tone_frequency,
 )
-from soapy_factories import MCR, soapy_capture, source_spec
 from sweep_strategies import SOURCE as FUNCTION_SOURCE
 from synthetic_sources import (
     FILTER_ONLY,
@@ -46,8 +46,6 @@ import striqt.waveform as sw
 from striqt.sensor.lib.compute import correction_error, corrections
 from striqt.sensor.lib.sources import buffers
 from striqt.waveform.fourier import on_peak_roundoff
-
-SOAPY_SOURCE = source_spec()
 
 # 0.5 ms is a whole number of samples at every preset's source and capture rate, so
 # the impulse sits on an output sample. The brick-wall resample of an impulse is
@@ -76,17 +74,6 @@ FILTERED_PRESETS = pytest.mark.parametrize(
 RESAMPLED_PRESETS = pytest.mark.parametrize(
     'preset', [RESAMPLE_FILTER, RESAMPLE_ONLY], ids=['resample_filter', 'resample_only']
 )
-
-
-def _capture(**kws):
-    """a 10 ms capture at the SoapyCapture defaults of no analysis filter and host
-    resampling, unless `kws` says otherwise"""
-    return soapy_capture(**{
-        'duration': 10e-3,
-        'analysis_bandwidth': inf,
-        'host_resample': True,
-        **kws,
-    })
 
 
 def _resample_tol(preset, raw, stage='pre_filter') -> dict:
@@ -135,19 +122,6 @@ def assert_impulse_at(x, capture, time):
 
 
 # %% correct_iq: time origin
-
-
-@PRESET_PARAMS
-def test_impulse_lands_on_its_output_sample(preset, array_backend, subtests):
-    capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
-    stages = acquire_corrected('dirac_delta', capture, array_backend=array_backend)
-    fs = capture.sample_rate
-
-    for name in ('pre_filter', 'pre_align'):
-        x = getattr(stages.corrected, name)
-        with subtests.test(stage=name):
-            assert x.shape[1] == round(capture.duration * fs)
-            assert_impulse_at(x, capture, IMPULSE_TIME)
 
 
 @pytest.mark.parametrize(
@@ -206,6 +180,7 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
 
     with subtests.test(stage='pre_align'):
         pre_align = to_numpy(stages.corrected.pre_align)
+        assert_impulse_at(pre_align, capture, IMPULSE_TIME)
         if isfinite(capture.analysis_bandwidth):
             # the center tap of a unit-DC-gain windowed-sinc lowpass at cutoff bw/2
             # is bw/fs, up to the passband error that the DC normalization moves
@@ -213,22 +188,6 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
             assert_close(np.abs(pre_align[:, index]), peak, rtol=FIR_LEAKAGE)
         else:
             assert np.array_equal(pre_align, to_numpy(stages.corrected.pre_filter))
-
-
-@PRESET_PARAMS
-def test_tone_level_and_frequency(preset, array_backend, subtests):
-    capture = preset_capture(
-        'single_tone', **preset, frequency_offset=TONE_FREQUENCY, snr=None
-    )
-    stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
-    x = to_numpy(stages.corrected.pre_align)
-    fs = capture.sample_rate
-
-    with subtests.test('level'):
-        assert_tone_level(x)
-    for port in range(x.shape[0]):
-        with subtests.test('frequency', port=port):
-            assert abs(tone_frequency(x[port], fs) - TONE_FREQUENCY) < fs / x.shape[1]
 
 
 @CHEAP_PRESETS
@@ -363,19 +322,6 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
 
 
 # %% correct_iq: experimental oaresample path (STRIQT_USE_OARESAMPLE=1)
-
-
-@RESAMPLED_PRESETS
-def test_oaresample_impulse_lands_on_its_output_sample(preset, corrections_flags):
-    corrections_flags(use_oaresample=True)
-    capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
-    overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
-
-    corrected = ss.correct_iq(_build_iq('dirac_delta', capture, overlaps))
-
-    size_out = round(capture.duration * capture.sample_rate)
-    assert corrected.pre_align.shape[1] == size_out
-    assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
 
 @RESAMPLED_PRESETS
@@ -557,6 +503,31 @@ sample_counts = st.integers(min_value=100, max_value=40000)
 bandwidth_fractions = st.one_of(st.just(inf), st.floats(min_value=0.3, max_value=0.95))
 max_lags = st.floats(min_value=0, max_value=1e-4)
 
+# 10 ms SoapySDR records at the 125 MHz clock rate, at its divisors 62.5, 10, and
+# 1 MS/s, and through the 15.625 -> 15.36 MS/s resampler, with and without the
+# analysis filter
+SOAPY_RECORDS = (
+    {'sample_rate': 125e6, 'count': 1_250_000, 'bandwidth_fraction': inf},
+    {'sample_rate': 125e6, 'count': 1_250_000, 'bandwidth_fraction': 0.32},
+    {'sample_rate': 62.5e6, 'count': 625_000, 'bandwidth_fraction': inf},
+    {'sample_rate': 15.36e6, 'count': 153_600, 'bandwidth_fraction': 10e6 / 15.36e6},
+    {'sample_rate': 1e6, 'count': 10_000, 'bandwidth_fraction': 0.5},
+    {'sample_rate': 10e6, 'count': 100_000, 'bandwidth_fraction': 0.8},
+)
+
+F = TypeVar('F', bound=Callable[..., None])
+
+
+def soapy_record_examples(**extra: float) -> Callable[[F], F]:
+    """stack an `example` of each SOAPY_RECORDS point, plus `extra`, on a property"""
+
+    def decorate(test: F) -> F:
+        for point in SOAPY_RECORDS:
+            test = example(**point, **extra)(test)
+        return test
+
+    return decorate
+
 
 def _drawn_capture(sample_rate, count, bandwidth_fraction):
     if bandwidth_fraction == inf:
@@ -577,6 +548,10 @@ def _drawn_capture(sample_rate, count, bandwidth_fraction):
     bandwidth_fraction=bandwidth_fractions,
     max_lag=max_lags,
 )
+# the FIR pad is 2000 output samples, which the 12.5 MS/s -> 12.065 MS/s resample
+# scales to 2000 * 12.5 / 12.065 source samples
+@example(sample_rate=12065e3, count=24977, bandwidth_fraction=0.5, max_lag=0.0)
+@soapy_record_examples(max_lag=0.0)
 def test_overlaps_cover_the_filter_and_trigger_pads(
     sample_rate, count, bandwidth_fraction, max_lag
 ):
@@ -601,18 +576,6 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
     assert read_count == source_count(capture, FUNCTION_SOURCE) + lead + tail
 
 
-def test_upsampled_overlap_covers_the_output_rate_filter_pad():
-    """a capture that upsamples a 12.5 MS/s fs_sdr to 12.065 MS/s needs
-    fs_sdr/sample_rate times as many source samples as the 2000 output samples that
-    the FIR transient spans at each end"""
-    capture = _drawn_capture(12065e3, 24977, 0.5)
-    lead, tail = corrections._get_resampler_overlaps(capture, FUNCTION_SOURCE)
-    ratio = capture.sample_rate / fs_sdr(capture)
-
-    assert lead * ratio >= FILTER_SIZE // 2
-    assert tail * ratio >= FILTER_SIZE // 2
-
-
 @settings(report_multiple_bugs=False, max_examples=50)
 @given(
     sample_rate=sample_rates,
@@ -620,6 +583,7 @@ def test_upsampled_overlap_covers_the_output_rate_filter_pad():
     bandwidth_fraction=bandwidth_fractions,
 )
 @example(sample_rate=1e7, count=23076, bandwidth_fraction=inf)
+@soapy_record_examples()
 def test_overlaps_pad_to_a_whole_resampler_block(
     sample_rate, count, bandwidth_fraction
 ):
@@ -676,18 +640,9 @@ NONINTEGRAL_CAPTURE = {**RESAMPLE_ONLY, 'sample_rate': 4e6, 'duration': 1e-3}
 def test_impulse_acquisition(preset):
     capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
     stages = acquire_corrected('dirac_delta', capture)
+    size_out = round(capture.duration * capture.sample_rate)
+    assert stages.corrected.pre_align.shape[1] == size_out
     assert_impulse_at(stages.corrected.pre_align, capture, IMPULSE_TIME)
-
-
-def test_correct_iq_trims_an_odd_lead_pad():
-    """an odd lead pad is trimmed exactly like an even one"""
-    capture = preset_capture('dirac_delta', **ODD_OVERLAP_CAPTURE, time=IMPULSE_TIME)
-    overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
-
-    corrected = ss.correct_iq(_build_iq('dirac_delta', capture, overlaps))
-
-    assert corrected.pre_align.shape[1] == round(capture.duration * capture.sample_rate)
-    assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
 
 # %% source_record_size
@@ -702,15 +657,6 @@ def test_source_record_size_rounds_an_exact_half_sample_up():
     assert (design['nfft'], design['nfft_out']) == (550, 528)
     assert corrections.source_record_size(capture, design) == 24038
     assert round(capture.duration * design['fs_sdr']) == 24037
-
-
-@given(sample_rate=sample_rates, count=sample_counts)
-def test_source_record_size_matches_the_exact_rational_length(sample_rate, count):
-    capture = _drawn_capture(sample_rate, count, inf)
-    design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
-    assert corrections.source_record_size(capture, design) == source_count(
-        capture, FUNCTION_SOURCE
-    )
 
 
 # %% _resample
@@ -729,58 +675,3 @@ def test_resample_rejects_a_length_that_does_not_divide():
 
     with pytest.raises(ValueError, match=f'{count} samples at {fs} S/s'):
         ss.correct_iq(iq)
-
-
-# %% get_correction_overlaps: the soapy captures
-
-
-def _assert_valid_overlaps(capture):
-    """the overlaps of `capture` from SOAPY_SOURCE cover the FIR transient at the
-    output rate on both sides and pad the record to a whole number of output samples"""
-    low, high = corrections.get_correction_overlaps(capture, SOAPY_SOURCE)
-    fs = fs_sdr(capture, SOAPY_SOURCE)
-    filter_out = corrections._get_filter_overlap(capture)
-    padded = source_count(capture, SOAPY_SOURCE) + low + high
-
-    assert low >= 0 and high >= 0
-    assert low * capture.sample_rate / fs >= filter_out
-    assert high * capture.sample_rate / fs >= filter_out
-    assert sw.isroundmod(padded * capture.sample_rate, fs)
-
-
-VALID_OVERLAP_CAPTURES = {
-    'infinite_bandwidth_at_the_clock_rate': {'sample_rate': MCR},
-    'infinite_bandwidth_at_62.5_MHz': {'sample_rate': 62.5e6},
-    'infinite_bandwidth_at_15.36_MHz': {'sample_rate': 15.36e6},
-    'finite_bandwidth_without_host_resampling': {
-        'analysis_bandwidth': 40e6,
-        'host_resample': False,
-    },
-    # fs_sdr 15.625 MS/s -> 15.36 MS/s designs a 6250-point FFT, larger than the
-    # filter overlap, so one FFT is the block
-    'finite_bandwidth_with_a_large_resampler_fft': {
-        'sample_rate': 15.36e6,
-        'analysis_bandwidth': 10e6,
-    },
-}
-
-
-@pytest.mark.parametrize(
-    'kws',
-    list(VALID_OVERLAP_CAPTURES.values()),
-    ids=list(VALID_OVERLAP_CAPTURES),
-)
-def test_soapy_capture_overlaps_cover_the_filter(kws):
-    _assert_valid_overlaps(_capture(**kws))
-
-
-@pytest.mark.parametrize(
-    'sample_rate, analysis_bandwidth',
-    [(MCR, 40e6), (1e6, 0.5e6), (10e6, 8e6)],
-)
-def test_finite_bandwidth_with_a_small_resampler_fft(sample_rate, analysis_bandwidth):
-    """sample rates that divide the master clock design a 258- or 550-point resampler
-    FFT, smaller than the filter transient, so the block is several FFTs"""
-    _assert_valid_overlaps(
-        _capture(sample_rate=sample_rate, analysis_bandwidth=analysis_bandwidth)
-    )

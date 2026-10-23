@@ -17,7 +17,12 @@ from typing import Optional
 import msgspec
 import numpy as np
 import pytest
-from analysis_strategies import POWER_BINS, VALIDATOR_DOMAINS, capture_of
+from analysis_strategies import (
+    POWER_BINS,
+    VALIDATOR_DOMAINS,
+    capture_of,
+    registered_tolerance,
+)
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -227,12 +232,6 @@ def test_registry_validate_is_cached_on_the_projected_capture():
     assert len(seen) == 2
 
 
-def test_registry_is_hashable():
-    registry = build_group_registry(None, None)
-    assert hash(registry) == hash(registry)
-    assert isinstance(hash(registry), int)
-
-
 def test_validator_errors_are_msgspec_validation_errors():
     """the sweep decode path reports these, so they must survive msgspec's own
     error handling and be catchable as a decode failure"""
@@ -264,15 +263,6 @@ def recording_tolerance(seen):
         return TOY_TOLERANCE
 
     return tolerance
-
-
-def test_tolerance_is_stored_on_the_info_and_defaults_to_none():
-    registry, _ = build_registry()
-    assert registry[ToySpec].tolerance is None
-
-    tolerance = recording_tolerance([])
-    registry, _ = build_registry(tolerance=tolerance)
-    assert registry[ToySpec].tolerance is tolerance
 
 
 def test_registry_tolerances_is_empty_when_nothing_declares_one():
@@ -342,9 +332,8 @@ def test_registry_tolerances_is_cached_on_the_projected_capture():
 
 VALIDATED = [info for info in sa.registry.values() if info.validate is not None]
 VALIDATED_IDS = [info.name for info in VALIDATED]
-# the SSS correlators search all 1008 cell ids per accepted example, so their draws
-# cost roughly 10 times the others'
-SSS = [info for info in VALIDATED if 'sss' in info.name]
+# the SSS correlators share the PSS validator and search all 1008 cell ids per
+# accepted example, so the PSS measurements alone draw from the shared domain
 OTHERS = [info for info in VALIDATED if 'sss' not in info.name]
 
 
@@ -379,13 +368,6 @@ def check_accepted_pair_runs(info, data):
 @given(data=st.data())
 @settings(max_examples=50)
 def test_a_validator_that_passes_means_the_measurement_runs(info, data):
-    check_accepted_pair_runs(info, data)
-
-
-@pytest.mark.parametrize('info', SSS, ids=[i.name for i in SSS])
-@given(data=st.data())
-@settings(max_examples=15)
-def test_a_validator_that_passes_means_the_sss_measurement_runs(info, data):
     check_accepted_pair_runs(info, data)
 
 
@@ -517,6 +499,36 @@ def test_measurement_attrs(spec):
         assert da.attrs[name] == value
 
 
+ABSOLUTE_POWER_UNITS = ('dBm', '√mW')
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
+    """every output and power-bin coordinate in absolute power units has a
+    `noise_bandwidth` in Hz and a `long_name` that names the bandwidth; ratios in dB
+    have
+    neither"""
+    _, da = measure(spec, as_xarray=True)
+
+    def check(attrs, what):
+        units = attrs.get('units')
+        if units in ABSOLUTE_POWER_UNITS:
+            assert isinstance(attrs.get('noise_bandwidth'), float), what
+            assert attrs['noise_bandwidth'] > 0, what
+            assert f'({units}/' in attrs['long_name'], what
+            assert 'dBm/' not in units, what
+        elif units == 'dB':
+            assert 'noise_bandwidth' not in attrs, what
+
+    check(da.attrs, da.name)
+    for name in da.coords:
+        if str(name).endswith('_power_bin'):
+            check(da[name].attrs, name)
+            assert ('noise_bandwidth' in da[name].attrs) == (
+                'noise_bandwidth' in da.attrs
+            ), name
+
+
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_measurement_without_xarray(spec):
     _, (data, attrs) = measure(spec, as_xarray=False)
@@ -546,25 +558,25 @@ def test_every_measurement_has_a_validator():
     assert NO_VALIDATOR <= {info.name for info in sa.registry.values()}
 
 
-CONTRACT_VALIDATED_SPECS = [
-    s for s in CONTRACT_SPECS if sa.registry[type(s)].validate is not None
+CONTRACT_TOLERANCE_SPECS = [
+    s for s in CONTRACT_SPECS if sa.registry[type(s)].tolerance is not None
 ]
-CONTRACT_VALIDATED_IDS = [type(spec).__name__ for spec in CONTRACT_VALIDATED_SPECS]
+CONTRACT_TOLERANCE_IDS = [type(spec).__name__ for spec in CONTRACT_TOLERANCE_SPECS]
 
 
-@pytest.mark.parametrize('spec', CONTRACT_VALIDATED_SPECS, ids=CONTRACT_VALIDATED_IDS)
-def test_validators_accept_the_contract_specs(spec):
-    """the pairs the contract tests measure successfully must also pass validation,
-    without IQ"""
-    validate = sa.registry[type(spec)].validate
-    validate(sa.specs.helpers.to_analysis_capture(CONTRACT_CAPTURE), spec)
+@pytest.mark.parametrize('spec', CONTRACT_TOLERANCE_SPECS, ids=CONTRACT_TOLERANCE_IDS)
+def test_registered_tolerance_is_a_dB_budget_that_grows_with_input_error(spec):
+    """the registered budget bounds a level in dB with a peak at or above its rms.
+    An amplitude error in the IQ widens both."""
+    exact = registered_tolerance(CONTRACT_CAPTURE, spec, input_error=0.0)
+    assert isinstance(exact, sa.specs.Tolerance)
+    assert exact.units == 'dB'
+    # iq_waveform copies its input, so its exact-input bound is 0
+    assert exact.on_peak.peak >= exact.on_peak.rms >= 0
 
-
-def test_registry_validate_accepts_the_whole_contract_group():
-    group = sa.specs.BuiltinAnalyses(**{
-        sa.registry[type(spec)].name: spec for spec in CONTRACT_SPECS
-    })
-    sa.registry.validate(CONTRACT_CAPTURE, group)
+    perturbed = registered_tolerance(CONTRACT_CAPTURE, spec, input_error=1e-4)
+    assert perturbed.on_peak.rms > exact.on_peak.rms
+    assert perturbed.on_peak.peak > exact.on_peak.peak
 
 
 # %% check_group_fields

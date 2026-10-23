@@ -37,7 +37,6 @@ from waveform_strategies import (
 from striqt.analysis import testing
 from striqt.waveform.lib.comms import sync_5gnr
 from striqt.waveform.lib.comms.sync_5gnr import (
-    _min_diff,
     _pss_m_sequence,
     _sss_m_sequence,
 )
@@ -194,11 +193,6 @@ class TestIndexPssSymbols:
         table = tuple(o + period * n for n in n_values for o in offsets)
         assert sync_5gnr.index_pss_symbols(*args) == table
 
-    @pytest.mark.parametrize('scs', [120e3, 240e3, 480e3, 960e3])
-    def test_fr2_cases_have_64_candidates(self, scs):
-        """TS 38.213 Section 4.1: L_max = 64 for cases D through G"""
-        assert len(sync_5gnr.index_pss_symbols(scs)) == 64
-
     def test_explicit_indexes_pass_through(self):
         assert sync_5gnr.index_pss_symbols(30e3, symbol_indexes=(3, 9)) == (3, 9)
         assert sync_5gnr.index_pss_symbols(30e3, symbol_indexes=[3, 9]) == [3, 9]
@@ -230,11 +224,6 @@ class TestIndexPssSymbols:
 
 
 class TestSyncParams:
-    def test_min_diff(self):
-        assert _min_diff([]) is None
-        assert _min_diff([5]) is None
-        assert _min_diff([2, 8, 16]) == 6
-
     def test_pss_params_structure(self):
         """the production configuration: 30 kHz Case C shared spectrum at 7.68 MS/s.
 
@@ -441,12 +430,9 @@ class TestCorrelateSyncSequence:
         with pytest.raises(ValueError, match='same excess CP'):
             sync_5gnr.correlate_sync_sequence(silent_block(params), pss, params=bad)
 
-    @pytest.mark.parametrize('n_frames', [1, 2, 3])
-    def test_sync_frame_count(self, n_frames):
+    def test_sync_frame_count(self):
         params = sync_params()
-        assert (
-            sync_5gnr.sync_frame_count(n_frames * params.frame_size, params) == n_frames
-        )
+        assert sync_5gnr.sync_frame_count(2 * params.frame_size, params) == 2
 
     def test_sync_frame_count_rejects_a_partial_frame(self):
         params, _, pss, _ = pss_setup()

@@ -497,9 +497,3 @@ def json_trees(max_leaves: int = 25):
 
 hashable_values = st.one_of(scalars, st.tuples(scalars, scalars))
 frozendict_dicts = st.dictionaries(dict_keys, hashable_values, max_size=6)
-unhashable_values = st.one_of(
-    st.lists(scalars, max_size=3), st.dictionaries(dict_keys, scalars, max_size=3)
-)
-unhashable_frozendicts = st.dictionaries(
-    dict_keys, unhashable_values, min_size=1, max_size=4
-).map(frozendict)
