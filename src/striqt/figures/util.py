@@ -37,10 +37,10 @@ def noise_bandwidth(data: 'xr.Dataset', var_name: str) -> 'xr.DataArray | float 
 
     The `noise_bandwidth` attr of `var_name` is returned when present. For a
     coordinate without the attr, the result is the `noise_bandwidth` of a data
-    variable on the dimension of the coordinate. For values with `units` in dBm and no attr, the result
-    is the `analysis_bandwidth` coordinate where that is finite and the `sample_rate`
-    coordinate where `analysis_bandwidth` is infinite. Any other variable has no noise
-    bandwidth.
+    variable on the dimension of the coordinate. For values with `units` of dBm or
+    √mW and no attr, the result is the `analysis_bandwidth` coordinate where that is
+    finite and the `sample_rate` coordinate where `analysis_bandwidth` is infinite.
+    Any other variable has no noise bandwidth.
 
     Returns:
         a float, a DataArray over the captures when the bandwidth is a capture
@@ -55,7 +55,7 @@ def noise_bandwidth(data: 'xr.Dataset', var_name: str) -> 'xr.DataArray | float 
         return from_owner
 
     units = str(da.attrs.get('units', ''))
-    if not units.startswith('dBm'):
+    if not units.startswith(('dBm', '√mW')):
         return None
     if 'analysis_bandwidth' in data.variables:
         bw = data['analysis_bandwidth']

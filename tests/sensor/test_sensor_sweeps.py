@@ -614,7 +614,8 @@ def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
 
 # %% bandwidth attrs of a store written from more than one analysis bandwidth
 
-CHANNEL_POWER = ss.specs.BundledAnalysis.from_dict({
+CAPTURE_BANDWIDTH_OUTPUTS = ss.specs.BundledAnalysis.from_dict({
+    'iq_waveform': {},
     'channel_power_time_series': {'detector_period': DETECTOR_PERIOD},
     'channel_power_histogram': {
         'detector_period': DETECTOR_PERIOD,
@@ -625,25 +626,23 @@ CHANNEL_POWER = ss.specs.BundledAnalysis.from_dict({
 })
 
 
-def test_mixed_analysis_bandwidth_store_resolves_channel_power_bandwidth_per_capture(
+def test_mixed_analysis_bandwidth_store_resolves_bandwidth_per_capture(
     tmp_path, monkeypatch
 ):
-    """channel power outputs written from captures at two analysis bandwidths carry no
-    `noise_bandwidth` attr, and `striqt.figures` resolves the bandwidth of each capture
-    from the coordinates: the finite `analysis_bandwidth`, else the `sample_rate`"""
+    """channel power and IQ outputs written from captures at two analysis bandwidths
+    carry no `noise_bandwidth` attr, and `striqt.figures` resolves the bandwidth of
+    each capture from the coordinates: the finite `analysis_bandwidth`, else the
+    `sample_rate`"""
     from striqt.figures import util as figures_util
 
     # open_resources chdirs into the spec directory and does not change back
     monkeypatch.chdir(os.getcwd())
-    captures = (
-        tone_capture(ONE_PORT),
-        tone_capture({**FILTER_ONLY, 'port': 0}, duration=ONE_PORT['duration']),
-    )
+    captures = (tone_capture(ONE_PORT), tone_capture(ONE_PORT, analysis_bandwidth=5e6))
     path = tmp_path / 'out.zarr'
     sweep = preset_sweep(
         'single_tone',
         captures,
-        analysis=CHANNEL_POWER,
+        analysis=CAPTURE_BANDWIDTH_OUTPUTS,
         sink=ss.specs.ZarrSink(path=str(path)),
     )
 
@@ -652,12 +651,10 @@ def test_mixed_analysis_bandwidth_store_resolves_channel_power_bandwidth_per_cap
             pass
     ds = sa.load(path)
 
-    assert ds.analysis_bandwidth.values.tolist() == [
-        float('inf'),
-        FILTER_ONLY['analysis_bandwidth'],
-    ]
-    expected = [ONE_PORT['sample_rate'], FILTER_ONLY['analysis_bandwidth']]
+    assert ds.analysis_bandwidth.values.tolist() == [float('inf'), 5e6]
+    expected = [ONE_PORT['sample_rate'], 5e6]
     outputs = (
+        'iq_waveform',
         'channel_power_time_series',
         'channel_power_histogram',
         'channel_power_bin',
@@ -665,7 +662,7 @@ def test_mixed_analysis_bandwidth_store_resolves_channel_power_bandwidth_per_cap
     for name in outputs:
         assert 'noise_bandwidth' not in ds[name].attrs, name
     # a histogram resolves through its bin coordinate, as check_noise_floor does
-    for name in ('channel_power_time_series', 'channel_power_bin'):
+    for name in ('iq_waveform', 'channel_power_time_series', 'channel_power_bin'):
         bandwidth = figures_util.noise_bandwidth(ds, name)
         assert bandwidth is not None, name
         assert bandwidth.values.tolist() == expected, name

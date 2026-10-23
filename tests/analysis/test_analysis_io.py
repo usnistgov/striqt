@@ -167,6 +167,16 @@ def legacy_store_dataset():
                     'noise_bandwidth': 10e6,
                 },
             ),
+            'iq_waveform': (
+                ('capture', 'iq_index'),
+                np.zeros((2, 3), 'complex64'),
+                {
+                    'standard_name': 'IQ waveform',
+                    'units': '√mW',
+                    'noise_bandwidth': 10e6,
+                    'long_name': 'IQ waveform (√mW/10 MHz)',
+                },
+            ),
             'cellular_5g_pss_correlation': (
                 ('capture', 'cellular_ssb_lag'),
                 np.zeros((2, 3), 'complex64'),
@@ -246,21 +256,23 @@ def test_repair_legacy_attrs_corrects_the_correlator_noise_bandwidth():
     assert attrs['sample_rate'] == pytest.approx(7.68e6)
 
 
-def test_repair_legacy_attrs_removes_channel_power_bandwidth_attrs():
+def test_repair_legacy_attrs_removes_capture_bandwidth_attrs():
     """a store-wide `noise_bandwidth` and bandwidth-suffixed `long_name` on channel
-    power outputs are removed; the bandwidth of those outputs is per capture"""
+    power and IQ outputs are removed; the bandwidth of those outputs is per capture"""
     ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
 
     names = (
         'channel_power_time_series',
         'channel_power_histogram',
         'channel_power_bin',
+        'iq_waveform',
     )
     for name in names:
         assert 'noise_bandwidth' not in ds[name].attrs, name
         assert 'long_name' not in ds[name].attrs, name
     assert ds.channel_power_time_series.attrs['units'] == 'dBm'
     assert ds.channel_power_bin.attrs['units'] == 'dBm'
+    assert ds.iq_waveform.attrs['units'] == '√mW'
 
 
 def test_repair_legacy_attrs_keeps_spectral_densities_and_current_stores():
