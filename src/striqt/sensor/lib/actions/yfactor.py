@@ -35,8 +35,9 @@ def calibration_analysis(
     """return the analysis a Y-factor calibration runs on each capture.
 
     The analysis is `channel_power_time_series` with the ``rms`` and ``peak``
-    detectors. The detector period is `spec.calibration.detector_period`, or the one
-    `duration` that the captures and loops share when that is None.
+    detectors, as an instance of the analysis group of the binding of `spec`. The
+    detector period is `spec.calibration.detector_period`, or the one `duration`
+    that the captures and loops share when that is None.
 
     Raises:
         SpecValidationError: at ``$.calibration.detector_period`` when

@@ -108,9 +108,10 @@ def bind_sensor(
     The returned `Controller` subclass has the class attributes `sensor` (a
     `SensorBinding`) and `schema`. The `sensor.sweep_spec_cls` of the returned class
     is a subclass of the action spec type, tagged with `key` in the
-    ``sensor_binding`` field. In that subclass, `source`, `peripherals`, and (when
-    the action declares the field) `captures` are annotated with the types in
-    `schema`. Decoding a sweep file whose ``sensor_binding`` is `key` produces an
+    ``sensor_binding`` field. In that subclass, `source`, `peripherals`, (when the
+    action declares the field) `captures`, and (when the action is a `Sweep`)
+    `analysis` are annotated with the types in `schema`. Decoding a sweep file whose
+    ``sensor_binding`` is `key` produces an
     instance of that class. The tagged class has the class attributes `sensor` (the
     `SensorBinding`), `schema`, `controller` (the returned class), and `sweep_cls`
     (the bound `Sweep` class with the same spec types; the class itself when the
@@ -123,15 +124,18 @@ def bind_sensor(
     Args:
         key: the ``sensor_binding`` value of sweep files, and the registry key
         sensor: the implementation classes
-        schema: the spec types; `schema.action` selects the action spec type
+        schema: the spec types; `schema.action` selects the action spec type and
+            `schema.analysis` the analysis group
         register: if True, make the binding available by `key` to `get_controller`
         module: the `__module__` recorded on the controller class, which the API
             documentation groups by; the caller's module when None
 
     Raises:
         TypeError: if `sensor` or `schema` has the wrong type, if `key` is already
-            registered, if `sensor.sweep_spec_cls` and `schema.action` disagree, or if
-            the action's `check_schema` rejects the spec types
+            registered, if `sensor.sweep_spec_cls` and `schema.action` disagree, if
+            the action's `check_schema` rejects the spec types, or if a field of
+            `schema.analysis` is not a registered measurement under the registered
+            name
     """
     if not isinstance(sensor, Sensor):
         raise TypeError('sensor argument must be a Sensor instance')

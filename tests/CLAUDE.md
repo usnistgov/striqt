@@ -37,7 +37,9 @@ The suite is flat and every helper is imported by bare name, so a second definit
 same thing is invisible until the two drift. Look here before writing setup:
 
 - `tests/conftest.py`: fixtures (`xp`, `cupy_available`, `real_soapy`, `armed_tone_controller`,
-  the autouse `restore_logging_state` and `isolated_persistent_cache`), the array and scalar
+  the autouse `restore_logging_state` and `isolated_persistent_cache`, and
+  `isolated_bindings`/`isolated_analysis_registry` for a test that binds a sensor or
+  registers a measurement with the live registries), the array and scalar
   hypothesis primitives (`float_arrays`, `iq_waveforms`, `scalars`, `bounded_ints`,
   `finite_floats`, `short_text`), the sweep-file path constants (`SWEEP_DIR`, `SITE_DIR`,
   `SITE_SPEC`, `FAKE_SOAPY_SPEC`), and the `construct`/`raises_on_both_paths` helpers for
@@ -55,7 +57,9 @@ same thing is invisible until the two drift. Look here before writing setup:
   spectrogram fixtures).
 - `tests/sensor/sweep_strategies.py`: sensor spec factories and constants (`SOURCE`, the
   function-generator source spec nine modules share; `make_capture`/`make_sweep`/
-  `make_sweep_kws` generic builders; `SPG`, `RESOLUTION_MSG`).
+  `make_sweep_kws` generic builders; `SPG`, `RESOLUTION_MSG`; the `QuickAnalyses` and
+  `CellularAnalyses` groups with the unregistered `quick_binding` and
+  `restricted_cellular_binding`).
 - `tests/sensor/synthetic_sources.py`: the sensor harness — the four capture presets,
   `preset_capture`, `preset_sweep`, `tone_capture`, `tone_captures`, `tone_sweep`, `fs_sdr`,
   `expected_raw`, `build_acquired_iq`, `acquire_corrected`, `expected_corrected`,

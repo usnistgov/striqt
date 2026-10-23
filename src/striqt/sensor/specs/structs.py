@@ -520,7 +520,8 @@ class CapturePlan(
 class Sweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
     """the spec of a sweep, and the form every action opens resources for.
 
-    `analysis` is evaluated on each expanded capture, with the capture's
+    `analysis` is an instance of the group that `Schema.analysis` names for the
+    binding, and is evaluated on each expanded capture with the capture's
     `adjust_analysis` applied on top. `options` selects the warmup, IQ reuse, and
     the `loop_only_nyquist` filter of the expansion. `plot_hint` is read only by
     `striqt.figures`. `sink` is a `ZarrSink`, which narrows the `Sink` of
@@ -595,6 +596,7 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only
 
     @classmethod
     def check_schema(cls, schema: Any) -> None:
+        """raise unless `schema.analysis` declares `channel_power_time_series`."""
         _require_group_fields(
             schema.analysis, ('channel_power_time_series',), cls.__name__
         )
@@ -852,6 +854,12 @@ class Cellular5GNRSweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
 
     @classmethod
     def check_schema(cls, schema: Any) -> None:
+        """raise unless `schema` can configure a sweep over cell channels.
+
+        The capture type must have a `center_frequency` field, and `schema.analysis`
+        must declare every field of `Cellular5GNRAnalysis` with the spec type of the
+        `BuiltinAnalyses` field of that name.
+        """
         if 'center_frequency' not in schema.capture.__struct_fields__:
             raise TypeError(
                 f'{cls.__name__} needs a capture type with a center_frequency field, '

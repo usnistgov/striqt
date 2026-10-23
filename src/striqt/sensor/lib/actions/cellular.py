@@ -318,7 +318,8 @@ def cellular_analysis(
 ) -> specs.AnalysisGroup:
     """return the `Sweep` analysis that `spec.analysis` and `subcarrier_spacing` select.
 
-    Each enabled block becomes the measurement of the same name, with the exposed
+    The result is an instance of the analysis group of the binding of `spec`. Each
+    enabled block becomes the measurement of the same name, with the exposed
     parameters copied, the `FIXED` parameters computed from the spacing, and a None
     `DEFAULTED` parameter replaced by the derived value.
 

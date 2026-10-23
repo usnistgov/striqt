@@ -14,7 +14,9 @@ class Schema(Generic[SS, SP, SC, SA, PS, PC]):
     """the spec types of a sensor binding.
 
     `action` is the action spec type that `bind_sensor` subclasses. The
-    `ActionRunner` registered for that type runs the bound spec.
+    `ActionRunner` registered for that type runs the bound spec. `analysis` is the
+    `AnalysisGroup` subclass that the ``analysis:`` block of the bound `Sweep` is
+    decoded against, and the type of the analysis that the other actions generate.
     """
 
     source: type[SS]

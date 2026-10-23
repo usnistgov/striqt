@@ -300,9 +300,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         """register the decorated function as the measurement configured by `spec_type`.
 
         Registration mutates this registry when the decorator is applied. A sweep
-        reaches the measurement through the ``analysis:`` block only when
-        `specs.BuiltinAnalyses` declares an ``Optional[spec_type]`` field of the same
-        `name`.
+        reaches the measurement through the ``analysis:`` block only when the
+        analysis group of the sensor binding declares an ``Optional[spec_type]``
+        field of the same `name`. `specs.BuiltinAnalyses` is the default group.
 
         The decorated function is called as ``func(iq, capture, **spec.to_dict())``
         and returns an array, or an ``(array, attrs)`` tuple, whose axes are `dims`.
