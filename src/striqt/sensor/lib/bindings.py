@@ -23,6 +23,8 @@ from .peripherals import NoPeripherals
 from .. import specs
 from .typing import Peripherals, PC, PS, SA, SC, SS, SP, SourceBackend, TypeVar
 import msgspec
+import striqt.analysis as sa
+from striqt.analysis.lib.register import check_group_registered
 
 TC2 = TypeVar('TC2', bound=specs.SensorCapture)
 TP2 = TypeVar('TP2', bound=specs.Peripherals)
@@ -142,6 +144,7 @@ def bind_sensor(
 
     action_type = _resolve_action_type(sensor, schema)
     action_type.check_schema(schema)
+    check_group_registered(schema.analysis, sa.registry)
 
     binding = SensorBinding(
         source_cls=cast(type[SourceBackend[SS, SC]], sensor.source_cls),
@@ -243,6 +246,7 @@ def mock_binding(
             peripherals=origin.schema.peripherals,
             arm_like=origin.schema.arm_like,
             init_like=ctrl_cls.schema.init_like,
+            analysis=origin.schema.analysis,
         ),
         register=register,
         module=origin.__module__,
@@ -297,6 +301,14 @@ def _bind_spec_class(
     ]
     if 'captures' in base.__struct_fields__:
         fields.append(('captures', tuple[schema.capture, ...], ()))
+    # only Sweep's `analysis` is the group; the calibration and cellular specs name
+    # their own block under the same field
+    if issubclass(base, specs.Sweep):
+        fields.append((
+            'analysis',
+            schema.analysis,
+            msgspec.field(default_factory=schema.analysis),
+        ))
 
     def __post_init__(self: Any) -> None:
         if self.mock_source is not None and self.mock_source not in registry:

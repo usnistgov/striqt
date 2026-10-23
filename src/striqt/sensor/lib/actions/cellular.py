@@ -152,7 +152,7 @@ def resolve_capture(
     return capture.replace(adjust_analysis=adjust_analysis, **derived)
 
 
-def analysis_parameter_names(analysis: specs.BuiltinAnalyses) -> frozenset[str]:
+def analysis_parameter_names(analysis: specs.AnalysisGroup) -> frozenset[str]:
     """return the field names of every enabled measurement in `analysis`."""
     names: set[str] = set()
     for meas in analysis.to_dict().values():
@@ -315,7 +315,7 @@ check_all_blocks()
 
 def cellular_analysis(
     spec: specs.Cellular5GNRSweep[Any, Any, Any, Any], subcarrier_spacing: float
-) -> specs.BuiltinAnalyses:
+) -> specs.AnalysisGroup:
     """return the `Sweep` analysis that `spec.analysis` and `subcarrier_spacing` select.
 
     Each enabled block becomes the measurement of the same name, with the exposed
@@ -356,7 +356,7 @@ def cellular_analysis(
             ('.source', '.signal_trigger'),
         )
 
-    return specs.BuiltinAnalyses.from_dict(result)
+    return specs.action.analysis_group_type(spec).from_dict(result)
 
 
 @sa.util.lru_cache()

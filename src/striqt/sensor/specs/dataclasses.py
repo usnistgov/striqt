@@ -1,6 +1,6 @@
 from __future__ import annotations
 import dataclasses
-from typing import Any, Callable, Generic, Literal
+from typing import Any, Callable, cast, Generic, Literal
 
 from . import structs, paths
 from ..lib.typing import SS, SC, SP, SA, PS, PC
@@ -26,12 +26,16 @@ class Schema(Generic[SS, SP, SC, SA, PS, PC]):
     arm_like: Callable[PC, Any]
 
     action: type[structs.ActionSpec[SS, SP, SA]] = structs.Sweep
+    analysis: type[SA] = dataclasses.field(
+        default=cast('type[SA]', sa.specs.BuiltinAnalyses)
+    )
 
     def __post_init__(self):
         assert issubclass(self.source, structs.Source)
         assert issubclass(self.capture, structs.SensorCapture)
         assert issubclass(self.peripherals, structs.Peripherals)
         assert issubclass(self.action, structs.ActionSpec)
+        assert issubclass(self.analysis, sa.specs.AnalysisGroup)
 
 
 @dataclasses.dataclass

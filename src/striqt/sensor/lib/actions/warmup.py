@@ -43,6 +43,7 @@ def warmup_binding(
         capture=origin.schema.capture,
         arm_like=origin.schema.arm_like,
         peripherals=origin.schema.peripherals,
+        analysis=origin.schema.analysis,
     )
     return bindings.bind_sensor(
         f'warmup_{origin.sensor.sweep_spec_cls.__name__}',

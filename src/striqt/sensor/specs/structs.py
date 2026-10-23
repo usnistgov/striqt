@@ -21,7 +21,7 @@ from striqt.analysis.specs import BuiltinAnalyses, BuiltinTriggers, Capture, Spe
 from striqt.analysis.specs import frozendict
 
 # re-exported through striqt.sensor.specs as the annotation of any analysis bundle
-from striqt.analysis.specs import AnalysisGroup  # noqa: F401
+from striqt.analysis.specs import AnalysisGroup
 from striqt.analysis.specs.helpers import SpecValidationError, subset_of
 
 from ..lib.typing import TypeVar, SS, SP, SC, SA
@@ -421,6 +421,30 @@ AdjustCapturesType = dict[
 ]
 
 
+def _require_group_fields(
+    group: type[AnalysisGroup], names: tuple[str, ...], action: str
+) -> None:
+    """raise unless `group` declares each of `names` as `BuiltinAnalyses` does.
+
+    Raises:
+        TypeError: naming `action` and the first of `names` that `group` lacks or
+            declares with a spec type other than the `BuiltinAnalyses` field
+    """
+    fields = {f.name: f.type for f in msgspec.structs.fields(group)}
+    builtin = {f.name: f.type for f in msgspec.structs.fields(BuiltinAnalyses)}
+    for name in names:
+        if name not in fields:
+            raise TypeError(
+                f'{action} needs an analysis group with a {name!r} field, but '
+                f'{group.__name__} has none'
+            )
+        if fields[name] != builtin[name]:
+            raise TypeError(
+                f'{action} needs {group.__name__}.{name} to be {builtin[name]!r}, '
+                f'not {fields[name]!r}'
+            )
+
+
 class ActionSpec(SpecBase, Generic[SS, SP, SA], frozen=True, kw_only=True):
     """the top-level spec that an action runs.
 
@@ -507,7 +531,7 @@ class Sweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
 
     sink: ZarrSink = ZarrSink()
     plot_hint: Union[PlotOptions, None] = None
-    analysis: BuiltinAnalyses = BuiltinAnalyses()
+    analysis: SA = cast(SA, BuiltinAnalyses())
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
 
     def __post_init__(self) -> None:
@@ -561,6 +585,12 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only
                 ('.source', '.calibration'),
             )
         action.validate_action(self)
+
+    @classmethod
+    def check_schema(cls, schema: Any) -> None:
+        _require_group_fields(
+            schema.analysis, ('channel_power_time_series',), cls.__name__
+        )
 
 
 # the cyclic prefix model is validated at 30 kHz only (strict xfails in
@@ -820,6 +850,9 @@ class Cellular5GNRSweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
                 f'{cls.__name__} needs a capture type with a center_frequency field, '
                 f'but {schema.capture.__name__} has none'
             )
+        _require_group_fields(
+            schema.analysis, Cellular5GNRAnalysis.__struct_fields__, cls.__name__
+        )
 
 
 # %% Non-Sweep specs

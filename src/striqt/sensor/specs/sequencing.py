@@ -205,7 +205,7 @@ def adjust_analysis(
             f'analysis_adjust keys {unused_names} do not match any analysis parameters'
         )
 
-    return sa.specs.helpers.freeze(structs.BuiltinAnalyses.from_dict(result))
+    return sa.specs.helpers.freeze(type(analyses).from_dict(result))
 
 
 def _resolve_capture_cls(sweep: structs.CapturePlan[Any, Any, SC, Any]) -> type[SC]:

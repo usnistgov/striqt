@@ -45,6 +45,20 @@ def validate_action(spec: structs.ActionSpec[Any, Any, Any]) -> None:
     runner.validate(spec)
 
 
+def analysis_group_type(
+    spec: structs.ActionSpec[Any, Any, Any],
+) -> type[sa.specs.AnalysisGroup]:
+    """return the analysis group type of the binding of `spec`.
+
+    The group is `schema.analysis` of the bound class, or `BuiltinAnalyses` for an
+    instance of an unbound spec class.
+    """
+    schema = type(spec).schema
+    if schema is None:
+        return structs.BuiltinAnalyses
+    return schema.analysis
+
+
 def validate_sweep(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
