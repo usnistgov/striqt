@@ -26,10 +26,59 @@ PORT_DIM = 'port'
 
 @dataclasses.dataclass
 class AcquiredIQ:
+    """an acquired IQ waveform and the conditioning that measurements may select from.
+
+    `select` returns the waveform conditioned as the preferences request when a stage
+    is available, and the closest available stage otherwise.
+    """
+
     pre_align: Array
     pre_filter: Array | None
     aligned: Array | None
     capture: specs.Capture | None
+
+    def select(
+        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+    ) -> Array:
+        """return the waveform conditioned as `prefer_filtered` and `prefer_aligned` allow.
+
+        Args:
+            prefer_filtered: True for the waveform low-passed to the capture
+                `analysis_bandwidth`, when a filter was applied
+            prefer_aligned: True for the waveform shifted by the signal trigger, when
+                a trigger ran
+
+        Returns:
+            shape (port, sample) array in the namespace of the acquisition
+        """
+        if not prefer_filtered and self.pre_filter is not None:
+            return self.pre_filter
+        if prefer_aligned and self.aligned is not None:
+            return self.aligned
+        return self.pre_align
+
+
+def select_waveform(
+    iq: Array | AcquiredIQ, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+) -> Array:
+    """return the waveform to measure from an array or an `AcquiredIQ`.
+
+    An array is returned unchanged. For an `AcquiredIQ`, the return value is
+    `AcquiredIQ.select` of `iq` with the same preferences.
+
+    Args:
+        iq: shape (port, sample) array, or the acquisition that wraps one
+        prefer_filtered: True for the waveform low-passed to the capture
+            `analysis_bandwidth`, when the acquisition applies one
+        prefer_aligned: True for the waveform shifted by the signal trigger, when the
+            acquisition runs one
+
+    Returns:
+        shape (port, sample) array in the namespace of the acquisition
+    """
+    if isinstance(iq, AcquiredIQ):
+        return iq.select(prefer_filtered=prefer_filtered, prefer_aligned=prefer_aligned)
+    return iq
 
 
 _ENG_PREFIXES = {

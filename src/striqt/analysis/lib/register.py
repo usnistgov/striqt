@@ -18,6 +18,7 @@ from . import util
 if TYPE_CHECKING:
     from striqt.waveform.lib.typing import ArrayBackend, DTypeLike
     import inspect
+    from .dataarrays import AcquiredIQ
     from .typing import (
         AnalysisFunc,
         AnalysisFuncWrapper,
@@ -88,7 +89,7 @@ class KwArgCache:
     def apply(self, func: 'AnalysisFunc[P, RM]') -> 'AnalysisFunc[P, RM]':
         @functools.wraps(func)
         def wrapped(
-            iq: Array,
+            iq: Array | AcquiredIQ,
             capture: specs.Capture,
             *args: P.args,
             **kwargs: P.kwargs,
@@ -391,7 +392,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         ) -> WrappedAnalysis[P, Measurement]:
             @functools.wraps(func)
             def wrapped(
-                iq: Array,
+                iq: Array | AcquiredIQ,
                 capture: specs.Capture,
                 as_xarray: bool | Literal['delayed'] = True,
                 *args: P.args,
@@ -681,7 +682,7 @@ class Trigger:
 
         return cls(name, meas_spec, registry)
 
-    def __call__(self, iq: Array, capture: specs.Capture) -> Array:
+    def __call__(self, iq: Array | AcquiredIQ, capture: specs.Capture) -> Array:
         meas_kws = self.meas_spec.to_dict()
         ret = self.info.func(iq, capture, as_xarray=False, **meas_kws)
         return ret[0]
@@ -735,7 +736,9 @@ def _make_measurement_signature(spec_cls):
 
     parameters = [
         inspect.Parameter(
-            'iq', inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation='Array'
+            'iq',
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation='Array | AcquiredIQ',
         ),
         inspect.Parameter(
             'capture',
@@ -749,12 +752,12 @@ def _make_measurement_signature(spec_cls):
 
 def _make_measurement_docstring(spec_cls):
     extra_prepend = {
-        'iq': 'input waveform array',
+        'iq': 'input waveform array, or an acquisition whose conditioning the measurement selects with `select_waveform`',
         'capture': 'acquisition specification',
         'as_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
     }
     extra_types = {
-        'iq': 'Array',
+        'iq': 'Array or AcquiredIQ',
         'capture': 'striqt.analysis.specs.Capture',
         'as_xarray': "(bool or 'delayed')",
     }

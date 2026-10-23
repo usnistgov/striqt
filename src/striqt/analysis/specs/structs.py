@@ -141,7 +141,8 @@ class Analysis(SpecBase, kw_only=True, frozen=True):
         Analysis result of type `(xarray.DataArray if as_xarray else type(iq))`
 
     Args:
-        iq (numpy.ndarray or cupy.ndarray): the M-channel input waveform of shape (M,N)
+        iq (numpy.ndarray, cupy.ndarray, or AcquiredIQ): the M-channel input waveform
+            of shape (M,N), or the acquisition from which the measurement selects one
         capture:
         as_xarray (bool): True to return xarray.DataArray or False to match type(iq)
     """
