@@ -168,7 +168,14 @@ def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> 'xr.Dataset':
 
 
 _BANDWIDTH_UNITS = re.compile(r'^(dBm|dB|√mW)/(.+)$')
+_BANDWIDTH_SUFFIX = re.compile(r' \((dBm|dB|√mW)/[^)]+\)$')
 _POWER_BIN_SUFFIX = '_power_bin'
+_CHANNEL_POWER_NAMES = frozenset({
+    'channel_power_time_series',
+    'channel_power_histogram',
+    'cyclic_channel_power',
+    'channel_power_bin',
+})
 
 
 def _owner_noise_bandwidth(data: xr.Dataset, coord_name: str) -> float | None:
@@ -194,6 +201,11 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
     rewrite applies to every variable and coordinate that matches one of these
     conditions:
 
+    * A channel power variable (`channel_power_time_series`,
+      `channel_power_histogram`, `cyclic_channel_power`) or the `channel_power_bin`
+      coordinate with `noise_bandwidth`: the attr is removed, with any `long_name`
+      that ends in a bandwidth. The noise bandwidth of these outputs is the
+      per-capture `analysis_bandwidth` coordinate.
     * A variable with `units` starting in ``'√mW'`` and equal `noise_bandwidth` and
       `sample_rate` attrs: `noise_bandwidth` is set to the `subcarrier_spacing` attr of
       the variable.
@@ -214,6 +226,13 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
     Returns:
         the same dataset object
     """
+    for name in _CHANNEL_POWER_NAMES.intersection(map(str, data.variables)):
+        attrs = data[name].attrs
+        attrs.pop('noise_bandwidth', None)
+        long_name = attrs.get('long_name')
+        if isinstance(long_name, str) and _BANDWIDTH_SUFFIX.search(long_name):
+            del attrs['long_name']
+
     for name, var in data.variables.items():
         attrs = var.attrs
         units = str(attrs.get('units', ''))

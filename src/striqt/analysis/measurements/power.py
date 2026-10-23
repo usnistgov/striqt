@@ -182,9 +182,10 @@ def channel_power_time_series(
     ``(power_detector, time_elapsed)``, with `time_elapsed` in s from the start of the
     capture in steps of `detector_period`. The capture `duration` must be a whole
     number of detector periods and `detector_period` a whole number of samples at
-    `sample_rate`; otherwise validation raises `ValueError`. The `noise_bandwidth`
-    attr (in Hz) is the `analysis_bandwidth` of the capture, or the capture
-    `sample_rate` when `analysis_bandwidth` is infinite.
+    `sample_rate`; otherwise validation raises `ValueError`. The output has no
+    `noise_bandwidth` attr. The noise bandwidth of each capture is the
+    `analysis_bandwidth` coordinate, or `sample_rate` where `analysis_bandwidth` is
+    infinite.
 
     Args:
     {args}
@@ -193,11 +194,10 @@ def channel_power_time_series(
 
     results = evaluate_channel_power_time_series(iq, capture=capture, spec=spec)
 
-    attrs = shared.bandwidth_attrs(
-        shared.capture_noise_bandwidth(capture), 'dBm', 'Channel Power'
-    )
-
-    return results, spec.to_dict() | attrs
+    # no noise_bandwidth attr: the bandwidth is the capture's analysis_bandwidth (or
+    # sample_rate), which can differ between the captures of one sweep, and a variable
+    # attr is written once per store. Readers use the analysis_bandwidth coordinate.
+    return results, spec.to_dict()
 
 
 # %% channel_power_histogram
@@ -267,14 +267,12 @@ def channel_power_bin(
     Returns:
         histogram bin centers in dBm from `power_low` to `power_high` in steps of
         `power_resolution`, with ``-inf`` and ``inf`` catch-all bins at each end
-        (`make_power_bins`), and the attrs of `shared.bandwidth_attrs` with the
-        `noise_bandwidth` (in Hz) of `shared.capture_noise_bandwidth`
+        (`make_power_bins`), with no attrs beyond the registered `standard_name` and
+        `units`
     """
     bins = make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
-    attrs = shared.bandwidth_attrs(
-        shared.capture_noise_bandwidth(capture), 'dBm', 'Channel power'
-    )
-    return bins, attrs
+    # no noise_bandwidth attr; see channel_power_time_series
+    return bins, {}
 
 
 @hint_keywords(specs.ChannelPowerHistogram)
@@ -297,8 +295,9 @@ def channel_power_histogram(
     ``(power_detector, channel_power_bin)`` and sums to 1 over the bins of each
     detector. `channel_power_bin` is the bin centers in dBm. The ``-inf`` and
     ``inf`` entries collect the readings more than half a bin below `power_low` or
-    above `power_high`. The `noise_bandwidth` attr (in Hz) of the output and of the
-    bin coordinate is that of `channel_power_time_series`.
+    above `power_high`. Neither the output nor the bin coordinate has a
+    `noise_bandwidth` attr. The noise bandwidth of each capture is the
+    `analysis_bandwidth` coordinate, or `sample_rate` where that is infinite.
 
     Args:
     {args}
@@ -335,10 +334,8 @@ def channel_power_histogram(
 
     data = xp.asarray(data, dtype=count_dtype)
 
-    metadata = {
-        'detector_period': spec.detector_period,
-        'noise_bandwidth': shared.capture_noise_bandwidth(capture),
-    }
+    # no noise_bandwidth attr; see channel_power_time_series
+    metadata = {'detector_period': spec.detector_period}
 
     return data, metadata
 
@@ -483,8 +480,8 @@ def cyclic_channel_power(
     capture `duration` must be a whole number of cycles, `cyclic_period` a whole
     number of detector periods, and `detector_period` a whole number of samples at
     `sample_rate`. A `detector_period` written as a fraction (``1/28000`` s is one
-    OFDM symbol at 30 kHz subcarrier spacing) stays exact. The `noise_bandwidth` attr
-    (in Hz) is that of `channel_power_time_series`.
+    OFDM symbol at 30 kHz subcarrier spacing) stays exact. The output has no
+    `noise_bandwidth` attr, as for `channel_power_time_series`.
 
     Args:
     {args}
@@ -509,8 +506,5 @@ def cyclic_channel_power(
     # move the capture axis to the front
     x = xp.moveaxis(x, -2, 0)
 
-    attrs = shared.bandwidth_attrs(
-        shared.capture_noise_bandwidth(capture), 'dBm', 'Cyclic channel power'
-    )
-
-    return sw.powtodB(x).astype('float32'), attrs
+    # no noise_bandwidth attr; see channel_power_time_series
+    return sw.powtodB(x).astype('float32')

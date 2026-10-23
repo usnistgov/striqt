@@ -28,11 +28,13 @@ from synthetic_sources import (
     DETECTOR_PERIOD,
     FILTER_ONLY,
     FILTER_SIZE,
+    ONE_PORT,
     RESAMPLE_FILTER,
     fs_sdr,
     preset_capture,
     preset_sweep,
     run_in_memory,
+    tone_capture,
 )
 
 import striqt.analysis as sa
@@ -608,3 +610,62 @@ def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
                     rtol=tol.rtol,
                     atol=sa.util.elementwise_atol(tol, expected),
                 )
+
+
+# %% bandwidth attrs of a store written from more than one analysis bandwidth
+
+CHANNEL_POWER = ss.specs.BundledAnalysis.from_dict({
+    'channel_power_time_series': {'detector_period': DETECTOR_PERIOD},
+    'channel_power_histogram': {
+        'detector_period': DETECTOR_PERIOD,
+        'power_low': -120,
+        'power_high': 0,
+        'power_resolution': 1,
+    },
+})
+
+
+def test_mixed_analysis_bandwidth_store_resolves_channel_power_bandwidth_per_capture(
+    tmp_path, monkeypatch
+):
+    """channel power outputs written from captures at two analysis bandwidths carry no
+    `noise_bandwidth` attr, and `striqt.figures` resolves the bandwidth of each capture
+    from the coordinates: the finite `analysis_bandwidth`, else the `sample_rate`"""
+    from striqt.figures import util as figures_util
+
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+    captures = (
+        tone_capture(ONE_PORT),
+        tone_capture({**FILTER_ONLY, 'port': 0}, duration=ONE_PORT['duration']),
+    )
+    path = tmp_path / 'out.zarr'
+    sweep = preset_sweep(
+        'single_tone',
+        captures,
+        analysis=CHANNEL_POWER,
+        sink=ss.specs.ZarrSink(path=str(path)),
+    )
+
+    with ss.open_resources(sweep) as resources:
+        for _ in ss.iterate_sweep(resources):
+            pass
+    ds = sa.load(path)
+
+    assert ds.analysis_bandwidth.values.tolist() == [
+        float('inf'),
+        FILTER_ONLY['analysis_bandwidth'],
+    ]
+    expected = [ONE_PORT['sample_rate'], FILTER_ONLY['analysis_bandwidth']]
+    outputs = (
+        'channel_power_time_series',
+        'channel_power_histogram',
+        'channel_power_bin',
+    )
+    for name in outputs:
+        assert 'noise_bandwidth' not in ds[name].attrs, name
+    # a histogram resolves through its bin coordinate, as check_noise_floor does
+    for name in ('channel_power_time_series', 'channel_power_bin'):
+        bandwidth = figures_util.noise_bandwidth(ds, name)
+        assert bandwidth is not None, name
+        assert bandwidth.values.tolist() == expected, name

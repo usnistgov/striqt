@@ -120,7 +120,8 @@ def test_scalar_typing(write_yaml, text, expected):
 
 def legacy_store_dataset():
     """a dataset with the bandwidth encoded in `units`, no `noise_bandwidth` on the bin
-    coordinate, and the sample rate as the correlator `noise_bandwidth`"""
+    coordinate, the sample rate as the correlator `noise_bandwidth`, and a store-wide
+    `noise_bandwidth` on the channel power outputs"""
     import numpy as np
     import xarray as xr
 
@@ -148,6 +149,24 @@ def legacy_store_dataset():
                 np.zeros((2, 5), 'float32'),
                 {'standard_name': 'Fraction of counts', 'noise_bandwidth': 360e3},
             ),
+            'channel_power_time_series': (
+                ('capture', 'time_elapsed'),
+                np.zeros((2, 3), 'float32'),
+                {
+                    'standard_name': 'Channel Power',
+                    'units': 'dBm',
+                    'noise_bandwidth': 10e6,
+                    'long_name': 'Channel Power (dBm/10 MHz)',
+                },
+            ),
+            'channel_power_histogram': (
+                ('capture', 'channel_power_bin'),
+                np.zeros((2, 4), 'float32'),
+                {
+                    'standard_name': 'Fraction of channel power readings',
+                    'noise_bandwidth': 10e6,
+                },
+            ),
             'cellular_5g_pss_correlation': (
                 ('capture', 'cellular_ssb_lag'),
                 np.zeros((2, 3), 'complex64'),
@@ -170,6 +189,16 @@ def legacy_store_dataset():
                 'spectrogram_power_bin',
                 bins,
                 {'standard_name': 'Spectrogram bin power', 'units': 'dBm/360 kHz'},
+            ),
+            'channel_power_bin': (
+                'channel_power_bin',
+                bins,
+                {
+                    'standard_name': 'Channel power',
+                    'units': 'dBm',
+                    'noise_bandwidth': 10e6,
+                    'long_name': 'Channel power (dBm/10 MHz)',
+                },
             ),
             'spectrogram_ratio_power_bin': (
                 'spectrogram_ratio_power_bin',
@@ -215,6 +244,23 @@ def test_repair_legacy_attrs_corrects_the_correlator_noise_bandwidth():
     assert attrs['units'] == '√mW'
     assert attrs['long_name'] == 'PSS Cross-Covariance (√mW/30 kHz)'
     assert attrs['sample_rate'] == pytest.approx(7.68e6)
+
+
+def test_repair_legacy_attrs_removes_channel_power_bandwidth_attrs():
+    """a store-wide `noise_bandwidth` and bandwidth-suffixed `long_name` on channel
+    power outputs are removed; the bandwidth of those outputs is per capture"""
+    ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
+
+    names = (
+        'channel_power_time_series',
+        'channel_power_histogram',
+        'channel_power_bin',
+    )
+    for name in names:
+        assert 'noise_bandwidth' not in ds[name].attrs, name
+        assert 'long_name' not in ds[name].attrs, name
+    assert ds.channel_power_time_series.attrs['units'] == 'dBm'
+    assert ds.channel_power_bin.attrs['units'] == 'dBm'
 
 
 def test_repair_legacy_attrs_keeps_spectral_densities_and_current_stores():

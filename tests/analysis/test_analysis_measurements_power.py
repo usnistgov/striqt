@@ -480,22 +480,15 @@ def test_channel_power_histogram_shares_the_time_series_validator():
 
 # %% noise bandwidth
 
-BANDWIDTH_CASES = [
-    (sa.specs.Capture(duration=HIST_DURATION, sample_rate=FS), FS),
-    (
-        sa.specs.Capture(
-            duration=HIST_DURATION, sample_rate=FS, analysis_bandwidth=FS / 4
-        ),
-        FS / 4,
-    ),
-]
-BANDWIDTH_IDS = ['unfiltered', 'filtered']
 
-
-@pytest.mark.parametrize('cap,bandwidth', BANDWIDTH_CASES, ids=BANDWIDTH_IDS)
-def test_channel_power_outputs_carry_the_capture_noise_bandwidth(cap, bandwidth):
-    """the time series, cyclic power, histogram, and the histogram bin coordinate name the
-    bandwidth of the IQ: the analysis bandwidth, or the sample rate when unfiltered"""
+def test_channel_power_outputs_set_no_noise_bandwidth():
+    """the time series, cyclic power, histogram, and the histogram bin coordinate set
+    no `noise_bandwidth` attr and no bandwidth in `long_name`. The noise bandwidth of
+    these outputs is the per-capture `analysis_bandwidth`, which one attr on a
+    variable of a store cannot represent"""
+    cap = sa.specs.Capture(
+        duration=HIST_DURATION, sample_rate=FS, analysis_bandwidth=FS / 4
+    )
     iq = sa.testing.tone(HIST_DURATION, FS)
     kws = {'detector_period': HIST_DETECTOR_PERIOD, 'as_xarray': True}
 
@@ -505,13 +498,11 @@ def test_channel_power_outputs_carry_the_capture_noise_bandwidth(cap, bandwidth)
     )
     histogram = sa.measurements.channel_power_histogram(iq, cap, **POWER_BINS, **kws)
 
-    for da in (series, cyclic_power):
+    for da in (series, cyclic_power, histogram, histogram.channel_power_bin):
+        assert 'noise_bandwidth' not in da.attrs
+        assert '/' not in str(da.attrs.get('long_name', ''))
+    for da in (series, cyclic_power, histogram.channel_power_bin):
         assert da.attrs['units'] == 'dBm'
-        assert da.attrs['noise_bandwidth'] == bandwidth
-        assert da.attrs['long_name'].startswith(da.attrs['standard_name'])
-    assert histogram.attrs['noise_bandwidth'] == bandwidth
-    assert histogram.channel_power_bin.attrs['units'] == 'dBm'
-    assert histogram.channel_power_bin.attrs['noise_bandwidth'] == bandwidth
 
 
 POWER_SPECS = [CPTS_SPEC, CYCLIC_SPEC]
