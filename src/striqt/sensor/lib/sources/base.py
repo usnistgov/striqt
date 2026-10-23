@@ -110,10 +110,10 @@ class VirtualSource(SourceBackend[SS, SC]):
         """return `count` samples of `port` starting at absolute sample `start_index`.
 
         Indices are at the source sample rate and are referenced to the corrected
-        capture: index 0 is the first sample of the output of `correct_iq`, so
-        negative indices are the leading-overlap pre-roll that it trims. A source
-        that has no samples there (a file) fills them with zeros. Subclasses
-        implement this; the base class raises `NotImplementedError`.
+        capture: index 0 is the first sample of the output of `correct_iq`, and
+        negative indices are the leading-overlap pre-roll that `correct_iq` trims. A
+        source with no samples there (a file) fills those samples with zeros. The
+        base class raises `NotImplementedError`.
 
         Returns:
             a 1-D array of `count` samples in the `xp` namespace with dtype `dtype`

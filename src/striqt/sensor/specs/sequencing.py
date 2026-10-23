@@ -1,9 +1,9 @@
-"""expansion of a sweep specification into the sequence of captures it runs.
+"""expansion of a sweep specification into the captures that the sweep runs.
 
 Loops nest over the listed captures, the `adjust_captures` remaps for the open source
-apply on top, and the loop point is applied last, so a looped field always wins. Each
-expanded capture keeps a record of the entry and loop point it came from, which the
-validators in `sweep` use to locate errors in the user's file.
+apply on top, and the loop point is applied last. A looped field wins over an
+adjustment. Each expanded capture keeps a record of the entry and loop point that
+produced the capture, from which the validators in `action` locate errors in the file.
 """
 
 from __future__ import annotations as __
@@ -36,11 +36,10 @@ if TYPE_CHECKING:
 
 
 class CaptureOrigin(NamedTuple):
-    """locate an expanded capture in the sweep specification that produced it.
+    """locate an expanded capture in the sweep specification that produced the capture.
 
-    An error message needs this to name a place in the user's file. The expanded
-    index alone cannot, since `sweep.captures` and `sweep.loops` are both flattened
-    away by the expansion.
+    The expanded index alone does not identify a place in the user's file.
+    `spec_index` and `loop_points` do.
     """
 
     capture_index: int
@@ -63,56 +62,51 @@ def loop_captures(
     """expand `sweep.loops` into the flat tuple of captures that the sweep runs.
 
     The loops are nested in declaration order, outermost first, with `sweep.captures`
-    innermost, so 2 captures under a 3-point loop give 6 captures ordered
+    innermost: 2 captures under a 3-point loop give 6 captures ordered
     ``(point0, capture0), (point0, capture1), (point1, capture0), ...``. A leading
-    `Repeat` is not expanded here, since its captures would be identical; the sweep
-    runner multiplies this tuple by `Repeat.count` instead. When `sweep.captures` is
-    empty, each loop point instead builds a new capture, and the loops must then
-    supply every field the capture class requires.
+    `Repeat` is not expanded here; the sweep runner multiplies this tuple by
+    `Repeat.count`. When `sweep.captures` is empty, each loop point builds a new
+    capture, and the loops must then supply every field the capture class requires.
 
     Each capture is assembled in three passes, the later ones winning:
 
     1. the entry from `sweep.captures`, with the loop point applied;
-    2. `adjust_captures` for `source_id`, evaluated against that result, so a
+    2. `adjust_captures` for `source_id`, evaluated against the result of pass 1. A
        `CaptureRemap` may key on a looped field;
-    3. the loop point again, which therefore always overrides an adjustment.
+    3. the loop point again. A looped field overrides an adjustment.
 
     Loops with ``isin='analysis'`` name a measurement parameter rather than a capture
-    field; they accumulate into the capture's `adjust_analysis` mapping, merged with
-    whatever that capture already carries. Loop points are coerced to the capture's
-    field type, so a sweep decoded from YAML strings expands to the same captures as
-    the equivalent numeric one.
+    field. The points of such loops are merged into the `adjust_analysis` mapping of
+    the capture. Loop points are coerced to the type of the capture field. A sweep
+    decoded from YAML strings expands to the same captures as the numeric equivalent.
 
-    Results are cached on `sweep.captures`, `sweep.loops`, `sweep.adjust_captures`
-    and the keyword arguments rather than on the sweep object, so repeated calls
-    from the acquire, analyze and write stages return the identical tuple.
+    Repeated calls with equal `sweep.captures`, `sweep.loops`,
+    `sweep.adjust_captures`, and keyword arguments return the identical tuple.
 
     Args:
-        sweep: the sweep to expand. Its capture class is that of `sweep.captures[0]`,
-            or the sensor binding's `schema.capture` when no captures are listed.
+        sweep: the sweep to expand. The capture class is that of `sweep.captures[0]`,
+            or `schema.capture` of the sensor binding when no captures are listed.
         source_id: hex id of the open source, selecting which `adjust_captures` block
-            applies on top of the `'defaults'` block. `None` uses `'defaults'` alone,
-            which lets a sweep be expanded with no hardware open; per-source remaps
-            are then not applied.
+            applies on top of the ``'defaults'`` block. `None` uses ``'defaults'``
+            alone, and the per-source remaps are not applied.
         only_fields: keep only the capture loops naming one of these fields, dropping
-            the rest. Analysis loops are unaffected. This expands only the
-            dimensions a lookup depends on, as `max_by_frequency` does.
+            the rest. Analysis loops are unaffected.
         limit: stop expanding after this many captures. Applied before the
-            `options.loop_only_nyquist` filter, so fewer may come back.
+            `options.loop_only_nyquist` filter, so the result may hold fewer.
 
     Returns:
-        the expanded captures, as instances of the sweep's capture class. Empty when
-        the sweep has neither captures nor loops, or when `loop_only_nyquist` is set
-        and every point has a finite `analysis_bandwidth` above its `sample_rate`.
+        the expanded captures, as instances of the capture class of the sweep. Empty
+        when the sweep has neither captures nor loops, or when `loop_only_nyquist` is
+        set and every point has a finite `analysis_bandwidth` above the `sample_rate`
+        of the point.
 
     Raises:
         msgspec.ValidationError: a loop names a field the capture class does not
             declare; the sweep has neither explicit captures nor a sensor binding,
             leaving no capture class to instantiate; a loop point does not convert to
-            the type of its capture field; or an expanded capture is invalid -- it
-            violates a `Meta` bound or a `Capture.__post_init__` rule that no single
-            input violates on its own, or the loops left a required capture field
-            unset.
+            the type of the capture field; an expanded capture violates a `Meta`
+            bound or a `Capture.__post_init__` rule that no single input violates
+            alone; or the loops left a required capture field unset.
     """
 
     args, kws = _expansion_args(
@@ -128,26 +122,24 @@ def loop_capture_origins(
     only_fields: tuple[str, ...] | None = None,
     limit: int | None = None,
 ) -> frozendict[SC, CaptureOrigin]:
-    """map each capture of `loop_captures` to its origin in the sweep specification.
+    """map each capture of `loop_captures` to the origin of the capture in the sweep.
 
-    The arguments mean what they do in `loop_captures`, which shares this function's
-    one cached expansion pass.
+    The arguments are those of `loop_captures`.
 
-    Captures that compare equal collapse onto the first of their origins, since a
-    label only ever needs to name one of them. They are not rare: a `List` may repeat
-    a value, loop points are coerced with ``strict=False`` so ``'1e6'`` and ``1e6``
-    are one point, and an `adjust_captures` fixed value can flatten the field that
-    distinguished two `sweep.captures` entries. Use `loop_captures` wherever the
+    Captures that compare equal collapse onto the first origin. Equal captures arise
+    when a `List` repeats a value, when two loop points coerce to one value (loop
+    points are coerced with ``strict=False``, so ``'1e6'`` and ``1e6`` are one
+    point), and when an `adjust_captures` fixed value flattens the field that
+    distinguished two `sweep.captures` entries. Use `loop_captures` where the
     multiplicity matters.
 
     Returns:
-        a `frozendict` from each distinct capture to the `CaptureOrigin` of its
-        first occurrence, keyed in expansion order
+        a `frozendict` from each distinct capture to the `CaptureOrigin` of the first
+        occurrence of the capture, keyed in expansion order
 
     Raises:
         msgspec.ValidationError: as `loop_captures`.
-        TypeError: an analysis loop point that survived freezing unhashable, which no
-            mapping can key on.
+        TypeError: an analysis loop point that is unhashable after freezing.
     """
     args, kws = _expansion_args(
         sweep, source_id, only_fields, limit, sweep.options.loop_only_nyquist
@@ -452,11 +444,7 @@ def _build_loop_points_dict(
 def _locate_conversion_failure(
     values: Iterable[Any], element_type: Any
 ) -> tuple[int, msgspec.ValidationError] | None:
-    """find which element of a failed bulk `msgspec.convert` fails on its own.
-
-    Converting a list at once gets msgspec's own message, but with a path rooted at
-    that list rather than at the sweep. Re-converting one element at a time recovers
-    which one it was, at a cost paid only on the failing path.
+    """find which element of a failed bulk `msgspec.convert` fails alone.
 
     Returns:
         ``(index, error)`` of the first element that fails to convert to
@@ -481,9 +469,9 @@ def _loop_point_error(
     """build the error for a loop at ``$.loops[index]`` whose points did not convert.
 
     Returns:
-        a `SpecValidationError` whose message names the first point that fails on
-        its own and its field, or repeats `ex` when no single point reproduces the
-        failure
+        a `SpecValidationError` whose message names the first point that fails
+        alone and the field `name`, or repeats `ex` when no single point reproduces
+        the failure
     """
     path = ('.loops', f'[{index}]')
     located = _locate_conversion_failure(points, field_type)
@@ -505,14 +493,11 @@ def _expanded_capture_error(
     capture_cls: type[SC],
     ex: msgspec.ValidationError,
 ) -> msgspec.ValidationError:
-    """build the error for an invalid expanded capture, located in its sweep.
-
-    msgspec locates the failure by its index in the expanded tuple, which is not a
-    place in the user's specification; the origin is.
+    """build the error for an invalid expanded capture, located in the sweep.
 
     Returns:
         a `SpecValidationError` at the locations `describe_capture_origin` gives for
-        the first capture that fails on its own, or `ex` unchanged when no single
+        the first capture that fails alone, or `ex` unchanged when no single
         capture reproduces the failure
     """
     located = _locate_conversion_failure(captures, capture_cls)
@@ -895,18 +880,17 @@ def describe_capture_origin(
     capture: structs.SensorCapture | Mapping[str, Any],
     origin: CaptureOrigin,
 ) -> tuple[str, ...]:
-    """locate an expanded capture in its sweep, as sibling paths for an error message.
+    """locate an expanded capture in the sweep, as sibling paths for an error message.
 
-    The loop point is rendered as one mapping in `loops` declaration order, with a
-    `repeat` rendered as its tag at pass 0 and capture fields read back from
-    `capture` so that the value shown is the coerced one it ran with. Two loops that
-    name the same field in different `isin` blocks collapse onto one entry, keeping
-    the rendering readable at the cost of that distinction.
+    The loop point is rendered as one mapping in `loops` declaration order. A
+    `repeat` is rendered as the tag of the loop at pass 0. Capture fields are read
+    back from `capture`, so the value shown is the coerced value. Two loops that name
+    the same field in different `isin` blocks collapse onto one entry.
 
     Args:
-        loops: the sweep's `loops`, in the order the user wrote them
+        loops: the `loops` of the sweep, in the order the user wrote them
         capture: the expanded capture, or the mapping the expansion assembled for a
-            capture that failed to convert to its class
+            capture that failed to convert to the capture class
         origin: the origin `loop_capture_origins` recorded for `capture`
 
     Returns:

@@ -1,8 +1,8 @@
-"""FFT evaluation on numpy and cupy, the exact `fftfreq` grid with its band selectors,
-and the roundoff model that budgets FFT error.
+"""FFT evaluation on numpy and cupy, the exact `fftfreq` grid and band selectors on
+that grid, and the roundoff model that budgets FFT error.
 
-The cupy path calls into cuFFT through `cupy.fft._fft`, which honors the `out=` buffer,
-in chunks of `MAX_CUPY_FFT_SAMPLES` when that is set.
+On cupy, `fft` and `ifft` honor the `out=` buffer and run in chunks of
+`MAX_CUPY_FFT_SAMPLES` samples when that is set.
 """
 
 from __future__ import annotations as __
@@ -58,11 +58,11 @@ def fft_roundoff_rms(
     """return the expected rms roundoff of one backend, relative to the output rms.
 
     Args:
-        dtype: the working dtype (a complex dtype selects its real component)
+        dtype: the working dtype; a complex dtype counts as the dtype of one component
         nffts: the size of each FFT pass in the computation
         n_elementwise: the number of elementwise roundings in the computation
-        array_backend: the backend whose FFT constant applies, named as in a source
-            spec so that a budget can be evaluated where that backend is not installed
+        array_backend: ``'numpy'`` or ``'cupy'``, the backend whose FFT constant
+            applies. The named backend need not be installed
 
     Returns:
         a dimensionless fraction of the output rms, proportional to the unit
@@ -330,8 +330,8 @@ def slice_freqs(
 ) -> slice:
     """return the slice of `bandwidth` about `offset` on an `nfft`-bin frequency axis.
 
-    The axis is the ascending `fftfreq` grid at sample rate `fs`; `fs`, `bandwidth`,
-    and `offset` are in Hz. Validators call this for its exceptions.
+    The axis is the ascending `fftfreq` grid at sample rate `fs`. `fs`, `bandwidth`,
+    and `offset` are in Hz.
 
     Raises:
         ValueError: if `bandwidth` is negative, if `offset` is off the ``fs/nfft``
@@ -396,9 +396,9 @@ def _freq_band_edges(
 ) -> tuple[int | None, int | None]:
     """return the half-open index bounds of ``[cutoff_low, cutoff_hi)`` on an `fftfreq` grid.
 
-    The grid is the ascending `fftfreq` axis of `n` bins at sample rate `d` (in Hz);
-    the cutoffs are in Hz and need not fall on it. Each bound is `None` when its
-    cutoff is `None`.
+    The grid is the ascending `fftfreq` axis of `n` bins at sample rate `d` (in Hz).
+    The cutoffs are in Hz and need not fall on the grid. A bound is `None` when the
+    corresponding cutoff is `None`.
     """
     freqs = fftfreq(n, d)
 

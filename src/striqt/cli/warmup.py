@@ -1,8 +1,8 @@
 """warm the numba JIT cache for the current platform.
 
 Run once after install on a new machine. The cache persists in the user cache
-directory, so a later run only reloads it. On a Jetson TX2i the first run takes about
-2 minutes.
+directory, and later runs reload the cache from there. On a Jetson TX2i the first run
+takes about 2 minutes.
 """
 
 import click

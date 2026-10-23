@@ -39,10 +39,12 @@ else:
 
 
 class KwArgCache:
-    """A single-element cache of measurement results.
+    """a single-element cache of a measurement result keyed on capture and keywords.
 
-    It is keyed on captures and keyword arguments.
-
+    The cache is disabled until entered as a context manager, and exiting clears the
+    entry and the callback. `apply` wraps a measurement function so that a call with
+    the same capture and the same values of the `fields` named at construction
+    returns the cached result.
     """
 
     _key: frozenset | None = None

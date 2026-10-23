@@ -150,17 +150,15 @@ class ExceptionStack:
                 cancel_threads()
             self.exceptions.append(ex)
 
-    def handle(self):
-        """raise an exception based on any deferred exceptions.
+    def handle(self) -> None:
+        """raise the deferred exceptions and clear the stack.
 
-        The raised exception type follows these rules:
-        - No exceptions: no exception is raised
-        - Exactly one exception: raise that exception
-        - More than one exception: raise an ExceptionGroup
-
-        A ThreadInterruptRequest will only be raised if it was the only
-        deferred exception. ThreadInterruptRequest is never included in an
-        ExceptionGroup.
+        No deferred exception: nothing is raised. One exception other than an
+        interrupt: that exception is raised. Several: an `ExceptionGroup` of those
+        exceptions is raised, labeled with `group_label`. `ThreadInterruptRequest`
+        and `KeyboardInterrupt` are raised only when no other exception was deferred,
+        and never inside an `ExceptionGroup`. A `KeyboardInterrupt` takes precedence
+        over a `ThreadInterruptRequest`. The stack is empty after the call.
         """
         exc_list = self.exceptions
         if len(exc_list) == 0:

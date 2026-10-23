@@ -132,13 +132,7 @@ _SSB_CORRELATION_COORDS = [
 def validated_5g_ssb_sync_params(
     capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator
 ) -> sw.comms_5gnr.SyncParams:
-    """check the SSB correlator sizing of a capture and return its `sw.comms_5gnr.SyncParams`.
-
-    `sss_params` is the stricter of the two builders and reaches every check in
-    `pss_params`, so one validator serves the PSS and SSS measurements. Building the
-    parameters warms the `get_3gpp_phy` design that the
-    correlators would otherwise pay for after the acquisition. The resampler sizes
-    checked are those `get_5g_ssb_iq` produces from the whole capture.
+    """return the `sw.comms_5gnr.SyncParams` of a capture, checking the SSB sizing.
 
     Raises:
         ValueError: if `spec.frequency_offset` is not a multiple of the resampler
@@ -231,11 +225,11 @@ def cellular_stft_window_fractions(
     """return the (fractional_overlap, window_fill) that hop one STFT window per symbol.
 
     The fractions hold only at a frequency resolution of half the subcarrier spacing,
-    where one FFT window spans 2 subcarrier periods and a slot spans 15 of them (3GPP TS
-    38.211 §5.3.1). `window_fill` is the mean share of one window occupied by a single
-    OFDM symbol and its cyclic prefix, which the hop then matches. `fractional_overlap`
-    is the remainder, so the two fractions lie in (0, 1) and sum to 1. `cyclic_prefix`
-    selects the 14- or 12-symbol slot.
+    where one FFT window spans 2 subcarrier periods and a slot spans 15 subcarrier
+    periods (3GPP TS 38.211 §5.3.1). `window_fill` is the mean share of one window
+    occupied by one OFDM symbol with the cyclic prefix of that symbol.
+    `fractional_overlap` is the remainder. The two fractions lie in (0, 1) and sum to
+    1. `cyclic_prefix` selects the 14- or 12-symbol slot.
     """
     if cyclic_prefix == 'normal':
         return Fraction(13, 28), Fraction(15, 28)
@@ -308,10 +302,11 @@ def cellular_5g_pss_sync(
 ) -> Measurement:
     """return the start-of-waveform delay (in s) detected from the PSS correlation.
 
-    The PSS correlation of `cellular_5g_pss_correlation` is reduced by
-    `sw.comms_5gnr.choose_ssb_offset` to one lag per port, or to one lag across the ports
-    when `per_port` is False, and offset by `delay`. The measurement is registered as a
-    `signal_trigger`, so a source spec can use it to align captures.
+    The output is one lag per port, or one lag shared across the ports when
+    `per_port` is False, chosen from the `cellular_5g_pss_correlation` output and
+    offset by `delay` rounded to a sample at `sample_rate`. The measurement is
+    registered as a `signal_trigger`. A source spec that sets ``signal_trigger`` to
+    this measurement aligns captures by the output.
 
     Args:
     {args}
@@ -435,10 +430,11 @@ def cellular_5g_sss_sync(
 ) -> Measurement:
     """return the start-of-waveform delay (in s) detected from the SSS correlation.
 
-    The SSS correlation of `cellular_5g_sss_correlation` is reduced by
-    `sw.comms_5gnr.choose_ssb_offset` to one lag per port, or to one lag across the ports
-    when `per_port` is False, and offset by `delay`. The measurement is registered as a
-    `signal_trigger`, so a source spec can use it to align captures.
+    The output is one lag per port, or one lag shared across the ports when
+    `per_port` is False, chosen from the `cellular_5g_sss_correlation` output and
+    offset by `delay` rounded to a sample at `sample_rate`. The measurement is
+    registered as a `signal_trigger`. A source spec that sets ``signal_trigger`` to
+    this measurement aligns captures by the output.
 
     Args:
     {args}
@@ -564,15 +560,15 @@ def _ssb_spectrogram_spec(spec: specs.Cellular5GNRSSBSpectrogram) -> specs.Spect
 def validated_ssb_spectrogram_sizing(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
 ) -> spectrum.SpectrogramSizing:
-    """check the STFT sizing of the SSB spectrogram and return it.
+    """check the STFT sizing of the SSB spectrogram and return the sizing.
 
-    The 3GPP cell-search parameters are not consulted. The measurement lays symbols out
-    from `subcarrier_spacing` and `discovery_periodicity` alone, and unlike the
-    correlators it has no `symbol_indexes` field to pick a search case with.
+    The symbol layout follows `subcarrier_spacing` and `discovery_periodicity` alone.
+    The TS 38.213 SSB case is not consulted.
 
     Raises:
         ValueError: if the STFT does not fit the capture (as
-            `spectrum.validated_spectrogram_sizing`), if the `sample_rate` band about
+            `spectrum.validated_spectrogram_sizing`), if `frequency_offset` is not a
+            multiple of `subcarrier_spacing`, if the `sample_rate` band about
             `frequency_offset` lies outside the capture bandwidth, if
             `discovery_periodicity` is shorter than one OFDM symbol, or if the capture
             does not end on a discovery period or after a complete burst set
@@ -956,13 +952,8 @@ def validated_autocorrelation_lag_count(
 ) -> int:
     """check the frame configuration and index ranges and return the lag axis length.
 
-    `tdd_config_from_str` owns the `frame_slots` rules and `_get_spec_range` the
-    open-ended-range rule. The lag axis length is the longest, across the requested
-    subcarrier spacings, of each spacing's shortest OFDM symbol (in samples).
-    Computing it warms the `get_3gpp_phy` design for each of them. The index bounds are
-    those of `Phy3GPP.index_cyclic_prefix`, whose frame axis is not bounds-checked
-    against the waveform. A frame past the end of the capture reads zeros into the
-    correlation.
+    The lag axis length is the longest, across the requested subcarrier spacings, of
+    the shortest OFDM symbol (in samples) at each spacing.
 
     Raises:
         ValueError: if `frame_slots` has no downlink slot at some subcarrier spacing,
@@ -1241,7 +1232,8 @@ def build_tdd_link_symbol_masks(
         frame_slots: the slot types in one frame as a string of ``'d'``, ``'u'`` and
             ``'s'`` characters, one per slot, or a single character for every slot
         special_symbols: the symbol types of each ``'s'`` slot as a string of
-            ``'d'``, ``'u'`` and ``'f'`` characters; None treats them as downlink
+            ``'d'``, ``'u'`` and ``'f'`` characters; None treats every symbol of a
+            special slot as downlink
         link_direction: ``'downlink'`` or ``'uplink'`` for each row of the output
         count: number of symbols along the output's last axis, tiled and truncated
             from whole frames; None gives one frame
@@ -1250,12 +1242,12 @@ def build_tdd_link_symbol_masks(
             None masks them from both
 
     Returns:
-        float32 array of shape (len(`link_direction`), `count`), with 1 where a
-        symbol carries the link direction and NaN elsewhere
+        float32 array of shape (len(`link_direction`), `count`), with 1 at the
+        symbols of the link direction and NaN elsewhere
 
     Raises:
         ValueError: if `frame_slots` has the wrong length for `subcarrier_spacing` or
-            either string contains characters outside its alphabet
+            either string contains a character outside the alphabet of that string
     """
 
     tdd_config = tdd_config_from_str(

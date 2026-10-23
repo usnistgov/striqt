@@ -1,5 +1,5 @@
-"""The short-time Fourier transform, its inverse, and edits of an STFT in the frequency
-domain (band zeroing and rational downsampling).
+"""The short-time Fourier transform, the inverse transform, and edits of an STFT in
+the frequency domain (band zeroing and rational downsampling).
 
 `stft(x, axis=a)` stacks windows on axis `a` and frequency bins, in ascending `fftfreq`
 order, on `a + 1`. `out=` buffers are honored through `_truncated_buffer`, which views a
@@ -187,7 +187,29 @@ def istft(
     overwrite_x=False,
     axis=0,
 ) -> Array:
-    """reconstruct and return a waveform given its STFT and associated parameters"""
+    """reconstruct the waveform from the STFT `y` by inverse FFT and overlap-add.
+
+    `y` has windows on `axis` and `nfft` frequency bins in ascending `fftfreq` order
+    on ``axis + 1``, the layout that `stft` returns. The windows are overlap-added at
+    a hop of ``nfft - noverlap`` samples.
+
+    Args:
+        y: the STFT, with at least 2 dimensions
+        size: the number of output samples; a longer reconstruction is trimmed about
+            the center, and None keeps every sample
+        nfft: the FFT size of the STFT, which is the window length in samples
+        noverlap: the overlap (in samples) of consecutive windows in the STFT
+        out: a buffer of at least the untrimmed output size in the dtype of `y`; a
+            non-contiguous buffer is copied, and the result is then not a view of
+            `out`
+        overwrite_x: if True, `y` is overwritten by the inverse FFT of each window
+        axis: the window axis of `y`
+
+    Returns:
+        the waveform on `axis`, in the dtype and array namespace of `y`, of
+        ``y.shape[axis] * (nfft - noverlap) + noverlap`` samples before trimming to
+        `size`
+    """
 
     xp = array_namespace(y)
     dtype = typing.cast(str, y.dtype)
@@ -266,17 +288,20 @@ def _stack_stft_windows(
 def _unstack_stft_windows(
     y: Array, noverlap: int, nperseg: int, axis: int = 0, out: Array | None = None
 ) -> Array:
-    """reconstruct the time-domain waveform from its STFT representation.
-
-    The parameter set is a subset of that of `scipy.signal.istft`. The reconstruction
-    sums whole groups of non-overlapping windows, which costs memory relative to the
-    scipy implementation.
+    """overlap-add the time-domain windows stacked on `axis` of `y` into one waveform.
 
     Args:
-        y: the stft output, containing at least 2 dimensions
-        noverlap: the overlap size that was used to generate the STFT (see scipy.signal.stft)
-        axis: the axis of the first dimension of the STFT (the second is at axis+1)
-        out: the array that receives the result; it must have at least the allocated size of `y`
+        y: time-domain windows on `axis`, each of `nperseg` samples on ``axis + 1``
+        noverlap: the overlap (in samples) of consecutive windows
+        nperseg: the window length (in samples)
+        axis: the window axis of `y`
+        out: a buffer of at least the output size in the dtype of `y`; a
+            non-contiguous buffer is copied, and the result is then not written into
+            `out`
+
+    Returns:
+        the waveform on `axis`, of ``y.shape[axis] * y.shape[axis + 1] * hop // nperseg
+        + noverlap`` samples with ``hop = nperseg - noverlap``
     """
 
     xp = array_namespace(y)

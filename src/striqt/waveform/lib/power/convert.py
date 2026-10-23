@@ -119,8 +119,7 @@ def log_conversion_tol(
 def pow_conversion_rtol(dtype: DTypeLike, max_abs_dB: float, n_impl: int = 1) -> float:
     """return the rtol on ``10**(x/10)`` for ``|x| <= max_abs_dB``.
 
-    Rounding the exponent perturbs the result in proportion to its magnitude, so the
-    bound grows linearly with `max_abs_dB` from a floor of a fixed number of unit
+    The bound grows linearly with `max_abs_dB` from a floor of a fixed number of unit
     roundoffs of `dtype`. `n_impl` is 1 against exact math and 2 against a second
     implementation.
     """
@@ -173,7 +172,7 @@ def roundtrip_power_rtol(dtype: DTypeLike, max_abs_dB: float) -> float:
 def roundtrip_dB_tol(dtype: DTypeLike, max_abs_dB: float) -> dict[str, float]:
     """return the ``rtol`` and ``atol`` in dB on ``powtodB(dBtopow(x))``.
 
-    `max_abs_dB` bounds ``|x|``, and ``atol`` grows with it.
+    `max_abs_dB` bounds ``|x|``. ``atol`` grows with `max_abs_dB`.
     """
     tol = log_conversion_tol(dtype, 10)
     return {
@@ -200,7 +199,8 @@ def linear_tolerance_dB(rtol: float) -> float:
 def dB_tolerance(rtol: float, atol: float, max_abs_dB: float) -> float:
     """return the worst-case tolerance in dB of ``(rtol, atol)`` on a dB-valued output.
 
-    `max_abs_dB` bounds the magnitude of the output, and the result grows with it.
+    `max_abs_dB` bounds the magnitude of the output. The result grows with
+    `max_abs_dB`.
     """
     return atol + rtol * max_abs_dB
 
@@ -210,23 +210,15 @@ def off_peak_dB_tolerance(depth_dBc: float, err: float) -> float: ...
 @typing.overload
 def off_peak_dB_tolerance(depth_dBc: Array, err: float) -> Array: ...
 def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array:
-    """bound the dB error of an element `depth_dBc` (>= 0) below the peak of its output.
+    """bound the dB error of an output element `depth_dBc` (>= 0) below the output peak.
 
     The tolerance is two-sided, given a relative amplitude error `err` at the peak.
-    The peak is the matched-filter bin of the matched input, so the same bound serves
-    a tone's FFT bin and an impulse's detector bin. The result is non-negative and
-    grows with `depth_dBc`: a float for a scalar `depth_dBc` and a float64 numpy
-    array otherwise.
-
-    Roundoff bounds an element's amplitude error relative to the output's *peak*, so
-    as a share of the element's own amplitude the bound grows with its depth below the
-    peak. A relative amplitude error ``r`` leaves the power between ``(1-r)**2``
-    and ``(1+r)**2`` of its exact value. The low side dominates in dB and diverges
-    as ``r`` approaches 1. An element deep enough below the peak that roundoff alone
-    could account for all of its amplitude gets an infinite tolerance and goes
-    unchecked. The floor falls out of the bound rather than being imposed on top of
-    it. The bound assumes nothing about the error spreading over an FFT's bins and
-    suits any dB-valued output.
+    The peak is the matched-filter bin of the matched input: the FFT bin of a tone or
+    the detector bin of an impulse. The result is non-negative and grows with
+    `depth_dBc`: a float for a scalar `depth_dBc` and a float64 numpy array
+    otherwise. The bound is ``-20*log10(1 - r)`` for the relative amplitude error
+    ``r = err * 10**(depth_dBc/20)`` of the element, and is infinite where ``r >= 1``,
+    which leaves the element unchecked.
     """
     r = err * 10 ** (np.asarray(depth_dBc, dtype='float64') / 20)
     with np.errstate(divide='ignore'):
@@ -245,11 +237,12 @@ def _lin_to_dB(
     """compute ``scale*log10(abs(x) + eps)`` or ``scale*log10(x + eps)``.
 
     The evaluation is ``scale_ln*log(...)`` with ``scale_ln = scale/ln(10)`` rounded
-    to the real computation dtype. `eps` is 0 unless `bounded`, and then the smallest
-    normal value of the computation dtype for `scale` 10 and its square root for
-    `scale` 20, as a scalar of that dtype. With `overwrite_x`, the result is written
-    into `x` unless `min_dtype` widens it first; a complex `x` overwritten in place
-    comes back as the real view of its buffer (`_real_buffer`) on every backend.
+    to the real computation dtype. `eps` is 0 unless `bounded`. With `bounded`, `eps`
+    is the smallest normal value of the computation dtype for `scale` 10, and the
+    square root of that value for `scale` 20, as a scalar of that dtype. With
+    `overwrite_x`, the result is written into `x` unless `min_dtype` widens `x`
+    first. A complex `x` overwritten in place is returned as the real view of the
+    buffer of `x` on every backend.
     """
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
@@ -327,15 +320,20 @@ def powtodB(
         bounded: True to floor the result at ``10*log10(tiny)``, where ``tiny`` is the
             smallest normal value of the computation dtype (about -379 dB in float32
             and -3077 dB in float64); zeros then map to the floor instead of ``-inf``
-        overwrite_x: True to write the result into `x` when its dtype is at least
-            `min_dtype`; a complex `x` then returns the real view of its buffer
+        overwrite_x: True to write the result into `x` when the dtype of `x` is at
+            least `min_dtype`; a complex `x` is then returned as the real view of the
+            buffer of `x`
         min_dtype: the narrowest floating-point dtype of the computation; a narrower
-            `x` is widened to it
+            `x` is widened to `min_dtype`
 
     Returns:
         the dB values, real-valued, in the container type of `x` (a Python number for
         a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
         xarray ``units`` attribute converted from linear power to dB)
+
+    Raises:
+        TypeError: if `min_dtype` is None or narrower than float32, or if no array
+            can be associated with the type of `x`
     """
     return _lin_to_dB(
         x,
@@ -357,15 +355,19 @@ def dBtopow(
 
     Args:
         x: values in dB, as a number, array, or pandas/xarray object
-        overwrite_x: True to write the result into `x` when its dtype is at least
-            `min_dtype`
+        overwrite_x: True to write the result into `x` when the dtype of `x` is at
+            least `min_dtype`
         min_dtype: the narrowest floating-point dtype of the computation; a narrower
-            `x` is widened to it
+            `x` is widened to `min_dtype`
 
     Returns:
         the values in linear power units, in the container type of `x` (a Python
         number for a number, otherwise the array, `pandas` or `xarray` type of `x`,
         with an xarray ``units`` attribute converted from dB to linear power)
+
+    Raises:
+        TypeError: if `min_dtype` is None or narrower than float32, or if no array
+            can be associated with the type of `x`
     """
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
@@ -402,15 +404,20 @@ def envtopow(
     Args:
         x: values in linear amplitude (envelope) units, real or complex, as a
             number, array, or pandas/xarray object
-        overwrite_x: True to write the result into `x` when its dtype is at least
-            `min_dtype`; a complex `x` then returns the real view of its buffer
+        overwrite_x: True to write the result into `x` when the dtype of `x` is at
+            least `min_dtype`; a complex `x` is then returned as the real view of the
+            buffer of `x`
         min_dtype: the narrowest floating-point dtype of the computation; a narrower
-            `x` is widened to it
+            `x` is widened to `min_dtype`
 
     Returns:
         the power values, real-valued, in the container type of `x` (a Python number
         for a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
         xarray ``units`` attribute converted from amplitude to linear power)
+
+    Raises:
+        TypeError: if `min_dtype` is None or narrower than float32, or if no array
+            can be associated with the type of `x`
     """
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
@@ -457,15 +464,20 @@ def envtodB(
         bounded: True to floor the result at the same dB value as `powtodB` with
             `bounded`, ``10*log10(tiny)`` for the smallest normal value ``tiny`` of the
             computation dtype; zeros then map to the floor instead of ``-inf``
-        overwrite_x: True to write the result into `x` when its dtype is at least
-            `min_dtype`; a complex `x` then returns the real view of its buffer
+        overwrite_x: True to write the result into `x` when the dtype of `x` is at
+            least `min_dtype`; a complex `x` is then returned as the real view of the
+            buffer of `x`
         min_dtype: the narrowest floating-point dtype of the computation; a narrower
-            `x` is widened to it
+            `x` is widened to `min_dtype`
 
     Returns:
         the dB values, real-valued, in the container type of `x` (a Python number for
         a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
         xarray ``units`` attribute converted from amplitude to dB)
+
+    Raises:
+        TypeError: if `min_dtype` is None or narrower than float32, or if no array
+            can be associated with the type of `x`
     """
     return _lin_to_dB(
         x,
@@ -534,14 +546,15 @@ def _infer_contained_array(x: Any) -> Array:
 def _arraylike_with_buffer(
     x: ArrayLike | Number, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
 ) -> 'tuple[Array, Array, ModuleType]':
-    """resolve an array-like input to its array, an output buffer and its namespace.
+    """resolve an array-like input to an array, an output buffer, and the namespace.
 
     Args:
         x: a number, an array, or a pandas/xarray object wrapping one
         overwrite_x: True to hand back the array of `x` as the output buffer;
             ignored for a 0-d array
         min_dtype: the narrowest floating-point dtype of the computation; an array
-            narrower than it is widened, and the widened copy becomes the buffer
+            narrower than `min_dtype` is widened, and the widened copy becomes the
+            buffer
 
     Returns:
         ``(values, out, xp)``: the array to compute on, with dtype at least
@@ -601,12 +614,7 @@ def _arraylike_with_buffer(
 
 
 def _real_buffer(out: Array) -> Array:
-    """return `out`, or the real view of `out` if it is complex.
-
-    `_arraylike_with_buffer` hands back a complex buffer only when overwriting
-    complex input in place. The conversions produce real values, so both the numexpr
-    and the fused-kernel paths write into this view and return it.
-    """
+    """return `out`, or the real view of `out` when `out` is complex."""
     if out.dtype.kind == 'c':
         return out.real
     return out

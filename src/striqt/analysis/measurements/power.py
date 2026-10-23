@@ -50,10 +50,10 @@ def validated_detector_bin_size(
 def validated_channel_power_binning(
     capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
 ) -> ChannelPowerBinning:
-    """return the detector binning of `capture` under `spec`, checking it tiles evenly.
+    """return the detector binning of `capture` under `spec` after checking the tiling.
 
-    `sw.iq_to_bin_power` and `sw.axis_to_blocks` apply the same two rules to the IQ;
-    checking them here moves the failure ahead of the acquisition.
+    The binning is the detector period in samples and the number of detector periods
+    in the capture duration.
 
     Raises:
         ValueError: if `detector_period` is not a whole number of samples, `duration`
@@ -207,8 +207,8 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
 
     The finite centers run from `power_low` toward `power_high` in steps of
     `power_resolution`, bracketed by ``-inf`` and ``inf``. The last finite center is
-    `power_high` or lies within half a step below it. The returned array is cached and
-    shared between callers, so it must not be modified in place.
+    `power_high` or lies within half a step below `power_high`. The returned array is
+    cached and shared between callers and must not be modified in place.
 
     Returns:
         1-D array in the namespace `xp`: the grid points with one extra element at
@@ -229,10 +229,10 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
 def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=np):
     """return the `xp.histogram` bin edges (in dB) that pair with `make_power_bins`.
 
-    Edges sit midway between adjacent grid points, so the first and last edges are
-    ``-inf`` and ``inf`` and the finite edges extend half a step below `power_low` and
-    half a step above `power_high`. The returned array is cached and shared between
-    callers, so it must not be modified in place.
+    Edges lie midway between adjacent grid points. The first and last edges are
+    ``-inf`` and ``inf``, and the finite edges extend half a step below `power_low`
+    and half a step above `power_high`. The returned array is cached and shared
+    between callers and must not be modified in place.
 
     Returns:
         1-D array in the namespace `xp`, one element longer than `make_power_bins`

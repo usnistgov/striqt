@@ -14,11 +14,18 @@ _lazy_import_locks = collections.defaultdict(threading.RLock)
 
 
 def lazy_import(module_name: str, package=None):
-    """postponed import of the module with the specified name.
+    """return a module object whose import runs on first attribute access.
 
-    The import is not performed until the module is accessed in the code. This
-    reduces the total time to import striqt by waiting to import the module
-    until it is used.
+    The returned object is registered in ``sys.modules`` under `module_name`. A
+    module that is already imported is returned as is.
+
+    Args:
+        module_name: the absolute module name, or a relative name with `package`
+        package: the anchor package of a relative `module_name`, as for
+            `importlib.util.find_spec`
+
+    Raises:
+        ImportError: if no module spec is found for `module_name`
     """
     # see https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
 
@@ -105,15 +112,14 @@ def _cache_shelf_path() -> str:
 _cache_shelf_disabled = False
 
 
+# any exception from the shelf disables the cache for the process: the macOS dbm
+# backend corrupts the shelf under eviction and then raises UnicodeDecodeError, a
+# ValueError that would otherwise be mistaken for a bad argument to the wrapped
+# function
 def _discard_cache_shelf(ex: BaseException) -> None:
-    """disable the disk cache for this process and delete its files.
+    """disable the disk cache for this process and delete the cache files.
 
-    A fault in the shelf must never fail a call that has a working uncached path.
-    The macOS dbm backend corrupts once the cache evicts, and the
-    `UnicodeDecodeError` it then raises subclasses `ValueError`. Propagating that
-    error gets a machine-local fault mistaken for a bad argument several layers
-    up. The files hold nothing that cannot be recomputed. A `UserWarning` names the
-    deleted files and `ex`.
+    A `UserWarning` names the deleted files and `ex`.
     """
     global _cache_shelf_disabled
     import glob
@@ -176,17 +182,19 @@ def _make_lru_key(func, args, kwargs) -> str:
 def persistent_cache(
     maxsize: int = 128,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    """memoize a function's results in a shelf on disk that survives across processes.
+    """memoize the results of a function in a disk shelf shared across processes.
 
-    The shelf holds at most `maxsize` entries. Which entry is evicted past that
-    limit is unspecified, since the access order is rebuilt from the shelf's key
-    iteration on every call rather than tracked. `get_window` and `design_fir_lpf`
-    stack it under `lru_cache`, which supplies the in-memory LRU behavior.
+    The shelf holds at most `maxsize` entries. The entry evicted past that limit is
+    unspecified. A fault reading or writing the shelf, an unpicklable result
+    included, disables the cache for the process, deletes the cache files with a
+    `UserWarning`, and lets the call proceed uncached. Only the exceptions of the
+    wrapped function reach the caller.
 
-    A fault reading or writing the shelf (an unpicklable result included) disables
-    the cache for the process, deletes its files (`_discard_cache_shelf`), and lets
-    the call proceed uncached. Only the wrapped function's own exceptions reach its
-    caller.
+    Args:
+        maxsize: the number of entries kept in the shelf
+
+    Returns:
+        a decorator that returns a wrapper with the signature of the wrapped function
     """
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:

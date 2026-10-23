@@ -172,18 +172,13 @@ def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
 class SpecValidationError(msgspec.ValidationError):
     """signal a spec validation failure with a msgspec-style field path.
 
-    The subclass of `msgspec.ValidationError` preserves the path. msgspec re-raises
-    a plain `ValueError` from `__post_init__` as its own `ValidationError` with its
-    own path, but propagates a `ValidationError` subclass untouched.
-
-    `path` is one nested chain of field accesses within a single document root,
-    which renders as msgspec does it (`$.analysis.spectrogram`) and leads the
-    message. `locations` are additional sibling roots, rendered as an `at ... on ...`
-    trailer in the order given. The split exists because a sweep failure is not
-    located by one chain. The same incompatibility is located jointly by a
-    `captures:` entry, the `loops:` point that generated it, and the measurement key
-    that rejected it. Those are siblings in the document, so collapsing them into
-    `path` would render a field chain that does not exist.
+    `path` is one chain of field accesses from a single document root. The chain
+    renders as msgspec renders a path (``$.analysis.spectrogram``) and leads the
+    message. `locations` are further roots that locate the same failure, rendered
+    as an ``at ... on ...`` trailer in the order given. A rejected capture is
+    located by a ``captures:`` entry, the ``loops:`` point that generated the
+    capture, and the measurement key that rejected the capture. msgspec propagates
+    an instance raised in `__post_init__` unchanged, with the path.
     """
 
     def __init__(
@@ -215,7 +210,7 @@ class SpecValidationError(msgspec.ValidationError):
 
 @contextlib.contextmanager
 def validation_path(*parts: str) -> Iterator[None]:
-    """re-raise a validation failure in the block with `parts` prepended to its path.
+    """prepend `parts` to the field path of a validation failure raised in the block.
 
     Yields:
         None, once, for the body of the ``with`` block
@@ -223,7 +218,7 @@ def validation_path(*parts: str) -> Iterator[None]:
     Raises:
         SpecValidationError: in place of a `SpecValidationError`, `ValueError`,
             `TypeError` or `msgspec.ValidationError` raised in the block, with
-            `parts` joined ahead of any field path it already carried
+            `parts` joined ahead of the field path of the original exception
     """
 
     try:
@@ -332,12 +327,11 @@ def convert_spec_cached(spec_cls: type[_T], spec: Any) -> _T:
     """project `spec` onto the fields that `spec_cls` declares.
 
     Results are stored in a process-global `lru_cache` of 4096 entries that
-    `striqt.waveform.lib.util.clear_caches` empties.
+    `clear_caches` empties.
 
     Returns:
         an instance of `spec_cls` with the matching fields of `spec`, or `spec`
-        itself when it is already exactly `spec_cls`, so an argument that was
-        projected already adds no second cache entry
+        itself when ``type(spec)`` is `spec_cls`
     """
     return convert_spec(spec, type=spec_cls)
 
@@ -347,8 +341,8 @@ def to_analysis_capture(capture: structs.Capture) -> structs.AnalysisCapture:
 
     Returns:
         an `AnalysisCapture` with the matching fields of `capture`, shared through
-        the cache of `convert_spec_cached`; `capture` itself when it is already
-        exactly an `AnalysisCapture`
+        the cache of `convert_spec_cached`; `capture` itself when ``type(capture)``
+        is `AnalysisCapture`
     """
     from . import structs
 
@@ -381,17 +375,13 @@ def lru_cache_on_converted(
 def lru_cache_on_converted(
     *spec_types: type[msgspec.Struct], maxsize: int | None = 128
 ) -> Callable[[Callable[..., _R]], LRUWrapped[..., _R]]:
-    """cache the decorated function, keyed on projections of its leading arguments.
+    """cache the decorated function, keyed on projections of the leading arguments.
 
     Each of the first ``len(spec_types)`` positional arguments is converted with
-    `convert_spec_cached` before the cache lookup, so callers that differ only in
-    fields the target types do not declare share one entry. The conversion sits over
-    the `lru_cache`; a cache stacked over the conversion instead would key on the
-    unprojected argument.
-
-    The decorated function annotates the projected arguments with the type its *body*
-    receives. Callers may pass anything `convert_spec` accepts, so the overloads type
-    those positions as `Any`.
+    `convert_spec_cached` before the cache lookup. Calls that differ only in fields
+    the target types do not declare share one entry. The decorated function
+    annotates the projected arguments with the type the body receives. A caller may
+    pass anything `convert_spec` accepts at those positions.
 
     Args:
         spec_types: the struct type that each leading positional argument is
@@ -400,8 +390,8 @@ def lru_cache_on_converted(
 
     Returns:
         a decorator whose wrapper exposes `cache_clear` and `cache_info` and is
-        registered for `striqt.waveform.lib.util.clear_caches`; the wrapper raises
-        `TypeError` when fewer than ``len(spec_types)`` arguments arrive by position
+        registered for `clear_caches`; the wrapper raises `TypeError` when fewer
+        than ``len(spec_types)`` arguments arrive by position
     """
 
     def wrapper(func: Callable[..., _R]) -> LRUWrapped[..., _R]:
@@ -456,7 +446,8 @@ def _unwrap_type_info(type_: mi.Type) -> tuple[dict[str, Any], list[mi.Type]]:
 def get_capture_type_attrs(capture_cls: type[msgspec.Struct]) -> dict[str, Any]:
     """return the `Meta` attrs (`standard_name`, `units`) of each field in `capture_cls`.
 
-    The dict is cached and shared between calls, so callers must not mutate it.
+    The returned dict is cached and shared between calls. Callers must not mutate
+    the dict.
     """
     fields = cast('mi.StructType', mi.type_info(capture_cls)).fields
     return {field.name: _unwrap_type_info(field.type)[0] for field in fields}
@@ -466,7 +457,8 @@ def get_capture_type_attrs(capture_cls: type[msgspec.Struct]) -> dict[str, Any]:
 def get_capture_field_types(capture_cls: type[msgspec.Struct]) -> dict[str, Any]:
     """return the annotated type of each field in `capture_cls`, keyed by field name.
 
-    The dict is cached and shared between calls, so callers must not mutate it.
+    The returned dict is cached and shared between calls. Callers must not mutate
+    the dict.
     """
     return {field.name: field.type for field in msgspec.structs.fields(capture_cls)}
 
