@@ -1,10 +1,10 @@
 """the manual Y-factor calibration action.
 
 The operator switches the noise diode by hand. The runner acquires the capture grid
-of each port once with the diode off and once with it on, and prompts the operator
-between the passes. The diode state is not a capture field. It enters each
-acquisition through the `extra_data` of the pipeline and is a dimension of the
-saved corrections beside the capture fields.
+of each port once with the diode off and once with the diode on, and prompts the
+operator between the passes. The diode state is not a capture field. The state
+enters each acquisition through the `extra_data` of the pipeline and is a dimension
+of the saved corrections beside the capture fields.
 """
 
 from __future__ import annotations as __
@@ -35,12 +35,13 @@ def calibration_analysis(
     """return the analysis a Y-factor calibration runs on each capture.
 
     The analysis is `channel_power_time_series` with the ``rms`` and ``peak``
-    detectors. Its detector period is `spec.calibration.detector_period`, or the one
+    detectors. The detector period is `spec.calibration.detector_period`, or the one
     `duration` that the captures and loops share when that is None.
 
     Raises:
-        SpecValidationError: at ``$.calibration.detector_period`` when it is None and
-            the captures and loops carry more than one `duration`
+        SpecValidationError: at ``$.calibration.detector_period`` when
+            `detector_period` is None and the captures and loops have more than one
+            `duration`
     """
     period = spec.calibration.detector_period
 
@@ -88,7 +89,7 @@ def compute_y_factor_corrections(
     """return the Y-factor noise figure and power correction of each grid point.
 
     The dimensions of `dataset` are the calibration fields and
-    ``noise_diode_enabled``. Its variables are `channel_power_time_series` (dB,
+    ``noise_diode_enabled``. The variables are `channel_power_time_series` (dB,
     ``rms`` and ``peak`` detectors over ``time_elapsed``), `analysis_bandwidth`
     (Hz), and `backend_sample_rate` (S/s). The rms detector is averaged in linear
     power over ``time_elapsed`` before the Y-factor is formed. An infinite
@@ -226,10 +227,10 @@ def build_calibration_sweep(
 
     The sweep is the spec's capture plan over every port, with the analysis of
     `calibration_analysis`, IQ reuse across the `analysis_bandwidth` points of one
-    radio setting, `loop_only_nyquist`, and no warmup. Its `sink` is the spec's
+    radio setting, `loop_only_nyquist`, and no warmup. The `sink` is the spec's
     `Sink` converted to a `ZarrSink` with default store fields. The runner reads
-    only its path and log fields. The sweep is an instance of the spec class's
-    `sweep_cls`, and the result is cached on `spec`.
+    only the path and log fields of `sink`. The sweep is an instance of the
+    `sweep_cls` of the spec class, and the result is cached on `spec`.
 
     Raises:
         TypeError: if `spec` is not an instance of a bound action spec class
@@ -314,7 +315,7 @@ def calibration_fields(
 def corrections_path(
     sweep: specs.Sweep[Any, Any, Any], format_path: specs.paths.PathFormatter | None
 ) -> Path:
-    """return `sweep.sink.path` with its ``{fields}`` formatted.
+    """return `sweep.sink.path` with the ``{fields}`` templates formatted.
 
     Raises:
         ValueError: if `sweep.sink.path` is None

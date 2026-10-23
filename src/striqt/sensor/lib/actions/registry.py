@@ -1,7 +1,7 @@
 """registry of the action runner for each action spec type.
 
-Bound classes subclass the action spec type they are built from. A runner
-registered for the base type therefore also runs the bindings derived from it.
+A bound spec class subclasses the action spec type of the binding. A runner registered
+for the action spec type runs every binding of that type.
 """
 
 from __future__ import annotations as __
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class ActionRegistry(dict['type[specs.ActionSpec]', 'type[ActionRunner]']):
-    """map from an action spec type to the `ActionRunner` subclass that runs it."""
+    """map from an action spec type to the `ActionRunner` subclass for that type."""
 
     def runner(
         self, spec_type: type[specs.ActionSpec[Any, Any]]
@@ -42,7 +42,7 @@ class ActionRegistry(dict['type[specs.ActionSpec]', 'type[ActionRunner]']):
     def lookup(
         self, spec: specs.ActionSpec | type[specs.ActionSpec]
     ) -> type[ActionRunner[Any, Any, Any, Any, Any, Any]]:
-        """return the runner registered for the spec type or the nearest of its bases.
+        """return the runner registered for the spec type or the nearest base.
 
         Args:
             spec: an action spec instance, or its type

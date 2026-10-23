@@ -1,12 +1,7 @@
-"""the action that runs a `Cellular5GNRSweep` as a plain `Sweep`.
+"""the action that runs a `Cellular5GNRSweep` as a `Sweep`.
 
-The transform from channel table to radio settings is explicit and runs once, when the
-runner builds its sweep: each capture is matched to the channel with its
-`center_frequency`, its `sample_rate` and `analysis_bandwidth` are derived from that
-channel, the channel's cell parameters are written into the capture's
-`adjust_analysis`, and the analysis block is expanded into an `BuiltinAnalyses` with the
-parameters that follow from the subcarrier spacing filled in. The sweep's captures
-are the binding's own type, and loops over their fields pass through unchanged.
+The `Sweep` is built once per spec, when the runner is constructed, and cached on the
+spec.
 """
 
 from __future__ import annotations as __
@@ -47,7 +42,7 @@ def symbol_period(subcarrier_spacing: float) -> Fraction:
 
 
 def ssb_symbol_indexes(channel: specs.CellChannel) -> Any:
-    """return the SSB `symbol_indexes` of `channel`: its `ssb_case`, or the case of its spacing.
+    """return the `symbol_indexes` of `channel`: `ssb_case`, or the case of the spacing.
 
     The default is the TS 38.213 §4.1 case ``'a'`` at 15 kHz and ``'c'`` at 30 kHz.
     """
@@ -105,10 +100,11 @@ def resolve_capture(
 ) -> SC:
     """return `capture` with the radio and analysis settings of `channel`.
 
-    `sample_rate` is `nr_sample_rate` of the channel, `analysis_bandwidth` is the
-    channel bandwidth, and `adjust_analysis` gains `frequency_offset`,
-    `guard_bandwidths`, `frame_slots`, `special_symbols`, `subcarrier_spacing`, and
-    `symbol_indexes` from the channel, under any key the capture already sets.
+    `sample_rate` is `nr_sample_rate` of the channel, and `analysis_bandwidth` is the
+    channel bandwidth. The `frequency_offset`, `guard_bandwidths`, `frame_slots`,
+    `special_symbols`, `subcarrier_spacing`, and `symbol_indexes` of the channel are
+    written into `adjust_analysis`. A key that the capture already sets in
+    `adjust_analysis` keeps the value of the capture.
 
     Args:
         capture: a capture of the spec, at its class defaults for `sample_rate` and
@@ -116,7 +112,7 @@ def resolve_capture(
         channel: the matched `CellChannel`
         index: the position of `capture` in `spec.captures`, for the error location
         consumed_keys: the analysis parameter names some enabled measurement reads;
-            generated keys outside it are omitted. None generates every key.
+            generated keys outside that set are omitted. None generates every key.
 
     Raises:
         SpecValidationError: if the capture sets a `sample_rate` or
@@ -267,10 +263,8 @@ def check_block_fields(
     """raise unless every field of `spec_type` is classified exactly once for `name`.
 
     A measurement field is exposed on `block_type`, in `FIXED[name]`, in
-    `PER_CAPTURE` when the measurement has it, or in `HIDDEN[name]`; `DEFAULTED[name]`
-    names exposed fields. The module runs this for every block of
-    `Cellular5GNRAnalysis` when it is imported, so a parameter added to a measurement
-    fails the import until it is classified.
+    `PER_CAPTURE` when the measurement has that field, or in `HIDDEN[name]`;
+    `DEFAULTED[name]` names exposed fields.
 
     Raises:
         TypeError: naming the unclassified, doubly classified, or mistyped fields
@@ -341,14 +335,14 @@ def cellular_analysis(
 ) -> specs.BuiltinAnalyses:
     """return the `Sweep` analysis that `spec.analysis` and `subcarrier_spacing` select.
 
-    Each enabled block becomes the measurement of the same name, with its free
+    Each enabled block becomes the measurement of the same name, with the exposed
     parameters copied, the `FIXED` parameters computed from the spacing, and a None
-    `DEFAULTED` parameter replaced by its derived value.
+    `DEFAULTED` parameter replaced by the derived value.
 
     Raises:
         SpecValidationError: if `spec.source.signal_trigger` is the PSS sync name and
-            the block of that name is None, or any other trigger name; the struct
-            form of `signal_trigger` carries its own spec and needs no block
+            the block of that name is None, or any other trigger name. The struct
+            form of `signal_trigger` is accepted without a block
     """
     scs = subcarrier_spacing
     result: dict[str, dict[str, Any]] = {}
@@ -390,8 +384,8 @@ def build_cellular_sweep(
 
     The sweep has the spec's captures resolved against `cell_channels`
     (`resolve_capture`), the spec's loops and `adjust_captures` unchanged, and the
-    analysis of `cellular_analysis`. It is an instance of the spec class's
-    `sweep_cls`, and the result is cached on `spec`.
+    analysis of `cellular_analysis`. The sweep is an instance of the `sweep_cls` of
+    the spec class, and the result is cached on `spec`.
 
     Raises:
         TypeError: if `spec` is not an instance of a bound spec class
@@ -441,7 +435,7 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, PS, PC]):
     """run a `Cellular5GNRSweep`.
 
     `sweep` is `build_cellular_sweep` of the spec. The output is a `ZarrCaptureSink`
-    at `sink.path`, or nothing when the path is None, as for a plain `Sweep`.
+    at `sink.path`, or nothing when the path is None.
     """
 
     spec: specs.Cellular5GNRSweep[SS, SP, SC]

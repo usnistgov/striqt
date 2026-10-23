@@ -426,7 +426,8 @@ def spectrogram(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement
     """evaluate a power spectrogram of the IQ by STFT.
 
     The input is the resampled IQ before the `analysis_bandwidth` low-pass filter and
-    any trigger alignment; the output array namespace (numpy or cupy) follows it. Per
+    any trigger alignment. The output array namespace (numpy or cupy) follows the
+    input. Per
     capture, the output has dimensions
     ``(spectrogram_time, spectrogram_baseband_frequency)``. `spectrogram_time` in s
     runs from the start of the capture at the STFT hop, which `fractional_overlap`
@@ -441,8 +442,7 @@ def spectrogram(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement
     one bin, where the `resolution_bandwidth` attr is the equivalent noise bandwidth (in
     Hz) of the zero-padded window. `time_aperture` averages consecutive windows, and
     `lo_bandstop` sets the bins within that bandwidth of DC to ``nan``. Values are
-    rounded to 2 decimals and stored as float16. `striqt.waveform.spectrogram`
-    evaluates the STFT.
+    rounded to 2 decimals and stored as float16.
 
     Args:
     {args}
@@ -520,7 +520,7 @@ def power_spectral_density(
     """estimate the power spectral density by the Welch method.
 
     Each `time_statistic` reduces the `spectrogram` output with the same STFT fields
-    (in linear power, unrounded) across its windows at each frequency bin; 'mean' is
+    (in linear power, unrounded) over the STFT windows at each frequency bin; 'mean' is
     the Welch estimate (P. D. Welch, IEEE Trans. Audio Electroacoust. 15(2), 1967)
     and a float in ``[0, 1]`` is a quantile. Per capture, the output has dimensions
     ``(time_statistic, baseband_frequency)`` in dBm per noise bandwidth, as recorded
@@ -633,7 +633,7 @@ def spectrogram_histogram(
     The pixels are those of the `spectrogram` output with the same STFT fields
     (float32, unrounded), flattened over time and frequency. Per capture, the output
     has the dimension ``(spectrogram_power_bin,)`` and sums to 1.
-    `spectrogram_power_bin` is the bin centers in dBm per noise bandwidth; its
+    `spectrogram_power_bin` is the bin centers in dBm per noise bandwidth. The
     ``-inf`` and ``inf`` entries collect the pixels more than half a bin below
     `power_low` or above `power_high`. The `noise_bandwidth` attr (in Hz) is set on
     the output and on the bin coordinate.

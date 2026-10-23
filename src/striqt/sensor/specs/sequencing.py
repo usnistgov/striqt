@@ -241,17 +241,13 @@ def _expansion_args(
 ) -> tuple[tuple, dict]:
     """marshal `plan` into the arguments of `_expand_capture_loops_with_origins`.
 
-    Every caller builds the keywords here because `lru_cache` keys on their insertion
-    order. The same values passed in two orders miss the cache, and the plan expands
-    twice into captures that are equal but not identical.
-
     Args:
         plan: the spec whose `captures`, `loops`, and `adjust_captures` are expanded
         source_id: as `loop_captures`
         only_fields: as `loop_captures`
         limit: as `loop_captures`
         loop_only_nyquist: drop each expanded capture whose finite
-            `analysis_bandwidth` exceeds its `sample_rate`. A `Sweep` passes
+            `analysis_bandwidth` exceeds the capture `sample_rate`. A `Sweep` passes
             ``options.loop_only_nyquist``.
 
     Returns:
@@ -260,6 +256,8 @@ def _expansion_args(
     """
 
     args = (plan.captures, plan.loops, plan.adjust_captures)
+    # lru_cache keys on keyword insertion order; one fixed order here keeps equal
+    # plans on one cache entry, so expanded captures stay identical, not just equal
     kws = {
         'source_id': source_id,
         'cls': _resolve_capture_cls(plan),

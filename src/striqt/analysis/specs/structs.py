@@ -418,11 +418,10 @@ class SpectrogramHistogramRatio(
 class BuiltinAnalyses(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):
     """the ``analysis:`` block of a sweep: one optional field per registered measurement.
 
-    Each field is named for the measurement it configures and holds that
-    measurement's spec, or None to leave the measurement out of the sweep. `to_dict`
-    omits the None fields. The dict and the saved zarr attrs therefore name only the
-    enabled measurements. The registered measurements and these fields must agree one
-    to one, which `striqt.analysis.measurements` checks when it is imported.
+    Each field is named for a measurement. A field set to a spec enables the
+    measurement with those parameters, and ``None`` leaves the measurement out of the
+    sweep. `to_dict` omits the ``None`` fields. The dict and the saved zarr attrs name
+    only the enabled measurements.
     """
 
     channel_power_time_series: Optional[ChannelPowerTimeSeries] = None
@@ -445,10 +444,11 @@ class BuiltinAnalyses(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=Tr
 class BuiltinTriggers(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):
     """the struct form of a source's ``signal_trigger:``, one optional field per trigger.
 
-    Exactly one field is set. The field names the trigger and holds the spec the
-    trigger runs with. A source with this form aligns captures to a measurement that
-    the sweep's `BuiltinAnalyses` need not enable. The string form of ``signal_trigger``
-    names a registered trigger and takes its spec from the sweep's analysis instead.
+    Exactly one field is set. The set field names the trigger, and the value is the
+    spec the trigger runs with. A source with this form aligns captures to a
+    measurement that the sweep's `BuiltinAnalyses` need not enable. The string form of
+    ``signal_trigger`` names a registered trigger and runs with the spec of that
+    measurement in the sweep's analysis.
     """
 
     cellular_5g_pss_sync: Optional[Cellular5GNPSSSync] = None

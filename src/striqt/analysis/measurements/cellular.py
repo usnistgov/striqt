@@ -339,14 +339,13 @@ def cellular_5g_pss_correlation(
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR primary synchronization signal.
 
-    The IQ is shifted and resampled to the sync block by `get_5g_ssb_iq`, then
-    cross-correlated with the PSS sequence of each cell sector ID. The output is the
-    complex correlation (in √mW) with dimensions `cellular_cell_id2`,
-    `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index`, and
-    `cellular_ssb_lag` (in s), truncated to the first `max_block_count` sync blocks
-    when that is set. The PSS template has unit energy over the 127 PSS subcarriers.
-    The
-    squared magnitude of a peak on a lag sample equals the received PSS symbol power.
+    The IQ is shifted and resampled to the sync block, then cross-correlated with the
+    PSS sequence of each cell sector ID. The output is the complex correlation (in
+    √mW) with dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
+    `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s), truncated to the first
+    `max_block_count` sync blocks when that is set. The PSS template has unit energy
+    over the 127 PSS subcarriers. The squared magnitude of a peak on a lag sample
+    equals the received PSS symbol power.
     White noise with power spectral density N0 has a mean squared magnitude of
     ``N0 * subcarrier_spacing`` in each lag, and the `noise_bandwidth` attr is
     `subcarrier_spacing`.
@@ -467,8 +466,8 @@ def cellular_5g_sss_correlation(
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR secondary synchronization signal.
 
-    The IQ is shifted and resampled to the sync block by `get_5g_ssb_iq`, then
-    cross-correlated with the SSS sequences. The output is the complex correlation (in
+    The IQ is shifted and resampled to the sync block, then cross-correlated with the
+    SSS sequences. The output is the complex correlation (in
     √mW) with dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
     `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s), truncated to the first
     `max_block_count` sync blocks when that is set. The SSS template has unit energy
@@ -654,7 +653,7 @@ def cellular_5g_ssb_spectrogram(
 ) -> Measurement:
     """evaluate a spectrogram of each 5G NR SSB burst set by OFDM symbol and subcarrier.
 
-    The STFT hops once per OFDM symbol, and its half-subcarrier bins are integrated
+    The STFT hops once per OFDM symbol, and the half-subcarrier bins are integrated
     pairwise to one bin per subcarrier of `subcarrier_spacing` before the frequency
     axis is trimmed to the `sample_rate` band about `frequency_offset`. Only the
     symbols of the burst set at the start of each `discovery_periodicity` are kept.

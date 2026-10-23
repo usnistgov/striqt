@@ -295,7 +295,7 @@ def channel_power_histogram(
     The readings are those of `channel_power_time_series` with the same detector
     fields. Per capture, the output has dimensions
     ``(power_detector, channel_power_bin)`` and sums to 1 over the bins of each
-    detector. `channel_power_bin` is the bin centers in dBm; its ``-inf`` and
+    detector. `channel_power_bin` is the bin centers in dBm. The ``-inf`` and
     ``inf`` entries collect the readings more than half a bin below `power_low` or
     above `power_high`. The `noise_bandwidth` attr (in Hz) of the output and of the
     bin coordinate is that of `channel_power_time_series`.

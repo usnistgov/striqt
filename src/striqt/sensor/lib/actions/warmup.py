@@ -3,7 +3,8 @@
 The warmup pays the python import and JIT compilation costs of the analysis before
 the first hardware capture. `prepare_compute` runs it through a `SweepRunner` while
 `open_resources` opens the hardware. The warmup sweep is derived from the sweep
-being prepared, and its resources are opened here rather than by `open_resources`.
+being prepared, and the resources of the warmup sweep are opened by
+`open_warmup_resources` rather than by `open_resources`.
 """
 
 from __future__ import annotations as __

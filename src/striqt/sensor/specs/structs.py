@@ -428,8 +428,7 @@ class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
     or constructed from the API. The `source`, `peripherals`, and `sink` blocks name
     the resources that every action opens. `source` and `peripherals` are the spec
     types of the binding named by the ``sensor_binding`` tag. `extensions` names an
-    out-of-tree module that the readers in `striqt.sensor.lib.io` import before
-    decoding the rest of the spec.
+    out-of-tree module that is imported before the rest of the spec is decoded.
     """
 
     # tagged unions used in bindings introduce the tag below as well.
@@ -453,7 +452,7 @@ class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
 
     @classmethod
     def check_schema(cls, schema: Any) -> None:
-        """raise if the spec types of `schema` cannot carry this action.
+        """raise if the spec types of `schema` cannot configure this action.
 
         `bind_sensor` calls this once per binding. The base accepts every schema.
 
@@ -526,7 +525,7 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=Tru
     accepted, discarded, and reported with a `DeprecationWarning`. More than one
     capture is accepted only when `calibration.implied_loops` names the fields the
     captures vary, and `source.calibration` must be null. A bound spec is also
-    rejected when `ManualYFactorRunner.validate` cannot build its sweep.
+    rejected when `ManualYFactorRunner.validate` cannot build the calibration sweep.
     """
 
     calibration: ManualYFactorSpec
@@ -575,11 +574,9 @@ class CellChannel(SpecBase, frozen=True, kw_only=True):
     `channel_bandwidth` and `subcarrier_spacing`, at or above `min_sample_rate`, with
     `analysis_bandwidth` equal to `channel_bandwidth`. The remaining fields reach the
     cellular measurements through the capture's `adjust_analysis`.
-    `ssb_case` None selects the TS 38.213 §4.1 case from the spacing
-    (`striqt.sensor.lib.actions.cellular.ssb_symbol_indexes`): ``'a'`` at 15 kHz and
-    ``'c'`` at 30 kHz. A `tdd_frame_slots` string is one character per
-    slot of a 10 ms frame, or a single character for every slot. Only 30 kHz spacing
-    is accepted.
+    `ssb_case` None selects the TS 38.213 §4.1 case for the spacing, ``'c'`` at 30 kHz.
+    A `tdd_frame_slots` string is one character per slot of a 10 ms frame, or a single
+    character for every slot. Only 30 kHz spacing is accepted.
     """
 
     center_frequency: types.CenterFrequencyScalar
@@ -687,15 +684,12 @@ class CellularIQWaveformSpec(SpecBase, frozen=True, kw_only=True):
 
 
 class Cellular5GNRAnalysis(SpecBase, frozen=True, kw_only=True):
-    """the `analysis:` block of a `Cellular5GNRSweep`.
+    """the per-measurement settings of a `Cellular5GNRSweep`.
 
-    Each field carries the name of the measurement it enables, as in the
-    ``analysis:`` block of a plain `Sweep`, and its block names only the free
-    parameters of that measurement. Every other parameter of the measurement is
-    classified in `striqt.sensor.lib.actions.cellular` as fixed by the subcarrier
-    spacing, set per capture from the channel table, or left at the measurement's
-    default, and that module checks the classification against the measurement specs
-    when it is imported. A None field disables its measurement.
+    Each field is named for a measurement. A field set to ``None`` disables the
+    measurement. A block enables the measurement and exposes only the parameters that
+    the channel does not fix. The remaining parameters are set from the `cell_channels`
+    entry at the center frequency of the capture and from the subcarrier spacing.
     """
 
     spectrogram: Optional[CellularSpectrogramSpec] = None
@@ -718,10 +712,10 @@ class Cellular5GNRSweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
 
     `captures` are the binding's own capture type and name a channel by
     `center_frequency`; `cell_channels` maps a label to the `CellChannel` with that
-    center frequency. The runner derives each capture's `sample_rate` and
-    `analysis_bandwidth` from its channel and generates the `Sweep` analysis from
-    `analysis`. A capture leaves its own `sample_rate` and `analysis_bandwidth` at
-    their defaults. Every channel a capture uses must share one subcarrier spacing.
+    center frequency. The runner derives the `sample_rate` and `analysis_bandwidth` of
+    each capture from the matched channel and generates the `Sweep` analysis from
+    `analysis`. A capture leaves `sample_rate` and `analysis_bandwidth` at the class
+    defaults. Every channel a capture uses must share one subcarrier spacing.
     A loop over `center_frequency` is rejected; the channels are listed as captures
     instead. The binding's capture type must have a `center_frequency` field.
     """

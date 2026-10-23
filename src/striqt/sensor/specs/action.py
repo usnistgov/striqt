@@ -26,9 +26,8 @@ def validate_action(spec: structs.ActionSpec[Any, Any]) -> None:
     """run the registered action runner's `validate` on a bound action spec.
 
     The leaf spec classes call this at the end of `__post_init__`, after every field
-    is in its final state. Nothing runs for an unbound spec (`sweep_cls` is None),
-    for a type with no registered runner, or while `striqt.sensor.lib.actions` is not
-    importable.
+    is final. Nothing runs for an unbound spec (`sweep_cls` is None) or for a type
+    with no registered runner.
 
     Raises:
         msgspec.ValidationError: whatever the runner's `validate` raises for `spec`

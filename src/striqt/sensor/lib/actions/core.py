@@ -89,8 +89,8 @@ def iterate_sweep(
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
     """run the action of ``resources['runner']`` over `resources`.
 
-    The runner was built by `open_resources` from the action spec. A plain
-    `Sweep` runs `iterate_captures`, whose docstring describes the yields.
+    The runner was built by `open_resources` from the action spec. A `Sweep` runs
+    `iterate_captures`, whose docstring describes the yields.
 
     Args:
         resources: dictionary of open resources returned by `open_resources`
@@ -137,12 +137,12 @@ def iterate_captures(
 
     `Result i` is what `sink.append` returned for capture `i`. With `yield_values`
     False, every step yields `None` when `always_yield` is True and the generator
-    yields nothing when it is False. The attrs of each result are the fields of
-    ``resources['action_spec']``. They differ from the fields of
+    yields nothing when `always_yield` is False. The attrs of each result are the
+    fields of ``resources['action_spec']``. The attrs differ from the fields of
     ``resources['sweep_spec']`` when the runner derived the sweep from the spec.
 
     Args:
-        resources: dictionary of open resources returned by open_resources
+        resources: dictionary of open resources returned by `open_resources`
         always_yield: with `yield_values` False, yield `None` at every step
         yield_values: if False, yield nothing, or `None` per step with `always_yield`
         loop: if True, the sweep repeats from the beginning after the last capture

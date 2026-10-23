@@ -1,4 +1,4 @@
-"""the actions a bound sensor can run over its open resources"""
+"""the actions a bound sensor runs over open resources"""
 
 from . import cellular, core, sweep, warmup, yfactor
 from .cellular import Cellular5GNRSweepRunner

@@ -146,10 +146,9 @@ def read_zarr_spec(
     `sensor_binding` that the extension module defines is accepted. Only attrs
     that name fields of the sweep class being decoded, the binding tag, and
     ``mock_source`` are read. Other dataset attrs are ignored. An
-    ``extensions.sink`` attr written by an earlier release is dropped with a
-    `DeprecationWarning`. Passing the store path to `open_resources` derives the
-    ``{spec_name}`` and ``{parent_name}`` path fields from it, as for
-    `read_yaml_spec`.
+    ``extensions.sink`` attr is dropped with a `DeprecationWarning`. Passing the
+    store path to `open_resources` derives the ``{spec_name}`` and ``{parent_name}``
+    path fields from the store path, as for `read_yaml_spec`.
 
     Args:
         path: the zarr store, a ``.zarr`` directory or ``.zarr.zip`` archive
@@ -195,7 +194,7 @@ def read_zarr_spec(
 
 
 def _drop_removed_extension_sink(attrs: dict[str, Any]) -> dict[str, Any]:
-    """return `attrs` without the ``extensions.sink`` key of earlier releases.
+    """return `attrs` without the ``extensions.sink`` key.
 
     `Extension` does not define the key. A `DeprecationWarning` reports the drop.
     The sink class the key named is not applied. A caller that wants no output sets

@@ -363,8 +363,8 @@ def evaluate_by_spec(
 ) -> 'dict[str, DelayedDataArray] | dict[str, Array]':
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
-    `spec` is an `AnalysisGroup` such as `specs.BuiltinAnalyses`; its None fields are
-    skipped.
+    `spec` is an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
+    fields of `spec` are skipped.
 
     Raises:
         TypeError: if `spec` is not an `AnalysisGroup`

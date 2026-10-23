@@ -297,24 +297,21 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     ) -> AnalysisFuncWrapper[P]:
         """register the decorated function as the measurement configured by `spec_type`.
 
-        Registration mutates this registry when the decorator is applied. `spec_type`
-        becomes a key here, and each of its fields is recorded in `parameter_fields`
-        and `parameter_defaults` for coordinate inference. A sweep reaches the
-        measurement through the ``analysis:`` block only when `specs.BuiltinAnalyses`
-        declares an ``Optional[spec_type]`` field of the same `name`;
-        `striqt.analysis.measurements` checks at import that the registry and that
-        struct agree.
+        Registration mutates this registry when the decorator is applied. A sweep
+        reaches the measurement through the ``analysis:`` block only when
+        `specs.BuiltinAnalyses` declares an ``Optional[spec_type]`` field of the same
+        `name`.
 
         The decorated function is called as ``func(iq, capture, **spec.to_dict())``
         and returns an array, or an ``(array, attrs)`` tuple, whose axes are `dims`.
-        The wrapper that replaces it accepts ``(iq, capture, as_xarray=True,
-        **kwargs)`` with the fields of `spec_type` as keywords; its `__signature__`
-        and the ``{args}`` placeholder in its docstring are filled from `spec_type`.
-        The wrapper runs `validate` before touching IQ, raising
-        `specs.helpers.SpecValidationError` on a rejected combination, and then
-        returns an `xarray.DataArray` with a leading ``port`` dimension when
-        `as_xarray` is True, a `DelayedDataArray` when it is ``'delayed'``, or the
-        ``(array, attrs)`` pair when it is False.
+        The wrapper that replaces the function accepts ``(iq, capture,
+        as_xarray=True, **kwargs)`` with the fields of `spec_type` as keywords. The
+        `__signature__` of the wrapper and the ``{args}`` placeholder in the docstring
+        are filled from `spec_type`. The wrapper runs `validate` before touching IQ,
+        raising `specs.helpers.SpecValidationError` on a rejected combination, and
+        then returns an `xarray.DataArray` with a leading ``port`` dimension when
+        `as_xarray` is True, a `DelayedDataArray` when `as_xarray` is ``'delayed'``,
+        or the ``(array, attrs)`` pair when `as_xarray` is False.
 
         Args:
             spec_type: the `specs.Analysis` subclass whose fields are the keyword
@@ -334,19 +331,17 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             store_compressed: False to store the output uncompressed in zarr
             attrs: attrs of the output `xarray.DataArray`; the spec fields and any
                 attrs returned by the function take precedence
-            validate: checks the (capture, spec) combination without touching IQ, so
-                that a sweep can reject a bad combination before it acquires. The
-                return value is ignored here. By convention it is the derived sizing
-                that the measurement consumes, so that arithmetic is written once.
-                Such a validator is named for what it returns (`validated_*`)
+            validate: checks the (capture, spec) combination without touching IQ. The
+                return value is ignored here. By convention the return value is the
+                derived sizing that the measurement consumes, and the validator is
+                named for what it returns (`validated_*`)
             tolerance: derives the roundoff error budget of the output from the
                 (capture, spec) combination without touching IQ, as a
-                `specs.Tolerance`, so that a test or a consumer can decide how
-                closely two evaluations must agree. It is called with the keywords
+                `specs.Tolerance`. The function is called with the keywords
                 `array_backend` and `input_error` (see `AnalysisTolerance`)
 
         Returns:
-            a decorator that registers its function and returns the wrapper
+            a decorator that registers the decorated function and returns the wrapper
 
         Raises:
             ValueError: when `spec_type` is already registered
@@ -622,10 +617,7 @@ def check_group_fields(
 ) -> None:
     """raise unless `group_type` has one ``Optional[spec] = None`` field per `expected` entry.
 
-    `striqt.analysis.measurements` runs this on `specs.BuiltinAnalyses` against the
-    measurement registry and on `specs.BuiltinTriggers` against the trigger
-    registry. A measurement registered without its field, or a field without its
-    measurement, therefore fails at import. Field order is not checked.
+    Field order is not checked.
 
     Args:
         group_type: the struct to check

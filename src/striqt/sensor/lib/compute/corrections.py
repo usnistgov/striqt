@@ -141,8 +141,8 @@ def get_correction_overlaps(
 
     The lead absorbs the transient of the analysis FIR, which `correct_iq` applies at
     `capture.sample_rate` after resampling; the tail absorbs that transient and the
-    largest lag of the trigger that `analysis` selects. Together they pad the record of
-    `source_record_size` samples to a whole number of resampler FFTs.
+    largest lag of the trigger that `analysis` selects. The lead and tail together pad
+    the record of `source_record_size` samples to a whole number of resampler FFTs.
 
     Args:
         capture: the capture whose duration, sample rate, and analysis bandwidth size

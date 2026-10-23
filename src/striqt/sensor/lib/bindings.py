@@ -37,7 +37,7 @@ tagged_sweeps: Any = None
 class Sensor(Generic[SS, SP, SC]):
     """the implementation classes of a sensor.
 
-    `sweep_spec_cls` is the action spec type to bind. At its default of
+    `sweep_spec_cls` is the action spec type to bind. At the default of
     `specs.Sweep`, `Schema.action` selects the type. `bind_sensor` rejects a
     `sweep_spec_cls` and a `Schema.action` that are both non-default and differ.
     """
@@ -103,19 +103,19 @@ def bind_sensor(
 ) -> type[Controller[SS, SP, SC, PS, PC]]:
     """bind a sensor's implementation classes to its spec types and register it.
 
-    The returned `Controller` subclass carries `sensor` (a `SensorBinding`) and
-    `schema`. Its `sensor.sweep_spec_cls` is a subclass of the action spec type,
-    tagged with `key` in the ``sensor_binding`` field, in which `source`,
-    `peripherals`, and (when the action declares it) `captures` are annotated with
-    the schema's types. Decoding a sweep file whose ``sensor_binding`` is `key`
-    produces an instance of that class. The tagged class carries the class
-    attributes `sensor` (the `SensorBinding`), `schema`, `controller` (the returned
-    class), and `sweep_cls` (the bound `Sweep` class with the same spec types; the
-    class itself when the action is a `Sweep`). A registered binding's tagged class
-    is also an arm of the union returned by `get_tagged_sweep_type`; an unregistered
-    one is decoded only by explicit type. Passing an existing controller's `sensor`
-    with its `schema` replaced by one with another `action` binds the same hardware
-    for that action.
+    The returned `Controller` subclass has the class attributes `sensor` (a
+    `SensorBinding`) and `schema`. The `sensor.sweep_spec_cls` of the returned class
+    is a subclass of the action spec type, tagged with `key` in the
+    ``sensor_binding`` field, in which `source`, `peripherals`, and (when the action
+    declares it) `captures` are annotated with the schema's types. Decoding a sweep
+    file whose ``sensor_binding`` is `key` produces an instance of that class. The
+    tagged class has the class attributes `sensor` (the `SensorBinding`), `schema`,
+    `controller` (the returned class), and `sweep_cls` (the bound `Sweep` class with
+    the same spec types; the class itself when the action is a `Sweep`). A registered
+    binding's tagged class is also an arm of the union returned by
+    `get_tagged_sweep_type`; an unregistered one is decoded only by explicit type.
+    Passing an existing controller's `sensor` with a `schema` whose `action` differs
+    binds the same hardware for that action.
 
     Args:
         key: the ``sensor_binding`` value of sweep files, and the registry key
@@ -282,9 +282,9 @@ def _bind_spec_class(
     """return a subclass of `base` whose spec fields are the types in `schema`.
 
     The class re-annotates `source` and `peripherals`, and `captures` when `base`
-    declares it, adds the ``mock_source`` field, and carries `binding` and `schema`
-    as its `sensor` and `schema` class attributes. With `tag`, the class is an arm
-    of the ``sensor_binding`` tagged union and its tag is `name`. The constructor of
+    declares it, adds the ``mock_source`` field, and sets `binding` and `schema`
+    as the `sensor` and `schema` class attributes. With `tag`, the class is an arm
+    of the ``sensor_binding`` tagged union with the tag `name`. The constructor of
     the returned class raises `TypeError` when ``mock_source`` names no registered
     binding.
     """

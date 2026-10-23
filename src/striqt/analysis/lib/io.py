@@ -196,7 +196,7 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
 
     * A variable with `units` starting in ``'√mW'`` and equal `noise_bandwidth` and
       `sample_rate` attrs: `noise_bandwidth` is set to the `subcarrier_spacing` attr of
-      the variable, which is the noise bandwidth of the unit-energy sync template.
+      the variable.
     * A ``*_power_bin`` coordinate without `noise_bandwidth`: the attr is copied from
       a data variable on the dimension of the coordinate.
     * `units` of the form ``'<unit>/<bandwidth>'`` other than ``'dBm/Hz'``: `units`
