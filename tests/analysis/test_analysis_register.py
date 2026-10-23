@@ -11,6 +11,7 @@ would leak a measurement into every other test module.
 
 from __future__ import annotations
 
+import weakref
 from fractions import Fraction
 from typing import Optional
 
@@ -631,6 +632,59 @@ def test_trigger_registry_and_any_signal_trigger_agree():
     register.check_group_fields(sa.specs.BuiltinTriggers, expected)
     triggers = set(sa.specs.BuiltinTriggers.__struct_fields__)
     assert triggers <= set(sa.specs.BuiltinAnalyses.__struct_fields__)
+
+
+# %% KwArgCache
+
+
+def build_counting_cache():
+    """a KwArgCache keyed on `nfft` around a function that counts its calls"""
+    cache = register.KwArgCache(['nfft'])
+    calls = []
+
+    @cache.apply
+    def helper(iq, capture, *, nfft):
+        calls.append((id(iq), nfft))
+        return np.zeros(nfft)
+
+    return cache, helper, calls
+
+
+def test_kwargcache_hits_on_the_same_array_and_keywords():
+    cache, helper, calls = build_counting_cache()
+    x = np.ones((1, 4))
+
+    with cache:
+        first = helper(x, CAPTURE, nfft=8)
+        second = helper(x, CAPTURE, nfft=8)
+
+    assert second is first
+    assert len(calls) == 1
+
+
+def test_kwargcache_misses_on_a_different_array_with_the_same_keywords():
+    cache, helper, calls = build_counting_cache()
+    x = np.ones((1, 4))
+    y = x.copy()
+
+    with cache:
+        helper(x, CAPTURE, nfft=8)
+        helper(y, CAPTURE, nfft=8)
+
+    assert [iq_id == id(y) for iq_id, _ in calls] == [False, True]
+
+
+def test_kwargcache_holds_the_array_until_exit():
+    cache, helper, _ = build_counting_cache()
+    x = np.ones((1, 4))
+    ref = weakref.ref(x)
+
+    with cache:
+        helper(x, CAPTURE, nfft=8)
+        del x
+        assert ref() is not None
+
+    assert ref() is None
 
 
 # %% check_group_registered

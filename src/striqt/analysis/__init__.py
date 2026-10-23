@@ -2,7 +2,12 @@
 
 from . import specs, testing
 from .lib import dataarrays, io, register, typing, util
-from .lib.dataarrays import analyze_by_spec, EvaluationOptions
+from .lib.dataarrays import (
+    AcquiredIQ,
+    analyze_by_spec,
+    EvaluationOptions,
+    select_waveform,
+)
 from .lib.io import dump, load, open_store
 from .lib.register import AnalysisRegistry, Trigger
 from .specs import Capture

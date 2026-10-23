@@ -1,7 +1,8 @@
 """budget the roundoff error of a sweep, capture by capture.
 
-The roundoff of the correction stage, set by the FFT sizes that `correct_iq` runs on
-a capture, is the `input_error` passed to the tolerance function of each measurement.
+The roundoff of the conditioning stages, set by the FFT sizes that
+`AcquiredIQ.select` runs on a capture, is the `input_error` passed to the tolerance
+function of each measurement.
 """
 
 from __future__ import annotations as __
@@ -81,9 +82,9 @@ def correction_error(
     analysis: specs.AnalysisGroup | None = None,
     *,
     array_backend: specs.types.ArrayBackend | None = None,
-    stage: Literal['pre_filter', 'pre_align'] = 'pre_align',
+    filtered: bool = True,
 ) -> float:
-    """bound the rms amplitude error that `correct_iq` leaves in a capture's IQ.
+    """bound the rms amplitude error that the conditioning stages leave in the IQ of `capture`.
 
     The bound grows with the FFT sizes the correction runs, which follow from
     `capture.duration`, the ratio of `source.master_clock_rate` to
@@ -98,8 +99,8 @@ def correction_error(
             whose `array_backend` is the default backend
         analysis: the measurements the sweep runs, whose `signal_trigger` sets the
             alignment overlap; None budgets no trigger
-        stage: the `AcquiredIQ` stage whose error is wanted; ``'pre_filter'`` stops
-            before the FIR low-pass
+        filtered: False for the error of the waveform before the FIR low-pass, as
+            ``select(prefer_filtered=False)`` returns
         array_backend: the backend whose FFT roundoff model applies, or None for
             `source.array_backend`
 
@@ -121,7 +122,7 @@ def correction_error(
         n_out = round(n_in * capture.sample_rate / design['fs_sdr'])
         nffts += [n_in, n_out]
 
-    filtered = stage == 'pre_align' and isfinite(capture.analysis_bandwidth)
+    filtered = filtered and isfinite(capture.analysis_bandwidth)
     if filtered and not (resampled and corrections.USE_OARESAMPLE):
         n_out = round(capture.duration * capture.sample_rate)
         fir_nfft = _oaconvolve_nfft(n_out, corrections.FILTER_SIZE, array_backend)

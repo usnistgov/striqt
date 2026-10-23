@@ -26,10 +26,55 @@ PORT_DIM = 'port'
 
 @dataclasses.dataclass
 class AcquiredIQ:
-    pre_align: Array
-    pre_filter: Array | None
-    aligned: Array | None
+    """an acquired IQ waveform `x` with the capture that describes the acquisition.
+
+    `select` returns `x` for every preference. A subclass that conditions the
+    waveform (resampling, filtering, trigger alignment) overrides `select`, and a
+    measurement body reaches either through `select_waveform`.
+    """
+
+    x: Array
     capture: specs.Capture | None
+
+    def select(
+        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+    ) -> Array:
+        """return the waveform conditioned as `prefer_filtered` and `prefer_aligned` allow.
+
+        Args:
+            prefer_filtered: True for the waveform low-passed to the capture
+                `analysis_bandwidth`, when the acquisition applies one
+            prefer_aligned: True for the waveform shifted by the signal trigger, when
+                the acquisition runs one
+
+        Returns:
+            shape (port, sample) array in the namespace of `x`; this class returns
+            `x` unchanged
+        """
+        return self.x
+
+
+def select_waveform(
+    iq: Array | AcquiredIQ, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+) -> Array:
+    """return the waveform to measure from an array or an `AcquiredIQ`.
+
+    An array is returned unchanged. For an `AcquiredIQ`, the return value is
+    `AcquiredIQ.select` of `iq` with the same preferences.
+
+    Args:
+        iq: shape (port, sample) array, or the acquisition that wraps one
+        prefer_filtered: True for the waveform low-passed to the capture
+            `analysis_bandwidth`, when the acquisition applies one
+        prefer_aligned: True for the waveform shifted by the signal trigger, when the
+            acquisition runs one
+
+    Returns:
+        shape (port, sample) array in the namespace of the acquisition
+    """
+    if isinstance(iq, AcquiredIQ):
+        return iq.select(prefer_filtered=prefer_filtered, prefer_aligned=prefer_aligned)
+    return iq
 
 
 _ENG_PREFIXES = {
@@ -355,6 +400,13 @@ class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
         assert self.registry is not None
 
 
+def _raw_array(iq: Array | AcquiredIQ) -> Array:
+    """return the acquired array of `iq`, or `iq` when the argument is an array."""
+    if isinstance(iq, AcquiredIQ):
+        return iq.x
+    return iq
+
+
 def evaluate_by_spec(
     iq: Array | AcquiredIQ,
     spec: specs.AnalysisGroup,
@@ -364,7 +416,8 @@ def evaluate_by_spec(
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
     `spec` is an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
-    fields of `spec` are skipped.
+    fields of `spec` are skipped. `iq` is handed to each measurement unchanged; the
+    measurement body selects the conditioning through `select_waveform`.
 
     Raises:
         TypeError: if `spec` is not an `AnalysisGroup`
@@ -378,14 +431,11 @@ def evaluate_by_spec(
     else:
         raise TypeError('invalid analysis spec argument')
 
-    if not isinstance(iq, AcquiredIQ):
-        iq = AcquiredIQ(pre_align=iq, pre_filter=None, aligned=None, capture=None)
-
     spec_dict = spec.to_dict()
     results = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
-    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+    if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.configure_cupy()
 
     for name in spec_dict.keys():
@@ -395,14 +445,7 @@ def evaluate_by_spec(
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
-            if meas.prefer_iq_source == 'pre_filter':
-                iq_sel = iq.pre_filter
-            elif iq.aligned is None or meas.prefer_iq_source == 'pre_align':
-                iq_sel = iq.pre_align
-            else:
-                iq_sel = iq.aligned
-
-            ret = meas.func(iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws)
+            ret = meas.func(iq=iq, capture=capture, as_xarray=as_xarray, **func_kws)
 
             if options.block_each:
                 results[name] = ret.compute()
@@ -425,7 +468,7 @@ def evaluate_by_spec(
             assert isinstance(res, DelayedDataArray)
             results[name] = res.to_xarray()  # ty: ignore
 
-    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+    if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.free_cupy_mempool()
 
     return results

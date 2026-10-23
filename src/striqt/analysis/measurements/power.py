@@ -7,12 +7,14 @@ from .. import specs
 
 from ..lib import dataarrays, register, util
 from ..lib.util import np
+from ..lib.dataarrays import select_waveform
 from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
+    from ..lib.dataarrays import AcquiredIQ
     from ..lib.typing import Array, Measurement
 
 
@@ -166,13 +168,12 @@ def evaluate_channel_power_time_series(
     dtype='float32',
     spec_type=specs.ChannelPowerTimeSeries,
     caches=_channel_power_cache,
-    prefer_iq_source='aligned',
     attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
     validate=validated_channel_power_binning,
     tolerance=channel_power_tolerance,
 )
 def channel_power_time_series(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate a time series of binned channel power for each power detector.
 
@@ -190,9 +191,10 @@ def channel_power_time_series(
     Args:
     {args}
     """
+    x = select_waveform(iq)
     spec = specs.ChannelPowerTimeSeries.from_dict(kwargs)
 
-    results = evaluate_channel_power_time_series(iq, capture=capture, spec=spec)
+    results = evaluate_channel_power_time_series(x, capture=capture, spec=spec)
 
     # no noise_bandwidth attr: the bandwidth is the capture's analysis_bandwidth (or
     # sample_rate), which can differ between the captures of one sweep, and a variable
@@ -281,12 +283,11 @@ def channel_power_bin(
     depends=[channel_power_time_series],
     spec_type=specs.ChannelPowerHistogram,
     dtype='float32',
-    prefer_iq_source='aligned',
     attrs={'standard_name': 'Fraction of channel power readings'},
     validate=validated_channel_power_binning,
 )
 def channel_power_histogram(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate the fraction of channel power readings that fall in each power bin.
 
@@ -302,10 +303,11 @@ def channel_power_histogram(
     Args:
     {args}
     """
+    x = select_waveform(iq)
 
     spec = specs.ChannelPowerHistogram.from_dict(kwargs)
 
-    xp = sw.array_namespace(iq)
+    xp = sw.array_namespace(x)
 
     bin_edges = make_power_histogram_bin_edges(
         power_low=spec.power_low,
@@ -316,12 +318,12 @@ def channel_power_histogram(
 
     pvt_spec = specs.ChannelPowerTimeSeries.from_spec(spec)
     power_dB = evaluate_channel_power_time_series(
-        iq,
+        x,
         capture=capture,
         spec=pvt_spec,
     )
 
-    count_dtype = xp.finfo(iq.dtype).dtype
+    count_dtype = xp.finfo(x.dtype).dtype
 
     data = []
     for i_chan in range(power_dB.shape[0]):
@@ -451,13 +453,12 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.nda
     coord_factories=[power_detector, cyclic_statistic, cyclic_lag],
     spec_type=specs.CyclicChannelPower,
     dtype='float32',
-    prefer_iq_source='aligned',
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
     validate=validated_cyclic_lag_count,
     tolerance=cyclic_channel_power_tolerance,
 )
 def cyclic_channel_power(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate cyclic statistics of channel power across the cycles in a capture.
 
@@ -486,12 +487,13 @@ def cyclic_channel_power(
     Args:
     {args}
     """
+    x = select_waveform(iq)
     spec = specs.CyclicChannelPower.from_dict(kwargs)
 
-    xp = sw.array_namespace(iq)
+    xp = sw.array_namespace(x)
 
     nested_ret = sw.iq_to_cyclic_power(
-        iq,
+        x,
         1 / capture.sample_rate,
         cyclic_period=spec.cyclic_period,
         detector_period=float(spec.detector_period),

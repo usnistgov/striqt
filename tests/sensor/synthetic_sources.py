@@ -17,6 +17,7 @@ from typing import NamedTuple
 import numpy as np
 from sweep_strategies import SOURCE
 
+import striqt.analysis as sa
 import striqt.sensor as ss
 import striqt.waveform as sw
 from striqt.analysis import testing
@@ -43,7 +44,7 @@ SIGNAL_KWS = {
     'dirac_delta': ('time', 'power'),
 }
 
-# the 4 signal paths of correct_iq. Measured overlaps from SOURCE: 3125/3125,
+# the 4 signal paths of the conditioning stages. Measured overlaps from SOURCE: 3125/3125,
 # 350/350, 512/512 and 4608/4608 at fs_sdr 6.25e6, 6.25e6, 15.36e6 and 7.68e6.
 # Both durations are multiples of the 1/8000 s detector period.
 RESAMPLE_FILTER = {
@@ -160,7 +161,7 @@ def tone_sweep(offsets, *, analysis=IQ_ONLY, **replace):
 
 
 def fs_sdr(capture, source=SOURCE) -> float:
-    """the source sample rate that correct_iq resamples `capture` from"""
+    """the source sample rate that the conditioning resamples `capture` from"""
     return float(
         ss.lib.compute.design_resampler(capture, source.master_clock_rate)['fs_sdr']
     )
@@ -198,9 +199,7 @@ def expected_raw(binding: str, capture, source=SOURCE, *, overlaps=None, xp=np):
 def build_acquired_iq(x, capture, source=SOURCE, *, info=None):
     """`x` packaged as the AcquiredIQ that a controller returns before any correction"""
     return ss.specs.AcquiredIQ(
-        pre_align=x,
-        pre_filter=None,
-        aligned=None,
+        x=x,
         capture=capture,
         info=ss.specs.AcquisitionInfo() if info is None else info,
         extra_data={},
@@ -210,7 +209,7 @@ def build_acquired_iq(x, capture, source=SOURCE, *, info=None):
 
 
 class Stages(NamedTuple):
-    """the acquisition and correction of one capture"""
+    """the acquisition of one capture and the same acquisition set up for conditioning"""
 
     raw: ss.specs.AcquiredIQ
     corrected: ss.specs.AcquiredIQ
@@ -228,15 +227,16 @@ def acquire_corrected(
     signal_trigger=None,
     overwrite_x=False,
 ) -> Stages:
-    """acquire `capture` from a fresh controller and run it through correct_iq.
+    """acquire `capture` from a fresh controller and attach the conditioning.
 
     `binding` is a key of BINDINGS or a bound sensor (the file sources are not
     synthetic and are passed directly); `array_backend` replaces that field of
     `source` when given.
 
-    `raw.pre_align` is [lead overlap | round(duration*fs_sdr) | tail overlap] at
-    fs_sdr; `corrected` fills the pre_filter, pre_align, and (with a trigger) aligned
-    stages at capture.sample_rate.
+    `raw.x` is [lead overlap | round(duration*fs_sdr) | tail overlap] at fs_sdr;
+    `corrected` is `raw` with `signal_trigger` and `overwrite_x` attached, and
+    `unfiltered`, `filtered`, and `aligned` select the conditioned waveforms at
+    capture.sample_rate.
     """
     if isinstance(binding, str):
         binding = BINDINGS[binding]
@@ -248,10 +248,25 @@ def acquire_corrected(
         raw = ctrl.acquire()
         overlaps = ss.lib.compute.get_correction_overlaps(capture, source, analysis)
         resampler = dict(ctrl.get_resampler())
-    corrected = ss.correct_iq(
+    corrected = ss.lib.compute.attach_corrections(
         raw, signal_trigger=signal_trigger, overwrite_x=overwrite_x
     )
     return Stages(raw, corrected, overlaps, resampler)
+
+
+def unfiltered(iq):
+    """the resampled waveform before the analysis filter, trigger-shifted if a trigger is set"""
+    return sa.select_waveform(iq, prefer_filtered=False, prefer_aligned=True)
+
+
+def filtered(iq):
+    """the resampled and low-passed waveform, without the trigger shift"""
+    return sa.select_waveform(iq, prefer_filtered=True, prefer_aligned=False)
+
+
+def aligned(iq):
+    """the resampled, low-passed and trigger-shifted waveform"""
+    return sa.select_waveform(iq, prefer_filtered=True, prefer_aligned=True)
 
 
 def generator(
@@ -325,6 +340,7 @@ class FakeTrigger:
         return float(np.max(np.abs(self.lags)))
 
     def __call__(self, iq, capture):
-        xp = sw.array_namespace(iq)
+        x = sa.select_waveform(iq, prefer_aligned=False)
+        xp = sw.array_namespace(x)
         lags = xp.asarray(self.lags, dtype='float64')
-        return xp.broadcast_to(lags, (iq.shape[0],)).copy()
+        return xp.broadcast_to(lags, (x.shape[0],)).copy()

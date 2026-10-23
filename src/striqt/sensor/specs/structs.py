@@ -526,7 +526,7 @@ class Sweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
     the `loop_only_nyquist` filter of the expansion. `plot_hint` is read only by
     `striqt.figures`. `sink` is a `ZarrSink`, which narrows the `Sink` of
     `ActionSpec`. Construction validates each unique capture against the
-    registered measurements and the `correct_iq` signal path (see
+    registered measurements and the conditioning signal path (see
     `action.validate_sweep`).
     """
 

@@ -103,11 +103,15 @@ def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
 ) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
-    """analyze a waveform according to a sweep specification.
+    """analyze an acquisition according to the sweep specification in `options`.
 
-    The waveform may be transformed with resampling and calibration
-    corrections before evaluation. Acquisition data and metadata
+    The returned `iq` of `attach_corrections` is handed to the measurements, so each
+    measurement conditions the waveform (resampling, the analysis filter, trigger
+    alignment) through `select_waveform` on first use. Acquisition data and metadata
     are included in the returned results.
+
+    Raises:
+        TypeError: `iq.capture` is not a `SensorCapture`
     """
 
     if isinstance(iq.capture, specs.SensorCapture):
@@ -123,16 +127,9 @@ def analyze(
     overwrite_x = not options.sweep_spec.options.reuse_iq
 
     with options.registry.cache_context(capture, options.cache_callback):
-        if options.correction:
-            with sa.util.stopwatch(
-                'resampling filter',
-                threshold=capture.duration / 3,
-                logger_level=sa.util.PERFORMANCE_INFO,
-            ):
-                iq = corrections.correct_iq(
-                    iq, signal_trigger=trigger, overwrite_x=overwrite_x
-                )
-
+        iq = corrections.attach_corrections(
+            iq, signal_trigger=trigger, overwrite_x=overwrite_x
+        )
         opts = msgspec.structs.replace(options, as_xarray='delayed')
         opts = cast(sa.EvaluationOptions[Literal['delayed']], opts)
         da_delayed = sa.analyze_by_spec(iq, analysis, capture, opts)
