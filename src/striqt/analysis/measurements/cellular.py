@@ -8,7 +8,7 @@ from typing import Any, Literal
 from .. import specs
 
 from ..lib import register, util
-from ..lib.dataarrays import CAPTURE_DIM
+from ..lib.dataarrays import CAPTURE_DIM, select_waveform
 from ..lib.util import np, pd
 from . import power, shared, spectrum
 from .shared import registry, hint_keywords
@@ -18,6 +18,7 @@ import striqt.waveform as sw
 if typing.TYPE_CHECKING:
     from typing_extensions import Unpack
 
+    from ..lib.dataarrays import AcquiredIQ
     from ..lib.typing import Array, Measurement, ToleranceKws
     from ..specs.structs import _Cellular5GNRSSBCorrelator, _Cellular5GNRSSBSync
 
@@ -298,7 +299,7 @@ def choose_pss_sync_offsets(
     validate=validated_5g_ssb_sync_params,
 )
 def cellular_5g_pss_sync(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """return the start-of-waveform delay (in s) detected from the PSS correlation.
 
@@ -311,9 +312,10 @@ def cellular_5g_pss_sync(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_aligned=False)
 
     spec = specs.Cellular5GNPSSSync.from_dict(kwargs).validate()
-    offs = choose_pss_sync_offsets(iq, capture=capture, spec=spec)
+    offs = choose_pss_sync_offsets(x, capture=capture, spec=spec)
     delay = round(spec.delay * spec.sample_rate) / spec.sample_rate
     return delay + offs / spec.sample_rate
 
@@ -330,7 +332,7 @@ def cellular_5g_pss_sync(
     validate=validated_5g_ssb_sync_params,
 )
 def cellular_5g_pss_correlation(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR primary synchronization signal.
 
@@ -351,10 +353,11 @@ def cellular_5g_pss_correlation(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_aligned=False)
 
     spec = specs.Cellular5GNRPSSCorrelator.from_dict(kwargs).validate()
 
-    R = correlate_5g_pss(iq, capture=capture, spec=spec)
+    R = correlate_5g_pss(x, capture=capture, spec=spec)
 
     if spec.max_block_count is not None:
         R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
@@ -426,7 +429,7 @@ def choose_sss_sync_offsets(
     validate=validated_5g_ssb_sync_params,
 )
 def cellular_5g_sss_sync(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """return the start-of-waveform delay (in s) detected from the SSS correlation.
 
@@ -439,9 +442,10 @@ def cellular_5g_sss_sync(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_aligned=False)
 
     spec = specs.Cellular5GNSSSSync.from_dict(kwargs).validate()
-    offs = choose_sss_sync_offsets(iq, capture=capture, spec=spec)
+    offs = choose_sss_sync_offsets(x, capture=capture, spec=spec)
     delay = round(spec.delay * spec.sample_rate) / spec.sample_rate
     return delay + offs / spec.sample_rate
 
@@ -458,7 +462,7 @@ def cellular_5g_sss_sync(
     validate=validated_5g_ssb_sync_params,
 )
 def cellular_5g_sss_correlation(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR secondary synchronization signal.
 
@@ -478,10 +482,11 @@ def cellular_5g_sss_correlation(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_aligned=False)
 
     spec = specs.Cellular5GNRSSSCorrelator.from_dict(kwargs).validate()
 
-    R = correlate_5g_sss(iq, capture=capture, spec=spec)
+    R = correlate_5g_sss(x, capture=capture, spec=spec)
 
     if spec.max_block_count is not None:
         R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
@@ -645,7 +650,7 @@ def ssb_spectrogram_tolerance(
     tolerance=ssb_spectrogram_tolerance,
 )
 def cellular_5g_ssb_spectrogram(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate a spectrogram of each 5G NR SSB burst set by OFDM symbol and subcarrier.
 
@@ -667,6 +672,7 @@ def cellular_5g_ssb_spectrogram(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_filtered=False)
 
     spec = specs.Cellular5GNRSSBSpectrogram.from_dict(kwargs).validate()
 
@@ -674,7 +680,7 @@ def cellular_5g_ssb_spectrogram(
     discovery_symbols = _discovery_symbol_count(spec)
 
     spg, attrs = spectrum.evaluate_spectrogram(
-        iq,
+        x,
         capture=capture,
         spec=_ssb_spectrogram_spec(spec),
         limit_digits=3,
@@ -1021,7 +1027,7 @@ def validated_autocorrelation_lag_count(
     validate=validated_autocorrelation_lag_count,
 )
 def cellular_cyclic_autocorrelation(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
@@ -1037,10 +1043,11 @@ def cellular_cyclic_autocorrelation(
     Returns:
         a float32 array in the array namespace of `iq`
     """
+    x = select_waveform(iq, prefer_aligned=False)
 
     spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
 
-    xp = sw.array_namespace(iq)
+    xp = sw.array_namespace(x)
     scs = _subcarrier_spacing_tuple(spec)
 
     phy_scs = _get_phy_mapping(
@@ -1076,20 +1083,20 @@ def cellular_cyclic_autocorrelation(
         capture, subcarrier_spacings=scs, generation=spec.generation
     )
 
-    result = xp.full((iq.shape[0], 2, len(scs), max_len), np.nan, dtype=np.float32)
-    for chan in range(iq.shape[0]):
+    result = xp.full((x.shape[0], 2, len(scs), max_len), np.nan, dtype=np.float32)
+    for chan in range(x.shape[0]):
         for iscs, phy in enumerate(phy_scs.values()):
             tdd_config = tdd_config_from_str(
                 subcarrier_spacing=phy.subcarrier_spacing, frame_slots=spec.frame_slots
             )
 
-            R = corr_for_slots(phy, iq[chan], tdd_config.downlink_slot_indexes)
+            R = corr_for_slots(phy, x[chan], tdd_config.downlink_slot_indexes)
             result[chan][0][iscs][: R.size] = xp.abs(R)
 
             if len(tdd_config.uplink_slot_indexes) == 0:
                 continue
 
-            R = corr_for_slots(phy, iq[chan], tdd_config.uplink_slot_indexes)
+            R = corr_for_slots(phy, x[chan], tdd_config.uplink_slot_indexes)
             result[chan][1][iscs][: R.size] = xp.abs(R)
 
     return result, metadata
@@ -1397,7 +1404,7 @@ def validated_resource_grid_sizing(
     validate=validated_resource_grid_sizing,
 )
 def cellular_resource_power_histogram(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """histogram the power of a cellular resource grid on each port, by link direction.
 
@@ -1412,16 +1419,17 @@ def cellular_resource_power_histogram(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_filtered=False)
     spec = specs.CellularResourcePowerHistogram.from_dict(kwargs)
 
-    xp = sw.array_namespace(iq)
+    xp = sw.array_namespace(x)
 
     link_direction = 'downlink', 'uplink'
 
     sizing = validated_resource_grid_sizing(capture, spec)
 
     spg, metadata = spectrum.evaluate_spectrogram(
-        iq, capture, sizing.spectrogram, dtype='float32', dB=False
+        x, capture, sizing.spectrogram, dtype='float32', dB=False
     )
     metadata = dict(metadata)
     del metadata['units']

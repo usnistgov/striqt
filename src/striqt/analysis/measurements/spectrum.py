@@ -8,6 +8,7 @@ from .. import specs
 
 from ..lib import dataarrays, register
 from ..lib.util import np
+from ..lib.dataarrays import select_waveform
 from . import power, shared
 from .shared import registry, hint_keywords
 
@@ -16,6 +17,7 @@ import striqt.waveform as sw
 if typing.TYPE_CHECKING:
     from typing_extensions import Unpack
 
+    from ..lib.dataarrays import AcquiredIQ
     from ..lib.typing import Array, Measurement, ToleranceKws
 
 
@@ -423,7 +425,9 @@ def spectrogram_tolerance(
     validate=validated_spectrogram_sizing,
     tolerance=spectrogram_tolerance,
 )
-def spectrogram(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
+def spectrogram(
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+) -> Measurement:
     """evaluate a power spectrogram of the IQ by STFT.
 
     The input is the resampled IQ before the `analysis_bandwidth` low-pass filter and
@@ -448,9 +452,10 @@ def spectrogram(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_filtered=False)
     spec = specs.Spectrogram.from_dict(kwargs).validate()
     spg, attrs = evaluate_spectrogram(
-        iq, capture, spec, dB=True, limit_digits=2, dtype='float16'
+        x, capture, spec, dB=True, limit_digits=2, dtype='float16'
     )
 
     return spg, attrs
@@ -516,7 +521,7 @@ def power_spectral_density_tolerance(
     tolerance=power_spectral_density_tolerance,
 )
 def power_spectral_density(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """estimate the power spectral density by the Welch method.
 
@@ -531,6 +536,7 @@ def power_spectral_density(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_filtered=False)
 
     spec = specs.PowerSpectralDensity.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
@@ -539,11 +545,11 @@ def power_spectral_density(
 
     working_dtype = 'float32'
 
-    xp = sw.array_namespace(iq)
+    xp = sw.array_namespace(x)
     axis = 1
 
     spg, metadata = evaluate_spectrogram(
-        iq,
+        x,
         capture,
         spg_spec,
         dB=False,
@@ -627,7 +633,7 @@ def spectrogram_power_bin(
     validate=validated_spectrogram_sizing,
 )
 def spectrogram_histogram(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate the fraction of spectrogram pixels that fall in each power bin.
 
@@ -642,11 +648,12 @@ def spectrogram_histogram(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_filtered=False)
     spec = specs.SpectrogramHistogram.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 
     spg, metadata = evaluate_spectrogram(
-        iq,
+        x,
         capture,
         spec=spg_spec,
         dtype='float32',
@@ -656,7 +663,7 @@ def spectrogram_histogram(
     metadata.pop('units')
     metadata.pop('long_name')
 
-    xp = sw.array_namespace(iq)
+    xp = sw.array_namespace(x)
     bin_edges = power.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,
@@ -664,7 +671,7 @@ def spectrogram_histogram(
         xp=xp,
     )
 
-    count_dtype = xp.finfo(iq.dtype).dtype
+    count_dtype = xp.finfo(x.dtype).dtype
     counts = xp.asarray(
         [xp.histogram(spg[i].flatten(), bin_edges)[0] for i in range(spg.shape[0])],
         dtype=count_dtype,
@@ -707,7 +714,7 @@ def spectrogram_ratio_power_bin(
     validate=validated_spectrogram_sizing,
 )
 def spectrogram_ratio_histogram(
-    iq: Array, capture: specs.Capture, **kwargs: Any
+    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate a histogram of the spectrogram power ratio between two channels.
 
@@ -723,11 +730,12 @@ def spectrogram_ratio_histogram(
     Args:
     {args}
     """
+    x = select_waveform(iq, prefer_filtered=False)
     spec = specs.SpectrogramHistogramRatio.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 
     spg, metadata = evaluate_spectrogram(
-        iq,
+        x,
         capture,
         spg_spec,
         dtype='float32',
@@ -745,7 +753,7 @@ def spectrogram_ratio_histogram(
     for key in ('units', 'long_name', 'noise_bandwidth', 'resolution_bandwidth'):
         metadata.pop(key)
 
-    xp = sw.array_namespace(iq)
+    xp = sw.array_namespace(x)
     bin_edges = power.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,
@@ -753,7 +761,7 @@ def spectrogram_ratio_histogram(
         xp=xp,
     )
 
-    count_dtype = xp.finfo(iq.dtype).dtype
+    count_dtype = xp.finfo(x.dtype).dtype
     counts = xp.asarray(
         [xp.histogram(spg[i].flatten(), bin_edges)[0] for i in range(spg.shape[0])],
         dtype=count_dtype,
