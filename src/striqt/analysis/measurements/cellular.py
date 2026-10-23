@@ -311,7 +311,7 @@ def cellular_5g_pss_sync(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_aligned=False)
+    x = select_waveform(iq, prefer_filtered=False, prefer_aligned=False)
 
     spec = specs.Cellular5GNPSSSync.from_dict(kwargs).validate()
     offs = choose_pss_sync_offsets(x, capture=capture, spec=spec)
@@ -351,7 +351,7 @@ def cellular_5g_pss_correlation(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_aligned=False)
+    x = select_waveform(iq, prefer_filtered=False, prefer_aligned=False)
 
     spec = specs.Cellular5GNRPSSCorrelator.from_dict(kwargs).validate()
 
@@ -439,7 +439,7 @@ def cellular_5g_sss_sync(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_aligned=False)
+    x = select_waveform(iq, prefer_filtered=False, prefer_aligned=False)
 
     spec = specs.Cellular5GNSSSSync.from_dict(kwargs).validate()
     offs = choose_sss_sync_offsets(x, capture=capture, spec=spec)
@@ -478,7 +478,7 @@ def cellular_5g_sss_correlation(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_aligned=False)
+    x = select_waveform(iq, prefer_filtered=False, prefer_aligned=False)
 
     spec = specs.Cellular5GNRSSSCorrelator.from_dict(kwargs).validate()
 

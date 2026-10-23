@@ -46,7 +46,12 @@ from synthetic_sources import (
 
 import striqt.analysis as sa
 import striqt.waveform as sw
-from striqt.sensor.lib.compute import attach_corrections, correction_error, corrections
+from striqt.sensor.lib.compute import (
+    attach_corrections,
+    correction_error,
+    corrections,
+    get_trigger_from_spec,
+)
 from striqt.sensor.lib.sources import buffers
 from striqt.waveform.fourier import on_peak_roundoff
 
@@ -416,6 +421,35 @@ def test_attach_corrections_falls_back_to_the_trigger_in_info(xp):
 
     assert implicit is not filtered(attach_corrections(raw))
     assert np.array_equal(to_numpy(implicit), to_numpy(explicit))
+
+
+def test_a_pss_trigger_with_frequency_domain_measurements_skips_the_fir():
+    """the sync detectors and the spectral measurements select unfiltered input, so a
+    triggered capture with only those enabled never runs the analysis FIR"""
+    capture = preset_capture(
+        'single_tone',
+        **{**FILTER_ONLY, 'duration': 10e-3, 'port': 0},
+        frequency_offset=TONE_FREQUENCY,
+        snr=None,
+    )
+    analysis = sa.specs.BuiltinAnalyses.from_dict({
+        'cellular_5g_pss_sync': {'subcarrier_spacing': 30e3, 'shared_spectrum': True},
+        'power_spectral_density': {'window': 'hann', 'frequency_resolution': 8e3},
+    })
+    source = FUNCTION_SOURCE.replace(signal_trigger='cellular_5g_pss_sync')
+    raw = acquire_corrected(
+        'single_tone', capture, source=source, analysis=analysis
+    ).raw
+    trigger = get_trigger_from_spec(source, analysis)
+    iq = attach_corrections(raw, signal_trigger=trigger)
+    options = sa.EvaluationOptions(as_xarray='delayed', registry=sa.registry)
+
+    with sa.registry.cache_context(capture):
+        results = sa.analyze_by_spec(iq, analysis, capture, options)
+
+    assert set(results) == {'cellular_5g_pss_sync', 'power_spectral_density'}
+    assert iq.stages.shifts is not None
+    assert iq.stages.filtered is None
 
 
 # %% select: trigger alignment
