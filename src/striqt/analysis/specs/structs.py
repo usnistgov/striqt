@@ -451,5 +451,5 @@ class BuiltinTriggers(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=Tr
     names a registered trigger and takes its spec from the sweep's analysis instead.
     """
 
-    cellular_5g_pss_sync: typing.Optional[Cellular5GNPSSSync] = None
-    cellular_5g_sss_sync: typing.Optional[Cellular5GNSSSSync] = None
+    cellular_5g_pss_sync: Optional[Cellular5GNPSSSync] = None
+    cellular_5g_sss_sync: Optional[Cellular5GNSSSSync] = None
