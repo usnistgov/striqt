@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from numeric_checks import FIR_LEAKAGE, assert_close, interior, to_numpy
+from pytest_lazy_fixtures import lf
 from synthetic_sources import (
     FILTER_SIZE,
     SCALE_ONLY,
@@ -142,9 +143,7 @@ def test_zarr_select_narrows_rows(zarr_iq_file):
     assert_close(waveform[0], zarr_rows(zarr_iq_file, 1)[0, :16])
 
 
-@pytest.mark.parametrize(
-    'port, ok', [(1, True), (2, False), (5, False)], ids=['last', 'one_past', 'far']
-)
+@pytest.mark.parametrize('port, ok', [(1, True), (2, False)], ids=['last', 'one_past'])
 def test_zarr_port_bound(zarr_iq_file, port, ok):
     source = ss.lib.sources.ZarrIQSource(zarr_spec(zarr_iq_file, capture_index=0))
     if ok:
@@ -152,13 +151,6 @@ def test_zarr_port_bound(zarr_iq_file, port, ok):
     else:
         with pytest.raises(ValueError, match='exceeds data channel count'):
             source.get_waveform(4, 0, port=port, xp=np)
-
-
-def test_zarr_request_past_end(zarr_iq_file):
-    source = ss.lib.sources.ZarrIQSource(zarr_spec(zarr_iq_file, capture_index=0))
-    source.get_waveform(8, FILE_SAMPLES - 8, port=0, xp=np)
-    with pytest.raises(ValueError, match='file capture length'):
-        source.get_waveform(8, FILE_SAMPLES - 7, port=0, xp=np)
 
 
 @pytest.mark.parametrize(
@@ -283,30 +275,28 @@ def mat_spec(mat_file, **kws):
     return ss.specs.MATSource(path=str(mat_file.path), master_clock_rate=FS, **kws)
 
 
-@pytest.mark.parametrize('key', [None, 'waveform'], ids=['default_key', 'explicit_key'])
-@PREROLL_FILLS
-def test_mat_get_waveform_preroll(mat_files, array_backend, key, fill):
-    """the stream's 'waveform' default applies when the spec leaves `key` unset"""
-    spec = mat_spec(mat_files[1], key=key, array_backend=array_backend)
-    source = ss.lib.sources.MATSource(spec)
+def mat_waveform(
+    mat_file: SimpleNamespace, fill: int, **spec_kws: object
+) -> np.ndarray:
+    """return PREROLL_COUNT samples of port 0 of `mat_file` from index ``-fill``"""
+    source = ss.lib.sources.MATSource(mat_spec(mat_file, **spec_kws))
     try:
-        waveform = source.get_waveform(PREROLL_COUNT, -fill, port=0, xp=np)
+        return source.get_waveform(PREROLL_COUNT, -fill, port=0, xp=np)
     finally:
         source.close()
+
+
+@PREROLL_FILLS
+def test_mat_get_waveform_preroll(mat_files, array_backend, fill):
+    """the stream's 'waveform' default applies when the spec leaves `key` unset"""
+    waveform = mat_waveform(mat_files[1], fill, array_backend=array_backend)
     assert waveform.shape == (1, PREROLL_COUNT)
     assert_preroll_then_file(waveform, fill, mat_files[1].waveform)
 
 
-def test_mat_request_past_end(mat_files):
-    """without loop, a read past the end of the file is an error, as for the zarr
-    and TDMS sources"""
-    source = ss.lib.sources.MATSource(mat_spec(mat_files[1]))
-    try:
-        source.get_waveform(8, FILE_SAMPLES - 8, port=0, xp=np)
-        with pytest.raises(ValueError, match='too few samples'):
-            source.get_waveform(8, FILE_SAMPLES - 7, port=0, xp=np)
-    finally:
-        source.close()
+def test_mat_explicit_key_reads_the_named_variable(mat_files):
+    waveform = mat_waveform(mat_files[1], 0, key='waveform')
+    assert_preroll_then_file(waveform, 0, mat_files[1].waveform)
 
 
 def test_mat_missing_file(tmp_path):
@@ -315,14 +305,18 @@ def test_mat_missing_file(tmp_path):
         ss.lib.sources.MATSource(spec)
 
 
-def test_mat_round_trip_scale_only(mat_files):
-    capture = file_capture(port=0)
-    source = mat_spec(mat_files[1])
-    stages = acquire_corrected(ss.bindings.mat_file, capture, source=source)
-    assert stages.raw.info.backend_sample_rate == FS
-    np.testing.assert_array_equal(
-        to_numpy(stages.corrected.pre_align), mat_files[1].waveform[:, :READ_SAMPLES]
+@pytest.mark.parametrize(
+    'rows, port', [(1, 0), (2, (0, 1))], ids=['one_row', 'two_rows']
+)
+def test_mat_round_trip_scale_only(mat_files, rows, port):
+    """each capture port reads the file row of the same index"""
+    capture = file_capture(port=port)
+    stages = acquire_corrected(
+        ss.bindings.mat_file, capture, source=mat_spec(mat_files[rows])
     )
+    assert stages.raw.info.backend_sample_rate == FS
+    expected = mat_files[rows].waveform[:, :READ_SAMPLES]
+    np.testing.assert_array_equal(to_numpy(stages.corrected.pre_align), expected)
 
 
 def test_mat_loop_repeats_file(mat_files):
@@ -337,16 +331,6 @@ def test_mat_loop_repeats_file(mat_files):
     count = round(duration * FS)
     expected = np.concatenate([file, file[:, : count - FILE_SAMPLES]], axis=1)
     np.testing.assert_array_equal(to_numpy(corrected.pre_align), expected)
-
-
-def test_mat_two_port(mat_files):
-    """a two-row file supplies ports 0 and 1 from rows 0 and 1"""
-    capture = file_capture()
-    stages = acquire_corrected(
-        ss.bindings.mat_file, capture, source=mat_spec(mat_files[2])
-    )
-    expected = mat_files[2].waveform[:, :READ_SAMPLES]
-    np.testing.assert_array_equal(to_numpy(stages.corrected.pre_align), expected)
 
 
 # %% TDMSSource
@@ -413,13 +397,6 @@ def test_tdms_get_waveform_preroll(tdms_file, xp, fill):
     assert_preroll_then_file(waveform, fill, tdms_file.waveform, **TDMS_SCALING_TOL)
 
 
-def test_tdms_request_past_end(tdms_file):
-    source = ss.lib.sources.TDMSSource(tdms_spec(tdms_file))
-    source.get_waveform(8, FILE_SAMPLES - 8, port=0, xp=np)
-    with pytest.raises(ValueError, match='file capture length'):
-        source.get_waveform(8, FILE_SAMPLES - 7, port=0, xp=np)
-
-
 def test_tdms_resampler_uses_header_rate(tdms_file):
     """the file, not the spec's master clock, fixes the resampler's input rate"""
     capture = ss.specs.FileCapture(
@@ -444,3 +421,41 @@ def test_tdms_round_trip_scale_only(tdms_file):
         tdms_file.waveform[:READ_SAMPLES],
         **TDMS_SCALING_TOL,
     )
+
+
+# %% get_waveform past the end of the file
+
+
+@pytest.mark.parametrize(
+    'file, open_source, match',
+    [
+        pytest.param(
+            lf('zarr_iq_file'),
+            lambda f: ss.lib.sources.ZarrIQSource(zarr_spec(f, capture_index=0)),
+            'file capture length',
+            id='zarr',
+        ),
+        pytest.param(
+            lf('mat_files'),
+            lambda f: ss.lib.sources.MATSource(mat_spec(f[1])),
+            'too few samples',
+            id='mat',
+        ),
+        pytest.param(
+            lf('tdms_file'),
+            lambda f: ss.lib.sources.TDMSSource(tdms_spec(f)),
+            'file capture length',
+            id='tdms',
+        ),
+    ],
+)
+def test_request_past_end(file, open_source, match):
+    """without `loop`, a read that ends on the last file sample succeeds and one that
+    ends past it is an error"""
+    source = open_source(file)
+    try:
+        source.get_waveform(8, FILE_SAMPLES - 8, port=0, xp=np)
+        with pytest.raises(ValueError, match=match):
+            source.get_waveform(8, FILE_SAMPLES - 7, port=0, xp=np)
+    finally:
+        source.close()

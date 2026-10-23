@@ -9,6 +9,7 @@ conftest. The sensor test modules import it by bare name.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from fractions import Fraction
 from typing import NamedTuple
@@ -107,7 +108,7 @@ SPECTROGRAM = ss.specs.BundledAnalysis.from_dict({
     'spectrogram': {'window': 'hann', 'frequency_resolution': PSD_RESOLUTION}
 })
 
-NO_SINK = ss.specs.Extension(sink='striqt.sensor.sinks.NoSink')
+NO_SINK = ss.specs.ZarrSink(path=None)
 
 
 def preset_capture(binding: str, **kws):
@@ -124,14 +125,14 @@ def preset_sweep(
     source=SOURCE,
     **replace,
 ):
-    """a sweep spec bound to `binding` that writes nothing (NO_SINK)"""
+    """a sweep spec bound to `binding` that writes nothing unless `sink` is given"""
     cls = BINDINGS[binding].sensor.sweep_spec_cls
+    replace.setdefault('sink', NO_SINK)
     return cls(
         source=source,
         captures=tuple(captures),
         loops=tuple(loops),
         analysis=analysis,
-        extensions=NO_SINK,
         **replace,
     )
 
@@ -173,13 +174,22 @@ def spectrogram_frames(capture, spec) -> tuple[int, float]:
     return (count - nfft) // hop + 1, hop / capture.sample_rate
 
 
+def source_count(capture, source=SOURCE) -> int:
+    """the source-rate sample count of `capture.duration`, from the exact rational
+    resampler ratio with a half sample rounded up"""
+    design = ss.lib.compute.design_resampler(capture, source.master_clock_rate)
+    samples_out = round(capture.duration * capture.sample_rate)
+    exact = Fraction(samples_out * design['nfft'], design['nfft_out'])
+    return math.floor(exact + Fraction(1, 2))
+
+
 def expected_raw(binding: str, capture, source=SOURCE, *, overlaps=None, xp=np):
-    """the acquisition buffer [lead overlap | round(duration*fs_sdr) | tail overlap] as
-    one generator call at fs_sdr starting at index -lead"""
+    """the acquisition buffer [lead overlap | source_count | tail overlap] as one
+    generator call at fs_sdr starting at index -lead"""
     if overlaps is None:
         overlaps = ss.lib.compute.get_correction_overlaps(capture, source, None)
     fs = fs_sdr(capture, source)
-    count = overlaps[0] + round(capture.duration * fs) + overlaps[1]
+    count = overlaps[0] + source_count(capture, source) + overlaps[1]
     return generator(
         binding, capture, sample_rate=fs, start_index=-overlaps[0], count=count, xp=xp
     )
@@ -287,7 +297,7 @@ def run_in_memory(sweep, *, loop=False, take=None, **replace) -> list:
     one xarray.Dataset per capture (the first `take` with `loop`)"""
     datasets = []
     with ss.open_resources(sweep, None) as resources:
-        # NoSink looks up the controller that open_resources registers
+        # nothing is written even for a sweep whose sink names a path
         replace.setdefault('sink', ss.sinks.NoSink(sweep))
         results = ss.iterate_sweep(resources, loop=loop, **replace)
         for dd in results:

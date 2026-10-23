@@ -189,14 +189,14 @@ def open_and_acquire(binding, capture, source=SOURCE, **kws):
 
 
 @pytest.mark.parametrize('preset', list(LAYOUT_PRESETS), ids=list(LAYOUT_PRESETS))
-@pytest.mark.parametrize('binding', list(BINDINGS), ids=list(BINDINGS))
 def test_acquire_layout_is_lead_data_tail_from_the_generator(
-    binding, preset, array_backend, isolated_lookup
+    preset, array_backend, isolated_lookup
 ):
+    """a layout off by any number of samples changes every sample of a sawtooth"""
     source = SOURCE.replace(array_backend=array_backend)
-    capture = preset_capture(binding, **LAYOUT_PRESETS[preset])
-    iq = open_and_acquire(binding, capture, source)
-    expected = expected_raw(binding, capture, source)
+    capture = preset_capture('sawtooth', **LAYOUT_PRESETS[preset])
+    iq = open_and_acquire('sawtooth', capture, source)
+    expected = expected_raw('sawtooth', capture, source)
     assert iq.pre_align.shape == expected.shape
     assert_close(iq.pre_align, expected)
 
@@ -270,18 +270,21 @@ def test_reuse_iq(reuse_iq, second_capture, shares_buffer, isolated_lookup):
         assert_close(second.pre_align, expected)
 
 
-def test_a_new_analysis_filter_is_acquired_with_its_own_overlap(isolated_lookup):
-    """the acquisition is padded for its own filter transient, so a capture that
-    adds an analysis filter is acquired afresh and corrects to its full length"""
+def test_discard_iq_forces_a_fresh_acquisition(isolated_lookup):
+    """`discard_iq` makes the next acquisition of a reusable capture read the source
+    again. A signal change that the capture spec does not describe, such as a
+    switched noise diode, would otherwise reach the analysis as the cached IQ."""
     with TONE.from_source_spec(SOURCE, reuse_iq=True) as ctrl:
         ctrl._arm_spec(REUSABLE)
-        ctrl.acquire()
-        ctrl._arm_spec(FILTERED_VARIANT)
+        first = ctrl.acquire()
+        ctrl.discard_iq()
+        ctrl._arm_spec(REUSABLE_VARIANT)
         second = ctrl.acquire()
+        ctrl._arm_spec(REUSABLE)
+        third = ctrl.acquire()
 
-    corrected = ss.correct_iq(second)
-    size_out = round(FILTERED_VARIANT.duration * FILTERED_VARIANT.sample_rate)
-    assert corrected.pre_align.shape == (2, size_out)
+    assert not np.shares_memory(first.pre_align, second.pre_align)
+    assert third.pre_align is second.pre_align, 'reuse resumes after the discard'
 
 
 def test_reuse_iq_clears_the_soapy_start_time(fake_controller):

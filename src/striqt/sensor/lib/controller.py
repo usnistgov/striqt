@@ -475,6 +475,15 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
         self._config.analysis = analysis
 
+    def discard_iq(self) -> None:
+        """drop the acquisition that `reuse_iq` would serve to the next matching capture.
+
+        The next `acquire` reads the source even if the armed capture is unchanged.
+        Call this when the signal has changed in a way the capture spec does not
+        describe, such as a switched noise diode.
+        """
+        self._prev_iq = None
+
     def set_calibration_formatter(
         self, format_path: specs.paths.PathFormatter | None = None
     ):
@@ -599,7 +608,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         sample_offs = included_holdoff - overlaps[0]
         sample_span = slice(sample_offs, sample_offs + output_count)
 
-        unused_count = output_count - round(self._capture.duration * fs)
+        record = compute.source_record_size(self._capture, self.get_resampler())
+        unused_count = output_count - record
         self._buffers.stash_carryover(
             samples[:, sample_span],
             start_ns,

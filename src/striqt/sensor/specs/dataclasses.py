@@ -11,6 +11,12 @@ import striqt.analysis as sa
 
 @dataclasses.dataclass(frozen=True)
 class Schema(Generic[SS, SP, SC, PS, PC]):
+    """the spec types of a sensor binding.
+
+    `action` is the action spec type that `bind_sensor` subclasses. The
+    `ActionRunner` registered for that type runs the bound spec.
+    """
+
     source: type[SS]
     capture: type[SC]
     peripherals: type[SP]
@@ -19,10 +25,13 @@ class Schema(Generic[SS, SP, SC, PS, PC]):
     init_like: Callable[PS, Any]
     arm_like: Callable[PC, Any]
 
+    action: type[structs.ActionSpec[SS, SP]] = structs.Sweep
+
     def __post_init__(self):
         assert issubclass(self.source, structs.Source)
         assert issubclass(self.capture, structs.SensorCapture)
         assert issubclass(self.peripherals, structs.Peripherals)
+        assert issubclass(self.action, structs.ActionSpec)
 
 
 @dataclasses.dataclass

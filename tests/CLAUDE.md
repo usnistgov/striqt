@@ -24,7 +24,9 @@ the `writing-tests` skill; this file is the map of the suite that the skill refe
   `test_sensor_compute_corrections.py` on `acquire_corrected`, not at the sweep level.
 - **The type checker's view** of the keyword-unpacking signatures is pinned by
   `tests/test_typing.py` and the probes under `tests/ty_probes/` (see Typing); import-time
-  side effects by `tests/test_imports.py`.
+  side effects by `tests/test_imports.py`; the docstring prose gate (no "it"/"its" for code,
+  no `striqt.<pkg>.lib` path in a public docstring) by `tests/test_docstrings.py`, whose
+  pre-existing hits are listed in `tests/docstring-baseline.txt` and only ever removed.
 - The downstream project's patterns are reproduced by `tests/sensor/sweeps/src/extensions.py`
   and the `site*` sweep directories; the papers the cyclic-power and sync tests derive their
   expectations from are under `_training_material/papers/` (untracked; locate with a search).

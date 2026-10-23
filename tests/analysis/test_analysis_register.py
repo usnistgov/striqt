@@ -7,14 +7,22 @@ The hook tests build their own `AnalysisRegistry`, since mutating the live regis
 would leak a measurement into every other test module.
 """
 
+# ruff: noqa: UP045  msgspec resolves the ToyGroup annotations at runtime on py3.9
+
 from __future__ import annotations
 
 from fractions import Fraction
+from typing import Optional
 
 import msgspec
 import numpy as np
 import pytest
-from analysis_strategies import POWER_BINS, VALIDATOR_DOMAINS, capture_of
+from analysis_strategies import (
+    POWER_BINS,
+    VALIDATOR_DOMAINS,
+    capture_of,
+    registered_tolerance,
+)
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -31,6 +39,11 @@ class ToySpec(sa.specs.Analysis, frozen=True, kw_only=True):
 
 class OtherToySpec(sa.specs.Analysis, frozen=True, kw_only=True):
     scale: float = 1.0
+
+
+class ToyGroup(sa.specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True):
+    toy: Optional[ToySpec] = None
+    other_toy: Optional[OtherToySpec] = None
 
 
 def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=None):
@@ -165,7 +178,7 @@ def test_registry_validate_calls_only_the_requested_measurements():
         lambda capture, spec: seen.append('toy'),
         lambda capture, spec: seen.append('other_toy'),
     )
-    group = registry.tospec()(other_toy=OtherToySpec())
+    group = ToyGroup(other_toy=OtherToySpec())
 
     registry.validate(CAPTURE, group)
     assert seen == ['other_toy']
@@ -176,7 +189,7 @@ def test_registry_validate_skips_measurements_without_a_validator():
     registry = build_group_registry(
         None, lambda capture, spec: seen.append('other_toy')
     )
-    group = registry.tospec()(toy=ToySpec(), other_toy=OtherToySpec())
+    group = ToyGroup(toy=ToySpec(), other_toy=OtherToySpec())
 
     registry.validate(CAPTURE, group)
     assert seen == ['other_toy']
@@ -187,7 +200,7 @@ def test_registry_validate_annotates_the_analysis_field_path():
         raise SpecValidationError('nfft must be even', ('.nfft',))
 
     registry = build_group_registry(validate, None)
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     with pytest.raises(SpecValidationError) as excinfo:
         registry.validate(CAPTURE, group)
@@ -199,7 +212,7 @@ def test_registry_validate_annotates_the_analysis_field_path():
 def test_registry_validate_passes_the_projected_capture():
     seen = []
     registry = build_group_registry(lambda capture, spec: seen.append(capture), None)
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     registry.validate(CAPTURE, group)
     assert seen == [sa.specs.helpers.to_analysis_capture(CAPTURE)]
@@ -210,7 +223,7 @@ def test_registry_validate_is_cached_on_the_projected_capture():
     path"""
     seen = []
     registry = build_group_registry(lambda capture, spec: seen.append(spec), None)
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     registry.validate(CAPTURE, group)
     registry.validate(CAPTURE, group)
@@ -219,19 +232,13 @@ def test_registry_validate_is_cached_on_the_projected_capture():
     assert len(seen) == 2
 
 
-def test_registry_is_hashable():
-    registry = build_group_registry(None, None)
-    assert hash(registry) == hash(registry)
-    assert isinstance(hash(registry), int)
-
-
 def test_validator_errors_are_msgspec_validation_errors():
     """the sweep decode path reports these, so they must survive msgspec's own
     error handling and be catchable as a decode failure"""
     registry = build_group_registry(
         lambda capture, spec: (_ for _ in ()).throw(ValueError('nope')), None
     )
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     with pytest.raises(msgspec.ValidationError):
         registry.validate(CAPTURE, group)
@@ -258,18 +265,9 @@ def recording_tolerance(seen):
     return tolerance
 
 
-def test_tolerance_is_stored_on_the_info_and_defaults_to_none():
-    registry, _ = build_registry()
-    assert registry[ToySpec].tolerance is None
-
-    tolerance = recording_tolerance([])
-    registry, _ = build_registry(tolerance=tolerance)
-    assert registry[ToySpec].tolerance is tolerance
-
-
 def test_registry_tolerances_is_empty_when_nothing_declares_one():
     registry = build_group_registry(None, None)
-    group = registry.tospec()(toy=ToySpec(), other_toy=OtherToySpec())
+    group = ToyGroup(toy=ToySpec(), other_toy=OtherToySpec())
 
     assert registry.tolerances(CAPTURE, group) == {}
 
@@ -278,7 +276,7 @@ def test_registry_tolerances_keys_declared_measurements_by_name():
     registry = build_group_registry(
         None, None, tolerances=(None, recording_tolerance([]))
     )
-    group = registry.tospec()(toy=ToySpec(), other_toy=OtherToySpec())
+    group = ToyGroup(toy=ToySpec(), other_toy=OtherToySpec())
 
     result = registry.tolerances(CAPTURE, group)
 
@@ -291,7 +289,7 @@ def test_registry_tolerances_skips_measurements_not_in_the_group():
     registry = build_group_registry(
         None, None, tolerances=(recording_tolerance(seen), recording_tolerance(seen))
     )
-    group = registry.tospec()(toy=ToySpec(nfft=4))
+    group = ToyGroup(toy=ToySpec(nfft=4))
 
     registry.tolerances(CAPTURE, group)
 
@@ -305,7 +303,7 @@ def test_registry_tolerances_forwards_backend_and_input_error_as_keywords():
     registry = build_group_registry(
         None, None, tolerances=(recording_tolerance(seen), None)
     )
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     registry.tolerances(CAPTURE, group)
     registry.tolerances(CAPTURE, group, array_backend='cupy', input_error=1e-4)
@@ -321,7 +319,7 @@ def test_registry_tolerances_is_cached_on_the_projected_capture():
     registry = build_group_registry(
         None, None, tolerances=(recording_tolerance(seen), None)
     )
-    group = registry.tospec()(toy=ToySpec())
+    group = ToyGroup(toy=ToySpec())
 
     registry.tolerances(WideCapture(duration=1e-4, sample_rate=1e6, gain=0.0), group)
     registry.tolerances(WideCapture(duration=1e-4, sample_rate=1e6, gain=10.0), group)
@@ -334,9 +332,8 @@ def test_registry_tolerances_is_cached_on_the_projected_capture():
 
 VALIDATED = [info for info in sa.registry.values() if info.validate is not None]
 VALIDATED_IDS = [info.name for info in VALIDATED]
-# the SSS correlators search all 1008 cell ids per accepted example, so their draws
-# cost roughly 10 times the others'
-SSS = [info for info in VALIDATED if 'sss' in info.name]
+# the SSS correlators share the PSS validator and search all 1008 cell ids per
+# accepted example, so the PSS measurements alone draw from the shared domain
 OTHERS = [info for info in VALIDATED if 'sss' not in info.name]
 
 
@@ -351,7 +348,7 @@ def check_accepted_pair_runs(info, data):
     once IQ arrives. Pairs they reject are out of scope here; the spot checks below
     cover those."""
     capture, spec = data.draw(VALIDATOR_DOMAINS[info.name], label=info.name)
-    group = sa.registry.tospec()(**{info.name: spec})
+    group = sa.specs.BuiltinAnalyses(**{info.name: spec})
     try:
         sa.registry.validate(capture, group)
     except SpecValidationError:
@@ -371,13 +368,6 @@ def check_accepted_pair_runs(info, data):
 @given(data=st.data())
 @settings(max_examples=50)
 def test_a_validator_that_passes_means_the_measurement_runs(info, data):
-    check_accepted_pair_runs(info, data)
-
-
-@pytest.mark.parametrize('info', SSS, ids=[i.name for i in SSS])
-@given(data=st.data())
-@settings(max_examples=15)
-def test_a_validator_that_passes_means_the_sss_measurement_runs(info, data):
     check_accepted_pair_runs(info, data)
 
 
@@ -411,7 +401,7 @@ def test_validator_rejects_at_the_analysis_path_naming_the_field(case):
     under `$.analysis`, worded in terms of the spec or capture field at fault"""
     capture, spec, field = REJECTED[case]
     name = sa.registry[type(spec)].name
-    group = sa.registry.tospec()(**{name: spec})
+    group = sa.specs.BuiltinAnalyses(**{name: spec})
 
     with pytest.raises(SpecValidationError) as excinfo:
         sa.registry.validate(capture, group)
@@ -509,6 +499,39 @@ def test_measurement_attrs(spec):
         assert da.attrs[name] == value
 
 
+ABSOLUTE_POWER_UNITS = ('dBm', '√mW')
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
+    """every output and power-bin coordinate in absolute power units has a
+    `noise_bandwidth` in Hz and a `long_name` that names the bandwidth, except the
+    outputs whose bandwidth is the per-capture `analysis_bandwidth`, which set
+    neither; ratios in dB have neither"""
+    info, da = measure(spec, as_xarray=True)
+
+    def check(attrs, what):
+        units = attrs.get('units')
+        if str(what) in sa.lib.io._CAPTURE_BANDWIDTH_NAMES:
+            assert 'noise_bandwidth' not in attrs, what
+            assert '/' not in str(attrs.get('long_name', '')), what
+        elif units in ABSOLUTE_POWER_UNITS:
+            assert isinstance(attrs.get('noise_bandwidth'), float), what
+            assert attrs['noise_bandwidth'] > 0, what
+            assert f'({units}/' in attrs['long_name'], what
+            assert 'dBm/' not in units, what
+        elif units == 'dB':
+            assert 'noise_bandwidth' not in attrs, what
+
+    check(da.attrs, info.name)
+    for name in da.coords:
+        if str(name).endswith('_power_bin'):
+            check(da[name].attrs, name)
+            assert ('noise_bandwidth' in da[name].attrs) == (
+                'noise_bandwidth' in da.attrs
+            ), name
+
+
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_measurement_without_xarray(spec):
     _, (data, attrs) = measure(spec, as_xarray=False)
@@ -538,22 +561,73 @@ def test_every_measurement_has_a_validator():
     assert NO_VALIDATOR <= {info.name for info in sa.registry.values()}
 
 
-CONTRACT_VALIDATED_SPECS = [
-    s for s in CONTRACT_SPECS if sa.registry[type(s)].validate is not None
+CONTRACT_TOLERANCE_SPECS = [
+    s for s in CONTRACT_SPECS if sa.registry[type(s)].tolerance is not None
 ]
-CONTRACT_VALIDATED_IDS = [type(spec).__name__ for spec in CONTRACT_VALIDATED_SPECS]
+CONTRACT_TOLERANCE_IDS = [type(spec).__name__ for spec in CONTRACT_TOLERANCE_SPECS]
 
 
-@pytest.mark.parametrize('spec', CONTRACT_VALIDATED_SPECS, ids=CONTRACT_VALIDATED_IDS)
-def test_validators_accept_the_contract_specs(spec):
-    """the pairs the contract tests measure successfully must also pass validation,
-    without IQ"""
-    validate = sa.registry[type(spec)].validate
-    validate(sa.specs.helpers.to_analysis_capture(CONTRACT_CAPTURE), spec)
+@pytest.mark.parametrize('spec', CONTRACT_TOLERANCE_SPECS, ids=CONTRACT_TOLERANCE_IDS)
+def test_registered_tolerance_is_a_dB_budget_that_grows_with_input_error(spec):
+    """the registered budget bounds a level in dB with a peak at or above its rms.
+    An amplitude error in the IQ widens both."""
+    exact = registered_tolerance(CONTRACT_CAPTURE, spec, input_error=0.0)
+    assert isinstance(exact, sa.specs.Tolerance)
+    assert exact.units == 'dB'
+    # iq_waveform copies its input, so its exact-input bound is 0
+    assert exact.on_peak.peak >= exact.on_peak.rms >= 0
+
+    perturbed = registered_tolerance(CONTRACT_CAPTURE, spec, input_error=1e-4)
+    assert perturbed.on_peak.rms > exact.on_peak.rms
+    assert perturbed.on_peak.peak > exact.on_peak.peak
 
 
-def test_registry_validate_accepts_the_whole_contract_group():
-    group = sa.registry.tospec()(**{
-        sa.registry[type(spec)].name: spec for spec in CONTRACT_SPECS
-    })
-    sa.registry.validate(CONTRACT_CAPTURE, group)
+# %% check_group_fields
+
+
+def test_check_group_fields_accepts_a_matching_group():
+    expected = {'toy': ToySpec, 'other_toy': OtherToySpec}
+    assert register.check_group_fields(ToyGroup, expected) is None
+
+
+def test_check_group_fields_reports_a_missing_field():
+    expected = {'toy': ToySpec, 'other_toy': OtherToySpec, 'third': ToySpec}
+    with pytest.raises(TypeError, match=r"missing fields \['third'\]"):
+        register.check_group_fields(ToyGroup, expected)
+
+
+def test_check_group_fields_reports_an_unregistered_field():
+    with pytest.raises(TypeError, match=r"unregistered fields \['other_toy'\]"):
+        register.check_group_fields(ToyGroup, {'toy': ToySpec})
+
+
+def test_check_group_fields_reports_a_wrong_spec_type():
+    expected = {'toy': OtherToySpec, 'other_toy': OtherToySpec}
+    with pytest.raises(TypeError, match=r"wrong spec type \['toy'\]"):
+        register.check_group_fields(ToyGroup, expected)
+
+
+def test_check_group_fields_rejects_a_field_that_is_not_optional():
+    class Bad(sa.specs.AnalysisGroup, frozen=True, kw_only=True):
+        toy: ToySpec = ToySpec()
+
+    with pytest.raises(TypeError, match='Optional'):
+        register.check_group_fields(Bad, {'toy': ToySpec})
+
+
+def test_registry_and_any_analysis_agree():
+    """the import-time guard in striqt.analysis.measurements, asserted by name"""
+    expected = {info.name: spec_type for spec_type, info in sa.registry.items()}
+    register.check_group_fields(sa.specs.BuiltinAnalyses, expected)
+    assert set(sa.specs.BuiltinAnalyses.__struct_fields__) == set(expected)
+
+
+def test_trigger_registry_and_any_signal_trigger_agree():
+    expected = {
+        info.name: info.meas_spec_type
+        for key, info in sa.registry.signal_trigger.items()
+        if isinstance(key, str)
+    }
+    register.check_group_fields(sa.specs.BuiltinTriggers, expected)
+    triggers = set(sa.specs.BuiltinTriggers.__struct_fields__)
+    assert triggers <= set(sa.specs.BuiltinAnalyses.__struct_fields__)

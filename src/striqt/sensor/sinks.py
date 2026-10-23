@@ -1,4 +1,5 @@
 from .lib.sinks import (
+    MemoryCacheSink,
     NoSink,
     SinkBase,
     ZarrSinkBase,

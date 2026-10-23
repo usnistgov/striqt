@@ -1,3 +1,9 @@
+"""sinks that write or collect the analyzed dataset of each capture.
+
+Every sink is constructed from a `Sweep` and reads the `sink` block of that sweep.
+The action runner selects the sink class.
+"""
+
 from __future__ import annotations as __
 
 import itertools as itertools
@@ -40,7 +46,7 @@ class _BatchTracker:
 class Zipper:
     BUFFER_SIZE = 10 * 1024 * 1024
     temp_dir: str
-    temp_spec: specs.Sink | None
+    temp_spec: specs.ZarrSink | None
 
     def __init__(self, zip_path, sink: SinkBase | None = None, force: bool = False):
         if sink is not None and sink._format_path is not None:
@@ -111,7 +117,13 @@ class Zipper:
 
 
 class SinkBase(Generic[specs.SC]):
-    """intake acquisitions one at a time and parcel them to a data store"""
+    """accept the analyzed dataset of one capture at a time for writing or collection.
+
+    A sink is constructed from a `Sweep` and entered as a context manager before the
+    first `append`. `append` receives the `DelayedDataset` of one capture and returns
+    the value the pipeline yields for that capture. Writes run on 1 worker thread,
+    and `wait` blocks until the pending write completes.
+    """
 
     def __init__(
         self,
@@ -131,15 +143,6 @@ class SinkBase(Generic[specs.SC]):
         self._future = None
         self._pending_data: list['xr.Dataset'] = []
         self._executor = ThreadPoolExecutor(1)
-
-        # decide group sizes
-        source_id = controller.lookup.id(sweep_spec.source)
-        captures = specs.sequencing.loop_captures(sweep_spec, source_id)
-        if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], specs.Repeat):
-            captures = sweep_spec.loops[0].count * captures
-        self._batch = _BatchTracker(
-            captures, min_size=sweep_spec.sink.batched_write_count
-        )
 
     def pop(self) -> list['xr.Dataset']:
         result = self._pending_data
@@ -212,10 +215,53 @@ class NoSink(SinkBase):
         pass
 
 
+class MemoryCacheSink(SinkBase):
+    """collect the dataset of every capture in memory until `pop` is called.
+
+    Nothing is written. `close` leaves the collected datasets in place.
+    """
+
+    def open(self) -> None:
+        pass
+
+    def close(self, *exc_info):
+        pass
+
+
 class ZarrSinkBase(SinkBase):
+    """write the zarr store at `sink.path` in batches of `batched_write_count` or more.
+
+    A ``.zarr.zip`` path is written through a `Zipper`.
+
+    Raises:
+        ValueError: if `sweep_spec.sink.path` is None
+    """
+
     _zipper: Zipper | None = None
+    _batch: _BatchTracker
+
+    def __init__(
+        self,
+        sweep_spec: specs.Sweep[Any, Any, specs.SC],
+        format_path: specs.paths.PathFormatter | None = None,
+        *,
+        force: bool = False,
+    ):
+        if sweep_spec.sink.path is None:
+            raise ValueError('sink.path is null, but a zarr sink needs an output path')
+
+        super().__init__(sweep_spec, format_path, force=force)
+
+        source_id = controller.lookup.id(sweep_spec.source)
+        captures = specs.sequencing.loop_captures(sweep_spec, source_id)
+        if len(sweep_spec.loops) > 0 and isinstance(sweep_spec.loops[0], specs.Repeat):
+            captures = sweep_spec.loops[0].count * captures
+        self._batch = _BatchTracker(
+            captures, min_size=sweep_spec.sink.batched_write_count
+        )
 
     def open(self):
+        assert self._spec.path is not None
         path = Path(self._spec.path)
 
         if path.name.lower().endswith('.zarr.zip'):
@@ -257,7 +303,7 @@ class ZarrSinkBase(SinkBase):
 
 
 class ZarrCaptureSink(ZarrSinkBase):
-    """concatenates the data from each capture and dumps to a zarr data store"""
+    """append the dataset of each capture to a zarr store along `capture`."""
 
     def append(self, capture_result: compute.DelayedDataset):
         ret = super().append(capture_result)
@@ -311,6 +357,17 @@ class ZarrCaptureSink(ZarrSinkBase):
 
 
 class ZarrTimeAppendSink(ZarrSinkBase):
+    """append the spectrogram of each capture along the spectrogram time axis.
+
+    No action runner selects this sink. The caller enters an instance as a context
+    manager and passes the instance through ``iterate_sweep(resources, sink=...)``.
+    The captures of one write batch share one `capture` index, and each batch is
+    appended along `capture`.
+
+    Raises:
+        ValueError: if `sweep_spec.analysis` has no `spectrogram`
+    """
+
     def __init__(
         self,
         sweep_spec: specs.Sweep,

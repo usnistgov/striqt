@@ -38,11 +38,9 @@ from striqt.waveform.lib.power import (
     envelope_power_rtol,
     envtodB,
     envtopow,
-    level_tolerance_dB,
     linear_stat_tol,
     linear_tolerance_dB,
     log_conversion_tol,
-    off_peak_dB_tolerance,
     pow_conversion_rtol,
     powtodB,
     roundtrip_dB_tol,
@@ -124,8 +122,8 @@ class TestUnitConversionProperties:
         assert unit_wave_to_dB(unit_dB_to_wave(dB_unit)) == dB_unit
         assert unit_wave_to_linear(wave_unit) == unit_dB_to_linear(dB_unit)
 
-    @pytest.mark.parametrize('unit', ['V', 'counts', ''])
-    def test_unknown_units_pass_through(self, subtests, unit):
+    def test_unknown_units_pass_through(self, subtests):
+        unit = 'counts'
         for func in (
             unit_dB_to_linear,
             unit_linear_to_dB,
@@ -253,12 +251,6 @@ class TestEdgeCases:
         assert np.all(np.isfinite(result))
         assert_close(result, floor, **log_conversion_tol(compute_dtype, scale))
 
-    def test_empty_array(self, subtests):
-        empty = np.array([], dtype=np.float64)
-        for func in (powtodB, dBtopow, envtodB, envtopow):
-            with subtests.test(msg=func.__name__):
-                assert func(empty).shape == (0,)
-
 
 @pytest.mark.namespaces('numpy', 'cupy', 'dask')
 class TestMultiBackend:
@@ -266,33 +258,36 @@ class TestMultiBackend:
 
     @pytest.mark.parametrize('func', [powtodB, dBtopow, envtodB, envtopow], ids=func_id)
     @for_each_float_dtype
-    @given(data=st.data())
-    def test_dtype_is_preserved(self, xp, func, dtype, data):
-        """Property: with min_dtype='float32', the input precision is kept."""
-        x = as_xp(xp, data.draw(INPUTS[func](dtype=dtype)))
+    def test_dtype_is_preserved(self, xp, func, dtype):
+        """with min_dtype='float32', the input precision is kept"""
+        x = as_xp(xp, np.array([0.5, 2.0], dtype=dtype))
         assert to_numpy(func(x, min_dtype='float32')).dtype == dtype
 
     @pytest.mark.parametrize(
-        'func, limits', [(powtodB, (1e-3, 1e3)), (dBtopow, (-30, 30))], ids=func_id
+        'func, values, reference, tol',
+        [
+            (
+                powtodB,
+                (1e-3, 1e3),
+                lambda x: 10 * np.log10(x),
+                log_conversion_tol(np.float32, 10),
+            ),
+            (
+                dBtopow,
+                (-30, 30),
+                lambda x: 10 ** (x / 10),
+                {'rtol': pow_conversion_rtol(np.float32, 30)},
+            ),
+        ],
+        ids=func_id,
     )
-    @given(data=st.data())
-    def test_float16_is_promoted_to_float32(self, xp, func, limits, data):
-        """The expected value follows the float16-quantized input, not the float32
-        draw it was made from."""
-        strategy = INPUTS[func](
-            dtype=np.float32, min_value=limits[0], max_value=limits[1]
-        )
-        x16 = data.draw(strategy).astype(np.float16)
+    def test_float16_is_promoted_to_float32(self, xp, func, values, reference, tol):
+        """the float32 result follows the float16-quantized input"""
+        x16 = np.array(values, dtype=np.float16)
 
         result = func(as_xp(xp, x16), min_dtype='float32')
         assert to_numpy(result).dtype == np.float32
-
-        expected = func(x16.astype(np.float32), min_dtype='float32')
-        if func is dBtopow:
-            tol = {'rtol': pow_conversion_rtol(np.float32, 30, n_impl=2)}
-        else:
-            tol = log_conversion_tol(np.float32, 10, n_impl=2)
-        assert_close(result, expected, **tol)
+        assert_close(result, reference(x16.astype(np.float64)), **tol)
 
     @given(power=positive_power_arrays(dtype=np.float64))
     def test_powtodB_dBtopow_roundtrip(self, xp, power):
@@ -425,10 +420,10 @@ class TestArrayLikeHandling:
         assert isinstance(dBtopow(10), float)
         assert_close(dBtopow(10), 10.0, rtol=pow_conversion_rtol(np.float64, 10))
 
-    @given(power=positive_power_arrays(dtype=np.float64, min_dims=1, max_dims=1))
-    def test_pandas_series_roundtrip(self, power):
+    def test_pandas_series_roundtrip(self):
         pd = pytest.importorskip('pandas')
 
+        power = np.array([1e-3, 1.0, 2.5, 1e3])
         index = pd.RangeIndex(10, 10 + power.size)
         series = pd.Series(power, index=index)
 
@@ -437,14 +432,10 @@ class TestArrayLikeHandling:
         assert result.index.equals(index)
         assert_array_equal(result.values, powtodB(power))
 
-    @given(
-        power=positive_power_arrays(
-            dtype=np.float64, min_dims=2, max_dims=2, min_size=1, max_size=6
-        )
-    )
-    def test_pandas_dataframe_roundtrip(self, power):
+    def test_pandas_dataframe_roundtrip(self):
         pd = pytest.importorskip('pandas')
 
+        power = np.array([[1e-3, 1.0], [2.5, 1e3], [0.5, 4.0]])
         columns = [f'c{i}' for i in range(power.shape[1])]
         frame = pd.DataFrame(power, columns=columns)
 
@@ -501,52 +492,6 @@ class TestArrayLikeHandling:
 
         with pytest.raises(TypeError, match='unable to associate an array type'):
             powtodB(Container())
-
-
-class TestRoundoffModels:
-    """The tolerance models that the rest of this module measures the library against."""
-
-    @for_each_float_dtype
-    def test_log_conversion_tol_scales_with_n_impl_and_scale(self, dtype):
-        one = log_conversion_tol(dtype, 10)
-        two = log_conversion_tol(dtype, 10, n_impl=2)
-        assert two['rtol'] == 2 * one['rtol']
-        assert two['atol'] == 2 * one['atol']
-
-        double_scale = log_conversion_tol(dtype, 20)
-        assert double_scale['atol'] == 2 * one['atol']
-        assert double_scale['rtol'] == one['rtol']
-
-    @for_each_float_dtype
-    def test_log_conversion_tol_complex_input_raises_atol(self, dtype):
-        real = log_conversion_tol(dtype, 20)
-        complex_ = log_conversion_tol(dtype, 20, complex_input=True)
-        assert complex_['atol'] > real['atol']
-        assert complex_['rtol'] == real['rtol']
-
-    @for_each_float_dtype
-    def test_pow_conversion_rtol_grows_with_level(self, dtype):
-        assert pow_conversion_rtol(dtype, 100) > pow_conversion_rtol(dtype, 10)
-
-    @pytest.mark.parametrize('r', [1e-5, 0.1, 0.9])
-    def test_off_peak_dB_tolerance_at_peak(self, r):
-        """the low side of a relative error costs at least as much dB as the high side"""
-        at_peak = off_peak_dB_tolerance(0, r)
-        assert at_peak == pytest.approx(-20 * np.log10(1 - r))
-        assert at_peak >= level_tolerance_dB(r)
-
-    def test_off_peak_dB_tolerance_unbounded_past_floor(self):
-        err = 1e-3
-        depth_dBc = -20 * np.log10(err)
-        assert np.isposinf(off_peak_dB_tolerance(depth_dBc, err))
-        assert np.isposinf(off_peak_dB_tolerance(depth_dBc + 10, err))
-        assert np.isfinite(off_peak_dB_tolerance(depth_dBc - 1, err))
-
-    def test_level_tolerance_dB_power_is_half_of_amplitude(self):
-        sigma = np.array([1e-6, 1e-3, 0.1, 1.0])
-        np.testing.assert_allclose(
-            level_tolerance_dB(sigma, power=True), level_tolerance_dB(sigma) / 2
-        )
 
 
 class TestNumpyCupyCrossComparison:

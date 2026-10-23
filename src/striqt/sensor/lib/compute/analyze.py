@@ -3,12 +3,12 @@
 from __future__ import annotations as __
 
 import logging
-from typing import cast, Literal, overload, TYPE_CHECKING
+from typing import Any, cast, Literal, overload, TYPE_CHECKING
 import warnings
 
 from ... import specs
 from .. import sources
-from . import corrections, gpu, datasets
+from . import corrections, datasets
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -17,7 +17,10 @@ from striqt.analysis.lib.util import np, xr
 import msgspec
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from ..typing import Array
+    from .datasets import DelayedDataset
 
 
 SOURCE_ID_NAME = 'source_id'
@@ -41,7 +44,8 @@ def get_trigger_from_spec(
     if name is None:
         return None
 
-    if analysis is None and isinstance(setup.signal_trigger, specs.AnalysisGroup):
+    # the spec inside a struct-form trigger takes precedence over the sweep analysis
+    if isinstance(setup.signal_trigger, specs.AnalysisGroup):
         analysis = setup.signal_trigger
 
     if analysis is None:
@@ -157,7 +161,17 @@ def analyze(
         return datasets.from_delayed(ds_delayed)
 
 
-def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
+def prepare_compute(
+    spec: specs.Sweep[Any, Any, Any], skip_warmup: bool = False
+) -> Generator[xr.Dataset | DelayedDataset | None]:
+    """import the compute backend of `spec`, then run the warmup sweep, if any.
+
+    The imports and the cupy configuration run before the first yield. When
+    `skip_warmup` is set or `warmup_sweep_for(spec)` returns None, a single None is
+    yielded. Otherwise the yields are those of a `SweepRunner` over the warmup sweep
+    on the resources of `open_warmup_resources`, and nothing is yielded when that
+    sweep has no captures.
+    """
     if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
             # numba.cuda must be imported before cupy on some versions/platforms
@@ -175,29 +189,23 @@ def prepare_compute(spec: specs.Sweep, skip_warmup: bool = False):
         message='Mean of empty slice.*',
     )
 
-    if skip_warmup or spec.options.skip_warmup or not gpu.sweep_touches_gpu(spec):
+    from ..actions import sweep as sweep_action
+    from ..actions import warmup
+
+    if skip_warmup:
+        warm = None
+    else:
+        warm = warmup.warmup_sweep_for(spec)
+
+    if warm is None:
         yield from (None,)
         return
 
-    from ... import bindings
-    from .. import execute, resources, sinks
-
-    spec = gpu.build_warmup_sweep(spec)
-
-    if len(spec.captures) == 0:
+    if len(warm.captures) == 0:
         return
 
-    res = resources.Resources(
-        sweep_spec=spec,
-        source=bindings.warmup.from_source_spec(spec.source),
-        peripherals=bindings.warmup.sensor.peripherals_cls(spec),
-        sink=sinks.NoSink(spec),
-        calibration=None,
-        format_path=None,
-    )
+    warm_runner = sweep_action.SweepRunner(warm)
+    res = warmup.open_warmup_resources(warm_runner)
 
     with res['source']:
-        sweep = execute.iterate_sweep(res, always_yield=True, calibration=None)
-
-        for _ in sweep:
-            yield _
+        yield from warm_runner.iterate(res, always_yield=True)

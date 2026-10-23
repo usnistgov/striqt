@@ -1,14 +1,10 @@
-"""evaluate xarray datasets from sensor (meta)data and calibrations"""
+"""decide whether a sweep puts work on the GPU"""
 
 from __future__ import annotations as __
 
 import math
-from typing import Any, TYPE_CHECKING
 from ... import specs
 import striqt.analysis as sa
-
-if TYPE_CHECKING:
-    from ..typing import SC, SS, SP, WarmupSweep
 
 
 def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
@@ -42,54 +38,3 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
                 return True
 
     return False
-
-
-def build_warmup_sweep(sweep: specs.Sweep[SS, SP, SC], count: int = 1) -> WarmupSweep:
-    """derive a warmup sweep specification from `sweep`.
-
-    Running the derived sweep triggers the python imports and JIT compilation that
-    would otherwise slow the analysis of the first captures.
-
-    The derived sweep is bound to `NoPeripherals` and `NoSink`, and contains `count`
-    captures with no loops.
-    """
-
-    from ..bindings import get_controller, mock_binding
-    from ...bindings import warmup
-
-    # ports are numbered from 0, so the source needs max(port) + 1 of them
-    ports: list[Any] = [c.port for c in sweep.captures]
-    max_rx_ports = 0
-    for loop in sweep.loops:
-        if loop.isin == 'capture' and loop.field == 'port':
-            ports.extend(loop.get_points())
-    for port in ports:
-        if port is None:
-            continue
-        if isinstance(port, tuple):
-            n = max(port) + 1
-        else:
-            n = port + 1
-        if n > max_rx_ports:
-            max_rx_ports = n
-
-    b = mock_binding(get_controller(sweep), 'warmup', register=False)
-
-    source = warmup.schema.source(
-        num_rx_ports=max_rx_ports,
-        master_clock_rate=sweep.source.master_clock_rate,
-        trigger_strobe=None,
-        signal_trigger=sweep.source.signal_trigger,
-    )
-
-    sweep_spec = b.sensor.sweep_spec_cls(
-        source=source,
-        captures=sweep.captures,
-        loops=sweep.loops,
-        analysis=sweep.analysis,
-        sink=sweep.sink,
-    )
-
-    captures = specs.sequencing.loop_captures(sweep_spec, limit=count)
-
-    return sweep_spec.replace(captures=captures, loops=())

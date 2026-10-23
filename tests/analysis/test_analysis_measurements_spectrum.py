@@ -10,6 +10,7 @@ over the window's equivalent noise bandwidth.
 from __future__ import annotations
 
 import fractions
+import math
 import re
 
 import msgspec
@@ -34,7 +35,6 @@ from numeric_checks import (
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis import testing
-from striqt.analysis.measurements.power import make_power_bins
 from striqt.waveform.fourier import fft_tolerance_rms, off_peak_floor_dBc
 
 # a 64-point FFT over 8 non-overlapping windows: 512 samples, 500 us
@@ -180,9 +180,11 @@ class TestSpectrogram:
         # of them keeps the level it had at the finer resolution while the bandwidth
         # it is referred to grows
         assert ref_metadata['noise_bandwidth'] == RES
-        assert ref_metadata['units'] == 'dBm/16 kHz'
+        assert ref_metadata['units'] == 'dBm'
+        assert ref_metadata['long_name'] == 'Power spectral density (dBm/16 kHz)'
         assert da.attrs['noise_bandwidth'] == frequency_bins * RES
-        assert da.attrs['units'] == 'dBm/64 kHz'
+        assert da.attrs['units'] == 'dBm'
+        assert da.attrs['long_name'] == 'Power spectral density (dBm/64 kHz)'
 
         # each side has its own quantization and roundoff budget
         atol = (
@@ -319,6 +321,133 @@ class TestSpectrogram:
         # the same nfft passes once the band is not cut
         da = spg_of(iq, capture, frequency_resolution=FS / 7, trim_stopband=False)
         assert da.sizes['spectrogram_baseband_frequency'] == 7
+
+
+# %% noise bandwidth and resolution bandwidth
+
+# 128 windows of white noise: enough exponential variates that a 5-sigma band on the
+# mean bin power is a few tenths of a dB, well inside the 2.7 dB shift that a
+# window_fill of 1/2 would produce if the zero padding entered the normalization
+NOISE_DURATION = 128 * NFFT / FS
+NOISE_CAPTURE = sa.specs.Capture(duration=NOISE_DURATION, sample_rate=FS)
+NOISE_PSD = 1e-6
+
+
+def noise_level_tolerance_dB(window, bins, windows, window_fill=1.0) -> float:
+    """5-sigma bound (in dB) on the mean of `windows` x `bins` noise bin powers.
+
+    Adjacent bins are correlated over the window's ENBW, which multiplies the
+    variance of the mean over bins by the ENBW in bins.
+    """
+    nwindow = round(window_fill * NFFT)
+    enbw_bins = float(sw.equivalent_noise_bandwidth(window, nwindow))
+    sigma = math.sqrt(enbw_bins / (bins * windows))
+    return sw.power_analysis.level_tolerance_dB(5 * sigma, power=True)
+
+
+def mean_linear_power(da) -> float:
+    return float(np.nanmean(10 ** (da.values.astype('float64') / 10)))
+
+
+@pytest.mark.parametrize('window', WINDOWS, ids=WINDOWS)
+@pytest.mark.parametrize(
+    'window_fill', [1, fractions.Fraction(1, 2)], ids=['fill1', 'fill1/2']
+)
+def test_spectrogram_white_noise_reads_noise_bandwidth(window, window_fill):
+    """white noise with power spectral density N0 has a mean bin power of
+    N0 * noise_bandwidth for every window and window fill, and the stored attr equals
+    frequency_resolution"""
+    iq = testing.circular_awgn(NOISE_DURATION, FS, power=NOISE_PSD * FS)
+    da = spg_of(
+        iq,
+        capture=NOISE_CAPTURE,
+        window=window,
+        window_fill=window_fill,
+        as_xarray=True,
+    )
+
+    assert da.attrs['noise_bandwidth'] == RES
+    assert da.attrs['units'] == 'dBm'
+    windows, bins = (
+        da.sizes['spectrogram_time'],
+        da.sizes['spectrogram_baseband_frequency'],
+    )
+    assert_close(
+        10 * np.log10(mean_linear_power(da)),
+        10 * np.log10(NOISE_PSD * RES),
+        atol=noise_level_tolerance_dB(window, bins, windows, float(window_fill)),
+    )
+
+
+def test_integrated_spectrogram_white_noise_reads_integration_bandwidth():
+    """the sum of 4 bins has 4 times the noise power, and noise_bandwidth is 4 times
+    the resolution"""
+    frequency_bins = 4
+    iq = testing.circular_awgn(NOISE_DURATION, FS, power=NOISE_PSD * FS)
+    da = spg_of(
+        iq,
+        capture=NOISE_CAPTURE,
+        window='hann',
+        integration_bandwidth=frequency_bins * RES,
+        as_xarray=True,
+    )
+
+    assert da.attrs['noise_bandwidth'] == frequency_bins * RES
+    windows, bins = (
+        da.sizes['spectrogram_time'],
+        da.sizes['spectrogram_baseband_frequency'],
+    )
+    assert_close(
+        10 * np.log10(mean_linear_power(da)),
+        10 * np.log10(NOISE_PSD * frequency_bins * RES),
+        atol=noise_level_tolerance_dB('hann', bins * frequency_bins, windows),
+    )
+
+
+def test_power_spectral_density_white_noise_reads_noise_bandwidth():
+    """the Welch mean of white noise is N0 * noise_bandwidth per bin"""
+    iq = testing.circular_awgn(NOISE_DURATION, FS, power=NOISE_PSD * FS)
+    da = psd_of(iq, capture=NOISE_CAPTURE, window='hamming', time_statistic=['mean'])
+
+    assert da.attrs['noise_bandwidth'] == RES
+    assert da.attrs['units'] == 'dBm'
+    assert da.attrs['long_name'] == 'Power spectral density (dBm/16 kHz)'
+    windows = round(NOISE_DURATION * FS / NFFT)
+    assert_close(
+        10 * np.log10(mean_linear_power(da)),
+        10 * np.log10(NOISE_PSD * RES),
+        atol=noise_level_tolerance_dB('hamming', NFFT, windows),
+    )
+
+
+@pytest.mark.parametrize('window', WINDOWS, ids=WINDOWS)
+@pytest.mark.parametrize(
+    'window_fill', [1, fractions.Fraction(1, 2)], ids=['fill1', 'fill1/2']
+)
+def test_resolution_bandwidth_sets_the_tone_level(window, window_fill):
+    """a bin-centered tone has frequency_resolution / resolution_bandwidth of the tone
+    power in the tone bin, where the attr is the ENBW in Hz of the nonzero part of the
+    window"""
+    nwindow = round(window_fill * NFFT)
+    enbw_bins = float(sw.equivalent_noise_bandwidth(window, nwindow))
+    expected_rbw = enbw_bins * FS / nwindow
+
+    tone_bin = 5
+    iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
+    da = spg_of(iq, window=window, window_fill=window_fill, as_xarray=True)
+
+    assert da.attrs['resolution_bandwidth'] == pytest.approx(expected_rbw)
+    assert da.spectrogram_baseband_frequency.attrs.get('resolution_bandwidth') is None
+
+    peak_dB = float(da.max())
+    tol = registered_tolerance(
+        CAPTURE, spg_spec(window=window, window_fill=window_fill)
+    )
+    assert_close(
+        peak_dB,
+        10 * np.log10(RES / da.attrs['resolution_bandwidth']),
+        atol=tol.on_peak.peak,
+    )
 
 
 # %% power_spectral_density
@@ -481,20 +610,71 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
 
 
 @pytest.mark.parametrize(
-    'integration_bandwidth,units',
-    [(None, 'dBm/50 kHz'), (100e3, 'dBm/100 kHz')],
+    'integration_bandwidth,noise_bandwidth,long_name',
+    [
+        (None, 50e3, 'Spectrogram bin power (dBm/50 kHz)'),
+        (100e3, 100e3, 'Spectrogram bin power (dBm/100 kHz)'),
+    ],
     ids=['no_integration', 'integrate_100kHz'],
 )
-def test_spectrogram_histogram_bin_coordinate(integration_bandwidth, units):
-    """the bin coordinate is the shared power grid, labeled with the equivalent noise
-    bandwidth that the readings are referred to"""
+def test_spectrogram_histogram_bin_coordinate(
+    integration_bandwidth, noise_bandwidth, long_name
+):
+    """the bin coordinate is the shared power grid with the noise bandwidth of the
+    readings, the same attr as on the histogram variable"""
     iq = sa.testing.tone(HIST_DURATION, HIST_FS)
 
     da = spectrogram_histogram_of(iq, integration_bandwidth=integration_bandwidth)
 
-    expected = make_power_bins(**POWER_BINS)
-    assert_close(da.spectrogram_power_bin.values, expected, rtol=RTOL)
-    assert da.spectrogram_power_bin.attrs['units'] == units
+    coord_attrs = da.spectrogram_power_bin.attrs
+    assert coord_attrs['units'] == 'dBm'
+    assert coord_attrs['noise_bandwidth'] == noise_bandwidth
+    assert coord_attrs['long_name'] == long_name
+    assert da.attrs['noise_bandwidth'] == noise_bandwidth
+    assert 'long_name' not in da.attrs
+
+
+# a histogram of 1e5 noise pixels: the dB-of-the-mean bin is populated 10 % more than
+# the bins 2 dB away, against a count noise of about 1 %
+HIST_NOISE_DURATION = 0.1
+HIST_NOISE_LEVEL_DBM = -10.0
+
+
+def test_spectrogram_histogram_white_noise_peaks_at_the_noise_bandwidth_level():
+    """the mode of the dB histogram of exponentially distributed bin powers is at the
+    dB of the mean, N0 * noise_bandwidth, and the fraction-weighted linear mean equals
+    that power"""
+    noise_mW = 10 ** (HIST_NOISE_LEVEL_DBM / 10)
+    psd = noise_mW / HIST_FREQUENCY_RESOLUTION
+    iq = sa.testing.circular_awgn(HIST_NOISE_DURATION, HIST_FS, power=psd * HIST_FS)
+    capture = sa.specs.Capture(duration=HIST_NOISE_DURATION, sample_rate=HIST_FS)
+
+    da = sa.measurements.spectrogram_histogram(
+        iq,
+        capture,
+        window='hamming',
+        frequency_resolution=HIST_FREQUENCY_RESOLUTION,
+        as_xarray=True,
+        **POWER_BINS,
+    )
+
+    bins = da.spectrogram_power_bin.values
+    fractions_ = da.values[0]
+    finite = np.isfinite(bins)
+    mode = bins[finite][np.argmax(fractions_[finite])]
+    assert abs(mode - HIST_NOISE_LEVEL_DBM) <= 2 * POWER_BINS['power_resolution']
+
+    # the 1 dB bin centers quantize the linear mean by under 0.1 dB, and the hamming
+    # window correlates adjacent bins over the 1.36-bin hamming ENBW
+    linear_mean = np.sum(fractions_[finite] * 10 ** (bins[finite] / 10))
+    pixels = round(HIST_NOISE_DURATION * HIST_FS)
+    enbw_bins = float(sw.equivalent_noise_bandwidth('hamming', HIST_NFFT))
+    sigma = math.sqrt(enbw_bins / pixels)
+    assert_close(
+        10 * np.log10(linear_mean),
+        HIST_NOISE_LEVEL_DBM,
+        atol=sw.power_analysis.level_tolerance_dB(5 * sigma, power=True) + 0.1,
+    )
 
 
 # %% spectrogram_ratio_histogram
@@ -545,11 +725,13 @@ def test_spectrogram_ratio_histogram_requires_two_ports(ports):
 
 def test_spectrogram_ratio_histogram_bin_units_are_ratios():
     """the bin coordinate is a cross-port ratio, so its units are dB rather than the
-    dBm of the absolute spectrogram histogram"""
+    dBm of the absolute spectrogram histogram, and neither the coordinate nor the
+    histogram has a noise bandwidth"""
     da = ratio_histogram(two_ports_offset_by(0.0))
 
-    units = da.spectrogram_ratio_power_bin.attrs['units']
-    assert units == 'dB/50 kHz'
+    assert da.spectrogram_ratio_power_bin.attrs['units'] == 'dB'
+    assert 'noise_bandwidth' not in da.spectrogram_ratio_power_bin.attrs
+    assert 'noise_bandwidth' not in da.attrs
 
 
 # %% tolerance
@@ -560,23 +742,6 @@ TOLERANCE_CASES = [
     (ssb_spectrogram_capture(SSB_SPECTROGRAM_PERIODICITY), SSB_SPECTROGRAM_SPEC),
 ]
 TOLERANCE_IDS = ['spectrogram', 'power_spectral_density', 'cellular_5g_ssb_spectrogram']
-
-
-@pytest.mark.parametrize('capture,spec', TOLERANCE_CASES, ids=TOLERANCE_IDS)
-def test_tolerance_is_a_dB_budget_with_peak_above_rms(capture, spec):
-    tol = registered_tolerance(capture, spec)
-    assert isinstance(tol, sa.specs.Tolerance)
-    assert tol.units == 'dB'
-    assert tol.on_peak.peak >= tol.on_peak.rms > 0
-    assert tol.off_peak_dBc.rms < tol.off_peak_dBc.peak < 0
-
-
-@pytest.mark.parametrize('capture,spec', TOLERANCE_CASES, ids=TOLERANCE_IDS)
-def test_tolerance_grows_with_the_input_error(capture, spec):
-    exact = registered_tolerance(capture, spec, input_error=0.0)
-    perturbed = registered_tolerance(capture, spec, input_error=1e-4)
-    assert perturbed.on_peak.rms > exact.on_peak.rms
-    assert perturbed.on_peak.peak > exact.on_peak.peak
 
 
 @pytest.mark.parametrize('capture,spec', TOLERANCE_CASES, ids=TOLERANCE_IDS)

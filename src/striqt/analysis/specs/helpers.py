@@ -3,11 +3,13 @@
 from __future__ import annotations as __
 
 import contextlib
+import dataclasses
 import functools
 import fractions
 from typing import (
     Any,
     Callable,
+    Collection,
     Iterator,
     ItemsView,
     Iterable,
@@ -17,6 +19,7 @@ from typing import (
     TypeVar,
     ValuesView,
     cast,
+    get_args,
     get_origin,
     overload,
 )
@@ -25,6 +28,7 @@ from msgspec import inspect as mi
 from striqt.waveform.lib import util
 
 _T = TypeVar('_T')
+_S = TypeVar('_S', bound=msgspec.Struct)
 _K = TypeVar('_K')
 _V = TypeVar('_V')
 
@@ -228,6 +232,99 @@ def validation_path(*parts: str) -> Iterator[None]:
         raise ex.prepend(*parts) from ex.__cause__
     except (ValueError, TypeError, msgspec.ValidationError) as ex:
         raise SpecValidationError(str(ex), parts) from ex
+
+
+# %% struct field subsets
+@dataclasses.dataclass(frozen=True)
+class SpecSubset:
+    """the relation `subset_of` records for a decorated struct type."""
+
+    base: type[msgspec.Struct]
+    without: frozenset[str]
+    optional: frozenset[str]
+
+
+_spec_subsets: dict[type[msgspec.Struct], SpecSubset] = {}
+
+
+def subset_of(
+    base: type[msgspec.Struct],
+    *,
+    without: Collection[str] = (),
+    optional: Collection[str] = (),
+) -> Callable[[type[_S]], type[_S]]:
+    """verify at class creation that a struct has the fields of `base` except `without`.
+
+    Each field of the decorated struct must match the field of `base` with the same
+    name in annotated type and default. A field named in `optional` is instead
+    annotated ``Optional[<base type>]`` with default ``None``. The decorated class is
+    returned unchanged and the relation is retrievable with `spec_subset`.
+
+    Args:
+        base: the struct type whose fields are the reference
+        without: names of `base` fields that the decorated struct omits
+        optional: names of kept fields that the decorated struct widens to
+            ``Optional`` with a ``None`` default
+
+    Raises:
+        TypeError: when the fields, annotated types, or defaults of the decorated
+            class differ from those of `base` minus `without`, or when `without` or
+            `optional` names a field that does not exist
+    """
+    without = frozenset(without)
+    optional = frozenset(optional)
+
+    def decorate(cls: type[_S]) -> type[_S]:
+        base_fields = {f.name: f for f in msgspec.structs.fields(base)}
+        fields = {f.name: f for f in msgspec.structs.fields(cls)}
+        label = f'{cls.__name__} as a subset of {base.__name__}'
+
+        problems: list[str] = []
+        if not without <= set(base_fields):
+            problems.append(
+                f'without names unknown fields {sorted(without - set(base_fields))!r}'
+            )
+        expected = set(base_fields) - without
+        if not optional <= expected:
+            problems.append(
+                f'optional names fields outside the subset {sorted(optional - expected)!r}'
+            )
+        if missing := expected - set(fields):
+            problems.append(f'missing fields {sorted(missing)!r}')
+        if extra := set(fields) - expected:
+            problems.append(f'unexpected fields {sorted(extra)!r}')
+
+        for name in sorted(expected & set(fields)):
+            field, ref = fields[name], base_fields[name]
+            if name in optional:
+                if field.default is not None or set(get_args(field.type)) != {
+                    ref.type,
+                    type(None),
+                }:
+                    problems.append(
+                        f'{name!r} is not Optional[{ref.type!r}] with default None'
+                    )
+            elif field.type != ref.type:
+                problems.append(
+                    f'{name!r} type {field.type!r} differs from {ref.type!r}'
+                )
+            elif field.default != ref.default:
+                problems.append(
+                    f'{name!r} default {field.default!r} differs from {ref.default!r}'
+                )
+
+        if problems:
+            raise TypeError(f'{label}: ' + '; '.join(problems))
+
+        _spec_subsets[cls] = SpecSubset(base, without, optional)
+        return cls
+
+    return decorate
+
+
+def spec_subset(cls: type[msgspec.Struct]) -> SpecSubset | None:
+    """return the `SpecSubset` that `subset_of` recorded for `cls`, or None."""
+    return _spec_subsets.get(cls)
 
 
 @util.lru_cache(4096)

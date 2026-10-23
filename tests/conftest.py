@@ -403,6 +403,33 @@ def isolated_lookup(monkeypatch):
 
 
 @pytest.fixture
+def scripted_input(monkeypatch):
+    """answer `sa.util.blocking_input` from a queue of answers and record the prompts"""
+    import striqt.analysis as sa
+
+    script = {'answers': [], 'prompts': []}
+
+    def blocking_input(prompt=None):
+        script['prompts'].append(prompt)
+        return script['answers'].pop(0)
+
+    monkeypatch.setattr(sa.util, 'blocking_input', blocking_input)
+    return script
+
+
+@pytest.fixture
+def isolated_bindings(monkeypatch):
+    """restore the module globals `registry` and `tagged_sweeps` of `ss.lib.bindings`,
+    which `bind_sensor` updates, after the test"""
+    import striqt.sensor as ss
+
+    bindings = ss.lib.bindings
+    monkeypatch.setattr(bindings, 'registry', dict(bindings.registry))
+    monkeypatch.setattr(bindings, 'tagged_sweeps', bindings.tagged_sweeps)
+    return bindings
+
+
+@pytest.fixture
 def corrections_flags(monkeypatch):
     """set(use_oaresample=None, ignore_highside_lo=None) -> None: override the
     STRIQT_USE_OARESAMPLE / STRIQT_IGNORE_HIGHSIDE_LO switches of
@@ -510,6 +537,7 @@ def _spec_kws_to_builtins(kws: dict) -> dict:
 
 SITE_DIR = SWEEP_DIR / 'site'
 SITE_SPEC = SITE_DIR / 'site-cpu.yaml'
+SITE_CELLULAR_SPEC = SITE_DIR / 'site-cellular.yaml'
 
 
 @pytest.fixture(scope='session')
@@ -588,6 +616,7 @@ def isolated_extension_import():
 
 FAKE_SOAPY_SPEC = SWEEP_DIR / 'fake_soapy-cpu.yaml'
 FAKE_SOAPY_CALIBRATION_SPEC = SWEEP_DIR / 'fake_soapy-calibration-cpu.yaml'
+FAKE_SOAPY_CELLULAR_SPEC = SWEEP_DIR / 'fake_soapy-cellular-cpu.yaml'
 
 
 @pytest.fixture

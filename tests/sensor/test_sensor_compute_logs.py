@@ -33,14 +33,13 @@ IF_OVERLOAD = 'if overload at port 0 (onto 2000 MHz)'
 # %% _adc_overload_message
 
 
-def test_adc_overload_names_the_port_at_or_below_zero_headroom():
-    extra = {'adc_headroom': (-1.0, 3.0)}
-    assert logs._adc_overload_message(extra, CAPTURE) == ADC_OVERLOAD
-
-
-def test_adc_overload_zero_headroom_counts():
-    message = logs._adc_overload_message({'adc_headroom': (3.0, 0.0)}, CAPTURE)
-    assert message == 'adc overload on port 1 (2000 MHz)'
+@pytest.mark.parametrize(
+    'headroom, message',
+    [((-1.0, 3.0), ADC_OVERLOAD), ((3.0, 0.0), 'adc overload on port 1 (2000 MHz)')],
+    ids=['negative_on_port_0', 'zero_on_port_1'],
+)
+def test_adc_overload_names_the_port_at_or_below_zero_headroom(headroom, message):
+    assert logs._adc_overload_message({'adc_headroom': headroom}, CAPTURE) == message
 
 
 ADC_SILENT = {

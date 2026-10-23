@@ -11,13 +11,15 @@ import pytest
 from conftest import construct_both, raises_on_both_paths
 from hypothesis import assume, given
 from hypothesis import strategies as st
-from site_strategies import SiteCaptureCls, make_site_capture_kws, make_site_sweep
+from site_strategies import SiteCaptureCls, make_site_capture_kws
 from sweep_strategies import (
     RESOLUTION_MSG,
     SOURCE,
     SPG,
+    YFACTOR_ENR_DB,
     CalSourceCls,
     CalSweepCls,
+    PlanCls,
     SweepCls,
     list_loop,
     loop_sets,
@@ -93,9 +95,9 @@ def consistent_port_gain(draw):
 
 class TestSoapyCapture:
     @given(port_gain=consistent_port_gain())
-    def test_consistent_port_gain_accepted(self, construct, port_gain):
+    def test_consistent_port_gain_accepted(self, port_gain):
         port, gain = port_gain
-        capture = construct(SoapyCapture, port=port, gain=gain, **BASE)
+        capture = SoapyCapture.from_dict({'port': port, 'gain': gain, **BASE})
         assert capture.port == port
         assert capture.gain == gain
 
@@ -141,18 +143,8 @@ class TestSoapyCapture:
         capture = SoapyCapture(port=[0, 1], gain=0.0, **BASE)
         assert capture.port == (0, 1)
 
-    def test_air7101b_capture_inherits_gain_check(self):
-        cls = ss.bindings.air7101b.schema.capture
-        assert issubclass(cls, SoapyCapture)
-        with pytest.raises(ValueError, match=GAIN_COUNT_MSG):
-            cls(port=(0, 1), gain=(1.0,), **BASE)
-
 
 class TestFileCapture:
-    def test_backend_sample_rate_none_ok(self, construct):
-        capture = construct(FileCapture, port=0, duration=1e-3, sample_rate=1e6)
-        assert capture.backend_sample_rate is None
-
     def test_backend_sample_rate_rejected(self):
         raises_on_both_paths(
             FileCapture,
@@ -184,12 +176,18 @@ class TestExtensionCapture:
 
 
 class TestGapless:
-    def test_non_gapless_ignores_sync_and_retries(self, construct):
-        source = construct(
-            SoapySource, gapless=False, time_sync_at='acquire', receive_retries=3, **MCR
-        )
-        assert source.time_sync_at == 'acquire'
-        assert source.receive_retries == 3
+    @pytest.mark.parametrize(
+        'kws',
+        [
+            {'gapless': False, 'time_sync_at': 'acquire', 'receive_retries': 3},
+            {'gapless': True, 'time_sync_at': 'open', 'receive_retries': 0},
+        ],
+        ids=['non_gapless_any_sync_and_retries', 'gapless_open_zero_retries'],
+    )
+    def test_consistent_gapless_settings_accepted(self, kws):
+        source = SoapySource(**kws, **MCR)
+        for name, value in kws.items():
+            assert getattr(source, name) == value
 
     def test_gapless_requires_open_time_sync(self):
         raises_on_both_paths(SoapySource, ValueError, SYNC_MSG, gapless=True, **MCR)
@@ -205,10 +203,6 @@ class TestGapless:
             **MCR,
         )
 
-    def test_gapless_open_zero_retries_ok(self, construct):
-        source = construct(SoapySource, gapless=True, time_sync_at='open', **MCR)
-        assert source.gapless is True
-
     def test_air7101b_nonzero_default_retries_forbid_gapless(self):
         with pytest.raises(ValueError, match=RETRIES_MSG):
             Air7101BSource(gapless=True, time_sync_at='open')
@@ -216,10 +210,9 @@ class TestGapless:
 
 
 class TestSignalTrigger:
-    @pytest.mark.parametrize('name', [*TRIGGERS, None])
-    def test_registered_names_accepted(self, construct, name):
-        source = construct(SoapySource, signal_trigger=name, **MCR)
-        assert source.signal_trigger == name
+    @pytest.mark.parametrize('name', TRIGGERS, ids=list(TRIGGERS))
+    def test_registered_names_accepted(self, name):
+        assert SoapySource(signal_trigger=name, **MCR).signal_trigger == name
 
     @given(
         name=st.text(min_size=1).filter(lambda s: s not in sa.registry.signal_trigger)
@@ -229,18 +222,29 @@ class TestSignalTrigger:
             SoapySource, ValueError, TRIGGER_MSG, signal_trigger=name, **MCR
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            'signal_trigger is annotated Union[str, AnalysisGroup, None] but '
-            '__post_init__ only accepts registered trigger names'
-        ),
-    )
-    def test_analysis_group_accepted(self):
-        # BundledTriggers() cannot be instantiated on py3.14, so the bare base is used
-        group = sa.specs.AnalysisGroup()
-        source = SoapySource(signal_trigger=group, **MCR)
-        assert isinstance(source.signal_trigger, sa.specs.AnalysisGroup)
+    def test_trigger_bundle_accepted(self, construct):
+        bundle = sa.specs.BuiltinTriggers(
+            cellular_5g_pss_sync=sa.specs.Cellular5GNPSSSync(subcarrier_spacing=30e3)
+        )
+        source = construct(SoapySource, signal_trigger=bundle, **MCR)
+        assert source.signal_trigger == bundle
+
+    @pytest.mark.parametrize('count', [0, 2], ids=['none_enabled', 'two_enabled'])
+    def test_trigger_bundle_must_enable_exactly_one(self, count):
+        kws = {}
+        if count == 2:
+            kws = {
+                'cellular_5g_pss_sync': sa.specs.Cellular5GNPSSSync(
+                    subcarrier_spacing=30e3
+                ),
+                'cellular_5g_sss_sync': sa.specs.Cellular5GNSSSSync(
+                    subcarrier_spacing=30e3
+                ),
+            }
+        bundle = sa.specs.BuiltinTriggers(**kws)
+        raises_on_both_paths(
+            SoapySource, ValueError, 'exactly one trigger', signal_trigger=bundle, **MCR
+        )
 
 
 # %% Loops, plot options and extensions
@@ -268,11 +272,41 @@ def test_plot_options_reject_unknown_fields():
         })
 
 
-def test_extension_sink_is_kept_as_a_string():
-    ext = ss.specs.Extension.from_dict({'sink': 'striqt.sensor.sinks.NoSink'})
-    assert (
-        make_site_sweep(extensions=ext).extensions.sink == 'striqt.sensor.sinks.NoSink'
+def test_extension_rejects_a_sink_key():
+    with pytest.raises(msgspec.ValidationError, match='sink'):
+        ss.specs.Extension.from_dict({'sink': 'striqt.sensor.sinks.NoSink'})
+
+
+# %% Sink and ZarrSink
+
+Sink = ss.specs.Sink
+ZarrSink = ss.specs.ZarrSink
+
+
+def test_sweep_sink_is_a_zarr_sink():
+    assert type(make_sweep().sink) is ZarrSink
+
+    # direct construction keeps the base Sink until revalidation widens it
+    direct = make_sweep(sink=Sink(path='x'))
+    assert direct.sink == Sink(path='x')
+    cls = type(direct)
+    revalidated = (
+        direct.validate(),
+        direct.replace(loops=()),
+        cls.from_dict(direct.to_dict(unfreeze=True)),
     )
+    for spec in revalidated:
+        assert spec.sink == ZarrSink(path='x')
+
+
+def test_calibration_spec_keeps_the_base_sink():
+    assert type(make_calibration_sweep().sink) is Sink
+
+    widened = make_calibration_sweep(sink=ZarrSink())
+    with pytest.raises(msgspec.ValidationError, match='store'):
+        widened.validate()
+    with pytest.raises(msgspec.ValidationError, match='store'):
+        widened.replace(loops=())
 
 
 # %% CaptureRemap
@@ -280,12 +314,6 @@ def test_extension_sink_is_kept_as_a_string():
 
 class TestCaptureRemap:
     """decoding of multi-field lookup keys"""
-
-    def test_multi_key_json_string_keys_become_tuples(self, construct):
-        remap = construct(Remap, key=('a', 'b'), lookup={'[1, 2]': 5, '["x", 3]': 6})
-        assert isinstance(remap.lookup, frozendict)
-        assert remap.lookup == {(1, 2): 5, ('x', 3): 6}
-        hash(remap)
 
     def test_multi_key_tuple_keys_pass_through(self):
         remap = Remap(key=('a', 'b'), lookup={(1, 2): 5})
@@ -295,7 +323,9 @@ class TestCaptureRemap:
     def test_multi_key_roundtrip(self, construct, keys):
         lookup = {json.dumps(list(k)): i for i, k in enumerate(keys)}
         remap = construct(Remap, key=('a', 'b'), lookup=lookup)
+        assert isinstance(remap.lookup, frozendict)
         assert remap.lookup == {k: i for i, k in enumerate(keys)}
+        hash(remap)
 
     @pytest.mark.parametrize('key', ['a', ('a',)])
     def test_single_field_key_leaves_string_keys(self, construct, key):
@@ -323,6 +353,79 @@ class TestCaptureRemap:
         assert remap.replace(lookup={'[3, 4]': 1}).lookup == {(3, 4): 1}
 
 
+# %% ActionSpec, CapturePlan, Sweep: the spec chain
+
+
+class TestSpecChain:
+    @pytest.mark.parametrize(
+        'cls, base, added',
+        [
+            (
+                ss.specs.ActionSpec,
+                sa.specs.SpecBase,
+                {'description', 'source', 'peripherals', 'extensions', 'sink'},
+            ),
+            (
+                ss.specs.CapturePlan,
+                ss.specs.ActionSpec,
+                {'captures', 'loops', 'adjust_captures'},
+            ),
+            (
+                ss.specs.Sweep,
+                ss.specs.CapturePlan,
+                {'plot_hint', 'analysis', 'options'},
+            ),
+            (
+                ss.specs.ManualYFactorCalibration,
+                ss.specs.CapturePlan,
+                {'calibration', 'analysis'},
+            ),
+            (
+                ss.specs.Cellular5GNRSweep,
+                ss.specs.CapturePlan,
+                {'plot_hint', 'options', 'cell_channels', 'analysis'},
+            ),
+        ],
+        ids=['action_spec', 'capture_plan', 'sweep', 'calibration', 'cellular'],
+    )
+    def test_each_level_adds_its_blocks(self, cls, base, added):
+        assert issubclass(cls, base)
+        inherited = set(base.__struct_fields__)
+        assert inherited <= set(cls.__struct_fields__)
+        assert set(cls.__struct_fields__) - inherited == added
+
+    @pytest.mark.parametrize(
+        'kws, match',
+        [
+            ({'loops': (Repeat(count=2), Repeat(count=3))}, REPEAT_MSG),
+            (
+                {
+                    'loops': (
+                        List(field='snr', values=(0.0,)),
+                        List(field='snr', values=(1.0,)),
+                    )
+                },
+                f'{DUPLICATE_MSG} `snr`',
+            ),
+            (
+                {
+                    'captures': (
+                        make_capture(frequency_offset=-1e6),
+                        make_capture(frequency_offset=1e6),
+                    ),
+                    'loops': (List(field='frequency_offset', values=(0.0,)),),
+                },
+                COLLISION_MSG,
+            ),
+        ],
+        ids=['repeat_not_first', 'duplicate_field', 'capture_collision'],
+    )
+    def test_capture_plan_validates_its_loops(self, kws, match):
+        raises_on_both_paths(
+            PlanCls, msgspec.ValidationError, match, **make_sweep_kws(**kws)
+        )
+
+
 # %% Sweep
 
 
@@ -344,10 +447,6 @@ class TestSweepLoops:
         loops.insert(min(position, len(loops)), Repeat(count=count))
         kws = make_sweep_kws(captures=(make_capture(),), loops=tuple(loops))
         raises_on_both_paths(SweepCls, msgspec.ValidationError, REPEAT_MSG, **kws)
-
-    def test_two_repeats_rejected(self):
-        with pytest.raises(msgspec.ValidationError, match=REPEAT_MSG):
-            make_sweep(loops=(Repeat(count=2), Repeat(count=3)))
 
     @given(base=CAPTURE_FIELD_LOOPS.filter(bool), data=st.data())
     def test_duplicate_loop_field_rejected(self, base, data):
@@ -390,41 +489,38 @@ class TestSweepLoops:
         kws = make_sweep_kws(captures=captures, loops=tuple(loops))
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
-    def test_a_single_capture_may_set_a_looped_field(self):
-        captures = (make_capture(frequency_offset=-1e6),)
-        loops = (List(field='frequency_offset', values=(0.0, 1e6)),)
-        for sweep in construct_both(
-            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
-        ):
-            assert len(sweep.captures) == 1
-
-    def test_captures_agreeing_on_a_looped_field_are_accepted(self):
-        captures = (
-            make_capture(frequency_offset=-1e6, snr=3.0),
-            make_capture(frequency_offset=-1e6, snr=10.0),
-        )
-        loops = (List(field='frequency_offset', values=(0.0, 1e6)),)
-        for sweep in construct_both(
-            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
-        ):
-            assert {c.snr for c in sweep.captures} == {3.0, 10.0}
-
-    def test_an_analysis_loop_does_not_collide_with_captures(self):
-        captures = (make_capture(snr=3.0), make_capture(snr=10.0))
-        loops = (List(field='snr', isin='analysis', values=(0.0, 1.0)),)
-        for sweep in construct_both(
-            SweepCls, **make_sweep_kws(captures=captures, loops=loops)
-        ):
-            assert len(sweep.captures) == 2
+    @pytest.mark.parametrize(
+        'captures, loops',
+        [
+            (
+                (make_capture(frequency_offset=-1e6),),
+                (List(field='frequency_offset', values=(0.0, 1e6)),),
+            ),
+            (
+                (
+                    make_capture(frequency_offset=-1e6, snr=3.0),
+                    make_capture(frequency_offset=-1e6, snr=10.0),
+                ),
+                (List(field='frequency_offset', values=(0.0, 1e6)),),
+            ),
+            (
+                (make_capture(snr=3.0), make_capture(snr=10.0)),
+                (List(field='snr', isin='analysis', values=(0.0, 1.0)),),
+            ),
+        ],
+        ids=['single_capture_sets_the_field', 'captures_agree', 'analysis_loop'],
+    )
+    def test_non_colliding_loops_accepted(self, captures, loops):
+        sweep = SweepCls(**make_sweep_kws(captures=captures, loops=loops))
+        assert sweep.captures == captures
 
 
 class TestSweepCaptures:
-    @pytest.mark.parametrize('cls', [ss.specs.Sweep, ss.specs.CalibrationSweep])
-    def test_bare_sweep_is_not_constructible(self, cls):
-        # the TypeError comes from msgspec.structs.fields on the unbound capture
-        # TypeVar, not from a guard, so there is no message to match
+    def test_bare_sweep_is_not_constructible(self):
+        # the TypeError comes from msgspec introspection of the unbound source or
+        # capture TypeVar, not from a guard, and carries no message to match
         with pytest.raises(TypeError):
-            cls(source=SOURCE)
+            ss.specs.Sweep(source=SOURCE)
 
     def test_capture_field_conflicting_with_measurement_name(self):
         capture = _ConflictingCapture(port=0, sample_rate=1e6, duration=1e-3)
@@ -466,12 +562,6 @@ INVALID_RESOLUTION_ORIGINS = {
 
 
 class TestSweepAnalysisValidation:
-    def test_a_valid_combination_constructs(self):
-        for sweep in construct_both(
-            SweepCls, **make_sweep_kws(captures=(make_capture(),), analysis=SPG)
-        ):
-            assert sweep.analysis == SPG
-
     @pytest.mark.parametrize(
         'origin', list(INVALID_RESOLUTION_ORIGINS), ids=list(INVALID_RESOLUTION_ORIGINS)
     )
@@ -480,10 +570,6 @@ class TestSweepAnalysisValidation:
         kws = make_sweep_kws(captures=(capture,), loops=loops, analysis=SPG)
         match = re.escape(f'$.analysis.spectrogram: {RESOLUTION_MSG} {location}')
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
-
-    def test_the_warmup_sweep_constructs(self, synthetic_sweep):
-        warmup = ss.lib.compute.gpu.build_warmup_sweep(synthetic_sweep)
-        assert len(warmup.captures) == 1
 
 
 class TestSweepAdjustCaptures:
@@ -508,26 +594,31 @@ class TestSweepAdjustCaptures:
                 re.escape('Object contains reserved capture field `duration`'),
             ),
             (
+                {'defaults': {'port': 3}},
+                re.escape('Object contains reserved capture field `port`'),
+            ),
+            (
                 {'defaults': ['snr', 1.0]},
                 # msgspec names the path after the message, SpecValidationError before
                 r'(?s)Expected `object`.*adjust_captures\[|adjust_captures\[.*Expected `object`',
             ),
         ],
-        ids=['unknown source id', 'reserved field', 'per-source list not mapping'],
+        ids=[
+            'unknown source id',
+            'reserved field',
+            'reserved port',
+            'per-source list not mapping',
+        ],
     )
     def test_invalid_adjustments_rejected(self, adjust, match):
         kws = make_sweep_kws(adjust_captures=adjust)
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
 
 
-# %% CalibrationSweep
+# %% ManualYFactorCalibration
 
 
-class TestCalibrationSweep:
-    def test_single_capture_needs_no_implied_loops(self):
-        for sweep in construct_both(CalSweepCls, **make_calibration_sweep_kws()):
-            assert len(sweep.captures) == 1
-
+class TestManualYFactorCalibration:
     def test_multiple_captures_need_implied_loops(self):
         captures = (make_calibration_capture(), make_calibration_capture(gain=-10))
         kws = make_calibration_sweep_kws(captures=captures)
@@ -546,10 +637,92 @@ class TestCalibrationSweep:
             CalSweepCls, msgspec.ValidationError, SOURCE_CAL_MSG, **kws
         )
 
-    def test_default_options_loop_only_nyquist(self):
-        loops = (List(field='analysis_bandwidth', values=(0.5e6, 2e6, math.inf)),)
-        sweep = make_calibration_sweep(loops=loops)
-        bandwidths = {
-            c.analysis_bandwidth for c in ss.specs.sequencing.loop_captures(sweep)
+    def test_legacy_analysis_block_is_ignored_with_a_warning(self):
+        """calibration files from before 2026-10 carry the `analysis` block that the
+        runner generates itself"""
+        tree = make_calibration_sweep().to_dict(unfreeze=True)
+        tree['analysis'] = {
+            'channel_power_time_series': {'detector_period': 0.01},
         }
-        assert bandwidths == {0.5e6, math.inf}
+        with pytest.warns(DeprecationWarning, match='analysis'):
+            sweep = CalSweepCls.from_dict(tree)
+        assert sweep.analysis is None, 'discarded, so the spec stays hashable'
+        assert hash(sweep) == hash(CalSweepCls.from_dict(sweep.to_dict(unfreeze=True)))
+        assert sweep.calibration.enr == pytest.approx(YFACTOR_ENR_DB)
+
+
+# %% CellChannel and Cellular5GNRSweep
+
+CellChannel = ss.specs.CellChannel
+CellularSweepCls = ss.bindings.air7101b_cellular.sensor.sweep_spec_cls
+CELL_FREQ = 3750e6
+
+
+def make_cell_channel(**kws):
+    kws = {'center_frequency': CELL_FREQ, 'channel_bandwidth': 100e6, **kws}
+    return CellChannel(**kws)
+
+
+def make_cell_capture(**kws):
+    kws = {'center_frequency': CELL_FREQ, 'port': (0, 1), 'gain': -10, **kws}
+    return ss.specs.SoapyCapture(duration=0.1, **kws)
+
+
+def make_cellular_sweep_kws(**kws):
+    return {
+        'source': ss.bindings.air7101b.schema.source(),
+        'captures': (make_cell_capture(),),
+        'cell_channels': {'a': make_cell_channel()},
+        **kws,
+    }
+
+
+class TestCellChannel:
+    def test_only_30khz_spacing_is_accepted(self):
+        raises_on_both_paths(
+            CellChannel,
+            msgspec.ValidationError,
+            r'subcarrier_spacing',
+            center_frequency=CELL_FREQ,
+            channel_bandwidth=100e6,
+            subcarrier_spacing=15e3,
+        )
+
+    @pytest.mark.parametrize('count', [1, 20], ids=['every_slot', 'frame'])
+    def test_tdd_frame_slots_is_one_slot_or_a_frame(self, count):
+        """3GPP TS 38.211 Table 4.3.2-1: 20 slots per 10 ms frame at 30 kHz"""
+        channel = make_cell_channel(tdd_frame_slots='d' * count)
+        assert len(channel.tdd_frame_slots) == count
+
+    def test_tdd_frame_slots_rejects_a_partial_frame(self):
+        raises_on_both_paths(
+            CellChannel,
+            msgspec.ValidationError,
+            r'tdd_frame_slots.*1 or 20',
+            center_frequency=CELL_FREQ,
+            channel_bandwidth=100e6,
+            tdd_frame_slots='d' * 19,
+        )
+
+
+class TestCellular5GNRSweep:
+    def test_channels_must_have_distinct_center_frequencies(self):
+        channels = {
+            'a': make_cell_channel(),
+            'b': make_cell_channel(channel_bandwidth=20e6),
+        }
+        raises_on_both_paths(
+            CellularSweepCls,
+            msgspec.ValidationError,
+            r"cell_channels\['b'\]\.center_frequency.*'a' and 'b'",
+            **make_cellular_sweep_kws(cell_channels=channels),
+        )
+
+    def test_capture_without_a_channel_is_rejected(self):
+        captures = (make_cell_capture(center_frequency=3800e6),)
+        raises_on_both_paths(
+            CellularSweepCls,
+            msgspec.ValidationError,
+            r'captures\[0\]\.center_frequency',
+            **make_cellular_sweep_kws(captures=captures),
+        )

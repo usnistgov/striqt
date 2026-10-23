@@ -6,7 +6,8 @@ from __future__ import annotations as __
 
 import contextlib
 import functools
-from typing import Any, Callable, cast, Literal, NamedTuple, TYPE_CHECKING, Union
+import typing
+from typing import Any, Callable, cast, Literal, NamedTuple, TYPE_CHECKING
 from fractions import Fraction
 
 import msgspec
@@ -230,11 +231,6 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
 
         return wrapper
 
-    def to_spec(
-        self, base: type[specs.AnalysisGroup] = specs.AnalysisGroup
-    ) -> type[specs.AnalysisGroup]:
-        return to_analysis_spec_type(self, base)
-
 
 PreferIQSource = Literal['aligned', 'pre_filter', 'pre_align']
 
@@ -301,22 +297,21 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     ) -> AnalysisFuncWrapper[P]:
         """register the decorated function as the measurement configured by `spec_type`.
 
-        Registration mutates this registry when the decorator is applied. `spec_type`
-        becomes a key here and an optional field of the `AnalysisGroup` struct that
-        `tospec()` synthesizes, so the measurement gains a key in the ``analysis:``
-        block of a sweep spec. Each field of `spec_type` is also recorded in
-        `parameter_fields` and `parameter_defaults` for coordinate inference.
+        Registration mutates this registry when the decorator is applied. A sweep
+        reaches the measurement through the ``analysis:`` block only when
+        `specs.BuiltinAnalyses` declares an ``Optional[spec_type]`` field of the same
+        `name`.
 
         The decorated function is called as ``func(iq, capture, **spec.to_dict())``
         and returns an array, or an ``(array, attrs)`` tuple, whose axes are `dims`.
-        The wrapper that replaces it accepts ``(iq, capture, as_xarray=True,
-        **kwargs)`` with the fields of `spec_type` as keywords; its `__signature__`
-        and the ``{args}`` placeholder in its docstring are filled from `spec_type`.
-        The wrapper runs `validate` before touching IQ, raising
-        `specs.helpers.SpecValidationError` on a rejected combination, and then
-        returns an `xarray.DataArray` with a leading ``port`` dimension when
-        `as_xarray` is True, a `DelayedDataArray` when it is ``'delayed'``, or the
-        ``(array, attrs)`` pair when it is False.
+        The wrapper that replaces the function accepts ``(iq, capture,
+        as_xarray=True, **kwargs)`` with the fields of `spec_type` as keywords. The
+        `__signature__` of the wrapper and the ``{args}`` placeholder in the docstring
+        are filled from `spec_type`. The wrapper runs `validate` before touching IQ,
+        raising `specs.helpers.SpecValidationError` on a rejected combination, and
+        then returns an `xarray.DataArray` with a leading ``port`` dimension when
+        `as_xarray` is True, a `DelayedDataArray` when `as_xarray` is ``'delayed'``,
+        or the ``(array, attrs)`` pair when `as_xarray` is False.
 
         Args:
             spec_type: the `specs.Analysis` subclass whose fields are the keyword
@@ -336,19 +331,17 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             store_compressed: False to store the output uncompressed in zarr
             attrs: attrs of the output `xarray.DataArray`; the spec fields and any
                 attrs returned by the function take precedence
-            validate: checks the (capture, spec) combination without touching IQ, so
-                that a sweep can reject a bad combination before it acquires. The
-                return value is ignored here. By convention it is the derived sizing
-                that the measurement consumes, so that arithmetic is written once.
-                Such a validator is named for what it returns (`validated_*`)
+            validate: checks the (capture, spec) combination without touching IQ. The
+                return value is ignored here. By convention the return value is the
+                derived sizing that the measurement consumes, and the validator is
+                named for that sizing (`validated_*`)
             tolerance: derives the roundoff error budget of the output from the
                 (capture, spec) combination without touching IQ, as a
-                `specs.Tolerance`, so that a test or a consumer can decide how
-                closely two evaluations must agree. It is called with the keywords
+                `specs.Tolerance`. The function is called with the keywords
                 `array_backend` and `input_error` (see `AnalysisTolerance`)
 
         Returns:
-            a decorator that registers its function and returns the wrapper
+            a decorator that registers the decorated function and returns the wrapper
 
         Raises:
             ValueError: when `spec_type` is already registered
@@ -503,11 +496,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
     __call__ = measurement
 
-    def tospec(
-        self, base: type[specs.AnalysisGroup] = specs.AnalysisGroup
-    ) -> type[specs.AnalysisGroup]:
-        return to_analysis_spec_type(self, base)
-
     def cache_context(
         self, capture: specs.Capture, callback: Callable | None = None
     ) -> contextlib.AbstractContextManager[contextlib.ExitStack]:
@@ -624,27 +612,39 @@ def cached_registry_context(
             raise
 
 
-def to_analysis_spec_type(
-    registry: AlignmentSourceRegistry | AnalysisRegistry,
-    base: type[specs.AnalysisGroup] = specs.AnalysisGroup,
-) -> type[specs.AnalysisGroup]:
-    """return a Struct subclass type representing a specification for calls to all registered functions"""
+def check_group_fields(
+    group_type: type[specs.AnalysisGroup], expected: dict[str, type[specs.Analysis]]
+) -> None:
+    """raise unless `group_type` has one ``Optional[spec] = None`` field per `expected` entry.
 
-    fields = [
-        (info.name, Union[struct_type, None], None)
-        for struct_type, info in registry.items()
-    ]
+    Field order is not checked.
 
-    cls = msgspec.defstruct(
-        'Analysis',
-        cast(list[tuple[str, type, Any]], fields),
-        bases=(base,),
-        kw_only=True,
-        omit_defaults=True,
-        frozen=True,
-    )
+    Args:
+        group_type: the struct to check
+        expected: measurement name to spec type, as the registry records them
 
-    return cast(type[specs.AnalysisGroup], cls)
+    Raises:
+        TypeError: naming the field that is not an optional spec with default None,
+            or listing the missing, unregistered, and mismatched field names
+    """
+    actual: dict[str, type] = {}
+    for field in msgspec.structs.fields(group_type):
+        args = set(typing.get_args(field.type))
+        if type(None) not in args or len(args) != 2 or field.default is not None:
+            raise TypeError(
+                f'{group_type.__qualname__}.{field.name} must be an Optional spec type '
+                f'with default None, not {field.type!r}'
+            )
+        (actual[field.name],) = args - {type(None)}
+    if actual != expected:
+        missing = sorted(expected.keys() - actual.keys())
+        extra = sorted(actual.keys() - expected.keys())
+        shared = actual.keys() & expected.keys()
+        mismatched = sorted(k for k in shared if actual[k] is not expected[k])
+        raise TypeError(
+            f'{group_type.__qualname__} does not match the registry: missing fields '
+            f'{missing!r}, unregistered fields {extra!r}, wrong spec type {mismatched!r}'
+        )
 
 
 class Trigger:

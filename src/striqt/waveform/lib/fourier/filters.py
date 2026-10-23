@@ -218,7 +218,9 @@ def oafilter(
         extend=extend,
     )
 
-    enbw = equivalent_noise_bandwidth(window, nfft_out, fftbins=False)
+    # the ENBW is in bins of fs / nfft_out; the passband edges are in Hz
+    enbw_bins = equivalent_noise_bandwidth(window, nfft_out, fftbins=False)
+    guard = float(enbw_bins) * fs / nfft_out
 
     freqs, _, y = stft(
         x,
@@ -232,7 +234,7 @@ def oafilter(
     )
 
     zero_stft_by_freq(
-        freqs, y, passband=(passband[0] + enbw, passband[1] - enbw), axis=axis
+        freqs, y, passband=(passband[0] + guard, passband[1] - guard), axis=axis
     )
 
     if nfft_out != nfft or frequency_shift:

@@ -1,0 +1,76 @@
+# Site-style 5G NR channel sweep: the captures name their channel by center_frequency
+# and the runner derives sample_rate and analysis_bandwidth from cell_channels
+
+sensor_binding: site_cellular
+
+extensions:
+  import_path: ../src
+  import_name: extensions
+
+description:
+  summary: End-to-end run of a site-style cellular sweep with synthetic single-tone input
+  version: v2026-10-01
+
+peripherals:
+  control_orientation: false
+
+options:
+  skip_warmup: true
+
+source: !include [../fragments/source/tone.yaml, ../fragments/source/tone_unsync.yaml]
+
+captures:
+  - port: [0, 1]
+    center_frequency: 3750e6 # Hz
+    gain: -10 # dB
+    duration: 10e-3 # s
+    frequency_offset: -3e6 # Hz
+    snr: 80 # dB
+    host_resample: true
+    backend_sample_rate: null
+    antenna_polarization: [V, H]
+  - port: 0
+    center_frequency: 3900e6 # Hz
+    gain: -10 # dB
+    duration: 10e-3 # s
+    frequency_offset: -3e6 # Hz
+    snr: 80 # dB
+    host_resample: true
+    backend_sample_rate: null
+    antenna_polarization: V
+
+loops:
+  - kind: list
+    field: gain
+    values: [0, -10]
+
+adjust_captures: !include "../sites/*.yaml"
+
+cell_channels:
+  '3750 MHz':
+    center_frequency: 3750e6
+    channel_bandwidth: 100e6
+    subcarrier_spacing: 30e3
+    ssb_frequency_offset: -40.08e6
+    channel_guard_bandwidths: [875e3, 575e3]
+    tdd_frame_slots: dddsuudddddddsuudddd
+    tdd_special_symbols: ddddddfffffffu
+  '3900 MHz':
+    center_frequency: 3900e6
+    channel_bandwidth: 40e6
+    subcarrier_spacing: 30e3
+    ssb_frequency_offset: -10.08e6
+    channel_guard_bandwidths: [505e3, 505e3]
+    tdd_frame_slots: dddsuudddddddsuudddd
+    tdd_special_symbols: ddddddfffffffu
+
+analysis:
+  power_spectral_density:
+    window: [kaiser, 11.884] # gives ENBW = 2
+    time_statistic: [mean, max]
+  channel_power_time_series: {}
+  cyclic_channel_power: {}
+
+plot_hint: !include ../fragments/plot/site.yaml
+
+sink: !include [../fragments/sink/zarr.yaml]

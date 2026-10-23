@@ -1,7 +1,11 @@
-"""striqt.sensor.lib.execute: the acquire/analyze/sink pipeline of iterate_sweep.
+"""striqt.sensor.lib.actions.core: the acquire/analyze/sink pipeline, iterate_captures.
 
-The captures are 1-port scale-only tones at distinct offsets, so a result attributed
-to the wrong capture disagrees with its own generator oracle exactly.
+The sequencing and yield-mode cells run through `ss.iterate_sweep`, which dispatches
+a bound `Sweep` to `SweepRunner` and the pipeline (`test_sensor_actions_sweep.py` pins
+that dispatch). The other cells call `iterate_captures` directly.
+
+The captures are 1-port scale-only tones at distinct offsets. A result attributed to
+the wrong capture then disagrees with its generator oracle exactly.
 """
 
 from __future__ import annotations
@@ -26,7 +30,8 @@ from synthetic_sources import (
 )
 
 import striqt.sensor as ss
-from striqt.sensor.lib import execute, util
+from striqt.sensor.lib import util
+from striqt.sensor.lib.actions import core
 from striqt.waveform import fourier
 
 OFFSETS = (1e6, 2e6, 3e6)
@@ -36,7 +41,7 @@ def index_values(datasets, name) -> list[int]:
     return [int(ds[name].values[0]) for ds in datasets]
 
 
-# %% iterate_sweep: sequencing
+# %% iterate_captures: sequencing
 
 
 def test_results_follow_the_capture_order(subtests):
@@ -53,9 +58,10 @@ def test_results_follow_the_capture_order(subtests):
 
 @pytest.mark.namespaces('cupy')
 def test_results_follow_the_capture_order_cupy(array_backend, subtests):
-    """the cupy source draws the same generator; scale-only correction leaves the
-    tone samples as the generator's complex exponential, which rounds once per
-    phase product, cosine, sine, and float32 cast on each backend"""
+    """the cupy source draws the same generator as numpy. Scale-only correction
+    leaves the tone samples as the generator's complex exponential, which rounds
+    once each at the phase product, the cosine, the sine, and the float32 cast on
+    each backend."""
     captures = tone_captures(OFFSETS)
     source = SOURCE.replace(array_backend=array_backend)
     datasets = run_in_memory(tone_sweep(OFFSETS, source=source))
@@ -94,7 +100,7 @@ def test_empty_captures_yield_nothing():
     assert run_in_memory(preset_sweep('single_tone', (), analysis=IQ_ONLY)) == []
 
 
-# %% iterate_sweep: yield modes
+# %% iterate_captures: yield modes
 
 YIELD_MODES = {
     # (yield_values, always_yield): item types, with N = 3 captures
@@ -107,11 +113,10 @@ YIELD_MODES = {
 
 @pytest.mark.parametrize('mode', list(YIELD_MODES), ids=list(YIELD_MODES))
 def test_yield_modes(mode):
-    """current behavior, not a contract: the pipeline runs N + 2 stages and yields
-    the sink result of every stage when yield_values is set (None for the 2
-    stages before the first capture reaches the sink), one None per stage when
-    only always_yield is set, and nothing otherwise. The iterate_sweep docstring
-    describes the leading placeholders differently."""
+    """the pipeline runs N + 2 stages. With `yield_values` set it yields the sink
+    result of every stage, which is None for the 2 stages before the first capture
+    reaches the sink. With only `always_yield` set it yields one None per stage.
+    With neither it yields nothing."""
     (yield_values, always_yield), expected = YIELD_MODES[mode]
     sweep = tone_sweep(OFFSETS)
     modes = {'yield_values': yield_values, 'always_yield': always_yield}
@@ -124,7 +129,57 @@ def test_yield_modes(mode):
             assert isinstance(item, ss.lib.compute.DelayedDataset)
 
 
-# %% iterate_sweep: failure propagation
+# %% iterate_captures: extra_data and a shared indexer
+
+
+class TaggingPeripherals(ss.peripherals.NoPeripherals):
+    def acquire(self, capture):
+        return {'shared': 'peripheral', 'from_peripheral': 1}
+
+
+def test_extra_data_reaches_every_capture_and_wins_over_the_peripherals():
+    sweep = tone_sweep(OFFSETS)
+    with ss.open_resources(sweep, None) as res:
+        items = core.iterate_captures(
+            res,
+            sink=ss.sinks.NoSink(sweep),
+            peripherals=TaggingPeripherals(sweep),
+            extra_data={'shared': 'runner', 'state': True},
+        )
+        results = [item for item in items if item is not None]
+
+    assert len(results) == len(OFFSETS)
+    for result in results:
+        assert result.extra_data['shared'] == 'runner'
+        assert result.extra_data['from_peripheral'] == 1
+        assert result.extra_data['state'] is True
+
+
+def test_a_shared_indexer_numbers_two_runs_consecutively():
+    """one indexer passed to 2 pipeline runs over the same open resources numbers
+    the second run's captures after the first run's. The second run also re-arms
+    its first capture, which differs from the capture the first run left armed."""
+    n = len(OFFSETS)
+    sweep = tone_sweep(OFFSETS)
+    indexer = core.AcquisitionIndexer(2 * n)
+
+    with ss.open_resources(sweep, None) as res:
+        sink = ss.sinks.NoSink(sweep)
+        first = list(core.iterate_captures(res, sink=sink, indexer=indexer))
+        second = list(core.iterate_captures(res, sink=sink, indexer=indexer))
+
+    datasets = [
+        ss.lib.compute.from_delayed(item) for item in first + second if item is not None
+    ]
+    assert index_values(datasets, 'capture_index') == list(range(2 * n))
+    assert index_values(datasets, 'sweep_index') == [0] * (2 * n)
+    for capture, ds in zip(tone_captures(OFFSETS) * 2, datasets):
+        assert np.array_equal(
+            ds.iq_waveform.values, expected_corrected('single_tone', capture)
+        )
+
+
+# %% iterate_captures: failure propagation
 
 
 class FailingSink(ss.sinks.NoSink):
@@ -138,7 +193,7 @@ def test_sink_exception_propagates_and_closes_the_source(isolated_lookup):
         pytest.raises(RuntimeError, match='simulated sink failure'),
         ss.open_resources(sweep, None) as res,
     ):
-        list(ss.iterate_sweep(res, sink=FailingSink(sweep)))
+        list(core.iterate_captures(res, sink=FailingSink(sweep)))
 
     assert not res['source'].is_open(wait=False)
     assert_source_released(isolated_lookup, sweep)
@@ -152,15 +207,15 @@ class CancellingPeripherals(ss.peripherals.NoPeripherals):
 
 def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
     """a peripheral that requests cancellation during the first acquisition stops
-    the pipeline at the interrupt check after that stage's yield, so exactly 1
-    item (the leading None) is yielded; the flag is cleared on leaving
-    share_thread_interrupts. The check is a no-op in the main thread, so the sweep
-    is consumed in a worker."""
+    the pipeline at the interrupt check that follows the first stage's yield. The
+    only item yielded is the leading None. Leaving `share_thread_interrupts` clears
+    the flag. `propagate_thread_interrupts` is a no-op in the main thread, and the
+    sweep is therefore consumed in a worker."""
     sweep = tone_sweep(OFFSETS)
     yielded = []
 
     def consume(res):
-        for item in ss.iterate_sweep(
+        for item in core.iterate_captures(
             res, sink=ss.sinks.NoSink(sweep), peripherals=CancellingPeripherals(sweep)
         ):
             assert item is None, 'no capture reaches the sink before the interrupt'
@@ -212,7 +267,7 @@ def test_log_cache_info_reports_the_spectrogram_snr(calibration_nc, caplog):
     cache = types.SimpleNamespace(name='_cached_spectrogram')
     with caplog.at_level(logging.INFO, logger='striqt.analysis'):
         result = spectrogram_result(PEAK_DBM)
-        execute._log_cache_info(resources, cache, capture, result)
+        core._log_cache_info(resources, cache, capture, result)
 
     messages = [r.getMessage() for r in caplog.records if 'SNR' in r.getMessage()]
     assert len(messages) == 1
@@ -220,11 +275,10 @@ def test_log_cache_info_reports_the_spectrogram_snr(calibration_nc, caplog):
     assert 'port: 0' in messages[0]
 
 
-@pytest.mark.parametrize('cache_name', ['_cached_spectrogram', 'ssb_iq_cache'])
-def test_log_cache_info_is_silent_without_calibration(cache_name, caplog):
+def test_log_cache_info_is_silent_for_a_non_spectrogram_cache(calibration_nc, caplog):
     capture = soapy_capture()
-    resources = air_resources(capture)
-    cache = types.SimpleNamespace(name=cache_name)
+    resources = air_resources(capture, calibration_nc)
+    cache = types.SimpleNamespace(name='ssb_iq_cache')
     with caplog.at_level(logging.DEBUG, logger='striqt.analysis'):
-        execute._log_cache_info(resources, cache, capture, spectrogram_result(PEAK_DBM))
+        core._log_cache_info(resources, cache, capture, spectrogram_result(PEAK_DBM))
     assert caplog.records == []

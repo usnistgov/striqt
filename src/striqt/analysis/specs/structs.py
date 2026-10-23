@@ -5,7 +5,7 @@ from __future__ import annotations as __
 import fractions
 from math import inf
 import typing
-from typing import Union
+from typing import Optional, Union
 
 import msgspec
 from typing_extensions import Self
@@ -242,7 +242,7 @@ class Cellular5GNRSSBSpectrogram(Analysis, kw_only=True, frozen=True):
 
     # spectrogram info
     window: types.WindowType = 'blackmanharris'
-    lo_bandstop: typing.Optional[float] = None
+    lo_bandstop: Union[types.LOBandstop, None] = None
 
 
 # %% Cellular 5G NR synchronizatino
@@ -413,3 +413,43 @@ class SpectrogramHistogramRatio(
     frozen=True,
 ):
     pass
+
+
+class BuiltinAnalyses(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):
+    """the ``analysis:`` block of a sweep: one optional field per registered measurement.
+
+    Each field is named for a measurement. A field set to a spec enables the
+    measurement with those parameters, and ``None`` leaves the measurement out of the
+    sweep. `to_dict` omits the ``None`` fields. The dict and the saved zarr attrs name
+    only the enabled measurements.
+    """
+
+    channel_power_time_series: Optional[ChannelPowerTimeSeries] = None
+    channel_power_histogram: Optional[ChannelPowerHistogram] = None
+    cyclic_channel_power: Optional[CyclicChannelPower] = None
+    spectrogram: Optional[Spectrogram] = None
+    power_spectral_density: Optional[PowerSpectralDensity] = None
+    spectrogram_histogram: Optional[SpectrogramHistogram] = None
+    spectrogram_ratio_histogram: Optional[SpectrogramHistogramRatio] = None
+    cellular_5g_pss_sync: Optional[Cellular5GNPSSSync] = None
+    cellular_5g_pss_correlation: Optional[Cellular5GNRPSSCorrelator] = None
+    cellular_5g_sss_sync: Optional[Cellular5GNSSSSync] = None
+    cellular_5g_sss_correlation: Optional[Cellular5GNRSSSCorrelator] = None
+    cellular_5g_ssb_spectrogram: Optional[Cellular5GNRSSBSpectrogram] = None
+    cellular_cyclic_autocorrelation: Optional[CellularCyclicAutocorrelator] = None
+    cellular_resource_power_histogram: Optional[CellularResourcePowerHistogram] = None
+    iq_waveform: Optional[IQWaveform] = None
+
+
+class BuiltinTriggers(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):
+    """the struct form of a source's ``signal_trigger:``, one optional field per trigger.
+
+    Exactly one field is set. The set field names the trigger, and the value is the
+    spec the trigger runs with. A source with this form aligns captures to a
+    measurement that the sweep's `BuiltinAnalyses` need not enable. The string form of
+    ``signal_trigger`` names a registered trigger and runs with the spec of that
+    measurement in the sweep's analysis.
+    """
+
+    cellular_5g_pss_sync: Optional[Cellular5GNPSSSync] = None
+    cellular_5g_sss_sync: Optional[Cellular5GNSSSSync] = None

@@ -1,4 +1,4 @@
-"""striqt.sensor.specs.sweep: the located errors validate_sweep raises from
+"""striqt.sensor.specs.action: the located errors validate_sweep raises from
 Sweep.__post_init__
 """
 
@@ -11,7 +11,14 @@ from pathlib import Path
 import msgspec
 import pytest
 from conftest import SWEEP_DIR
-from sweep_strategies import RESOLUTION_MSG, SOURCE, SPG, make_capture, make_sweep
+from sweep_strategies import (
+    RESOLUTION_MSG,
+    SOURCE,
+    SPG,
+    as_sweep,
+    make_capture,
+    make_sweep,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
@@ -40,10 +47,6 @@ DOWNSTREAM_SWEEP = (
 )
 
 
-def test_validate_sweep_accepts_the_synthetic_sweep(synthetic_sweep):
-    assert ss.specs.sweep.validate_sweep(synthetic_sweep) is None
-
-
 def test_validate_sweep_reports_a_per_source_override():
     """`source_id` selects an `adjust_captures` block that `Sweep.__post_init__` cannot
     reach, since it resolves only the 'defaults' block"""
@@ -54,10 +57,10 @@ def test_validate_sweep_reports_a_per_source_override():
         analysis=SPG,
     )
 
-    assert ss.specs.sweep.validate_sweep(sweep) is None
+    assert ss.specs.action.validate_sweep(sweep) is None
 
     with pytest.raises(msgspec.ValidationError) as excinfo:
-        ss.specs.sweep.validate_sweep(sweep, 'ab12')
+        ss.specs.action.validate_sweep(sweep, 'ab12')
 
     message = str(excinfo.value)
     # the measurement that rejected it, the values the failed rule compared, then the
@@ -86,7 +89,7 @@ def test_validate_sweep_ignores_loops_over_sensor_only_fields(monkeypatch):
         sa.registry, 'validate', lambda capture, analysis: seen.append(capture)
     )
 
-    ss.specs.sweep.validate_sweep(sweep)
+    ss.specs.action.validate_sweep(sweep)
 
     assert len(seen) == 1
 
@@ -99,7 +102,7 @@ def test_validate_sweep_skips_an_empty_analysis(monkeypatch):
         sa.registry, 'validate', lambda capture, analysis: seen.append(capture)
     )
 
-    ss.specs.sweep.validate_sweep(sweep)
+    ss.specs.action.validate_sweep(sweep)
 
     assert seen == []
 
@@ -159,10 +162,10 @@ def test_file_sources_skip_the_resampler_design_but_not_the_filter():
 @pytest.mark.parametrize('path', IN_TREE_SWEEPS, ids=lambda p: p.name)
 def test_in_tree_sweeps_still_load(path):
     sweep = ss.read_yaml_spec(path)
-    assert len(ss.specs.sequencing.loop_captures(sweep)) > 0
+    assert len(ss.specs.sequencing.loop_captures(as_sweep(sweep))) > 0
 
 
 @pytest.mark.skipif(not DOWNSTREAM_SWEEP.exists(), reason='not checked in')
 def test_downstream_sweep_still_loads():
     sweep = ss.read_yaml_spec(DOWNSTREAM_SWEEP)
-    assert len(ss.specs.sequencing.loop_captures(sweep)) > 0
+    assert len(ss.specs.sequencing.loop_captures(as_sweep(sweep))) > 0

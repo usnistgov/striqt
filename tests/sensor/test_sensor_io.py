@@ -11,14 +11,21 @@ from pathlib import Path
 
 import msgspec
 import pytest
-from conftest import SITE_DIR, SWEEP_DIR
+from conftest import FAKE_SOAPY_CELLULAR_SPEC, SITE_CELLULAR_SPEC, SITE_DIR, SWEEP_DIR
 from hypothesis import given, settings
-from site_strategies import SiteCalCaptureCls, SiteCaptureCls
-from sweep_strategies import CalSweepCls, loop_fields, make_capture, make_sweep, sweeps
+from site_strategies import SiteCaptureCls
+from sweep_strategies import (
+    CalSweepCls,
+    loop_fields,
+    make_calibration_sweep,
+    make_capture,
+    make_sweep,
+    sweeps,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-from striqt.sensor.lib.io import _convert_zarr_attrs_spec
+from striqt.sensor.lib.io import _decode_spec_tree
 
 FRAGMENTS = SWEEP_DIR / 'fragments'
 
@@ -84,14 +91,15 @@ def test_sink_including_a_source_fragment_is_rejected(write_yaml):
 # %% the extensions: block
 
 
+@pytest.mark.parametrize('key', ['sweep_struct', 'sink'])
 def test_legacy_extensions_keys_are_rejected_before_import(
-    write_yaml, isolated_extension_import
+    write_yaml, isolated_extension_import, key
 ):
     text = INLINE_SITE_SPEC.replace(
-        '  import_name: extensions\n', '  import_name: extensions\n  sweep_struct: x\n'
+        '  import_name: extensions\n', f'  import_name: extensions\n  {key}: x\n'
     )
     spec = write_yaml('spec.yaml', text)
-    with pytest.raises(msgspec.ValidationError, match='sweep_struct'):
+    with pytest.raises(msgspec.ValidationError, match=key):
         ss.read_yaml_spec(spec)
     assert 'extensions' not in sys.modules
 
@@ -179,25 +187,75 @@ def test_calibration_sweeps_decode(calibration_sweep, site_calibration_sweep):
     assert type(sweep).__name__ == 'site_single_tone_calibration'
     assert sweep.calibration.enr == pytest.approx(20.9)
     assert sweep.source.calibration is None
-    assert isinstance(sweep.captures[0], SiteCalCaptureCls)
-    assert sweep.captures[0].noise_diode_enabled is False
+    assert isinstance(sweep.captures[0], SiteCaptureCls)
+    assert type(sweep).schema.capture is SiteCaptureCls
     assert loop_fields(sweep) == [
         'port',
-        'noise_diode_enabled',
         'sample_rate',
         'center_frequency',
         'gain',
         'analysis_bandwidth',
         'lo_shift',
     ]
+    assert sweep.calibration.detector_period == pytest.approx(0.01)
 
 
-# %% output_path override
+# %% cellular sweep files
+
+CELLULAR_SPECS = {
+    'fake_soapy': FAKE_SOAPY_CELLULAR_SPEC,
+    'site': SITE_CELLULAR_SPEC,
+}
+
+
+@pytest.mark.parametrize('name', list(CELLULAR_SPECS), ids=list(CELLULAR_SPECS))
+def test_cellular_sweeps_decode(name):
+    """a `sensor_binding` bound with the `Cellular5GNRSweep` action decodes to that
+    action's tagged subclass, whose `sweep_cls` is the companion `Sweep` class with
+    the binding's capture type"""
+    spec = ss.read_yaml_spec(CELLULAR_SPECS[name])
+    cls = type(spec)
+    assert issubclass(cls, ss.specs.Cellular5GNRSweep)
+    assert not issubclass(cls, ss.specs.Sweep)
+    assert issubclass(cls.sweep_cls, ss.specs.Sweep)
+    assert cls.sweep_cls.schema.capture is cls.schema.capture
+    assert all(isinstance(c, cls.schema.capture) for c in spec.captures)
+    assert {c.center_frequency for c in spec.captures} == {
+        ch.center_frequency for ch in spec.cell_channels.values()
+    }
+
+
+def _write_cellular_variant(tmp_path, **replace) -> Path:
+    """write the fake-soapy cellular YAML to `tmp_path` with top-level blocks
+    replaced, and its `extensions.import_path` made absolute"""
+    tree = dict(sa.lib.io.decode_from_yaml_file(FAKE_SOAPY_CELLULAR_SPEC))
+    src_dir = FAKE_SOAPY_CELLULAR_SPEC.parent / tree['extensions']['import_path']
+    tree['extensions'] = {**tree['extensions'], 'import_path': str(src_dir)}
+    tree.update(replace)
+    path = tmp_path / 'variant.yaml'
+    # JSON is YAML, and the frozen loader's tuples have no safe_dump representer
+    path.write_text(json.dumps(tree))
+    return path
+
+
+def test_cellular_hardware_loop_passes_through(tmp_path):
+    loop = {'kind': 'list', 'field': 'gain', 'values': [0, -10]}
+    path = _write_cellular_variant(tmp_path, loops=[loop])
+    spec = ss.read_yaml_spec(path)
+    assert [(lp.field, lp.values) for lp in spec.loops] == [('gain', (0, -10))]
+
+
+# %% output_path and store_backend overrides
 
 
 def test_output_path_overrides_the_sink_path():
     spec = ss.read_yaml_spec(SWEEP_DIR / 'synthetic.yaml', output_path='out.zarr.zip')
     assert spec.sink.path == 'out.zarr.zip'
+
+
+def test_store_backend_is_rejected_for_a_calibration_spec():
+    with pytest.raises(TypeError, match='ZarrSink'):
+        ss.read_yaml_spec(SITE_DIR / 'site-calibration.yaml', store_backend='zip')
 
 
 # %% read_zarr_spec
@@ -248,19 +306,10 @@ def test_read_zarr_spec_rebuilds_the_spec_that_ran(run_sweep_to_zarr, sweep):
     assert rebuilt == spec
 
 
-def test_read_zarr_spec_decodes_fractions(run_sweep_to_zarr):
-    _, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['fraction_analysis'])
-    analysis = ss.read_zarr_spec(path).analysis
-    detector_period = analysis.channel_power_time_series.detector_period
-    assert isinstance(detector_period, Fraction)
-    assert detector_period == Fraction(1, 1000)
-    assert analysis.power_spectral_density.fractional_overlap == Fraction(13, 28)
-
-
 @settings(max_examples=25)
 @given(sweep=sweeps())
 def test_attrs_tree_rebuilds_any_sweep(sweep):
-    assert _convert_zarr_attrs_spec(_json_round_trip(sweep), SWEEP_DIR) == sweep
+    assert _decode_spec_tree(_json_round_trip(sweep), SWEEP_DIR) == sweep
 
 
 def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
@@ -271,10 +320,41 @@ def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
     assert ss.read_zarr_spec(path) == spec
 
 
+def test_read_zarr_spec_drops_the_removed_extensions_sink_attr(run_sweep_to_zarr):
+    """a store written when ``extensions.sink`` was a spec field carries the key in
+    its attrs. The reader warns and discards it."""
+    import zarr
+
+    spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')
+    attrs = zarr.open(sa.open_store(path, mode='a')).attrs
+    attrs['extensions'] = {**attrs['extensions'], 'sink': 'striqt.sensor.sinks.NoSink'}
+
+    with pytest.warns(DeprecationWarning, match='extensions.sink'):
+        rebuilt = ss.read_zarr_spec(path)
+    assert rebuilt == spec
+
+
+def test_read_zarr_spec_keeps_the_fields_a_bound_sweep_adds(tmp_path):
+    import zarr
+
+    sweep = make_calibration_sweep(
+        calibration=ss.specs.ManualYFactorSpec(enr=20.87, ambient_temperature=296.0)
+    )
+    path = tmp_path / 'out.zarr'
+    zarr.open(sa.open_store(path, mode='w'), mode='w').attrs.update(
+        _json_round_trip(sweep)
+    )
+
+    rebuilt = ss.read_zarr_spec(path)
+    assert type(rebuilt) is CalSweepCls
+    assert rebuilt.calibration.enr == pytest.approx(20.87)
+    assert rebuilt == sweep
+
+
 def test_unknown_tree_keys_are_rejected():
     tree = _json_round_trip(ROUND_TRIP_SWEEPS['single_port'])
     with pytest.raises(msgspec.ValidationError, match='junk'):
-        _convert_zarr_attrs_spec({**tree, 'junk': 1}, SWEEP_DIR)
+        _decode_spec_tree({**tree, 'junk': 1}, SWEEP_DIR)
 
 
 def test_read_zarr_spec_output_overrides(run_sweep_to_zarr):

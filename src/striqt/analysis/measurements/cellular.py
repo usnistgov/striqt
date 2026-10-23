@@ -339,12 +339,16 @@ def cellular_5g_pss_correlation(
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR primary synchronization signal.
 
-    The IQ is shifted and resampled to the sync block by `get_5g_ssb_iq`, then
-    cross-correlated with the PSS sequence of each cell sector ID. The output is the
-    complex correlation (in √mW per `sample_rate` of bandwidth) with dimensions
-    `cellular_cell_id2`, `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index`,
-    and `cellular_ssb_lag` (in s), truncated to the first `max_block_count` sync blocks
-    when that is set.
+    The IQ is shifted and resampled to the sync block, then cross-correlated with the
+    PSS sequence of each cell sector ID. The output is the complex correlation (in
+    √mW) with dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
+    `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s), truncated to the first
+    `max_block_count` sync blocks when that is set. The PSS template has unit energy
+    over the 127 PSS subcarriers. The squared magnitude of a peak on a lag sample
+    equals the received PSS symbol power.
+    White noise with power spectral density N0 has a mean squared magnitude of
+    ``N0 * subcarrier_spacing`` in each lag, and the `noise_bandwidth` attr is
+    `subcarrier_spacing`.
 
     References:
         3GPP TS 38.211 Table 7.4.3.1-1 and §7.4.2.2; 3GPP TS 38.213 §4.1
@@ -360,8 +364,9 @@ def cellular_5g_pss_correlation(
     if spec.max_block_count is not None:
         R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
 
-    enbw = spec.sample_rate
-    metadata = {'units': f'√mW/{enbw / 1e6:0.2f} MHz', 'noise_bandwidth': enbw}
+    metadata = shared.bandwidth_attrs(
+        spec.subcarrier_spacing, '√mW', 'PSS cross-covariance'
+    )
 
     return R, metadata
 
@@ -461,11 +466,15 @@ def cellular_5g_sss_correlation(
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR secondary synchronization signal.
 
-    The IQ is shifted and resampled to the sync block by `get_5g_ssb_iq`, then
-    cross-correlated with the SSS sequences. The output is the complex correlation (in
-    √mW per `sample_rate` of bandwidth) with dimensions `cellular_cell_id2`,
-    `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index`, and `cellular_ssb_lag`
-    (in s), truncated to the first `max_block_count` sync blocks when that is set.
+    The IQ is shifted and resampled to the sync block, then cross-correlated with the
+    SSS sequences. The output is the complex correlation (in
+    √mW) with dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
+    `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s), truncated to the first
+    `max_block_count` sync blocks when that is set. The SSS template has unit energy
+    over the 127 SSS subcarriers. The squared magnitude of a peak on a lag sample equals
+    the received SSS symbol power. White noise with power spectral density N0 has a
+    mean squared magnitude of ``N0 * subcarrier_spacing`` in each lag, and the
+    `noise_bandwidth` attr is `subcarrier_spacing`.
 
     References:
         3GPP TS 38.211 Table 7.4.3.1-1 and §7.4.2.3; 3GPP TS 38.213 §4.1
@@ -481,8 +490,9 @@ def cellular_5g_sss_correlation(
     if spec.max_block_count is not None:
         R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
 
-    enbw = spec.sample_rate
-    metadata = {'units': f'√mW/{enbw / 1e6:0.2f} MHz', 'noise_bandwidth': enbw}
+    metadata = shared.bandwidth_attrs(
+        spec.subcarrier_spacing, '√mW', 'SSS cross-covariance'
+    )
 
     return R, metadata
 
@@ -643,15 +653,17 @@ def cellular_5g_ssb_spectrogram(
 ) -> Measurement:
     """evaluate a spectrogram of each 5G NR SSB burst set by OFDM symbol and subcarrier.
 
-    The STFT hops once per OFDM symbol, and its half-subcarrier bins are integrated
+    The STFT hops once per OFDM symbol, and the half-subcarrier bins are integrated
     pairwise to one bin per subcarrier of `subcarrier_spacing` before the frequency
     axis is trimmed to the `sample_rate` band about `frequency_offset`. Only the
     symbols of the burst set at the start of each `discovery_periodicity` are kept.
 
-    The output is power spectral density (in dB, float16) with dimensions
-    `cellular_ssb_index` (burst set within the capture), `cellular_ssb_symbol_index`
-    (OFDM symbol within the burst set), and `cellular_ssb_baseband_frequency` (in Hz,
-    relative to `frequency_offset`).
+    The output is power per subcarrier (dBm in a noise bandwidth of one
+    `subcarrier_spacing`, float16) with dimensions `cellular_ssb_index` (burst set
+    within the capture), `cellular_ssb_symbol_index` (OFDM symbol within the burst
+    set), and `cellular_ssb_baseband_frequency` (in Hz, relative to
+    `frequency_offset`). The `noise_bandwidth` and `resolution_bandwidth` attrs follow
+    the `spectrogram` measurement.
 
     References:
         3GPP TS 38.213 §4.1
@@ -1105,8 +1117,9 @@ def cellular_resource_power_bin(
 
     Returns:
         the bins from `power_low` to `power_high` in steps of `power_resolution`,
-        bracketed by ``-inf`` and ``inf`` catch-all bins, and attrs with the resource
-        grid `noise_bandwidth` (in Hz) and its ``dBm/<bandwidth> kHz`` units string
+        bracketed by ``-inf`` and ``inf`` catch-all bins, and the attrs of
+        `shared.bandwidth_attrs` for the resource grid: ``'units'`` of dBm,
+        `noise_bandwidth`, and `resolution_bandwidth` in Hz
     """
 
     bins = power.make_power_bins(
@@ -1115,11 +1128,13 @@ def cellular_resource_power_bin(
         power_resolution=spec.power_resolution,
     )
 
-    enbw = validated_resource_grid_sizing(capture, spec).enbw
-    metadata = {
-        'noise_bandwidth': float(enbw),
-        'units': f'dBm/{enbw / 1e3:0.0f} kHz',
-    }
+    sizing = validated_resource_grid_sizing(capture, spec)
+    metadata = shared.bandwidth_attrs(
+        sizing.noise_bandwidth,
+        'dBm',
+        'Cellular resource grid bin power',
+        resolution_bandwidth=sizing.resolution_bandwidth,
+    )
     return bins, metadata
 
 
@@ -1302,14 +1317,16 @@ class ResourceGridSizing(typing.NamedTuple):
 
     `frame_slots` is the normalized slot string of one frame, `spectrogram` the STFT
     spec that hops once per OFDM symbol, `time_bin_averaging` the number of hops in
-    one slot (None when `average_slots` is off), and `enbw` the equivalent noise
-    bandwidth (in Hz) of one histogram bin.
+    one slot (None when `average_slots` is off), and `noise_bandwidth` and
+    `resolution_bandwidth` (in Hz) the `spectrum.SpectrogramSizing` values of the
+    STFT for one histogram bin.
     """
 
     frame_slots: str
     spectrogram: specs.Spectrogram
     time_bin_averaging: typing.Optional[int]
-    enbw: float
+    noise_bandwidth: float
+    resolution_bandwidth: float
 
 
 def validated_resource_grid_sizing(
@@ -1372,7 +1389,8 @@ def validated_resource_grid_sizing(
         frame_slots=tdd_config.frame_slots,
         spectrogram=spg_spec,
         time_bin_averaging=time_bin_averaging,
-        enbw=sizing.enbw,
+        noise_bandwidth=sizing.noise_bandwidth,
+        resolution_bandwidth=sizing.resolution_bandwidth,
     )
 
 
@@ -1413,7 +1431,9 @@ def cellular_resource_power_histogram(
     spg, metadata = spectrum.evaluate_spectrogram(
         iq, capture, sizing.spectrogram, dtype='float32', dB=False
     )
+    metadata = dict(metadata)
     del metadata['units']
+    del metadata['long_name']
 
     freqs = spectrum.spectrogram_freqs(capture, sizing.spectrogram)
     freqs = xp.asarray(freqs)

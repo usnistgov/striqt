@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from numeric_checks import assert_close, elementwise_rtol
+from sweep_strategies import make_cellular_sweep
 from synthetic_sources import (
     IQ_ONLY,
     ONE_PORT,
@@ -24,15 +25,13 @@ import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import sinks
 
-ZARR_SINK = ss.specs.Extension()
-TIME_APPEND_SINK = ss.specs.Extension(sink='striqt.sensor.sinks.ZarrTimeAppendSink')
+OFFSETS = (1e6, 2e6)
 
 
-def zarr_sweep(path, offsets, *, analysis=IQ_ONLY, extensions=ZARR_SINK, **sink_kws):
-    """a sweep writing to `path` through the binding's default sink (or `extensions`)"""
+def zarr_sweep(path, offsets, *, analysis=IQ_ONLY, **sink_kws):
+    """a tone sweep whose `ZarrSink` writes to `path`"""
     sweep = tone_sweep(offsets, analysis=analysis)
-    sink = ss.specs.Sink(path=str(path), **sink_kws)
-    return sweep.replace(sink=sink, extensions=extensions)
+    return sweep.replace(sink=ss.specs.ZarrSink(path=str(path), **sink_kws))
 
 
 def run_to_store(sweep):
@@ -44,7 +43,7 @@ def run_to_store(sweep):
 # %% NoSink
 
 
-def test_no_sink_append_returns_its_argument(fake_source_id):
+def test_no_sink_append_returns_its_argument():
     sink = ss.sinks.NoSink(tone_sweep((1e6,)))
     token = object()
     assert sink.append(token) is token
@@ -113,8 +112,8 @@ def test_zarr_zip_path_is_archived_and_readable(tmp_path):
 # %% ZarrTimeAppendSink
 
 
-def test_time_append_sink_requires_a_spectrogram(fake_source_id):
-    sweep = zarr_sweep('unused.zarr', (1e6,), extensions=TIME_APPEND_SINK)
+def test_time_append_sink_requires_a_spectrogram():
+    sweep = zarr_sweep('unused.zarr', (1e6,))
     with pytest.raises(ValueError, match='spectrogram'):
         ss.sinks.ZarrTimeAppendSink(sweep)
 
@@ -122,16 +121,20 @@ def test_time_append_sink_requires_a_spectrogram(fake_source_id):
 def test_time_append_sink_concatenates_the_frames(tmp_path):
     """2 captures written as 1 batch form 1 row whose spectrogram time axis
     contains both captures' frames back to back on a uniform grid"""
-    offsets = (1e6, 2e6)
     sweep = zarr_sweep(
-        tmp_path / 'spg.zarr',
-        offsets,
-        analysis=SPECTROGRAM,
-        extensions=TIME_APPEND_SINK,
-        batched_write_count=2,
+        tmp_path / 'spg.zarr', OFFSETS, analysis=SPECTROGRAM, batched_write_count=2
     )
     frames, hop_period = spectrogram_frames(sweep.captures[0], SPECTROGRAM.spectrogram)
-    results = run_to_store(sweep)
+
+    # the runner's ZarrCaptureSink would open the same store if the sweep it opens
+    # kept the path. A zarr sink looks up the source id in its constructor, which
+    # requires the source to be open first
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    with (
+        ss.open_resources(unsunk, None) as res,
+        ss.sinks.ZarrTimeAppendSink(sweep) as sink,
+    ):
+        results = [ds for ds in ss.iterate_sweep(res, sink=sink) if ds is not None]
 
     stored = sa.load(sweep.sink.path)
     assert stored.sizes['capture'] == 1
@@ -144,6 +147,33 @@ def test_time_append_sink_concatenates_the_frames(tmp_path):
         assert np.array_equal(
             stored.spectrogram.values[0, half], ds.spectrogram.values[0]
         )
+
+
+# %% runner sink selection
+
+
+def test_zarr_sink_rejects_a_null_path():
+    with pytest.raises(ValueError, match='path'):
+        ss.sinks.ZarrCaptureSink(tone_sweep(OFFSETS))
+
+
+@pytest.mark.parametrize(
+    'make_spec, name, sink_type',
+    [
+        (lambda: tone_sweep(OFFSETS), None, ss.sinks.NoSink),
+        (lambda: tone_sweep(OFFSETS), 'out.zarr', ss.sinks.ZarrCaptureSink),
+        (make_cellular_sweep, None, ss.sinks.NoSink),
+        (make_cellular_sweep, 'out.zarr', ss.sinks.ZarrCaptureSink),
+    ],
+    ids=['sweep_null_path', 'sweep_path', 'cellular_null_path', 'cellular_path'],
+)
+def test_runner_opens_the_sink_that_the_path_selects(
+    tmp_path, make_spec, name, sink_type
+):
+    path = None if name is None else str(tmp_path / name)
+    spec = make_spec().replace(sink=ss.specs.ZarrSink(path=path))
+    with ss.open_resources(spec, None) as res:
+        assert type(res['sink']) is sink_type
 
 
 # %% Zipper
@@ -159,25 +189,17 @@ def make_tree(root: Path) -> set[str]:
     return files
 
 
-def test_zipper_from_zarr_archives_every_file(tmp_path):
+@pytest.mark.parametrize('remove', [True, False], ids=['remove', 'keep'])
+def test_zipper_from_zarr_archives_every_file(tmp_path, remove):
     store = tmp_path / 'data.zarr'
     files = make_tree(store)
-    zipper = sinks.Zipper.from_zarr(store)
-    out = zipper.archive()
+    out = sinks.Zipper.from_zarr(store).archive(remove=remove)
 
     assert Path(out) == tmp_path / 'data.zarr.zip'
     with zipfile.ZipFile(out) as zf:
         assert set(zf.namelist()) == files
         assert zf.read('a/c/0.0') == b'a/c/0.0'
-    assert not store.exists()
-
-
-def test_zipper_archive_can_keep_the_directory(tmp_path):
-    store = tmp_path / 'data.zarr'
-    make_tree(store)
-    sinks.Zipper.from_zarr(store).archive(remove=False)
-    assert store.is_dir()
-    assert (tmp_path / 'data.zarr.zip').exists()
+    assert store.is_dir() == (not remove)
 
 
 def test_zipper_refuses_an_existing_zip_without_force(tmp_path):

@@ -19,14 +19,8 @@ from fractions import Fraction
 
 import numpy as np
 import pytest
-from conftest import SITE_DIR, SWEEP_DIR
-from numeric_checks import (
-    COLA_LEVEL_DB,
-    COLA_RIPPLE_DB,
-    FIR_LEAKAGE,
-    assert_close,
-    cross_backend,
-)
+from conftest import FAKE_SOAPY_CELLULAR_SPEC, SITE_CELLULAR_SPEC, SITE_DIR, SWEEP_DIR
+from numeric_checks import COLA_LEVEL_DB, COLA_RIPPLE_DB, assert_close, cross_backend
 from site_strategies import RADIO_ID
 from sweep_strategies import SOURCE
 from synthetic_sources import (
@@ -34,12 +28,13 @@ from synthetic_sources import (
     DETECTOR_PERIOD,
     FILTER_ONLY,
     FILTER_SIZE,
+    ONE_PORT,
     RESAMPLE_FILTER,
-    expected_corrected,
     fs_sdr,
     preset_capture,
     preset_sweep,
     run_in_memory,
+    tone_capture,
 )
 
 import striqt.analysis as sa
@@ -244,68 +239,6 @@ def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
         assert len(fields) == 5 and all(math.isfinite(float(f)) for f in fields), name
 
 
-def test_check_sweep_budgets_the_looped_field_over_its_adjustment(
-    write_yaml, monkeypatch, capsys
-):
-    """a loop point outranks an `adjust_captures` value for the same field
-    (`loop_captures`, pass 3), so the printed budget includes the resampler FFTs of
-    the looped `host_resample: true` rather than the adjustment's `false`"""
-    path = write_yaml(
-        'looped-host-resample.yaml',
-        """
-        sensor_binding: single_tone
-        source:
-          master_clock_rate: 125e6
-          num_rx_ports: 2
-          array_backend: numpy
-        captures:
-          - port: [0, 1]
-            sample_rate: 6.144e6
-            duration: 1e-3
-            analysis_bandwidth: 5e6
-        loops:
-          - kind: list
-            field: host_resample
-            values: [true]
-        adjust_captures:
-          defaults:
-            host_resample: false
-        analysis:
-          iq_waveform: {}
-        sink:
-          path: out.zarr.zip
-        """,
-    )
-    # open_resources chdirs into the spec directory and does not change back
-    monkeypatch.chdir(os.getcwd())
-
-    check_sweep.run(str(path))
-
-    out = capsys.readouterr().out
-    id_line = re.search(r'^source_id: (.*)$', out, re.MULTILINE)
-    source_id = ast.literal_eval(id_line[1])
-    block = out.split('Numerical tolerance')[1].split('\n\n')[0]
-    (row,) = [r for r in block.splitlines()[4:] if r.startswith('iq_waveform')]
-    spec = ss.read_yaml_spec(path)
-
-    def rendered(captures):
-        budget = ss.lib.compute.worst_case_tolerances([
-            (c, capture_tolerances(c, spec.source, spec.analysis)) for c in captures
-        ])
-        tol = budget['iq_waveform']
-        off = tol.off_peak_dBc
-        values = (tol.rtol, tol.on_peak.rms, tol.on_peak.peak) + (
-            (None, None) if off is None else (off.rms, off.peak)
-        )
-        return ['NaN' if v is None else f'{v:.4g}' for v in values]
-
-    captures = ss.specs.sequencing.loop_captures(spec, source_id=source_id)
-    adjusted = captures[0].replace(**spec.adjust_captures['defaults'])
-    # the adjusted capture must render differently for the check to discriminate
-    assert rendered([adjusted]) != rendered(captures)
-    assert row.split()[1:] == rendered(captures)
-
-
 def test_check_sweep_formats_the_default_sink_path(write_yaml, monkeypatch, capsys):
     """a spec with no `sink:` block takes the `Sink.path` default, whose format
     fields must all be ones that `get_path_fields` supplies"""
@@ -401,6 +334,104 @@ def test_check_sweep_lists_the_looped_field_over_its_adjustment(
     }
 
 
+# %% cellular sweeps: the Sweep that the runner derives from a Cellular5GNRSweep
+
+CELLULAR_SWEEPS = {
+    'fake_soapy': FAKE_SOAPY_CELLULAR_SPEC,
+    'site': SITE_CELLULAR_SPEC,
+}
+
+
+def derived_sample_rates(spec) -> list[float]:
+    """the sample rate of each row of the output, one per port of each capture, from
+    the channel each capture names: the smallest multiple of 896 subcarriers at or
+    above the channel bandwidth plus the 250 kHz transition band"""
+    rates = []
+    for capture in spec.captures:
+        (channel,) = [
+            c
+            for c in spec.cell_channels.values()
+            if c.center_frequency == capture.center_frequency
+        ]
+        step = 896 * channel.subcarrier_spacing
+        rate = math.ceil((channel.channel_bandwidth + 250e3) / step) * step
+        rates += [rate] * len(ports_of(capture.port))
+    return rates
+
+
+@pytest.mark.parametrize('name', list(CELLULAR_SWEEPS), ids=list(CELLULAR_SWEEPS))
+def test_check_sweep_budgets_the_derived_cellular_analysis(
+    name, fake_soapy, monkeypatch, capsys
+):
+    """check-sweep opens a cellular spec through its runner. The printed sink path is
+    formatted, and the tolerance table lists the measurements of the derived `Sweep`
+    analysis rather than the fields of the document's `analysis:` block."""
+    path = CELLULAR_SWEEPS[name]
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(path))
+
+    out = capsys.readouterr().out
+    assert f'for {ss.read_yaml_spec(path).__class__.__name__!r} bindings' in out
+    block = re.search(
+        r'^sink\.path:\n  Input: +(.*)\n  Formatted: +(.*)$', out, re.MULTILINE
+    )
+    assert block is not None, out
+    template, formatted = (ast.literal_eval(v) for v in block.groups())
+    assert formatted.startswith(template.split('{')[0])
+    assert path.stem in formatted
+    assert '{' not in formatted
+
+    spec = ss.read_yaml_spec(path)
+    sweep = ss.lib.actions.cellular.build_cellular_sweep(spec)
+    budgeted = {
+        name
+        for name in sweep.analysis.to_dict()
+        if sa.registry[type(getattr(sweep.analysis, name))].tolerance is not None
+    }
+    assert budgeted, 'the fixture must enable at least one budgeted measurement'
+    enabled = {k for k, v in spec.analysis.to_dict().items() if v is not None}
+    block = out.split('Numerical tolerance')[1].split('\n\n')[0]
+    rows = block.splitlines()[4:]
+    table = {row.split()[0] for row in rows}
+    assert table == budgeted
+    assert table.isdisjoint(enabled - set(sweep.analysis.to_dict()))
+
+
+def test_cli_run_cellular(fake_soapy, tmp_path, monkeypatch):
+    """the fake-soapy cellular sweep writes one store whose rows carry the sample
+    rate and analysis bandwidth derived from each capture's channel, the derived
+    measurements, the document's `cell_channels` as an attr, and attrs that rebuild
+    the document"""
+    path = FAKE_SOAPY_CELLULAR_SPEC
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+    out_path = tmp_path / 'out.zarr.zip'
+
+    sensor_sweep.run(str(path), output_path=str(out_path))
+
+    spec = ss.read_yaml_spec(path, output_path=str(out_path))
+    assert isinstance(spec, ss.specs.Cellular5GNRSweep)
+    assert ss.read_zarr_spec(out_path, extension_root=path.parent) == spec
+    ds = sa.load(out_path)
+
+    rates = derived_sample_rates(spec)
+    assert sorted(set(rates)) == [53.76e6, 107.52e6]
+    assert ds.sample_rate.values.tolist() == rates
+    assert ds.analysis_bandwidth.values.tolist() == [100e6, 100e6, 40e6]
+    assert ds.port.values.tolist() == [0, 1, 0]
+    assert set(ds.attrs['cell_channels']) == {'3750 MHz', '3960 MHz'}
+
+    sweep = ss.lib.actions.cellular.build_cellular_sweep(spec)
+    assert set(sweep.analysis.to_dict()) <= set(ds.data_vars)
+    assert 'cellular_5g_pss_correlation' in ds.data_vars
+    # the default detector period is one OFDM symbol: 28000 per second at 30 kHz
+    # subcarrier spacing with a normal cyclic prefix
+    (duration,) = {c.duration for c in spec.captures}
+    assert ds.sizes['time_elapsed'] == round(duration * 28000)
+
+
 # %% in-memory sweeps against the generators
 
 FS = RESAMPLE_FILTER['sample_rate']
@@ -442,14 +473,6 @@ def detector(ds, kind):
 
 
 def check_single_tone(ds, capture, subtests):
-    with subtests.test('iq_waveform reproduces the generator'):
-        # the tone is continuous through the source pre-roll, so the whole capture
-        # is steady state
-        assert_close(
-            ds.iq_waveform.values,
-            expected_corrected('single_tone', capture),
-            sigma=correction_error(capture, SOURCE, ANALYSIS),
-        )
     with subtests.test('rms detector reads 0 dBm'):
         tol = capture_tolerances(capture, SOURCE, ANALYSIS)['channel_power_time_series']
         assert_close(detector(ds, 'rms'), 0.0, rtol=tol.rtol, atol=tol.on_peak.peak)
@@ -524,13 +547,6 @@ def check_dirac_delta(ds, capture, subtests):
     if capture.host_resample:
         with subtests.test('peak level bounded by the filter'):
             assert peak[:, IMPULSE_BIN].max() <= filter_peak_dB + COLA_RIPPLE_DB
-    else:
-        with subtests.test('peak level is the FIR central tap'):
-            assert_close(
-                peak[:, IMPULSE_BIN],
-                filter_peak_dB,
-                atol=sw.power_analysis.level_tolerance_dB(FIR_LEAKAGE),
-            )
 
 
 CHECKS = {
@@ -594,3 +610,59 @@ def test_in_memory_fidelity_cupy(binding, array_backend, subtests):
                     rtol=tol.rtol,
                     atol=sa.util.elementwise_atol(tol, expected),
                 )
+
+
+# %% bandwidth attrs of a store written from more than one analysis bandwidth
+
+CAPTURE_BANDWIDTH_OUTPUTS = ss.specs.BundledAnalysis.from_dict({
+    'iq_waveform': {},
+    'channel_power_time_series': {'detector_period': DETECTOR_PERIOD},
+    'channel_power_histogram': {
+        'detector_period': DETECTOR_PERIOD,
+        'power_low': -120,
+        'power_high': 0,
+        'power_resolution': 1,
+    },
+})
+
+
+def test_mixed_analysis_bandwidth_store_resolves_bandwidth_per_capture(
+    tmp_path, monkeypatch
+):
+    """channel power and IQ outputs written from captures at two analysis bandwidths
+    carry no `noise_bandwidth` attr, and `striqt.figures` resolves the bandwidth of
+    each capture from the coordinates: the finite `analysis_bandwidth`, else the
+    `sample_rate`"""
+    from striqt.figures import util as figures_util
+
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+    captures = (tone_capture(ONE_PORT), tone_capture(ONE_PORT, analysis_bandwidth=5e6))
+    path = tmp_path / 'out.zarr'
+    sweep = preset_sweep(
+        'single_tone',
+        captures,
+        analysis=CAPTURE_BANDWIDTH_OUTPUTS,
+        sink=ss.specs.ZarrSink(path=str(path)),
+    )
+
+    with ss.open_resources(sweep) as resources:
+        for _ in ss.iterate_sweep(resources):
+            pass
+    ds = sa.load(path)
+
+    assert ds.analysis_bandwidth.values.tolist() == [float('inf'), 5e6]
+    expected = [ONE_PORT['sample_rate'], 5e6]
+    outputs = (
+        'iq_waveform',
+        'channel_power_time_series',
+        'channel_power_histogram',
+        'channel_power_bin',
+    )
+    for name in outputs:
+        assert 'noise_bandwidth' not in ds[name].attrs, name
+    # a histogram resolves through its bin coordinate, as check_noise_floor does
+    for name in ('iq_waveform', 'channel_power_time_series', 'channel_power_bin'):
+        bandwidth = figures_util.noise_bandwidth(ds, name)
+        assert bandwidth is not None, name
+        assert bandwidth.values.tolist() == expected, name

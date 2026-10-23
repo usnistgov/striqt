@@ -22,6 +22,7 @@ import striqt.waveform as sw
 
 if TYPE_CHECKING:
     from .. import specs
+    from .actions.core import ActionRunner
 
 
 # these are evaluated at runtime, so they need to be here
@@ -36,6 +37,8 @@ SC = TypeVar('SC', bound='specs.SensorCapture')
 SP = TypeVar('SP', bound='specs.Peripherals')
 SPC = TypeVar('SPC', bound='specs.Peripherals')
 _SS = TypeVar('_SS', bound='specs.Source', covariant=True)
+TA = TypeVar('TA', bound='specs.ActionSpec')
+TR = TypeVar('TR', bound='ActionRunner[Any, Any, Any, Any, Any, Any]')
 
 # %% compute.py
 from striqt.analysis.lib.typing import TAR
@@ -130,9 +133,6 @@ if typing.TYPE_CHECKING:
         min_oversampling: float
         window: str
         min_fft_size: int
-
-    # %% compute.py
-    WarmupSweep: TypeAlias = specs.Sweep[specs.NoSource, specs.NoPeripherals, SC]
 
     # %% resources.py
     class SourceOpenCallback(Protocol):

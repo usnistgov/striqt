@@ -8,10 +8,11 @@ probe as a strict xfail until the `ty` pin moves.
 from __future__ import annotations
 
 import striqt.sensor as ss
-from striqt.sensor.lib import execute, resources
+from striqt.sensor.lib import resources
+from striqt.sensor.lib.actions import core
 from striqt.sensor.lib.compute import corrections
 
 
 def probe(cap: ss.specs.SensorCapture, res: resources.Resources) -> None:
     corrections.design_resampler(cap, 1e6, bogus=1)  # ty: ignore[unknown-argument]
-    execute.iterate_sweep(res, bogus=1)  # ty: ignore[unknown-argument]
+    core.iterate_sweep(res, bogus=1)  # ty: ignore[unknown-argument]

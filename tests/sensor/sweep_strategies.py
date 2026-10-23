@@ -7,6 +7,7 @@ directories import by name.
 from __future__ import annotations
 
 import numpy as np
+import xarray as xr
 from hypothesis import strategies as st
 from soapy_factories import MCR
 
@@ -41,6 +42,26 @@ def make_sweep_kws(captures=(), loops=(), adjust_captures=None, **kws) -> dict:
 
 def make_sweep(captures=(), loops=(), adjust_captures=None, **kws):
     return SweepCls(**make_sweep_kws(captures, loops, adjust_captures, **kws))
+
+
+class ActionCls(
+    ss.specs.ActionSpec[ss.specs.FunctionSource, ss.specs.Peripherals],
+    frozen=True,
+    kw_only=True,
+):
+    """an action spec over SOURCE's type with no captures block"""
+
+
+class PlanCls(
+    ss.specs.CapturePlan[ss.specs.FunctionSource, ss.specs.Peripherals, CaptureCls],
+    frozen=True,
+    kw_only=True,
+):
+    """a capture plan over the single_tone capture class with no analysis or options"""
+
+
+def make_plan(captures=(), loops=(), adjust_captures=None, **kws):
+    return PlanCls(**make_sweep_kws(captures, loops, adjust_captures, **kws))
 
 
 # 1e4 Hz divides the 1e6 sample_rate of make_capture into 100 bins; 3e4 does not
@@ -170,7 +191,6 @@ CalSweepCls = CAL.sensor.sweep_spec_cls
 CalCaptureCls = CAL.schema.capture
 CalSourceCls = CAL.schema.source
 
-NDE_LOOP = ss.specs.List(field='noise_diode_enabled', values=(False, True))
 PORT_LOOP = ss.specs.List(field='port', values=(0, 1))
 GAIN_LOOP = ss.specs.List(field='gain', values=(0, -10))
 CAL_LOOP_VALUES = {'port': (0, 1), 'gain': (0, -10), 'center_frequency': (1e9, 2e9)}
@@ -188,16 +208,40 @@ def make_calibration_capture(**kws):
     return CalCaptureCls(**kws)
 
 
-def make_calibration_sweep_kws(captures=None, loops=(), source=None, **kws) -> dict:
+def make_calibration_sweep_kws(
+    captures=None, loops=(), source=None, calibration=None, **kws
+) -> dict:
     if captures is None:
         captures = (make_calibration_capture(),)
     if source is None:
         source = CalSourceCls()
-    return {'source': source, 'captures': tuple(captures), 'loops': tuple(loops), **kws}
+    if calibration is None:
+        calibration = ss.specs.ManualYFactorSpec(
+            enr=YFACTOR_ENR_DB, ambient_temperature=290.0
+        )
+    return {
+        'source': source,
+        'captures': captures,
+        'loops': loops,
+        'calibration': calibration,
+        **kws,
+    }
 
 
-def make_calibration_sweep(captures=None, loops=(), source=None, **kws):
-    return CalSweepCls(**make_calibration_sweep_kws(captures, loops, source, **kws))
+def make_calibration_sweep(**kws):
+    return CalSweepCls(**make_calibration_sweep_kws(**kws))
+
+
+def as_sweep(spec):
+    """the Sweep that runs for an action spec: itself, or the one its runner builds"""
+    if isinstance(spec, ss.specs.Sweep):
+        return spec
+    return ss.lib.actions.registry.lookup(spec)(spec).sweep
+
+
+def make_calibration_runner(**kws):
+    """the ManualYFactorRunner of make_calibration_sweep(**kws)"""
+    return ss.lib.actions.ManualYFactorRunner(make_calibration_sweep(**kws))
 
 
 def loop_fields(sweep) -> list:
@@ -266,14 +310,13 @@ def make_yfactor_dataset(
     nf_dB=YFACTOR_NF_DB,
     *,
     enr_dB=YFACTOR_ENR_DB,
-    ambient_temperature=T_REF,
     papr_dB=10.0,
     time_count=4,
     **gain_kws,
 ):
-    """a calibration dataset shaped as YFactorSink.flush receives it before the corrections:
+    """a calibration dataset as save_yfactor_corrections indexes the collected captures:
     one dimension per calibration field plus noise_diode_enabled, and a constant
-    channel_power_time_series drawn from the receiver model"""
+    channel_power_time_series drawn from the receiver model at enr_dB"""
     import xarray as xr
 
     coords = {'noise_diode_enabled': [False, True]}
@@ -303,8 +346,6 @@ def make_yfactor_dataset(
 
     return xr.Dataset({
         'channel_power_time_series': pvt.assign_coords(capture_index=capture_index),
-        'enr': template + enr_dB,
-        'ambient_temperature': template + ambient_temperature,
     })
 
 
@@ -323,14 +364,105 @@ def expected_yfactor(grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, *, T0=T_REF, **gain
     })
 
 
+INF = float('inf')
+CORRECTION_VARS = ('noise_figure', 'temperature', 'power_correction')
+# float64 roundoff of the closed-form corrections, expressed in dB
+EXACT_DB = 1e-8
+
+
+def assert_corrections_match(actual, expected, tol_dB=EXACT_DB, names=CORRECTION_VARS):
+    """assert that each `names` variable of `actual` matches `expected` within `tol_dB`.
+
+    `expected` may span fewer dimensions than `actual`. `temperature` and
+    `power_correction` are compared in dB.
+    """
+    for name in names:
+        result = actual[name].reset_coords(drop=True)
+        model = expected[name].reset_coords(drop=True).broadcast_like(result)
+        if name != 'noise_figure':
+            result, model = 10 * np.log10(result), 10 * np.log10(model)
+        xr.testing.assert_allclose(result, model, rtol=0, atol=tol_dB)
+
+
 def save_yfactor_calibration(
     path, grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, **kws
 ) -> str:
     """write the corrections for make_yfactor_dataset to a netCDF file and return its path"""
-    from striqt.sensor.lib import calibration, io
+    from striqt.sensor.lib import io
+    from striqt.sensor.lib.actions import yfactor
 
-    corrections = calibration._y_factor_power_corrections(
-        make_yfactor_dataset(grid, nf_dB, **kws)
+    corrections = yfactor.compute_y_factor_corrections(
+        make_yfactor_dataset(grid, nf_dB, **kws), kws.get('enr_dB', YFACTOR_ENR_DB)
     )
     io.save_calibration(path, corrections)
     return str(path)
+
+
+# %% cellular sweeps
+#
+# The 3750 MHz channel of sweeps/site/site-cellular.yaml: 100 MHz at 30 kHz spacing,
+# so nr_sample_rate derives 107.52 MS/s (4 x 896 x 30 kHz).
+
+CELL_CHANNEL = ss.specs.CellChannel(
+    center_frequency=3750e6,
+    channel_bandwidth=100e6,
+    ssb_frequency_offset=-40.08e6,
+    channel_guard_bandwidths=(875e3, 575e3),
+    tdd_frame_slots='dddsuudddddddsuudddd',
+    tdd_special_symbols='ddddddfffffffu',
+)
+CELL_LABEL = '3750 MHz'
+
+
+def make_cell_channel(**kws):
+    """CELL_CHANNEL with its fields replaced by `kws`, validated"""
+    return ss.specs.CellChannel(**{**CELL_CHANNEL.to_dict(), **kws})
+
+
+def cellular_sweep_cls():
+    """the bound `site_cellular` spec class; importing `site_strategies` registers
+    the site extension module"""
+    from site_strategies import EXT
+
+    return EXT.site_cellular.sensor.sweep_spec_cls
+
+
+def make_cellular_capture(**kws):
+    """a site capture at the CELL_CHANNEL center frequency with `sample_rate` and
+    `analysis_bandwidth` at their defaults, as a cellular sweep requires"""
+    kws = {
+        'port': 0,
+        'center_frequency': CELL_CHANNEL.center_frequency,
+        'gain': -10,
+        'duration': 1e-3,
+        # the antenna_index coordinate is integer, so from_delayed rejects None
+        'antenna_index': 0,
+        **kws,
+    }
+    return cellular_sweep_cls().schema.capture(**kws)
+
+
+def make_cellular_sweep_kws(
+    captures=None, loops=(), cell_channels=None, source=SOURCE, **kws
+) -> dict:
+    if captures is None:
+        captures = (make_cellular_capture(),)
+    if cell_channels is None:
+        cell_channels = {CELL_LABEL: CELL_CHANNEL}
+    return {
+        'source': source,
+        'captures': tuple(captures),
+        'loops': tuple(loops),
+        'cell_channels': cell_channels,
+        'sink': ss.specs.ZarrSink(path=None),
+        **kws,
+    }
+
+
+def make_cellular_sweep(**kws):
+    return cellular_sweep_cls()(**make_cellular_sweep_kws(**kws))
+
+
+def make_cellular_runner(**kws):
+    """the Cellular5GNRSweepRunner of make_cellular_sweep(**kws)"""
+    return ss.lib.actions.Cellular5GNRSweepRunner(make_cellular_sweep(**kws))

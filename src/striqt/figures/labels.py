@@ -138,6 +138,18 @@ def _get_fig_center_y(fig: 'matplotlib.figure.Figure') -> float:
     return (top + bot) / 2
 
 
+def _units_with_bandwidth(attrs: typing.Mapping[str, typing.Any]) -> str | None:
+    """return `units` with the `noise_bandwidth` of `attrs` appended, as in ``dBm/360 kHz``.
+
+    A `units` value that already contains a slash is returned as written.
+    """
+    units = attrs.get('units', None)
+    bandwidth = attrs.get('noise_bandwidth', None)
+    if units is None or bandwidth is None or '/' in str(units):
+        return units
+    return f'{units}/{sa.dataarrays.format_units(float(bandwidth), "Hz")}'
+
+
 def label_axis(
     which_axis: typing.Literal['x', 'y', 'colorbar'],
     ax_data: typing.Union[xr.DataArray, xr.Dataset],
@@ -204,11 +216,9 @@ def label_axis(
         target_axs = [a.yaxis for a in axs if hasattr(a, '_colorbar')]
 
     if coord_name is None:
-        # label = a.attrs.get('standard_name', None)
-        units = ax_data.attrs.get('units', None)
+        units = _units_with_bandwidth(ax_data.attrs)
     else:
-        # label = a[dimension].attrs.get('label', None)
-        units = ax_data[coord_name].attrs.get('units', None)
+        units = _units_with_bandwidth(ax_data[coord_name].attrs)
 
     standard_name = ax_data.attrs.get('standard_name', None) or ax_data.name
     long_name = ax_data.attrs.get('long_name', None) or standard_name

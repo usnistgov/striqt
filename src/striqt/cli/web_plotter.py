@@ -1766,12 +1766,13 @@ def run_server(
     else:
         raise click.ClickException('expected file to have .json or .yaml suffix')
 
-    # NoSink replaces the configured sink; on_data receives the results instead
-    spec = spec.replace(
-        extensions=spec.extensions.replace(sink='striqt.sensor.sinks.NoSink')
-    )
+    # a null sink path writes nothing, and on_data receives the results instead
+    spec = spec.replace(sink=spec.sink.replace(path=None))
 
-    if spec.plot_hint is None:
+    # the plotter shows the sweep the action runs, which may differ from the spec
+    sweep = ss.lib.actions.registry.lookup(spec)(spec).sweep
+
+    if sweep.plot_hint is None:
         plot_opts = sf.specs.PlotOptions(
             data=sf.specs.DataOptions(
                 sweep_index=-1,
@@ -1790,7 +1791,7 @@ def run_server(
             ),
         )
     else:
-        plot_opts = sf.specs.PlotOptions.from_spec(spec.plot_hint)
+        plot_opts = sf.specs.PlotOptions.from_spec(sweep.plot_hint)
 
     _app_state['plot_opts'] = plot_opts
     _app_state['plotter'] = WebPlotBackend(plot_opts.plotter)
@@ -1798,7 +1799,7 @@ def run_server(
     _app_state['data_select'] = dict(plot_opts.data.select)
 
     _app_state['variable_labels'] = _build_variable_labels_from_registry(
-        spec.analysis, sa.registry
+        sweep.analysis, sa.registry
     )
 
     loop = asyncio.new_event_loop()

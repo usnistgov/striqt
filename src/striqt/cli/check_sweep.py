@@ -4,7 +4,8 @@ import typing
 
 import click
 
-from striqt.sensor.lib import calibration, resources
+from striqt.sensor.lib import resources
+from striqt.sensor.lib.compute import cal_lookups
 
 
 @click.command('runtime information about running a sweep')
@@ -28,11 +29,10 @@ def run(yaml_path: str):
     print(f'Opening sensor resources...')
     import sys
 
-    spec = spec.replace(
-        extensions=spec.extensions.replace(sink='striqt.sensor.sinks.NoSink')
-    )
+    # `run_spec` writes nothing. The paths printed below come from `spec`.
+    run_spec = spec.replace(sink=spec.sink.replace(path=None))
 
-    manager = ss.open_resources(spec, yaml_path, test_only=True)
+    manager = ss.open_resources(run_spec, yaml_path, test_only=True)
 
     with manager as res:
         assert isinstance(spec.sensor, ss.lib.bindings.SensorBinding)
@@ -45,7 +45,7 @@ def run(yaml_path: str):
         if res['calibration'] is None:
             print('Configured for uncalibrated operation')
         else:
-            summary = calibration.summarize_calibration(res['calibration'])
+            summary = cal_lookups.summarize_calibration(res['calibration'])
             with pd.option_context('display.max_rows', None):
                 print(summary.sort_index(axis=1).sort_index(axis=0))
 
@@ -82,7 +82,7 @@ def run(yaml_path: str):
         print('\n\nNumerical tolerance (worst case over captures):')
         print(80 * '▀')
         budget = ss.lib.compute.worst_case_tolerances(
-            ss.lib.compute.sweep_tolerances(spec, source_id=source_id)
+            ss.lib.compute.sweep_tolerances(res['sweep_spec'], source_id=source_id)
         )
         rows = {}
         for name, tol in budget.items():
@@ -101,7 +101,9 @@ def run(yaml_path: str):
         print(table.to_string(float_format='{:.4g}'.format))
 
         print('\n\nUnique capture field coordinates in output:')
-        labels = ss.specs.sequencing.list_capture_adjustments(spec, source_id)
+        labels = ss.specs.sequencing.list_capture_adjustments(
+            res['sweep_spec'], source_id
+        )
 
         if len(labels) == 0:
             return

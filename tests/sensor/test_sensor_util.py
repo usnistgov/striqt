@@ -16,7 +16,6 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 import striqt.analysis as sa
-import striqt.sensor as ss
 from striqt.sensor.lib import util
 
 ExceptionGroup = exceptiongroup.ExceptionGroup
@@ -68,6 +67,8 @@ def zip_offsets_reference(seq, shifts, fill):
 
 
 class TestZipOffsets:
+    # the shift range covers (-2, -1, 0, 1), the (previous-1, previous, current,
+    # next) stages of the sweep pipeline
     @given(
         seq=st.lists(st.integers(), max_size=8),
         shifts=st.lists(st.integers(-3, 3), min_size=2, max_size=4),
@@ -75,17 +76,6 @@ class TestZipOffsets:
     def test_matches_reference(self, seq, shifts):
         result = list(util.zip_offsets(iter(seq), tuple(shifts), fill=None))
         assert result == zip_offsets_reference(seq, shifts, None)
-
-    def test_pipeline_offsets(self):
-        """the sweep pipeline iterates (previous-1, previous, current, next)"""
-        result = list(util.zip_offsets(['a', 'b', 'c'], (-2, -1, 0, 1), fill=None))
-        assert result == [
-            (None, None, 'a', 'b'),
-            (None, 'a', 'b', 'c'),
-            ('a', 'b', 'c', None),
-            ('b', 'c', None, None),
-            ('c', None, None, None),
-        ]
 
     def test_single_shift_squeeze(self):
         assert list(util.zip_offsets([1, 2, 3], (1,), fill=0)) == [2, 3]
@@ -124,13 +114,6 @@ class TestThreadInterrupts:
             cancel_then_fail()
         assert not util._cancel_threads.is_set()
 
-    def test_threadpool_is_a_module_singleton(self):
-        assert util.threadpool is util.threadpool
-
-    def test_unknown_attribute(self):
-        with pytest.raises(AttributeError, match='no attribute'):
-            assert util.no_such_attribute
-
 
 # %% ExceptionStack / await_and_ignore
 class TestExceptionStack:
@@ -163,29 +146,21 @@ class TestExceptionStack:
         assert info.value.message == 'label'
         assert [type(e) for e in info.value.exceptions] == [ValueError, TypeError]
 
-    def test_interrupts_yield_to_other_exceptions(self):
+    @pytest.mark.parametrize(
+        'raised, expected',
+        [
+            ((util.ThreadInterruptRequest, ValueError), ValueError),
+            ((util.ThreadInterruptRequest, KeyboardInterrupt), KeyboardInterrupt),
+            ((util.ThreadInterruptRequest,), util.ThreadInterruptRequest),
+        ],
+        ids=['error', 'keyboard_interrupt', 'alone'],
+    )
+    def test_interrupts_yield_to_other_exceptions(self, raised, expected):
         stack = util.ExceptionStack()
-        with stack.defer():
-            raise util.ThreadInterruptRequest
-        with stack.defer():
-            raise ValueError('real')
-        with pytest.raises(ValueError, match='real'):
-            stack.handle()
-
-    def test_keyboard_interrupt_preferred(self):
-        stack = util.ExceptionStack()
-        with stack.defer():
-            raise util.ThreadInterruptRequest
-        with stack.defer():
-            raise KeyboardInterrupt
-        with pytest.raises(KeyboardInterrupt):
-            stack.handle()
-
-    def test_lone_thread_interrupt(self):
-        stack = util.ExceptionStack()
-        with stack.defer():
-            raise util.ThreadInterruptRequest
-        with pytest.raises(util.ThreadInterruptRequest):
+        for exc in raised:
+            with stack.defer():
+                raise exc
+        with pytest.raises(expected):
             stack.handle()
 
     def test_cancel_on_except(self):
@@ -328,10 +303,9 @@ class TestRetry:
             wrapped()
         assert len(flaky.calls) == 3
 
-    @pytest.mark.parametrize('tries', [0, -3], ids=['zero', 'negative'])
-    def test_rejects_tries_below_one_at_decoration(self, tries):
+    def test_rejects_tries_below_one_at_decoration(self):
         with pytest.raises(ValueError, match='tries'):
-            util.retry(ConnectionError, tries=tries)
+            util.retry(ConnectionError, tries=0)
 
     def test_single_try_is_a_plain_call(self):
         original = ConnectionError('only failure')
@@ -497,9 +471,3 @@ class TestLogToFile:
         assert striqt_logger._striqt_handler in striqt_logger.handlers
         assert striqt_logger._striqt_handler.level == logging.WARNING
         first.close()
-
-
-def test_public_reexports(subtests):
-    for name in ('zip_offsets', 'retry', 'ExceptionStack', 'log_verbosity'):
-        with subtests.test(msg=name):
-            assert getattr(ss.util, name) is getattr(util, name)

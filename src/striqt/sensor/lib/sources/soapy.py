@@ -6,7 +6,7 @@ import time
 import typing
 
 from ... import specs
-from .. import calibration, util
+from .. import util
 from ..typing import PS, PC, SourceBackend
 from . import base, buffers
 
@@ -202,7 +202,7 @@ def _probe_channel(
 
 
 def _assign_iq_calibration(iq: specs.AcquiredIQ):
-    from ..calibration import lookup_power_correction, lookup_system_noise_power
+    from ..compute.cal_lookups import lookup_power_correction, lookup_system_noise_power
 
     assert isinstance(iq.capture, specs.SoapyCapture)
 

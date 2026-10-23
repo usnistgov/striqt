@@ -1,20 +1,30 @@
-"""schema for the specification of calibration and sweeps"""
+"""spec structs for sensor actions, their blocks, sources, peripherals, and captures.
+
+msgspec resolves the field annotations at runtime. Field types are written as
+`Union`/`Optional`, with every name they reference bound in this module.
+"""
 
 from __future__ import annotations as __
 
 import dataclasses
+import warnings
 from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
 
 import msgspec
 
 import striqt.analysis as sa
+from striqt.analysis import Trigger
 
 # pd must be bound here for msgspec to resolve the 'pd.Timestamp' types in `types`
 from striqt.analysis.lib.util import pd  # noqa: F401
-from striqt.analysis.specs import AnalysisGroup, SpecBase, Capture, frozendict
-from striqt.analysis.specs.helpers import SpecValidationError
+from striqt.analysis.specs import BuiltinAnalyses, BuiltinTriggers, Capture, SpecBase
+from striqt.analysis.specs import frozendict
 
-from ..lib.typing import TypeVar, SS, SP, SC, SPC
+# re-exported through striqt.sensor.specs as the annotation of any analysis bundle
+from striqt.analysis.specs import AnalysisGroup  # noqa: F401
+from striqt.analysis.specs.helpers import SpecValidationError, subset_of
+
+from ..lib.typing import TypeVar, SS, SP, SC
 from . import types
 
 
@@ -101,7 +111,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
 
     # synchronization and triggering
     trigger_strobe: Union[float, None] = None
-    signal_trigger: Union[str, AnalysisGroup, None] = None
+    signal_trigger: Union[str, BuiltinTriggers, None] = None
 
     array_backend: types.ArrayBackend = 'numpy'
 
@@ -144,10 +154,14 @@ class SoapySource(Source, frozen=True, kw_only=True):
             raise ValueError('time_sync_at must be "open" when gapless')
         elif self.receive_retries > 0:
             raise ValueError('receive_retries must be 0 when gapless is enabled')
-        if self.signal_trigger is None:
+        trigger = self.signal_trigger
+        if trigger is None:
             pass
-        elif self.signal_trigger not in registry.signal_trigger:
-            registered = set(registry.signal_trigger)
+        elif isinstance(trigger, BuiltinTriggers):
+            if len(trigger.to_dict()) != 1:
+                raise ValueError('signal_trigger must enable exactly one trigger')
+        elif trigger not in registry.signal_trigger:
+            registered = {k for k in registry.signal_trigger if isinstance(k, str)}
             raise ValueError(f'signal_trigger must be one of {registered!r}')
 
 
@@ -298,31 +312,72 @@ class NoPeripherals(Peripherals, frozen=True, kw_only=True):
     pass
 
 
-class ManualYFactorPeripheral(Peripherals, frozen=True, kw_only=True):
+class ManualYFactorSpec(Peripherals, frozen=True, kw_only=True):
+    """the `calibration:` block of a `ManualYFactorCalibration`.
+
+    `implied_loops` names capture fields that the operator varies by hand between
+    captures. The saved corrections are indexed by these fields ahead of the loop
+    fields. `detector_period` is the bin of the generated
+    `channel_power_time_series` analysis. The rms detector is averaged over the bins
+    before the Y-factor is formed, and only the ``papr_on``/``papr_off`` diagnostics
+    depend on the bin. When None, the bin is the one `duration` of the captures and
+    loops, and a bound spec with more than one duration is rejected.
+
+    `enr` is the excess noise ratio of the noise diode referred to 290 K. The
+    Y-factor assumes a diode-off source temperature of 290 K. `ambient_temperature`
+    is recorded with the spec and does not enter the corrections.
+    """
+
     enr: types.ENR
     ambient_temperature: types.AmbientTemperature
     implied_loops: tuple[str, ...] = ()
+    detector_period: Optional[types.DetectorPeriod] = None
+
+
+ManualYFactorPeripheral = ManualYFactorSpec
 
 
 # %% Top-level Sweep specifications
-BundledAnalysis = sa.registry.tospec()
-BundledTriggers = sa.registry.signal_trigger.to_spec()
+# compatibility names for the bundles, which striqt.analysis.specs defines
+BundledAnalysis = BuiltinAnalyses
+BundledTriggers = BuiltinTriggers
 
 
 class Sink(SpecBase, frozen=True, kw_only=True):
-    path: str = '{spec_name}-{start_time}'
+    """the output block of every action spec.
+
+    `path` is where the action writes, after the ``{field}`` templates of
+    `specs.paths.PathFormatter` are expanded. The action runner selects the file
+    format. A `path` of None writes nothing. `log_path` and `log_level` configure
+    the log file and do not depend on `path`.
+    """
+
+    path: Optional[str] = '{spec_name}-{start_time}'
     log_path: Optional[str] = None
     log_level: str = 'info'
-    store: types.StoreFormat = 'directory'
 
-    # zarr store tuning parameters
+
+class ZarrSink(Sink, frozen=True, kw_only=True):
+    """the output block of a `Sweep`: a zarr store appended along `capture`.
+
+    `store` selects a directory or zip store. The remaining fields tune the write
+    batching and chunking of the store.
+    """
+
+    store: types.StoreFormat = 'directory'
     max_threads: Optional[int] = None
     batched_write_count: int = 1
     max_chunk_bytes: int = 50000000
 
 
 class Extension(SpecBase, frozen=True, kw_only=True):
-    sink: Union[types.SinkClass, None] = None
+    """the `extensions:` block of an action spec.
+
+    `import_path` is inserted into ``sys.path`` and `import_name` is imported before
+    the rest of the spec is decoded. The module may bind the ``sensor_binding`` that
+    the spec names.
+    """
+
     import_path: Optional[types.ExtensionPath] = None
     import_name: types.ModuleName = None
 
@@ -366,67 +421,133 @@ AdjustCapturesType = dict[
 ]
 
 
-class Sweep(SpecBase, Generic[SS, SP, SC], frozen=True, kw_only=True):
-    # bound sweep subclasses also accept the tag field below in input files, which
-    # msgspec reads to choose the Sweep subclass to decode from, e.g., a yaml file
+class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
+    """the top-level spec that an action runs.
+
+    An instance is decoded from a file against the tagged class of a sensor binding
+    or constructed from the API. The `source`, `peripherals`, and `sink` blocks name
+    the resources that every action opens. `source` and `peripherals` are the spec
+    types of the binding named by the ``sensor_binding`` tag. `extensions` names an
+    out-of-tree module that is imported before the rest of the spec is decoded.
+    """
+
+    # tagged unions used in bindings introduce the tag below as well.
+    # msgspec uses this to choose the subclass to decode from.
     #
     # See: ./bindings.py
     #
     # sensor_binding: str
 
-    # metadata
     description: Description = Description()
-    plot_hint: Union[PlotOptions, None] = None
-
-    # acquisition and sequencing
     source: SS
-    captures: tuple[SC, ...] = tuple()
-    loops: tuple[LoopSpec, ...] = ()
-    adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
     peripherals: SP = cast(SP, Peripherals())
-
-    # analysis
-    analysis: BundledAnalysis = BundledAnalysis()
-
-    # misc
     extensions: Extension = Extension()
     sink: Sink = Sink()
-    options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
 
-    # to be defined only when subclassing
+    # set only on the subclasses that bind_sensor creates
     schema: ClassVar[Any] = None
     sensor: ClassVar[Any] = None
+    controller: ClassVar[Any] = None
+    sweep_cls: ClassVar[Any] = None
 
-    def __post_init__(self):
-        from . import sequencing, sweep
+    @classmethod
+    def check_schema(cls, schema: Any) -> None:
+        """raise if the spec types of `schema` cannot configure this action.
+
+        `bind_sensor` calls this once per binding. The base accepts every schema.
+
+        Args:
+            schema: the `Schema` being bound
+
+        Raises:
+            TypeError: if a spec type of `schema` lacks a field the action requires
+        """
+
+
+class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=True):
+    """an `ActionSpec` with the `captures`, `loops`, and `adjust_captures` blocks.
+
+    `loops` expands over `captures` into the sequence of captures that the action
+    runs (see `sequencing.loop_captures`), and `adjust_captures` applies per-source
+    overrides to each expanded capture. Construction rejects a `repeat` loop that is
+    not the outermost entry, two loops over one field, and a loop over a field that
+    the listed captures set to different values. Lookup keys in `adjust_captures`
+    are converted to the type of the capture field they key on.
+    """
+
+    captures: tuple[SC, ...] = ()
+    loops: tuple[LoopSpec, ...] = ()
+    adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        from . import action, sequencing
 
         # convert the label keys before super().__post_init__ freezes the struct
         fixed_labels = sequencing._convert_label_lookup_keys(self)
         msgspec.structs.force_setattr(self, 'adjust_captures', fixed_labels)
 
         super().__post_init__()
-        sweep.validate_sweep(self)
+        action._validate_loops(self.loops)
+        action._validate_loop_capture_collisions(self.loops, self.captures)
 
 
-class CalibrationSweep(
-    Sweep[SS, SP, SC],
-    Generic[SS, SP, SC, SPC],
-    frozen=True,
-    kw_only=True,
-):
-    """sweep specification for calibration runs, which adds a `calibration` block
-    to the YAML schema."""
+class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+    """the spec of a sweep, and the form every action opens resources for.
 
-    options: SweepOptions = SweepOptions(
-        skip_warmup=True, reuse_iq=True, loop_only_nyquist=True
-    )
-    calibration: Union[SPC, None] = None
+    `analysis` is evaluated on each expanded capture, with the capture's
+    `adjust_analysis` applied on top. `options` selects the warmup, IQ reuse, and
+    the `loop_only_nyquist` filter of the expansion. `plot_hint` is read only by
+    `striqt.figures`. `sink` is a `ZarrSink`, which narrows the `Sink` of
+    `ActionSpec`. Construction validates each unique capture against the
+    registered measurements and the `correct_iq` signal path (see
+    `action.validate_sweep`).
+    """
+
+    sink: ZarrSink = ZarrSink()
+    plot_hint: Union[PlotOptions, None] = None
+    analysis: BuiltinAnalyses = BuiltinAnalyses()
+    options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
 
     def __post_init__(self) -> None:
+        from . import action
+
+        super().__post_init__()
+        action.validate_sweep(self)
+        action.validate_action(self)
+
+
+class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+    """the spec of a Y-factor calibration with a hand-switched noise diode.
+
+    The `calibration:` block is a `ManualYFactorSpec`. The runner acquires the
+    expanded captures at each port with the diode off and then on, and generates
+    the analysis itself. The spec has no `options` block. An `analysis` block is
+    accepted, discarded, and reported with a `DeprecationWarning`. More than one
+    capture is accepted only when `calibration.implied_loops` names the fields the
+    captures vary, and `source.calibration` must be null. A bound spec is also
+    rejected when `ManualYFactorRunner.validate` cannot build the calibration sweep.
+    """
+
+    calibration: ManualYFactorSpec
+    analysis: Any = None
+
+    def __post_init__(self) -> None:
+        from . import action
+
         super().__post_init__()
 
-        implied_loops = getattr(self.calibration, 'implied_loops', ())
-        if len(self.captures) > 1 and not implied_loops:
+        if self.analysis is not None:
+            warnings.warn(
+                'the `analysis` block of a calibration is ignored: the calibration '
+                'generates its own analysis. The block is accepted until the next '
+                'release.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            # the block is a dict, which the frozen struct's hash cannot include
+            msgspec.structs.force_setattr(self, 'analysis', None)
+
+        if len(self.captures) > 1 and not self.calibration.implied_loops:
             raise SpecValidationError(
                 'Expected at most one capture in a calibration sweep, unless the '
                 'calibration peripheral declares `implied_loops`',
@@ -436,6 +557,266 @@ class CalibrationSweep(
             raise SpecValidationError(
                 'Expected `null`, since a calibration sweep cannot itself be calibrated',
                 ('.source', '.calibration'),
+            )
+        action.validate_action(self)
+
+
+# the cyclic prefix model is validated at 30 kHz only (strict xfails in
+# tests/waveform/test_waveform_comms_phy_3gpp.py cover 15 and 60 kHz)
+SUPPORTED_SUBCARRIER_SPACINGS = frozenset({30e3})
+
+
+class CellChannel(SpecBase, frozen=True, kw_only=True):
+    """one 5G NR channel of the `cell_channels` table of a `Cellular5GNRSweep`.
+
+    A capture whose `center_frequency` equals the channel's is acquired at the
+    sample rate `striqt.waveform.comms_5gnr.nr_sample_rate` derives from
+    `channel_bandwidth` and `subcarrier_spacing`, at or above `min_sample_rate`, with
+    `analysis_bandwidth` equal to `channel_bandwidth`. The remaining fields reach the
+    cellular measurements through the capture's `adjust_analysis`.
+    `ssb_case` None selects the TS 38.213 §4.1 case for the spacing, ``'c'`` at 30 kHz.
+    A `tdd_frame_slots` string is one character per slot of a 10 ms frame, or a single
+    character for every slot. Only 30 kHz spacing is accepted.
+    """
+
+    center_frequency: types.CenterFrequencyScalar
+    channel_bandwidth: types.ChannelBandwidth
+    subcarrier_spacing: types.CellularSubcarrierSpacing = 30e3
+    ssb_frequency_offset: types.SSBFrequencyOffset = 0.0
+    ssb_case: Optional[types.CellSSBSymbolIndexes] = None
+    channel_guard_bandwidths: types.ChannelGuardBandwidths = (0.0, 0.0)
+    tdd_frame_slots: types.CellularFrame = None
+    tdd_special_symbols: types.CellularSpecialSymbols = None
+    min_sample_rate: Optional[types.MinSampleRate] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.subcarrier_spacing not in SUPPORTED_SUBCARRIER_SPACINGS:
+            raise SpecValidationError(
+                f'Expected one of {sorted(SUPPORTED_SUBCARRIER_SPACINGS)!r}',
+                ('.subcarrier_spacing',),
+            )
+        slots = round(10 * self.subcarrier_spacing / 15e3)
+        if self.tdd_frame_slots is not None and len(self.tdd_frame_slots) not in (
+            1,
+            slots,
+        ):
+            raise SpecValidationError(
+                f'Expected 1 or {slots} slot characters for a 10 ms frame at this '
+                'subcarrier spacing',
+                ('.tdd_frame_slots',),
+            )
+
+
+@subset_of(
+    sa.specs.Spectrogram,
+    without=(
+        'frequency_resolution',
+        'fractional_overlap',
+        'window_fill',
+        'integration_bandwidth',
+    ),
+)
+class CellularSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
+    window: types.WindowType
+    lo_bandstop: Optional[types.LOBandstop] = None
+    time_aperture: Optional[float] = None
+    trim_stopband: bool = True
+
+
+@subset_of(
+    sa.specs.PowerSpectralDensity,
+    without=(
+        'frequency_resolution',
+        'fractional_overlap',
+        'window_fill',
+        'integration_bandwidth',
+    ),
+)
+class CellularPowerSpectralDensitySpec(SpecBase, frozen=True, kw_only=True):
+    window: types.WindowType
+    time_statistic: tuple[Union[str, float], ...] = ('mean',)
+    lo_bandstop: Optional[types.LOBandstop] = None
+    trim_stopband: bool = True
+
+
+@subset_of(
+    sa.specs.CellularResourcePowerHistogram,
+    without=(
+        'subcarrier_spacing',
+        'guard_bandwidths',
+        'frame_slots',
+        'special_symbols',
+    ),
+)
+class CellularResourcePowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
+    window: types.WindowType
+    power_low: types.PowerBinMin
+    power_high: types.PowerBinMax
+    power_resolution: types.PowerBinStep
+    average_rbs: types.CellularAverageRBs = False
+    average_slots: types.CellularAverageSlots = False
+    cyclic_prefix: types.CellularCyclicPrefix = 'normal'
+    lo_bandstop: Optional[types.LOBandstop] = None
+
+
+@subset_of(
+    sa.specs.Cellular5GNRPSSCorrelator,
+    without=(
+        'subcarrier_spacing',
+        'sample_rate',
+        'frequency_offset',
+        'symbol_indexes',
+        'max_lag_symbols',
+    ),
+)
+class CellularPSSCorrelationSpec(SpecBase, frozen=True, kw_only=True):
+    discovery_periodicity: float = 20e-3
+    delay: float = 0.0
+    shared_spectrum: bool = False
+    max_block_count: Optional[int] = 1
+
+
+@subset_of(
+    sa.specs.Cellular5GNPSSSync,
+    without=(
+        'subcarrier_spacing',
+        'sample_rate',
+        'frequency_offset',
+        'symbol_indexes',
+        'max_lag_symbols',
+        'window_fill',
+    ),
+)
+class CellularPSSSyncSpec(SpecBase, frozen=True, kw_only=True):
+    discovery_periodicity: float = 20e-3
+    delay: float = 0.0
+    shared_spectrum: bool = False
+    per_port: types.PerPort = False
+    max_beams: Optional[types.MaxBeams] = None
+
+
+@subset_of(
+    sa.specs.Cellular5GNRSSBSpectrogram,
+    without=('subcarrier_spacing', 'sample_rate', 'frequency_offset'),
+)
+class CellularSSBSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
+    window: types.WindowType = 'blackmanharris'
+    discovery_periodicity: float = 20e-3
+    max_block_count: Optional[int] = None
+    lo_bandstop: Optional[types.LOBandstop] = None
+
+
+@subset_of(sa.specs.CyclicChannelPower, without=('cyclic_period', 'detector_period'))
+class CellularCyclicChannelPowerSpec(SpecBase, frozen=True, kw_only=True):
+    power_detectors: types.PowerDetectors = ('rms', 'peak')
+    cyclic_statistics: types.CyclicStatistics = ('min', 'mean', 'max')
+
+
+@subset_of(sa.specs.ChannelPowerTimeSeries, optional=('detector_period',))
+class CellularChannelPowerTimeSeriesSpec(SpecBase, frozen=True, kw_only=True):
+    detector_period: Optional[types.DetectorPeriod] = None
+    power_detectors: types.PowerDetectors = ('rms', 'peak')
+
+
+@subset_of(sa.specs.ChannelPowerHistogram, optional=('detector_period',))
+class CellularChannelPowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
+    power_low: types.PowerBinMin
+    power_high: types.PowerBinMax
+    power_resolution: types.PowerBinStep
+    detector_period: Optional[types.DetectorPeriod] = None
+    power_detectors: types.PowerDetectors = ('rms', 'peak')
+
+
+@subset_of(
+    sa.specs.CellularCyclicAutocorrelator,
+    without=('subcarrier_spacings', 'frame_slots', 'generation'),
+)
+class CellularCyclicAutocorrelationSpec(SpecBase, frozen=True, kw_only=True):
+    frame_range: Union[int, tuple[int, int]] = (0, 1)
+    symbol_range: Union[int, tuple[int, Union[int, None]]] = (0, None)
+
+
+@subset_of(sa.specs.IQWaveform)
+class CellularIQWaveformSpec(SpecBase, frozen=True, kw_only=True):
+    start_time_sec: Optional[float] = None
+    stop_time_sec: Optional[float] = None
+
+
+class Cellular5GNRAnalysis(SpecBase, frozen=True, kw_only=True):
+    """the per-measurement settings of a `Cellular5GNRSweep`.
+
+    Each field is named for a measurement. A field set to ``None`` disables the
+    measurement. A block enables the measurement and exposes only the parameters that
+    the channel does not fix. The remaining parameters are set from the `cell_channels`
+    entry at the center frequency of the capture and from the subcarrier spacing, or
+    stay at the measurement default.
+    """
+
+    spectrogram: Optional[CellularSpectrogramSpec] = None
+    power_spectral_density: Optional[CellularPowerSpectralDensitySpec] = None
+    cellular_resource_power_histogram: Optional[CellularResourcePowerHistogramSpec] = (
+        None
+    )
+    cellular_5g_pss_correlation: Optional[CellularPSSCorrelationSpec] = None
+    cellular_5g_pss_sync: Optional[CellularPSSSyncSpec] = None
+    cellular_5g_ssb_spectrogram: Optional[CellularSSBSpectrogramSpec] = None
+    cyclic_channel_power: Optional[CellularCyclicChannelPowerSpec] = None
+    channel_power_time_series: Optional[CellularChannelPowerTimeSeriesSpec] = None
+    channel_power_histogram: Optional[CellularChannelPowerHistogramSpec] = None
+    cellular_cyclic_autocorrelation: Optional[CellularCyclicAutocorrelationSpec] = None
+    iq_waveform: Optional[CellularIQWaveformSpec] = None
+
+
+class Cellular5GNRSweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+    """the spec of a sweep over 5G NR channels.
+
+    `captures` are the binding's own capture type and name a channel by
+    `center_frequency`; `cell_channels` maps a label to the `CellChannel` with that
+    center frequency. The runner derives the `sample_rate` and `analysis_bandwidth` of
+    each capture from the matched channel and generates the `Sweep` analysis from
+    `analysis`. A capture leaves `sample_rate` and `analysis_bandwidth` at the class
+    defaults. Every channel a capture uses must share one subcarrier spacing.
+    A loop over `center_frequency` is rejected; the channels are listed as captures
+    instead. The binding's capture type must have a `center_frequency` field.
+    """
+
+    sink: ZarrSink = ZarrSink()
+    plot_hint: Union[PlotOptions, None] = None
+    options: SweepOptions = SweepOptions()
+    cell_channels: dict[str, CellChannel]
+    analysis: Cellular5GNRAnalysis = Cellular5GNRAnalysis()
+
+    def __post_init__(self) -> None:
+        from . import action
+
+        # before the generic loop checks of CapturePlan, whose collision error would
+        # otherwise name the same loop with a less specific message
+        for i, loop in enumerate(self.loops):
+            if getattr(loop, 'field', None) == 'center_frequency':
+                raise SpecValidationError(
+                    'Expected no loop over center_frequency: list the channels as '
+                    'captures',
+                    (f'.loops[{i}]', '.field'),
+                )
+        super().__post_init__()
+        seen: dict[float, str] = {}
+        for label, channel in self.cell_channels.items():
+            other = seen.setdefault(channel.center_frequency, label)
+            if other != label:
+                raise SpecValidationError(
+                    f'Expected unique center frequencies, but {other!r} and '
+                    f'{label!r} share {channel.center_frequency!r}',
+                    ('.cell_channels', f'[{label!r}]', '.center_frequency'),
+                )
+        action.validate_action(self)
+
+    @classmethod
+    def check_schema(cls, schema: Any) -> None:
+        if 'center_frequency' not in schema.capture.__struct_fields__:
+            raise TypeError(
+                f'{cls.__name__} needs a capture type with a center_frequency field, '
+                f'but {schema.capture.__name__} has none'
             )
 
 
@@ -452,9 +833,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     sweep_index: int = 0
     capture_index: int = 0
 
-    # sa.Trigger is excluded from this union because msgspec fails to resolve it
-    # on python 3.9
-    signal_trigger: Union[str, None] = None
+    signal_trigger: Union[Trigger, None] = None
 
     def replace(self, **attrs) -> _Self:
         """returns a copy of self with changed attributes.

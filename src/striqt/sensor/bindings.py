@@ -1,23 +1,27 @@
-"""
-A registry of bindings between spec classes and IQ acquisition control classes.
-Each binding defines a sensor. Extension modules can bind peripherals and
-additional spec fields.
+"""the built-in sensor bindings.
+
+Each binding pairs a source backend with the spec types that configure the
+backend. The ``sensor_binding`` key of a sweep file selects a binding by name.
+Extension modules bind further sensors with the same calls.
 """
 
+import dataclasses
+
 from . import specs
-from .lib import sources, peripherals, sinks
-from .lib.bindings import Sensor, bind_sensor, SensorBinding
+from .lib import sources, peripherals
+from .lib.bindings import (
+    Sensor,
+    SensorBinding,
+    bind_manual_yfactor_calibration,
+    bind_sensor,
+)
 from .lib.controller import Controller
 from .specs import Schema
-from .lib.calibration import bind_manual_yfactor_calibration
 
 # %% Synthetic data sources for testing/warmup/post-analysis
 warmup = bind_sensor(
     'warmup',
-    Sensor(
-        source_cls=sources.NoSource,
-        sink_cls=sinks.NoSink,
-    ),
+    Sensor(source_cls=sources.NoSource),
     Schema(
         source=specs.NoSource,
         init_like=specs.NoSource,
@@ -38,15 +42,6 @@ mat_file = bind_sensor(
         arm_like=specs.FileCapture,
         peripherals=specs.NoPeripherals,
     ),
-)
-
-
-schema = Schema(
-    source=specs.MATSource,
-    init_like=specs.MATSource,
-    capture=specs.FileCapture,
-    arm_like=specs.FileCapture,
-    peripherals=specs.NoPeripherals,
 )
 
 
@@ -139,7 +134,17 @@ air7101b = bind_sensor(
     ),
 )
 
-air7101b_calibration = bind_manual_yfactor_calibration('air7101b_calibration', air7101b)
+air7101b_calibration = bind_sensor(
+    'air7101b_calibration',
+    air7101b.sensor,
+    dataclasses.replace(air7101b.schema, action=specs.ManualYFactorCalibration),
+)
+
+air7101b_cellular = bind_sensor(
+    'air7101b_cellular',
+    air7101b.sensor,
+    dataclasses.replace(air7101b.schema, action=specs.Cellular5GNRSweep),
+)
 
 air7201b = bind_sensor(
     'air7201b',
@@ -153,7 +158,17 @@ air7201b = bind_sensor(
     ),
 )
 
-air7201b_calibration = bind_manual_yfactor_calibration('air7201b_calibration', air7201b)
+air7201b_calibration = bind_sensor(
+    'air7201b_calibration',
+    air7201b.sensor,
+    dataclasses.replace(air7201b.schema, action=specs.ManualYFactorCalibration),
+)
+
+air7201b_cellular = bind_sensor(
+    'air7201b_cellular',
+    air7201b.sensor,
+    dataclasses.replace(air7201b.schema, action=specs.Cellular5GNRSweep),
+)
 
 air8201b = bind_sensor(
     'air8201b',
@@ -167,5 +182,14 @@ air8201b = bind_sensor(
     ),
 )
 
+air8201b_calibration = bind_sensor(
+    'air8201b_calibration',
+    air8201b.sensor,
+    dataclasses.replace(air8201b.schema, action=specs.ManualYFactorCalibration),
+)
 
-air8201b_calibration = bind_manual_yfactor_calibration('air8201b_calibration', air8201b)
+air8201b_cellular = bind_sensor(
+    'air8201b_cellular',
+    air8201b.sensor,
+    dataclasses.replace(air8201b.schema, action=specs.Cellular5GNRSweep),
+)

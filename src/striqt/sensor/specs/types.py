@@ -30,6 +30,19 @@ ArrayBackend = Annotated[
     Meta('array module to use to set compute device: numpy = cpu, cupy = gpu'),
 ]
 BackendSampleRate = Annotated[float, Meta('Source sample rate', 'S/s', gt=0)]
+ChannelBandwidth = Annotated[
+    float, Meta('nominal 5G NR channel bandwidth (3GPP TS 38.104)', 'Hz', gt=0)
+]
+ChannelGuardBandwidths = Annotated[
+    tuple[float, float],
+    Meta('guard bandwidths trimmed from the [low, high] channel edges', 'Hz'),
+]
+SSBFrequencyOffset = Annotated[
+    float, Meta('offset of the SSB center from the channel center frequency', 'Hz')
+]
+MinSampleRate = Annotated[
+    float, Meta('lower bound on the sample rate derived for the channel', 'S/s', gt=0)
+]
 MasterClockRate = Annotated[
     float, Meta('Base sample rate used inside the source', 'Hz', gt=0)
 ]
@@ -93,7 +106,6 @@ ModuleName = Annotated[
     Union[str, None],
     Meta('name of the extension module that calls bind_sensor'),
 ]
-NoiseDiodeEnabled = Annotated[bool, Meta(standard_name='Noise diode enabled')]
 OnOverflow = Literal['ignore', 'except', 'log']
 PortScalar = Annotated[int, Meta('Input port index', ge=0)]
 Port = Annotated[
@@ -105,10 +117,6 @@ Power = Annotated[float, Meta('peak power level', 'dB')]
 Period = Annotated[float, Meta('waveform period', 's', ge=0)]
 ReceiveRetries = Annotated[
     int, Meta('number of acquisition retry attempts on stream error', ge=0)
-]
-SinkClass = Annotated[
-    Union[str, Literal['striqt.sensor.sinks.CaptureAppender']],
-    Meta('Data sink class that implements data storage'),
 ]
 SNR = Annotated[
     float, Meta('Add circular white gaussian noise to achieve this SNR', 'dB')

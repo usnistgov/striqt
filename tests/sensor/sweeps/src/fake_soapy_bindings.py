@@ -6,6 +6,8 @@ spec mirrors the Airstack defaults except that it runs on numpy.
 
 from __future__ import annotations
 
+import dataclasses
+
 from striqt.sensor import bindings, peripherals, sources, specs
 
 
@@ -31,6 +33,13 @@ _schema = bindings.Schema(
 )
 fake_soapy = bindings.bind_sensor('fake_soapy', _sensor, _schema)
 
-fake_soapy_calibration = bindings.bind_manual_yfactor_calibration(
-    'fake_soapy_calibration', fake_soapy
+fake_soapy_calibration = bindings.bind_sensor(
+    'fake_soapy_calibration',
+    _sensor,
+    dataclasses.replace(_schema, action=specs.ManualYFactorCalibration),
+)
+fake_soapy_cellular = bindings.bind_sensor(
+    'fake_soapy_cellular',
+    _sensor,
+    dataclasses.replace(_schema, action=specs.Cellular5GNRSweep),
 )

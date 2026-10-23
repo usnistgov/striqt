@@ -170,15 +170,11 @@ class TestOafilter:
         assert level_error_dB(rms(yi)) < -40
         assert level_error_dB(yi).max() < -25
 
-    def test_downsample_length(self):
+    def test_downsample_length_and_level(self):
         x = self._tone(0.05e6)
         nfft_out = self.NFFT // 2
         y = self._oafilter(x, nfft_out=nfft_out)
         assert y.shape == (round(x.size * nfft_out / self.NFFT),)
-
-    def test_downsample_preserves_level(self):
-        nfft_out = self.NFFT // 2
-        y = self._oafilter(self._tone(0.05e6), nfft_out=nfft_out)
         assert_tone_level(interior(y, nfft_out))
 
 

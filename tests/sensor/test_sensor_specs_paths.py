@@ -14,7 +14,7 @@ from conftest import SITE_SPEC
 from hypothesis import given
 from hypothesis import strategies as st
 from site_strategies import OTHER_ID, RADIO_ID
-from sweep_strategies import make_sweep
+from sweep_strategies import SOURCE, ActionCls, make_sweep
 
 import striqt.sensor as ss
 
@@ -54,11 +54,6 @@ def test_path_fields_with_spec_path(synthetic_sweep, synthetic_spec_path):
     assert re.fullmatch(r'\d{8}-\d{2}h\d{2}m\d{2}', fields['start_time'])
 
 
-def test_path_fields_without_spec_path(synthetic_sweep):
-    fields = P.get_path_fields(synthetic_sweep, source_id='abcd')
-    assert set(fields) == {'start_time', 'sensor_binding', 'source_id'}
-
-
 def test_path_fields_accept_a_callable_source_id(synthetic_sweep):
     fields = P.get_path_fields(synthetic_sweep, source_id=lambda: 'abcd')
     assert fields['source_id'] == 'abcd'
@@ -70,6 +65,12 @@ def test_path_fields_include_fixed_adjustments_only():
     fields = P.get_path_fields(sweep, source_id='abcd')
     assert fields['lo_shift'] == 'left'
     assert 'snr' not in fields
+
+
+def test_path_fields_of_an_action_spec_without_captures():
+    fields = P.get_path_fields(ActionCls(source=SOURCE), source_id='abcd')
+    assert set(fields) == {'start_time', 'sensor_binding', 'source_id'}
+    assert fields['sensor_binding'] == 'ActionCls'
 
 
 def test_path_fields_only_string_fixed_values_from_site_files(site_sweep):

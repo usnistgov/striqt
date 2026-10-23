@@ -96,12 +96,17 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     coord_factories=[iq_index],
     spec_type=specs.IQWaveform,
     dtype='complex64',
-    attrs={'standard_name': 'IQ waveform', 'units': 'V/√Ω'},
+    attrs={'standard_name': 'IQ waveform', 'units': '√mW'},
     store_compressed=False,
     tolerance=iq_waveform_tolerance,
 )
 def iq_waveform(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """package the IQ waveform as a measurement result.
+
+    The values are in √mW, and ``|iq|**2`` is power in mW. The output has no
+    `noise_bandwidth` attr. The noise bandwidth of each capture is the
+    `analysis_bandwidth` coordinate, or `sample_rate` where `analysis_bandwidth` is
+    infinite.
 
     Args:
     {args}
@@ -109,6 +114,9 @@ def iq_waveform(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement
 
     spec = specs.IQWaveform.from_dict(kwargs)
 
+    # no noise_bandwidth attr: the bandwidth is the capture's analysis_bandwidth (or
+    # sample_rate), which can differ between the captures of one sweep, and a variable
+    # attr is written once per store. Readers use the analysis_bandwidth coordinate.
     metadata = spec.to_dict()
 
     start, stop = _get_start_stop_index(capture, spec)

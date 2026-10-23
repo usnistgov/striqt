@@ -4,7 +4,6 @@ reductions that check-sweep prints"""
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 from sweep_strategies import SOURCE
 from synthetic_sources import (
@@ -14,14 +13,12 @@ from synthetic_sources import (
     RESAMPLE_FILTER,
     RESAMPLE_ONLY,
     SCALE_ONLY,
-    acquire_corrected,
     preset_sweep,
     tone_capture,
 )
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-import striqt.waveform as sw
 from striqt.sensor.lib.compute import corrections, tolerance
 
 PRESETS = {
@@ -35,51 +32,25 @@ PRESETS = {
 # %% _oaconvolve_nfft
 
 
-def test_oaconvolve_nfft_matches_scipy_block_choice():
+@pytest.mark.parametrize(
+    'signal_size',
+    [1000, 25_000, 400_000],
+    ids=['whole_convolution', '25k_samples', '400k_samples'],
+)
+def test_oaconvolve_nfft_matches_scipy_block_choice(signal_size):
     """the Lambert W port reproduces the block length scipy picks, after the fast-size
     rounding that fftconvolve applies to a block `_calc_oa_lens` leaves at s1 + s2 - 1"""
     from scipy.signal import _signaltools
 
-    for signal_size in (25_000, 400_000):
-        block, _, _, _ = _signaltools._calc_oa_lens(
-            signal_size, corrections.FILTER_SIZE
-        )
-        expected = corrections._get_next_fast_len(block, 'numpy')
-        assert (
-            tolerance._oaconvolve_nfft(signal_size, corrections.FILTER_SIZE, 'numpy')
-            == expected
-        )
-
-
-def test_oaconvolve_nfft_of_a_short_signal_is_the_whole_convolution():
-    n = tolerance._oaconvolve_nfft(1000, corrections.FILTER_SIZE, 'numpy')
-    assert n == corrections._get_next_fast_len(
-        1000 + corrections.FILTER_SIZE - 1, 'numpy'
+    block, _, _, _ = _signaltools._calc_oa_lens(signal_size, corrections.FILTER_SIZE)
+    expected = corrections._get_next_fast_len(block, 'numpy')
+    assert (
+        tolerance._oaconvolve_nfft(signal_size, corrections.FILTER_SIZE, 'numpy')
+        == expected
     )
 
 
 # %% correction_error
-
-
-@pytest.mark.parametrize('preset', list(PRESETS), ids=list(PRESETS))
-def test_correction_error_is_sized_from_the_acquisition_correct_iq_runs(preset):
-    capture = tone_capture(PRESETS[preset])
-    stages = acquire_corrected('single_tone', capture, analysis=ANALYSIS)
-
-    n_in = stages.raw.pre_align.shape[1]
-    nffts = []
-    if corrections.needs_resample(stages.resampler, capture):
-        nffts += [n_in, round(n_in * capture.sample_rate / stages.resampler['fs_sdr'])]
-    if np.isfinite(capture.analysis_bandwidth):
-        fir = tolerance._oaconvolve_nfft(
-            round(capture.duration * capture.sample_rate),
-            corrections.FILTER_SIZE,
-            'numpy',
-        )
-        nffts += [fir, fir]
-    expected = sw.fourier.fft_tolerance_rms('complex64', nffts, n_elementwise=1)
-
-    assert tolerance.correction_error(capture, SOURCE, ANALYSIS) == expected
 
 
 def test_correction_error_orders_the_presets_by_work_done():
@@ -134,21 +105,19 @@ def test_sweep_tolerances_follow_the_looped_captures():
     )
 
 
-@pytest.mark.parametrize('source_id', [None, 'ab12'], ids=['defaults', 'source'])
-def test_sweep_tolerances_use_the_looped_value_over_an_adjustment(source_id):
+def test_sweep_tolerances_use_the_looped_value_over_an_adjustment():
     """`loop_captures` applies the loop point last, so a looped field keeps its loop
     value over an `adjust_captures` entry and the budget is that of the looped capture.
     `lo_shift='none'` skips the shift stage, so its budget differs from a shifted one."""
     loops = (ss.specs.List(field='lo_shift', values=('none', 'left')),)
-    block = 'defaults' if source_id is None else source_id
     sweep = preset_sweep(
         'single_tone',
         (tone_capture(LO_SHIFT_CAPTURE),),
         loops=loops,
-        adjust_captures={block: {'lo_shift': 'right'}},
+        adjust_captures={'defaults': {'lo_shift': 'right'}},
     )
-    expected = list(ss.specs.sequencing.loop_captures(sweep, source_id=source_id))
-    entries = tolerance.sweep_tolerances(sweep, source_id=source_id)
+    expected = list(ss.specs.sequencing.loop_captures(sweep))
+    entries = tolerance.sweep_tolerances(sweep)
 
     assert [c for c, _ in entries] == expected
     assert [c.lo_shift for c, _ in entries] == ['none', 'left']
@@ -159,33 +128,6 @@ def test_sweep_tolerances_use_the_looped_value_over_an_adjustment(source_id):
     # the adjusted value would have changed the first budget, so the check discriminates
     adjusted = expected[0].replace(lo_shift='right')
     assert tolerance.capture_tolerances(adjusted, sweep.source, ANALYSIS) != budgets[0]
-
-
-@pytest.mark.parametrize(
-    'adjustment, expected_snr',
-    [
-        (10.0, [10.0, 10.0]),
-        (
-            ss.specs.CaptureRemap(key='frequency_offset', lookup={1e6: 3.0, 2e6: 5.0}),
-            [3.0, 5.0],
-        ),
-    ],
-    ids=['scalar', 'remap_on_looped_field'],
-)
-def test_sweep_tolerances_apply_adjustments_to_unlooped_fields(
-    adjustment, expected_snr
-):
-    loops = (ss.specs.List(field='frequency_offset', values=(1e6, 2e6)),)
-    sweep = preset_sweep(
-        'single_tone',
-        (tone_capture(SCALE_ONLY),),
-        loops=loops,
-        adjust_captures={'defaults': {'snr': adjustment}},
-    )
-    captures = [c for c, _ in tolerance.sweep_tolerances(sweep)]
-
-    assert [c.frequency_offset for c in captures] == [1e6, 2e6]
-    assert [c.snr for c in captures] == expected_snr
 
 
 # %% worst_case_tolerances

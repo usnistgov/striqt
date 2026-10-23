@@ -23,7 +23,7 @@ def registered_tolerance(capture, spec, **kwargs) -> sa.specs.Tolerance:
     """the tolerance registered for the measurement that `spec` selects, fetched
     through the registry walk a consumer would use"""
     name = sa.registry[type(spec)].name
-    group = sa.registry.tospec()(**{name: spec})
+    group = sa.specs.BuiltinAnalyses(**{name: spec})
     return sa.registry.tolerances(capture, group, **kwargs)[name]
 
 
@@ -497,9 +497,3 @@ def json_trees(max_leaves: int = 25):
 
 hashable_values = st.one_of(scalars, st.tuples(scalars, scalars))
 frozendict_dicts = st.dictionaries(dict_keys, hashable_values, max_size=6)
-unhashable_values = st.one_of(
-    st.lists(scalars, max_size=3), st.dictionaries(dict_keys, scalars, max_size=3)
-)
-unhashable_frozendicts = st.dictionaries(
-    dict_keys, unhashable_values, min_size=1, max_size=4
-).map(frozendict)

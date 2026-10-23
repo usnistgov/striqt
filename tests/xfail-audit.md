@@ -25,8 +25,18 @@ the same change without giving them a number (listed under "Fixed on 2026-09-18
 without a ledger number" below). Item 90 was added on 2026-09-23 by the
 sweep-validation pass, and item 91 on 2026-09-24 as the first entry under "Tool
 limitations": a gap in the type checker rather than in striqt, kept as a strict
-xfail so that the `ty` upgrade that closes it surfaces as an xpass. Items
-are listed in priority order, not numeric order.
+xfail so that the `ty` upgrade that closes it surfaces as an xpass. Items 39
+and 41 were fixed on 2026-10-21 by the actions refactor of `striqt.sensor`
+(`sensor/lib/actions/`), and items 14 and 48 retired with it the same day: the
+calibration runner now acquires each port with the diode off and on itself, so no
+loop is inserted (14), and `save_yfactor_corrections` assigns `calibration_fields` to the
+saved corrections (48). Items 22 and 86 were fixed on 2026-10-22 by replacing the
+`msgspec.defstruct`-generated `BundledAnalysis`/`BundledTriggers` with the hand-written
+`specs.BuiltinAnalyses`/`specs.BuiltinTriggers` (the old names are aliases):
+`Source.signal_trigger` is annotated with the trigger bundle, `SoapySource.__post_init__`
+accepts it when exactly one trigger is enabled, and `striqt.analysis.measurements` checks
+at import that the registry and the bundles agree (`xfailed` 43 to 41 on both
+interpreters; 35 to 33 markers). Items are listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -84,7 +94,6 @@ item is open.
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
 | 44 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]` | High | B | trivial |
 | 52 | `TestSoapySourceClose::test_close_releases_the_stream_and_device` | High | B | trivial |
-| 14 | `test_leading_repeat_is_accepted` | High | B | easy |
 | 16 | `test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys` | High | B | trivial |
 | 62 | `test_three_deep_adjust_analysis_is_hashable` | High | B | small |
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
@@ -93,13 +102,11 @@ item is open.
 | 10 | `test_chained_remap_declared_before_its_key_resolves` | Medium | B | moderate |
 | 45 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]` | Medium | B | easy |
 | 82 | `test_zarr_resampler_pins_file_rate` | High | C | design |
-| 86 | `test_get_trigger_from_an_analysis_group_trigger` | High | C | easy |
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
 | 53 | `test_capture_changes_port` | High | C | easy |
 | 54 | `TestSoapySourceSetup::test_initial_ports_on_a_non_stream_all_source` | High | C | trivial |
 | 70 | `TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports` | High | C | easy |
 | 20 | `test_list_port_direct_is_frozen`; `test_var_tuple_list_is_frozen_on_direct_construction`; `test_freeze_depths_count_dict_list_and_tuple_nesting`; `test_freeze_depths_of_real_specs`; `test_direct_struct_with_list_validates_and_replaces` | High | C | trivial |
-| 22 | `test_analysis_group_accepted` | High | C | moderate |
 | 24 | `test_recurses_into_frozendict` | High | C | trivial |
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
 | 55 | `TestHardwareTimeSync::test_call_returns_the_sync_time` | High | C | trivial |
@@ -107,11 +114,8 @@ item is open.
 | 23 | `test_second_directory_with_the_same_import_name_is_imported` | High | C | design |
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
-| 48 | `TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields` | High | D | trivial |
-| 41 | `test_message_names_the_field` | High | D | trivial |
 | 56 | `TestHardwareTimeSync::test_unsupported_source_names_itself` | High | D | trivial |
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
-| 39 | `test_calibration_capture_class_has_a_descriptive_name` | High | D | trivial |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
 ## Tier B: reachable from plausible YAML or a spec default
@@ -186,9 +190,9 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 44. A single-frequency calibration cannot be looked up
 
-`tests/sensor/test_sensor_calibration.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]`
+`tests/sensor/test_sensor_compute_cal_lookups.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]`
 
-- **Mechanism.** `calibration.py:572` calls `squeeze(drop=True)` before
+- **Mechanism.** `compute/cal_lookups.py:572` calls `squeeze(drop=True)` before
   `dropna('center_frequency')`, so a length-1 `center_frequency` dimension
   is gone by the time it is named, and xarray raises `ValueError`.
 - **Why the test is right.** The exact-match branch below it
@@ -209,22 +213,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   single sweep works; opening a second controller in one process, or the
   `Controller.close`/reopen path, relies on the driver tolerating it.
 - **Fix.** Rename the two lookups. Trivial.
-
-### 14. A leading `Repeat` breaks calibration loop insertion
-
-`tests/sensor/test_sensor_calibration.py::TestNoiseDiodeToggle::test_leading_repeat_is_accepted[*]`
-
-- **Mechanism.** `calibration.py:369-393` `_ensure_loop_at_position` only
-  allows for a leading `port` loop; `_validate_loops`
-  (`sensor/specs/sweep.py`) requires a `Repeat` to be first. The toggle
-  is inserted ahead of the `Repeat`, or the helper raises when the `Repeat` is
-  already first.
-- **Why the test is right.** The two constraints are stated in code and are
-  mutually exclusive as written.
-- **Impact.** No in-tree calibration YAML uses `kind: repeat`; any that adds
-  one fails to decode.
-- **Fix.** Offset the insert index by one when the first loop has no field.
-  Easy.
 
 ### 16. Remaps keyed on a fixed numeric alias reject numeric keys
 
@@ -319,13 +307,13 @@ tables draw their marks from the module's `scs_cp_layout` builder
 
 ### 45. Lookups require every exact-match field to be a dimension
 
-`tests/sensor/test_sensor_calibration.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]`
+`tests/sensor/test_sensor_compute_cal_lookups.py::TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]`
 
-- **Mechanism.** `calibration.py:554` selects the exact-match fields with
+- **Mechanism.** `compute/cal_lookups.py:554` selects the exact-match fields with
   `sel`, which needs an index. `lo_shift` is a dimension only when it was
   looped; otherwise it is a scalar (or multi-dimensional) coordinate,
   `sel` raises `KeyError`, and `_describe_missing_data` then iterates the
-  0-d coordinate at `calibration.py:521` and raises `TypeError`. xarray
+  0-d coordinate at `compute/cal_lookups.py:521` and raises `TypeError`. xarray
   2026.7 (the `test314` environment) raises `ValueError` from `sel` itself
   instead; the xfail accepts either.
 - **Why the test is right.** The scalar coordinate carries exactly the value
@@ -361,19 +349,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   `backend_sample_rate`, yet the overlap machinery has no access to the backend.
   Design decision; the xfail is kept whole so that it records that file
   resampling is broken end to end, not only the design.
-
-### 86. `Source.signal_trigger` cannot decode the analysis-group form
-
-`tests/sensor/test_sensor_compute_analyze.py::test_get_trigger_from_an_analysis_group_trigger`
-
-- **Mechanism.** `sensor/specs/structs.py:105` annotates `signal_trigger:
-  Union[str, AnalysisGroup, None]` with the fieldless `AnalysisGroup` base, so
-  `validate()` and YAML decoding reject any measurement key. The
-  `AnalysisGroup` branches of `_get_signal_trigger_name` and
-  `get_trigger_from_spec` (`analyze.py:50-75`) are unreachable through a
-  validated spec; `BundledTriggers` (`structs.py:307`) exists and is unused.
-- **Impact.** C. Only the string form works, which is what every YAML uses.
-- **Fix.** Annotate with `BundledTriggers`. Easy, but a schema change.
 
 ### 88. An analysis loop over an un-inferable field breaks `from_delayed`
 
@@ -460,22 +435,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Fix.** Add the `VarTupleType` branch. Trivial, but it also changes which
   fields `to_dict(unfreeze=True)` emits as lists in zarr attrs.
 
-### 22. `SoapySource.signal_trigger` rejects the `AnalysisGroup` form
-
-`tests/sensor/test_sensor_specs_structs.py::TestSignalTrigger::test_analysis_group_accepted`
-
-- **Mechanism.** `sensor/specs/structs.py:148` checks membership in the
-  trigger registry, which fails for a struct. `FunctionSource` accepts it, and
-  `compute/analyze.py:66` implements the group form.
-- **Why the test is right.** The annotation and `analyze.py` both intend it.
-  However the annotation is the bare `AnalysisGroup`, which has no fields, so
-  YAML cannot express it anyway; `BundledTriggers` (`structs.py:307`), the
-  type that should be there, cannot be introspected on py3.9 and is
-  unreferenced.
-- **Impact.** Dead path in production; every YAML uses the string form.
-- **Fix.** Relaxing the check is trivial; making it usable from YAML needs
-  `AlignmentSourceRegistry.to_spec()` fixed and used. Moderate.
-
 ### 24. `freeze` does not recurse into an existing `frozendict`
 
 `tests/analysis/test_analysis_specs_helpers.py::TestFreeze::test_recurses_into_frozendict`
@@ -544,9 +503,9 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 
 ### 46. Range error text embeds a DataArray repr
 
-`tests/sensor/test_sensor_calibration.py::TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz`
+`tests/sensor/test_sensor_compute_cal_lookups.py::TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz`
 
-- **Mechanism.** `calibration.py:580` and `:584` format
+- **Mechanism.** `compute/cal_lookups.py:580` and `:584` format
   `sel.center_frequency.max() / 1e6`, a 0-d `DataArray`, so the message
   reads `exceeds calibration max <xarray.DataArray ...> array(2000.) MHz`.
 - **Fix.** Wrap in `float()`. Trivial.
@@ -560,28 +519,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   `DecodeError` or `TypeError` ("bytes-like object") rather than a
   `ValidationError` naming the lookup key.
 - **Fix.** Catch and re-raise as `ValidationError` with the key. Trivial.
-
-### 48. The saved calibration loses `calibration_fields`
-
-`tests/sensor/test_sensor_calibration.py::TestYFactorSinkFlush::test_saved_attrs_record_the_calibration_fields`
-
-- **Mechanism.** `YFactorSink.flush` assigns `calibration_fields` and
-  `sweep_start_time` attrs at `calibration.py:184`, but
-  `_y_factor_power_corrections` returns a new `xr.Dataset`
-  (`calibration.py:458`) that carries none of the input attrs, and that is
-  what `io.save_calibration` writes.
-- **Impact.** Nothing in `src/` reads the attribute. Metadata only.
-- **Fix.** `.assign_attrs(by_field.attrs)` on the result. Trivial.
-
-### 41. `BoundSweep` error text says `mock_sensor`
-
-`tests/sensor/test_sensor_bindings.py::TestMockSource::test_message_names_the_field`
-
-- **Mechanism.** `bindings.py:120` names a stale field. `_convert_dict_spec`
-  raises a `KeyError` first, so the CLI never shows this text anyway.
-- **Fix.** String change. Trivial. On 2026-09-16 the stale `mock_sensor`
-  field on `BoundSweep` was renamed and the `SensorBinding` assertion fixed,
-  but the message still says `mock_sensor`, so the xfail stands.
 
 ### 56. Unsupported time source message is not an f-string
 
@@ -599,16 +536,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Mechanism.** `soapy.py:379`, a leftover `print('close stream')`.
 - **Fix.** Delete it, or log at DEBUG on the `source` logger. Trivial.
 
-### 39. The calibration capture class is named `capture_spec_cls`
-
-`tests/sensor/test_sensor_calibration.py::test_calibration_capture_class_has_a_descriptive_name`
-
-- **Mechanism.** `calibration.py:321` defines the class inline and renames
-  only the peripherals class (`calibration.py:339`).
-- **Impact.** Surfaces in the JSON schema `$defs`, the `adjust_captures`
-  error text, and the `Controller.arm` signature. Not in zarr attrs.
-- **Fix.** Set `__name__` and `__qualname__`. Trivial.
-
 ## Tool limitations
 
 Gaps in the checkers and test tooling the suite relies on, not in striqt. They are
@@ -624,7 +551,7 @@ it was standing in for is enabled.
 - **Mechanism.** `ty` 0.0.81 (the `dev` pin) lowers a `**kwargs:
   Unpack[SomeTypedDict]` parameter to `**kwargs: object`: `reveal_type` of
   `sensor/lib/compute/corrections.py:185` `design_resampler` ends in
-  `..., window: str = ..., **kwargs: object`, and `sensor/lib/execute.py:21`
+  `..., window: str = ..., **kwargs: object`, and `sensor/lib/actions/core.py:21`
   `iterate_sweep` in `..., **replace: object`. The known keys keep their
   declared types, so a wrong value (`bw_lo='x'`, `sink=3`) and a missing required
   key are reported, but a keyword that is not in the TypedDict
@@ -646,15 +573,12 @@ it was standing in for is enabled.
 
 ## Observations without an xfail
 
-- **Ambient temperature is not used.** `_y_factor_power_corrections` takes
-  every temperature from `Tref` (290 K, by convention) and never reads
-  `calibration.ambient_temperature`; the tests use a receiver model at 290 K
-  and so cannot tell. The user is opening an issue for this. The only code that
-  did take an ambient temperature, `_y_factor_temperature` (and its dead
-  caller `_y_factor_frequency_response_correction`), was removed on
-  2026-09-16; it had defined `Ton = Tref * 10**(ENR/10)` without the `+1`
-  that the IEEE ENR definition implies and that the live formula
-  `NF = ENR_dB - 10 log10(Y - 1)` relies on.
+- **Ambient temperature is not used.** `actions/yfactor.py:compute_y_factor_corrections`
+  takes the ENR and `Tref` (290 K) as arguments and reads nothing else from the
+  `calibration:` block; `ManualYFactorSpec.ambient_temperature` is recorded in the
+  spec and nowhere else. Resolved on 2026-10-21 to the extent that the value no
+  longer rides along as a per-capture data variable; whether it should replace
+  `Tref` is still open.
 
 - **`open_resources` never restores the working directory.**
   `resources.py:200` `chdir`s to the spec directory and nothing undoes it, so
@@ -665,9 +589,9 @@ it was standing in for is enabled.
   directory (zarr 2.18's `DirectoryStore` absolutises its own path, so
   directory stores are unaffected). `test_sensor_sweeps` restores the cwd itself.
 
-- **`summarize_calibration` labels a linear column as dB.** `calibration.py:39`
+- **`summarize_calibration` labels a linear column as dB.** `compute/cal_lookups.py:39`
   names the column `Power Corr (dB)` but `_summarize_calibration_field`
-  returns `power_correction` unchanged (units `mW/fs`). Whether the label or
+  returns `power_correction` unchanged (units `mW/FS`). Whether the label or
   the value is the mistake is a judgment call, so the xfail that recorded it
   (item 47) was withdrawn; the mismatch itself remains.
 
@@ -694,14 +618,14 @@ it was standing in for is enabled.
   a float32 view, while the int16 path yields exactly `acquired_count`. Harmless
   while `read_iq` passes the full buffer width; tested only at full width.
 
-- **`mock_binding(register=False)` still extends the tagged union.**
-  `lib/bindings.py:129-133` appends the mock `BoundSweep` to `tagged_sweeps`,
-  so after any warmup a YAML with `sensor_binding: mock_warmup_single_tone`
-  decodes.
+- **`mock_binding(register=False)` extended the tagged union** until 2026-10-21.
+  `bind_sensor` now adds a tagged class to `tagged_sweeps` only when it registers
+  the binding, so a YAML with `sensor_binding: mock_warmup_single_tone` no longer
+  decodes after a warmup (`test_unregistered_binding_stays_out_of_the_union`).
 
 - **`cancel_threads()` from a peripheral does not stop a main-thread sweep.**
   `propagate_thread_interrupts` is a no-op on the main thread by design and the
-  function sources never check the flag; `test_sensor_execute.py` consumes
+  function sources never check the flag; `test_sensor_actions_core.py` consumes
   `iterate_sweep` in a worker thread to observe the interrupt.
 
 - **`ZarrTimeAppendSink` concatenates along time only within a batch.**

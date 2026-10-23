@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import dataclasses
 
-import msgspec
 import numpy as np
 import pytest
+import xarray as xr
 from sweep_strategies import SOURCE
 from synthetic_sources import (
     ANALYSIS,
@@ -26,9 +26,10 @@ from striqt.sensor.lib import compute
 (CAPTURE,) = tone_captures((1e6,))
 SWEEP = preset_sweep('single_tone', (CAPTURE,), analysis=IQ_ONLY)
 
-PSS = ss.specs.BundledAnalysis.from_dict({
+PSS = ss.specs.BuiltinAnalyses.from_dict({
     'cellular_5g_pss_sync': {'subcarrier_spacing': 30e3}
 })
+PSS_BUNDLE = ss.specs.BuiltinTriggers(cellular_5g_pss_sync=PSS.cellular_5g_pss_sync)
 
 
 def options(**kws):
@@ -53,20 +54,17 @@ def fresh_raw(stages):
 # %% analyze
 
 
-def test_delayed_result_matches_correct_iq(stages):
-    dd = compute.analyze(
-        fresh_raw(stages), options(correction=True, as_xarray='delayed')
+@pytest.mark.parametrize(
+    'as_xarray, container',
+    [('delayed', compute.DelayedDataset), (True, xr.Dataset)],
+    ids=['delayed', 'dataset'],
+)
+def test_analyze_result_matches_correct_iq(stages, as_xarray, container):
+    result = compute.analyze(
+        fresh_raw(stages), options(correction=True, as_xarray=as_xarray)
     )
-    assert isinstance(dd, compute.DelayedDataset)
-    ds = compute.from_delayed(dd)
-    assert np.array_equal(ds.iq_waveform.values, stages.corrected.pre_align)
-
-
-def test_as_xarray_true_returns_a_dataset(stages):
-    import xarray as xr
-
-    ds = compute.analyze(fresh_raw(stages), options(correction=True, as_xarray=True))
-    assert isinstance(ds, xr.Dataset)
+    assert isinstance(result, container)
+    ds = result if as_xarray is True else compute.from_delayed(result)
     assert np.array_equal(ds.iq_waveform.values, stages.corrected.pre_align)
 
 
@@ -139,6 +137,16 @@ TRIGGER_CASES = {
         None,
         ValueError,
     ),
+    'bundle_without_analysis': (
+        SOURCE.replace(signal_trigger=PSS_BUNDLE),
+        None,
+        'pss',
+    ),
+    'bundle_with_other_analysis': (
+        SOURCE.replace(signal_trigger=PSS_BUNDLE),
+        IQ_ONLY,
+        'pss',
+    ),
 }
 
 
@@ -153,20 +161,8 @@ def test_get_trigger_from_spec(case):
     else:
         trigger = compute.get_trigger_from_spec(source, analysis)
         assert isinstance(trigger, sa.Trigger)
+        assert trigger.info.name == 'cellular_5g_pss_sync'
         assert trigger.meas_spec == PSS.cellular_5g_pss_sync
-
-
-@pytest.mark.xfail(
-    strict=True,
-    raises=msgspec.ValidationError,
-    reason='Source.signal_trigger annotates the group form as the fieldless '
-    'AnalysisGroup base, so validation rejects every measurement key and the '
-    'AnalysisGroup branches of get_trigger_from_spec are unreachable '
-    '(sensor/specs/structs.py:105)',
-)
-def test_get_trigger_from_an_analysis_group_trigger():
-    trigger = compute.get_trigger_from_spec(SOURCE.replace(signal_trigger=PSS), None)
-    assert trigger.meas_spec == PSS.cellular_5g_pss_sync
 
 
 # %% prepare_compute

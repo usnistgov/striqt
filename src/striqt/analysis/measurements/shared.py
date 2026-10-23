@@ -1,5 +1,6 @@
 from __future__ import annotations as __
 
+import math
 from typing import TYPE_CHECKING, Any, Callable
 
 import striqt.waveform as sw
@@ -25,6 +26,57 @@ def hint_keywords(
 
 def capture_sample_count(capture: specs.Capture) -> int:
     return round(capture.duration * capture.sample_rate)
+
+
+def capture_noise_bandwidth(capture: specs.Capture) -> float:
+    """return the noise bandwidth (in Hz) of the IQ that a measurement receives.
+
+    The IQ is low-pass filtered to `analysis_bandwidth` when that is finite. Otherwise
+    the resampler passband spans the full `sample_rate`.
+    """
+    if math.isfinite(capture.analysis_bandwidth):
+        return float(capture.analysis_bandwidth)
+    else:
+        return float(capture.sample_rate)
+
+
+def bandwidth_attrs(
+    noise_bandwidth: float,
+    units: str,
+    quantity: str,
+    *,
+    resolution_bandwidth: float | None = None,
+) -> dict[str, Any]:
+    """return the attrs of a power output with the noise bandwidth `noise_bandwidth`.
+
+    White noise with power spectral density N0 has a mean power of
+    ``N0 * noise_bandwidth`` in the output. A calibrated noise density in dBm/Hz plus
+    ``10*log10(noise_bandwidth)`` is therefore the expected noise level of the output.
+
+    Args:
+        noise_bandwidth: in Hz
+        units: the unit of the output values without a bandwidth, ``'dBm'`` or ``'√mW'``
+        quantity: the name of the output, which starts `long_name`
+        resolution_bandwidth: the equivalent noise bandwidth (in Hz) of the analysis
+            window of a spectrum, which sets the output level of a CW tone; None
+            omits the key
+
+    Returns:
+        a dict with ``'units'``, ``'noise_bandwidth'``, ``'long_name'`` as
+        ``'<quantity> (<units>/<bandwidth>)'`` such as
+        ``'Power spectral density (dBm/360 kHz)'``, and ``'resolution_bandwidth'``
+        when given
+    """
+    from ..lib.dataarrays import format_units
+
+    attrs: dict[str, Any] = {
+        'units': units,
+        'noise_bandwidth': float(noise_bandwidth),
+        'long_name': f'{quantity} ({units}/{format_units(noise_bandwidth, "Hz")})',
+    }
+    if resolution_bandwidth is not None:
+        attrs['resolution_bandwidth'] = float(resolution_bandwidth)
+    return attrs
 
 
 def check_statistics(field: str, statistics: Sequence[str | float]) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from pathlib import Path
 
@@ -13,6 +14,23 @@ from sweep_strategies import SweepCls, make_sweep, make_sweep_kws
 import striqt.sensor as ss
 
 MOCK_MSG = 'no sensor was bound with this name'
+
+TONE = ss.bindings.single_tone
+
+
+def tone_sensor(**kws) -> ss.bindings.Sensor:
+    return ss.bindings.Sensor(source_cls=TONE.sensor.source_cls, **kws)
+
+
+def tone_schema(**kws) -> ss.bindings.Schema:
+    return ss.bindings.Schema(
+        source=TONE.schema.source,
+        init_like=TONE.schema.source,
+        capture=TONE.schema.capture,
+        arm_like=TONE.schema.capture,
+        peripherals=TONE.schema.peripherals,
+        **kws,
+    )
 
 
 # %% registry and tagged sweep type
@@ -26,17 +44,104 @@ def test_tagged_union_arms_match_the_registry():
         assert registry[t.tag].sensor.sweep_spec_cls is t.cls
 
 
-def test_yaml_schema_binding():
+def test_yaml_spec_decodes_into_the_tagged_class_of_its_binding(subtests):
+    """the tagged class of a plain sweep binding is its own `sweep_cls`, its
+    `controller` is the registered controller class, and its `sensor` is the
+    `SensorBinding` of `get_controller(spec)`"""
     spec = ss.read_yaml_spec(SWEEP_DIR / 'air7101b.yaml')
     ctrl_cls = ss.bindings.air7101b
-    schema = ctrl_cls.schema
+    cls = type(spec)
 
-    assert isinstance(spec.captures[0], schema.capture), 'capture binding mismatch'
-    assert isinstance(spec.peripherals, schema.peripherals), 'periph binding mismatch'
-    assert isinstance(spec.source, schema.source), 'source binding mismatch'
-    assert isinstance(spec, ctrl_cls.sensor.sweep_spec_cls), (
-        'sweep spec binding mismatch'
-    )
+    with subtests.test(msg='schema types'):
+        assert isinstance(spec.captures[0], ctrl_cls.schema.capture)
+        assert isinstance(spec.peripherals, ctrl_cls.schema.peripherals)
+        assert isinstance(spec.source, ctrl_cls.schema.source)
+    with subtests.test(msg='tagged class'):
+        assert cls is ctrl_cls.sensor.sweep_spec_cls
+        assert cls.__mro__.index(ss.specs.Sweep) == 1, 'one bound class, no nesting'
+        assert cls.sweep_cls is cls
+    with subtests.test(msg='controller and binding'):
+        assert ss.lib.bindings.get_controller(spec) is ctrl_cls
+        assert cls.controller is ctrl_cls
+        assert cls.sensor is ctrl_cls.sensor
+
+
+# %% bind_sensor: action selection and module
+
+
+class TestBindSensor:
+    def test_schema_action_selects_the_sweep_base(self, isolated_bindings):
+        ctrl_cls = ss.bindings.bind_sensor(
+            'action_test',
+            tone_sensor(),
+            tone_schema(action=ss.specs.ManualYFactorCalibration),
+            register=False,
+        )
+        sweep_cls = ctrl_cls.sensor.sweep_spec_cls
+        assert issubclass(sweep_cls, ss.specs.ManualYFactorCalibration)
+        assert sweep_cls.__name__ == 'action_test'
+        assert 'calibration' in sweep_cls.__struct_fields__
+
+    def test_a_non_sweep_action_gets_a_companion_sweep_class(self, isolated_bindings):
+        """the companion class has the action's spec types and binding and is neither
+        tagged nor registered. The runner builds the sweep that runs from it."""
+        schema = tone_schema(action=ss.specs.ManualYFactorCalibration)
+        ctrl_cls = ss.bindings.bind_sensor(
+            'companion_test', tone_sensor(), schema, register=False
+        )
+        action_cls = ctrl_cls.sensor.sweep_spec_cls
+        companion = action_cls.sweep_cls
+        assert companion is not action_cls
+        assert issubclass(companion, ss.specs.Sweep)
+        assert companion.__name__ == 'companion_test.sweep'
+        assert companion.schema is schema
+        assert companion.sensor is ctrl_cls.sensor
+        assert companion.controller is ctrl_cls
+        assert companion.sweep_cls is companion
+        assert 'companion_test.sweep' not in isolated_bindings.registry
+        assert 'mock_source' in companion.__struct_fields__
+
+    def test_sweep_spec_cls_still_selects_the_sweep_base(self, isolated_bindings):
+        ctrl_cls = ss.bindings.bind_sensor(
+            'legacy_test',
+            tone_sensor(sweep_spec_cls=ss.specs.ManualYFactorCalibration),
+            tone_schema(),
+            register=False,
+        )
+        assert issubclass(
+            ctrl_cls.sensor.sweep_spec_cls, ss.specs.ManualYFactorCalibration
+        )
+
+    def test_an_existing_binding_derives_through_schema_action(self, isolated_bindings):
+        """the `sweep_spec_cls` of a `SensorBinding` is its tagged class, which is
+        not a base for a second binding. The action comes from the schema."""
+        ctrl_cls = ss.bindings.bind_sensor(
+            'derived_test',
+            TONE.sensor,
+            tone_schema(action=ss.specs.ManualYFactorCalibration),
+            register=False,
+        )
+        sweep_cls = ctrl_cls.sensor.sweep_spec_cls
+        assert issubclass(sweep_cls, ss.specs.ManualYFactorCalibration)
+        assert not issubclass(sweep_cls, TONE.sensor.sweep_spec_cls)
+
+    def test_conflicting_action_types_are_rejected(self, isolated_bindings):
+        with pytest.raises(TypeError, match=r'sweep_spec_cls.*schema\.action'):
+            ss.bindings.bind_sensor(
+                'conflict_test',
+                tone_sensor(sweep_spec_cls=ss.specs.ManualYFactorCalibration),
+                tone_schema(action=SweepCls),
+                register=False,
+            )
+
+    def test_unregistered_binding_stays_out_of_the_union(self, isolated_bindings):
+        """`get_controller` finds registered bindings only. A file that decoded into
+        an unregistered one could not be run."""
+        union_before = isolated_bindings.get_tagged_sweep_type()
+        ss.bindings.bind_sensor(
+            'unregistered_test', tone_sensor(), tone_schema(), register=False
+        )
+        assert isolated_bindings.get_tagged_sweep_type() is union_before
 
 
 def test_extension_module_registers_site_bindings(subtests):
@@ -48,6 +153,81 @@ def test_extension_module_registers_site_bindings(subtests):
     assert Path(S.EXT.__file__).resolve().parent == (SWEEP_DIR / 'src').resolve()
 
 
+def test_derived_calibration_binding_records_the_extension_module():
+    """the extension module binds its calibration with `bind_sensor`, and the API
+    documentation groups the controller under that module"""
+    import site_strategies as S
+
+    assert S.EXT.site_single_tone_calibration.__module__ == S.EXT.__name__
+    assert S.EXT.site_single_tone.__module__ == S.EXT.__name__
+
+
+# %% bind_manual_yfactor_calibration
+
+
+def test_bind_manual_yfactor_calibration_is_deprecated(isolated_bindings):
+    """the function warns and binds what `bind_sensor` binds from the schema with
+    `action` replaced by `ManualYFactorCalibration`. The controller's module is the
+    caller's unless `module=` names another."""
+    with pytest.warns(DeprecationWarning, match='bind_sensor'):
+        derived = ss.lib.bindings.bind_manual_yfactor_calibration(
+            'deprecated_cal_test', TONE
+        )
+    direct = ss.bindings.bind_sensor(
+        'direct_cal_test',
+        TONE.sensor,
+        dataclasses.replace(TONE.schema, action=ss.specs.ManualYFactorCalibration),
+        register=False,
+        module='some.extension',
+    )
+    assert derived.schema == direct.schema
+    assert derived.schema.action is ss.specs.ManualYFactorCalibration
+    for ctrl_cls in (derived, direct):
+        action_cls = ctrl_cls.sensor.sweep_spec_cls
+        assert action_cls.__mro__[1] is ss.specs.ManualYFactorCalibration
+        assert action_cls.sweep_cls.__mro__[1] is ss.specs.Sweep
+    assert (
+        derived.sensor.sweep_spec_cls.__struct_fields__
+        == direct.sensor.sweep_spec_cls.__struct_fields__
+    )
+    assert derived.__module__ == __name__
+    assert direct.__module__ == 'some.extension'
+    assert isolated_bindings.registry['deprecated_cal_test'] is derived
+
+
+# %% cellular bindings and ActionSpec.check_schema
+
+CELLULAR = ss.bindings.air7101b_cellular
+
+
+class TestCellularBinding:
+    @pytest.mark.parametrize('name', ['air7101b', 'air7201b', 'air8201b'])
+    def test_cellular_binding_shares_the_sensor_of_its_origin(self, name):
+        origin = getattr(ss.bindings, name)
+        cellular = getattr(ss.bindings, f'{name}_cellular')
+        assert cellular.sensor.source_cls is origin.sensor.source_cls
+        assert cellular.schema == dataclasses.replace(
+            origin.schema, action=ss.specs.Cellular5GNRSweep
+        )
+
+
+class TestCheckSchema:
+    def test_cellular_action_needs_a_center_frequency_field(self, isolated_bindings):
+        """`SingleToneCapture` has no `center_frequency`, which `cell_channels` is
+        matched against"""
+        assert 'center_frequency' not in TONE.schema.capture.__struct_fields__
+        with pytest.raises(TypeError, match='center_frequency'):
+            ss.bindings.bind_sensor(
+                'probe',
+                tone_sensor(),
+                tone_schema(action=ss.specs.Cellular5GNRSweep),
+                register=False,
+            )
+
+    def test_cellular_action_accepts_a_capture_with_center_frequency(self):
+        assert ss.specs.Cellular5GNRSweep.check_schema(CELLULAR.schema) is None
+
+
 # %% BoundSweep.mock_source
 
 
@@ -57,15 +237,7 @@ class TestMockSource:
         raises_on_both_paths(
             SweepCls,
             TypeError,
-            f'{MOCK_MSG}.*{names}',
+            f"mock_source 'bogus': {MOCK_MSG}.*{names}",
             **make_sweep_kws(mock_source='bogus'),
         )
         assert make_sweep(mock_source='warmup').mock_source == 'warmup'
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason='BoundSweep.__post_init__ error text says mock_sensor, not mock_source',
-    )
-    def test_message_names_the_field(self):
-        with pytest.raises(TypeError, match=r"mock_source 'bogus'"):
-            make_sweep(mock_source='bogus')

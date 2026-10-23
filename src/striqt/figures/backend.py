@@ -259,12 +259,15 @@ class PlotBackend:
         self,
         data: 'xr.DataArray',
         yscale: 'xarray.core.types.ScaleOptions' = 'linear',
+        sharex: bool = True,
         **kwargs: Unpack[_DimKws],
     ):
         coords = self._coord_kws(**kwargs)
         rasterized = data.size > 10000
 
-        grid = data.plot.line(**coords, yscale=yscale, rasterized=rasterized)
+        grid = data.plot.line(
+            **coords, yscale=yscale, rasterized=rasterized, sharex=sharex
+        )
 
         grid._x_var = kwargs['x']  # type: ignore
         grid._y_var = None
@@ -362,6 +365,23 @@ class PlotBackend:
 
         return path
 
+    def limit_facets(
+        self,
+        grid: 'xarray.plot.FacetGrid',
+        low: 'xr.DataArray | float | None',
+        high: float | None,
+    ) -> None:
+        """set the x limits of each facet of `grid` to (`low`, `high`).
+
+        A DataArray `low` is selected per facet by `_facet_values`.
+        """
+        if isinstance(low, xr.DataArray):
+            lows = _facet_values(low, grid)
+        else:
+            lows = [low] * grid.axs.size
+        for ax, lo in zip(grid.axs.flat, lows):
+            ax.set_xlim(lo, high)
+
     def mark_noise_level(
         self,
         data: 'xr.Dataset',
@@ -369,12 +389,21 @@ class PlotBackend:
         grid: 'xarray.plot.FacetGrid',
         where: typing.Literal['x'] | typing.Literal['y'] | typing.Literal['colorbar'],
     ):
+        """draw the system noise level of `var_name` on each facet of `grid`.
+
+        `where` names the axis of the power values. ``'x'`` draws a horizontal line at
+        the level for power on the y axis. ``'y'`` draws a vertical line for power on
+        the x axis, as in a histogram. ``'colorbar'`` adds a tick to the colorbar of a
+        heatmap.
+        """
         noise = util.get_system_noise(data, var_name)
 
         if noise is None:
             return
         assert not isinstance(noise, (int, float))
-        for pow, ax in zip(noise.values.flat, grid.axs.flat):
+        for pow, ax in zip(_facet_values(noise, grid), grid.axs.flat):
+            if pow is None:
+                continue
             if where == 'x':
                 ax.axhline(pow, color='k', linestyle=':')
             elif where == 'y':
@@ -407,6 +436,43 @@ class PlotBackend:
 
             else:
                 raise TypeError('where must be "x", "y", or "colorbar"')
+
+
+def _facet_values(
+    values: 'xr.DataArray', grid: 'xarray.plot.FacetGrid'
+) -> list[float | None]:
+    """return one value of `values` per facet of `grid`, in `grid.axs.flat` order.
+
+    Each facet selects `values` by the `grid.name_dicts` entry of the facet on the
+    coordinates of `values`. The minimum over the selection is returned when several captures share
+    a facet. The result is None for a facet without a name, which is an unused axis
+    of a wrapped grid. Without `name_dicts`, the values are returned in order, one
+    per facet.
+    """
+    name_dicts = getattr(grid, 'name_dicts', None)
+    if name_dicts is None:
+        flat = [float(v) for v in values.values.flat]
+        return flat + [None] * (grid.axs.size - len(flat))
+
+    out: list[float | None] = []
+    for name_dict in name_dicts.flat:
+        if name_dict is None:
+            out.append(None)
+            continue
+        sel = values
+        for key, value in name_dict.items():
+            if key in sel.indexes:
+                sel = sel.sel({key: value})
+            elif key in sel.coords:
+                sel = sel.where(sel.coords[key] == value, drop=True)
+            elif key in sel.dims:
+                # a dimension without coordinate values is faceted by position
+                sel = sel.isel({key: int(value)})
+        if sel.size == 0:
+            out.append(None)
+        else:
+            out.append(float(sel.min()))
+    return out
 
 
 def _select_dpi(grid, x_data, y_data: 'xr.DataArray | None', min_=0, max_=300):

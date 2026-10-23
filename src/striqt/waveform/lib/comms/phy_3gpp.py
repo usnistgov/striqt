@@ -6,6 +6,7 @@ Cyclic prefix sizes and start indices follow TS 38.211 §5.3.1; slot timing foll
 
 from __future__ import annotations as __
 
+import math
 import typing
 from fractions import Fraction
 
@@ -22,6 +23,115 @@ def slot_period(subcarrier_spacing: float) -> float:
     (3GPP TS 38.211 Section 4.3.2).
     """
     return 10e-3 / (10 * subcarrier_spacing / 15e3)
+
+
+# 3GPP TS 38.104 Table 5.3.2-1: transmission bandwidth configuration N_RB for FR1,
+# keyed by subcarrier spacing (Hz) and then channel bandwidth (Hz)
+NR_FR1_RESOURCE_BLOCKS: dict[float, dict[float, int]] = {
+    15e3: {
+        5e6: 25,
+        10e6: 52,
+        15e6: 79,
+        20e6: 106,
+        25e6: 133,
+        30e6: 160,
+        35e6: 188,
+        40e6: 216,
+        45e6: 242,
+        50e6: 270,
+    },
+    30e3: {
+        5e6: 11,
+        10e6: 24,
+        15e6: 38,
+        20e6: 51,
+        25e6: 65,
+        30e6: 78,
+        35e6: 92,
+        40e6: 106,
+        45e6: 119,
+        50e6: 133,
+        60e6: 162,
+        70e6: 189,
+        80e6: 217,
+        90e6: 245,
+        100e6: 273,
+    },
+    60e3: {
+        10e6: 11,
+        15e6: 18,
+        20e6: 24,
+        25e6: 31,
+        30e6: 38,
+        35e6: 44,
+        40e6: 51,
+        45e6: 58,
+        50e6: 65,
+        60e6: 79,
+        70e6: 93,
+        80e6: 107,
+        90e6: 121,
+        100e6: 135,
+    },
+}
+
+# lcm(128, 14): 128 keeps the 5G NR cyclic prefixes of `Phy3GPP` whole samples, and
+# 14 keeps the 15/28 window fill of the SCS/2 spectrograms whole samples
+NR_SAMPLE_RATE_STEP_SUBCARRIERS = 896
+
+
+def nr_occupied_bandwidth(channel_bandwidth: float, subcarrier_spacing: float) -> float:
+    """return the transmission bandwidth (in Hz) of a 5G NR FR1 channel.
+
+    The value is ``N_RB * 12 * subcarrier_spacing`` with ``N_RB`` from 3GPP TS 38.104
+    Table 5.3.2-1.
+
+    Args:
+        channel_bandwidth: the nominal channel bandwidth (Hz), a key of the table
+        subcarrier_spacing: 15e3, 30e3, or 60e3 (Hz)
+
+    Raises:
+        ValueError: if the table has no entry for the pair
+    """
+    try:
+        n_rb = NR_FR1_RESOURCE_BLOCKS[subcarrier_spacing][channel_bandwidth]
+    except KeyError:
+        raise ValueError(
+            f'no 3GPP TS 38.104 FR1 configuration for channel bandwidth '
+            f'{channel_bandwidth!r} Hz at subcarrier spacing {subcarrier_spacing!r} Hz'
+        ) from None
+    return n_rb * 12 * subcarrier_spacing
+
+
+def nr_sample_rate(
+    channel_bandwidth: float,
+    subcarrier_spacing: float,
+    *,
+    min_sample_rate: float | None = None,
+    transition_bandwidth: float = 250e3,
+) -> float:
+    """return the smallest sample rate (in S/s) that the cellular measurements accept.
+
+    The rate is a multiple of ``896 * subcarrier_spacing`` (26.88 MS/s at 30 kHz) at
+    or above ``channel_bandwidth + transition_bandwidth`` and `min_sample_rate`.
+
+    Args:
+        channel_bandwidth: the nominal channel bandwidth (Hz), a key of
+            `NR_FR1_RESOURCE_BLOCKS`
+        subcarrier_spacing: 15e3, 30e3, or 60e3 (Hz)
+        min_sample_rate: a lower bound (S/s), or None for none
+        transition_bandwidth: the analysis filter transition band (Hz) that must fit
+            between the channel edge and the Nyquist frequency
+
+    Raises:
+        ValueError: if `NR_FR1_RESOURCE_BLOCKS` has no entry for the pair
+    """
+    nr_occupied_bandwidth(channel_bandwidth, subcarrier_spacing)
+    step = NR_SAMPLE_RATE_STEP_SUBCARRIERS * subcarrier_spacing
+    needed = channel_bandwidth + transition_bandwidth
+    if min_sample_rate is not None:
+        needed = max(needed, min_sample_rate)
+    return math.ceil(needed / step) * step
 
 
 @util.lru_cache(4)

@@ -113,7 +113,7 @@ def correction_error(
         nffts += [design['nfft'], design['nfft_out']]
     elif resampled:
         lead, tail = _correction_overlaps(capture, source, analysis, array_backend)
-        n_in = round(capture.duration * design['fs_sdr']) + lead + tail
+        n_in = corrections.source_record_size(capture, design) + lead + tail
         n_out = round(n_in * capture.sample_rate / design['fs_sdr'])
         nffts += [n_in, n_out]
 

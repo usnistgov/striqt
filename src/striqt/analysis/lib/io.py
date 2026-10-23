@@ -2,6 +2,7 @@ from __future__ import annotations as __
 
 import functools
 import math
+import re
 import threading
 import typing
 import warnings
@@ -158,11 +159,127 @@ def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> 'xr.Dataset':
     store = open_store(path, mode='r')
 
     result = xr.open_dataset(store, chunks=chunks, engine='zarr', **kwargs)
+    result = repair_legacy_attrs(result)
 
     if chunks is None:
         return result
     else:
         return result.unify_chunks()
+
+
+_BANDWIDTH_UNITS = re.compile(r'^(dBm|dB|√mW)/(.+)$')
+_BANDWIDTH_SUFFIX = re.compile(r' \((dBm|dB|√mW)/[^)]+\)$')
+_POWER_BIN_SUFFIX = '_power_bin'
+_CAPTURE_BANDWIDTH_NAMES = frozenset({
+    'channel_power_time_series',
+    'channel_power_histogram',
+    'cyclic_channel_power',
+    'channel_power_bin',
+    'iq_waveform',
+})
+
+
+def _owner_noise_bandwidth(data: xr.Dataset, coord_name: str) -> float | None:
+    """return the `noise_bandwidth` attr of a data variable on the dimension of `coord_name`.
+
+    None when `coord_name` is a scalar or no data variable on the dimension of
+    `coord_name` has the attr.
+    """
+    coord = data[coord_name]
+    if coord.ndim == 0:
+        return None
+    dim = coord.dims[0]
+    for var in data.data_vars.values():
+        if dim in var.dims and 'noise_bandwidth' in var.attrs:
+            return float(var.attrs['noise_bandwidth'])
+    return None
+
+
+def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
+    """return `data` with the bandwidth attrs in the current convention.
+
+    The attrs are rewritten in place; data values and other attrs are unchanged. The
+    rewrite applies to every variable and coordinate that matches one of these
+    conditions:
+
+    * `channel_power_time_series`, `channel_power_histogram`, `cyclic_channel_power`,
+      `iq_waveform`, or the `channel_power_bin` coordinate with `noise_bandwidth`: the
+      attr is removed, with any `long_name` that ends in a bandwidth. The noise
+      bandwidth of these outputs is the per-capture `analysis_bandwidth` coordinate.
+    * A variable with `units` starting in ``'√mW'`` and equal `noise_bandwidth` and
+      `sample_rate` attrs: `noise_bandwidth` is set to the `subcarrier_spacing` attr of
+      the variable.
+    * A ``*_power_bin`` coordinate without `noise_bandwidth`: the attr is copied from
+      a data variable on the dimension of the coordinate.
+    * `units` of the form ``'<unit>/<bandwidth>'`` other than ``'dBm/Hz'``: `units`
+      is set to ``'<unit>'``. For a unit other than dB, `long_name` is set to
+      ``'<long_name or standard_name> (<unit>/<bandwidth>)'`` with the bandwidth from
+      `noise_bandwidth`.
+    * A data variable on a ``*_power_bin`` dimension whose coordinate has `units` of
+      dB: `noise_bandwidth` is removed.
+    * `system_noise` without `standard_name`: `standard_name` is set to
+      ``'System noise'``.
+
+    A dataset in the current convention matches none of the conditions and is
+    returned unchanged.
+
+    Returns:
+        the same dataset object
+    """
+    for name in _CAPTURE_BANDWIDTH_NAMES.intersection(map(str, data.variables)):
+        attrs = data[name].attrs
+        attrs.pop('noise_bandwidth', None)
+        long_name = attrs.get('long_name')
+        if isinstance(long_name, str) and _BANDWIDTH_SUFFIX.search(long_name):
+            del attrs['long_name']
+
+    for name, var in data.variables.items():
+        attrs = var.attrs
+        units = str(attrs.get('units', ''))
+        is_correlator = (
+            units.startswith('√mW')
+            and 'subcarrier_spacing' in attrs
+            and 'sample_rate' in attrs
+            and attrs.get('noise_bandwidth') == attrs['sample_rate']
+        )
+        if is_correlator:
+            attrs['noise_bandwidth'] = float(attrs['subcarrier_spacing'])
+
+    for name in data.coords:
+        if (
+            str(name).endswith(_POWER_BIN_SUFFIX)
+            and 'noise_bandwidth' not in data[name].attrs
+        ):
+            if str(data[name].attrs.get('units', '')).startswith('dB/'):
+                continue
+            bandwidth = _owner_noise_bandwidth(data, str(name))
+            if bandwidth is not None:
+                data[name].attrs['noise_bandwidth'] = bandwidth
+
+    for name, var in data.variables.items():
+        attrs = var.attrs
+        match = _BANDWIDTH_UNITS.match(str(attrs.get('units', '')))
+        if match is None or match.group(2) == 'Hz':
+            # 'dBm/Hz' is a spectral density, not a bandwidth label
+            continue
+        unit = match.group(1)
+        attrs['units'] = unit
+        if unit != 'dB' and 'noise_bandwidth' in attrs:
+            bandwidth = dataarrays.format_units(float(attrs['noise_bandwidth']), 'Hz')
+            quantity = attrs.get('long_name') or attrs.get('standard_name') or name
+            attrs['long_name'] = f'{quantity} ({unit}/{bandwidth})'
+
+    for name, var in data.data_vars.items():
+        for dim in var.dims:
+            if not str(dim).endswith(_POWER_BIN_SUFFIX) or dim not in data.coords:
+                continue
+            if data[dim].attrs.get('units') == 'dB':
+                var.attrs.pop('noise_bandwidth', None)
+
+    if 'system_noise' in data.variables:
+        data['system_noise'].attrs.setdefault('standard_name', 'System noise')
+
+    return data
 
 
 def load_attrs(path: str | Path) -> dict[str, typing.Any]:

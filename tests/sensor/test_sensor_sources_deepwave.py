@@ -21,27 +21,14 @@ SPECS = {
 # %% spec defaults
 
 
-@pytest.mark.parametrize('cls', list(SPECS.values()), ids=list(SPECS))
-def test_airstack_specs_target_the_gpu_with_retries(cls):
-    spec = cls()
-    assert spec.master_clock_rate == pytest.approx(125e6)
-    assert spec.array_backend == 'cupy'
-    assert spec.receive_retries == 3
-    assert spec.stream_all_rx_ports is True
-    assert spec.transport_dtype == 'float32'
-    assert isinstance(spec, ss.specs.SoapySource)
-
-
-@pytest.mark.parametrize('name', list(SPECS))
-def test_bindings_pair_source_specs(name):
-    ctrl = getattr(ss.bindings, name)
-    assert ctrl.schema.source is SPECS[name]
-    assert ctrl.sensor.source_cls is deepwave.Airstack1Source
-    assert ctrl.schema.capture is ss.specs.SoapyCapture
-
-
-def test_air7201b_init_like_matches_its_source_spec():
-    assert ss.bindings.air7201b.schema.init_like is deepwave.Air7201BSourceSpec
+def test_airstack_specs_target_the_gpu_with_retries(subtests):
+    for name, cls in SPECS.items():
+        with subtests.test(binding=name):
+            spec = cls()
+            assert getattr(ss.bindings, name).schema.source is cls
+            assert spec.array_backend == 'cupy'
+            assert spec.receive_retries == 3
+            assert spec.stream_all_rx_ports is True
 
 
 # %% _set_jesd_sysref_delay

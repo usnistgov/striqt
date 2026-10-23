@@ -357,19 +357,24 @@ class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
 
 def evaluate_by_spec(
     iq: Array | AcquiredIQ,
-    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
+    spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions,
 ) -> 'dict[str, DelayedDataArray] | dict[str, Array]':
-    """evaluate each analysis for the given IQ waveform"""
+    """evaluate each enabled measurement of `spec` on the IQ waveform.
+
+    `spec` is an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
+    fields of `spec` are skipped.
+
+    Raises:
+        TypeError: if `spec` is not an `AnalysisGroup`
+    """
 
     spec_dict: dict[str, dict[str, typing.Any]]
     results: dict[str, DelayedDataArray] | dict[str, Array]
 
     if isinstance(spec, specs.AnalysisGroup):
         spec = spec.validate()
-    elif isinstance(spec, dict):
-        spec = options.registry.tospec().from_dict(spec)
     else:
         raise TypeError('invalid analysis spec argument')
 
@@ -449,7 +454,7 @@ def package_analysis(
 @typing.overload
 def analyze_by_spec(
     iq: Array | AcquiredIQ,
-    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
+    spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[True]],
 ) -> 'xr.Dataset': ...
@@ -458,7 +463,7 @@ def analyze_by_spec(
 @typing.overload
 def analyze_by_spec(
     iq: Array | AcquiredIQ,
-    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
+    spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal['delayed']],
 ) -> 'dict[str, DelayedDataArray]': ...
@@ -467,7 +472,7 @@ def analyze_by_spec(
 @typing.overload
 def analyze_by_spec(
     iq: Array | AcquiredIQ,
-    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
+    spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[False]],
 ) -> 'dict[str, Array]': ...
@@ -475,7 +480,7 @@ def analyze_by_spec(
 
 def analyze_by_spec(
     iq: Array | AcquiredIQ,
-    spec: dict[str, specs.Analysis] | specs.AnalysisGroup,
+    spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions,
 ) -> Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]:

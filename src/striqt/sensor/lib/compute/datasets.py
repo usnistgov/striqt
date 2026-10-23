@@ -296,13 +296,14 @@ def _coords_template(
             return v
 
     # templates for the capture and acquisition info type fields
+    # adjust_analysis is a dict and signal_trigger a Trigger object: neither is a
+    # coordinate
+    skipped = {'adjust_analysis', 'signal_trigger'}
     for spec_cls in (capture_cls, info_cls):
         for field in msgspec.structs.fields(spec_cls):
-            if field.name.startswith('_') or field.name == 'adjust_analysis':
+            if field.name.startswith('_') or field.name in skipped:
                 continue
             coord_vars[field.name] = make_var(field)
-
-    coord_vars.pop('signal_trigger', None)
 
     # templates for analysis loops
     for loop in loops:

@@ -34,6 +34,13 @@ PERIOD_MSG = 'is not an integer multiple of sample period'
 DELAY_MSG = r'delay \* sample_rate must be an integer'
 
 by_correlator = pytest.mark.parametrize('cls', CORRELATORS, ids=lambda c: c.__name__)
+# the delay check is inherited from one `__post_init__`, so one correlator and one
+# synchronizer cover the 4 classes
+by_correlator_and_sync = pytest.mark.parametrize(
+    'cls',
+    (S.Cellular5GNRPSSCorrelator, S.Cellular5GNPSSSync),
+    ids=lambda c: c.__name__,
+)
 
 
 # %% SpecBase
@@ -124,13 +131,13 @@ class TestCapture:
 
 
 class TestSSBCorrelators:
-    @by_correlator
+    @by_correlator_and_sync
     @given(kws=integer_delay_kwargs())
     def test_integer_delay_samples_accepted(self, construct, cls, kws):
         spec = construct(cls, subcarrier_spacing=SCS, **kws)
         assert spec.delay == kws['delay']
 
-    @by_correlator
+    @by_correlator_and_sync
     @given(kws=fractional_delay_kwargs())
     def test_fractional_delay_samples_rejected(self, cls, kws):
         raises_on_both_paths(
