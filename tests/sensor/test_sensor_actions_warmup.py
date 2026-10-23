@@ -4,8 +4,16 @@ resources it runs over, and whether a sweep warms up at all
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
-from sweep_strategies import SOURCE, as_sweep, make_calibration_sweep
+from sweep_strategies import (
+    SOURCE,
+    QuickAnalyses,
+    as_sweep,
+    make_calibration_sweep,
+    quick_binding,
+)
 from synthetic_sources import (
     ANALYSIS,
     IQ_ONLY,
@@ -108,6 +116,30 @@ def test_one_warmup_binding_per_origin():
     assert a is warmup.warmup_binding(ss.bindings.single_tone)
     assert a is not warmup.warmup_binding(ss.bindings.noise)
     assert a.sensor.sweep_spec_cls.__name__ not in ss.lib.bindings.registry
+
+
+def test_warmup_binding_and_sweep_keep_the_analysis_group(isolated_bindings):
+    """the warmup binding takes the group of the origin, so the copied analysis
+    decodes against the same fields. The origin is registered, which
+    `derive_warmup_sweep` requires to look the controller up by name"""
+    assert warmup.warmup_binding(quick_binding()).schema.analysis is QuickAnalyses
+
+    origin = ss.bindings.single_tone
+    ctrl = ss.bindings.bind_sensor(
+        'quick_registered',
+        origin.sensor,
+        dataclasses.replace(origin.schema, analysis=QuickAnalyses),
+    )
+    analysis = QuickAnalyses.from_dict({
+        'channel_power_time_series': {'detector_period': 1e-4}
+    })
+    sweep = ctrl.sensor.sweep_spec_cls(
+        source=SOURCE, captures=(scale_only(),), analysis=analysis
+    )
+    warm = warmup.derive_warmup_sweep(sweep)
+    assert type(warm).schema.analysis is QuickAnalyses
+    assert type(warm.analysis) is QuickAnalyses
+    assert warm.analysis == analysis
 
 
 # %% warmup_sweep_for

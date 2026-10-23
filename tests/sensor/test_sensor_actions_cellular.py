@@ -17,10 +17,13 @@ from sweep_strategies import (
     CELL_CHANNEL,
     CELL_LABEL,
     SOURCE,
+    CellularAnalyses,
     make_cell_channel,
     make_cellular_capture,
     make_cellular_runner,
     make_cellular_sweep,
+    make_cellular_sweep_kws,
+    restricted_cellular_binding,
 )
 from synthetic_sources import run_in_memory
 
@@ -333,6 +336,18 @@ def test_time_series_detector_period_defaults_to_one_symbol(detector_period, exp
     spec = one_block_sweep('channel_power_time_series', block)
     analysis = cellular.cellular_analysis(spec, SCS)
     assert analysis.channel_power_time_series.detector_period == expected
+
+
+def test_cellular_analysis_is_the_group_of_the_binding():
+    """the generated analysis is an instance of `schema.analysis`, so a binding over
+    a group of only the cellular measurements decodes and runs"""
+    cls = restricted_cellular_binding().sensor.sweep_spec_cls
+    block = ss.specs.Cellular5GNRAnalysis(
+        channel_power_time_series=BLOCKS['channel_power_time_series']
+    )
+    spec = cls(**make_cellular_sweep_kws(analysis=block))
+    assert type(cellular.cellular_analysis(spec, SCS)) is CellularAnalyses
+    assert type(cellular.build_cellular_sweep(spec).analysis) is CellularAnalyses
 
 
 def test_pss_trigger_requires_the_pss_sync_block():

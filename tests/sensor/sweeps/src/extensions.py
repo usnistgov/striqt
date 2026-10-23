@@ -12,6 +12,7 @@ import dataclasses
 from math import nan
 from typing import Annotated, Optional, Union
 
+import striqt.analysis as sa
 from striqt.sensor import bindings, peripherals, sources, specs
 
 RADIO_ID = '48b02d17a587'
@@ -100,4 +101,21 @@ site_cellular = bindings.bind_sensor(
     'site_cellular',
     _site_sensor,
     dataclasses.replace(_schema(SiteCapture), action=specs.Cellular5GNRSweep),
+)
+
+
+class SiteQuickAnalyses(
+    specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True
+):
+    """the measurements of fragments/analysis/quick.yaml, and no others"""
+
+    spectrogram: Optional[sa.specs.Spectrogram] = None
+    power_spectral_density: Optional[sa.specs.PowerSpectralDensity] = None
+    channel_power_time_series: Optional[sa.specs.ChannelPowerTimeSeries] = None
+
+
+site_quick = bindings.bind_sensor(
+    'site_quick',
+    _site_sensor,
+    dataclasses.replace(_schema(SiteCapture), analysis=SiteQuickAnalyses),
 )

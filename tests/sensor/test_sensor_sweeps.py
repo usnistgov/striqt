@@ -167,6 +167,7 @@ def check_site(ds):
 CLI_SWEEPS = {
     'synthetic': SWEEP_DIR / 'synthetic.yaml',
     'site': SITE_DIR / 'site-cpu.yaml',
+    'site_quick': SITE_DIR / 'site-quick.yaml',
 }
 
 
