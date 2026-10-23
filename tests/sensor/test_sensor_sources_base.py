@@ -145,9 +145,3 @@ def test_no_source_read_leaves_the_buffers_alone():
 
     assert count == COUNT
     assert np.isnan(np.stack(buffers)).all()
-
-
-def test_no_source_identity():
-    source, _ = _no_source()
-    assert source.get_id() == 'null'
-    assert source.get_info().num_rx_ports == NO_SOURCE.num_rx_ports

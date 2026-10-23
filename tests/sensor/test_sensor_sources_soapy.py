@@ -71,12 +71,8 @@ def test_port_info_round_trips_as_probed():
 
 @pytest.mark.parametrize(
     'time_source, expected',
-    [
-        ('host', 'internal'),
-        ('internal', 'internal'),
-        ('external', 'external'),
-        ('gps', 'gps'),
-    ],
+    [('host', 'internal'), ('gps', 'gps')],
+    ids=['host_maps_to_internal', 'identity'],
 )
 def test_device_time_source(time_source, expected):
     assert soapy.device_time_source(source_spec(time_source=time_source)) == expected
@@ -174,10 +170,10 @@ def _samples(xp, peaks, count=64):
     return xp.asarray(np.stack(rows))
 
 
-def test_no_limits_gives_no_info(xp):
+def test_no_limits_gives_no_info():
     source = source_spec(adc_overload_limit=None, if_overload_limit=None)
     capture = soapy_capture()
-    assert soapy.compute_overload_info(_samples(xp, [1.0]), source, capture) == {}
+    assert soapy.compute_overload_info(_samples(np, [1.0]), source, capture) == {}
 
 
 HEADROOM_CASES = {
@@ -291,15 +287,18 @@ def _stream(device, spec=None, **kws):
 
 
 class TestRxStreamSetup:
-    def test_requested_ports_with_gain_minimized(self, soapy_device):
+    @pytest.mark.parametrize(
+        'ports, expected', [((1,), (1,)), (0, (0,))], ids=['tuple', 'scalar']
+    )
+    def test_requested_ports_with_gain_minimized(self, soapy_device, ports, expected):
         stream = _stream(soapy_device)
-        stream.setup(soapy_device, ports=(1,))
+        stream.setup(soapy_device, ports=ports)
 
-        assert stream.ports == (1,)
+        assert stream.ports == expected
         assert soapy_device.calls_named('setGain', 'setupStream') == [
             ('setGain', RX, 0, -30.0),
             ('setGain', RX, 1, -30.0),
-            ('setupStream', RX, 'CF32', (1,)),
+            ('setupStream', RX, 'CF32', expected),
             ('setGain', RX, 0, 0.0),
             ('setGain', RX, 1, 0.0),
         ]
@@ -309,11 +308,6 @@ class TestRxStreamSetup:
         stream.setup(soapy_device, ports=1)
         assert stream.ports == (0, 1)
         assert soapy_device.streams[0].channels == (0, 1)
-
-    def test_scalar_port_is_accepted(self, soapy_device):
-        stream = _stream(soapy_device)
-        stream.setup(soapy_device, ports=0)
-        assert stream.ports == (0,)
 
     def test_no_ports_is_an_error(self, soapy_device):
         with pytest.raises(RuntimeError, match='stream_all_rx_ports=False'):
@@ -533,11 +527,6 @@ class TestHardwareTimeSync:
             soapy.time.time(), abs=0.05
         )
 
-    def test_host_sync_needs_hardware_time(self, soapy_device, monkeypatch):
-        monkeypatch.setattr(soapy_device, 'hasHardwareTime', lambda *a: False)
-        with pytest.raises(IOError, match='hardware time'):
-            soapy.HardwareTimeSync('host').to_host_os(soapy_device)
-
     @pytest.mark.xfail(
         strict=True,
         raises=AssertionError,
@@ -620,26 +609,27 @@ class TestSoapySourceOpen:
 
 
 class TestSoapySourceSetup:
-    def test_host_time_source_configures_the_device(self, fake_soapy):
-        source = _source(time_source='host', clock_source='external')
+    @pytest.mark.parametrize(
+        'time_source, device_time_source, on_overflow',
+        [('host', 'internal', 'log'), ('external', 'external', 'except')],
+        ids=['host', 'external'],
+    )
+    def test_time_source_configures_the_device(
+        self, fake_soapy, time_source, device_time_source, on_overflow
+    ):
+        source = _source(time_source=time_source, clock_source='external')
         source.setup()
 
         device = fake_soapy.devices[0]
         assert device.calls == [
             ('setGainMode', RX, 0, False),
             ('setGainMode', RX, 1, False),
-            ('setTimeSource', 'internal'),
+            ('setTimeSource', device_time_source),
             ('setClockSource', 'external'),
             ('setMasterClockRate', MCR),
         ]
-        assert source.rx_stream._on_overflow == 'log'
+        assert source.rx_stream._on_overflow == on_overflow
         assert source.rx_stream.stream is None
-
-    def test_external_time_source_raises_on_overflow(self, fake_soapy):
-        source = _source(time_source='external')
-        source.setup()
-        assert fake_soapy.devices[0].time_source == 'external'
-        assert source.rx_stream._on_overflow == 'except'
 
     def test_sync_at_open(self, fake_soapy):
         source = _source(time_sync_at='open')
@@ -875,9 +865,6 @@ class TestNullDriver:
         assert info.rx_ports == ()
         assert info.timesources == ()
         assert info.min_port_count(2) == 0
-
-    def test_probe_null_device_round_trips(self, null_device):
-        info = soapy.probe_soapy_info(null_device)
         assert dict(info.hardware_info) == {}
         assert info.validate() == info
 

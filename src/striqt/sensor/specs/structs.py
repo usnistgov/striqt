@@ -322,6 +322,10 @@ class ManualYFactorSpec(Peripherals, frozen=True, kw_only=True):
     before the Y-factor is formed, and only the ``papr_on``/``papr_off`` diagnostics
     depend on the bin. When None, the bin is the one `duration` of the captures and
     loops, and a bound spec with more than one duration is rejected.
+
+    `enr` is the excess noise ratio of the noise diode referred to 290 K. The
+    Y-factor assumes a diode-off source temperature of 290 K. `ambient_temperature`
+    is recorded with the spec and does not enter the corrections.
     """
 
     enr: types.ENR

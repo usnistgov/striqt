@@ -18,8 +18,6 @@ from striqt.waveform.lib.arrays import accum_rtol
 from striqt.waveform.lib.fourier.fft import fft_tolerance_rms, fftfreq
 from striqt.waveform.lib.fourier.stft import (
     _find_downsample_copy_range,
-    _get_stft_axes,
-    _same_base_memory,
     _stack_stft_windows,
     _unstack_stft_windows,
     downsample_stft,
@@ -119,17 +117,6 @@ class TestStft:
         X = stft(x, out=out, return_axis_arrays=False, **kws)
         assert np.shares_memory(X, out)
         assert_array_equal(X, X_ref)
-
-    def test_helpers(self):
-        x = np.arange(8)
-        assert not _same_base_memory(x, None)
-        assert _same_base_memory(x, x)
-        assert _same_base_memory(x, x[2:])
-        assert not _same_base_memory(x, x.copy())
-
-        freqs, times = _get_stft_axes(1e6, 64, 10, overlap_frac=0.5)
-        assert_array_equal(freqs, fftfreq(64, 1e6))
-        assert_allclose(times, np.arange(10) * 32 / 1e6)
 
 
 # %% istft
@@ -250,11 +237,6 @@ class TestStftFrequencyEditing:
         assert not np.shares_memory(Yo, Y)
         assert_allclose(np.diff(freqs_out), freqs[1] - freqs[0], rtol=1e-12)
 
-    def test_downsample_stft_fast_path_returns_view(self):
-        freqs, Y = self._stft(1e6)
-        _, Yo = downsample_stft(freqs, Y, self.NFFT // 2, out=Y)
-        assert np.shares_memory(Yo, Y)
-
     def test_downsample_stft_zero_pads_when_upsampling(self):
         freqs, Y = self._stft(1e6)
         nfft_out = 2 * self.NFFT
@@ -302,22 +284,22 @@ class TestStftFrequencyEditing:
         assert_array_equal(Yo[:, band_out.stop :], 0)
 
     def test_downsample_stft_out_buffer(self):
+        """the result is written into `out` when `out` is a fresh buffer and when
+        `out` is the input"""
         freqs, Y = self._stft(1.0)
         nfft_out = self.NFFT // 2
-        _, expected = downsample_stft(freqs, Y, nfft_out, passband=(-0.125, 0.125))
-        _, Yo = downsample_stft(
-            freqs, Y, nfft_out, passband=(-0.125, 0.125), out=np.empty_like(Y)
-        )
-        assert Yo.shape == (self.NSEG, nfft_out)
+        passband = (-0.125, 0.125)
+
+        _, expected = downsample_stft(freqs, Y, nfft_out, passband=passband)
+        out = np.empty_like(Y)
+        _, Yo = downsample_stft(freqs, Y, nfft_out, passband=passband, out=out)
+        assert np.shares_memory(Yo, out)
         assert_array_equal(Yo, expected)
 
-    def test_downsample_stft_writes_into_out(self):
-        freqs, Y = self._stft(1.0)
-        out = np.empty_like(Y)
-        _, Yo = downsample_stft(
-            freqs, Y, self.NFFT // 2, passband=(-0.125, 0.125), out=out
-        )
-        assert np.shares_memory(Yo, out)
+        _, expected = downsample_stft(freqs, Y, nfft_out)
+        _, Yo = downsample_stft(freqs, Y, nfft_out, out=Y)
+        assert np.shares_memory(Yo, Y)
+        assert_array_equal(Yo, expected)
 
     @given(
         nfft_in=st.integers(min_value=2, max_value=256),

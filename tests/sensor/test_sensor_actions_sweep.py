@@ -1,16 +1,15 @@
 """striqt.sensor.lib.actions.sweep: SweepRunner, and the iterate_sweep dispatch through
 resources['runner'].
 
-The runs use 1-port scale-only tones at distinct offsets. A result attributed to
-the wrong capture then disagrees with its generator oracle exactly.
+The pipeline that `SweepRunner.iterate` runs is covered in
+`test_sensor_actions_core.py` through `ss.iterate_sweep`.
 """
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 from sweep_strategies import SweepCls
-from synthetic_sources import expected_corrected, tone_captures, tone_sweep
+from synthetic_sources import tone_sweep
 
 import striqt.sensor as ss
 from striqt.sensor.lib.actions import SweepRunner, registry
@@ -18,48 +17,11 @@ from striqt.sensor.lib.actions import SweepRunner, registry
 OFFSETS = (1e6, 2e6)
 
 
-def materialize(items) -> list:
-    """the xarray datasets of the non-None items"""
-    return [ss.lib.compute.from_delayed(dd) for dd in items if dd is not None]
-
-
 # %% SweepRunner
 
 
-@pytest.mark.parametrize(
-    'spec',
-    [tone_sweep(OFFSETS), SweepCls],
-    ids=['instance', 'type'],
-)
-def test_a_bound_sweep_dispatches_to_the_sweep_runner(spec):
-    assert registry.lookup(spec) is SweepRunner
-
-
-def test_sweep_runner_matches_the_pipeline_and_the_oracle(subtests):
-    """`iterate` with its defaults yields what `iterate_captures` does: 2 leading
-    None placeholders, then one sink result per capture, each the tone the
-    generator oracle predicts for that capture"""
-    captures = tone_captures(OFFSETS)
-    sweep = tone_sweep(OFFSETS)
-    with ss.open_resources(sweep, None) as res:
-        items = list(SweepRunner(sweep).iterate(res))
-
-    assert [item is None for item in items] == [True, True, False, False]
-    datasets = materialize(items)
-    for i, (capture, ds) in enumerate(zip(captures, datasets)):
-        with subtests.test(capture=i):
-            assert int(ds.capture_index.values[0]) == i
-            expected = expected_corrected('single_tone', capture)
-            assert np.array_equal(ds.iq_waveform.values, expected)
-
-
-def test_sweep_runner_forwards_the_yield_modes():
-    """placeholders only: one None per pipeline stage (N captures + 2)"""
-    sweep = tone_sweep(OFFSETS)
-    with ss.open_resources(sweep, None) as res:
-        runner = SweepRunner(sweep)
-        items = list(runner.iterate(res, yield_values=False, always_yield=True))
-    assert items == [None] * (len(OFFSETS) + 2)
+def test_a_bound_sweep_dispatches_to_the_sweep_runner():
+    assert registry.lookup(tone_sweep(OFFSETS)) is SweepRunner
 
 
 def test_build_sweep_is_the_spec_itself():
@@ -71,11 +33,6 @@ def test_build_sweep_is_the_spec_itself():
         assert res['sweep_spec'] is sweep
         assert res['action_spec'] is sweep
         assert isinstance(res['runner'], SweepRunner)
-
-
-def test_validate_accepts_every_sweep():
-    sweep = tone_sweep(OFFSETS)
-    assert ss.lib.actions.SweepRunner.validate(sweep) is None
 
 
 # %% iterate_sweep dispatch

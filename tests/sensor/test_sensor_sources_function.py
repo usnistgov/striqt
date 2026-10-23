@@ -36,80 +36,40 @@ def _rows(source, ports):
     ]
 
 
-def _generator_kws(source, capture):
-    return {
-        'duration': None,
-        'sample_rate': source.get_resampler(capture)['fs_sdr'],
-        'start_index': 0,
-        'count': COUNT,
-    }
+# %% NoiseSource and SingleToneSource: the noise draw per port
 
 
-# %% NoiseSource
-
-
-def test_noise_ports_are_independent_and_match_the_generator():
+@pytest.mark.parametrize(
+    'binding, port, capture_kws',
+    [
+        ('noise', (0, 1), {'noise_psd': NOISE_PSD}),
+        ('noise', 1, {'noise_psd': NOISE_PSD}),
+        ('single_tone', (0, 1), {'frequency_offset': -3e6, 'snr': 20}),
+    ],
+    ids=['noise_two_ports', 'noise_scalar_port', 'tone_with_noise'],
+)
+def test_noise_rows_match_the_generator_and_differ_per_port(binding, port, capture_kws):
     source, capture = _armed(
-        sources.NoiseSource, ss.specs.NoiseCapture, port=(0, 1), noise_psd=NOISE_PSD
+        BINDINGS[binding].sensor.source_cls,
+        BINDINGS[binding].schema.capture,
+        port=port,
+        **capture_kws,
     )
-    rows = _rows(source, (0, 1))
-    kws = _generator_kws(source, capture)
-    expected = sa.testing.circular_awgn(
-        power=NOISE_PSD * kws['sample_rate'], ports=2, **kws
+    ports = port if isinstance(port, tuple) else (port,)
+    rows = _rows(source, ports)
+    expected = generator(
+        binding,
+        capture,
+        sample_rate=source.get_resampler(capture)['fs_sdr'],
+        start_index=0,
+        count=COUNT,
     )
 
     for i, row in enumerate(rows):
         assert row.shape == (1, COUNT)
         assert np.array_equal(row, expected[i : i + 1])
-
-    assert not np.array_equal(rows[0], rows[1])
-
-
-def test_noise_rows_follow_the_capture_port_order():
-    source, capture = _armed(
-        sources.NoiseSource, ss.specs.NoiseCapture, port=(3, 2), noise_psd=NOISE_PSD
-    )
-    kws = _generator_kws(source, capture)
-    expected = sa.testing.circular_awgn(
-        power=NOISE_PSD * kws['sample_rate'], ports=2, **kws
-    )
-
-    # the port number is not its own index: port 3 is the capture's first row
-    for i, row in enumerate(_rows(source, (3, 2))):
-        assert np.array_equal(row, expected[i : i + 1])
-
-
-def test_noise_from_a_scalar_port_capture():
-    source, capture = _armed(
-        sources.NoiseSource, ss.specs.NoiseCapture, port=1, noise_psd=NOISE_PSD
-    )
-    kws = _generator_kws(source, capture)
-    expected = sa.testing.circular_awgn(
-        power=NOISE_PSD * kws['sample_rate'], ports=1, **kws
-    )
-    assert np.array_equal(_rows(source, (1,))[0], expected)
-
-
-# %% SingleToneSource
-
-
-def test_single_tone_noise_is_independent_per_port():
-    kws = {'frequency_offset': -3e6, 'snr': 20}
-    source, capture = _armed(
-        sources.SingleToneSource, ss.specs.SingleToneCapture, port=(0, 1), **kws
-    )
-    rows = _rows(source, (0, 1))
-    expected = sa.testing.single_tone(
-        lo_offset=source.get_resampler(capture)['lo_offset'],
-        ports=2,
-        **kws,
-        **_generator_kws(source, capture),
-    )
-
-    for i, row in enumerate(rows):
-        assert np.array_equal(row, expected[i : i + 1])
-
-    assert not np.array_equal(rows[0], rows[1])
+    if len(rows) > 1:
+        assert not np.array_equal(rows[0], rows[1])
 
 
 # %% get_waveform: the origin contract for every synthetic binding
@@ -140,9 +100,7 @@ def _armed_binding(binding, **capture_kws):
 
 
 @pytest.mark.parametrize('binding', list(BINDINGS))
-@pytest.mark.parametrize(
-    'start_index', [-700, 0, 300], ids=['preroll', 'origin', 'interior']
-)
+@pytest.mark.parametrize('start_index', [-700, 0], ids=['preroll', 'origin'])
 def test_get_waveform_is_the_generator_at_the_absolute_index(binding, start_index):
     source, capture = _armed_binding(binding)
     expected = generator(

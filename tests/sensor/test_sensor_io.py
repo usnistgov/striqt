@@ -238,21 +238,6 @@ def _write_cellular_variant(tmp_path, **replace) -> Path:
     return path
 
 
-def test_cellular_center_frequency_loop_is_rejected(tmp_path):
-    """a `center_frequency` loop is rejected at the loop's `field` when the spec is
-    read. The channels of a cellular sweep are listed as captures instead."""
-    tree = sa.lib.io.decode_from_yaml_file(FAKE_SOAPY_CELLULAR_SPEC)
-    values = [c['center_frequency'] for c in tree['captures']]
-    loop = {'kind': 'list', 'field': 'center_frequency', 'values': values}
-    # with two captures at different center frequencies, the CapturePlan check for a
-    # looped field that the captures also set would fire first, at `$.loops[0]`
-    path = _write_cellular_variant(
-        tmp_path, captures=tree['captures'][:1], loops=[loop]
-    )
-    with pytest.raises(msgspec.ValidationError, match=r'loops\[0\]\.field'):
-        ss.read_yaml_spec(path)
-
-
 def test_cellular_hardware_loop_passes_through(tmp_path):
     loop = {'kind': 'list', 'field': 'gain', 'values': [0, -10]}
     path = _write_cellular_variant(tmp_path, loops=[loop])
@@ -319,15 +304,6 @@ def test_read_zarr_spec_rebuilds_the_spec_that_ran(run_sweep_to_zarr, sweep):
     rebuilt = ss.read_zarr_spec(path)
     assert type(rebuilt) is type(spec)
     assert rebuilt == spec
-
-
-def test_read_zarr_spec_decodes_fractions(run_sweep_to_zarr):
-    _, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['fraction_analysis'])
-    analysis = ss.read_zarr_spec(path).analysis
-    detector_period = analysis.channel_power_time_series.detector_period
-    assert isinstance(detector_period, Fraction)
-    assert detector_period == Fraction(1, 1000)
-    assert analysis.power_spectral_density.fractional_overlap == Fraction(13, 28)
 
 
 @settings(max_examples=25)

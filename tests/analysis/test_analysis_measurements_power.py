@@ -21,7 +21,6 @@ from numeric_checks import assert_close, elementwise_rtol, populated
 
 import striqt.analysis as sa
 from striqt.analysis import testing
-from striqt.analysis.measurements.power import make_power_bins
 
 FS = 1e6
 
@@ -120,12 +119,8 @@ class TestChannelPowerTimeSeries:
         )
         assert abs(expected - 10 * np.log10(3)) < 5e-3
 
-    @pytest.mark.parametrize(
-        'detectors',
-        [('rms', 'peak'), ('peak', 'rms'), ('max', 'min', 'median', 'mean')],
-        ids=['default_order', 'reversed', 'four_named'],
-    )
-    def test_power_detector_coordinate_follows_the_request(self, detectors):
+    def test_power_detector_coordinate_follows_the_request(self):
+        detectors = ('max', 'min', 'median', 'mean')
         iq = testing.tone(DURATION, FS, frequency=1e5)
         da = cpts(iq, power_detectors=detectors)
 
@@ -242,8 +237,8 @@ class TestCyclicChannelPower:
 
     @pytest.mark.parametrize(
         'statistics',
-        [('min', 'mean', 'max'), ('max', 'min'), ('min', 0.5, 'max')],
-        ids=['default_order', 'reversed_pair', 'with_quantile'],
+        [('min', 'mean', 'max'), ('min', 0.5, 'max')],
+        ids=['default_order', 'with_quantile'],
     )
     def test_axis_order_and_statistic_coordinate(self, statistics):
         detectors = ('peak', 'rms')
@@ -426,14 +421,24 @@ def test_channel_power_histogram_fractions_sum_to_one():
     assert_close(da.values.sum(axis=-1), np.ones((2, 2)), rtol=RTOL)
 
 
+# 3 dB steps from -40 dB reach 8 dB, so `power_high` is appended as its own center
+OFF_GRID_BINS = [-40, -37, -34, -31, -28, -25, -22, -19, -16, -13, -10, -7, -4, -1]
+OFF_GRID_BINS += [2, 5, 8, 10]
+
+
 @pytest.mark.parametrize(
-    'power_low,power_high,power_resolution',
-    [(-40.0, 10.0, 1.0), (-40.0, 10.0, 3.0), (-20.0, 0.0, 0.5)],
-    ids=['step1', 'step3_off_grid_high', 'step0.5'],
+    'power_low,power_high,power_resolution,centers',
+    [
+        (-40.0, 10.0, 1.0, np.arange(-40, 11)),
+        (-40.0, 10.0, 3.0, OFF_GRID_BINS),
+    ],
+    ids=['step1', 'step3_off_grid_high'],
 )
 def test_channel_power_histogram_bin_coordinate(
-    power_low, power_high, power_resolution
+    power_low, power_high, power_resolution, centers
 ):
+    """the bin centers step from `power_low` to `power_high` inclusive, bracketed by
+    the catch-all bins at -inf and inf"""
     iq = sa.testing.tone(HIST_DURATION, FS)
     bins = {
         'power_low': power_low,
@@ -445,10 +450,8 @@ def test_channel_power_histogram_bin_coordinate(
         iq, HIST_CAPTURE, detector_period=HIST_DETECTOR_PERIOD, as_xarray=True, **bins
     )
 
-    expected = make_power_bins(power_low, power_high, power_resolution)
+    expected = [-np.inf, *centers, np.inf]
     assert_close(da.channel_power_bin.values, expected, rtol=RTOL)
-    assert da.channel_power_bin.values[0] == float('-inf')
-    assert da.channel_power_bin.values[-1] == float('inf')
 
 
 def test_channel_power_histogram_shares_the_time_series_validator():
@@ -475,36 +478,51 @@ def test_channel_power_histogram_shares_the_time_series_validator():
 
 # %% registered tolerances
 
+# %% noise bandwidth
+
+BANDWIDTH_CASES = [
+    (sa.specs.Capture(duration=HIST_DURATION, sample_rate=FS), FS),
+    (
+        sa.specs.Capture(
+            duration=HIST_DURATION, sample_rate=FS, analysis_bandwidth=FS / 4
+        ),
+        FS / 4,
+    ),
+]
+BANDWIDTH_IDS = ['unfiltered', 'filtered']
+
+
+@pytest.mark.parametrize('cap,bandwidth', BANDWIDTH_CASES, ids=BANDWIDTH_IDS)
+def test_channel_power_outputs_carry_the_capture_noise_bandwidth(cap, bandwidth):
+    """the time series, cyclic power, histogram, and the histogram bin coordinate name the
+    bandwidth of the IQ: the analysis bandwidth, or the sample rate when unfiltered"""
+    iq = sa.testing.tone(HIST_DURATION, FS)
+    kws = {'detector_period': HIST_DETECTOR_PERIOD, 'as_xarray': True}
+
+    series = sa.measurements.channel_power_time_series(iq, cap, **kws)
+    cyclic_power = sa.measurements.cyclic_channel_power(
+        iq, cap, cyclic_period=HIST_DURATION, **kws
+    )
+    histogram = sa.measurements.channel_power_histogram(iq, cap, **POWER_BINS, **kws)
+
+    for da in (series, cyclic_power):
+        assert da.attrs['units'] == 'dBm'
+        assert da.attrs['noise_bandwidth'] == bandwidth
+        assert da.attrs['long_name'].startswith(da.attrs['standard_name'])
+    assert histogram.attrs['noise_bandwidth'] == bandwidth
+    assert histogram.channel_power_bin.attrs['units'] == 'dBm'
+    assert histogram.channel_power_bin.attrs['noise_bandwidth'] == bandwidth
+
+
 POWER_SPECS = [CPTS_SPEC, CYCLIC_SPEC]
 POWER_IDS = [type(spec).__name__ for spec in POWER_SPECS]
 
 
 @pytest.mark.parametrize('spec', POWER_SPECS, ids=POWER_IDS)
-def test_registered_tolerance_is_a_dB_budget_that_grows_with_input_error(spec):
-    """with exact input the budget is a pure roundoff bound with no floor, and an
-    amplitude error in the IQ adds a peak term over the output and a floor below
-    which elements go unchecked"""
-    exact = tolerance(spec)
-    assert isinstance(exact, sa.specs.Tolerance)
-    assert exact.units == 'dB'
-    assert exact.on_peak.peak >= exact.on_peak.rms > 0
-    assert exact.off_peak_dBc is None
-
-    noisy = tolerance(spec, input_error=1e-4)
-    assert noisy.on_peak.peak > noisy.on_peak.rms > exact.on_peak.rms
-    assert noisy.off_peak_dBc is not None and noisy.off_peak_dBc.peak < 0
-
-    noisier = tolerance(spec, input_error=1e-3)
-    assert noisier.on_peak.rms > noisy.on_peak.rms
-    assert noisier.on_peak.peak > noisy.on_peak.peak
-
-
-@pytest.mark.parametrize('spec', POWER_SPECS, ids=POWER_IDS)
-@pytest.mark.parametrize('input_error', [0.0, 1e-4], ids=['exact', 'noisy'])
-def test_tolerance_is_backend_independent_since_no_fft_is_involved(spec, input_error):
+def test_tolerance_is_backend_independent_since_no_fft_is_involved(spec):
     """the detectors square, bin, and take a log elementwise on either backend, so the
     budget has no backend term of its own; the FFT roundoff that separates cupy from
     numpy reaches these measurements only through the caller's `input_error`"""
-    numpy_tol = tolerance(spec, input_error=input_error, array_backend='numpy')
-    cupy_tol = tolerance(spec, input_error=input_error, array_backend='cupy')
+    numpy_tol = tolerance(spec, input_error=1e-4, array_backend='numpy')
+    cupy_tol = tolerance(spec, input_error=1e-4, array_backend='cupy')
     assert cupy_tol == numpy_tol

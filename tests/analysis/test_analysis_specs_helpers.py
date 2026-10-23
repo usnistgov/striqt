@@ -18,7 +18,6 @@ from analysis_strategies import (
     listify,
     scalars,
     tuplify,
-    unhashable_frozendicts,
 )
 from hypothesis import given
 from hypothesis import strategies as st
@@ -78,10 +77,10 @@ class TestFrozendict:
         assert hash(frozendict(items)) == hash(permuted)
         assert len({frozendict(items), permuted}) == 1
 
-    @given(fd=unhashable_frozendicts)
-    def test_unhashable_value_raises(self, fd):
+    @pytest.mark.parametrize('value', [[1, 2], {'b': 1}], ids=['list', 'dict'])
+    def test_unhashable_value_raises(self, value):
         with pytest.raises(TypeError, match='unhashable frozendict entry'):
-            hash(fd)
+            hash(frozendict({'a': value}))
 
     @given(a=frozendict_dicts, b=frozendict_dicts)
     def test_or_returns_frozendict(self, a, b):
@@ -222,10 +221,6 @@ def test_freeze_depths_count_dict_list_and_tuple_nesting():
         'f': 1,
         'g': 2,
     }
-
-
-def test_freeze_depths_are_cached():
-    assert inspect_freeze_depths(DepthProbe) is inspect_freeze_depths(DepthProbe)
 
 
 @VAR_TUPLE_DEPTH_XFAIL
@@ -715,10 +710,6 @@ def test_spec_validation_error_at_and_prepend_are_independent():
     )
 
 
-def test_spec_validation_error_is_a_msgspec_validation_error():
-    assert issubclass(SpecValidationError, msgspec.ValidationError)
-
-
 def test_validation_path_prepends_to_a_spec_validation_error():
     match = r'\$\.captures\[2\]\.nfft'
     with (
@@ -728,29 +719,23 @@ def test_validation_path_prepends_to_a_spec_validation_error():
         raise SpecValidationError('too large', ('.nfft',))
 
 
-def test_validation_path_wraps_a_plain_value_error():
-    match = r'\$\.spectrogram: too large'
-    with (
-        pytest.raises(SpecValidationError, match=match),
-        validation_path('.spectrogram'),
-    ):
-        raise ValueError('too large')
-
-
-@pytest.mark.parametrize('exc_type', [ValueError, TypeError, msgspec.ValidationError])
-def test_validation_path_wraps_the_validation_exception_types(exc_type):
-    with pytest.raises(SpecValidationError, match=r'\$\.x'), validation_path('.x'):
-        raise exc_type('nope')
+@pytest.mark.parametrize(
+    'exc_type, match',
+    [
+        (ValueError, r'\$\.x: too large'),
+        (TypeError, r'\$\.x'),
+        (msgspec.ValidationError, r'\$\.x'),
+    ],
+    ids=['ValueError', 'TypeError', 'ValidationError'],
+)
+def test_validation_path_wraps_the_validation_exception_types(exc_type, match):
+    with pytest.raises(SpecValidationError, match=match), validation_path('.x'):
+        raise exc_type('too large')
 
 
 def test_validation_path_passes_through_other_exceptions():
     with pytest.raises(KeyError), validation_path('.x'):
         raise KeyError('nope')
-
-
-def test_validation_path_is_transparent_when_nothing_raises():
-    with validation_path('.x'):
-        pass
 
 
 class _RaisingSpec(sa.specs.SpecBase, frozen=True, kw_only=True):

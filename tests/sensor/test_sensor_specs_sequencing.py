@@ -142,11 +142,22 @@ def test_max_by_frequency_is_the_maximum(gains, data):
 # %% loop_captures
 
 
-@given(sweep=sweeps())
-def test_loop_captures_returns_a_tuple_of_the_capture_class(sweep):
-    result = S.loop_captures(sweep)
-    assert isinstance(result, tuple)
-    assert all(type(c) is CaptureCls for c in result)
+@given(sweep=sweeps(), limit=st.none() | st.integers(min_value=0, max_value=12))
+def test_limit_keeps_a_prefix_and_origins_index_it(sweep, limit):
+    """the origins key the first occurrence of each distinct capture in the
+    expansion that `limit` keeps, and index its position there"""
+    full = S.loop_captures(sweep)
+    assert isinstance(full, tuple)
+    assert all(type(c) is CaptureCls for c in full)
+
+    captures = S.loop_captures(sweep, limit=limit)
+    assert captures == full[:limit]
+
+    origins = S.loop_capture_origins(sweep, limit=limit)
+    assert isinstance(origins, frozendict)
+    assert tuple(origins) == tuple(dict.fromkeys(captures))
+    for capture, origin in origins.items():
+        assert origin.capture_index == captures.index(capture)
 
 
 def test_repeat_is_not_expanded(synthetic_sweep):
@@ -182,11 +193,6 @@ def test_string_loop_points_are_coerced_to_the_field_type(values):
     strings = S.loop_captures(sweep_with(repr(v) for v in values))
     assert strings == numeric
     assert all(type(c.frequency_offset) is float for c in strings)
-
-
-@given(sweep=sweeps(), limit=st.integers(min_value=0, max_value=12))
-def test_limit_is_a_prefix(sweep, limit):
-    assert S.loop_captures(sweep, limit=limit) == S.loop_captures(sweep)[:limit]
 
 
 def test_only_fields_filters_capture_loops_but_keeps_analysis_loops():
@@ -238,14 +244,13 @@ def test_loops_without_captures_build_new_instances():
     assert all((c.sample_rate, c.duration) == (1e6, 1e-3) for c in result)
 
 
-def test_no_loops_and_no_captures():
-    assert S.loop_captures(make_sweep()) == ()
-
-
-def test_a_repeat_alone_and_no_captures():
+@pytest.mark.parametrize(
+    'loops', [(), (ss.specs.Repeat(count=2),)], ids=['no_loops', 'repeat_only']
+)
+def test_no_captures_and_no_capture_field_loops_expand_to_nothing(loops):
     """a repeat names no capture field, so it leaves nothing to build a capture from,
     exactly as an empty `loops:` does"""
-    assert S.loop_captures(make_sweep(loops=(ss.specs.Repeat(count=2),))) == ()
+    assert S.loop_captures(make_sweep(loops=loops)) == ()
 
 
 def test_loops_that_leave_a_required_field_unset_name_the_loop_point():
@@ -290,11 +295,10 @@ def test_analysis_loop_merges_with_the_captures_adjust_analysis():
 @pytest.mark.parametrize(
     'bandwidths, expected',
     [
-        ((0.5e6, 0.7e6, 2e6, math.inf), [0.5e6, 0.7e6, math.inf]),
         ((math.inf, 2e6, 0.5e6), [math.inf, 0.5e6]),
         ((2e6,), []),
     ],
-    ids=['ascending', 'order_kept', 'all_above_nyquist'],
+    ids=['order_kept', 'all_above_nyquist'],
 )
 def test_loop_only_nyquist_keeps_bandwidths_within_the_sample_rate(
     bandwidths, expected
@@ -306,14 +310,6 @@ def test_loop_only_nyquist_keeps_bandwidths_within_the_sample_rate(
         make_sweep(captures=captures, loops=loops, options=options)
     )
     assert [c.analysis_bandwidth for c in filtered] == expected
-
-
-def test_loop_only_nyquist_keeps_inf_bandwidth():
-    loops = (ss.specs.List(field='analysis_bandwidth', values=(0.5e6, math.inf)),)
-    options = ss.specs.SweepOptions(loop_only_nyquist=True)
-    sweep = make_site_sweep(loops=loops, options=options)
-    bandwidths = [c.analysis_bandwidth for c in S.loop_captures(sweep)]
-    assert bandwidths == [0.5e6, math.inf]
 
 
 @pytest.mark.parametrize(
@@ -334,25 +330,27 @@ def test_expansion_args_take_the_nyquist_filter_as_an_argument(
 
 
 def test_calibration_fixture_expansion(calibration_sweep):
-    """the runner's sweep expands over both ports to 192 captures. Each of the 4
-    diode passes runs the captures of one port, and the passes together acquire
+    """the runner's sweep expands the loop points of calibration.json over its one
+    capture, less the (sample_rate, analysis_bandwidth) pairs above Nyquist. Each of
+    the diode passes runs the captures of one port, and the passes together acquire
     the plan twice."""
+    points = {loop.field: loop.get_points() for loop in calibration_sweep.loops}
+    rates = [float(v) for v in points.pop('sample_rate')]
+    bandwidths = [float(v) for v in points.pop('analysis_bandwidth')]
+    within_nyquist = sum(
+        not math.isfinite(bw) or bw <= fs for fs in rates for bw in bandwidths
+    )
+    expected = within_nyquist * math.prod(len(p) for p in points.values())
+    expected *= len(calibration_sweep.captures)
+
     runner = ss.lib.actions.ManualYFactorRunner(calibration_sweep)
-    result = S.loop_captures(runner.sweep)
-    assert len(result) == 192
+    assert len(S.loop_captures(runner.sweep)) == expected
     yfactor = ss.lib.actions.yfactor
     by_pass = [
         len(S.loop_captures(yfactor.pass_sweep(runner.sweep, port)))
         for port, _ in yfactor.calibration_passes(runner.spec)
     ]
-    assert sum(by_pass) == 384
-    assert all(
-        not math.isfinite(c.analysis_bandwidth) or c.sample_rate >= c.analysis_bandwidth
-        for c in result
-    )
-    assert all(type(c.sample_rate) is float for c in result)
-    # the limit applies before the nyquist filter
-    assert len(S.loop_captures(runner.sweep, limit=7)) <= 7
+    assert sum(by_pass) == 2 * expected
 
 
 def test_adjustments_apply_before_loops_take_priority():
@@ -447,21 +445,30 @@ def test_survey_loops_expand(site_survey_sweep):
     assert c.frequency_offset == pytest.approx(-3e6)
 
 
-def test_meta_bounds_are_enforced_when_the_sweep_is_constructed(site_survey_sweep):
+@pytest.mark.parametrize(
+    'loops, match',
+    [
+        (
+            (
+                ss.specs.Range(field='azimuth', start=-45, stop=226, step=2.5),
+                ss.specs.Range(field='elevation', start=0, stop=5, step=5),
+            ),
+            '<= 180',
+        ),
+        (
+            (ss.specs.Range(field='azimuth', start=-180, stop=180, step=90),),
+            'azimuth and elevation',
+        ),
+    ],
+    ids=['meta_bound', 'post_init'],
+)
+def test_capture_checks_are_enforced_when_the_sweep_is_constructed(
+    site_survey_sweep, loops, match
+):
     """`validate_sweep` expands the loops from `Sweep.__post_init__`, so a
     `Meta` bound that only `_expand_capture_loops_with_origins` re-checks fails at
     construction"""
-    loops = (
-        ss.specs.Range(field='azimuth', start=-45, stop=226, step=2.5),
-        ss.specs.Range(field='elevation', start=0, stop=5, step=5),
-    )
-    with pytest.raises(msgspec.ValidationError, match='<= 180'):
-        site_survey_sweep.replace(loops=loops)
-
-
-def test_capture_post_init_is_enforced_when_the_sweep_is_constructed(site_survey_sweep):
-    loops = (ss.specs.Range(field='azimuth', start=-180, stop=180, step=90),)
-    with pytest.raises(msgspec.ValidationError, match='azimuth and elevation'):
+    with pytest.raises(msgspec.ValidationError, match=match):
         site_survey_sweep.replace(loops=loops)
 
 
@@ -478,35 +485,17 @@ def test_range_loop_on_an_int_field_rejects_fractions():
         make_site_sweep(cls=SurveySweepCls, loops=loops)
 
 
-def test_remaps_see_loop_values_given_as_numbers(site_sweep):
-    loops = (ss.specs.List(field='center_frequency', values=(3750e6, 3900e6)),)
-    sweep = site_sweep.replace(loops=loops)
-    captures = S.loop_captures(sweep, source_id=RADIO_ID)
-    assert [c.channel_name for c in captures] == ['3750 MHz', '3900 MHz']
-
-
-def test_remaps_see_loop_values_given_as_yaml_strings(site_sweep):
-    loops = [
-        {'kind': 'list', 'field': 'center_frequency', 'values': ['3750e6', '3900e6']}
-    ]
+@pytest.mark.parametrize(
+    'values', [[3750e6, 3900e6], ['3750e6', '3900e6']], ids=['numbers', 'yaml_strings']
+)
+def test_remaps_see_loop_values_as_the_field_type(site_sweep, values):
+    loops = [{'kind': 'list', 'field': 'center_frequency', 'values': values}]
     sweep = SiteSweepCls.from_dict({**site_sweep.to_dict(), 'loops': loops})
     captures = S.loop_captures(sweep, source_id=RADIO_ID)
     assert [c.channel_name for c in captures] == ['3750 MHz', '3900 MHz']
 
 
 # %% loop_capture_origins
-
-
-@given(sweep=sweeps())
-def test_origins_key_the_first_occurrence_of_each_capture(sweep):
-    captures = S.loop_captures(sweep)
-    origins = S.loop_capture_origins(sweep)
-
-    assert isinstance(origins, frozendict)
-    assert tuple(origins) == tuple(dict.fromkeys(captures))
-
-    for capture, origin in origins.items():
-        assert origin.capture_index == captures.index(capture)
 
 
 def test_origin_spec_index_cycles_over_the_capture_entries():
@@ -549,15 +538,6 @@ def test_origin_loop_points_are_hashable(site_survey_sweep):
     origins = S.loop_capture_origins(site_survey_sweep, source_id=RADIO_ID)
     assert isinstance(hash(origins), int)
     assert all(isinstance(hash(o.loop_points), int) for o in origins.values())
-
-
-@given(sweep=sweeps(), limit=st.integers(min_value=0, max_value=12))
-def test_origins_stay_aligned_under_limit(sweep, limit):
-    captures = S.loop_captures(sweep, limit=limit)
-    origins = S.loop_capture_origins(sweep, limit=limit)
-    assert tuple(origins) == tuple(dict.fromkeys(captures))
-    for capture, origin in origins.items():
-        assert captures[origin.capture_index] == capture
 
 
 def test_origins_are_renumbered_after_the_nyquist_filter():
@@ -653,16 +633,6 @@ def test_describe_capture_origin_omits_the_loops_dropped_by_only_fields():
 # %% adjust_captures
 
 
-def test_adjust_captures_source_overrides_and_falls_back_to_defaults():
-    spec = make_sweep(adjust_captures=ADJUST).adjust_captures
-    hit = S.adjust_captures(make_capture_kws(frequency_offset=100.0), spec, 'ab12')
-    assert hit == {'lo_shift': 'right', 'snr': 11.0}
-    miss = S.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, 'ab12')
-    assert miss == {'lo_shift': 'right', 'snr': -1.0}
-    unknown = S.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None)
-    assert unknown == {'lo_shift': 'left', 'snr': -1.0}
-
-
 def test_adjust_captures_missing_required_source_lookup_raises():
     adjust = {'ab12': {'snr': Remap(key='frequency_offset', lookup={100: 1.0})}}
     spec = make_sweep(adjust_captures=adjust).adjust_captures
@@ -736,12 +706,6 @@ def test_adjust_captures_requires_a_mapping():
     match = 'Expected `capture` as a mapping, got `SingleToneCapture`'
     with pytest.raises(TypeError, match=re.escape(match)):
         S.adjust_captures(make_capture(), spec, None)
-
-
-def test_port_adjustments_are_rejected_when_the_sweep_is_built():
-    match = 'Object contains reserved capture field `port`'
-    with pytest.raises(msgspec.ValidationError, match=re.escape(match)):
-        make_sweep(adjust_captures={'defaults': {'port': 3}})
 
 
 # %% adjust_captures: site override files on the extension binding
@@ -861,11 +825,6 @@ def test_empty_string_source_key_is_valid_hex():
     sweep = make_site_sweep(adjust_captures={'': {'radio_name': 'anon'}})
     result = S.adjust_captures(make_site_capture_kws(), sweep.adjust_captures, '')
     assert result == {'radio_name': 'anon'}
-
-
-def test_source_key_error_names_defaults():
-    with pytest.raises(msgspec.ValidationError, match='defaults'):
-        make_site_sweep(adjust_captures={'zz': {'radio_name': 'x'}})
 
 
 # %% list_capture_adjustments

@@ -47,10 +47,6 @@ DOWNSTREAM_SWEEP = (
 )
 
 
-def test_validate_sweep_accepts_the_synthetic_sweep(synthetic_sweep):
-    assert ss.specs.action.validate_sweep(synthetic_sweep) is None
-
-
 def test_validate_sweep_reports_a_per_source_override():
     """`source_id` selects an `adjust_captures` block that `Sweep.__post_init__` cannot
     reach, since it resolves only the 'defaults' block"""

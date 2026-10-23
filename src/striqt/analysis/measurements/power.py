@@ -182,7 +182,9 @@ def channel_power_time_series(
     ``(power_detector, time_elapsed)``, with `time_elapsed` in s from the start of the
     capture in steps of `detector_period`. The capture `duration` must be a whole
     number of detector periods and `detector_period` a whole number of samples at
-    `sample_rate`; otherwise validation raises `ValueError`.
+    `sample_rate`; otherwise validation raises `ValueError`. The `noise_bandwidth`
+    attr (in Hz) is the `analysis_bandwidth` of the capture, or the capture
+    `sample_rate` when `analysis_bandwidth` is infinite.
 
     Args:
     {args}
@@ -191,7 +193,11 @@ def channel_power_time_series(
 
     results = evaluate_channel_power_time_series(iq, capture=capture, spec=spec)
 
-    return results, spec.to_dict()
+    attrs = shared.bandwidth_attrs(
+        shared.capture_noise_bandwidth(capture), 'dBm', 'Channel Power'
+    )
+
+    return results, spec.to_dict() | attrs
 
 
 # %% channel_power_histogram
@@ -255,13 +261,20 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def channel_power_bin(
     capture: specs.Capture, spec: specs.ChannelPowerHistogram
-) -> np.ndarray:
-    """return the `channel_power_bin` coordinate: histogram bin centers in dBm.
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """return the `channel_power_bin` coordinate values and attrs.
 
-    The grid runs from `power_low` to `power_high` in steps of `power_resolution`,
-    with ``-inf`` and ``inf`` catch-all bins at each end (`make_power_bins`).
+    Returns:
+        histogram bin centers in dBm from `power_low` to `power_high` in steps of
+        `power_resolution`, with ``-inf`` and ``inf`` catch-all bins at each end
+        (`make_power_bins`), and the attrs of `shared.bandwidth_attrs` with the
+        `noise_bandwidth` (in Hz) of `shared.capture_noise_bandwidth`
     """
-    return make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
+    bins = make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
+    attrs = shared.bandwidth_attrs(
+        shared.capture_noise_bandwidth(capture), 'dBm', 'Channel power'
+    )
+    return bins, attrs
 
 
 @hint_keywords(specs.ChannelPowerHistogram)
@@ -284,7 +297,8 @@ def channel_power_histogram(
     ``(power_detector, channel_power_bin)`` and sums to 1 over the bins of each
     detector. `channel_power_bin` is the bin centers in dBm; its ``-inf`` and
     ``inf`` entries collect the readings more than half a bin below `power_low` or
-    above `power_high`.
+    above `power_high`. The `noise_bandwidth` attr (in Hz) of the output and of the
+    bin coordinate is that of `channel_power_time_series`.
 
     Args:
     {args}
@@ -321,7 +335,10 @@ def channel_power_histogram(
 
     data = xp.asarray(data, dtype=count_dtype)
 
-    metadata = {'detector_period': spec.detector_period}
+    metadata = {
+        'detector_period': spec.detector_period,
+        'noise_bandwidth': shared.capture_noise_bandwidth(capture),
+    }
 
     return data, metadata
 
@@ -466,7 +483,8 @@ def cyclic_channel_power(
     capture `duration` must be a whole number of cycles, `cyclic_period` a whole
     number of detector periods, and `detector_period` a whole number of samples at
     `sample_rate`. A `detector_period` written as a fraction (``1/28000`` s is one
-    OFDM symbol at 30 kHz subcarrier spacing) stays exact.
+    OFDM symbol at 30 kHz subcarrier spacing) stays exact. The `noise_bandwidth` attr
+    (in Hz) is that of `channel_power_time_series`.
 
     Args:
     {args}
@@ -491,4 +509,8 @@ def cyclic_channel_power(
     # move the capture axis to the front
     x = xp.moveaxis(x, -2, 0)
 
-    return sw.powtodB(x).astype('float32')
+    attrs = shared.bandwidth_attrs(
+        shared.capture_noise_bandwidth(capture), 'dBm', 'Cyclic channel power'
+    )
+
+    return sw.powtodB(x).astype('float32'), attrs

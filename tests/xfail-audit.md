@@ -591,7 +591,7 @@ it was standing in for is enabled.
 
 - **`summarize_calibration` labels a linear column as dB.** `compute/cal_lookups.py:39`
   names the column `Power Corr (dB)` but `_summarize_calibration_field`
-  returns `power_correction` unchanged (units `mW/fs`). Whether the label or
+  returns `power_correction` unchanged (units `mW/FS`). Whether the label or
   the value is the mistake is a judgment call, so the xfail that recorded it
   (item 47) was withdrawn; the mismatch itself remains.
 

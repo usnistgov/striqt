@@ -76,14 +76,14 @@ def generate(func, xp, duration=DURATION, fs=FS, **kws):
 # %% shape and dtype
 
 
+@pytest.mark.namespaces('numpy')
 @pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
 @pytest.mark.parametrize('dtype', [None, 'complex128'], ids=['default', 'complex128'])
-@pytest.mark.parametrize('ports', [1, 2], ids='ports{}'.format)
-def test_generator_shape_and_dtype(xp, name, dtype, ports):
+def test_generator_dtype(xp, name, dtype):
+    """the windowing tests below cover the shape on every port count and backend"""
     func, kws = GENERATORS[name]
     requested = {} if dtype is None else {'dtype': dtype}
-    x = func(DURATION, FS, ports=ports, xp=xp, **kws, **requested)
-    assert x.shape == (ports, SIZE)
+    x = func(DURATION, FS, xp=xp, **kws, **requested)
     assert x.dtype == np.dtype(dtype or 'complex64')
 
 
@@ -398,9 +398,10 @@ def test_circular_awgn_preroll_is_independent_of_the_capture(xp):
 
 
 @pytest.mark.parametrize('kws', list(INVALID_KWS.values()), ids=list(INVALID_KWS))
-@pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
-def test_invalid_arguments_raise(name, kws):
-    func, defaults = GENERATORS[name]
+def test_invalid_arguments_raise(kws):
+    """every generator checks `ports`, `count`, and `start_index` through
+    `_resolve_count`, so one generator covers the rejections"""
+    func, defaults = GENERATORS['tone']
     with pytest.raises(ValueError):
         func(DURATION, FS, **defaults, **kws)
 

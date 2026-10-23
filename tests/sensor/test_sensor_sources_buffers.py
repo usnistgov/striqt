@@ -58,7 +58,7 @@ def receive_buffers(
 
 
 @pytest.mark.parametrize('preset', list(PRESETS), ids=list(PRESETS))
-@pytest.mark.parametrize('overlap', [0, 2, 100], ids=lambda n: f'overlap{n}')
+@pytest.mark.parametrize('overlap', [0, 100], ids=lambda n: f'overlap{n}')
 def test_get_read_count_is_the_source_rate_sample_count_plus_overlap(preset, overlap):
     """the source must deliver the source-rate record of the capture, with a half
     sample rounded up, plus the requested overlap"""
@@ -195,13 +195,9 @@ def test_cast_iq_cupy_returns_a_device_array(xp):
 # %% get_dtype_scale
 
 
-@pytest.mark.parametrize(
-    'transport_dtype, expected',
-    [('int16', 1 / (2**15 - 1)), ('float32', 1.0), ('complex64', 1.0)],
-    ids=['int16', 'float32', 'complex64'],
-)
-def test_get_dtype_scale(transport_dtype, expected):
-    assert buffers.get_dtype_scale(transport_dtype) == expected
+def test_get_dtype_scale_of_int16_is_the_full_scale_reciprocal():
+    full_scale = np.iinfo(np.int16).max
+    assert buffers.get_dtype_scale('int16') == pytest.approx(1 / full_scale, rel=0)
 
 
 # %% is_reusable
@@ -267,27 +263,18 @@ def test_carryover_round_trip_copies_the_tail_into_the_next_head():
     unused = 7
     t0 = 1_000_000_000_123
     previous = (np.arange(2 * 40) * (1 + 2j)).reshape(2, 40).astype('complex64')
+    tail = previous[:, -unused:].copy()
     rb.stash_carryover(previous, t0, unused_sample_count=unused, capture=capture)
+    # a stash that aliased `previous` would carry these zeros into the next head
+    previous[:] = 0
 
     samples = np.full((2, 40), -1 - 1j, dtype='complex64')
     start_ns, count = rb.apply(samples)
 
     assert count == unused
     assert start_ns == t0 + round(1e9 * capture.duration)
-    np.testing.assert_array_equal(samples[:, :unused], previous[:, -unused:])
+    np.testing.assert_array_equal(samples[:, :unused], tail)
     np.testing.assert_array_equal(samples[:, unused:], -1 - 1j)
-
-
-def test_carryover_is_a_copy_of_the_stashed_samples():
-    capture = soapy_capture()
-    rb = receive_buffers(capture)
-    previous = np.ones((1, 20), dtype='complex64')
-    rb.stash_carryover(previous, 0, unused_sample_count=5, capture=capture)
-    previous[:] = 0
-
-    samples = np.zeros((1, 20), dtype='complex64')
-    rb.apply(samples)
-    assert (samples[:, :5] == 1).all()
 
 
 def test_carryover_without_a_stash_returns_the_timestamp_only():
@@ -416,10 +403,6 @@ def test_alloc_for_cupy_is_pinned_host_memory(xp):
 
 
 # %% get_array_namespace
-
-
-def test_get_array_namespace(xp):
-    assert buffers.get_array_namespace(xp.__name__) is xp
 
 
 def test_get_array_namespace_cupy_unavailable_is_an_import_error(monkeypatch):

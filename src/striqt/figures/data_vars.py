@@ -104,7 +104,7 @@ def cellular_5g_ssb_spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line
     x = 'cellular_ssb_symbol_index'
     y = 'cellular_ssb_baseband_frequency'
     sub = data[name].isel(cellular_ssb_index=0)
-    vmin = util.get_system_noise(data, name, 6)
+    vmin = util.system_noise_floor(data, name, 6)
     grid = plotter.heatmap(sub, x=x, y=y, vmin=vmin, vstep=2)
     if noise_line:
         plotter.mark_noise_level(data, name, grid, where='colorbar')
@@ -123,7 +123,8 @@ def cellular_resource_power_histogram(
     name = sa.measurements.cellular_resource_power_histogram.__name__
     x = 'cellular_resource_power_bin'
     sub = util.select_histogram_bins(data, name, x)
-    grid = plotter.line(sub, x=x, yscale=yscale, hue=hue)
+    grid = plotter.line(sub, x=x, yscale=yscale, hue=hue, sharex=False)
+    plotter.limit_facets(grid, *util.histogram_bin_limits(data, name, x))
     if noise_line:
         plotter.mark_noise_level(data, x, grid, where='y')
     return plotter.finish(grid)
@@ -141,7 +142,8 @@ def channel_power_histogram(
     x = 'channel_power_bin'
     sub = util.select_histogram_bins(data, name, x)
 
-    grid = plotter.line(sub, x=x, yscale=yscale, hue=hue)
+    grid = plotter.line(sub, x=x, yscale=yscale, hue=hue, sharex=False)
+    plotter.limit_facets(grid, *util.histogram_bin_limits(data, name, x))
     if noise_line:
         plotter.mark_noise_level(data, x, grid, where='y')
     return plotter.finish(grid)
@@ -210,7 +212,7 @@ def spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line: bool = True) -
     name = sa.measurements.spectrogram.__name__
     x, y = _coord_names(sa.specs.Spectrogram)
     sub = data[name].dropna(y)
-    vmin = util.get_system_noise(data, name, 6)
+    vmin = util.system_noise_floor(data, name, 6)
     grid = plotter.heatmap(sub, x=x, y=y, vmin=vmin, vstep=2)
     if noise_line:
         plotter.mark_noise_level(data, name, grid, where='colorbar')
@@ -228,9 +230,10 @@ def spectrogram_histogram(
     name = sa.measurements.spectrogram_histogram.__name__
     x = 'spectrogram_power_bin'
     sub = util.select_histogram_bins(data, name, x)
-    grid = plotter.line(sub, x=x, yscale=yscale)
+    grid = plotter.line(sub, x=x, yscale=yscale, sharex=False)
+    plotter.limit_facets(grid, *util.histogram_bin_limits(data, name, x))
     if noise_line:
-        plotter.mark_noise_level(data, x, grid, where='x')
+        plotter.mark_noise_level(data, x, grid, where='y')
     return plotter.finish(grid)
 
 

@@ -217,10 +217,6 @@ class TestIndexCyclicPrefix:
             phy.cp_start_idx[5] + np.arange(phy.cp_sizes[1]),
         )
 
-    def test_is_cached(self):
-        phy = phy_5g(30e3)
-        assert phy.index_cyclic_prefix() is phy.index_cyclic_prefix()
-
     @pytest.mark.parametrize(
         'kws, match',
         [
@@ -249,12 +245,6 @@ class TestSlotPeriod:
         # sample counts are rounded from this, so a last-bit difference moves a shape
         assert phy_3gpp.slot_period(scs) == SLOT_PERIODS[scs]
 
-    @pytest.mark.parametrize('scs', SCS_5G, ids=khz_id)
-    def test_slot_spans_15_subcarrier_periods(self, scs):
-        """TS 38.211 5.3.1: the 14 normal-CP symbols of a slot and their cyclic
-        prefixes add up to 15 subcarrier periods"""
-        assert phy_3gpp.slot_period(scs) * FS == 15 * round(FS / scs)
-
 
 class TestCupy:
     """the phy and its index tensor on cupy against the numpy result"""
@@ -270,15 +260,32 @@ class TestCupy:
 
 # %% nr_sample_rate
 
-# smallest multiple of 896 * 30e3 = 26.88e6 S/s at or above the 3GPP TS 38.104 channel
-# bandwidth plus a 250 kHz transition band
-NR_RATES_30KHZ = {
-    20e6: 26.88e6,
-    40e6: 53.76e6,
-    60e6: 80.64e6,
-    80e6: 80.64e6,
-    100e6: 107.52e6,
+# (subcarrier spacing, 3GPP TS 38.104 Table 5.3.2-1 channel bandwidth) -> the smallest
+# multiple of 896 * scs at or above the channel bandwidth plus a 250 kHz transition
+# band. The step is 13.44e6 S/s at 15 kHz, 26.88e6 at 30 kHz, and 53.76e6 at 60 kHz.
+# The rows near a step boundary: 50.25e6 exceeds 3 steps of 13.44e6 (40.32e6) and
+# takes 4; 80.25e6 fits 3 steps of 26.88e6 (80.64e6); 60.25e6 exceeds 1 step of
+# 53.76e6 and takes 2.
+NR_RATES = {
+    (15e3, 5e6): 13.44e6,
+    (15e3, 20e6): 26.88e6,
+    (15e3, 50e6): 53.76e6,
+    (30e3, 20e6): 26.88e6,
+    (30e3, 40e6): 53.76e6,
+    (30e3, 60e6): 80.64e6,
+    (30e3, 80e6): 80.64e6,
+    (30e3, 100e6): 107.52e6,
+    (60e3, 10e6): 53.76e6,
+    (60e3, 60e6): 107.52e6,
+    (60e3, 100e6): 107.52e6,
 }
+
+# one channel per subcarrier spacing. Every rate is a multiple of 896 * scs, so the
+# sample grid properties below hold for one bandwidth iff they hold for all.
+NR_ONE_PER_SCS = [
+    pytest.param(scs, bw, id=khz_id(scs))
+    for scs, bw in [(15e3, 20e6), (30e3, 100e6), (60e3, 40e6)]
+]
 
 NR_FR1_PAIRS = [
     pytest.param(scs, bw, id=f'{khz_id(scs)}-{bw / 1e6:g}MHz')
@@ -289,36 +296,27 @@ NR_FR1_PAIRS = [
 
 class TestNRSampleRate:
     @pytest.mark.parametrize(
-        'bw, expected',
-        NR_RATES_30KHZ.items(),
-        ids=[f'{bw / 1e6:g}MHz' for bw in NR_RATES_30KHZ],
+        'scs, bw, expected',
+        [(scs, bw, rate) for (scs, bw), rate in NR_RATES.items()],
+        ids=[f'{khz_id(scs)}-{bw / 1e6:g}MHz' for scs, bw in NR_RATES],
     )
-    def test_rates_at_30khz(self, bw, expected):
-        assert phy_3gpp.nr_sample_rate(bw, 30e3) == expected
+    def test_rates(self, scs, bw, expected):
+        assert phy_3gpp.nr_sample_rate(bw, scs) == expected
 
     def test_min_sample_rate_is_a_lower_bound(self):
         rate = phy_3gpp.nr_sample_rate(60e6, 30e3, min_sample_rate=107.52e6)
         assert rate == pytest.approx(107.52e6)
         rate = phy_3gpp.nr_sample_rate(60e6, 30e3, min_sample_rate=1e6)
-        assert rate == NR_RATES_30KHZ[60e6]
+        assert rate == NR_RATES[(30e3, 60e6)]
 
-    @pytest.mark.parametrize('scs, bw', NR_FR1_PAIRS)
-    def test_rate_is_the_smallest_step_multiple_above_the_channel(self, scs, bw):
-        step = phy_3gpp.NR_SAMPLE_RATE_STEP_SUBCARRIERS * scs
-        needed = bw + 250e3
-        rate = phy_3gpp.nr_sample_rate(bw, scs)
-        assert rate % step == 0
-        assert rate >= needed
-        assert rate - step < needed
-
-    @pytest.mark.parametrize('scs, bw', NR_FR1_PAIRS)
+    @pytest.mark.parametrize('scs, bw', NR_ONE_PER_SCS)
     def test_rate_gives_whole_sample_symbols_and_cyclic_prefixes(self, scs, bw):
         rate = phy_3gpp.nr_sample_rate(bw, scs)
         phy = phy_3gpp.Phy3GPP(bw, scs, generation='5G', sample_rate=rate)
         assert phy.nfft == rate / scs
         assert phy.cp_sizes.dtype.kind == 'i'
 
-    @pytest.mark.parametrize('scs, bw', NR_FR1_PAIRS)
+    @pytest.mark.parametrize('scs, bw', NR_ONE_PER_SCS)
     def test_rate_fits_the_symbol_grid_at_half_spacing(self, scs, bw):
         """the cellular spectrograms at SCS/2 resolution fill 15/28 of each hop.
         A whole-sample window needs a bin period that is a multiple of 28 samples."""

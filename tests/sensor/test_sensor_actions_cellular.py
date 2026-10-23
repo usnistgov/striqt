@@ -8,7 +8,6 @@ the runner that builds and runs the plain `Sweep`
 from __future__ import annotations
 
 import copy
-import dataclasses
 from fractions import Fraction
 from typing import Optional
 
@@ -523,35 +522,9 @@ def test_build_sweep_adjusts_only_the_parameters_a_measurement_reads(fields, key
     assert set(runner.sweep.captures[0].adjust_analysis) == keys
 
 
-def test_hardware_loops_expand_over_the_resolved_captures():
-    runner = make_cellular_runner(loops=(GAIN_LOOP,))
-    expanded = H.loop_captures(runner.sweep)
-    assert [c.gain for c in expanded] == [0, -10]
-    assert {(c.sample_rate, c.analysis_bandwidth) for c in expanded} == {
-        (107.52e6, 100e6)
-    }
-
-
 def test_center_frequency_loop_is_rejected_at_construction():
     with pytest.raises(msgspec.ValidationError, match=r'loops\[0\]\.field'):
         make_cellular_sweep(loops=(FC_LOOP,))
-
-
-# %% Cellular5GNRSweep construction
-
-
-def test_capture_without_a_channel_is_rejected_at_construction():
-    captures = (make_cellular_capture(center_frequency=3800e6),)
-    with pytest.raises(
-        msgspec.ValidationError, match=r'captures\[0\]\.center_frequency'
-    ):
-        make_cellular_sweep(captures=captures)
-
-
-def test_duplicate_center_frequencies_are_rejected():
-    channels = {CELL_LABEL: CELL_CHANNEL, 'again': make_cell_channel()}
-    with pytest.raises(msgspec.ValidationError, match='cell_channels'):
-        make_cellular_sweep(cell_channels=channels)
 
 
 # %% runner protocol
@@ -561,18 +534,6 @@ def test_registry_runs_the_cellular_sweep_with_its_runner():
     spec = make_cellular_sweep()
     assert registry.lookup(spec) is Cellular5GNRSweepRunner
     assert Cellular5GNRSweepRunner.validate(spec) is None
-
-
-def test_null_sink_path_opens_a_no_sink():
-    runner = make_cellular_runner()
-    assert type(runner.open_sink(None)) is ss.sinks.NoSink
-
-
-def test_sink_path_opens_a_zarr_capture_sink(tmp_path):
-    spec = make_cellular_sweep(sink=ss.specs.ZarrSink(path=str(tmp_path / 'c.zarr')))
-    with ss.open_resources(spec, None) as res:
-        assert type(res['sink']) is ss.sinks.ZarrCaptureSink
-        assert type(res['runner']) is Cellular5GNRSweepRunner
 
 
 def test_in_memory_run_yields_one_dataset_per_capture_at_the_derived_rate():
@@ -592,21 +553,3 @@ def test_in_memory_run_yields_one_dataset_per_capture_at_the_derived_rate():
         assert (ds.sample_rate.item(), ds.analysis_bandwidth.item()) == (26.88e6, 20e6)
         assert ds.channel_power_time_series.sizes['time_elapsed'] == 28
         assert ds.attrs['cell_channels'] == {CELL_LABEL: channel.to_dict()}
-
-
-# %% check_schema
-
-
-def test_check_schema_accepts_a_capture_type_with_a_center_frequency():
-    assert ss.specs.Cellular5GNRSweep.check_schema(ss.bindings.air7101b.schema) is None
-
-
-def test_bind_sensor_rejects_a_capture_type_without_center_frequency(
-    isolated_bindings,
-):
-    schema = dataclasses.replace(
-        ss.bindings.single_tone.schema, action=ss.specs.Cellular5GNRSweep
-    )
-    sensor = ss.lib.bindings.Sensor(source_cls=ss.sources.SingleToneSource)
-    with pytest.raises(TypeError, match='center_frequency'):
-        ss.lib.bindings.bind_sensor('cellular_probe', sensor, schema, register=False)

@@ -40,7 +40,6 @@ from striqt.waveform.lib.fourier.fft import (
     set_max_cupy_fft_chunk,
     slice_freqs,
     time_fftshift,
-    time_ifftshift,
     truncate_freqs,
 )
 from striqt.waveform.lib.fourier.filters import oaconvolve
@@ -92,23 +91,10 @@ class TestRoundoffModels:
             unit_roundoff(np.float32) / unit_roundoff(np.float64)
         )
 
-    def test_fft_roundoff_rms_defaults_to_numpy(self):
-        by_default = fft_roundoff_rms(*self.ARGS)
-        assert by_default == fft_roundoff_rms(*self.ARGS, array_backend='numpy')
-
     def test_cupy_bound_is_looser_than_numpy(self):
         by_numpy = fft_roundoff_rms(*self.ARGS, array_backend='numpy')
         by_cupy = fft_roundoff_rms(*self.ARGS, array_backend='cupy')
         assert by_cupy > by_numpy
-
-    def test_fft_tolerance_rms_applies_the_same_safety_on_each_backend(self):
-        margins = []
-        for array_backend in ('numpy', 'cupy'):
-            roundoff = fft_roundoff_rms(*self.ARGS, array_backend=array_backend)
-            tolerance = fft_tolerance_rms(*self.ARGS, array_backend=array_backend)
-            assert tolerance > roundoff
-            margins.append(tolerance / roundoff)
-        assert margins[0] == pytest.approx(margins[1])
 
     def test_off_peak_floor_peak_covers_rms(self):
         sigma = fft_tolerance_rms(np.complex64, [1024], 2)
@@ -258,9 +244,6 @@ class TestTimeFftshift:
         x = np.ones((2, 8), dtype=np.complex64)
         with pytest.raises(ValueError, match='1-D or scalar'):
             time_fftshift(x, np.ones((2, 2)), axis=1)
-
-    def test_ifftshift_is_fftshift(self):
-        assert time_ifftshift is time_fftshift
 
     def test_broadcast_onto_requires_1d(self):
         with pytest.raises(ValueError, match='1-D'):

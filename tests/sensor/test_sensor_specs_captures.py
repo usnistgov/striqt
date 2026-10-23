@@ -6,9 +6,7 @@ import pytest
 from conftest import scalars
 from hypothesis import given
 from hypothesis import strategies as st
-from pytest_lazy_fixtures import lf
 from sweep_strategies import (
-    as_sweep,
     capture_tuples,
     make_capture,
     port_scalars,
@@ -99,7 +97,7 @@ def test_ensure_tuple_wraps_scalars(x, size):
 
 @given(
     items=st.lists(scalars, min_size=1, max_size=4),
-    size=st.integers(min_value=1, max_value=5),
+    size=st.integers(min_value=0, max_value=5),
 )
 def test_ensure_tuple_broadcasts_only_singletons(items, size):
     t = tuple(items)
@@ -108,10 +106,6 @@ def test_ensure_tuple_broadcasts_only_singletons(items, size):
         assert C.ensure_tuple(t, size) == t * size
     else:
         assert C.ensure_tuple(t, size) is t
-
-
-def test_ensure_tuple_size_zero():
-    assert C.ensure_tuple((1,), 0) == ()
 
 
 # %% get_unique_ports
@@ -137,11 +131,6 @@ def test_unique_ports_is_the_sorted_union(captures, loop_ports):
 def test_unique_ports_ignores_other_loops(captures):
     loops = (ss.specs.List(field='snr', values=(1.0, 2.0)),)
     assert C.get_unique_ports(captures, loops) == C.get_unique_ports(captures)
-
-
-@pytest.mark.parametrize('sweep', [lf('synthetic_sweep'), lf('calibration_sweep')])
-def test_unique_ports_of_fixtures(sweep):
-    assert C.get_unique_ports(sweep.captures, sweep.loops) == (0, 1)
 
 
 # %% get_capture_type
@@ -196,10 +185,8 @@ def test_concat_group_sizes_ignore_subclass_fields(captures, min_size):
     )
 
 
-@pytest.mark.parametrize('sweep', [lf('synthetic_sweep'), lf('calibration_sweep')])
-def test_concat_group_sizes_of_fixtures(sweep):
+def test_concat_group_sizes_of_mixed_shapes_form_one_group():
     # a group only closes while every distinct shape is still pending *and* remaining,
-    # so mixed sweeps collapse into a single group once any shape runs out
-    captures = ss.specs.sequencing.loop_captures(as_sweep(sweep))
-    assert C.concat_group_sizes(captures) == [len(captures)]
-    assert C.concat_group_sizes(captures, min_size=10) == [len(captures)]
+    # so captures of 2 shapes collapse into a single group once one shape runs out
+    captures = (make_capture(), make_capture(duration=2e-3), make_capture())
+    assert C.concat_group_sizes(captures, min_size=len(captures) + 1) == [3]

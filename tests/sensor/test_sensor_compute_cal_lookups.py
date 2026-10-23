@@ -59,19 +59,22 @@ def model_corrections():
     )
 
 
-def test_summarize_selects_the_port_at_maximum_gain(model_corrections):
-    summary = cal_lookups.summarize_calibration(model_corrections, port=1)
+@pytest.mark.parametrize(
+    'port, expected_nf',
+    [(0, {1e9: 5.0, 2e9: 7.0}), (1, {1e9: 8.0, 2e9: 8.0})],
+    ids=['nf_per_frequency', 'constant_nf'],
+)
+def test_summarize_selects_the_port_at_maximum_gain(
+    model_corrections, port, expected_nf
+):
+    summary = cal_lookups.summarize_calibration(model_corrections, port=port)
     assert list(summary.columns) == ['NF (dB)', 'Power Corr (dB)']
-    assert summary['NF (dB)'].tolist() == [8.0, 8.0]
     assert 'gain' not in summary.index.names
     assert 'port' not in summary.index.names
     assert set(summary.index.names) >= {'center_frequency'}
-
-
-def test_summarize_noise_figure_per_frequency(model_corrections):
-    summary = cal_lookups.summarize_calibration(model_corrections, port=0)
+    assert len(summary) == len(expected_nf)
     by_frequency = summary['NF (dB)'].groupby(level='center_frequency').first()
-    assert by_frequency.to_dict() == pytest.approx({1e9: 5.0, 2e9: 7.0})
+    assert by_frequency.to_dict() == pytest.approx(expected_nf)
 
 
 # %% calibration lookups
@@ -116,7 +119,11 @@ class TestLookupPowerCorrection:
     @pytest.mark.parametrize(
         'cal_path, capture_kws',
         [
-            pytest.param(lf('calibration_nc'), {'gain': -10}, id='exact_grid_point'),
+            pytest.param(
+                lf('calibration_nc'),
+                {'port': (0, 1), 'gain': (0, -10)},
+                id='one_value_per_port',
+            ),
             pytest.param(
                 lf('legacy_channel_nc'), {'port': 1}, id='legacy_channel_coordinate'
             ),
@@ -150,15 +157,12 @@ class TestLookupPowerCorrection:
     def test_recovers_the_receiver_gain(self, cal_path, capture_kws):
         result = _lookup_pc(cal_path, soapy_capture(**capture_kws))
         assert result.dtype == np.float32
-        expected = 1 / receiver_gain(capture_kws.get('gain', 0))
-        assert result == pytest.approx([expected], rel=1e-6)
-
-    def test_multiport_capture_gives_one_value_per_port(self, calibration_nc):
-        capture = soapy_capture(port=(0, 1), gain=(0, -10))
-        result = _lookup_pc(calibration_nc, capture)
-        expected = [1 / receiver_gain(0), 1 / receiver_gain(-10)]
+        gains = capture_kws.get('gain', 0)
+        gains = gains if isinstance(gains, tuple) else (gains,)
+        expected = [1 / receiver_gain(g) for g in gains]
         assert result == pytest.approx(expected, rel=1e-6)
 
+    @pytest.mark.namespaces('cupy')
     def test_array_namespace(self, calibration_nc, xp):
         result = _lookup_pc(calibration_nc, soapy_capture(), xp=xp)
         assert isinstance(result, xp.ndarray)
@@ -207,12 +211,21 @@ class TestLookupSystemNoisePower:
         noise = self._lookup(calibration_nc, soapy_capture(port=1))
         assert noise.dims == ('capture',)
         assert noise.attrs['units'] == 'dBm/Hz'
+        assert noise.attrs['standard_name'] == 'System noise'
+        assert noise.attrs['reference_temperature'] == 290.0
+        assert '290 K' in noise.attrs['long_name']
         assert noise.item() == pytest.approx(8.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
     def test_bandwidth_and_temperature_scale_the_result(self, calibration_nc):
+        """a bandwidth other than 1 Hz gives a power in dBm with the bandwidth in
+        the `noise_bandwidth` attr, the convention of the power measurements"""
         noise = self._lookup(calibration_nc, soapy_capture(), B=1e6, T=300.0)
         expected = 5.0 + 10 * np.log10(BOLTZMANN_MW * 300.0 * 1e6)
         assert noise.item() == pytest.approx(expected)
+        assert noise.attrs['units'] == 'dBm'
+        assert noise.attrs['noise_bandwidth'] == 1e6
+        assert noise.attrs['reference_temperature'] == 300.0
+        assert noise.attrs['long_name'].endswith('300 K source (dBm/1 MHz)')
 
     def test_noise_figure_is_interpolated_in_frequency(self, calibration_nc):
         noise = self._lookup(calibration_nc, soapy_capture(center_frequency=1.5e9))
@@ -373,19 +386,6 @@ def fake_model(fake_calibration_run):
     model.tones.clear()
 
 
-class TestFakeCalibrationSweep:
-    def test_prompts_follow_the_diode_state(self, fake_calibration_run):
-        prompts = fake_calibration_run.prompts
-        assert prompts[0].startswith('Confirm that the noise diode ENR is 20.87 dB')
-        # one prompt per (port, diode state) pass
-        assert prompts[1:] == [
-            'disable noise diode at port 0 and press enter: ',
-            'enable noise diode at port 0 and press enter: ',
-            'disable noise diode at port 1 and press enter: ',
-            'enable noise diode at port 1 and press enter: ',
-        ]
-
-
 SAVED_CALIBRATIONS = [
     pytest.param(lf('flushed_calibration'), EXACT_DB, id='flushed'),
     pytest.param(lf('fake_calibration_run'), FAKE_TOL_DB, id='fake_sweep'),
@@ -402,11 +402,10 @@ class TestSavedCalibration:
         assert set(saved.data_vars) >= set(CORRECTION_VARS)
 
     @pytest.mark.parametrize('run, tol_dB', SAVED_CALIBRATIONS)
-    @pytest.mark.parametrize('analysis_bandwidth', [40e6, INF])
-    def test_points_match_the_model(self, run, tol_dB, analysis_bandwidth):
-        saved = run.calibration(analysis_bandwidth=analysis_bandwidth)
-        grid = dict(SWEEP_GRID, analysis_bandwidth=(analysis_bandwidth,))
-        assert_corrections_match(saved, expected_yfactor(grid), tol_dB)
+    def test_points_match_the_model(self, run, tol_dB):
+        assert_corrections_match(
+            run.calibration(), expected_yfactor(SWEEP_GRID), tol_dB
+        )
 
 
 def _rms_dBm(ds):

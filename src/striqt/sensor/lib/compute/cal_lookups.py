@@ -68,7 +68,29 @@ def lookup_system_noise_power(
     B=1.0,
     xp=None,
 ):
-    """return the power spectral density of the receive system noise"""
+    """return the noise power of the receive system referred to the calibrated input.
+
+    The level is ``k * T * B * F`` in dBm, the noise power that the sensor measures
+    with the input terminated at temperature `T`. `F` is the linear noise figure from
+    the calibration file at the capture's port, gain, sample rate, and analysis
+    bandwidth, interpolated in center frequency. An antenna at a noise temperature
+    other than `T` gives a different measured floor.
+
+    Args:
+        cal_data: path to the calibration corrections file, or None for no calibration
+        capture: the capture whose calibration row is selected
+        master_clock_rate: the SDR master clock rate (in S/s), which sets the
+            backend sample rate of the row
+        format_path: formatter for the calibration path fields
+        T: the source temperature (in K) that the noise figure is referred to
+        B: the noise bandwidth (in Hz); 1 Hz gives a power spectral density in dBm/Hz
+        xp: array namespace for the result
+
+    Returns:
+        a DataArray on the capture dimension, in dBm/Hz when `B` is 1 Hz and in dBm
+        with a `noise_bandwidth` attr otherwise. The `reference_temperature` attr is
+        `T`. None when `cal_data` is None or has no corrections.
+    """
     from scipy.constants import Boltzmann
 
     if xp is None:
@@ -94,15 +116,24 @@ def lookup_system_noise_power(
     k = Boltzmann * 1000  # W/K -> mW/K
     noise_psd = noise_figure + 10 * xp.log10(k * T * B)
 
+    attrs: dict[str, Any] = {
+        'standard_name': 'System noise',
+        'name': 'Sensor system noise spectral density',
+        'reference_temperature': float(T),
+    }
     if B == 1:
-        units = 'dBm/Hz'
+        attrs['units'] = 'dBm/Hz'
+        attrs['long_name'] = (
+            f'Sensor noise power spectral density referred to a {T:g} K source'
+        )
     else:
-        units = f'dBm/{round(B)} Hz'
-    return xr.DataArray(
-        data=noise_psd,
-        dims=CAPTURE_DIM,
-        attrs={'name': 'Sensor system noise spectral density', 'units': units},
-    )
+        attrs['units'] = 'dBm'
+        attrs['noise_bandwidth'] = float(B)
+        attrs['long_name'] = (
+            f'Sensor noise power referred to a {T:g} K source '
+            f'(dBm/{sa.dataarrays.format_units(B, "Hz")})'
+        )
+    return xr.DataArray(data=noise_psd, dims=CAPTURE_DIM, attrs=attrs)
 
 
 def _summarize_calibration_field(

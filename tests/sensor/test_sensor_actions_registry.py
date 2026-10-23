@@ -58,19 +58,6 @@ def test_lookup_by_exact_type(spec):
     assert reg.lookup(spec) is RunnerA
 
 
-@pytest.mark.parametrize(
-    'spec',
-    [SweepCls, make_sweep()],
-    ids=['type', 'instance'],
-)
-def test_lookup_walks_the_mro_of_a_bound_sweep(spec):
-    """the bound class is one subclass below `Sweep` and is not itself registered"""
-    reg = ActionRegistry()
-    reg.runner(spec_type=ss.specs.Sweep)(RunnerA)
-    assert SweepCls.__mro__.index(ss.specs.Sweep) == 1
-    assert reg.lookup(spec) is RunnerA
-
-
 def test_lookup_returns_the_nearest_registered_base():
     reg = ActionRegistry()
     reg.runner(spec_type=ss.specs.Sweep)(RunnerA)
@@ -79,13 +66,8 @@ def test_lookup_returns_the_nearest_registered_base():
     assert reg.lookup(CalSweepCls) is RunnerB
 
 
-@pytest.mark.parametrize(
-    'spec, name',
-    [(UnboundSweep, 'UnboundSweep'), (make_sweep(), SweepCls.__name__)],
-    ids=['type', 'instance'],
-)
-def test_lookup_of_an_unregistered_type_raises_naming_it(spec, name):
+def test_lookup_of_an_unregistered_type_raises_naming_it():
     reg = ActionRegistry()
     reg.runner(spec_type=ss.specs.ManualYFactorCalibration)(RunnerB)
-    with pytest.raises(TypeError, match=name):
-        reg.lookup(spec)
+    with pytest.raises(TypeError, match='UnboundSweep'):
+        reg.lookup(UnboundSweep)

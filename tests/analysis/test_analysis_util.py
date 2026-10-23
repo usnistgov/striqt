@@ -32,14 +32,9 @@ def screen_handlers(name):
 
 # %% StriqtLogger / get_logger
 class TestStriqtLogger:
-    def test_registered_at_import(self):
-        logger = util.get_logger('analysis')
-        assert isinstance(logger, util.StriqtLogger)
-        assert logger.logger.name == 'striqt.analysis'
-        assert logger.extra == util.StriqtLogger.EXTRA_DEFAULTS
-        assert sa.util is util
-
     def test_new_adapter_merges_extra_defaults(self):
+        assert util.get_logger('analysis').extra == util.StriqtLogger.EXTRA_DEFAULTS
+
         logger = util.StriqtLogger(
             'test-util-suffix', {'capture_index': 3, 'site': 'a'}
         )

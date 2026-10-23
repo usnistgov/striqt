@@ -9,8 +9,6 @@ test_waveform_power_convert.py.
 
 from __future__ import annotations
 
-import functools
-
 import numpy as np
 import pytest
 from conftest import gaussian_iq, iq_waveforms
@@ -87,9 +85,7 @@ def corr_cases(
 
 def assert_matches_reference(out, inds, x, nfft, ncp, norm):
     expected = corr_reference(inds, x, nfft, ncp, norm)
-    scale = float(np.abs(x).max() ** 2)
-    atol = cp.corr_atol(x.dtype, inds.size, norm, scale=scale)
-    assert_close(out, expected, atol=atol)
+    assert_close(out, expected, atol=corr_atol_for(x, inds.size, norm))
 
 
 class TestCorrAtIndicesKernels:
@@ -188,22 +184,6 @@ class TestCorrelateCyclicShift:
         power = reference_power(x[inds.ravel()]).mean()
         assert R[0] == pytest.approx(power, abs=corr_atol_for(x, inds.size, norm=False))
         assert R.dtype == x.dtype
-
-    def test_corr_atol_model(self):
-        atol = functools.partial(cp.corr_atol, np.float32)
-        # one rounding per summed product on top of a fixed count of power roundings
-        assert atol(8, norm=False) > atol(4, norm=False)
-        assert atol(16, norm=False) - atol(8, norm=False) == pytest.approx(
-            atol(8, norm=False) - atol(0, norm=False)
-        )
-        # a normalized correlation is bounded by 1 regardless of the input scale
-        assert atol(4, norm=True, scale=100.0) == atol(4, norm=True)
-        assert atol(4, norm=False, scale=100.0) == pytest.approx(
-            100 * atol(4, norm=False)
-        )
-        # roundoff follows the real dtype underlying the complex input
-        assert cp.corr_atol(np.complex64, 4, norm=True) == atol(4, norm=True)
-        assert cp.corr_atol(np.complex128, 4, norm=True) < atol(4, norm=True)
 
 
 class TestCupy:

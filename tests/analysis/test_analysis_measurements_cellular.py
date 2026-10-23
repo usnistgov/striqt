@@ -11,6 +11,7 @@ Section 4.1) and a two-frame `frame_range` both fit.
 
 from __future__ import annotations
 
+import math
 import re
 
 import msgspec
@@ -112,8 +113,18 @@ SSB_REJECTED = {
 }
 
 
-@pytest.mark.parametrize('cls', SSB_SPEC_TYPES, ids=SSB_IDS)
-@pytest.mark.parametrize('case', list(SSB_REJECTED), ids=list(SSB_REJECTED))
+# the 4 registrations share one validator (checked above). Every case runs on one
+# spec type; one case on each other type checks the `$.{name}` prefix of its path.
+SSB_REJECTED_CASES = [
+    pytest.param(SSB_SPEC_TYPES[0], case, id=f'{SSB_IDS[0]}-{case}')
+    for case in SSB_REJECTED
+] + [
+    pytest.param(cls, 'odd_sample_count', id=f'{cls.__name__}-odd_sample_count')
+    for cls in SSB_SPEC_TYPES[1:]
+]
+
+
+@pytest.mark.parametrize('cls, case', SSB_REJECTED_CASES)
 def test_ssb_layout_the_resampler_cannot_produce_is_rejected(cls, case):
     """`fourier.resample` and `correlate_sync_sequence` raise on these once they have
     IQ; the validator rejects them at the measurement path, naming the field"""
@@ -125,17 +136,6 @@ def test_ssb_layout_the_resampler_cannot_produce_is_rejected(cls, case):
 
     name = sa.registry[cls].name
     assert str(ex.value).startswith(f'$.{name}: ')
-
-
-@pytest.mark.parametrize('cls', SSB_SPEC_TYPES, ids=SSB_IDS)
-def test_ssb_downsampled_and_shifted_block_runs(cls):
-    """the accepted counterpart of the rejections above: a 2:1 downsample with a
-    frequency offset on the 50 Hz resampler grid reaches the correlator"""
-    spec = cls(
-        subcarrier_spacing=15e3, sample_rate=CELL_FS / 2, frequency_offset=100 * 50.0
-    )
-    data, _ = measure(spec, capture())
-    assert np.all(np.isfinite(data))
 
 
 # %% cellular_cyclic_autocorrelation
@@ -186,20 +186,6 @@ def test_autocorrelation_index_out_of_the_capture_is_rejected(case):
         measure(spec, capture())
 
     assert str(ex.value).startswith('$.cellular_cyclic_autocorrelation: ')
-
-
-@pytest.mark.parametrize(
-    'symbol_range', [(0, None), (0, 14), (13, 14), (-14, 0), 3], ids=str
-)
-def test_autocorrelation_symbol_range_within_the_slot_runs(symbol_range):
-    """the accepted counterpart of the index bounds: negative indices count back from
-    the end of the slot as `cp_start_idx` does"""
-    spec = sa.specs.CellularCyclicAutocorrelator(
-        subcarrier_spacings=SCS, frame_range=(0, 2), symbol_range=symbol_range
-    )
-    data, _ = measure(spec, capture())
-    downlink = data[0, 0, 0]
-    assert np.all(np.isfinite(downlink))
 
 
 def test_autocorrelation_guards_a_waveform_shorter_than_its_capture():
@@ -329,6 +315,59 @@ class TestCellular5GSSBSpectrogram:
         assert str(ex.value).startswith('$.cellular_5g_ssb_spectrogram: ')
 
 
+# %% noise bandwidth of the SSB measurements
+
+
+def test_pss_correlation_noise_bandwidth_is_one_subcarrier():
+    """the unit-energy PSS template passes one subcarrier of white noise per lag, so
+    |R|^2 of white noise averages N0 * subcarrier_spacing, which the attrs state"""
+    cap = capture()
+    spec = sa.specs.Cellular5GNRPSSCorrelator(**SSB)
+    R, metadata = measure(spec, cap)
+
+    assert metadata['units'] == '√mW'
+    assert metadata['noise_bandwidth'] == SCS
+    assert metadata['long_name'] == 'PSS cross-covariance (√mW/30 kHz)'
+
+    # the awgn has unit power over CELL_FS; the last lags of each block are zero
+    psd = 1.0 / CELL_FS
+    power = np.abs(np.asarray(R)) ** 2
+    lags = power.shape[-1]
+    mean = float(power[..., : lags - 32].mean())
+    sigma = 1 / math.sqrt(power[..., : lags - 32].size)
+    assert_close(
+        10 * np.log10(mean),
+        10 * np.log10(psd * SCS),
+        atol=sw.power_analysis.level_tolerance_dB(5 * sigma, power=True),
+    )
+
+
+def test_ssb_spectrogram_white_noise_reads_one_subcarrier():
+    """the sum of 2 half-subcarrier bins has a mean of N0 * subcarrier_spacing for
+    white noise, and the resolution bandwidth is that of the boxcar over the
+    window_fill samples"""
+    periods = 10
+    da = ssb_of(periods * SSB_SPECTROGRAM_PERIODICITY)
+
+    assert da.attrs['units'] == 'dBm'
+    assert da.attrs['noise_bandwidth'] == SSB_SPECTROGRAM_SCS
+    _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
+    nfft = round(2 * SSB_SPECTROGRAM_FS / SSB_SPECTROGRAM_SCS)
+    nwindow = round(window_fill * nfft)
+    assert da.attrs['resolution_bandwidth'] == pytest.approx(
+        SSB_SPECTROGRAM_FS / nwindow
+    )
+
+    psd = 1.0 / SSB_SPECTROGRAM_FS
+    linear = 10 ** (da.values.astype('float64') / 10)
+    sigma = math.sqrt(2 / linear.size)
+    assert_close(
+        10 * np.log10(np.nanmean(linear)),
+        10 * np.log10(psd * SSB_SPECTROGRAM_SCS),
+        atol=sw.power_analysis.level_tolerance_dB(5 * sigma, power=True),
+    )
+
+
 # %% cellular_resource_power_histogram
 
 # the cellular resource grid requires sample_rate/(subcarrier_spacing/2) divisible by
@@ -363,6 +402,28 @@ def resource_histogram(*, frame_slots, **kwargs):
         **RESOURCE_GRID_KWS,
         **kwargs,
     )
+
+
+@pytest.mark.parametrize(
+    'average_rbs,resource_blocks', [(False, 1 / 12), ('half', 1 / 2)]
+)
+def test_cellular_resource_power_histogram_bin_coordinate_bandwidth(
+    average_rbs, resource_blocks
+):
+    """the bin coordinate and the histogram have the noise bandwidth of one bin:
+    a subcarrier, or the 6 subcarriers averaged per half resource block (a full
+    block exceeds the 150 kHz analysis bandwidth of the test capture)"""
+    da = resource_histogram(frame_slots='dddddddddd', average_rbs=average_rbs)
+
+    bandwidth = 12 * RESOURCE_GRID_SCS * resource_blocks
+    coord_attrs = da.cellular_resource_power_bin.attrs
+    assert coord_attrs['units'] == 'dBm'
+    assert coord_attrs['noise_bandwidth'] == pytest.approx(bandwidth)
+    assert coord_attrs['long_name'].startswith('Cellular resource grid bin power (dBm/')
+    assert da.attrs['noise_bandwidth'] == pytest.approx(bandwidth)
+    assert da.attrs['resolution_bandwidth'] == coord_attrs['resolution_bandwidth']
+    assert 'units' not in da.attrs
+    assert 'long_name' not in da.attrs
 
 
 def test_cellular_resource_power_histogram_link_direction_coordinate():
