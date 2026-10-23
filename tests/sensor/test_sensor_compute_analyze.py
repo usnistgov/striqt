@@ -25,10 +25,10 @@ from striqt.sensor.lib import compute
 (CAPTURE,) = tone_captures((1e6,))
 SWEEP = preset_sweep('single_tone', (CAPTURE,), analysis=IQ_ONLY)
 
-PSS = ss.specs.AnyAnalysis.from_dict({
+PSS = ss.specs.BuiltinAnalyses.from_dict({
     'cellular_5g_pss_sync': {'subcarrier_spacing': 30e3}
 })
-PSS_BUNDLE = ss.specs.AnySignalTrigger(cellular_5g_pss_sync=PSS.cellular_5g_pss_sync)
+PSS_BUNDLE = ss.specs.BuiltinTriggers(cellular_5g_pss_sync=PSS.cellular_5g_pss_sync)
 
 
 def options(**kws):

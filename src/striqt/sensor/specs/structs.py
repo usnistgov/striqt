@@ -17,7 +17,7 @@ from striqt.analysis import Trigger
 
 # pd must be bound here for msgspec to resolve the 'pd.Timestamp' types in `types`
 from striqt.analysis.lib.util import pd  # noqa: F401
-from striqt.analysis.specs import AnyAnalysis, AnySignalTrigger, Capture, SpecBase
+from striqt.analysis.specs import BuiltinAnalyses, BuiltinTriggers, Capture, SpecBase
 from striqt.analysis.specs import frozendict
 
 # re-exported through striqt.sensor.specs as the annotation of any analysis bundle
@@ -111,7 +111,7 @@ class Source(SpecBase, frozen=True, kw_only=True):
 
     # synchronization and triggering
     trigger_strobe: Union[float, None] = None
-    signal_trigger: Union[str, AnySignalTrigger, None] = None
+    signal_trigger: Union[str, BuiltinTriggers, None] = None
 
     array_backend: types.ArrayBackend = 'numpy'
 
@@ -157,7 +157,7 @@ class SoapySource(Source, frozen=True, kw_only=True):
         trigger = self.signal_trigger
         if trigger is None:
             pass
-        elif isinstance(trigger, AnySignalTrigger):
+        elif isinstance(trigger, BuiltinTriggers):
             if len(trigger.to_dict()) != 1:
                 raise ValueError('signal_trigger must enable exactly one trigger')
         elif trigger not in registry.signal_trigger:
@@ -335,8 +335,8 @@ ManualYFactorPeripheral = ManualYFactorSpec
 
 # %% Top-level Sweep specifications
 # compatibility names for the bundles, which striqt.analysis.specs defines
-BundledAnalysis = AnyAnalysis
-BundledTriggers = AnySignalTrigger
+BundledAnalysis = BuiltinAnalyses
+BundledTriggers = BuiltinTriggers
 
 
 class Sink(SpecBase, frozen=True, kw_only=True):
@@ -502,7 +502,7 @@ class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
 
     sink: ZarrSink = ZarrSink()
     plot_hint: Union[PlotOptions, None] = None
-    analysis: AnyAnalysis = AnyAnalysis()
+    analysis: BuiltinAnalyses = BuiltinAnalyses()
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
 
     def __post_init__(self) -> None:
@@ -685,25 +685,27 @@ class CellularIQWaveformSpec(SpecBase, frozen=True, kw_only=True):
 class Cellular5GNRAnalysis(SpecBase, frozen=True, kw_only=True):
     """the `analysis:` block of a `Cellular5GNRSweep`.
 
-    Each field enables one measurement and names only its free parameters. The
-    parameters that follow from the subcarrier spacing of the channels are filled
-    when the sweep is built: the SCS/2 frequency resolution with the 13/28 overlap
-    and 15/28 window fill of the OFDM symbol grid, 1 resource block (spectrogram) or
-    1 subcarrier (power spectral density) of integration bandwidth, the 10 ms cyclic
-    period, and 1 OFDM symbol as the default detector period. A None field disables
-    its measurement.
+    Each field carries the name of the measurement it enables, as in the
+    ``analysis:`` block of a plain `Sweep`, and its block names only the free
+    parameters of that measurement. Every other parameter of the measurement is
+    classified in `striqt.sensor.lib.actions.cellular` as fixed by the subcarrier
+    spacing, set per capture from the channel table, or left at the measurement's
+    default, and that module checks the classification against the measurement specs
+    when it is imported. A None field disables its measurement.
     """
 
     spectrogram: Optional[CellularSpectrogramSpec] = None
     power_spectral_density: Optional[CellularPowerSpectralDensitySpec] = None
-    resource_power_histogram: Optional[CellularResourcePowerHistogramSpec] = None
-    pss_correlation: Optional[CellularPSSCorrelationSpec] = None
-    pss_sync: Optional[CellularPSSSyncSpec] = None
-    ssb_spectrogram: Optional[CellularSSBSpectrogramSpec] = None
+    cellular_resource_power_histogram: Optional[CellularResourcePowerHistogramSpec] = (
+        None
+    )
+    cellular_5g_pss_correlation: Optional[CellularPSSCorrelationSpec] = None
+    cellular_5g_pss_sync: Optional[CellularPSSSyncSpec] = None
+    cellular_5g_ssb_spectrogram: Optional[CellularSSBSpectrogramSpec] = None
     cyclic_channel_power: Optional[CellularCyclicChannelPowerSpec] = None
     channel_power_time_series: Optional[CellularChannelPowerTimeSeriesSpec] = None
     channel_power_histogram: Optional[CellularChannelPowerHistogramSpec] = None
-    cyclic_autocorrelation: Optional[CellularCyclicAutocorrelationSpec] = None
+    cellular_cyclic_autocorrelation: Optional[CellularCyclicAutocorrelationSpec] = None
     iq_waveform: Optional[CellularIQWaveformSpec] = None
 
 

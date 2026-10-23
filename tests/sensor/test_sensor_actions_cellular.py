@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import dataclasses
 from fractions import Fraction
+from typing import Optional
 
 import msgspec
 import pytest
@@ -44,22 +45,24 @@ BLOCKS = {
     'power_spectral_density': ss.specs.CellularPowerSpectralDensitySpec(
         window=('kaiser', 11.884), time_statistic=('mean', 0.5, 'max')
     ),
-    'resource_power_histogram': ss.specs.CellularResourcePowerHistogramSpec(
+    'cellular_resource_power_histogram': ss.specs.CellularResourcePowerHistogramSpec(
         window=('kaiser', 11.884),
         power_low=-150,
         power_high=0,
         power_resolution=0.1,
         average_rbs=True,
     ),
-    'pss_correlation': ss.specs.CellularPSSCorrelationSpec(),
-    'pss_sync': ss.specs.CellularPSSSyncSpec(per_port=True, max_beams=4),
-    'ssb_spectrogram': ss.specs.CellularSSBSpectrogramSpec(lo_bandstop=120e3),
+    'cellular_5g_pss_correlation': ss.specs.CellularPSSCorrelationSpec(),
+    'cellular_5g_pss_sync': ss.specs.CellularPSSSyncSpec(per_port=True, max_beams=4),
+    'cellular_5g_ssb_spectrogram': ss.specs.CellularSSBSpectrogramSpec(
+        lo_bandstop=120e3
+    ),
     'cyclic_channel_power': ss.specs.CellularCyclicChannelPowerSpec(),
     'channel_power_time_series': ss.specs.CellularChannelPowerTimeSeriesSpec(),
     'channel_power_histogram': ss.specs.CellularChannelPowerHistogramSpec(
         power_low=-150, power_high=0, power_resolution=0.1
     ),
-    'cyclic_autocorrelation': ss.specs.CellularCyclicAutocorrelationSpec(),
+    'cellular_cyclic_autocorrelation': ss.specs.CellularCyclicAutocorrelationSpec(),
     'iq_waveform': ss.specs.CellularIQWaveformSpec(),
 }
 
@@ -78,13 +81,19 @@ MEASUREMENTS = {
         'power_spectral_density',
         {**GRID, 'integration_bandwidth': SCS},
     ),
-    'resource_power_histogram': (
+    'cellular_resource_power_histogram': (
         'cellular_resource_power_histogram',
         {'subcarrier_spacing': SCS},
     ),
-    'pss_correlation': ('cellular_5g_pss_correlation', {'subcarrier_spacing': SCS}),
-    'pss_sync': (PSS_TRIGGER, {'subcarrier_spacing': SCS}),
-    'ssb_spectrogram': ('cellular_5g_ssb_spectrogram', {'subcarrier_spacing': SCS}),
+    'cellular_5g_pss_correlation': (
+        'cellular_5g_pss_correlation',
+        {'subcarrier_spacing': SCS},
+    ),
+    'cellular_5g_pss_sync': (PSS_TRIGGER, {'subcarrier_spacing': SCS}),
+    'cellular_5g_ssb_spectrogram': (
+        'cellular_5g_ssb_spectrogram',
+        {'subcarrier_spacing': SCS},
+    ),
     'cyclic_channel_power': (
         'cyclic_channel_power',
         {'cyclic_period': FRAME, 'detector_period': SYMBOL_30K},
@@ -97,7 +106,7 @@ MEASUREMENTS = {
         'channel_power_histogram',
         {'detector_period': SYMBOL_30K},
     ),
-    'cyclic_autocorrelation': (
+    'cellular_cyclic_autocorrelation': (
         'cellular_cyclic_autocorrelation',
         {'subcarrier_spacings': (SCS,)},
     ),
@@ -328,20 +337,22 @@ def test_time_series_detector_period_defaults_to_one_symbol(detector_period, exp
 
 def test_pss_trigger_requires_the_pss_sync_block():
     source = SOURCE.replace(signal_trigger=PSS_TRIGGER)
-    with pytest.raises(msgspec.ValidationError, match=r'analysis\.pss_sync'):
+    with pytest.raises(
+        msgspec.ValidationError, match=r'analysis\.cellular_5g_pss_sync'
+    ):
         one_block_sweep('iq_waveform', source=source)
 
 
 def test_pss_trigger_runs_with_the_pss_sync_block():
     source = SOURCE.replace(signal_trigger=PSS_TRIGGER)
-    spec = one_block_sweep('pss_sync', source=source)
+    spec = one_block_sweep('cellular_5g_pss_sync', source=source)
     assert PSS_TRIGGER in enabled(cellular.cellular_analysis(spec, SCS))
 
 
 def test_struct_trigger_needs_no_pss_sync_block():
     """the struct form of signal_trigger carries its own spec, so the derived sweep
     triggers without the measurement in its analysis"""
-    bundle = ss.specs.AnySignalTrigger(
+    bundle = ss.specs.BuiltinTriggers(
         cellular_5g_pss_sync=sa.specs.Cellular5GNPSSSync(subcarrier_spacing=SCS)
     )
     spec = one_block_sweep('iq_waveform', source=SOURCE.replace(signal_trigger=bundle))
@@ -355,6 +366,74 @@ def test_other_string_trigger_is_rejected():
     source = SOURCE.replace(signal_trigger='cellular_5g_sss_sync')
     with pytest.raises(msgspec.ValidationError, match=r'source\.signal_trigger'):
         one_block_sweep('iq_waveform', source=source)
+
+
+# %% check_block_fields
+
+
+class _ToyMeasurement(sa.specs.Analysis, frozen=True, kw_only=True):
+    window: str = 'hann'
+    frequency_resolution: float = 1.0
+    frame_slots: Optional[str] = None
+    generation: str = '5G'
+
+
+class _ToyBlock(ss.specs.SpecBase, frozen=True, kw_only=True):
+    window: str = 'hann'
+
+
+def _classify(**tables):
+    """run check_block_fields with the module tables replaced for the toy name"""
+    saved = {k: getattr(cellular, k) for k in ('FIXED', 'DEFAULTED', 'HIDDEN')}
+    try:
+        for k in saved:
+            setattr(cellular, k, {'toy': tables.get(k, saved[k].get('toy', {}))})
+        cellular.check_block_fields(_ToyBlock, _ToyMeasurement, 'toy')
+    finally:
+        for k, v in saved.items():
+            setattr(cellular, k, v)
+
+
+def test_check_block_fields_accepts_a_complete_classification():
+    """window exposed, frequency_resolution fixed, frame_slots per capture,
+    generation hidden"""
+    _classify(FIXED={'frequency_resolution': lambda scs: scs}, HIDDEN={'generation'})
+
+
+def test_check_block_fields_reports_an_unclassified_parameter():
+    with pytest.raises(TypeError, match=r"unclassified \['generation'\]"):
+        _classify(FIXED={'frequency_resolution': lambda scs: scs})
+
+
+def test_check_block_fields_reports_a_parameter_classified_twice():
+    with pytest.raises(TypeError, match=r"exposed and fixed \['window'\]"):
+        _classify(
+            FIXED={'frequency_resolution': lambda scs: scs, 'window': lambda scs: 'x'},
+            HIDDEN={'generation'},
+        )
+
+
+def test_check_block_fields_reports_a_block_type_that_differs():
+    class WrongType(ss.specs.SpecBase, frozen=True, kw_only=True):
+        window: int = 0
+
+    with pytest.raises(TypeError, match=r"type differs .*\['window'\]"):
+        saved = cellular.FIXED, cellular.HIDDEN
+        cellular.FIXED = {'toy': {'frequency_resolution': lambda scs: scs}}
+        cellular.HIDDEN = {'toy': frozenset({'generation'})}
+        try:
+            cellular.check_block_fields(WrongType, _ToyMeasurement, 'toy')
+        finally:
+            cellular.FIXED, cellular.HIDDEN = saved
+
+
+def test_every_cellular_block_is_classified():
+    """the check that runs at import, asserted by name: each block's free parameters
+    plus the FIXED, PER_CAPTURE, and HIDDEN names cover its measurement exactly"""
+    cellular.check_all_blocks()
+    assert set(ss.specs.Cellular5GNRAnalysis.__struct_fields__) <= set(
+        ss.specs.BuiltinAnalyses.__struct_fields__
+    )
 
 
 # %% build_cellular_sweep and validate
@@ -429,12 +508,12 @@ ALL_ADJUSTMENTS = {
     [
         (tuple(BLOCKS), ALL_ADJUSTMENTS),
         (
-            ('pss_correlation',),
+            ('cellular_5g_pss_correlation',),
             {'frequency_offset', 'subcarrier_spacing', 'symbol_indexes'},
         ),
         (('iq_waveform',), set()),
     ],
-    ids=['every_block', 'pss_correlation', 'iq_waveform'],
+    ids=['every_block', 'cellular_5g_pss_correlation', 'iq_waveform'],
 )
 def test_build_sweep_adjusts_only_the_parameters_a_measurement_reads(fields, keys):
     """the PSS correlator reads the SSB offset, spacing, and symbol indexes but no

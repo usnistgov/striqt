@@ -4,14 +4,15 @@ The transform from channel table to radio settings is explicit and runs once, wh
 runner builds its sweep: each capture is matched to the channel with its
 `center_frequency`, its `sample_rate` and `analysis_bandwidth` are derived from that
 channel, the channel's cell parameters are written into the capture's
-`adjust_analysis`, and the analysis block is expanded into an `AnyAnalysis` with the
+`adjust_analysis`, and the analysis block is expanded into an `BuiltinAnalyses` with the
 parameters that follow from the subcarrier spacing filled in. The sweep's captures
 are the binding's own type, and loops over their fields pass through unchanged.
 """
 
 from __future__ import annotations as __
 
-from collections.abc import Collection, Generator, Mapping
+import typing
+from collections.abc import Callable, Collection, Generator, Mapping
 from fractions import Fraction
 from typing import Any, Generic
 
@@ -155,7 +156,7 @@ def resolve_capture(
     return capture.replace(adjust_analysis=adjust_analysis, **derived)
 
 
-def analysis_parameter_names(analysis: specs.AnyAnalysis) -> frozenset[str]:
+def analysis_parameter_names(analysis: specs.BuiltinAnalyses) -> frozenset[str]:
     """return the field names of every enabled measurement in `analysis`."""
     names: set[str] = set()
     for meas in analysis.to_dict().values():
@@ -184,84 +185,182 @@ def channel_subcarrier_spacing(channels: Mapping[int, specs.CellChannel]) -> flo
     return spacing
 
 
+def _resource_block(scs: float) -> float:
+    return 12 * scs
+
+
+def _same(scs: float) -> float:
+    return scs
+
+
+def _half(scs: float) -> float:
+    return scs / 2
+
+
+def _frame(scs: float) -> float:
+    return FRAME_PERIOD
+
+
+def _spacings(scs: float) -> tuple[float, ...]:
+    return (scs,)
+
+
+# the spectrogram parameters of the OFDM symbol grid defined above
+_GRID: dict[str, Callable[[float], Any]] = {
+    'frequency_resolution': _half,
+    'fractional_overlap': lambda scs: SYMBOL_FRACTIONAL_OVERLAP,
+    'window_fill': lambda scs: SYMBOL_WINDOW_FILL,
+}
+
+# measurement parameters that the subcarrier spacing fixes, by measurement name; they
+# are absent from the block struct of the same name. A resource block is 12
+# subcarriers (3GPP TS 38.211 §4.4.4.1).
+FIXED: dict[str, dict[str, Callable[[float], Any]]] = {
+    'spectrogram': {**_GRID, 'integration_bandwidth': _resource_block},
+    'power_spectral_density': {**_GRID, 'integration_bandwidth': _same},
+    'cellular_resource_power_histogram': {'subcarrier_spacing': _same},
+    'cellular_5g_pss_correlation': {'subcarrier_spacing': _same},
+    PSS_SYNC_TRIGGER: {'subcarrier_spacing': _same},
+    'cellular_5g_ssb_spectrogram': {'subcarrier_spacing': _same},
+    'cyclic_channel_power': {'cyclic_period': _frame, 'detector_period': symbol_period},
+    'cellular_cyclic_autocorrelation': {'subcarrier_spacings': _spacings},
+}
+
+# block parameters that stay exposed as Optional and take the derived value when None
+DEFAULTED: dict[str, dict[str, Callable[[float], Any]]] = {
+    'channel_power_time_series': {'detector_period': symbol_period},
+    'channel_power_histogram': {'detector_period': symbol_period},
+}
+
+# measurement parameters that `resolve_capture` writes into each capture's
+# `adjust_analysis` from its channel
+PER_CAPTURE = frozenset({
+    'frequency_offset',
+    'guard_bandwidths',
+    'frame_slots',
+    'special_symbols',
+    'subcarrier_spacing',
+    'symbol_indexes',
+})
+
+# measurement parameters that the cellular analysis leaves at the measurement default:
+# the SSB correlators' internal resample rate and lag search, the window fill of the
+# sync detector, and the 3GPP generation of the autocorrelator
+HIDDEN: dict[str, frozenset[str]] = {
+    'cellular_5g_pss_correlation': frozenset({'sample_rate', 'max_lag_symbols'}),
+    PSS_SYNC_TRIGGER: frozenset({'sample_rate', 'max_lag_symbols', 'window_fill'}),
+    'cellular_5g_ssb_spectrogram': frozenset({'sample_rate'}),
+    'cellular_cyclic_autocorrelation': frozenset({'generation'}),
+}
+
+
+def _optional_inner(field: msgspec.structs.FieldInfo) -> type[msgspec.Struct]:
+    """return the struct type `X` of an ``Optional[X]`` field."""
+    args = set(typing.get_args(field.type)) - {type(None)}
+    (inner,) = args
+    return typing.cast('type[msgspec.Struct]', inner)
+
+
+def check_block_fields(
+    block_type: type[msgspec.Struct], spec_type: type[msgspec.Struct], name: str
+) -> None:
+    """raise unless every field of `spec_type` is classified exactly once for `name`.
+
+    A measurement field is exposed on `block_type`, in `FIXED[name]`, in
+    `PER_CAPTURE` when the measurement has it, or in `HIDDEN[name]`; `DEFAULTED[name]`
+    names exposed fields. The module runs this for every block of
+    `Cellular5GNRAnalysis` when it is imported, so a parameter added to a measurement
+    fails the import until it is classified.
+
+    Raises:
+        TypeError: naming the unclassified, doubly classified, or mistyped fields
+    """
+    spec_fields = {f.name: f.type for f in msgspec.structs.fields(spec_type)}
+    exposed = {f.name: f.type for f in msgspec.structs.fields(block_type)}
+    fixed = set(FIXED.get(name, {}))
+    hidden = set(HIDDEN.get(name, frozenset()))
+    per_capture = PER_CAPTURE & set(spec_fields)
+    defaulted = set(DEFAULTED.get(name, {}))
+
+    problems: list[str] = []
+    classified = set(exposed) | fixed | hidden | per_capture
+    if classified != set(spec_fields):
+        problems.extend([
+            f'unclassified {sorted(set(spec_fields) - classified)!r}',
+            f'unknown {sorted(classified - set(spec_fields))!r}',
+        ])
+    for a, b, label in (
+        (set(exposed), fixed, 'exposed and fixed'),
+        (set(exposed), hidden, 'exposed and hidden'),
+        (fixed, hidden, 'fixed and hidden'),
+        (set(exposed), per_capture - fixed, 'exposed and per capture'),
+    ):
+        if a & b:
+            problems.append(f'{label} {sorted(a & b)!r}')
+    if not defaulted <= set(exposed):
+        problems.append(
+            f'defaulted but not exposed {sorted(defaulted - set(exposed))!r}'
+        )
+    mistyped = [
+        n
+        for n, t in exposed.items()
+        if n in spec_fields and n not in defaulted and t != spec_fields[n]
+    ]
+    if mistyped:
+        problems.append(f'type differs from the measurement {sorted(mistyped)!r}')
+    if problems:
+        raise TypeError(
+            f'{block_type.__name__} vs {spec_type.__name__}: ' + '; '.join(problems)
+        )
+
+
+def check_all_blocks() -> None:
+    """run `check_block_fields` for every block of `Cellular5GNRAnalysis`.
+
+    Raises:
+        TypeError: for a block whose name is not a measurement, or from
+            `check_block_fields`
+    """
+    measurement_types = {
+        f.name: _optional_inner(f) for f in msgspec.structs.fields(specs.BuiltinAnalyses)
+    }
+    for field in msgspec.structs.fields(specs.Cellular5GNRAnalysis):
+        if field.name not in measurement_types:
+            raise TypeError(f'{field.name!r} is not a registered measurement name')
+        check_block_fields(
+            _optional_inner(field), measurement_types[field.name], field.name
+        )
+
+
+check_all_blocks()
+
+
 def cellular_analysis(
     spec: specs.Cellular5GNRSweep[Any, Any, Any], subcarrier_spacing: float
-) -> specs.AnyAnalysis:
+) -> specs.BuiltinAnalyses:
     """return the `Sweep` analysis that `spec.analysis` and `subcarrier_spacing` select.
 
-    Each enabled block of `spec.analysis` becomes the measurement of the same role,
-    with its free parameters copied and the spacing-dependent parameters filled.
+    Each enabled block becomes the measurement of the same name, with its free
+    parameters copied, the `FIXED` parameters computed from the spacing, and a None
+    `DEFAULTED` parameter replaced by its derived value.
 
     Raises:
         SpecValidationError: if `spec.source.signal_trigger` is the PSS sync name and
-            `spec.analysis.pss_sync` is None, or any other trigger name; the struct
+            the block of that name is None, or any other trigger name; the struct
             form of `signal_trigger` carries its own spec and needs no block
     """
     scs = subcarrier_spacing
-    blocks = spec.analysis
-    symbol = symbol_period(scs)
-    grid = {
-        'frequency_resolution': scs / 2,
-        'fractional_overlap': SYMBOL_FRACTIONAL_OVERLAP,
-        'window_fill': SYMBOL_WINDOW_FILL,
-    }
     result: dict[str, dict[str, Any]] = {}
-
-    if blocks.spectrogram is not None:
-        result['spectrogram'] = {
-            **blocks.spectrogram.to_dict(),
-            **grid,
-            'integration_bandwidth': 12 * scs,
-        }
-    if blocks.power_spectral_density is not None:
-        result['power_spectral_density'] = {
-            **blocks.power_spectral_density.to_dict(),
-            **grid,
-            'integration_bandwidth': scs,
-        }
-    if blocks.resource_power_histogram is not None:
-        result['cellular_resource_power_histogram'] = {
-            **blocks.resource_power_histogram.to_dict(),
-            'subcarrier_spacing': scs,
-        }
-    if blocks.pss_correlation is not None:
-        result['cellular_5g_pss_correlation'] = {
-            **blocks.pss_correlation.to_dict(),
-            'subcarrier_spacing': scs,
-        }
-    if blocks.pss_sync is not None:
-        result[PSS_SYNC_TRIGGER] = {
-            **blocks.pss_sync.to_dict(),
-            'subcarrier_spacing': scs,
-        }
-    if blocks.ssb_spectrogram is not None:
-        result['cellular_5g_ssb_spectrogram'] = {
-            **blocks.ssb_spectrogram.to_dict(),
-            'subcarrier_spacing': scs,
-        }
-    if blocks.cyclic_channel_power is not None:
-        result['cyclic_channel_power'] = {
-            **blocks.cyclic_channel_power.to_dict(),
-            'cyclic_period': FRAME_PERIOD,
-            'detector_period': symbol,
-        }
-    if blocks.channel_power_time_series is not None:
-        kws = blocks.channel_power_time_series.to_dict()
-        if kws['detector_period'] is None:
-            kws['detector_period'] = symbol
-        result['channel_power_time_series'] = kws
-    if blocks.channel_power_histogram is not None:
-        kws = blocks.channel_power_histogram.to_dict()
-        if kws['detector_period'] is None:
-            kws['detector_period'] = symbol
-        result['channel_power_histogram'] = kws
-    if blocks.cyclic_autocorrelation is not None:
-        result['cellular_cyclic_autocorrelation'] = {
-            **blocks.cyclic_autocorrelation.to_dict(),
-            'subcarrier_spacings': (scs,),
-        }
-    if blocks.iq_waveform is not None:
-        result['iq_waveform'] = blocks.iq_waveform.to_dict()
+    for name in specs.Cellular5GNRAnalysis.__struct_fields__:
+        block = getattr(spec.analysis, name)
+        if block is None:
+            continue
+        kws = block.to_dict()
+        for key, fn in DEFAULTED.get(name, {}).items():
+            if kws[key] is None:
+                kws[key] = fn(scs)
+        kws.update({key: fn(scs) for key, fn in FIXED.get(name, {}).items()})
+        result[name] = kws
 
     # a string trigger takes its spec from the sweep analysis, so the analysis must
     # enable that measurement; the struct form of signal_trigger brings its own spec
@@ -269,9 +368,9 @@ def cellular_analysis(
     if isinstance(trigger, str) and trigger not in result:
         if trigger == PSS_SYNC_TRIGGER:
             raise SpecValidationError(
-                f'Expected a `pss_sync` block, since the source triggers on '
-                f'{PSS_SYNC_TRIGGER!r}',
-                ('.analysis', '.pss_sync'),
+                f'Expected a `{PSS_SYNC_TRIGGER}` block, since the source triggers '
+                f'on {PSS_SYNC_TRIGGER!r}',
+                ('.analysis', f'.{PSS_SYNC_TRIGGER}'),
             )
         raise SpecValidationError(
             f'Expected {PSS_SYNC_TRIGGER!r}, the trigger the cellular analysis '
@@ -279,7 +378,7 @@ def cellular_analysis(
             ('.source', '.signal_trigger'),
         )
 
-    return specs.AnyAnalysis.from_dict(result)
+    return specs.BuiltinAnalyses.from_dict(result)
 
 
 @sa.util.lru_cache()

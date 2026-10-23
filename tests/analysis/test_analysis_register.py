@@ -357,7 +357,7 @@ def check_accepted_pair_runs(info, data):
     once IQ arrives. Pairs they reject are out of scope here; the spot checks below
     cover those."""
     capture, spec = data.draw(VALIDATOR_DOMAINS[info.name], label=info.name)
-    group = sa.specs.AnyAnalysis(**{info.name: spec})
+    group = sa.specs.BuiltinAnalyses(**{info.name: spec})
     try:
         sa.registry.validate(capture, group)
     except SpecValidationError:
@@ -417,7 +417,7 @@ def test_validator_rejects_at_the_analysis_path_naming_the_field(case):
     under `$.analysis`, worded in terms of the spec or capture field at fault"""
     capture, spec, field = REJECTED[case]
     name = sa.registry[type(spec)].name
-    group = sa.specs.AnyAnalysis(**{name: spec})
+    group = sa.specs.BuiltinAnalyses(**{name: spec})
 
     with pytest.raises(SpecValidationError) as excinfo:
         sa.registry.validate(capture, group)
@@ -559,7 +559,7 @@ def test_validators_accept_the_contract_specs(spec):
 
 
 def test_registry_validate_accepts_the_whole_contract_group():
-    group = sa.specs.AnyAnalysis(**{
+    group = sa.specs.BuiltinAnalyses(**{
         sa.registry[type(spec)].name: spec for spec in CONTRACT_SPECS
     })
     sa.registry.validate(CONTRACT_CAPTURE, group)
@@ -601,8 +601,8 @@ def test_check_group_fields_rejects_a_field_that_is_not_optional():
 def test_registry_and_any_analysis_agree():
     """the import-time guard in striqt.analysis.measurements, asserted by name"""
     expected = {info.name: spec_type for spec_type, info in sa.registry.items()}
-    register.check_group_fields(sa.specs.AnyAnalysis, expected)
-    assert set(sa.specs.AnyAnalysis.__struct_fields__) == set(expected)
+    register.check_group_fields(sa.specs.BuiltinAnalyses, expected)
+    assert set(sa.specs.BuiltinAnalyses.__struct_fields__) == set(expected)
 
 
 def test_trigger_registry_and_any_signal_trigger_agree():
@@ -611,6 +611,6 @@ def test_trigger_registry_and_any_signal_trigger_agree():
         for key, info in sa.registry.signal_trigger.items()
         if isinstance(key, str)
     }
-    register.check_group_fields(sa.specs.AnySignalTrigger, expected)
-    triggers = set(sa.specs.AnySignalTrigger.__struct_fields__)
-    assert triggers <= set(sa.specs.AnyAnalysis.__struct_fields__)
+    register.check_group_fields(sa.specs.BuiltinTriggers, expected)
+    triggers = set(sa.specs.BuiltinTriggers.__struct_fields__)
+    assert triggers <= set(sa.specs.BuiltinAnalyses.__struct_fields__)

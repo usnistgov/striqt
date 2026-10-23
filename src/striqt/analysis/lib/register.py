@@ -300,7 +300,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         Registration mutates this registry when the decorator is applied. `spec_type`
         becomes a key here, and each of its fields is recorded in `parameter_fields`
         and `parameter_defaults` for coordinate inference. A sweep reaches the
-        measurement through the ``analysis:`` block only when `specs.AnyAnalysis`
+        measurement through the ``analysis:`` block only when `specs.BuiltinAnalyses`
         declares an ``Optional[spec_type]`` field of the same `name`;
         `striqt.analysis.measurements` checks at import that the registry and that
         struct agree.
@@ -622,8 +622,8 @@ def check_group_fields(
 ) -> None:
     """raise unless `group_type` has one ``Optional[spec] = None`` field per `expected` entry.
 
-    `striqt.analysis.measurements` runs this on `specs.AnyAnalysis` against the
-    measurement registry and on `specs.AnySignalTrigger` against the trigger
+    `striqt.analysis.measurements` runs this on `specs.BuiltinAnalyses` against the
+    measurement registry and on `specs.BuiltinTriggers` against the trigger
     registry. A measurement registered without its field, or a field without its
     measurement, therefore fails at import. Field order is not checked.
 

@@ -232,7 +232,7 @@ class TestSignalTrigger:
         )
 
     def test_trigger_bundle_accepted(self, construct):
-        bundle = sa.specs.AnySignalTrigger(
+        bundle = sa.specs.BuiltinTriggers(
             cellular_5g_pss_sync=sa.specs.Cellular5GNPSSSync(subcarrier_spacing=30e3)
         )
         source = construct(SoapySource, signal_trigger=bundle, **MCR)
@@ -250,7 +250,7 @@ class TestSignalTrigger:
                     subcarrier_spacing=30e3
                 ),
             }
-        bundle = sa.specs.AnySignalTrigger(**kws)
+        bundle = sa.specs.BuiltinTriggers(**kws)
         raises_on_both_paths(
             SoapySource, ValueError, 'exactly one trigger', signal_trigger=bundle, **MCR
         )

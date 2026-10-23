@@ -52,7 +52,7 @@ cell_channels:
 analysis:
   channel_power_time_series: {}
   cyclic_channel_power: {}
-  pss_correlation: {}
+  cellular_5g_pss_correlation: {}
   iq_waveform:
     stop_time_sec: 1e-3
 

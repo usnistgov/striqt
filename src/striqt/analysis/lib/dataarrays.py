@@ -363,7 +363,7 @@ def evaluate_by_spec(
 ) -> 'dict[str, DelayedDataArray] | dict[str, Array]':
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
-    `spec` is an `AnalysisGroup` such as `specs.AnyAnalysis`; its None fields are
+    `spec` is an `AnalysisGroup` such as `specs.BuiltinAnalyses`; its None fields are
     skipped.
 
     Raises:

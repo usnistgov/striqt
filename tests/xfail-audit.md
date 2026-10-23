@@ -32,7 +32,7 @@ calibration runner now acquires each port with the diode off and on itself, so n
 loop is inserted (14), and `save_yfactor_corrections` assigns `calibration_fields` to the
 saved corrections (48). Items 22 and 86 were fixed on 2026-10-22 by replacing the
 `msgspec.defstruct`-generated `BundledAnalysis`/`BundledTriggers` with the hand-written
-`specs.AnyAnalysis`/`specs.AnySignalTrigger` (the old names are aliases):
+`specs.BuiltinAnalyses`/`specs.BuiltinTriggers` (the old names are aliases):
 `Source.signal_trigger` is annotated with the trigger bundle, `SoapySource.__post_init__`
 accepts it when exactly one trigger is enabled, and `striqt.analysis.measurements` checks
 at import that the registry and the bundles agree (`xfailed` 43 to 41 on both
