@@ -737,6 +737,12 @@ class CellularCyclicAutocorrelationSpec(SpecBase, frozen=True, kw_only=True):
     symbol_range: Union[int, tuple[int, Union[int, None]]] = (0, None)
 
 
+@subset_of(sa.specs.IQWaveform)
+class CellularIQWaveformSpec(SpecBase, frozen=True, kw_only=True):
+    start_time_sec: Optional[float] = None
+    stop_time_sec: Optional[float] = None
+
+
 class Cellular5GNRAnalysis(SpecBase, frozen=True, kw_only=True):
     """the per-measurement settings of a `Cellular5GNRSweep`.
 
@@ -759,7 +765,7 @@ class Cellular5GNRAnalysis(SpecBase, frozen=True, kw_only=True):
     channel_power_time_series: Optional[CellularChannelPowerTimeSeriesSpec] = None
     channel_power_histogram: Optional[CellularChannelPowerHistogramSpec] = None
     cellular_cyclic_autocorrelation: Optional[CellularCyclicAutocorrelationSpec] = None
-    iq_waveform: Optional[sa.specs.IQWaveform] = None
+    iq_waveform: Optional[CellularIQWaveformSpec] = None
 
 
 class Cellular5GNRSweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
