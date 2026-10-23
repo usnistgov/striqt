@@ -430,6 +430,41 @@ def isolated_bindings(monkeypatch):
 
 
 @pytest.fixture
+def isolated_analysis_registry():
+    """restore the live `sa.registry` after a test registers a measurement with it.
+
+    `registry.measurement` writes the dict items and the `names`, `caches`,
+    `coordinates`, `signal_trigger`, `parameter_defaults`, and `parameter_fields`
+    attributes; every `sw.util.lru_cache` is cleared at teardown because the group
+    validation and tolerance caches key on the registered spec types."""
+    import striqt.analysis as sa
+    import striqt.waveform as sw
+
+    registry = sa.registry
+    attrs = (
+        'names',
+        'caches',
+        'coordinates',
+        'signal_trigger',
+        'parameter_defaults',
+        'parameter_fields',
+    )
+    items = dict(registry)
+    saved = {name: dict(getattr(registry, name)) for name in attrs if name != 'names'}
+    names = set(registry.names)
+    yield registry
+    registry.clear()
+    registry.update(items)
+    registry.names.clear()
+    registry.names.update(names)
+    for name, value in saved.items():
+        attr = getattr(registry, name)
+        attr.clear()
+        attr.update(value)
+    sw.util.clear_caches()
+
+
+@pytest.fixture
 def corrections_flags(monkeypatch):
     """set(use_oaresample=None, ignore_highside_lo=None) -> None: override the
     STRIQT_USE_OARESAMPLE / STRIQT_IGNORE_HIGHSIDE_LO switches of

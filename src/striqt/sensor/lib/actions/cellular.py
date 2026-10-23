@@ -22,7 +22,7 @@ from ... import specs
 from .. import compute
 from ..resources import Resources
 from ..sinks import NoSink, SinkBase, ZarrCaptureSink
-from ..typing import PC, PS, SC, SP, SS
+from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
 
@@ -152,7 +152,7 @@ def resolve_capture(
     return capture.replace(adjust_analysis=adjust_analysis, **derived)
 
 
-def analysis_parameter_names(analysis: specs.BuiltinAnalyses) -> frozenset[str]:
+def analysis_parameter_names(analysis: specs.AnalysisGroup) -> frozenset[str]:
     """return the field names of every enabled measurement in `analysis`."""
     names: set[str] = set()
     for meas in analysis.to_dict().values():
@@ -314,11 +314,12 @@ check_all_blocks()
 
 
 def cellular_analysis(
-    spec: specs.Cellular5GNRSweep[Any, Any, Any], subcarrier_spacing: float
-) -> specs.BuiltinAnalyses:
+    spec: specs.Cellular5GNRSweep[Any, Any, Any, Any], subcarrier_spacing: float
+) -> specs.AnalysisGroup:
     """return the `Sweep` analysis that `spec.analysis` and `subcarrier_spacing` select.
 
-    Each enabled block becomes the measurement of the same name, with the exposed
+    The result is an instance of the analysis group of the binding of `spec`. Each
+    enabled block becomes the measurement of the same name, with the exposed
     parameters copied, the `FIXED` parameters computed from the spacing, and a None
     `DEFAULTED` parameter replaced by the derived value.
 
@@ -356,13 +357,13 @@ def cellular_analysis(
             ('.source', '.signal_trigger'),
         )
 
-    return specs.BuiltinAnalyses.from_dict(result)
+    return specs.action.analysis_group_type(spec).from_dict(result)
 
 
 @sa.util.lru_cache()
 def build_cellular_sweep(
-    spec: specs.Cellular5GNRSweep[SS, SP, SC],
-) -> specs.Sweep[SS, SP, SC]:
+    spec: specs.Cellular5GNRSweep[SS, SP, SC, SA],
+) -> specs.Sweep[SS, SP, SC, SA]:
     """return the `Sweep` that `open_resources` opens for a `Cellular5GNRSweep`.
 
     The sweep has the spec's captures resolved against `cell_channels`
@@ -414,22 +415,22 @@ def build_cellular_sweep(
 
 
 @registry.runner(spec_type=specs.Cellular5GNRSweep)
-class Cellular5GNRSweepRunner(Generic[SS, SP, SC, PS, PC]):
+class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
     """run a `Cellular5GNRSweep`.
 
     `sweep` is `build_cellular_sweep` of the spec. The output is a `ZarrCaptureSink`
     at `sink.path`, or nothing when the path is None.
     """
 
-    spec: specs.Cellular5GNRSweep[SS, SP, SC]
-    sweep: specs.Sweep[SS, SP, SC]
+    spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]
+    sweep: specs.Sweep[SS, SP, SC, SA]
 
-    def __init__(self, spec: specs.Cellular5GNRSweep[SS, SP, SC]) -> None:
+    def __init__(self, spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]) -> None:
         self.spec = spec
         self.sweep = build_cellular_sweep(spec)
 
     @classmethod
-    def validate(cls, spec: specs.Cellular5GNRSweep[SS, SP, SC]) -> None:
+    def validate(cls, spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]) -> None:
         """build the sweep of `spec`, raising what `build_cellular_sweep` raises."""
         build_cellular_sweep(spec)
 
@@ -440,7 +441,7 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, PS, PC]):
 
     def iterate(
         self,
-        resources: Resources[SS, SP, SC, PS, PC],
+        resources: Resources[SS, SP, SC, SA, PS, PC],
         *,
         always_yield: bool = False,
         yield_values: bool = True,

@@ -21,10 +21,10 @@ from striqt.analysis.specs import BuiltinAnalyses, BuiltinTriggers, Capture, Spe
 from striqt.analysis.specs import frozendict
 
 # re-exported through striqt.sensor.specs as the annotation of any analysis bundle
-from striqt.analysis.specs import AnalysisGroup  # noqa: F401
+from striqt.analysis.specs import AnalysisGroup
 from striqt.analysis.specs.helpers import SpecValidationError, subset_of
 
-from ..lib.typing import TypeVar, SS, SP, SC
+from ..lib.typing import TypeVar, SS, SP, SC, SA
 from . import types
 
 
@@ -421,7 +421,31 @@ AdjustCapturesType = dict[
 ]
 
 
-class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
+def _require_group_fields(
+    group: type[AnalysisGroup], names: tuple[str, ...], action: str
+) -> None:
+    """raise unless `group` declares each of `names` as `BuiltinAnalyses` does.
+
+    Raises:
+        TypeError: naming `action` and the first of `names` that `group` lacks or
+            declares with a spec type other than the `BuiltinAnalyses` field
+    """
+    fields = {f.name: f.type for f in msgspec.structs.fields(group)}
+    builtin = {f.name: f.type for f in msgspec.structs.fields(BuiltinAnalyses)}
+    for name in names:
+        if name not in fields:
+            raise TypeError(
+                f'{action} needs an analysis group with a {name!r} field, but '
+                f'{group.__name__} has none'
+            )
+        if fields[name] != builtin[name]:
+            raise TypeError(
+                f'{action} needs {group.__name__}.{name} to be {builtin[name]!r}, '
+                f'not {fields[name]!r}'
+            )
+
+
+class ActionSpec(SpecBase, Generic[SS, SP, SA], frozen=True, kw_only=True):
     """the top-level spec that an action runs.
 
     An instance is decoded from a file against the tagged class of a sensor binding
@@ -464,7 +488,9 @@ class ActionSpec(SpecBase, Generic[SS, SP], frozen=True, kw_only=True):
         """
 
 
-class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=True):
+class CapturePlan(
+    ActionSpec[SS, SP, SA], Generic[SS, SP, SC, SA], frozen=True, kw_only=True
+):
     """an `ActionSpec` with the `captures`, `loops`, and `adjust_captures` blocks.
 
     `loops` expands over `captures` into the sequence of captures that the action
@@ -491,10 +517,11 @@ class CapturePlan(ActionSpec[SS, SP], Generic[SS, SP, SC], frozen=True, kw_only=
         action._validate_loop_capture_collisions(self.loops, self.captures)
 
 
-class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+class Sweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
     """the spec of a sweep, and the form every action opens resources for.
 
-    `analysis` is evaluated on each expanded capture, with the capture's
+    `analysis` is an instance of the group that `Schema.analysis` names for the
+    binding, and is evaluated on each expanded capture with the capture's
     `adjust_analysis` applied on top. `options` selects the warmup, IQ reuse, and
     the `loop_only_nyquist` filter of the expansion. `plot_hint` is read only by
     `striqt.figures`. `sink` is a `ZarrSink`, which narrows the `Sink` of
@@ -505,18 +532,25 @@ class Sweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
 
     sink: ZarrSink = ZarrSink()
     plot_hint: Union[PlotOptions, None] = None
-    analysis: BuiltinAnalyses = BuiltinAnalyses()
+    analysis: SA = cast(SA, BuiltinAnalyses())
     options: SweepOptions = SweepOptions(reuse_iq=False, loop_only_nyquist=False)
 
     def __post_init__(self) -> None:
         from . import action
 
         super().__post_init__()
+        group = action.analysis_group_type(self)
+        if not isinstance(self.analysis, group):
+            raise SpecValidationError(
+                f'Expected an instance of {group.__name__}, not '
+                f'{type(self.analysis).__name__}',
+                ('.analysis',),
+            )
         action.validate_sweep(self)
         action.validate_action(self)
 
 
-class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+class ManualYFactorCalibration(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
     """the spec of a Y-factor calibration with a hand-switched noise diode.
 
     The `calibration:` block is a `ManualYFactorSpec`. The runner acquires the
@@ -559,6 +593,13 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC], frozen=True, kw_only=Tru
                 ('.source', '.calibration'),
             )
         action.validate_action(self)
+
+    @classmethod
+    def check_schema(cls, schema: Any) -> None:
+        """raise unless `schema.analysis` declares `channel_power_time_series`."""
+        _require_group_fields(
+            schema.analysis, ('channel_power_time_series',), cls.__name__
+        )
 
 
 # the cyclic prefix model is validated at 30 kHz only (strict xfails in
@@ -768,7 +809,7 @@ class Cellular5GNRAnalysis(SpecBase, frozen=True, kw_only=True):
     iq_waveform: Optional[CellularIQWaveformSpec] = None
 
 
-class Cellular5GNRSweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
+class Cellular5GNRSweep(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only=True):
     """the spec of a sweep over 5G NR channels.
 
     `captures` are the binding's own capture type and name a channel by
@@ -813,11 +854,20 @@ class Cellular5GNRSweep(CapturePlan[SS, SP, SC], frozen=True, kw_only=True):
 
     @classmethod
     def check_schema(cls, schema: Any) -> None:
+        """raise unless `schema` can configure a sweep over cell channels.
+
+        The capture type must have a `center_frequency` field, and `schema.analysis`
+        must declare every field of `Cellular5GNRAnalysis` with the spec type of the
+        `BuiltinAnalyses` field of that name.
+        """
         if 'center_frequency' not in schema.capture.__struct_fields__:
             raise TypeError(
                 f'{cls.__name__} needs a capture type with a center_frequency field, '
                 f'but {schema.capture.__name__} has none'
             )
+        _require_group_fields(
+            schema.analysis, Cellular5GNRAnalysis.__struct_fields__, cls.__name__
+        )
 
 
 # %% Non-Sweep specs

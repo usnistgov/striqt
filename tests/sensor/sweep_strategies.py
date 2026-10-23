@@ -4,13 +4,20 @@ Not a conftest. A second rootless conftest would shadow the root one that other 
 directories import by name.
 """
 
+# ruff: noqa: UP045  msgspec resolves the QuickAnalyses annotations at runtime on py3.9
 from __future__ import annotations
 
+import dataclasses
+import functools
+from typing import Optional
+
+import msgspec
 import numpy as np
 import xarray as xr
 from hypothesis import strategies as st
 from soapy_factories import MCR
 
+import striqt.analysis as sa
 import striqt.sensor as ss
 
 SOURCE = ss.specs.FunctionSource(master_clock_rate=MCR, num_rx_ports=2)
@@ -44,8 +51,34 @@ def make_sweep(captures=(), loops=(), adjust_captures=None, **kws):
     return SweepCls(**make_sweep_kws(captures, loops, adjust_captures, **kws))
 
 
+class QuickAnalyses(
+    sa.specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True
+):
+    """an analysis group over 2 of the built-in measurements"""
+
+    spectrogram: Optional[sa.specs.Spectrogram] = None
+    channel_power_time_series: Optional[sa.specs.ChannelPowerTimeSeries] = None
+
+
+@functools.lru_cache
+def quick_binding(action=ss.specs.Sweep) -> type[ss.lib.controller.Controller]:
+    """the single_tone sensor bound for `action` with `QuickAnalyses`, unregistered"""
+    schema = dataclasses.replace(
+        ss.bindings.single_tone.schema, action=action, analysis=QuickAnalyses
+    )
+    return ss.bindings.bind_sensor(
+        f'quick_{action.__name__}',
+        ss.bindings.single_tone.sensor,
+        schema,
+        register=False,
+        module=__name__,
+    )
+
+
 class ActionCls(
-    ss.specs.ActionSpec[ss.specs.FunctionSource, ss.specs.Peripherals],
+    ss.specs.ActionSpec[
+        ss.specs.FunctionSource, ss.specs.Peripherals, ss.specs.BuiltinAnalyses
+    ],
     frozen=True,
     kw_only=True,
 ):
@@ -53,7 +86,12 @@ class ActionCls(
 
 
 class PlanCls(
-    ss.specs.CapturePlan[ss.specs.FunctionSource, ss.specs.Peripherals, CaptureCls],
+    ss.specs.CapturePlan[
+        ss.specs.FunctionSource,
+        ss.specs.Peripherals,
+        CaptureCls,
+        ss.specs.BuiltinAnalyses,
+    ],
     frozen=True,
     kw_only=True,
 ):
@@ -466,3 +504,34 @@ def make_cellular_sweep(**kws):
 def make_cellular_runner(**kws):
     """the Cellular5GNRSweepRunner of make_cellular_sweep(**kws)"""
     return ss.lib.actions.Cellular5GNRSweepRunner(make_cellular_sweep(**kws))
+
+
+# the built-in measurements that a Cellular5GNRSweep generates, and no others
+CellularAnalyses = msgspec.defstruct(
+    'CellularAnalyses',
+    [
+        (f.name, f.type, None)
+        for f in msgspec.structs.fields(sa.specs.BuiltinAnalyses)
+        if f.name in ss.specs.Cellular5GNRAnalysis.__struct_fields__
+    ],
+    bases=(sa.specs.AnalysisGroup,),
+    frozen=True,
+    kw_only=True,
+    omit_defaults=True,
+    module=__name__,
+)
+
+
+def restricted_cellular_binding() -> type[ss.lib.controller.Controller]:
+    """the `site_cellular` sensor bound over `CellularAnalyses`, unregistered"""
+    from site_strategies import EXT
+
+    return _restricted_cellular_binding(EXT.site_cellular)
+
+
+@functools.lru_cache
+def _restricted_cellular_binding(origin):
+    schema = dataclasses.replace(origin.schema, analysis=CellularAnalyses)
+    return ss.bindings.bind_sensor(
+        'cellular_restricted', origin.sensor, schema, register=False, module=__name__
+    )

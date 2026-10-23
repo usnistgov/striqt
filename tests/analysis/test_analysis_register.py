@@ -685,3 +685,70 @@ def test_kwargcache_holds_the_array_until_exit():
         assert ref() is not None
 
     assert ref() is None
+
+
+# %% check_group_registered
+
+GROUP_CHECKS = {
+    'fields': lambda group: register.check_group_fields(
+        group, {'toy': ToySpec, 'other_toy': OtherToySpec}
+    ),
+    'registered': lambda group: register.check_group_registered(
+        group, build_group_registry(None, None)
+    ),
+}
+
+
+def test_check_group_registered_accepts_a_group_of_registered_measurements():
+    registry = build_group_registry(None, None)
+    assert register.check_group_registered(ToyGroup, registry) is None
+
+
+def test_check_group_registered_accepts_a_subset_of_the_registry():
+    class Subset(sa.specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True):
+        toy: Optional[ToySpec] = None
+
+    assert (
+        register.check_group_registered(Subset, build_group_registry(None, None))
+        is None
+    )
+
+
+def test_check_group_registered_rejects_an_unregistered_spec_type():
+    registry, _ = build_registry()
+    assert OtherToySpec not in registry
+    with pytest.raises(TypeError, match='other_toy: OtherToySpec is not a registered'):
+        register.check_group_registered(ToyGroup, registry)
+
+
+def test_check_group_registered_rejects_a_field_named_unlike_the_measurement():
+    class Renamed(
+        sa.specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True
+    ):
+        renamed: Optional[ToySpec] = None
+
+    with pytest.raises(TypeError, match="renamed must be named 'toy'"):
+        register.check_group_registered(Renamed, build_group_registry(None, None))
+
+
+@pytest.mark.parametrize('check', GROUP_CHECKS.values(), ids=list(GROUP_CHECKS))
+def test_group_checks_reject_a_group_without_omit_defaults(check):
+    """`to_dict` and the saved attrs name only the enabled measurements, which needs
+    ``omit_defaults=True`` on the group"""
+
+    class Kept(sa.specs.AnalysisGroup, frozen=True, kw_only=True):
+        toy: Optional[ToySpec] = None
+        other_toy: Optional[OtherToySpec] = None
+
+    with pytest.raises(TypeError, match='omit_defaults'):
+        check(Kept)
+
+
+@pytest.mark.parametrize('check', GROUP_CHECKS.values(), ids=list(GROUP_CHECKS))
+def test_group_checks_reject_a_field_that_is_not_optional(check):
+    class Bad(sa.specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True):
+        toy: ToySpec = ToySpec()
+        other_toy: Optional[OtherToySpec] = None
+
+    with pytest.raises(TypeError, match='Optional'):
+        check(Bad)

@@ -35,10 +35,11 @@ S = TypeVar('S', bound='specs.SpecBase')
 SS = TypeVar('SS', bound='specs.Source')
 SC = TypeVar('SC', bound='specs.SensorCapture')
 SP = TypeVar('SP', bound='specs.Peripherals')
+SA = TypeVar('SA', bound='sa.specs.AnalysisGroup')
 SPC = TypeVar('SPC', bound='specs.Peripherals')
 _SS = TypeVar('_SS', bound='specs.Source', covariant=True)
 TA = TypeVar('TA', bound='specs.ActionSpec')
-TR = TypeVar('TR', bound='ActionRunner[Any, Any, Any, Any, Any, Any]')
+TR = TypeVar('TR', bound='ActionRunner[Any, Any, Any, Any, Any, Any, Any]')
 
 # %% compute.py
 from striqt.analysis.lib.typing import TAR
@@ -52,7 +53,7 @@ _SP = TypeVar('_SP', bound='specs.Peripherals', covariant=True)
 @runtime_checkable
 class Peripherals(Protocol[_SP, _SC]):
     @abstractmethod
-    def __init__(self, spec: 'specs.Sweep[Any, _SP, _SC]'): ...
+    def __init__(self, spec: 'specs.Sweep[Any, _SP, _SC, Any]'): ...
 
     def open(self): ...
 

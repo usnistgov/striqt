@@ -29,7 +29,9 @@ from site_strategies import (
     make_site_sweep,
 )
 from sweep_strategies import (
+    SPG,
     CaptureCls,
+    QuickAnalyses,
     capture_tuples,
     frequency_bin_range_loop,
     make_capture,
@@ -956,6 +958,15 @@ def test_adjust_analysis_replaces_matching_fields_everywhere(
             assert after[name] == {**before[name], 'frequency_resolution': resolution}
         else:
             assert after[name] == before[name]
+
+
+def test_adjust_analysis_keeps_the_group_type():
+    """the adjusted analysis is an instance of the input's group, not of
+    `BuiltinAnalyses`, so a binding over another group keeps decoding against it"""
+    analysis = QuickAnalyses.from_dict({'spectrogram': SPG.spectrogram.to_dict()})
+    adjusted = S.adjust_analysis(analysis, frozendict({'frequency_resolution': 2e4}))
+    assert type(adjusted) is QuickAnalyses
+    assert adjusted.spectrogram.frequency_resolution == pytest.approx(2e4)
 
 
 def test_adjust_analysis_warns_about_unused_keys(synthetic_sweep, caplog):

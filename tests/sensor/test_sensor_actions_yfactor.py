@@ -19,16 +19,20 @@ from sweep_strategies import (
     GAIN_LOOP,
     INF,
     PORT_LOOP,
+    SOURCE,
     YFACTOR_ENR_DB,
     YFACTOR_GRID,
     CalSweepCls,
+    QuickAnalyses,
     SweepCls,
     assert_corrections_match,
     expected_yfactor,
     make_calibration_capture,
     make_calibration_runner,
     make_calibration_sweep,
+    make_capture,
     make_yfactor_dataset,
+    quick_binding,
     yfactor_rms_power,
 )
 
@@ -145,6 +149,19 @@ def test_default_detector_period_is_the_one_duration(loops, period):
     )
     meas = yfactor.calibration_analysis(sweep).channel_power_time_series
     assert meas.detector_period == period
+
+
+def test_calibration_analysis_is_the_group_of_the_binding():
+    """the generated analysis is an instance of `schema.analysis`, which the
+    binding's `check_schema` has required to declare `channel_power_time_series`"""
+    cls = quick_binding(ss.specs.ManualYFactorCalibration).sensor.sweep_spec_cls
+    spec = cls(
+        source=SOURCE,
+        captures=(make_capture(),),
+        calibration=ss.specs.ManualYFactorSpec(enr=20.0, ambient_temperature=290.0),
+    )
+    assert type(yfactor.calibration_analysis(spec)) is QuickAnalyses
+    assert type(yfactor.build_calibration_sweep(spec).analysis) is QuickAnalyses
 
 
 def test_default_detector_period_needs_one_duration():

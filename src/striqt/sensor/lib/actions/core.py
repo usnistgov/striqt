@@ -23,10 +23,10 @@ from ... import specs
 from ..resources import Resources, AnyResources
 from ..sinks import SinkBase
 from ..compute.cal_lookups import lookup_system_noise_power
-from ..typing import PC, PS, SC, SP, SS, TA, Unpack
+from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
 
-class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
+class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
     """the contract between an action spec and the code that runs the spec.
 
     A runner class is registered for one action spec type with `registry.runner`
@@ -37,7 +37,7 @@ class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
     """
 
     spec: TA
-    sweep: specs.Sweep[SS, SP, SC]
+    sweep: specs.Sweep[SS, SP, SC, SA]
 
     def __init__(self, spec: TA) -> None: ...
 
@@ -61,7 +61,7 @@ class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
 
     def iterate(
         self,
-        resources: Resources[SS, SP, SC, PS, PC],
+        resources: Resources[SS, SP, SC, SA, PS, PC],
         *,
         always_yield: bool = False,
         yield_values: bool = True,
@@ -79,12 +79,12 @@ class ActionRunner(Protocol[TA, SS, SP, SC, PS, PC]):
 
 
 def iterate_sweep(
-    resources: Resources[SS, SP, SC, PS, PC],
+    resources: Resources[SS, SP, SC, SA, PS, PC],
     *,
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
-    **replace: Unpack[AnyResources[SS, SP, SC, PS, PC]],
+    **replace: Unpack[AnyResources[SS, SP, SC, SA, PS, PC]],
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
     """run the action of ``resources['runner']`` over `resources`.
 
@@ -110,14 +110,14 @@ def iterate_sweep(
 
 
 def iterate_captures(
-    resources: Resources[SS, SP, SC, PS, PC],
+    resources: Resources[SS, SP, SC, SA, PS, PC],
     *,
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
     extra_data: Mapping[str, Any] | None = None,
     indexer: AcquisitionIndexer | None = None,
-    **replace: 'Unpack[AnyResources[SS, SP, SC, PS, PC]]',
+    **replace: 'Unpack[AnyResources[SS, SP, SC, SA, PS, PC]]',
 ) -> Generator['xr.Dataset|compute.DelayedDataset|None']:
     """step through the captures of a sweep in the acquire, analyze, and sink pipeline.
 
@@ -316,7 +316,7 @@ class AcquisitionIndexer:
 
 @sa.util.stopwatch('acquire', 'sweep', threshold=0.25)
 def _acquire_both(
-    res: Resources[Any, Any, SC, PS, PC],
+    res: Resources[Any, Any, SC, SA, PS, PC],
     this: SC,
     next_: SC | None,
     indexer: AcquisitionIndexer,
@@ -371,7 +371,7 @@ def _acquire_both(
 
 
 def _log_cache_info(
-    resources: Resources[SS, SP, SC, PS, PC],
+    resources: Resources[SS, SP, SC, SA, PS, PC],
     cache,
     capture: SC,
     result,
