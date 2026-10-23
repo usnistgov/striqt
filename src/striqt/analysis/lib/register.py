@@ -40,15 +40,17 @@ else:
 
 
 class KwArgCache:
-    """a single-element cache of a measurement result keyed on capture and keywords.
+    """a single-element cache of a measurement result keyed on the input array, capture, and keywords.
 
     The cache is disabled until entered as a context manager, and exiting clears the
     entry and the callback. `apply` wraps a measurement function so that a call with
-    the same capture and the same values of the `fields` named at construction
-    returns the cached result.
+    the same input array object, the same capture, and the same values of the
+    `fields` named at construction returns the cached result. The array is compared
+    by identity, and the cache keeps a reference to the array while the entry lives.
     """
 
     _key: frozenset | None = None
+    _key_iq: Array | AcquiredIQ | None = None
     _value = None
     enabled = False
     _callback = None
@@ -69,21 +71,23 @@ class KwArgCache:
 
     def clear(self):
         self._key = None
+        self._key_iq = None
         self._value = None
 
-    def lookup(self, kws: dict):
+    def lookup(self, iq: Array | AcquiredIQ, kws: dict):
         if self._key is None or not self.enabled:
             return None
 
-        if self.kw_key(kws) == self._key:
+        if iq is self._key_iq and self.kw_key(kws) == self._key:
             return self._value
         else:
             return None
 
-    def update(self, kws: dict, value):
+    def update(self, iq: Array | AcquiredIQ, kws: dict, value):
         if not self.enabled:
             return
         self._key = self.kw_key(kws)
+        self._key_iq = iq
         self._value = value
 
     def apply(self, func: 'AnalysisFunc[P, RM]') -> 'AnalysisFunc[P, RM]':
@@ -95,12 +99,12 @@ class KwArgCache:
             **kwargs: P.kwargs,
         ) -> RM:
             all_kws = dict(kwargs, capture=capture)  # ty: ignore[no-matching-overload]
-            match = self.lookup(all_kws)
+            match = self.lookup(iq, all_kws)
             if match is not None:
                 return match
 
             ret = func(iq, capture, *args, **kwargs)
-            self.update(all_kws, ret)
+            self.update(iq, all_kws, ret)
             if self._callback is None or self._callback_capture is None:
                 pass
             else:
@@ -235,9 +239,6 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
         return wrapper
 
 
-PreferIQSource = Literal['aligned', 'pre_filter', 'pre_align']
-
-
 AnalysisValidator = Callable[['specs.AnalysisCapture', Any], Any]
 
 # func(capture: AnalysisCapture, spec, *, array_backend: ArrayBackend = 'numpy',
@@ -251,7 +252,6 @@ class AnalysisInfo(NamedTuple):
     name: str
     func: AnalysisFunc
     coord_factories: tuple[CoordFunc, ...]
-    prefer_iq_source: PreferIQSource
     cache: KwArgCache | None
     dtype: str
     attrs: dict
@@ -292,7 +292,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         coord_factories: Iterable[CoordFunc] | CoordFunc | None = None,
         depends: Iterable[Callable] | Callable = [],
         caches: Iterable[KwArgCache] | KwArgCache | None = None,
-        prefer_iq_source: PreferIQSource = 'aligned',
         store_compressed: bool = True,
         attrs: dict[str, Any] = {},
         validate: AnalysisValidator | None = None,
@@ -306,7 +305,9 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         `name`.
 
         The decorated function is called as ``func(iq, capture, **spec.to_dict())``
-        and returns an array, or an ``(array, attrs)`` tuple, whose axes are `dims`.
+        with the caller's `iq`, an array or an `AcquiredIQ`, unchanged, and returns
+        an array, or an ``(array, attrs)`` tuple, whose axes are `dims`. The body
+        selects the waveform conditioning through `select_waveform`.
         The wrapper that replaces the function accepts ``(iq, capture,
         as_xarray=True, **kwargs)`` with the fields of `spec_type` as keywords. The
         `__signature__` of the wrapper and the ``{args}`` placeholder in the docstring
@@ -329,8 +330,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 the `AnalysisInfo` entry and not otherwise consumed
             caches: `KwArgCache` instances shared with other measurements, which
                 `cache_context` scopes to one capture
-            prefer_iq_source: the stage of the acquired IQ handed to the function;
-                ``'aligned'`` falls back to ``'pre_align'`` when no trigger ran
             store_compressed: False to store the output uncompressed in zarr
             attrs: attrs of the output `xarray.DataArray`; the spec fields and any
                 attrs returned by the function take precedence
@@ -358,7 +357,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
         info_kws: dict[str, Any] = dict(
             name=name,
-            prefer_iq_source=prefer_iq_source,
             cache=caches,
             dtype=dtype,
             attrs=attrs,

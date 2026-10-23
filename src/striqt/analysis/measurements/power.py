@@ -168,7 +168,6 @@ def evaluate_channel_power_time_series(
     dtype='float32',
     spec_type=specs.ChannelPowerTimeSeries,
     caches=_channel_power_cache,
-    prefer_iq_source='aligned',
     attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
     validate=validated_channel_power_binning,
     tolerance=channel_power_tolerance,
@@ -284,7 +283,6 @@ def channel_power_bin(
     depends=[channel_power_time_series],
     spec_type=specs.ChannelPowerHistogram,
     dtype='float32',
-    prefer_iq_source='aligned',
     attrs={'standard_name': 'Fraction of channel power readings'},
     validate=validated_channel_power_binning,
 )
@@ -455,7 +453,6 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.nda
     coord_factories=[power_detector, cyclic_statistic, cyclic_lag],
     spec_type=specs.CyclicChannelPower,
     dtype='float32',
-    prefer_iq_source='aligned',
     attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
     validate=validated_cyclic_lag_count,
     tolerance=cyclic_channel_power_tolerance,

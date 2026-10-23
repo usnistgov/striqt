@@ -404,6 +404,13 @@ class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
         assert self.registry is not None
 
 
+def _raw_array(iq: Array | AcquiredIQ) -> Array:
+    """return the acquired array of `iq`, or `iq` when the argument is an array."""
+    if isinstance(iq, AcquiredIQ):
+        return iq.pre_align
+    return iq
+
+
 def evaluate_by_spec(
     iq: Array | AcquiredIQ,
     spec: specs.AnalysisGroup,
@@ -413,7 +420,8 @@ def evaluate_by_spec(
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
     `spec` is an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
-    fields of `spec` are skipped.
+    fields of `spec` are skipped. `iq` is handed to each measurement unchanged; the
+    measurement body selects the conditioning through `select_waveform`.
 
     Raises:
         TypeError: if `spec` is not an `AnalysisGroup`
@@ -427,14 +435,11 @@ def evaluate_by_spec(
     else:
         raise TypeError('invalid analysis spec argument')
 
-    if not isinstance(iq, AcquiredIQ):
-        iq = AcquiredIQ(pre_align=iq, pre_filter=None, aligned=None, capture=None)
-
     spec_dict = spec.to_dict()
     results = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
-    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+    if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.configure_cupy()
 
     for name in spec_dict.keys():
@@ -444,14 +449,7 @@ def evaluate_by_spec(
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
-            if meas.prefer_iq_source == 'pre_filter':
-                iq_sel = iq.pre_filter
-            elif iq.aligned is None or meas.prefer_iq_source == 'pre_align':
-                iq_sel = iq.pre_align
-            else:
-                iq_sel = iq.aligned
-
-            ret = meas.func(iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws)
+            ret = meas.func(iq=iq, capture=capture, as_xarray=as_xarray, **func_kws)
 
             if options.block_each:
                 results[name] = ret.compute()
@@ -474,7 +472,7 @@ def evaluate_by_spec(
             assert isinstance(res, DelayedDataArray)
             results[name] = res.to_xarray()  # ty: ignore
 
-    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+    if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.free_cupy_mempool()
 
     return results
