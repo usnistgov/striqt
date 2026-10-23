@@ -322,7 +322,8 @@ def check_all_blocks() -> None:
             `check_block_fields`
     """
     measurement_types = {
-        f.name: _optional_inner(f) for f in msgspec.structs.fields(specs.BuiltinAnalyses)
+        f.name: _optional_inner(f)
+        for f in msgspec.structs.fields(specs.BuiltinAnalyses)
     }
     for field in msgspec.structs.fields(specs.Cellular5GNRAnalysis):
         if field.name not in measurement_types:

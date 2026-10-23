@@ -10,7 +10,7 @@ from math import inf, isfinite
 
 import numpy as np
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from numeric_checks import (
     FIR_LEAKAGE,
@@ -38,6 +38,7 @@ from synthetic_sources import (
     fs_sdr,
     generator,
     preset_capture,
+    source_count,
 )
 
 import striqt.sensor as ss
@@ -597,7 +598,7 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
     # the sum of the two is an overlap that read_iq accepts, and it asks the source
     # for exactly the padded resampler input
     read_count = buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=lead + tail)
-    assert read_count == round(capture.duration * fs) + lead + tail
+    assert read_count == source_count(capture, FUNCTION_SOURCE) + lead + tail
 
 
 def test_upsampled_overlap_covers_the_output_rate_filter_pad():
@@ -618,16 +619,18 @@ def test_upsampled_overlap_covers_the_output_rate_filter_pad():
     count=sample_counts,
     bandwidth_fraction=bandwidth_fractions,
 )
+@example(sample_rate=1e7, count=23076, bandwidth_fraction=inf)
 def test_overlaps_pad_to_a_whole_resampler_block(
     sample_rate, count, bandwidth_fraction
 ):
     """the overlaps need not be even or equal: together they pad the source-rate
     record to a length that resamples to a whole number of output samples, as
-    _resample requires. read_iq reads exactly that padded record"""
+    _resample requires. read_iq reads exactly that padded record. The example is a
+    25:24 ratio whose record length is an exact half sample"""
     capture = _drawn_capture(sample_rate, count, bandwidth_fraction)
     lead, tail = corrections._get_resampler_overlaps(capture, FUNCTION_SOURCE)
     fs = fs_sdr(capture)
-    padded = round(capture.duration * fs) + lead + tail
+    padded = source_count(capture, FUNCTION_SOURCE) + lead + tail
 
     assert lead >= 0 and tail >= 0
     assert sw.isroundmod(padded * capture.sample_rate, fs)
@@ -687,6 +690,29 @@ def test_correct_iq_trims_an_odd_lead_pad():
     assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
 
 
+# %% source_record_size
+
+
+def test_source_record_size_rounds_an_exact_half_sample_up():
+    """23076 samples at 10 MS/s from the 125 MS/s clock resample 25:24, so the source
+    record is 24037.5 samples exactly; the float product duration * fs_sdr falls
+    below the half and would round down"""
+    capture = _drawn_capture(1e7, 23076, inf)
+    design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
+    assert (design['nfft'], design['nfft_out']) == (550, 528)
+    assert corrections.source_record_size(capture, design) == 24038
+    assert round(capture.duration * design['fs_sdr']) == 24037
+
+
+@given(sample_rate=sample_rates, count=sample_counts)
+def test_source_record_size_matches_the_exact_rational_length(sample_rate, count):
+    capture = _drawn_capture(sample_rate, count, inf)
+    design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
+    assert corrections.source_record_size(capture, design) == source_count(
+        capture, FUNCTION_SOURCE
+    )
+
+
 # %% _resample
 
 
@@ -696,7 +722,7 @@ def test_resample_rejects_a_length_that_does_not_divide():
     capture = preset_capture('dirac_delta', **RESAMPLE_ONLY, time=IMPULSE_TIME)
     lead, tail = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
     fs = fs_sdr(capture)
-    count = lead + 1 + round(capture.duration * fs) + tail
+    count = lead + 1 + source_count(capture, FUNCTION_SOURCE) + tail
     assert not sw.isroundmod(count * capture.sample_rate, fs)
 
     iq = _build_iq('dirac_delta', capture, (lead + 1, tail))
@@ -714,7 +740,7 @@ def _assert_valid_overlaps(capture):
     low, high = corrections.get_correction_overlaps(capture, SOAPY_SOURCE)
     fs = fs_sdr(capture, SOAPY_SOURCE)
     filter_out = corrections._get_filter_overlap(capture)
-    padded = round(capture.duration * fs) + low + high
+    padded = source_count(capture, SOAPY_SOURCE) + low + high
 
     assert low >= 0 and high >= 0
     assert low * capture.sample_rate / fs >= filter_out

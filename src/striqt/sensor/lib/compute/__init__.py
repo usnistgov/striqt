@@ -7,6 +7,7 @@ from .corrections import (
     design_resampler,
     get_correction_overlaps,
     needs_resample,
+    source_record_size,
 )
 from .tolerance import (
     capture_tolerances,

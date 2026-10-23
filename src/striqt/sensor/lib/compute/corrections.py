@@ -142,7 +142,7 @@ def get_correction_overlaps(
     The lead absorbs the transient of the analysis FIR, which `correct_iq` applies at
     `capture.sample_rate` after resampling; the tail absorbs that transient and the
     largest lag of the trigger that `analysis` selects. Together they pad the record of
-    ``round(duration * fs_sdr)`` samples to a whole number of resampler FFTs.
+    `source_record_size` samples to a whole number of resampler FFTs.
 
     Args:
         capture: the capture whose duration, sample rate, and analysis bandwidth size
@@ -551,6 +551,21 @@ def _get_oaresample_overlaps(
     return lead, tail
 
 
+def source_record_size(capture: specs.SensorCapture, design: sw.ResamplerDesign) -> int:
+    """return the source-rate sample count of `capture.duration` under `design`.
+
+    The count is the output sample count ``round(duration * sample_rate)`` scaled by
+    the exact ``nfft / nfft_out`` ratio of `design`, in integer arithmetic, with a
+    half sample rounded up. The acquisition read count, the resampler pads, and the
+    tolerance model all take the record length from this function.
+    """
+    samples_out = round(capture.duration * capture.sample_rate)
+    nfft, nfft_out = design['nfft'], design['nfft_out']
+    # integer round-half-up; the float product duration * fs_sdr lands below the
+    # half sample when both factors are inexact and would round the other way
+    return (2 * samples_out * nfft + nfft_out) // (2 * nfft_out)
+
+
 @sa.specs.helpers.lru_cache_on_converted(specs.SensorCapture, maxsize=30000)
 def _get_resample_overlap(
     capture: specs.SensorCapture, setup: specs.Source, min_overlap: int = 0
@@ -576,7 +591,7 @@ def _get_resample_overlap(
     design = design_resampler(capture, setup.master_clock_rate)
     nfft = design['nfft']
     nfft_out = design['nfft_out']
-    analysis_size = round(capture.duration * design['fs_sdr'])
+    analysis_size = source_record_size(capture, design)
 
     filter_pad = sw.util.ceildiv(_get_filter_overlap(capture) * nfft, nfft_out)
     lead_min = filter_pad

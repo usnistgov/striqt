@@ -3,6 +3,8 @@ resolved into radio settings and analysis adjustments, the generated analysis, a
 the runner that builds and runs the plain `Sweep`
 """
 
+# ruff: noqa: UP045  msgspec resolves the toy struct annotations at runtime on py3.9
+
 from __future__ import annotations
 
 import copy
@@ -291,7 +293,6 @@ def test_analysis_parameter_names_of_no_measurements_is_empty():
 
 
 def test_channel_subcarrier_spacing_is_the_shared_spacing():
-    spec = make_cellular_sweep()
     channels = {0: CELL_CHANNEL, 1: OTHER_CHANNEL}
     assert cellular.channel_subcarrier_spacing(channels) == pytest.approx(SCS)
 
@@ -300,7 +301,6 @@ def test_channel_subcarrier_spacing_rejects_mixed_spacings():
     """`CellChannel` accepts 30 kHz only, so the 15 kHz channel is forced onto a copy"""
     at_15k = copy.copy(OTHER_CHANNEL)
     msgspec.structs.force_setattr(at_15k, 'subcarrier_spacing', 15e3)
-    spec = make_cellular_sweep()
     with pytest.raises(msgspec.ValidationError, match='cell_channels'):
         cellular.channel_subcarrier_spacing({0: CELL_CHANNEL, 1: at_15k})
 
@@ -386,12 +386,12 @@ def _classify(**tables):
     """run check_block_fields with the module tables replaced for the toy name"""
     saved = {k: getattr(cellular, k) for k in ('FIXED', 'DEFAULTED', 'HIDDEN')}
     try:
-        for k in saved:
-            setattr(cellular, k, {'toy': tables.get(k, saved[k].get('toy', {}))})
+        for k, table in saved.items():
+            setattr(cellular, k, {'toy': tables.get(k, table.get('toy', {}))})
         cellular.check_block_fields(_ToyBlock, _ToyMeasurement, 'toy')
     finally:
-        for k, v in saved.items():
-            setattr(cellular, k, v)
+        for k, table in saved.items():
+            setattr(cellular, k, table)
 
 
 def test_check_block_fields_accepts_a_complete_classification():
@@ -413,18 +413,16 @@ def test_check_block_fields_reports_a_parameter_classified_twice():
         )
 
 
-def test_check_block_fields_reports_a_block_type_that_differs():
+def test_check_block_fields_reports_a_block_type_that_differs(monkeypatch):
     class WrongType(ss.specs.SpecBase, frozen=True, kw_only=True):
         window: int = 0
 
+    monkeypatch.setattr(
+        cellular, 'FIXED', {'toy': {'frequency_resolution': lambda scs: scs}}
+    )
+    monkeypatch.setattr(cellular, 'HIDDEN', {'toy': frozenset({'generation'})})
     with pytest.raises(TypeError, match=r"type differs .*\['window'\]"):
-        saved = cellular.FIXED, cellular.HIDDEN
-        cellular.FIXED = {'toy': {'frequency_resolution': lambda scs: scs}}
-        cellular.HIDDEN = {'toy': frozenset({'generation'})}
-        try:
-            cellular.check_block_fields(WrongType, _ToyMeasurement, 'toy')
-        finally:
-            cellular.FIXED, cellular.HIDDEN = saved
+        cellular.check_block_fields(WrongType, _ToyMeasurement, 'toy')
 
 
 def test_every_cellular_block_is_classified():

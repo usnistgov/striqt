@@ -7,6 +7,8 @@ The hook tests build their own `AnalysisRegistry`, since mutating the live regis
 would leak a measurement into every other test module.
 """
 
+# ruff: noqa: UP045  msgspec resolves the ToyGroup annotations at runtime on py3.9
+
 from __future__ import annotations
 
 from fractions import Fraction

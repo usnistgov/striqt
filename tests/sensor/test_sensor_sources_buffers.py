@@ -20,6 +20,7 @@ from synthetic_sources import (
     SCALE_ONLY,
     fs_sdr,
     preset_capture,
+    source_count,
 )
 
 import striqt.sensor as ss
@@ -59,12 +60,10 @@ def receive_buffers(
 @pytest.mark.parametrize('preset', list(PRESETS), ids=list(PRESETS))
 @pytest.mark.parametrize('overlap', [0, 2, 100], ids=lambda n: f'overlap{n}')
 def test_get_read_count_is_the_source_rate_sample_count_plus_overlap(preset, overlap):
-    """the source must deliver duration * fs_sdr samples (rounded up when the
-    resampler ratio is fractional) plus the requested overlap"""
+    """the source must deliver the source-rate record of the capture, with a half
+    sample rounded up, plus the requested overlap"""
     capture = preset_capture('single_tone', **PRESETS[preset])
-    samples_out = round(capture.duration * capture.sample_rate)
-    ratio = fs_sdr(capture) / capture.sample_rate
-    expected = ceil(samples_out * ratio) + overlap
+    expected = source_count(capture, SOURCE) + overlap
 
     assert buffers.get_read_count(capture, SOURCE, overlap=overlap) == expected
 

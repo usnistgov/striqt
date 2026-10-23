@@ -608,7 +608,8 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
         sample_offs = included_holdoff - overlaps[0]
         sample_span = slice(sample_offs, sample_offs + output_count)
 
-        unused_count = output_count - round(self._capture.duration * fs)
+        record = compute.source_record_size(self._capture, self.get_resampler())
+        unused_count = output_count - record
         self._buffers.stash_carryover(
             samples[:, sample_span],
             start_ns,

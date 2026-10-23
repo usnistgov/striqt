@@ -120,9 +120,7 @@ def get_read_count(
 ) -> int:
     if overlap < 0 or not isinstance(overlap, (np.integer, int)):
         raise ValueError('overlap must be a non-negative integer')
-    if sw.isroundmod(capture.duration * capture.sample_rate, 1):
-        samples_out = round(capture.duration * capture.sample_rate)
-    else:
+    if not sw.isroundmod(capture.duration * capture.sample_rate, 1):
         msg = f'duration must be an integer multiple of the sample period (1/{capture.sample_rate} s)'
         raise ValueError(msg)
 
@@ -135,10 +133,7 @@ def get_read_count(
         sample_rate = capture.sample_rate
 
     if compute.needs_resample(resampler_design, capture):
-        nfft = resampler_design['nfft']
-        # round, not ceil, to match the resampler pad built from round(duration*fs_sdr)
-        min_samples_in = round(samples_out * nfft / resampler_design['nfft_out'])
-        samples_in = min_samples_in + overlap
+        samples_in = compute.source_record_size(capture, resampler_design) + overlap
     else:
         samples_in = round(capture.sample_rate * capture.duration) + overlap
 

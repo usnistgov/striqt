@@ -14,7 +14,8 @@ def probe(source: ss.specs.Source) -> None:
     analysis = sa.specs.BuiltinAnalyses(iq_waveform=sa.specs.IQWaveform())
     assert_type(analysis.iq_waveform, Optional[sa.specs.IQWaveform])
     assert_type(
-        ss.specs.BundledAnalysis.from_dict({'iq_waveform': {}}), sa.specs.BuiltinAnalyses
+        ss.specs.BundledAnalysis.from_dict({'iq_waveform': {}}),
+        sa.specs.BuiltinAnalyses,
     )
     assert_type(analysis.replace(spectrogram=None), sa.specs.BuiltinAnalyses)
     if isinstance(source.signal_trigger, sa.specs.BuiltinTriggers):
