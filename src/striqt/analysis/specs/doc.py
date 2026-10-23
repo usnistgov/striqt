@@ -6,7 +6,7 @@ import types
 
 
 def format_type_hint(hint) -> str:
-    """format a type hint as a string, recursing into its arguments."""
+    """format a type hint as a string, recursing into the type arguments."""
     # 1. Base cases: None, Any, and Ellipsis
     if hint is None or hint is type(None):
         return 'None'
@@ -61,10 +61,10 @@ def clean_type_string(type_str):
 
 
 def parse_type_and_meta(hint):
-    """extract the `msgspec.Meta` objects from a type hint and its arguments.
+    """extract the `msgspec.Meta` objects from a type hint and the type arguments.
 
     Returns:
-        the hint with its `Annotated` wrappers removed, and the list of metas;
+        the hint with the `Annotated` wrappers removed, and the list of metas;
         `Literal` values and Ellipsis are returned unchanged
     """
 

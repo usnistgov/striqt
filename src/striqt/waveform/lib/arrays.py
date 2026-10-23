@@ -115,8 +115,8 @@ def unit_roundoff(dtype: DTypeLike) -> float:
     """return the unit roundoff of the real dtype underlying `dtype`.
 
     The unit roundoff is half the spacing between 1 and the next representable
-    value of that dtype (half an ulp); a complex `dtype` selects that of its real
-    component.
+    value of that dtype (half an ulp). A complex `dtype` selects the unit roundoff
+    of the real component.
     """
     return float(np.finfo(cast('np.dtype[np.floating[Any]]', np.dtype(dtype))).eps / 2)
 
@@ -163,7 +163,7 @@ def mean_atol(x: Array, count: int) -> float:
     """bound the absolute roundoff of the mean of `count` samples drawn from `x`.
 
     The bound is in the units of `x`, grows linearly with `count`, and scales with
-    the largest magnitude in `x` at the precision of its dtype.
+    the largest magnitude in `x` at the precision of the dtype of `x`.
     """
     xp = array_namespace(x)
     return count * float(np.finfo(x.dtype).eps) * float(xp.abs(x).max())
@@ -694,6 +694,7 @@ def tiny_like(x: Array) -> np.floating[Any]:
     """return the smallest positive normal value of the real dtype underlying `x.dtype`.
 
     Returns:
-        a numpy floating scalar of that dtype; a complex `x` selects its component dtype
+        a numpy floating scalar of that dtype; a complex `x` selects the real
+        component dtype
     """
     return _get_dtype_tiny(x.dtype)

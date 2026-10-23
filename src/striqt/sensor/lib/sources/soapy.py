@@ -72,7 +72,7 @@ class _SoapyArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
 
 
 class _SoapySensorReading(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    """Represents a sensor and its current reading."""
+    """a device sensor and the reading taken when the device was probed."""
 
     name: str
     info: _SoapyArgInfo
@@ -141,7 +141,7 @@ def _get_adc_peak(x: 'Array', capture: specs.SoapyCapture, source: specs.SoapySo
 def _probe_channel(
     device: SoapySDR.Device, direction: int, port: int
 ) -> _SoapyPortInfo:
-    """Probes a single channel and returns its capabilities."""
+    """return the capabilities of channel `port` in `direction`, read from `device`."""
 
     args = (direction, port)
 
@@ -223,16 +223,17 @@ def _assign_iq_calibration(iq: specs.AcquiredIQ):
 
 
 def probe_soapy_info(device: SoapySDR.Device, retries: int | None = None) -> SoapyInfo:
-    """probe a SoapySDR device and return its capabilities as a `SoapyInfo` struct.
+    """probe a SoapySDR device and return the capabilities as a `SoapyInfo` struct.
 
-    The fields follow the C++ ``SoapySDRUtil --probe`` output, packaged as a struct
-    rather than printed.
+    The fields follow the C++ ``SoapySDRUtil --probe`` output. Every sensor of the
+    device is read during the probe.
 
     Args:
-        device: An open SoapySDR.Device
+        device: an open SoapySDR.Device
+        retries: stored as the `retries` field of the result; not used by the probe
 
     Returns:
-        A `SoapyInfo` struct of capability metadata for the device.
+        a `SoapyInfo` struct of capability metadata for the device
     """
     global_sensors = {
         key: _SoapySensorReading(

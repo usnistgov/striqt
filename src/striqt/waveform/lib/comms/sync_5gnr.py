@@ -118,11 +118,13 @@ def _generate_5g_nr_sync_sequence(
 ):
     """return time-domain sync sequences for every id from an m-sequence generator.
 
-    Each sequence is normalized to unit mean power over its 127 active subcarriers
-    and placed on the `sample_rate` FFT grid, centered at `center_frequency`.
+    Each sequence is normalized to unit mean power over the 127 active subcarriers
+    of the sequence and placed on the `sample_rate` FFT grid, centered at
+    `center_frequency`.
 
     Args:
-        seq_func: maps a sequence id to its 127 bipolar frequency-domain values
+        seq_func: maps a sequence id to the 127 bipolar frequency-domain values of
+            that sequence
         max_id: sequences are built for ids 0 through `max_id`
         sample_rate: in S/s; a multiple of `subcarrier_spacing` and at least
             ``127 * subcarrier_spacing``

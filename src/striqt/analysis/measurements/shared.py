@@ -109,13 +109,13 @@ def check_frequency_band(
 ) -> int:
     """return the number of bins in the band that `field` selects.
 
-    The checks are those of `sw.fourier.slice_freqs`, whose errors are reworded in
-    terms of the spec fields: `offset` must fall on the ``sample_rate / nfft`` grid and
-    the band must lie within ``±sample_rate / 2``. `bandwidth` itself is not checked
-    against the grid. It is rounded to the nearest whole number of bins, so a value
-    between grid multiples passes and the returned count reflects the rounding.
+    `offset` must fall on the ``sample_rate / nfft`` grid, and the band must lie
+    within ``±sample_rate / 2``. `bandwidth` is rounded to the nearest whole number of
+    bins and is not otherwise checked against the grid, so a value between grid
+    multiples passes.
 
     Args:
+        field: name of the spec field that set `bandwidth`, for the message
         nfft: number of bins across `sample_rate`, which sets the grid spacing
         sample_rate: in S/s
         bandwidth: width of the band in Hz, rounded to the nearest whole number of bins
@@ -184,14 +184,12 @@ def level_tolerance(
     power_rms: float = 0.0,
     dtype: DTypeLike = 'complex64',
 ) -> specs.Tolerance:
-    """combine the error terms of a dB power output into its `specs.Tolerance`.
+    """combine the error terms of a dB power output into one `specs.Tolerance`.
 
-    The peak amplitude error over `size` output elements adds the structured roundoff
-    that lands on the matched-filter bin of the matched input: a tone's FFT bin, or an
-    impulse's sample after the resampler. Both inputs produce that roundoff, so the
-    term applies whenever the amplitude error is nonzero. `off_peak_dBc` contains the
-    depths at which the rms and the peak amplitude errors equal an element's own
-    amplitude; `util.elementwise_atol` diverges at the latter.
+    The peak amplitude error over `size` output elements includes the on-peak
+    roundoff of `dtype` whenever `amplitude_rms` is nonzero. `off_peak_dBc` gives the
+    depths (in dBc) at which the rms and the peak amplitude errors equal the amplitude
+    of an element. `util.elementwise_atol` diverges at the peak depth.
 
     Args:
         amplitude_rms: relative rms error of the amplitude the power is taken from
@@ -204,8 +202,8 @@ def level_tolerance(
             (`sw.power_analysis.log_conversion_tol`)
         quantization: storage rounding in dB (`quantization_dB`)
         power_rms: rms relative error of a reduction over a contiguous axis
-            (`sw.power_analysis.bin_power_rms`); its worst case over `size` outputs
-            enters the peak bound
+            (`sw.power_analysis.bin_power_rms`); the worst case of this error over
+            `size` outputs enters the peak bound
         dtype: complex dtype of the amplitude, which sets the on-peak roundoff term
 
     Returns:

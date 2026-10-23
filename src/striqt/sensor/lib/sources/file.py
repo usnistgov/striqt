@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 def _split_preroll(start_index: int, count: int) -> tuple[int, int, int]:
     """split a read request into (zero-fill count, first file index, file sample count).
 
-    File index 0 is corrected sample 0, so the part of the request before it is
+    File index 0 is corrected sample 0. The part of the request before index 0 is
     filled with zeros rather than read. All 3 values are in samples and never
     negative. The zero-fill and file sample counts sum to `count`. Reading starts
     at `start_index` when that lies in the file and at sample 0 otherwise.

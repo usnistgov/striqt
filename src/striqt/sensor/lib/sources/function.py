@@ -59,15 +59,9 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
     def _port_position(self, port: int) -> tuple[int, int]:
         """return the row index of `port` in the capture and the capture's port count.
 
-        The generators return rows in capture order, so a source that is called one
-        port at a time needs the position of that port rather than its number, which
-        may differ (``port: [1, 0]``). A scalar `port` field is the only row.
-
-        Callers generate all `ports` rows and keep one, rather than asking for a
-        single port, so that a multi-port acquisition reproduces one generator call
-        with the same `ports`. The noise draws interleave port-by-port within each
-        sample, so one row of an N-port call is not the result of any smaller call.
-        Each port of an N-port capture therefore draws all N ports.
+        The generators return rows in capture order. A source called one port at a
+        time needs the position of that port rather than the port number, which can
+        differ (``port: [1, 0]``). A scalar `port` field is the only row.
         """
         ports = self._capture.port
 
@@ -106,6 +100,7 @@ class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapt
             **self._generator_kws(count, start_index, xp),
         )
 
+        # all ports are generated and one row kept; see the noise source below
         return x[index : index + 1]
 
 
@@ -165,4 +160,7 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture]):
             power=capture.noise_psd * kws['sample_rate'], ports=ports, **kws
         )
 
+        # all ports are generated and one row kept: the noise draws interleave by
+        # port within each sample, so one row of an N-port call matches no smaller
+        # call, and an acquisition read port by port reproduces one N-port call
         return x[index : index + 1]

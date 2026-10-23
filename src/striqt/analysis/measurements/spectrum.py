@@ -336,8 +336,8 @@ def spectrogram_level_tolerance(
 ) -> specs.Tolerance:
     """bound the error (in dB) of a dB spectrogram evaluated by `evaluate_spectrogram`.
 
-    The argument projections match `validated_spectrogram_sizing`, so any
-    `FrequencyAnalysisSpecBase` may be passed as `spec`.
+    Any `FrequencyAnalysisSpecBase` may be passed as `spec`, as for
+    `validated_spectrogram_sizing`.
 
     Args:
         array_backend: selects the FFT roundoff model of `sw.fourier.fft_tolerance_rms`
@@ -346,7 +346,8 @@ def spectrogram_level_tolerance(
         limit_digits: the decimal rounding the measurement hands to
             `evaluate_spectrogram`; `None` for none
         statistic_count: number of windows a derived measurement averages afterward
-            (the PSD's mean statistic); 1 when it keeps them or only selects among them
+            (the PSD's mean statistic); 1 for a measurement that keeps or selects
+            windows
 
     Returns:
         the `specs.Tolerance` in dB over every output element (frequency bin by
@@ -711,12 +712,13 @@ def spectrogram_ratio_histogram(
     """evaluate a histogram of the spectrogram power ratio between two channels.
 
     The spectrograms are the `spectrogram` output with the same STFT fields (float32,
-    unrounded), and the ratio is their pixel-by-pixel difference in dB. The capture
-    must have exactly 2 channels; otherwise `ValueError` is raised. Per capture, the
-    output has the dimension ``(spectrogram_ratio_power_bin,)`` with bin centers in
-    dB; the first output channel is the ratio of the first input channel to the
-    second, and the second its inverse. Normalization and the catch-all bins follow
-    `spectrogram_histogram`.
+    unrounded), and the ratio is the pixel-by-pixel difference of the two spectrograms
+    in dB. The capture must have exactly 2 channels; otherwise `ValueError` is raised.
+    Per capture, the output has the dimension ``(spectrogram_ratio_power_bin,)`` with
+    bin centers in dB. The first output channel is the ratio of the first input
+    channel to the second, and the second output channel is the negative of the first.
+    Normalization and the catch-all bins follow `spectrogram_histogram`. Neither the
+    output nor the bin coordinate has a `noise_bandwidth` attr.
 
     Args:
     {args}

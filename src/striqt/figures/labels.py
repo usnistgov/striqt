@@ -160,9 +160,35 @@ def label_axis(
     ax: typing.Optional['matplotlib.axes.Axes' | list['matplotlib.axes.Axes']] = None,
     fig: typing.Optional['matplotlib.figure.Figure'] = None,
 ):
-    """label an axis from the `standard_name` and `units` attrs of `ax_data` or of its coordinate `coord_name`.
+    """label an axis with the `standard_name` and `units` attrs of `ax_data`.
 
-    When `coord_name` is None, the units come from `ax_data.attrs`.
+    With `coord_name`, the units are those of the coordinate `coord_name` of
+    `ax_data`; otherwise those of `ax_data.attrs`. The `noise_bandwidth` attr is
+    appended to the units as in ``dBm/360 kHz``. The label text is the `long_name`
+    attr, or the `standard_name` attr when `short` is True or `long_name` is absent,
+    or the name of `ax_data` without either. With units, each target axis gets an
+    engineering tick formatter, and the label gets a unit suffix chosen from the
+    finite values of `ax_data`. No label is set when `ax_data` has units and no
+    finite value.
+
+    Args:
+        which_axis: ``'x'``, ``'y'``, or ``'colorbar'``; the colorbar axis is the
+            first colorbar of the figure
+        ax_data: the array whose attrs name the quantity and whose finite values
+            select the unit scaling
+        coord_name: a coordinate of `ax_data` that supplies the units, or None for
+            `ax_data` itself
+        tick_units: True places the unit in each tick label and False in the axis
+            label; ``'auto'`` is True for a unit of 1 or 2 characters
+        short: True labels with `standard_name` instead of `long_name`
+        ax: the axes, or list of axes, to label; None labels the current axes, or
+            every axes of `fig` when `fig` is given
+        fig: when given with `ax` None, an x or y label is set once as a figure
+            super-label and the per-axes labels are hidden
+
+    Raises:
+        ValueError: if `which_axis` is not one of the 3 values, if a colorbar is
+            requested and the figure has none, or if there are no axes to label
     """
 
     from . import ticker
@@ -270,7 +296,24 @@ def label_legend(
     tick_units=True,
     ax: typing.Optional['matplotlib.axes.Axes'] = None,
 ) -> 'matplotlib.legend.Legend':
-    """label a legend from the `standard_name` and `units` attrs of `data` or of its coordinate `coord_name`"""
+    """add a legend labeled with the `standard_name` and `units` attrs of `data`.
+
+    With `coord_name`, the attrs and the entry values are those of the coordinate
+    `coord_name` of `data`; otherwise those of `data`. Each entry is a value in
+    engineering notation with the unit when `units` is set, else ``str(value)``. The
+    legend title is `standard_name`, with ``(units)`` appended when `tick_units` is
+    False.
+
+    Args:
+        data: the array or dataset whose attrs and values label the legend
+        coord_name: a coordinate of `data`, or None for `data` itself
+        tick_units: True puts the unit in each entry only; False also appends the
+            unit to the title
+        ax: the axes to add the legend to; None uses the current axes
+
+    Returns:
+        the `matplotlib.legend.Legend` added to `ax`
+    """
     from . import ticker
     import matplotlib.pyplot as plt
 

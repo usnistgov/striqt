@@ -148,11 +148,11 @@ class WebPlotBackend:
         return '_'.join(parts) if parts else 'main'
 
     def _get_col_dim(self, data: xr.DataArray) -> Optional[str]:
-        """return the dimension for column faceting.
+        """return the dimension for column faceting, or None.
 
-        `opts.col` is returned when it is a dimension of `data`. When `opts.col` is a
-        1-D coordinate, its dimension is returned if `data` has more than 1 value
-        along it. The return is None otherwise.
+        `opts.col` is returned when `opts.col` is a dimension of `data`. When
+        `opts.col` is a 1-D coordinate of `data`, the dimension of that coordinate is
+        returned if `data` has more than 1 value along that dimension.
         """
         col = self.opts.col
         if not col:
@@ -858,18 +858,17 @@ class WebPlotBackend:
 def _to_json_serializable(
     arr: Any, preserve_inf: bool = False
 ) -> Union[np.ndarray, list, float, int, str, None]:
-    """Convert arrays to Plotly graph object inputs.
+    """convert an array or scalar to a Plotly graph object input.
 
-    Numeric arrays are returned as contiguous numpy arrays, which Plotly's
-    `to_json()` encodes as base64 typed arrays. Other arrays are returned as lists.
-
-    NaN is kept, and Plotly draws it as a gap. Inf is replaced with NaN unless
-    `preserve_inf` is True.
+    Numeric arrays are returned as contiguous numpy arrays, with a cupy array
+    transferred to the CPU. String, object, and datetime64 arrays are returned as
+    lists, and a timedelta64 array as seconds. In arrays, NaN is kept and Inf is
+    replaced with NaN unless `preserve_inf` is True. In lists and scalars, NaN and
+    Inf are returned as None, or Inf as ±1e38 when `preserve_inf` is True.
 
     Args:
-        arr: The array or value to convert
-        preserve_inf: True keeps Inf values, which heatmaps draw at the ends of the
-                     color scale. False replaces Inf with NaN.
+        preserve_inf: True keeps Inf, which a heatmap draws at the ends of the color
+            scale; False replaces Inf with NaN
     """
     # Use large but finite values for Inf when preserving
     _INF_REPLACEMENT = 1e38
@@ -1296,12 +1295,10 @@ def _serialize_plot_message(
     selected_variable: str,
     spec_filename: str,
 ) -> str:
-    """Serialize plot message using Plotly's binary encoding for numpy arrays.
+    """return the ``plot_data`` message as JSON text.
 
-    Plotly's `fig.to_json()` emits numpy arrays as base64 typed-array specs. Its
-    output is decoded with msgspec, wrapped in the outer message, and re-encoded
-    with msgspec. The decoded data are plain JSON types (dicts, lists, and base64
-    strings), so msgspec's strict non-finite-float handling does not apply.
+    Numpy arrays in the traces are encoded as base64 typed arrays, the form of
+    Plotly's `fig.to_json()`.
     """
     serialized_plots = []
     for plot in plot_data:
@@ -1407,9 +1404,11 @@ async def _do_broadcast():
 
 @functools.cache
 def _get_field_origins(cls: type) -> Dict[str, type]:
-    """Find which class in the MRO first defines each msgspec field.
+    """return the class in the MRO of `cls` that first defines each msgspec field.
 
-    Returns a dict mapping field name to the highest-level class that defines it.
+    Returns:
+        a dict from field name to the base-most class whose ``__struct_fields__``
+        names the field
     """
     import msgspec
 
@@ -1589,10 +1588,12 @@ def _extract_capture_coordinates(
 
 
 def _get_si_prefix_for_values(values: List[float], unit: str) -> tuple[int, str]:
-    """Determine the SI prefix based on the smallest absolute non-zero value.
+    """return the engineering power of 10 and SI prefix for the smallest nonzero value.
 
-    Returns (power_of_10, prefix_string).
-    Uses _ENG_PREFIXES from striqt.analysis.lib.dataarrays.
+    Returns:
+        ``(power_of_10, prefix)``: ``(0, '')`` for a dB unit or when no value is
+        finite and nonzero; otherwise a multiple of 3 chosen from the smallest
+        absolute value and clamped to the known prefixes, with the prefix string
     """
     from striqt.analysis.lib.dataarrays import _ENG_PREFIXES
     import math
@@ -1653,19 +1654,15 @@ def _build_variable_labels_from_registry(
     analysis_spec: 'sa.specs.AnalysisGroup',
     registry: 'sa.lib.register.AnalysisRegistry',
 ) -> Dict[str, str]:
-    """Build a mapping from variable names to human-readable labels.
+    """return a label for each enabled field of `analysis_spec`, keyed by field name.
 
-    The labels come from the registry's spec class names for the fields set in
-    `analysis_spec`. A field without a registry entry falls back to its
-    title-cased name.
-
-    Args:
-        analysis_spec: The analysis specification from the sweep spec (spec.analysis)
-        registry: The striqt.analysis.registry containing AnalysisInfo entries
+    The label of a field with a `registry` entry is derived from the name of the
+    spec class. A field without an entry is labeled by the field name in title case
+    with underscores replaced by spaces.
 
     Returns:
-        Dict mapping variable names (e.g., 'spectrogram_histogram') to labels
-        (e.g., 'Spectrogram Histogram')
+        a dict from variable name to label, such as ``'spectrogram_histogram'`` to
+        ``'Spectrogram Histogram'``
     """
     labels: Dict[str, str] = {}
 

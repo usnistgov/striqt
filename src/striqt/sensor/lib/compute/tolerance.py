@@ -1,7 +1,7 @@
 """budget the roundoff error of a sweep, capture by capture.
 
-The correction stage's own roundoff, from the FFT sizes `correct_iq` runs on a
-capture, feeds each measurement's registered tolerance function as its `input_error`.
+The roundoff of the correction stage, set by the FFT sizes that `correct_iq` runs on
+a capture, is the `input_error` passed to the tolerance function of each measurement.
 """
 
 from __future__ import annotations as __
@@ -41,10 +41,10 @@ def _oaconvolve_nfft(
 ) -> int:
     """return the FFT size (in samples) that `scipy.signal.oaconvolve` picks.
 
-    The size follows `scipy.signal._signaltools._calc_oa_lens` (shared by its cupyx
-    port): a fast length for `array_backend` that depends on `filter_size` alone,
-    except that it never exceeds the fast length of one transform over the whole
-    convolution of a `signal_size`-sample input.
+    The size follows `scipy.signal._signaltools._calc_oa_lens`, which the cupyx port
+    shares: a fast length for `array_backend` that depends on `filter_size` alone,
+    capped at the fast length of one transform over the whole convolution of a
+    `signal_size`-sample input.
     """
     from scipy.special import lambertw
 
@@ -89,9 +89,13 @@ def correction_error(
     `capture.duration`, the ratio of `source.master_clock_rate` to
     `capture.sample_rate`, whether `capture.analysis_bandwidth` is finite, and the
     alignment overlap of the trigger in `analysis`. A capture that is neither
-    resampled nor filtered is bounded by the roundoff of its voltage scaling alone.
+    resampled nor filtered is bounded by the roundoff of the voltage scaling alone.
 
     Args:
+        capture: the capture whose `duration`, `sample_rate`, and
+            `analysis_bandwidth` set the FFT sizes
+        source: the source whose `master_clock_rate` fixes the resampler design and
+            whose `array_backend` is the default backend
         analysis: the measurements the sweep runs, whose `signal_trigger` sets the
             alignment overlap; None budgets no trigger
         stage: the `AcquiredIQ` stage whose error is wanted; ``'pre_filter'`` stops

@@ -276,7 +276,7 @@ def sawtooth(
 
     Each ramp rises linearly from 0 toward the amplitude whose power is `power` dB
     (1 at 0 dB), resetting at absolute sample index 0 and every `period` s before
-    and after it; the peak itself is never reached. The imaginary part is 0. Each
+    and after that index. The peak is never reached. The imaginary part is 0. Each
     port gets the same samples.
 
     Args:

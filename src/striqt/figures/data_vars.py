@@ -28,7 +28,10 @@ _data_plots: dict[str, _DataVariablePlotter] = {}
 
 
 def _coord_names(spec_type: type[sa.specs.Analysis]) -> tuple[str, ...]:
-    """return the coordinate names of a measurement, in its `coord_factories` order"""
+    """return the coordinate names of the measurement registered for `spec_type`.
+
+    The order is the `coord_factories` order of the registration.
+    """
     factories = sa.registry[spec_type].coord_factories
     return tuple(sa.registry.coordinates[f].name for f in factories)
 

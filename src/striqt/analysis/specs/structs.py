@@ -32,11 +32,12 @@ class SpecBase(
     forbid_unknown_fields=True,
     cache_hash=True,
 ):
-    """Base type for structures that support validated
-    (de)serialization.
+    """the base of every spec struct.
 
-    It is a `msgspec.Struct` with methods that set the encoding and decoding hooks
-    for extra types.
+    An instance is a frozen, keyword-only `msgspec.Struct` that rejects unknown
+    fields. Construction freezes tuple, dict, and list field values. `to_dict` and
+    `from_dict` round-trip an instance through builtin types with the encoding hooks
+    for the extra field types, and `validate` is that round trip.
     """
 
     def replace(self, **attrs) -> Self:
@@ -112,12 +113,12 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 
 
 class AnalysisCapture(Capture, kw_only=True, frozen=True):
-    """define the capture fields that measurements and coordinate factories may read.
+    """the projection of a capture onto the fields that measurements may read.
 
-    Measurement validators take this projection of a (potentially much larger)
-    sensor capture, so captures differing only in fields the analysis layer ignores
-    share one validation cache entry. A measurement outside this package whose
-    validator needs another capture field cannot see it here.
+    Measurement validators and coordinate factories receive this projection of a
+    sensor capture. Captures that differ only in fields outside this projection
+    share one validation cache entry. A measurement validator cannot read a capture
+    field that this class does not declare.
     """
 
     center_frequency: Union[types.CenterFrequency, None] = None
@@ -147,7 +148,7 @@ class Analysis(SpecBase, kw_only=True, frozen=True):
 
 
 class ErrorBound(SpecBase, kw_only=True, frozen=True):
-    """bound one quantity by its rms over all elements and its worst case at any one"""
+    """an error bound: the rms over all elements and the peak at any one element"""
 
     rms: float
     peak: float
@@ -201,17 +202,14 @@ class FrequencyAnalysisSpecBase(
     frozen=True,
     dict=True,
 ):
-    """
-    window (specs.types.WindowType): a window specification, following `scipy.signal.get_window`
-    frequency_resolution (float): the STFT resolution (in Hz)
-    fractional_overlap (float):
-        fraction of each FFT window that overlaps with its neighbor
-    window_fill (float):
-        fraction of each FFT window that is filled with the window function
-        (leaving the rest zeroed)
-    integration_bandwidth (float): bin bandwidth for RMS averaging in the frequency domain
-    trim_stopband (bool):
-        whether to trim the frequency axis to capture.analysis_bandwidth
+    """the STFT settings shared by the spectrum measurements.
+
+    `frequency_resolution` sets the FFT size at the capture sample rate.
+    `fractional_overlap` and `window_fill` set the hop and the zero padding of each
+    window as fractions of that size. `integration_bandwidth` sums adjacent bins
+    after the FFT and must be a multiple of `frequency_resolution`. `trim_stopband`
+    cuts the frequency axis to the `analysis_bandwidth` of the capture when that
+    bandwidth is finite.
     """
 
     window: types.WindowType

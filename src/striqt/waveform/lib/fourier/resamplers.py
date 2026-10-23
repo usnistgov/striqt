@@ -1,6 +1,7 @@
-"""Rational resampling: the COLA resampler design that selects radio sample rate, LO
-offset, and FFT sizes, and the FFT (`resample`) and STFT overlap-add (`oaresample`)
-implementations of it.
+"""Rational resampling by FFT and by STFT overlap-add from one COLA design.
+
+Every implementation takes the `ResamplerDesign` of `design_cola_resampler`, whose
+``nfft / nfft_out`` equals ``fs_sdr / fs_target`` exactly.
 """
 
 from __future__ import annotations as __
@@ -76,12 +77,11 @@ def design_cola_resampler(
     `fs_base`, unless given) to `fs_target` with FFT sizes in the ratio
     ``nfft / nfft_out == fs_sdr / fs_target`` exactly, both divisible by the COLA
     divisor of `window`. With `shift`, the radio is to be tuned ``lo_offset`` below
-    the center frequency so that its LO leakage falls outside the protected band.
-    ``fs_sdr`` is then raised so that the `fs_target`-wide output band around
-    ``lo_offset`` fits inside the radio's Nyquist band. The magnitude of
+    the center frequency, which places the LO leakage outside the protected band.
+    ``fs_sdr`` is then raised until the `fs_target`-wide output band around
+    ``lo_offset`` fits inside the Nyquist band of the radio. The magnitude of
     ``lo_offset`` is ``bw / 2 + bw_lo / 2`` rounded up to a whole number of
-    ``fs_sdr / nfft`` bins, so a radio tuned by it is offset by up to one bin more
-    than that sum.
+    ``fs_sdr / nfft`` bins, up to one bin more than that sum.
 
     Args:
         fs_base: the master clock rate (in S/s) that ``fs_sdr`` divides
@@ -91,12 +91,13 @@ def design_cola_resampler(
         bw_lo: the bandwidth (in Hz) of the LO leakage and phase noise kept out of
             the protected band
         min_oversampling: the factor applied to `bw` when sizing ``fs_sdr`` for an
-            LO shift, which leaves room for the bin rounding of ``lo_offset``
+            LO shift
         min_fft_size: the smallest ``nfft_out`` candidate considered
         shift: ``'left'`` or ``'right'`` moves the LO leakage below or above the
-            protected band; ``'none'``, None, or False leaves it at the center
+            protected band; ``'none'``, None, or False leaves the LO at the center
+            frequency
         avoid_primes: whether to reject ``nfft_out`` candidates that are large
-            primes, which the FFT computes slowly
+            primes. An FFT of prime size is slow
         window: a key of the COLA window divisor table; None selects ``'hamming'``
         fs_sdr: the radio sample rate (in S/s) to use instead of selecting one
 
@@ -107,8 +108,9 @@ def design_cola_resampler(
     Raises:
         ValueError: if `shift` is set while `bw` is infinite, `shift` is not a
             recognized direction, `window` has no COLA divisor, `bw` exceeds
-            `fs_base`, no FFT size up to `OLA_MAX_FFT_SIZE` realizes the rate ratio,
-            or the LO shift does not fit the radio's Nyquist band at ``fs_sdr``
+            `fs_base`, the LO shift needs a radio rate above `fs_base`, no FFT size
+            up to `OLA_MAX_FFT_SIZE` realizes the rate ratio, or the LO shift does
+            not fit the Nyquist band of the radio at ``fs_sdr``
     """
 
     if bw == inf and shift:

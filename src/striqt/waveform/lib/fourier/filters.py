@@ -1,7 +1,7 @@
-"""FIR low-pass designs and the overlap-add filters that apply them through the STFT.
+"""FIR low-pass designs and the STFT overlap-add filters that apply a design.
 
-`design_oafilter` sizes the window overlap for a constant-overlap-add (COLA) window; the
-divisor table it enforces is shared with the resampler design.
+Window overlaps come from one constant-overlap-add (COLA) divisor table, which the
+resampler design shares.
 """
 
 from __future__ import annotations as __
@@ -112,11 +112,11 @@ def _fir_lowpass_fft(
     """return the zero-phase response of an FIR low-pass on the `size` bins of an STFT.
 
     The taps are a `scipy.signal.firwin2` design with unit gain below `cutoff` (in Hz)
-    falling linearly to zero over `transition` (in Hz); a transition band that would
-    run past Nyquist ends there. The result is the real amplitude response of that
-    linear-phase design on the bin grid of `stft` (ascending frequency), so multiplying
-    an STFT by it filters each segment without delaying it. A `cutoff` at or above
-    Nyquist gives all ones.
+    falling linearly to zero over `transition` (in Hz). A transition band that would
+    run past Nyquist ends at Nyquist. The result is the real amplitude response of
+    that linear-phase design on the bin grid of `stft` (ascending frequency).
+    Multiplying an STFT by the response filters each segment with no delay. A
+    `cutoff` at or above Nyquist gives all ones.
 
     Returns:
         a 1-D array of `size` samples with dtype `dtype` in `xp` (numpy when None)

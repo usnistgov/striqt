@@ -277,10 +277,10 @@ def build_dataarray(
 
 @util.lru_cache()
 def _infer_coord_dims(coord_factories: tuple[CoordFunc, ...]) -> tuple[str, ...]:
-    """guess dimensions of a dataarray based on its coordinates.
+    """return the dimension names that `coord_factories` declare, in order.
 
-    This orders the dimensions according to (1) first appearance in the given
-    list of coord factory functions and (2) first location within each factory.
+    A dimension is placed at the first factory that declares the dimension, in the
+    order of the dims of that factory.
     """
 
     # build an ordered list of unique coordinates

@@ -659,6 +659,30 @@ def test_source_record_size_rounds_an_exact_half_sample_up():
     assert round(capture.duration * design['fs_sdr']) == 24037
 
 
+def test_oaresample_pads_use_the_exact_record_size(corrections_flags):
+    """7680 samples at 7.68 MS/s from the 125 MS/s clock are a 7812.5-sample source
+    record, which `source_record_size` rounds up to 7813 where the float product
+    rounds down to 7812. The oaresample pads must bring the 7813-sample record to a
+    whole number of STFT hops, or the output slips by one source sample"""
+    corrections_flags(use_oaresample=True)
+    capture = preset_capture(
+        'dirac_delta',
+        port=(0, 1),
+        sample_rate=7.68e6,
+        duration=7680 / 7.68e6,
+        analysis_bandwidth=inf,
+        time=IMPULSE_TIME,
+    )
+    design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
+    record = corrections.source_record_size(capture, design)
+    assert record == 7813
+    assert round(7680 * design['nfft'] / design['nfft_out']) == 7812
+
+    stages = acquire_corrected('dirac_delta', capture)
+
+    assert_impulse_at(stages.corrected.pre_align, capture, IMPULSE_TIME)
+
+
 # %% _resample
 
 

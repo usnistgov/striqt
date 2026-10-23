@@ -43,9 +43,9 @@ class lookup:
     def _get(cls, spec: specs.Source) -> PendingController:
         """return the controller, pending event or stored exception for `spec`.
 
-        The registry references controllers weakly, so a controller that nothing else
-        references is finalized by the collector and its slot reverts to a pending
-        event. A dead reference seen before its callback ran is cleared here.
+        The registry references controllers weakly. The slot of a controller that
+        nothing else references reverts to a pending event once the controller is
+        collected, and a dead reference found before then is cleared by this call.
         """
         obj = cls._obj[spec]
         if isinstance(obj, weakref.ref):
@@ -138,7 +138,9 @@ class lookup:
 
     @classmethod
     def _register(cls, spec: specs.Source, controller: Controller) -> None:
-        """take the registry slot of `spec` for `controller` and wake its waiters.
+        """register `controller` in the slot of `spec` and wake the waiters on the slot.
+
+        An open controller already in the slot is closed first, with a warning.
 
         Args:
             spec: the registry key

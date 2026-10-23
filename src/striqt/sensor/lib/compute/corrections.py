@@ -439,16 +439,17 @@ def _resample(
 def _oaresample(
     iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
-    """resample `iq.pre_align` in one STFT pass and return it with its lead offset.
+    """resample `iq.pre_align` in one STFT pass and return ``(waveform, lead offset)``.
 
     The acquisition must contain the capture plus the pads that
     `_get_oaresample_overlaps` gives for `min_overlap`. The returned waveform starts
     at the lead pad at `capture.sample_rate`, low-passed to `analysis_bandwidth` when
-    that is finite and shifted by the design's `lo_offset`. The returned offset is the
-    resampled lead pad. The resampled tail pad is left for `correct_iq` to trim.
+    that is finite and shifted by the `lo_offset` of the resampler design. The
+    returned waveform includes the resampled tail pad. The returned offset is the
+    resampled lead pad, in samples at `capture.sample_rate`.
 
     Raises:
-        ValueError: the acquisition is shorter than the capture plus its pads
+        ValueError: if the acquisition is shorter than the capture plus the pads
     """
     x = iq.pre_align
     source_spec = iq.source_spec
@@ -462,7 +463,7 @@ def _oaresample(
     lead, tail = _get_oaresample_overlaps(
         capture, source_spec.master_clock_rate, min_overlap
     )
-    size_in = lead + _source_sample_count(capture, design) + tail
+    size_in = lead + source_record_size(capture, design) + tail
     if x.shape[axis] < size_in:
         raise ValueError(
             f'{x.shape[axis]} samples at {fs} S/s are fewer than the {size_in} needed '
@@ -484,14 +485,6 @@ def _oaresample(
     )
 
     return y, round(lead * design['nfft_out'] / design['nfft'])
-
-
-def _source_sample_count(
-    capture: specs.SensorCapture, design: sw.ResamplerDesign
-) -> int:
-    """return the source-rate sample count of `capture` as `get_read_count` sizes it"""
-    samples_out = round(capture.duration * capture.sample_rate)
-    return round(samples_out * design['nfft'] / design['nfft_out'])
 
 
 def _get_filter_overlap(capture: specs.SensorCapture) -> int:
@@ -546,7 +539,7 @@ def _get_oaresample_overlaps(
     lead = sw.util.ceildiv(noverlap, lead_step) * lead_step
 
     tail = noverlap + min_overlap
-    tail += (nfft - (lead + _source_sample_count(capture, design) + tail)) % hop
+    tail += (nfft - (lead + source_record_size(capture, design) + tail)) % hop
 
     return lead, tail
 
@@ -572,13 +565,11 @@ def _get_resample_overlap(
 ) -> tuple[int, int]:
     """return the (lead, tail) source-rate pad around the record of `capture`.
 
-    The padded record is a whole number of resampler FFTs, and that number of FFTs is
-    a fast FFT length. `_resample` maps such a record to an integral number of output
-    samples. The FIR transient is counted at `capture.sample_rate`, where `correct_iq`
-    applies the filter, and converted to source-rate samples through the resampler's
-    ``nfft / nfft_out`` ratio. The lead is a multiple of the reduced denominator of
-    that ratio, so its output-rate trim is a whole number of samples. The slack
-    beyond the required pads is split between the two ends.
+    The padded record is a whole number of resampler FFTs, and that number is a fast
+    FFT length for `setup.array_backend`. The lead is a multiple of the reduced
+    denominator of the ``nfft / nfft_out`` ratio of the resampler. The FIR transient
+    is counted at `capture.sample_rate` and converted to source-rate samples through
+    that ratio.
 
     Args:
         min_overlap: tail (in source-rate samples) reserved beyond the filter

@@ -51,26 +51,28 @@ def validate_sweep(
 ) -> None:
     """raise on anything in `sweep` that would fail once the sweep ran.
 
-    `Sweep.__post_init__` calls this, so a constructed `Sweep` is a validated one.
-    The checks, in order: the `loops` entries (a `repeat` only outermost, at most one
-    loop per field) and their collisions with fields set per entry in `captures`; a
-    measurement name that shadows a capture field; each unique (capture, analysis)
-    combination against the registered measurements; and each unique capture against
-    the signal path of `correct_iq` (trigger lookup, resampler design, analysis
-    filter and LO shift). The captures checked are those `loop_captures` expands for
-    `source_id`, which is what `iterate_sweep` runs.
+    A `Sweep` runs this at construction. The checks, in order:
+
+    * the `loops` entries: a `repeat` only outermost, and at most one loop per field;
+    * a loop over a field that the `captures` entries set to different values;
+    * a measurement name that shadows a capture field;
+    * each unique (capture, analysis) combination against the registered
+      measurements;
+    * each unique capture against the signal path of `correct_iq`: trigger lookup,
+      resampler design, analysis filter, and LO shift.
+
+    The captures checked are those that `loop_captures` expands for `source_id`.
 
     Args:
         sweep: the sweep to check
-        source_id: hex id of the open source, selecting its `adjust_captures` block.
-            `None` resolves `adjust_captures` through the ``'defaults'`` block alone,
-            which needs no hardware but leaves per-source remaps checked only in
-            their default form.
+        source_id: hex id of the open source, selecting the `adjust_captures` block
+            of that source. `None` resolves `adjust_captures` through the
+            ``'defaults'`` block alone, and the per-source remaps are not checked.
 
     Raises:
-        SpecValidationError: (a `msgspec.ValidationError`) at the offending path,
-            locating a capture by its `sweep.captures` entry and the loop points that
-            produced it
+        SpecValidationError: (a `msgspec.ValidationError`) at the offending path. A
+            capture is located by the `sweep.captures` entry and the loop point that
+            produced the capture.
     """
     _validate_loops(sweep.loops)
     _validate_loop_capture_collisions(sweep.loops, sweep.captures)
@@ -121,16 +123,13 @@ _MISSING = object()
 def _validate_loop_capture_collisions(
     loops: tuple[structs.LoopSpec, ...], captures: tuple[structs.SensorCapture, ...]
 ) -> None:
-    """reject a loop that erases a distinction written into `captures:`.
+    """reject a loop over a field that the `captures:` entries set to different values.
 
-    A loop point overrides the same field in every capture, so captures written to
-    differ in a looped field would become identical copies at each loop point. A
-    loop over a field the capture class lacks is left for `_build_loop_points_dict`
-    to report.
+    A loop over a field that the capture class lacks is not rejected here.
 
     Raises:
         SpecValidationError: at the loop, locating the first two `captures:` entries
-            that differ in its field
+            that differ in the looped field
     """
     if len(captures) < 2:
         return
@@ -189,9 +188,9 @@ def _validate_sweep_analysis(
     A sweep whose `analysis` block sets no measurement passes without expanding.
 
     Raises:
-        SpecValidationError: locating the first offending capture by its
-            `sweep.captures` entry and the loop points that produced it, and naming
-            the measurement that rejected it
+        SpecValidationError: naming the measurement that rejected the first offending
+            capture, located by the `sweep.captures` entry and the loop point that
+            produced the capture
     """
 
     if len(sweep.analysis.to_dict()) == 0:
@@ -211,21 +210,18 @@ def _validate_sweep_corrections(
 ) -> None:
     """reject each unique capture that `correct_iq` could not process for `sweep`.
 
-    This raises at load what the trigger lookup, `design_resampler`, `design_fir_lpf`
-    and the LO shift check of `oaresample` (only when `USE_OARESAMPLE` is set) would
-    otherwise raise on the first acquisition. The resampler design is skipped for
-    `FileCapture` sweeps, whose source rate comes from the file rather than from
-    `sweep.source.master_clock_rate`; the analysis filter, which depends only on the
-    capture, is still checked. The parity of the padded acquisition that `resample`
-    requires is left to acquisition time. Sizing it here would import scipy at spec
-    load, and no design from a hamming COLA pads to an odd length.
+    The checks are the trigger lookup, `design_resampler`, `design_fir_lpf`, and,
+    when `USE_OARESAMPLE` is set, the LO shift check of `oaresample`. The resampler
+    design is skipped for a `FileCapture`; the analysis filter is still checked. The
+    parity check of `resample` on the padded acquisition runs at acquisition time,
+    not here.
 
     Raises:
         SpecValidationError: at ``$.source.signal_trigger`` when `sweep.analysis`
             lacks the measurement the trigger runs, or otherwise at the
-            `analysis_bandwidth`, `sample_rate` or `lo_shift` field of the first
-            offending capture, located by its `sweep.captures` entry and the loop
-            points that produced it
+            `analysis_bandwidth`, `sample_rate`, or `lo_shift` field of the first
+            offending capture, located by the `sweep.captures` entry and the loop
+            point that produced the capture
     """
     from ..lib import compute
     from ..lib.compute import corrections
@@ -317,8 +313,7 @@ def _capture_field_path(
 ) -> tuple[str, ...]:
     """locate `field` in the `captures:` entry behind `origin`, as path parts.
 
-    A capture built from loops alone has no entry to point at, so its path is empty;
-    the loop point in the ``at ...`` trailer then locates it on its own.
+    The path is empty for a capture built from loops alone.
     """
     if origin.spec_index is None:
         return ()

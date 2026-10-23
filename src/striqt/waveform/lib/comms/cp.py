@@ -18,14 +18,14 @@ if typing.TYPE_CHECKING:
 def correlate_cyclic_shift(
     inds: Array, x: Array, nfft: int, norm: bool = True, out: Array | None = None
 ) -> Array:
-    """correlate `x` against its `nfft`-sample cyclic shift at the index sets in `inds`.
+    """correlate `x` with a copy of `x` delayed `nfft` samples at the index sets `inds`.
 
     Args:
         inds: integer sample indices into `x`, with the cyclic-prefix sample on the
             last axis; the last-axis size ``ncp`` is the number of index pairs summed
             per output lag, and the leading axes are flattened before use
         x: complex waveform, 1-D
-        nfft: shift in samples between a sample and its cyclic copy
+        nfft: the delay (in samples) from a sample to the cyclic copy of that sample
         norm: True normalizes each lag by the geometric mean of the powers in the
             two windows; False divides by the number of index pairs
         out: buffer of length ``nfft + ncp`` and the dtype of `x`
