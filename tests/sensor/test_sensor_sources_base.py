@@ -112,6 +112,25 @@ def test_arm_restarts_the_stream():
     assert np.array_equal(np.stack(again), np.stack(first))
 
 
+@pytest.mark.parametrize('resetup', [False, True], ids=['arm', 'setup_arm'])
+@pytest.mark.parametrize(
+    'rearm_rate', [SAMPLE_RATE, SAMPLE_RATE / 2], ids=['same_rate', 'half_rate']
+)
+def test_rearm_continues_the_time_base_at_the_previous_rate(rearm_rate, resetup):
+    """the re-armed stream is stamped where the previous one ended, with the samples
+    read converted at the rate of the capture that produced them"""
+    source, capture = _sawtooth_source()
+    _, first_ns = source.read(_buffers(COUNT), 0, COUNT)
+
+    if resetup:
+        source.setup()
+    source.arm(capture.replace(sample_rate=rearm_rate))
+    source.trigger(OVERLAPS)
+    _, rearmed_ns = source.read(_buffers(COUNT), 0, COUNT)
+
+    assert rearmed_ns - first_ns == _sample_period_ns(COUNT)
+
+
 def test_rows_follow_the_capture_port_order():
     """buffers[i] is the capture's i-th port, which is port 1 for port=(1, 0)"""
     kws = {'port': (1, 0), 'noise_psd': NOISE_PSD}
