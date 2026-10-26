@@ -132,13 +132,13 @@ class VirtualSource(SourceBackend[SS, SC]):
 
     def read(
         self,
-        buffers,
-        offset,
-        count,
-        timeout_sec=None,
+        buffers: list[Array],
+        offset: int,
+        count: int,
+        timeout_sec: float | None = None,
         *,
         on_overflow: specs.types.OnOverflow = 'except',
-    ):
+    ) -> tuple[int, int]:
         assert self._capture is not None
 
         if not isinstance(self._capture.port, tuple):
