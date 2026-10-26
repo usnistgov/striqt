@@ -612,12 +612,14 @@ class Controller(Generic[SS, SP, SC, PS, PC]):
 
         record = compute.source_record_size(self._capture, self.get_resampler())
         unused_count = output_count - record
-        self._buffers.stash_carryover(
-            samples[:, sample_span],
-            start_ns,
-            unused_sample_count=unused_count,
-            capture=self._capture,
-        )
+        if start_ns is not None:
+            self._buffers.stash_carryover(
+                samples[:, sample_span],
+                start_ns,
+                unused_sample_count=unused_count,
+                capture=self._capture,
+                start_overlap=overlaps[0],
+            )
 
         # convert to cupy before slicing, over the whole pinned buffer. Converting
         # after the slice has produced CUDA memory corruption

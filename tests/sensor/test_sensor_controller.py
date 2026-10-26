@@ -305,6 +305,24 @@ def test_reuse_iq_clears_the_soapy_start_time(fake_controller):
     assert second.pre_align is first.pre_align
 
 
+def test_gapless_repeats_are_stamped_one_record_apart(fake_controller):
+    """the start time of a gapless repeat follows the previous start by one record,
+    although the carried-over samples begin one lead overlap before that"""
+    capture = soapy_capture(port=(0, 1), gain=(0, 0), sample_rate=MCR / 2)
+    with fake_controller(gapless=True, time_sync_at='open', receive_retries=0) as ctrl:
+        ctrl._arm_spec(capture)
+        first = ctrl.acquire()
+        ctrl._arm_spec(capture)
+        second = ctrl.acquire()
+        design = ctrl.get_resampler()
+        lead, _ = ss.lib.compute.get_correction_overlaps(capture, ctrl.source_spec)
+
+    assert lead > 0, 'the capture must have a lead overlap to be discriminating'
+    record = ss.lib.compute.source_record_size(capture, design)
+    elapsed = second.info.start_time - first.info.start_time
+    assert elapsed / np.timedelta64(1, 'ns') == round(1e9 * record / design['fs_sdr'])
+
+
 # %% read_iq: buffer reuse across captures, chunked reads and validation
 
 

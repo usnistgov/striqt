@@ -12,7 +12,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from numeric_checks import assert_close
-from soapy_factories import soapy_capture, source_spec
+from soapy_factories import MCR, soapy_capture, source_spec
 from sweep_strategies import SOURCE
 from synthetic_sources import (
     PRESETS,
@@ -261,20 +261,43 @@ def test_carryover_round_trip_copies_the_tail_into_the_next_head():
     capture = soapy_capture(duration=2e-3)
     rb = receive_buffers(capture)
     unused = 7
+    lead = 4
     t0 = 1_000_000_000_123
     previous = (np.arange(2 * 40) * (1 + 2j)).reshape(2, 40).astype('complex64')
     tail = previous[:, -unused:].copy()
-    rb.stash_carryover(previous, t0, unused_sample_count=unused, capture=capture)
+    rb.stash_carryover(
+        previous, t0, unused_sample_count=unused, capture=capture, start_overlap=lead
+    )
     # a stash that aliased `previous` would carry these zeros into the next head
     previous[:] = 0
 
     samples = np.full((2, 40), -1 - 1j, dtype='complex64')
     start_ns, count = rb.apply(samples)
 
+    fs = fs_sdr(capture, GAPLESS_SOURCE)
     assert count == unused
-    assert start_ns == t0 + round(1e9 * capture.duration)
+    assert start_ns == t0 + round(1e9 * (40 - unused - lead) / fs)
     np.testing.assert_array_equal(samples[:, :unused], tail)
     np.testing.assert_array_equal(samples[:, unused:], -1 - 1j)
+
+
+def test_carryover_is_stamped_one_lead_before_the_next_record():
+    """the stashed time is that of the first carried-over sample, which is the lead
+    overlap that precedes the record of the next capture"""
+    capture = soapy_capture(duration=1e-3, sample_rate=MCR / 2)
+    design = ss.lib.compute.design_resampler(capture, GAPLESS_SOURCE.master_clock_rate)
+    lead, tail = ss.lib.compute.get_correction_overlaps(capture, GAPLESS_SOURCE)
+    record = ss.lib.compute.source_record_size(capture, design)
+    assert lead > 0, 'the capture must have a lead overlap to be discriminating'
+
+    rb = receive_buffers(capture)
+    span = np.zeros((1, lead + record + tail), dtype='complex64')
+    t0 = 1_000_000_000_123
+    rb.stash_carryover(
+        span, t0, unused_sample_count=lead + tail, capture=capture, start_overlap=lead
+    )
+
+    assert rb.start_time_ns == t0 + round(1e9 * (record - lead) / design['fs_sdr'])
 
 
 def test_carryover_without_a_stash_returns_the_timestamp_only():
