@@ -73,16 +73,43 @@ class ReceiveBuffers(typing.Generic[SC]):
     def stash_carryover(
         self,
         samples: 'np.ndarray',
-        sample_start_ns,
+        sample_start_ns: int,
         unused_sample_count: int,
         capture: specs.SensorCapture,
-    ):
-        """stash data needed to carry over extra samples into the next capture"""
+        start_overlap: int = 0,
+    ) -> None:
+        """stash the unused tail of `samples` to carry over into the next capture.
+
+        The stashed `start_time_ns` is the time of the first carried-over sample,
+        which `apply` returns as the time of the first sample of the next buffer.
+        A source that is not gapless stashes nothing.
+
+        Args:
+            samples: the source-rate samples returned for the capture, with shape
+                (ports, count)
+            sample_start_ns: the time (in ns) of sample `start_overlap` of
+                `samples`, which is the first sample of the corrected record
+            unused_sample_count: the count of trailing samples of `samples` past
+                the record
+            capture: the capture whose resampler design sets the source rate
+            start_overlap: the lead overlap (in source-rate samples) that precedes
+                the record in `samples`
+        """
         if not self.controller.source_spec.gapless:
             return
+
+        from ..compute import design_resampler
+
         carryover_count = unused_sample_count
         self.carryover_samples = samples[:, -carryover_count:].copy()
-        self.start_time_ns = sample_start_ns + round(1e9 * capture.duration)
+
+        carryover_index = samples.shape[1] - carryover_count
+        fs = design_resampler(capture, self.controller.source_spec.master_clock_rate)[
+            'fs_sdr'
+        ]
+        self.start_time_ns = sample_start_ns + round(
+            1e9 * (carryover_index - start_overlap) / fs
+        )
 
     def clear(self):
         self.carryover_samples = None
