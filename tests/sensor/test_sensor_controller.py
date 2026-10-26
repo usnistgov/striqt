@@ -18,6 +18,7 @@ from synthetic_sources import (
     BINDINGS,
     RESAMPLE_FILTER,
     SCALE_ONLY,
+    acquire_corrected,
     expected_raw,
     preset_capture,
 )
@@ -221,6 +222,29 @@ def test_acquire_metadata_defaults(isolated_lookup, subtests):
             assert iq.pre_filter is None and iq.aligned is None
         with subtests.test('capture and source specs are attached'):
             assert iq.capture == capture and iq.source_spec == SOURCE
+
+
+# 6250 source samples of the resample_filter preset, of which the lead overlap of
+# 3125 is half, so the lead is not a whole number of strobe periods
+STROBE = 1e-3
+
+
+@pytest.mark.parametrize('trigger_strobe', [None, STROBE], ids=['no_strobe', 'strobe'])
+@pytest.mark.parametrize('time', [0.0, STROBE], ids=['t0', 't_strobe'])
+def test_corrected_output_starts_on_the_strobe_grid(
+    trigger_strobe, time, isolated_lookup
+):
+    """an impulse at source time 0 or one strobe period later is on the same
+    corrected sample with and without a strobe: the strobe grid of a virtual source
+    is referenced to corrected sample 0"""
+    source = SOURCE.replace(trigger_strobe=trigger_strobe)
+    capture = preset_capture('dirac_delta', **RESAMPLE_FILTER, time=time)
+
+    stages = acquire_corrected('dirac_delta', capture, source=source)
+
+    assert stages.overlaps[0] % round(STROBE * stages.resampler['fs_sdr']) != 0
+    peaks = np.argmax(np.abs(to_numpy(stages.corrected.pre_align)), axis=1)
+    assert list(peaks) == [round(time * capture.sample_rate)] * 2
 
 
 @pytest.mark.namespaces('cupy')
