@@ -272,7 +272,8 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
         )
 
         if offset == 0:
-            time_ns = int(self._waveform.start_time[0].data)
+            start_time_ns = int(self._waveform.start_time[0].data)
+            time_ns = start_time_ns + self._sample_time_ns(-self._overlaps[0])
         else:
             time_ns = 0
 

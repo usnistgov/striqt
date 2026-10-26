@@ -99,6 +99,16 @@ def test_timestamps_advance_by_the_samples_read(armed):
     assert second_ns - first_ns == _sample_period_ns(COUNT)
 
 
+def test_first_read_is_stamped_at_the_lead_overlap_before_the_time_origin():
+    """buffer position 0 is source sample -OVERLAPS[0], so the first read is stamped
+    that many sample periods before the source's time origin"""
+    source, _ = _sawtooth_source()
+
+    _, first_ns = source.read(_buffers(COUNT), 0, COUNT)
+
+    assert first_ns - source._sync_time_ns == -_sample_period_ns(OVERLAPS[0])
+
+
 def test_arm_restarts_the_stream():
     source, capture = _sawtooth_source()
     first = _buffers(COUNT)

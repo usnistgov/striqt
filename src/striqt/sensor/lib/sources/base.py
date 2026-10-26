@@ -132,13 +132,13 @@ class VirtualSource(SourceBackend[SS, SC]):
 
     def read(
         self,
-        buffers,
-        offset,
-        count,
-        timeout_sec=None,
+        buffers: list[Array],
+        offset: int,
+        count: int,
+        timeout_sec: float | None = None,
         *,
         on_overflow: specs.types.OnOverflow = 'except',
-    ):
+    ) -> tuple[int, int]:
         assert self._capture is not None
 
         if not isinstance(self._capture.port, tuple):
@@ -154,15 +154,20 @@ class VirtualSource(SourceBackend[SS, SC]):
             )
             buf[offset : (offset + count)] = values
 
-        fs = float(self.get_resampler(self._capture)['fs_sdr'])
-        sample_period_ns = 1_000_000_000 / fs
-        timestamp_ns = self._sync_time_ns + round(
-            self._samples_elapsed * sample_period_ns
-        )
+        timestamp_ns = self._sync_time_ns + self._sample_time_ns(start_index)
 
         self._samples_elapsed += count
 
-        return count, round(timestamp_ns)
+        return count, timestamp_ns
+
+    def _sample_time_ns(self, index: int) -> int:
+        """return the time (in ns) of source sample `index` after the time origin.
+
+        Index 0 is the first sample of the output of `correct_iq`. The result is
+        negative for the leading-overlap pre-roll and is rounded to 1 ns.
+        """
+        fs = float(self.get_resampler(self._capture)['fs_sdr'])
+        return round(index * 1_000_000_000 / fs)
 
     def _sync_time_source(self):
         self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
