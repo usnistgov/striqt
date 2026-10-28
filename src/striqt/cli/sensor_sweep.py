@@ -48,7 +48,11 @@ def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None
     else:
         raise click.ClickException('expected file to have .json or .yaml suffix')
 
-    ctx = ss.open_resources(spec, path, on_source_opened=check_func)
+    callbacks = ss.SweepCallbacks(
+        on_source_opened=() if check_func is None else (check_func,),
+        on_analyzed=(ss.callbacks.log_overloads,),
+    )
+    ctx = ss.open_resources(spec, path, callbacks=callbacks)
     with ctx as resources:
         sweep = ss.iterate_sweep(resources, yield_values=False, always_yield=True)
         for _ in sweep:

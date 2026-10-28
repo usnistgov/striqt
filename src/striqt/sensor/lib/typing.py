@@ -135,6 +135,10 @@ if typing.TYPE_CHECKING:
         window: str
         min_fft_size: int
 
-    # %% resources.py
+    # %% callbacks.py
+    from .compute.datasets import DelayedDataset
+
     class SourceOpenCallback(Protocol):
         def __call__(self, sweep: specs.Sweep, source_id: str) -> None: ...
+
+    AnalyzedCallback: TypeAlias = Callable[[DelayedDataset], None]

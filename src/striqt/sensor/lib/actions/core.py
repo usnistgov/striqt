@@ -33,8 +33,10 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
     and constructed from an instance of that type. Construction stores `spec` and
     has no other effect. `open_resources` opens the source, the peripherals, and the
     sink from `open_sink` for `sweep`. `iterate_sweep` calls `iterate` over those
-    resources. A bound spec reads `sweep` at the end of `__post_init__`. Nothing is
-    inherited from the protocol.
+    resources, and `iterate` invokes the `on_analyzed` callbacks of
+    ``resources['callbacks']`` with the `DelayedDataset` of each capture. A bound
+    spec reads `sweep` at the end of `__post_init__`. Nothing is inherited from the
+    protocol.
     """
 
     spec: TA
@@ -140,6 +142,11 @@ def iterate_captures(
     fields of ``resources['action_spec']``. The attrs differ from the fields of
     ``resources['sweep_spec']`` when the runner derived the sweep from the spec.
 
+    The `on_analyzed` callbacks of ``resources['callbacks']`` run in the calling
+    thread with the `DelayedDataset` of each capture, after the analysis of that
+    capture and before the dataset is submitted to `sink.append`. An exception from
+    a callback ends the pipeline like an analysis error.
+
     Args:
         resources: dictionary of open resources returned by `open_resources`
         always_yield: with `yield_values` False, yield `None` at every step
@@ -176,6 +183,8 @@ def iterate_captures(
 
     iq = None
     analysis = None
+    callbacks = resources.get('callbacks')
+    on_analyzed = () if callbacks is None else callbacks.on_analyzed
     captures = specs.sequencing.loop_captures(
         spec, source_id=resources['source'].source_id
     )
@@ -220,6 +229,8 @@ def iterate_captures(
                     # cupy/cuda analysis must run in the foreground thread
                     analysis = compute.analyze(iq, compute_opts)
                     assert isinstance(analysis, compute.DelayedDataset)
+                    for callback in on_analyzed:
+                        callback(analysis)
 
             with exc.defer():
                 if acquire is not None:

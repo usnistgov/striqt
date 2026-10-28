@@ -155,6 +155,64 @@ def test_extra_data_reaches_every_capture_and_wins_over_the_peripherals():
         assert result.extra_data['state'] is True
 
 
+# %% iterate_captures: on_analyzed callbacks
+
+
+class RecordingSink(ss.sinks.NoSink):
+    def __init__(self, sweep, events):
+        super().__init__(sweep)
+        self.events = events
+
+    def append(self, capture_result):
+        self.events.append(('sink', capture_result.capture))
+        return super().append(capture_result)
+
+
+def test_on_analyzed_sees_each_capture_in_order_before_the_sink():
+    """the callback for capture i runs in the analysis step of i; the sink append of
+    i is submitted one step later, concurrently with the callback of i + 1"""
+    sweep = tone_sweep(OFFSETS)
+    events = []
+    callbacks = ss.SweepCallbacks(
+        on_analyzed=(lambda dd: events.append(('callback', dd.capture)),)
+    )
+    with ss.open_resources(sweep, None, callbacks=callbacks) as res:
+        sink = RecordingSink(sweep, events)
+        results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
+
+    captures = [r.capture for r in results]
+    assert len(captures) == len(OFFSETS)
+    assert [c for kind, c in events if kind == 'callback'] == captures
+    for c in captures:
+        assert events.index(('callback', c)) < events.index(('sink', c))
+
+
+def test_iterate_sweep_replaces_the_callbacks_for_one_run():
+    sweep = tone_sweep(OFFSETS)
+    seen = []
+    callbacks = ss.SweepCallbacks(on_analyzed=(lambda dd: seen.append(dd.capture),))
+    with ss.open_resources(sweep, None) as res:
+        sink = ss.sinks.NoSink(sweep)
+        list(ss.iterate_sweep(res, sink=sink, callbacks=callbacks))
+        assert len(seen) == len(OFFSETS)
+        list(ss.iterate_sweep(res, sink=sink))
+    assert len(seen) == len(OFFSETS)
+
+
+def test_an_on_analyzed_exception_ends_the_pipeline():
+    sweep = tone_sweep(OFFSETS)
+
+    def fail(dd):
+        raise RuntimeError('callback failed')
+
+    callbacks = ss.SweepCallbacks(on_analyzed=(fail,))
+    with (
+        ss.open_resources(sweep, None, callbacks=callbacks) as res,
+        pytest.raises(RuntimeError, match='callback failed'),
+    ):
+        list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
+
+
 def test_a_shared_indexer_numbers_two_runs_consecutively():
     """one indexer passed to 2 pipeline runs over the same open resources numbers
     the second run's captures after the first run's. The second run also re-arms

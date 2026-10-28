@@ -80,7 +80,7 @@ def test_if_overload_is_none(case):
     assert logs._if_overload_message(extra, capture, sweep) is None
 
 
-# %% log_info
+# %% log_overloads
 
 
 def delayed(extra_data, capture=CAPTURE, sweep=SWEEP):
@@ -96,18 +96,18 @@ def delayed(extra_data, capture=CAPTURE, sweep=SWEEP):
     )
 
 
-def test_log_info_joins_both_overload_messages_in_one_warning(caplog):
+def test_log_overloads_joins_both_overload_messages_in_one_warning(caplog):
     dd = delayed({'adc_headroom': (-1.0, 3.0), 'if_headroom': (10.0, 10.0)})
     with caplog.at_level(logging.WARNING, logger='striqt.analysis'):
-        logs.log_info(dd)
+        logs.log_overloads(dd)
     assert [r.getMessage() for r in caplog.records] == [
         f'{ADC_OVERLOAD}, {IF_OVERLOAD}'
     ]
     assert caplog.records[0].levelno == logging.WARNING
 
 
-def test_log_info_is_silent_without_overloads(caplog):
+def test_log_overloads_is_silent_without_overloads(caplog):
     dd = delayed({'adc_headroom': (1.0, 3.0), 'if_headroom': (21.0, 21.0)})
     with caplog.at_level(logging.DEBUG, logger='striqt.analysis'):
-        logs.log_info(dd)
+        logs.log_overloads(dd)
     assert caplog.records == []

@@ -137,7 +137,7 @@ exclude_also = [
 # these modules only re-export from `.lib`, so every import is intentionally unused in place
 "src/striqt/waveform/{arrays,fourier,power_analysis,comms_5gnr,comms_lte,comms_802_16}.py" = ["F401"]
 "src/striqt/analysis/testing.py" = ["F401"]
-"src/striqt/sensor/{io,sinks,util,peripherals,calibration}.py" = ["F401"]
+"src/striqt/sensor/{io,sinks,util,peripherals,calibration,callbacks}.py" = ["F401"]
 # bindings.py re-exports the deprecated bind_manual_yfactor_calibration
 "src/striqt/sensor/bindings.py" = ["F401"]
 

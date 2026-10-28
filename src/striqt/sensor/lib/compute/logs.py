@@ -6,8 +6,16 @@ from ... import specs
 from ..typing import SA, SC, SS, SP
 
 
-def log_info(dd: datasets.DelayedDataset):
-    # log overload messages
+def log_overloads(dd: datasets.DelayedDataset) -> None:
+    """warn on the ``analysis`` logger when `dd.extra_data` reports an overload.
+
+    `adc_headroom` (dB, one value per port) at or below 0 is an ADC overload on that
+    port. `if_headroom` (dB, one value per port) is compared against the gain of
+    every capture of the sweep at the same port to estimate third-order
+    intermodulation onto the frequencies of those captures. Nothing is logged when
+    neither key is present, when `dd.capture` is not a `SoapyCapture`, or when no
+    port overloads. Register through `SweepCallbacks.on_analyzed`.
+    """
     overload_msgs = []
     adc_ol_info = _adc_overload_message(dd.extra_data, dd.capture)
     if adc_ol_info is not None:
