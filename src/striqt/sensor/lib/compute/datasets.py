@@ -43,11 +43,11 @@ class DelayedDataset:
 def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
     """return the materialized dataset of the capture in `dd`.
 
-    Returns:
-        a dataset with one `capture` entry per port of `dd.capture`; coordinates from
-        the capture, acquisition, and analysis-loop fields; attrs from
-        `dd.config.extra_attrs` less the coordinate names; and one variable along
-        `capture` per `dd.extra_data` entry
+    The dataset contains
+    - one `capture` entry per port of `dd.capture`
+    - coordinates for each field in the capture, and source-specific acquisition info
+    - attributes coontaining the full action specification and `dd.config.extra_attrs`
+    - one variable per analysis specification and per `dd.extra_data` entry
 
     Raises:
         ValueError: if the first axis of an `extra_data` array has a size other
