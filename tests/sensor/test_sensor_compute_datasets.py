@@ -11,6 +11,7 @@ import logging
 import numpy as np
 import pytest
 from numeric_checks import assert_close, elementwise_rtol
+from soapy_factories import soapy_capture
 from synthetic_sources import (
     IQ_ONLY,
     SCALE_ONLY,
@@ -63,6 +64,27 @@ def spectrogram_run() -> list:
 
 
 # %% from_delayed
+
+
+def test_from_delayed_does_not_warn_on_an_adc_overload(caplog):
+    """the overload warning is the `log_overloads` callback's, not the packaging's"""
+    air = ss.bindings.air7101b
+    capture = soapy_capture(port=(0, 1), center_frequency=(1e9, 2e9), gain=0.0)
+    sweep = air.sensor.sweep_spec_cls(source=air.schema.source(), captures=(capture,))
+    config = compute.EvaluationOptions(
+        sweep_spec=sweep, registry=sa.registry, as_xarray='delayed', extra_attrs={}
+    )
+    dd = compute.DelayedDataset(
+        delayed={},
+        capture=capture,
+        extra_coords=ss.specs.AcquisitionInfo(),
+        extra_data={'adc_headroom': (-1.0, -1.0)},
+        config=config,
+    )
+    with caplog.at_level(logging.WARNING, logger='striqt.analysis'):
+        ds = compute.from_delayed(dd)
+    assert ds.sizes['capture'] == 2
+    assert caplog.records == []
 
 
 def test_from_delayed_one_row_per_port_with_split_fields():

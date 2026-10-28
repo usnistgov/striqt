@@ -9,12 +9,10 @@ thread. Exceptions from the 3 stages of one step are collected in an
 from __future__ import annotations as __
 
 import contextlib
-import math
 import itertools
 from collections.abc import Mapping
 from typing import Any, Generator, Protocol, TYPE_CHECKING
 
-import striqt.waveform as sw
 import striqt.analysis as sa
 from striqt.analysis.lib.util import pd, xr
 
@@ -22,40 +20,40 @@ from .. import compute, util
 from ... import specs
 from ..resources import Resources, AnyResources
 from ..sinks import SinkBase
-from ..compute.cal_lookups import lookup_system_noise_power
 from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
 
 class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
-    """the contract between an action spec and the code that runs the spec.
-
-    A runner class is registered for one action spec type with `registry.runner`
-    and constructed from an instance of that type. `open_resources` opens the
-    source, the peripherals, and the sink from `open_sink` for `sweep`.
-    `iterate_sweep` calls `iterate` over those resources. A bound spec calls
-    `validate` at the end of `__post_init__`. Nothing is inherited from the protocol.
-    """
+    """the contract between an action spec and the code that runs the spec."""
 
     spec: TA
-    sweep: specs.Sweep[SS, SP, SC, SA]
+    """the action spec given at construction"""
 
-    def __init__(self, spec: TA) -> None: ...
+    def __init__(self, spec: TA) -> None:
+        """store `spec`; nothing is opened or derived."""
+        ...
 
-    @classmethod
-    def validate(cls, spec: TA) -> None:
-        """raise if `spec` cannot be converted to the `Sweep` this runner runs.
+    @property
+    def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
+        """the `Sweep` derived from `spec`.
+
+        The source, peripherals, and sink are opened for this `Sweep`.
 
         Raises:
-            msgspec.ValidationError: for the field of `spec` that the conversion
-                rejects, located by the path of the field
+            msgspec.ValidationError: if a field of `spec` is rejected; the error path
+                names the field
         """
         ...
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        """return the sink for `sweep`, not yet entered.
+        """return the sink for `sweep`.
 
-        `open_resources` enters the returned sink. A ``sweep.sink.path`` of None
-        selects a sink that writes nothing.
+        The caller enters the returned sink. A ``sweep.sink.path`` of None selects a
+        sink that writes nothing.
+
+        Args:
+            format_path: the formatter of the ``{field}`` templates in the sink path,
+                or None to use the path as written
         """
         ...
 
@@ -67,13 +65,19 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
         yield_values: bool = True,
         loop: bool = False,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-        """run the action over `resources`, yielding what the sink's `append` returns.
+        """run the action over `resources`.
+
+        An implementation runs `iterate_captures` over `resources`.
 
         Args:
-            resources: the open resources returned by `open_resources`
+            resources: the open resources
             always_yield: if True, yield `None` on steps that produce no result
             yield_values: if False, yield `None` instead of the sink result
             loop: if True, the action repeats from the beginning after the last capture
+
+        Yields:
+            what `sink.append` returned for each capture, or None as `always_yield`
+            and `yield_values` select
         """
         ...
 
@@ -86,19 +90,17 @@ def iterate_sweep(
     loop: bool = False,
     **replace: Unpack[AnyResources[SS, SP, SC, SA, PS, PC]],
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-    """run the action of ``resources['runner']`` over `resources`.
-
-    The runner was built by `open_resources` from the action spec. A `Sweep` runs
-    `iterate_captures`, whose docstring describes the yields.
+    """run the action in `resources` using `iterate_captures`.
 
     Args:
         resources: dictionary of open resources returned by `open_resources`
         always_yield: if True, yield `None` on steps that produce no result
         yield_values: if False, yield `None` instead of the sink result
         loop: if True, the action repeats from the beginning after the last capture
+        **replace: resources that replace the entries of `resources` for this run
 
-    Returns:
-        the iterator returned by the runner's `iterate`
+    Yields:
+        the return value from each append to the sink, or None
     """
     runner = resources['runner']
     return runner.iterate(
@@ -140,6 +142,9 @@ def iterate_captures(
     fields of ``resources['action_spec']``. The attrs differ from the fields of
     ``resources['sweep_spec']`` when the runner derived the sweep from the spec.
 
+    The `on_analyzed` and `on_sink_cached` hooks of ``resources['callbacks']`` run in the
+    calling thread. An exception from a hook ends the pipeline like an analysis error.
+
     Args:
         resources: dictionary of open resources returned by `open_resources`
         always_yield: with `yield_values` False, yield `None` at every step
@@ -159,8 +164,17 @@ def iterate_captures(
 
     resources = Resources(resources, **replace)
 
-    def log(*args, **kws):
-        return _log_cache_info(resources, *args, **kws)
+    callbacks = resources.get('callbacks')
+    on_analyzed = None if callbacks is None else callbacks.on_analyzed
+    on_sink_cached = None if callbacks is None else callbacks.on_sink_cached
+
+    if on_sink_cached is None:
+        cache_callback = None
+    else:
+
+        def cache_callback(cache: Any, capture: SC, result: Any, **kws: Any) -> None:
+            assert on_sink_cached is not None
+            on_sink_cached(resources, cache, capture, result, **kws)
 
     spec = resources['sweep_spec']
 
@@ -169,7 +183,7 @@ def iterate_captures(
         registry=sa.registry,
         extra_attrs=resources['action_spec'].to_dict(True, allow_tuple_keys=False),
         correction=True,
-        cache_callback=log,
+        cache_callback=cache_callback,
         as_xarray='delayed',
         block_each=True,  # data corruption has been observed otherwise
     )
@@ -220,6 +234,8 @@ def iterate_captures(
                     # cupy/cuda analysis must run in the foreground thread
                     analysis = compute.analyze(iq, compute_opts)
                     assert isinstance(analysis, compute.DelayedDataset)
+                    if on_analyzed is not None:
+                        on_analyzed(analysis)
 
             with exc.defer():
                 if acquire is not None:
@@ -369,56 +385,3 @@ def _acquire_both(
     if extra_data is not None:
         iq.extra_data = iq.extra_data | dict(extra_data)
     return iq
-
-
-def _log_cache_info(
-    resources: Resources[SS, SP, SC, SA, PS, PC],
-    cache,
-    capture: SC,
-    result,
-    *_,
-    **__,
-):
-    cal = resources['sweep_spec'].source.calibration
-    if cal is None or 'spectrogram' not in cache.name:
-        return
-
-    spg, attrs = result
-
-    xp = sw.array_namespace(spg)
-
-    if isinstance(capture, specs.SoapyCapture):
-        info_fields = ('center_frequency', 'port', 'gain')
-    else:
-        info_fields = ('port',)
-
-    # converted to dB below
-    peaks = spg.max(axis=tuple(range(1, spg.ndim)))
-    noise = lookup_system_noise_power(
-        cal,
-        specs.SoapyCapture.from_spec(capture),
-        master_clock_rate=resources['sweep_spec'].source.master_clock_rate,
-        format_path=resources['format_path'],
-        B=attrs['noise_bandwidth'],
-        xp=xp,
-    )
-
-    logger = sa.util.get_logger('analysis')
-    capture_splits = specs.captures.split_capture_ports(capture)
-
-    for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
-        if sw.is_cupy_array(snr.data):
-            snr = float(snr.data.get())
-        else:
-            snr = float(snr.values)
-        if not abs(snr) < math.inf:
-            continue
-
-        snr_desc = f'{round(snr)} dB max SNR'
-        capture_desc = specs.sequencing.describe_capture(
-            c,
-            fields=info_fields,
-            source_id=resources['source'].source_id,
-            adjust_spec=resources['sweep_spec'].adjust_captures,
-        )
-        logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')

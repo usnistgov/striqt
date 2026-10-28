@@ -108,6 +108,9 @@ source_suffix = {
 
 autodoc_mock_imports = []
 
+# render the docstring of an __init__ that has one; autodoc drops it otherwise
+napoleon_include_init_with_doc = True
+
 autodoc_default_options = {
     'imported-members': True,
     'members': True,

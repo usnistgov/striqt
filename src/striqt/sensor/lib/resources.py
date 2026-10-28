@@ -7,6 +7,7 @@ concurrently in `util.threadpool`. A failure in any of them closes the others.
 from __future__ import annotations as __
 
 import contextlib
+import dataclasses
 import functools
 import os
 import sys
@@ -25,17 +26,46 @@ import striqt.analysis as sa
 
 if TYPE_CHECKING:
     from .actions.core import ActionRunner
-    from .typing import P, PassThroughWrapper, R, SourceOpenCallback
+    from .typing import (
+        AnalyzedCallback,
+        CachedCallback,
+        P,
+        PassThroughWrapper,
+        R,
+        SourceOpenCallback,
+    )
     import xarray as xr
 
+
+@dataclasses.dataclass(frozen=True)
+class SweepCallbacks:
+    """the hooks of one run of an action.
+
+    An exception from any hook ends the run.
+    """
+
+    on_source_opened: SourceOpenCallback | None = None
+    """hook run once with ``(sweep, source_id)`` in a worker thread after the source
+    opens and before the first capture"""
+    on_analyzed: AnalyzedCallback | None = None
+    """hook run with the `DelayedDataset` of each capture, after the analysis of that
+    capture and before the sink receives the dataset. The analysis thread blocks until
+    the hook returns."""
+    on_sink_cached: CachedCallback | None = None
+    """hook run with ``(resources, cache, capture, result, **kwargs)`` each time a
+    measurement fills a `KwArgCache`. `kwargs` are the measurement keywords. The
+    analysis thread blocks until the hook returns."""
+
+
+if TYPE_CHECKING:
     # the Generic parameters are for type checking only on python < 3.10
 
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, SA, PS, PC]):
-        """the open resources an action runs over.
+        """the open resources over which an action runs.
 
-        `action_spec` is the spec the action runs, and `runner` is the action built
-        from it. `sweep_spec` is the `Sweep` the runner built, which the hardware is
-        open for.
+        `action_spec` is the spec the action runs. `runner` is the action built from
+        `action_spec`. `sweep_spec` is the `Sweep` for which the hardware is open.
+        `callbacks` are the `SweepCallbacks` of the run; a missing key means none.
         """
 
         source: controller.Controller[SS, SP, SC, SA, PS, PC]
@@ -47,13 +77,14 @@ if TYPE_CHECKING:
         runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC]
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
+        callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
     class AnyResources(
         typing_extensions.TypedDict,
         Generic[SS, SP, SC, SA, PS, PC],
         total=False,
     ):
-        """Sensor resources needed to run a sweep"""
+        """`Resources` with every key optional."""
 
         source: controller.Controller[SS, SP, SC, SA, PS, PC]
         sink: SinkBase
@@ -64,11 +95,17 @@ if TYPE_CHECKING:
         runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC]
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
+        callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
 else:
     # the Generic parameters are for type checking only on python < 3.10
     class Resources(typing_extensions.TypedDict):
-        """Sensor resources needed to run a sweep"""
+        """the open resources over which an action runs.
+
+        `action_spec` is the spec the action runs. `runner` is the action built from
+        `action_spec`. `sweep_spec` is the `Sweep` for which the hardware is open.
+        `callbacks` are the `SweepCallbacks` of the run; a missing key means none.
+        """
 
         source: controller.Controller
         sink: SinkBase
@@ -79,9 +116,10 @@ else:
         runner: ActionRunner
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
+        callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
     class AnyResources(typing_extensions.TypedDict, total=False):
-        """Sensor resources needed to run a sweep"""
+        """`Resources` with every key optional."""
 
         source: controller.Controller
         sink: SinkBase
@@ -92,6 +130,7 @@ else:
         runner: ActionRunner
         calibration: 'xr.Dataset|None'
         format_path: specs.paths.PathFormatter | None
+        callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
 
 def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
@@ -128,7 +167,7 @@ class ConnectionManager(
         missing = Resources.__required_keys__ - set(self._resources.keys())
 
         # at runtime, __required_keys__ includes the NotRequired fields
-        missing = missing - {'peripherals', 'except_context'}
+        missing = missing - {'peripherals', 'except_context', 'callbacks'}
         if len(missing) == 0:
             return cast(Resources[SS, SP, SC, SA, PS, PC], self._resources)
         else:
@@ -173,13 +212,13 @@ def _open_devices(
     peripherals.setup(spec.captures, spec.loops)
 
 
-def _prepare_sweep(spec: specs.Sweep, callback: SourceOpenCallback | None = None):
-    """after the source opens, enumerate the sweep and invoke callback"""
+def _prepare_sweep(spec: specs.Sweep, callbacks: SweepCallbacks) -> None:
+    """list the capture adjustments of `spec`, then run `callbacks.on_source_opened`"""
     source_id = controller.lookup.id(spec.source)
     specs.sequencing.list_capture_adjustments(spec, source_id=source_id)
 
-    if callback is not None:
-        callback(spec, source_id)
+    if callbacks.on_source_opened is not None:
+        callbacks.on_source_opened(spec, source_id)
 
 
 @sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
@@ -189,6 +228,8 @@ def open_resources(
     *,
     test_only: bool = False,
     on_source_opened: SourceOpenCallback | None = None,
+    on_analyzed: AnalyzedCallback | None = None,
+    on_sink_cached: CachedCallback | None = None,
 ) -> ConnectionManager[SS, SP, SC, SA, PS, PC]:
     """open the sensor hardware and software contexts needed to run `spec`.
 
@@ -196,6 +237,23 @@ def open_resources(
     peripherals, the sink from the runner's `open_sink`, and the warmup are opened
     for the runner's `sweep`. The resources of the returned `ConnectionManager` are
     open and ready for `iterate_sweep`.
+
+    `on_source_opened` runs once with ``(sweep, source_id)`` in a worker thread after
+    the source opens and before the first capture. `on_analyzed` runs in the analysis
+    thread with the `DelayedDataset` of each capture before the sink receives the
+    dataset. `on_sink_cached` runs in the analysis thread each time a measurement
+    fills a `KwArgCache`, with `resources` followed by the arguments of the cache
+    callback. An exception from a hook ends the run.
+
+    Args:
+        spec: the action spec to open resources for
+        spec_path: the path of the file `spec` was read from, which sets the working
+            directory and the ``{spec_path}`` path field; None leaves both unset
+        test_only: if True, open `NoPeripherals` in place of the peripherals and
+            skip the compute warmup
+        on_source_opened: hook run after the source opens
+        on_analyzed: hook run after each capture is analyzed
+        on_sink_cached: hook run when a measurement cache fills
 
     Raises:
         TypeError: if no action runner is registered for the type of `spec`
@@ -214,6 +272,12 @@ def open_resources(
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
+    callbacks = SweepCallbacks(
+        on_source_opened=on_source_opened,
+        on_analyzed=on_analyzed,
+        on_sink_cached=on_sink_cached,
+    )
+
     runner = actions.registry.lookup(spec)(spec)
     sweep = runner.sweep
     ctrl_cls = bindings.get_controller(spec)
@@ -224,7 +288,7 @@ def open_resources(
         devices = util.threadpool.submit(
             _open_devices, conn, ctrl_cls, sweep, test_only, fmt
         )
-        prep_sweep = util.threadpool.submit(_prepare_sweep, sweep, on_source_opened)
+        prep_sweep = util.threadpool.submit(_prepare_sweep, sweep, callbacks)
         sink = util.threadpool.submit(_open_sink, runner, fmt)
 
         with exc.defer():
@@ -288,5 +352,6 @@ def open_resources(
     conn._resources['sweep_spec'] = sweep
     conn._resources['runner'] = runner
     conn._resources['format_path'] = fmt
+    conn._resources['callbacks'] = callbacks
 
     return conn

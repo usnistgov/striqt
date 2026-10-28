@@ -558,7 +558,7 @@ def test_center_frequency_loop_is_rejected_at_construction():
 def test_registry_runs_the_cellular_sweep_with_its_runner():
     spec = make_cellular_sweep()
     assert registry.lookup(spec) is Cellular5GNRSweepRunner
-    assert Cellular5GNRSweepRunner.validate(spec) is None
+    assert Cellular5GNRSweepRunner(spec).sweep is cellular.build_cellular_sweep(spec)
 
 
 def test_in_memory_run_yields_one_dataset_per_capture_at_the_derived_rate():

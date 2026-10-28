@@ -367,21 +367,18 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
     """
 
     spec: specs.ManualYFactorCalibration[SS, SP, SC, SA]
-    sweep: specs.Sweep[SS, SP, SC, SA]
 
     def __init__(self, spec: specs.ManualYFactorCalibration[SS, SP, SC, SA]) -> None:
         self.spec = spec
-        self.sweep = build_calibration_sweep(spec)
 
-    @classmethod
-    def validate(cls, spec: specs.ManualYFactorCalibration[SS, SP, SC, SA]) -> None:
-        """build the calibration sweep of `spec`.
+    @property
+    def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
+        """the `Sweep` built by `build_calibration_sweep` from `spec`.
 
         Raises:
-            msgspec.ValidationError: what `build_calibration_sweep` raises
-            TypeError: if `spec` is not an instance of a bound action spec class
+            msgspec.ValidationError: if a field of `spec` is rejected
         """
-        build_calibration_sweep(spec)
+        return build_calibration_sweep(self.spec)
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
         return MemoryCacheSink(self.sweep)

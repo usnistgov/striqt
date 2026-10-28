@@ -1811,11 +1811,9 @@ def run_server(
             # Schedule broadcast on the event loop
             asyncio.run_coroutine_threadsafe(broadcast_plot_update(), loop)
 
-        ctx = ss.open_resources(spec, path)
+        ctx = ss.open_resources(spec, path, on_analyzed=on_data)
 
         with ctx as resources:
-            # the sink's result is discarded here, so the callback need not return it
-            cast(Any, resources['sink']).append = on_data
             while True:
                 sweep = ss.iterate_sweep(
                     resources, yield_values=True, always_yield=True

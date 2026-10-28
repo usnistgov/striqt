@@ -61,15 +61,17 @@ lookup walks the MRO of the bound class.
 is constructed from the action spec, decoded from a file or built from the API, and
 exposes:
 
-- `spec`: the action spec.
-- `sweep`: the `Sweep` that `open_resources` opens the hardware for.
-- `validate(spec)`, a classmethod: raises when the spec cannot be converted to that
-  sweep. A bound spec calls `validate` at the end of `__post_init__` through
-  `specs.action.validate_action`, so a bound spec that constructs is one that the
-  runner can run.
+- `spec`: the action spec. Construction stores the spec and does nothing else.
+- `sweep`, a read-only property: the `Sweep` that `open_resources` opens the hardware
+  for. Reading the property runs the derivation (`build_calibration_sweep`,
+  `build_cellular_sweep`, both `lru_cache`d on the spec) and raises when the spec
+  cannot be converted. A bound spec reads `sweep` at the end of `__post_init__`
+  through `specs.action.validate_action`, so a bound spec that constructs is one that
+  the runner can run. `SweepRunner.sweep` is the spec itself.
 - `open_sink(format_path)`: returns the sink that `open_resources` enters. A
   `sink.path` of None writes nothing.
-- `iterate(resources)`: runs the action.
+- `iterate(resources)`: runs the action and invokes the `on_analyzed` and `on_sink_cached`
+  callbacks of `resources['callbacks']`.
 
 Nothing is inherited between runners. Each runner calls `iterate_captures`, the pipeline
 described under Sweep execution below, with the per-capture `extra_data=`
@@ -144,8 +146,8 @@ An omitted parameter in none of the tables stays at the measurement default.
 `check_block_fields` verifies at import that the tables agree with the declaration of
 each block.
 
-`build_cellular_sweep` is cached and runs from `validate` at spec construction. The
-function resolves each capture against the table:
+`build_cellular_sweep` is cached and runs when the runner's `sweep` is read at spec
+construction. The function resolves each capture against the table:
 
 - `sample_rate` comes from `striqt.waveform.comms_5gnr.nr_sample_rate`: the smallest
   multiple of 896·SCS at or above the channel bandwidth plus the FIR transition band.
@@ -192,10 +194,33 @@ cannot be executed on a laptop. A cupy-only change is unverified until someone r
 
 ## Sweep execution
 
-`open_resources(spec)` builds the runner registered for the type of the spec and opens
-the source, peripherals, and sink for `runner.sweep`. The returned `Resources` dict has
-the keys `action_spec` (the spec passed in), `sweep_spec` (the built sweep), and
-`runner`.
+`open_resources(spec, callbacks=...)` builds the runner registered for the type of the
+spec and opens the source, peripherals, and sink for `runner.sweep`. The returned
+`Resources` dict has the keys `action_spec` (the spec passed in), `sweep_spec` (the
+built sweep), `runner`, and `callbacks`.
+
+A front end registers hooks for one run as keywords of `open_resources`, each one
+callable or None: `on_source_opened(sweep, source_id)` runs from a worker thread after
+the source opens; `on_analyzed(dd)` receives the `DelayedDataset` of each capture in the
+analysis thread, after `compute.analyze` and before the dataset is submitted to
+`sink.append`; `on_sink_cached(resources, cache, capture, result, **kwargs)` runs in the
+analysis thread each time a measurement fills a `KwArgCache` (the pipeline forwards the
+cache's own callback arguments and prepends `resources`, since the SNR line needs the
+calibration, `format_path`, and `source_id`). A front end that wants two behaviors on
+one event writes one function. A callback exception ends the run like an analysis
+error. No hooks are registered by default. `open_resources` bundles the three into the
+internal dataclass `lib/resources.py:SweepCallbacks` under `resources['callbacks']`,
+which `iterate_captures` reads; `iterate_sweep(res, callbacks=...)` replaces that
+bundle for one run.
+
+`lib/compute/summary.py` returns structured data and never logs: `overloads(dd)` gives
+one `PortOverload` per port (`adc`, `im3_victims`) and `spectrogram_snr(sweep, capture,
+result)` one `SpectrogramSNR` per port with a finite SNR, None without a calibration;
+the `describe_*` functions render each as one line. The logging callbacks are CLI code:
+`cli/sensor_sweep.py:log_overloads` (`on_analyzed`) and `log_spectrogram_snr`
+(`on_sink_cached`, gated on `'spectrogram' in cache.name`), which `sensor-sweep` registers
+beside `confirm_labels` and `web-plotter` imports and calls from its own callbacks.
+`from_delayed` emits none of these messages.
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in
 `actions/core.py:iterate_captures`, the three-stage software pipeline in threads

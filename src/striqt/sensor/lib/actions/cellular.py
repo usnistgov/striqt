@@ -423,16 +423,18 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
     """
 
     spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]
-    sweep: specs.Sweep[SS, SP, SC, SA]
 
     def __init__(self, spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]) -> None:
         self.spec = spec
-        self.sweep = build_cellular_sweep(spec)
 
-    @classmethod
-    def validate(cls, spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]) -> None:
-        """build the sweep of `spec`, raising what `build_cellular_sweep` raises."""
-        build_cellular_sweep(spec)
+    @property
+    def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
+        """the `Sweep` built by `build_cellular_sweep` from `spec`.
+
+        Raises:
+            msgspec.ValidationError: if a field of `spec` is rejected
+        """
+        return build_cellular_sweep(self.spec)
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
         if self.sweep.sink.path is None:

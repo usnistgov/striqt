@@ -41,9 +41,18 @@ class DelayedDataset:
 
 
 def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
-    """complete any remaining calculations, transfer from the device, and build an output dataset"""
+    """return the materialized dataset of the capture in `dd`.
 
-    from .logs import log_info
+    The dataset contains
+    - one `capture` entry per port of `dd.capture`
+    - coordinates for each field in the capture, and source-specific acquisition info
+    - attributes coontaining the full action specification and `dd.config.extra_attrs`
+    - one variable per analysis specification and per `dd.extra_data` entry
+
+    Raises:
+        ValueError: if the first axis of an `extra_data` array has a size other
+            than 0, 1, or the port count
+    """
 
     with sa.util.stopwatch(
         'package xarray',
@@ -54,11 +63,6 @@ def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
         analysis = sa.dataarrays.package_analysis(
             dd.capture, dd.delayed, expand_dims=(CAPTURE_DIM,)
         )
-
-    if isinstance(dd.config.sweep_spec.source, specs.NoSource):
-        pass
-
-    log_info(dd)
 
     with sa.util.stopwatch(
         'build coords',
