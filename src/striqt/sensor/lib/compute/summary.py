@@ -41,10 +41,12 @@ class SpectrogramSNR:
 def overloads(dd: datasets.DelayedDataset) -> tuple[PortOverload, ...]:
     """return the overload state of each port of `dd.capture`.
 
+    `adc_headroom` and `if_headroom` (dB, one value per port) in `dd.extra_data`
+    determine `adc` and `im3_victims`. The candidate IM3 victims are the center
+    frequencies of `dd.config.sweep_spec`.
+
     Args:
-        dd: the analyzed capture; `adc_headroom` and `if_headroom` (dB, one value per
-            port) in `extra_data` determine `adc` and `im3_victims`, and the center
-            frequencies of `config.sweep_spec` are the candidate IM3 victims
+        dd: the analyzed capture
 
     Returns:
         one entry per port in `split_capture_ports` order, or an empty tuple when
@@ -130,14 +132,16 @@ def spectrogram_snr(
 ) -> tuple[SpectrogramSNR, ...] | None:
     """return the peak SNR of each port in the spectrogram `result`.
 
+    The spectrogram is linear power with the port on axis 0, and
+    ``attrs['noise_bandwidth']`` is in Hz. `sweep.source.calibration` selects the
+    noise figure and `sweep.source.master_clock_rate` the calibration row.
+
     Args:
-        sweep: the sweep; `source.calibration` selects the noise figure and
-            `source.master_clock_rate` the calibration row
+        sweep: the sweep with the calibration
         capture: the capture of the spectrogram
-        result: the cached ``(spectrogram, attrs)`` pair: linear power with the port
-            on axis 0, and ``attrs['noise_bandwidth']`` in Hz
+        result: the cached ``(spectrogram, attrs)`` pair
         format_path: the formatter of the ``{field}`` templates in the calibration
-            path, or None to use the path as written
+            path, or None
 
     Returns:
         one entry per port with a finite SNR, in `split_capture_ports` order, or None
@@ -180,10 +184,12 @@ def describe_spectrogram_snr(
 ) -> str:
     """return the one-line description of `entry`.
 
+    A field set by an adjustment in `adjust_spec` is described by the field that
+    drives the adjustment.
+
     Args:
         source_id: the source id that selects the entries of `adjust_spec`
-        adjust_spec: the `adjust_captures` of the sweep; a field set by an adjustment
-            is described by the field that drives the adjustment
+        adjust_spec: the `adjust_captures` of the sweep
     """
     if isinstance(entry.capture, specs.SoapyCapture):
         fields = ('center_frequency', 'port', 'gain')
