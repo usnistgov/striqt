@@ -1,12 +1,16 @@
 from __future__ import annotations
 import dataclasses
-from typing import Any, Callable, cast, Generic, Literal
+from typing import Any, Callable, cast, Generic, Literal, TYPE_CHECKING
 
 from . import structs, paths
+from ..lib import util
 from ..lib.typing import SS, SC, SP, SA, PS, PC
 
 import striqt.waveform as sw
 import striqt.analysis as sa
+
+if TYPE_CHECKING:
+    from ..lib.compute import corrections
 
 
 @dataclasses.dataclass(frozen=True)
@@ -41,32 +45,11 @@ class Schema(Generic[SS, SP, SC, SA, PS, PC]):
 
 
 @dataclasses.dataclass
-class CorrectionStages:
-    """the memoized conditioning stages of one acquisition."""
-
-    resampled: tuple[sw.typing.Array, int | None] | None = None
-    """the waveform at the capture sample rate with the lead and tail overlaps,
-    paired with the lead offset in samples"""
-    unfiltered: sw.typing.Array | None = None
-    """the resampled waveform from the lead offset, with the tail overlap"""
-    filtered: sw.typing.Array | None = None
-    """the low-passed waveform from the lead offset, with the tail overlap"""
-    shifts: sw.typing.Array | None = None
-    """the per-port trigger shift in samples"""
-    outputs: dict[tuple[bool, bool], sw.typing.Array] = dataclasses.field(
-        default_factory=dict
-    )
-    """the selected waveforms keyed by the effective ``(filtered, aligned)`` pair"""
-    aligning: bool = False
-    """True while the trigger measurement runs"""
-
-
-@dataclasses.dataclass
 class AcquiredIQ(sa.AcquiredIQ):
     """an acquisition from a sensor source with the metadata and conditioning of the capture.
 
-    `select` conditions `x` through the sensor signal path and memoizes each stage
-    in `stages`. `x` must not change after the first call to `select`.
+    `preprocess` conditions `x` through the sensor signal path and memoizes each
+    stage. `x` must not change after the first call to `preprocess`.
     """
 
     info: structs.AcquisitionInfo
@@ -79,46 +62,19 @@ class AcquiredIQ(sa.AcquiredIQ):
     # whether to evaluate the complex conjugate of each port
     conjugate: tuple[bool, ...] | Literal[False] = False
     signal_trigger: sa.Trigger | None = None
-    """the trigger that `select` runs for alignment; None selects
+    """the trigger that `preprocess` runs for alignment; None selects
     `info.signal_trigger`"""
     overwrite_x: bool = False
     """True to let the resampling stage consume `x` in place"""
-    stages: CorrectionStages = dataclasses.field(
-        default_factory=CorrectionStages, init=False, compare=False, repr=False
-    )
-    """the memoized conditioning stages; every instance, including each
-    `dataclasses.replace` copy, starts empty"""
 
-    def select(
-        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
-    ) -> sw.typing.Array:
-        """return `x` conditioned as `prefer_filtered` and `prefer_aligned` allow.
+    @util.cached_property
+    def preprocess(self) -> corrections.Preprocessor:
+        """the sensor `Preprocessor` of this acquisition, one per instance.
 
-        The stages, in order: resample to `capture.sample_rate`, conjugate the ports
-        in `conjugate`, low-pass to `capture.analysis_bandwidth`, trim to
-        `capture.duration`, and shift by the trigger lags. Each stage runs on the
-        first call that needs the stage.
-
-        Args:
-            prefer_filtered: True for the waveform low-passed to
-                `capture.analysis_bandwidth`; the unfiltered waveform is returned
-                when that bandwidth is infinite
-            prefer_aligned: True for the waveform shifted by the trigger lags; the
-                unaligned waveform is returned when no trigger is set
-
-        Returns:
-            shape (port, sample) array of ``round(duration * sample_rate)`` samples
-            per port at `capture.sample_rate`, in the namespace of `x`. Repeated calls
-            with the same effective conditioning return the same object.
-
-        Raises:
-            TypeError: if `capture` is not a `SensorCapture`
-            RuntimeError: if the trigger measurement selected ``prefer_aligned=True``
-            ValueError: if the acquisition is too short for the resampler or the
-                trigger shifts
+        A `dataclasses.replace` copy, including the copy that a controller returns
+        for a reused acquisition, starts with a `Preprocessor` of its own and every
+        stage empty.
         """
         from ..lib.compute import corrections
 
-        return corrections.select_corrected(
-            self, prefer_filtered=prefer_filtered, prefer_aligned=prefer_aligned
-        )
+        return corrections.Preprocessor(self)

@@ -221,7 +221,7 @@ def test_acquire_metadata_defaults(isolated_lookup, subtests):
             assert iq.info.signal_trigger is None
         with subtests.test('no conditioning is attached'):
             assert iq.signal_trigger is None and not iq.overwrite_x
-            assert not iq.stages.outputs
+            assert 'preprocess' not in vars(iq)
         with subtests.test('capture and source specs are attached'):
             assert iq.capture == capture and iq.source_spec == SOURCE
 
@@ -290,7 +290,7 @@ def test_reuse_iq(reuse_iq, second_capture, shares_buffer, isolated_lookup):
     assert (first.capture, second.capture) == (REUSABLE, second_capture)
     if shares_buffer:
         assert second.x is first.x
-        assert second.stages is not first.stages
+        assert second.preprocess is not first.preprocess
     else:
         assert not np.shares_memory(first.x, second.x)
         expected = expected_raw('single_tone', second_capture, SOURCE)

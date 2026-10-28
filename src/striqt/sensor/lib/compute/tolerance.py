@@ -1,7 +1,7 @@
 """budget the roundoff error of a sweep, capture by capture.
 
 The roundoff of the conditioning stages, set by the FFT sizes that
-`AcquiredIQ.select` runs on a capture, is the `input_error` passed to the tolerance
+`AcquiredIQ.preprocess` runs on a capture, is the `input_error` passed to the tolerance
 function of each measurement.
 """
 

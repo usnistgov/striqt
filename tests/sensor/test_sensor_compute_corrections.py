@@ -1,11 +1,12 @@
 """striqt.sensor.lib.compute.corrections: the per-capture signal path of
-AcquiredIQ.select, the resampler design, and the acquisition overlap that the
+AcquiredIQ.preprocess, the resampler design, and the acquisition overlap that the
 resampler and analysis filter consume
 """
 
 from __future__ import annotations
 
 import dataclasses
+import gc
 from collections.abc import Callable
 from math import inf, isfinite
 from typing import TypeVar
@@ -375,28 +376,52 @@ def test_overwrite_x_decides_whether_the_scaling_consumes_x(overwrite_x):
     assert np.array_equal(iq.x, before) != overwrite_x
 
 
-def test_replace_starts_with_empty_stages():
+def test_replace_starts_with_empty_stages(subtests):
     capture = preset_capture(
         'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
     )
     iq = acquire_corrected('single_tone', capture).corrected
     unfiltered(iq)
-    assert iq.stages.outputs
+    assert iq.preprocess.outputs
 
-    copy = dataclasses.replace(iq)
+    with subtests.test('repeated access is one preprocessor'):
+        assert iq.preprocess is iq.preprocess
+        assert isinstance(iq.preprocess, corrections.Preprocessor)
+    with subtests.test('a replace copy starts a preprocessor of its own'):
+        copy = dataclasses.replace(iq)
+        assert copy.preprocess is not iq.preprocess
+        assert not copy.preprocess.outputs
+        assert copy.preprocess.iq is copy
+    with subtests.test('attach_corrections starts a preprocessor of its own'):
+        attached = attach_corrections(iq)
+        assert attached.preprocess is not iq.preprocess
+        assert not attached.preprocess.outputs
+    with pytest.raises(TypeError, match='preprocess'):
+        dataclasses.replace(iq, preprocess=iq.preprocess)
 
-    assert copy.stages is not iq.stages
-    assert not copy.stages.outputs
-    # ValueError on py3.9 through 3.12, TypeError from 3.13
-    with pytest.raises((TypeError, ValueError), match='init=False'):
-        dataclasses.replace(iq, stages=iq.stages)
+
+def test_a_preprocessor_outlives_its_acquisition_only_as_an_error():
+    capture = preset_capture(
+        'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
+    )
+    iq = acquire_corrected('single_tone', capture).corrected
+    pp = iq.preprocess
+    unfiltered(iq)
+    del iq
+    gc.collect()
+
+    with pytest.raises(RuntimeError, match='released'):
+        pp(prefer_filtered=False)
 
 
 class _AlignedInputTrigger(FakeTrigger):
     """a trigger that asks for the aligned waveform while computing the alignment"""
 
-    def __call__(self, iq, capture):
-        sa.select_waveform(iq, prefer_aligned=True)
+    def __call__(
+        self, iq: sw.typing.Array | sa.AcquiredIQ, capture: sa.specs.Capture
+    ) -> sw.typing.Array:
+        assert isinstance(iq, sa.AcquiredIQ)
+        iq.preprocess(prefer_aligned=True)
         return super().__call__(iq, capture)
 
 
@@ -448,8 +473,8 @@ def test_a_pss_trigger_with_frequency_domain_measurements_skips_the_fir():
         results = sa.analyze_by_spec(iq, analysis, capture, options)
 
     assert set(results) == {'cellular_5g_pss_sync', 'power_spectral_density'}
-    assert iq.stages.shifts is not None
-    assert iq.stages.filtered is None
+    assert iq.preprocess.shifts is not None
+    assert iq.preprocess.filtered is None
 
 
 # %% select: trigger alignment

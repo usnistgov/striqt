@@ -105,9 +105,9 @@ def analyze(
 ) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
     """analyze an acquisition according to the sweep specification in `options`.
 
-    Each measurement selects the conditioning of `iq` through `select_waveform`. A
-    conditioning stage runs on the first selection that needs the stage. The
-    results include the acquisition data and metadata.
+    The registry selects the conditioning of `iq` for each measurement through
+    `preprocess`. A conditioning stage runs on the first selection that needs the
+    stage. The results include the acquisition data and metadata.
 
     Raises:
         TypeError: if `iq.capture` is not a `SensorCapture`

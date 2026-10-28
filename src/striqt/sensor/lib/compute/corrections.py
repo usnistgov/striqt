@@ -3,7 +3,7 @@ from __future__ import annotations as __
 import dataclasses
 from math import ceil, gcd, isfinite
 import os
-from typing import TYPE_CHECKING
+from typing import cast, TYPE_CHECKING
 import warnings
 
 from .. import sources, util
@@ -47,13 +47,13 @@ def attach_corrections(
     signal_trigger: sa.Trigger | None = None,
     overwrite_x: bool = False,
 ) -> specs.AcquiredIQ:
-    """return a copy of `iq` with `signal_trigger` and `overwrite_x` set for `select`.
+    """return a copy of `iq` with `signal_trigger` and `overwrite_x` set for `preprocess`.
 
     The copy starts with empty conditioning stages.
 
     Args:
-        signal_trigger: the trigger that `select` runs for alignment; None selects
-            `iq.info.signal_trigger`
+        signal_trigger: the trigger that `preprocess` runs for alignment; None
+            selects `iq.info.signal_trigger`
         overwrite_x: True to let the resampling stage consume `iq.x` in place
 
     Raises:
@@ -65,49 +65,90 @@ def attach_corrections(
     )
 
 
-def select_corrected(
-    iq: specs.AcquiredIQ, *, prefer_filtered: bool = True, prefer_aligned: bool = True
-) -> Array:
-    """return `iq.x` conditioned as the preferences allow, from the memoized stages.
+class Preprocessor(sa.Preprocessor):
+    """the sensor signal path of one acquisition, memoized stage by stage.
 
-    `prefer_filtered` applies only when `needs_analysis_filter` is true.
-    `prefer_aligned` applies only when a trigger is set. Repeated calls with the
-    same effective conditioning return the same array object.
-
-    Raises:
-        TypeError: if `iq.capture` is not a `SensorCapture`
-        RuntimeError: if `prefer_aligned` is set while the trigger is being evaluated
-        ValueError: if the acquisition is too short for the resampler or the shifts
+    An instance refers to the acquisition weakly and memoizes the stages of that
+    acquisition alone. Each stage runs on the first call that needs the stage, and
+    `x` of the acquisition must not change after that call.
     """
-    capture = _sensor_capture(iq)
-    stages = iq.stages
-    filtered = prefer_filtered and needs_analysis_filter(iq)
-    aligned = prefer_aligned and _trigger_of(iq) is not None
-    key = (filtered, aligned)
 
-    if key in stages.outputs:
-        return stages.outputs[key]
-    if aligned and stages.aligning:
-        raise RuntimeError(
-            'the signal_trigger measurement selected prefer_aligned=True while the '
-            'alignment was being computed; a trigger must select prefer_aligned=False'
-        )
+    def __init__(self, iq: specs.AcquiredIQ) -> None:
+        super().__init__(iq)
+        self.resampled: tuple[Array, int | None] | None = None
+        self.unfiltered: Array | None = None
+        self.filtered: Array | None = None
+        self.shifts: Array | None = None
+        self.outputs: dict[tuple[bool, bool], Array] = {}
+        self.aligning: bool = False
 
-    base = _filtered_stage(iq) if filtered else _unfiltered_stage(iq)
-    size_out = round(capture.duration * capture.sample_rate)
+    @property
+    def iq(self) -> specs.AcquiredIQ:
+        """the sensor acquisition that owns this preprocessor.
 
-    if aligned:
-        out = _apply_trigger_shifts(base, _trigger_shifts(iq), size_out)
-    else:
-        out = sw.axis_slice(base, 0, size_out, axis=_TIME_AXIS)
+        Raises:
+            RuntimeError: when the acquisition has been garbage collected
+        """
+        return cast('specs.AcquiredIQ', super().iq)
 
-    assert out.shape[_TIME_AXIS] == size_out
-    stages.outputs[key] = out
-    return out
+    def __call__(
+        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+    ) -> Array:
+        """return `x` of the acquisition conditioned as the preferences allow.
+
+        The stages, in order: resample to `capture.sample_rate`, conjugate the ports
+        in `conjugate`, low-pass to `capture.analysis_bandwidth`, trim to
+        `capture.duration`, and shift by the trigger lags.
+
+        Args:
+            prefer_filtered: True for the waveform low-passed to
+                `capture.analysis_bandwidth`; the unfiltered waveform is returned
+                when `needs_analysis_filter` is false
+            prefer_aligned: True for the waveform shifted by the trigger lags; the
+                unaligned waveform is returned when no trigger is set
+
+        Returns:
+            shape (port, sample) array of ``round(duration * sample_rate)`` samples
+            per port at `capture.sample_rate`, in the namespace of `x`. Repeated calls
+            with the same effective conditioning return the same object.
+
+        Raises:
+            TypeError: if `capture` is not a `SensorCapture`
+            RuntimeError: if the trigger measurement selected ``prefer_aligned=True``,
+                or if the acquisition has been garbage collected
+            ValueError: if the acquisition is too short for the resampler or the
+                trigger shifts
+        """
+        iq = self.iq
+        capture = _sensor_capture(iq)
+        filtered = prefer_filtered and needs_analysis_filter(iq)
+        aligned = prefer_aligned and _trigger_of(iq) is not None
+        key = (filtered, aligned)
+
+        if key in self.outputs:
+            return self.outputs[key]
+        if aligned and self.aligning:
+            raise RuntimeError(
+                'the signal_trigger measurement selected prefer_aligned=True while '
+                'the alignment was being computed; a trigger must select '
+                'prefer_aligned=False'
+            )
+
+        base = _filtered_stage(self) if filtered else _unfiltered_stage(self)
+        size_out = round(capture.duration * capture.sample_rate)
+
+        if aligned:
+            out = _apply_trigger_shifts(base, _trigger_shifts(self), size_out)
+        else:
+            out = sw.axis_slice(base, 0, size_out, axis=_TIME_AXIS)
+
+        assert out.shape[_TIME_AXIS] == size_out
+        self.outputs[key] = out
+        return out
 
 
 def needs_analysis_filter(iq: specs.AcquiredIQ) -> bool:
-    """return whether `select` runs the FIR low-pass to `analysis_bandwidth` for `iq`.
+    """return whether `preprocess` runs the FIR low-pass to `analysis_bandwidth` for `iq`.
 
     The filter runs when `analysis_bandwidth` is finite, except on the oaresample
     path, where the resampler applies the low-pass.
@@ -130,16 +171,16 @@ def _trigger_of(iq: specs.AcquiredIQ) -> sa.Trigger | None:
     return iq.info.signal_trigger
 
 
-def _resampled_stage(iq: specs.AcquiredIQ) -> tuple[Array, int | None]:
-    """return `iq.x` scaled, resampled, and conjugated, with the lead offset in samples.
+def _resampled_stage(pp: Preprocessor) -> tuple[Array, int | None]:
+    """return `x` scaled, resampled, and conjugated, with the lead offset in samples.
 
-    No other stage reads `iq.x`. The stage modifies `iq.x` in place when
-    `iq.overwrite_x` is set.
+    No other stage reads `x` of the acquisition. The stage modifies that `x` in
+    place when `overwrite_x` of the acquisition is set.
     """
-    stages = iq.stages
-    if stages.resampled is not None:
-        return stages.resampled
+    if pp.resampled is not None:
+        return pp.resampled
 
+    iq = pp.iq
     capture = _sensor_capture(iq)
     max_lag = _get_max_trigger_lag(iq.source_spec, capture, _trigger_of(iq))
     resample_kws = {
@@ -167,38 +208,37 @@ def _resampled_stage(iq: specs.AcquiredIQ) -> tuple[Array, int | None]:
                 y, iq.conjugate, overwrite_x=iq.overwrite_x or y is not iq.x
             )
 
-    stages.resampled = (y, offs)
-    return stages.resampled
+    pp.resampled = (y, offs)
+    return pp.resampled
 
 
-def _unfiltered_stage(iq: specs.AcquiredIQ) -> Array:
+def _unfiltered_stage(pp: Preprocessor) -> Array:
     """return the resampled waveform from the lead offset, with the tail overlap."""
-    stages = iq.stages
-    if stages.unfiltered is None:
-        y, offs = _resampled_stage(iq)
+    if pp.unfiltered is None:
+        y, offs = _resampled_stage(pp)
         if offs is not None:
             y = sw.axis_slice(y, offs, None, axis=_TIME_AXIS)
-        stages.unfiltered = y
-    return stages.unfiltered
+        pp.unfiltered = y
+    return pp.unfiltered
 
 
-def _filtered_stage(iq: specs.AcquiredIQ) -> Array:
+def _filtered_stage(pp: Preprocessor) -> Array:
     """return the low-passed waveform from the lead offset, with the tail overlap.
 
     The FIR runs on the full resampled record, and the transient falls in the lead
     overlap. When `needs_analysis_filter` is false, the return value is the
     unfiltered stage object.
     """
-    stages = iq.stages
-    if stages.filtered is not None:
-        return stages.filtered
+    if pp.filtered is not None:
+        return pp.filtered
 
+    iq = pp.iq
     if not needs_analysis_filter(iq):
-        stages.filtered = _unfiltered_stage(iq)
-        return stages.filtered
+        pp.filtered = _unfiltered_stage(pp)
+        return pp.filtered
 
     capture = _sensor_capture(iq)
-    y, offs = _resampled_stage(iq)
+    y, offs = _resampled_stage(pp)
     xp = sw.array_namespace(y)
     h = sw.design_fir_lpf(
         bw=capture.analysis_bandwidth,
@@ -215,33 +255,33 @@ def _filtered_stage(iq: specs.AcquiredIQ) -> Array:
         z = sw.oaconvolve(y, h[xp.newaxis, :], 'same', axes=_TIME_AXIS)
     if offs is not None:
         z = sw.axis_slice(z, offs, None, axis=_TIME_AXIS)
-    stages.filtered = z
+    pp.filtered = z
     return z
 
 
-def _trigger_shifts(iq: specs.AcquiredIQ) -> Array:
-    """return the per-port shift, in samples, from the trigger of `iq`.
+def _trigger_shifts(pp: Preprocessor) -> Array:
+    """return the per-port shift, in samples, from the trigger of the acquisition.
 
-    The trigger is called with `iq` itself, and the trigger measurement selects the
-    waveform conditioning.
+    The trigger is called with the acquisition itself, so the input of the trigger
+    measurement is selected through `pp` while `aligning` is set.
     """
-    stages = iq.stages
-    if stages.shifts is not None:
-        return stages.shifts
+    if pp.shifts is not None:
+        return pp.shifts
 
+    iq = pp.iq
     capture = _sensor_capture(iq)
     trigger = _trigger_of(iq)
     assert trigger is not None
 
-    stages.aligning = True
+    pp.aligning = True
     try:
         lags = trigger(iq, capture)
     finally:
-        stages.aligning = False
+        pp.aligning = False
 
     xp = sw.array_namespace(lags)
-    stages.shifts = xp.rint(lags * capture.sample_rate).astype('int')
-    return stages.shifts
+    pp.shifts = xp.rint(lags * capture.sample_rate).astype('int')
+    return pp.shifts
 
 
 @sa.specs.helpers.lru_cache_on_converted(specs.SensorCapture, maxsize=30000)
@@ -252,7 +292,7 @@ def get_correction_overlaps(
 ) -> tuple[int, int]:
     """return the (lead, tail) acquisition overlap of `capture` in source-rate samples.
 
-    The lead absorbs the transient of the analysis FIR, which `AcquiredIQ.select`
+    The lead absorbs the transient of the analysis FIR, which `AcquiredIQ.preprocess`
     applies at `capture.sample_rate` after resampling. The tail absorbs that
     transient and the largest lag of the trigger that `analysis` selects. The lead
     and tail together pad

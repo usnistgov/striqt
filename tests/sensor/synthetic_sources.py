@@ -253,19 +253,19 @@ def acquire_corrected(
     return Stages(raw, corrected, overlaps, resampler)
 
 
-def unfiltered(iq):
+def unfiltered(iq: sa.AcquiredIQ) -> sw.typing.Array:
     """the resampled waveform before the analysis filter, trigger-shifted if a trigger is set"""
-    return sa.select_waveform(iq, prefer_filtered=False, prefer_aligned=True)
+    return iq.preprocess(prefer_filtered=False, prefer_aligned=True)
 
 
-def filtered(iq):
+def filtered(iq: sa.AcquiredIQ) -> sw.typing.Array:
     """the resampled and low-passed waveform, without the trigger shift"""
-    return sa.select_waveform(iq, prefer_filtered=True, prefer_aligned=False)
+    return iq.preprocess(prefer_filtered=True, prefer_aligned=False)
 
 
-def aligned(iq):
+def aligned(iq: sa.AcquiredIQ) -> sw.typing.Array:
     """the resampled, low-passed and trigger-shifted waveform"""
-    return sa.select_waveform(iq, prefer_filtered=True, prefer_aligned=True)
+    return iq.preprocess(prefer_filtered=True, prefer_aligned=True)
 
 
 def generator(
@@ -338,8 +338,13 @@ class FakeTrigger:
             return self._max_lag
         return float(np.max(np.abs(self.lags)))
 
-    def __call__(self, iq, capture):
-        x = sa.select_waveform(iq, prefer_aligned=False)
+    def __call__(
+        self, iq: sw.typing.Array | sa.AcquiredIQ, capture: sa.specs.Capture
+    ) -> sw.typing.Array:
+        if isinstance(iq, sa.AcquiredIQ):
+            x = iq.preprocess(prefer_aligned=False)
+        else:
+            x = iq
         xp = sw.array_namespace(x)
         lags = xp.asarray(self.lags, dtype='float64')
         return xp.broadcast_to(lags, (x.shape[0],)).copy()
