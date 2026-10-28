@@ -7,6 +7,7 @@ concurrently in `util.threadpool`. A failure in any of them closes the others.
 from __future__ import annotations as __
 
 import contextlib
+import dataclasses
 import functools
 import os
 import sys
@@ -16,7 +17,6 @@ from pathlib import Path
 import typing_extensions
 
 from . import bindings, controller, io, util
-from .callbacks import SweepCallbacks
 from .peripherals import NoPeripherals
 from .sinks import SinkBase
 from .typing import Peripherals, SS, SP, SC, SA, PS, PC
@@ -26,9 +26,38 @@ import striqt.analysis as sa
 
 if TYPE_CHECKING:
     from .actions.core import ActionRunner
-    from .typing import P, PassThroughWrapper, R
+    from .typing import (
+        AnalyzedCallback,
+        CachedCallback,
+        P,
+        PassThroughWrapper,
+        R,
+        SourceOpenCallback,
+    )
     import xarray as xr
 
+
+@dataclasses.dataclass(frozen=True)
+class SweepCallbacks:
+    """the callbacks of one run, invoked by `open_resources` and `iterate_captures`.
+
+    Each field is one callable or None. `on_source_opened` receives
+    ``(sweep, source_id)`` from a worker thread once the source is open and before the
+    first capture. `on_analyzed` receives the `DelayedDataset` of each capture in the
+    analysis thread, after the analysis of that capture and before the sink receives
+    the dataset. `on_cached` receives ``(resources, cache, capture, result,
+    **kwargs)`` in the analysis thread each time a measurement fills the `KwArgCache`
+    named `cache`, with the measurement keywords in `kwargs`. The analysis thread
+    waits for `on_analyzed` and `on_cached` to return. An exception from any callback
+    ends the run.
+    """
+
+    on_source_opened: SourceOpenCallback | None = None
+    on_analyzed: AnalyzedCallback | None = None
+    on_cached: CachedCallback | None = None
+
+
+if TYPE_CHECKING:
     # the Generic parameters are for type checking only on python < 3.10
 
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, SA, PS, PC]):
@@ -180,12 +209,12 @@ def _open_devices(
 
 
 def _prepare_sweep(spec: specs.Sweep, callbacks: SweepCallbacks) -> None:
-    """after the source opens, enumerate the sweep and run the `on_source_opened` callbacks"""
+    """after the source opens, enumerate the sweep and run the `on_source_opened` callback"""
     source_id = controller.lookup.id(spec.source)
     specs.sequencing.list_capture_adjustments(spec, source_id=source_id)
 
-    for callback in callbacks.on_source_opened:
-        callback(spec, source_id)
+    if callbacks.on_source_opened is not None:
+        callbacks.on_source_opened(spec, source_id)
 
 
 @sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
@@ -209,7 +238,7 @@ def open_resources(
             directory and the ``{spec_path}`` path field; None leaves both unset
         test_only: if True, open `NoPeripherals` in place of the peripherals and
             skip the compute warmup
-        callbacks: the hooks of the run. `on_source_opened` run from a worker thread
+        callbacks: the hooks of the run. `on_source_opened` runs from a worker thread
             after the source opens; the rest are stored in ``resources['callbacks']``
             for `iterate_sweep`. None registers no callbacks.
 

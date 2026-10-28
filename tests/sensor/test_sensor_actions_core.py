@@ -10,18 +10,14 @@ the wrong capture then disagrees with its generator oracle exactly.
 
 from __future__ import annotations
 
-import logging
-import math
-import types
-
 import numpy as np
 import pytest
 from conftest import assert_source_released
 from numeric_checks import assert_close, cross_backend
-from soapy_factories import soapy_capture
-from sweep_strategies import BOLTZMANN_MW, SOURCE, T_REF
+from sweep_strategies import SOURCE
 from synthetic_sources import (
     IQ_ONLY,
+    SPECTROGRAM,
     expected_corrected,
     preset_sweep,
     run_in_memory,
@@ -174,7 +170,7 @@ def test_on_analyzed_sees_each_capture_in_order_before_the_sink():
     sweep = tone_sweep(OFFSETS)
     events = []
     callbacks = ss.SweepCallbacks(
-        on_analyzed=(lambda dd: events.append(('callback', dd.capture)),)
+        on_analyzed=lambda dd: events.append(('callback', dd.capture))
     )
     with ss.open_resources(sweep, None, callbacks=callbacks) as res:
         sink = RecordingSink(sweep, events)
@@ -190,7 +186,7 @@ def test_on_analyzed_sees_each_capture_in_order_before_the_sink():
 def test_iterate_sweep_replaces_the_callbacks_for_one_run():
     sweep = tone_sweep(OFFSETS)
     seen = []
-    callbacks = ss.SweepCallbacks(on_analyzed=(lambda dd: seen.append(dd.capture),))
+    callbacks = ss.SweepCallbacks(on_analyzed=lambda dd: seen.append(dd.capture))
     with ss.open_resources(sweep, None) as res:
         sink = ss.sinks.NoSink(sweep)
         list(ss.iterate_sweep(res, sink=sink, callbacks=callbacks))
@@ -205,7 +201,7 @@ def test_an_on_analyzed_exception_ends_the_pipeline():
     def fail(dd):
         raise RuntimeError('callback failed')
 
-    callbacks = ss.SweepCallbacks(on_analyzed=(fail,))
+    callbacks = ss.SweepCallbacks(on_analyzed=fail)
     with (
         ss.open_resources(sweep, None, callbacks=callbacks) as res,
         pytest.raises(RuntimeError, match='callback failed'),
@@ -289,54 +285,42 @@ def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
     assert yielded == [None]
 
 
-# %% _log_cache_info
-
-AIR = ss.bindings.air7101b
-NOISE_BANDWIDTH = 1e4
-PEAK_DBM = -100.0
+# %% iterate_captures: on_cached callback
 
 
-def air_resources(capture, calibration=None):
-    source = AIR.schema.source(calibration=calibration)
-    sweep = AIR.sensor.sweep_spec_cls(source=source, captures=(capture,))
-    return ss.lib.resources.Resources(
-        sweep_spec=sweep,
-        source=types.SimpleNamespace(source_id='beef'),
-        format_path=None,
-    )
+def test_on_cached_fires_once_per_capture_when_the_spectrogram_cache_fills():
+    sweep = tone_sweep(OFFSETS, analysis=SPECTROGRAM)
+    calls = []
+
+    def on_cached(resources, cache, capture, result, **kwargs):
+        calls.append((resources, cache.name, capture, result))
+
+    callbacks = ss.SweepCallbacks(on_cached=on_cached)
+    with ss.open_resources(sweep, None, callbacks=callbacks) as res:
+        sink = ss.sinks.NoSink(sweep)
+        results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
+
+    assert [call[2] for call in calls] == [r.capture for r in results]
+    for resources, name, _, result in calls:
+        assert resources['sweep_spec'] is sweep
+        assert 'spectrogram' in name
+        spg, attrs = result
+        assert spg.ndim == 3
+        assert 'noise_bandwidth' in attrs
 
 
-def spectrogram_result(peak_dBm, shape=(1, 4, 8)):
-    """a linear-power spectrogram whose only feature is one bin at `peak_dBm`"""
-    spg = np.full(shape, 1e-30, dtype='float32')
-    spg[0, shape[1] // 2, shape[2] // 2] = 10 ** (peak_dBm / 10)
-    return spg, {'noise_bandwidth': NOISE_BANDWIDTH}
+def test_no_cache_callback_is_installed_without_on_cached(monkeypatch):
+    from striqt.analysis.lib.register import KwArgCache
 
+    installed = []
+    original = KwArgCache.set_callback
 
-def test_log_cache_info_reports_the_spectrogram_snr(calibration_nc, caplog):
-    """the logged SNR is the spectrogram peak above the calibrated system noise
-    k*T*B raised by the noise figure the calibration file records for the capture's
-    port and center frequency (5 dB at port 0, 1 GHz)"""
-    capture = soapy_capture()
-    noise_dBm = 5.0 + 10 * math.log10(BOLTZMANN_MW * T_REF * NOISE_BANDWIDTH)
-    expected_snr = round(PEAK_DBM - noise_dBm)
+    def set_callback(self, func, capture=None):
+        installed.append(func)
+        return original(self, func, capture)
 
-    resources = air_resources(capture, calibration_nc)
-    cache = types.SimpleNamespace(name='_cached_spectrogram')
-    with caplog.at_level(logging.INFO, logger='striqt.analysis'):
-        result = spectrogram_result(PEAK_DBM)
-        core._log_cache_info(resources, cache, capture, result)
-
-    messages = [r.getMessage() for r in caplog.records if 'SNR' in r.getMessage()]
-    assert len(messages) == 1
-    assert f'{expected_snr} dB max SNR' in messages[0]
-    assert 'port: 0' in messages[0]
-
-
-def test_log_cache_info_is_silent_for_a_non_spectrogram_cache(calibration_nc, caplog):
-    capture = soapy_capture()
-    resources = air_resources(capture, calibration_nc)
-    cache = types.SimpleNamespace(name='ssb_iq_cache')
-    with caplog.at_level(logging.DEBUG, logger='striqt.analysis'):
-        core._log_cache_info(resources, cache, capture, spectrogram_result(PEAK_DBM))
-    assert caplog.records == []
+    monkeypatch.setattr(KwArgCache, 'set_callback', set_callback)
+    sweep = tone_sweep(OFFSETS, analysis=SPECTROGRAM)
+    with ss.open_resources(sweep, None) as res:
+        list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
+    assert installed == []

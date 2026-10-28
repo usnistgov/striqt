@@ -421,17 +421,3 @@ class ZarrTimeAppendSink(ZarrSinkBase):
             for i in range(count - len(data_list), count):
                 with util.log_capture_context('sink', capture_index=i):
                     logger.info('💾')
-
-
-def open_capture_sink(
-    sweep: specs.Sweep[Any, Any, specs.SC, Any],
-    format_path: specs.paths.PathFormatter | None = None,
-) -> SinkBase[specs.SC]:
-    """return the sink that `sweep.sink.path` selects, not yet entered.
-
-    A path of None selects a `NoSink`; any other path selects a `ZarrCaptureSink`
-    at that path.
-    """
-    if sweep.sink.path is None:
-        return NoSink(sweep)
-    return ZarrCaptureSink(sweep, format_path)

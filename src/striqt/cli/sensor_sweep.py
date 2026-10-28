@@ -3,10 +3,11 @@
 """console entry point ``sensor-sweep``, installed on the shell PATH by pyproject.toml"""
 
 import click
-from typing import Callable, Union, TYPE_CHECKING
+from typing import Any, Callable, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import striqt.sensor as ss
+    from striqt.sensor.lib.resources import Resources
 
 
 def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
@@ -34,6 +35,54 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
             raise KeyboardInterrupt
 
 
+def log_overloads(dd: 'ss.lib.compute.DelayedDataset') -> None:
+    """warn on the ``analysis`` logger when a port of the capture overloaded.
+
+    Registered as the `on_analyzed` callback of `SweepCallbacks`. The ports and the
+    IM3 victims come from `compute.summary.overloads`.
+    """
+    import striqt.analysis as sa
+    from striqt.sensor.lib.compute import summary
+
+    message = summary.describe_overloads(summary.overloads(dd))
+    if message is not None:
+        sa.util.get_logger('analysis').warning(message)
+
+
+def log_spectrogram_snr(
+    resources: 'Resources',
+    cache: Any,
+    capture: 'ss.specs.SensorCapture',
+    result: Any,
+    **kwargs: Any,
+) -> None:
+    """log the peak SNR of each port on the ``analysis`` logger for a spectrogram cache.
+
+    Registered as the `on_cached` callback of `SweepCallbacks`. Nothing is logged for a
+    cache whose name does not contain ``spectrogram``, or for a sweep without a
+    calibration.
+    """
+    import striqt.analysis as sa
+    from striqt.sensor.lib.compute import summary
+
+    if 'spectrogram' not in cache.name:
+        return
+
+    sweep = resources['sweep_spec']
+    entries = summary.spectrogram_snr(
+        sweep, capture, result, format_path=resources['format_path']
+    )
+    logger = sa.util.get_logger('analysis')
+    for entry in entries or ():
+        logger.info(
+            summary.describe_spectrogram_snr(
+                entry,
+                source_id=resources['source'].source_id,
+                adjust_spec=sweep.adjust_captures,
+            )
+        )
+
+
 def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None):
     import striqt.sensor as ss
     from pathlib import Path
@@ -49,8 +98,9 @@ def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None
         raise click.ClickException('expected file to have .json or .yaml suffix')
 
     callbacks = ss.SweepCallbacks(
-        on_source_opened=() if check_func is None else (check_func,),
-        on_analyzed=(ss.callbacks.log_overloads,),
+        on_source_opened=check_func,
+        on_analyzed=log_overloads,
+        on_cached=log_spectrogram_snr,
     )
     ctx = ss.open_resources(spec, path, callbacks=callbacks)
     with ctx as resources:

@@ -133,19 +133,14 @@ def test_log_path_records_a_json_array_at_the_log_level(tmp_path):
 # %% callbacks
 
 
-def test_on_source_opened_callbacks_run_in_order_with_the_spec_and_id():
+def test_on_source_opened_is_called_once_with_the_spec_and_id():
     calls = []
     sweep = tone_sweep(OFFSETS)
-    callbacks = ss.SweepCallbacks(
-        on_source_opened=(
-            lambda *a: calls.append(('first', *a)),
-            lambda *a: calls.append(('second', *a)),
-        )
-    )
+    callbacks = ss.SweepCallbacks(on_source_opened=lambda *a: calls.append(a))
     with ss.open_resources(sweep, None, callbacks=callbacks) as res:
         source_id = ss.lib.controller.lookup.id(sweep.source)
         assert res['callbacks'] is callbacks
-    assert calls == [('first', sweep, source_id), ('second', sweep, source_id)]
+    assert calls == [(sweep, source_id)]
 
 
 def test_resources_carry_empty_callbacks_by_default():

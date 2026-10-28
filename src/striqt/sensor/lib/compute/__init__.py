@@ -1,6 +1,6 @@
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
 
-from . import cal_lookups
+from . import cal_lookups, summary
 from .analyze import analyze, prepare_compute, get_trigger_from_spec
 from .corrections import (
     correct_iq,

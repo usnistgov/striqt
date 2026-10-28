@@ -1804,14 +1804,19 @@ def run_server(
     def acquisition_loop():
         """Run data acquisition in a separate thread."""
 
+        from striqt.cli.sensor_sweep import log_overloads, log_spectrogram_snr
+
         def on_data(result: 'ss.lib.compute.DelayedDataset') -> None:
             """Callback when new data arrives."""
             update_dataset(result)
+            log_overloads(result)
 
             # Schedule broadcast on the event loop
             asyncio.run_coroutine_threadsafe(broadcast_plot_update(), loop)
 
-        callbacks = ss.SweepCallbacks(on_analyzed=(on_data, ss.callbacks.log_overloads))
+        callbacks = ss.SweepCallbacks(
+            on_analyzed=on_data, on_cached=log_spectrogram_snr
+        )
         ctx = ss.open_resources(spec, path, callbacks=callbacks)
 
         with ctx as resources:

@@ -135,10 +135,23 @@ if typing.TYPE_CHECKING:
         window: str
         min_fft_size: int
 
-    # %% callbacks.py
+    # %% resources.py
+    from striqt.analysis.lib.register import KwArgCache
+
     from .compute.datasets import DelayedDataset
+    from .resources import Resources
 
     class SourceOpenCallback(Protocol):
         def __call__(self, sweep: specs.Sweep, source_id: str) -> None: ...
 
     AnalyzedCallback: TypeAlias = Callable[[DelayedDataset], None]
+
+    class CachedCallback(Protocol):
+        def __call__(
+            self,
+            resources: Resources,
+            cache: KwArgCache,
+            capture: specs.SensorCapture,
+            result: Any,
+            **kwargs: Any,
+        ) -> None: ...

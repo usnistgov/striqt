@@ -9,12 +9,10 @@ thread. Exceptions from the 3 stages of one step are collected in an
 from __future__ import annotations as __
 
 import contextlib
-import math
 import itertools
 from collections.abc import Mapping
 from typing import Any, Generator, Protocol, TYPE_CHECKING
 
-import striqt.waveform as sw
 import striqt.analysis as sa
 from striqt.analysis.lib.util import pd, xr
 
@@ -22,7 +20,6 @@ from .. import compute, util
 from ... import specs
 from ..resources import Resources, AnyResources
 from ..sinks import SinkBase
-from ..compute.cal_lookups import lookup_system_noise_power
 from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
 
@@ -142,10 +139,12 @@ def iterate_captures(
     fields of ``resources['action_spec']``. The attrs differ from the fields of
     ``resources['sweep_spec']`` when the runner derived the sweep from the spec.
 
-    The `on_analyzed` callbacks of ``resources['callbacks']`` run in the calling
+    The `on_analyzed` callback of ``resources['callbacks']`` runs in the calling
     thread with the `DelayedDataset` of each capture, after the analysis of that
-    capture and before the dataset is submitted to `sink.append`. An exception from
-    a callback ends the pipeline like an analysis error.
+    capture and before the dataset is submitted to `sink.append`. The `on_cached`
+    callback runs in the calling thread with `resources` and the arguments of the
+    `KwArgCache` callback each time a measurement fills a cache. An exception from
+    either ends the pipeline like an analysis error.
 
     Args:
         resources: dictionary of open resources returned by `open_resources`
@@ -166,8 +165,17 @@ def iterate_captures(
 
     resources = Resources(resources, **replace)
 
-    def log(*args, **kws):
-        return _log_cache_info(resources, *args, **kws)
+    callbacks = resources.get('callbacks')
+    on_analyzed = None if callbacks is None else callbacks.on_analyzed
+    on_cached = None if callbacks is None else callbacks.on_cached
+
+    if on_cached is None:
+        cache_callback = None
+    else:
+
+        def cache_callback(cache: Any, capture: SC, result: Any, **kws: Any) -> None:
+            assert on_cached is not None
+            on_cached(resources, cache, capture, result, **kws)
 
     spec = resources['sweep_spec']
 
@@ -176,15 +184,13 @@ def iterate_captures(
         registry=sa.registry,
         extra_attrs=resources['action_spec'].to_dict(True, allow_tuple_keys=False),
         correction=True,
-        cache_callback=log,
+        cache_callback=cache_callback,
         as_xarray='delayed',
         block_each=True,  # data corruption has been observed otherwise
     )
 
     iq = None
     analysis = None
-    callbacks = resources.get('callbacks')
-    on_analyzed = () if callbacks is None else callbacks.on_analyzed
     captures = specs.sequencing.loop_captures(
         spec, source_id=resources['source'].source_id
     )
@@ -229,8 +235,8 @@ def iterate_captures(
                     # cupy/cuda analysis must run in the foreground thread
                     analysis = compute.analyze(iq, compute_opts)
                     assert isinstance(analysis, compute.DelayedDataset)
-                    for callback in on_analyzed:
-                        callback(analysis)
+                    if on_analyzed is not None:
+                        on_analyzed(analysis)
 
             with exc.defer():
                 if acquire is not None:
@@ -380,56 +386,3 @@ def _acquire_both(
     if extra_data is not None:
         iq.extra_data = iq.extra_data | dict(extra_data)
     return iq
-
-
-def _log_cache_info(
-    resources: Resources[SS, SP, SC, SA, PS, PC],
-    cache,
-    capture: SC,
-    result,
-    *_,
-    **__,
-):
-    cal = resources['sweep_spec'].source.calibration
-    if cal is None or 'spectrogram' not in cache.name:
-        return
-
-    spg, attrs = result
-
-    xp = sw.array_namespace(spg)
-
-    if isinstance(capture, specs.SoapyCapture):
-        info_fields = ('center_frequency', 'port', 'gain')
-    else:
-        info_fields = ('port',)
-
-    # converted to dB below
-    peaks = spg.max(axis=tuple(range(1, spg.ndim)))
-    noise = lookup_system_noise_power(
-        cal,
-        specs.SoapyCapture.from_spec(capture),
-        master_clock_rate=resources['sweep_spec'].source.master_clock_rate,
-        format_path=resources['format_path'],
-        B=attrs['noise_bandwidth'],
-        xp=xp,
-    )
-
-    logger = sa.util.get_logger('analysis')
-    capture_splits = specs.captures.split_capture_ports(capture)
-
-    for c, snr in zip(capture_splits, sw.powtodB(peaks) - noise):
-        if sw.is_cupy_array(snr.data):
-            snr = float(snr.data.get())
-        else:
-            snr = float(snr.values)
-        if not abs(snr) < math.inf:
-            continue
-
-        snr_desc = f'{round(snr)} dB max SNR'
-        capture_desc = specs.sequencing.describe_capture(
-            c,
-            fields=info_fields,
-            source_id=resources['source'].source_id,
-            adjust_spec=resources['sweep_spec'].adjust_captures,
-        )
-        logger.info(f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}')

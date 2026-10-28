@@ -21,7 +21,7 @@ from striqt.analysis.specs.helpers import SpecValidationError, spec_subset
 from ... import specs
 from .. import compute
 from ..resources import Resources
-from ..sinks import SinkBase, open_capture_sink
+from ..sinks import NoSink, SinkBase, ZarrCaptureSink
 from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
@@ -433,7 +433,9 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
         return build_cellular_sweep(self.spec)
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        return open_capture_sink(self.sweep, format_path)
+        if self.sweep.sink.path is None:
+            return NoSink(self.sweep)
+        return ZarrCaptureSink(self.sweep, format_path)
 
     def iterate(
         self,
