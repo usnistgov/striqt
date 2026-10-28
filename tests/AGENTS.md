@@ -27,7 +27,10 @@ repository.
   `tests/figures/` against the synthetic 3-capture datasets of `figures_datasets.py`
   (`make_dataset`, `predicted_levels_dBm`, `occupied_bins`), with the expected levels and
   bin supports from the dataset construction; the one plotting test runs headless through
-  `MPLBACKEND=agg`, set in the root conftest before any third-party import.
+  `MPLBACKEND=agg`, set in the root conftest before any third-party import. The same lines
+  set `MPLCONFIGDIR` to `platformdirs.user_cache_dir('striqt')/matplotlib`, beside the numba
+  cache, because a sandbox that cannot write `~/.matplotlib` rebuilds the matplotlib font
+  cache on every run (12 s per process) when the default config dir is used.
 - **The type checker's view** of the keyword-unpacking signatures is pinned by
   `tests/test_typing.py` and the probes under `tests/ty_probes/` (see Typing); import-time
   side effects by `tests/test_imports.py`; the docstring prose gate (no "it"/"its" for code,

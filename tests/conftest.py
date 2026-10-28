@@ -10,8 +10,16 @@ from pathlib import Path
 from threading import Lock
 from typing import NamedTuple
 
-# matplotlib reads the backend on first import. The figures tests plot headless.
+# matplotlib reads the backend and config dir on first import. The figures tests plot
+# headless. The font cache goes beside the numba cache (jit.py) because a sandbox without
+# write access to ~/.matplotlib rebuilds the cache on every run otherwise
 os.environ.setdefault('MPLBACKEND', 'agg')
+if not os.environ.get('MPLCONFIGDIR'):
+    import platformdirs
+
+    _mpl_dir = Path(platformdirs.user_cache_dir('striqt')) / 'matplotlib'
+    _mpl_dir.mkdir(parents=True, exist_ok=True)
+    os.environ['MPLCONFIGDIR'] = str(_mpl_dir)
 
 import msgspec
 import numpy as np
