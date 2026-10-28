@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Architecture &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="../_static/documentation_options.js?v=82662543"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Waveform numerics" href="waveform_numerics.html" />
+    <link rel="prev" title="Introduction" href="../guide/01_introduction.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="../">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="..//_static/NISTStyle.css">
+  <link rel="stylesheet" href="..//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="waveform_numerics.html" title="Waveform numerics"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../guide/01_introduction.html" title="Introduction"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Architecture</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="architecture">
+<h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading">¶</a></h1>
+<section id="package-layout">
+<h2>Package layout<a class="headerlink" href="#package-layout" title="Link to this heading">¶</a></h2>
+<p>Four packages under <code class="docutils literal notranslate"><span class="pre">src/striqt/</span></code> are stacked bottom-up:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">striqt.waveform</span></code>: array numerics on numpy and cupy</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code>: measurement specs and the measurement registry</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">striqt.sensor</span></code>: acquisition, sensor bindings, and sweep execution</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">striqt.figures</span></code>: plotting</p></li>
+</ol>
+<p>Each package depends only on the packages below that package. The command-line entry points in
+<code class="docutils literal notranslate"><span class="pre">striqt.cli</span></code> sit over all four.</p>
+<p>The public API of each package is the top-level namespace (<code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code>,
+<code class="docutils literal notranslate"><span class="pre">striqt.sensor</span></code>, and so on). Everything under a <code class="docutils literal notranslate"><span class="pre">.lib</span></code> subpackage is internal and
+changes without warning.</p>
+<section id="shims-over-striqt-waveform-lib">
+<h3>Shims over <code class="docutils literal notranslate"><span class="pre">striqt.waveform.lib</span></code><a class="headerlink" href="#shims-over-striqt-waveform-lib" title="Link to this heading">¶</a></h3>
+<p>The top-level modules of <code class="docutils literal notranslate"><span class="pre">striqt.waveform</span></code> re-export names from <code class="docutils literal notranslate"><span class="pre">striqt.waveform.lib</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">striqt.waveform.arrays</span></code> re-exports <code class="docutils literal notranslate"><span class="pre">waveform/lib/arrays.py</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">striqt.waveform.fourier</span></code> and <code class="docutils literal notranslate"><span class="pre">striqt.waveform.power_analysis</span></code> re-export the
+packages <code class="docutils literal notranslate"><span class="pre">waveform/lib/fourier</span></code> and <code class="docutils literal notranslate"><span class="pre">waveform/lib/power</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">striqt.waveform.comms_5gnr</span></code>, <code class="docutils literal notranslate"><span class="pre">striqt.waveform.comms_lte</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">striqt.waveform.comms_802_16</span></code> re-export per standard from <code class="docutils literal notranslate"><span class="pre">waveform/lib/comms</span></code>. A
+name shared by two standards, such as <code class="docutils literal notranslate"><span class="pre">Phy3GPP</span></code>, is exported by both of the shims.</p></li>
+</ul>
+<p>A private helper (<code class="docutils literal notranslate"><span class="pre">_truncated_buffer</span></code>, <code class="docutils literal notranslate"><span class="pre">_get_3gpp_index_cyclic_prefix</span></code>, and so on)
+is imported from the <code class="docutils literal notranslate"><span class="pre">striqt.waveform.lib</span></code> module that defines the helper
+(<code class="docutils literal notranslate"><span class="pre">striqt.waveform.lib.fourier.stft</span></code>, <code class="docutils literal notranslate"><span class="pre">striqt.waveform.lib.comms.phy_3gpp</span></code>).
+<code class="docutils literal notranslate"><span class="pre">waveform/lib/fourier/__init__.py</span></code> imports only the submodules of the package, so
+inside <code class="docutils literal notranslate"><span class="pre">lib</span></code> a name is reached as <code class="docutils literal notranslate"><span class="pre">fourier.stft.stft</span></code> or
+<code class="docutils literal notranslate"><span class="pre">fourier.windows.get_window</span></code>.</p>
+<p>A shim is a plain <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">.lib.&lt;module&gt;</span> <span class="pre">import</span> <span class="pre">(...)</span></code> block with no <code class="docutils literal notranslate"><span class="pre">__all__</span></code>. The
+import list is the export list. Ruff’s F401 is switched off for these files through
+<code class="docutils literal notranslate"><span class="pre">[tool.ruff.lint.extend-per-file-ignores]</span></code> in <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>, so a new shim
+(<code class="docutils literal notranslate"><span class="pre">sensor/io.py</span></code>, <code class="docutils literal notranslate"><span class="pre">analysis/testing.py</span></code>, and so on) also gets a path added there.</p>
+<p><code class="docutils literal notranslate"><span class="pre">__all__</span></code> is written only where the list does a second job:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">waveform/arrays.py</span></code> curates what <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">.arrays</span> <span class="pre">import</span> <span class="pre">*</span></code> in
+<code class="docutils literal notranslate"><span class="pre">waveform/__init__.py</span></code> pulls into the root namespace. The roundoff models stay
+reachable as <code class="docutils literal notranslate"><span class="pre">sw.arrays.accum_rms</span></code> but out of <code class="docutils literal notranslate"><span class="pre">sw</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">analysis/measurements/__init__.py</span></code> curates <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">.measurements</span> <span class="pre">import</span> <span class="pre">*</span></code> in
+<code class="docutils literal notranslate"><span class="pre">analysis/__init__.py</span></code>, so that the measurement submodules (<code class="docutils literal notranslate"><span class="pre">cellular</span></code>, <code class="docutils literal notranslate"><span class="pre">power</span></code>,
+<code class="docutils literal notranslate"><span class="pre">spectrum</span></code>, and so on) do not leak into <code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code>.</p></li>
+</ul>
+</section>
+</section>
+<section id="specs-are-the-schema">
+<h2>Specs are the schema<a class="headerlink" href="#specs-are-the-schema" title="Link to this heading">¶</a></h2>
+<p>Every configurable thing is a frozen, validated <code class="docutils literal notranslate"><span class="pre">msgspec.Struct</span></code> that subclasses
+<code class="docutils literal notranslate"><span class="pre">specs.SpecBase</span></code> (<code class="docutils literal notranslate"><span class="pre">analysis/specs/structs.py</span></code>, <code class="docutils literal notranslate"><span class="pre">sensor/specs/structs.py</span></code>). These
+structs are at once the YAML schema, the JSON schema, the function keyword arguments,
+and the names of the variables, coordinates, and attrs in saved zarr files. Renaming
+a spec field renames the YAML key and the on-disk metadata field.</p>
+<p>Field types are semantic aliases in <code class="docutils literal notranslate"><span class="pre">specs/types.py</span></code>, built as
+<code class="docutils literal notranslate"><span class="pre">Annotated[float,</span> <span class="pre">Meta('Standard</span> <span class="pre">name',</span> <span class="pre">'Hz')]</span></code>. The <code class="docutils literal notranslate"><span class="pre">Meta</span></code> helper
+(<code class="docutils literal notranslate"><span class="pre">analysis/specs/helpers.py</span></code>) feeds <code class="docutils literal notranslate"><span class="pre">standard_name</span></code> and <code class="docutils literal notranslate"><span class="pre">units</span></code> into the xarray
+attrs and into the generated JSON schema. A new field is annotated with <code class="docutils literal notranslate"><span class="pre">Meta</span></code>
+rather than with a bare <code class="docutils literal notranslate"><span class="pre">float</span></code>.</p>
+</section>
+<section id="the-measurement-registry">
+<h2>The measurement registry<a class="headerlink" href="#the-measurement-registry" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">analysis/lib/register.py</span></code> defines <code class="docutils literal notranslate"><span class="pre">AnalysisRegistry</span></code>, a dict keyed by spec type, and
+the live instance <code class="docutils literal notranslate"><span class="pre">register.registry</span></code>. <code class="docutils literal notranslate"><span class="pre">measurements/shared.py</span></code> re-exports the
+instance, and every measurement module decorates with the instance.</p>
+<p>A measurement is declared by decorating a function with
+<code class="docutils literal notranslate"><span class="pre">&#64;registry.measurement(spec_type=...,</span> <span class="pre">dtype=...,</span> <span class="pre">coord_factories=[...])</span></code>. A
+coordinate factory is declared with <code class="docutils literal notranslate"><span class="pre">&#64;registry.coordinates(...)</span></code>. The decorator
+wraps the function so that the wrapper accepts the fields of the spec as keyword
+arguments, validates the fields, and returns a <code class="docutils literal notranslate"><span class="pre">DelayedDataArray</span></code>
+(<code class="docutils literal notranslate"><span class="pre">analysis/lib/dataarrays.py</span></code>). The <code class="docutils literal notranslate"><span class="pre">&#64;hint_keywords(spec_type)</span></code> stacked above the
+registration is an identity at runtime that gives the type checker the fields of the
+spec as keyword parameters.</p>
+<p>Materialization to xarray is deferred so that the GPU can queue several measurements
+before anything is pulled back to the CPU. <code class="docutils literal notranslate"><span class="pre">evaluate_by_spec</span></code> runs every measurement
+in the <code class="docutils literal notranslate"><span class="pre">analysis:</span></code> block under a <code class="docutils literal notranslate"><span class="pre">stopwatch</span></code>, then calls
+<code class="docutils literal notranslate"><span class="pre">sw.arrays.free_cupy_mempool()</span></code> when the input was a cupy array.</p>
+<section id="analysis-groups">
+<h3>Analysis groups<a class="headerlink" href="#analysis-groups" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">specs.BuiltinAnalyses</span></code> (<code class="docutils literal notranslate"><span class="pre">analysis/specs/structs.py</span></code>) is the hand-written struct with
+one <code class="docutils literal notranslate"><span class="pre">Optional</span></code> field per registered measurement, named for the measurement.
+<code class="docutils literal notranslate"><span class="pre">specs.BuiltinTriggers</span></code> is the same struct for the two triggers.
+<code class="docutils literal notranslate"><span class="pre">striqt.sensor.specs.BundledAnalysis</span></code> and <code class="docutils literal notranslate"><span class="pre">BundledTriggers</span></code> are aliases of the two.
+Both set <code class="docutils literal notranslate"><span class="pre">omit_defaults=True</span></code>, so <code class="docutils literal notranslate"><span class="pre">to_dict</span></code> and the saved attrs name only the enabled
+measurements.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">analysis:</span></code> block of a sweep YAML validates against the analysis group of the
+binding, <code class="docutils literal notranslate"><span class="pre">Schema.analysis</span></code>, which defaults to <code class="docutils literal notranslate"><span class="pre">BuiltinAnalyses</span></code>. A binding can
+restrict the block to a subset of the registered measurements, or name a measurement
+that an extension registers with <code class="docutils literal notranslate"><span class="pre">sa.registry.measurement</span></code>. <code class="docutils literal notranslate"><span class="pre">bind_sensor</span></code> runs
+<code class="docutils literal notranslate"><span class="pre">register.check_group_registered</span></code> on the group. The check requires:</p>
+<ul class="simple">
+<li><p>every field is an <code class="docutils literal notranslate"><span class="pre">Optional</span></code> registered spec type with default <code class="docutils literal notranslate"><span class="pre">None</span></code>;</p></li>
+<li><p>every field is named by the registered measurement name;</p></li>
+<li><p>the group sets <code class="docutils literal notranslate"><span class="pre">omit_defaults=True</span></code>.</p></li>
+</ul>
+<p>Adding a built-in measurement means registering the measurement in a module that
+<code class="docutils literal notranslate"><span class="pre">analysis/measurements/__init__.py</span></code> imports, and adding a field for the measurement
+to <code class="docutils literal notranslate"><span class="pre">BuiltinAnalyses</span></code>. <code class="docutils literal notranslate"><span class="pre">register.check_group_fields</span></code> runs at the end of that
+<code class="docutils literal notranslate"><span class="pre">__init__</span></code> and fails the import when the registry and the struct disagree.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Source.signal_trigger</span></code> is a trigger name or a <code class="docutils literal notranslate"><span class="pre">BuiltinTriggers</span></code> with exactly one
+field set. The spec in that field then wins over the sweep analysis.</p>
+</section>
+<section id="registry-features-in-a-measurement-module">
+<h3>Registry features in a measurement module<a class="headerlink" href="#registry-features-in-a-measurement-module" title="Link to this heading">¶</a></h3>
+<p>Three registry features matter when reading a measurement module.</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">caches=</span></code>.</strong> <code class="docutils literal notranslate"><span class="pre">KwArgCache</span></code> is a single-element cache keyed on the capture plus
+the listed kwargs. A cache lets several measurements share one expensive
+intermediate. Every spectrogram-derived measurement reuses <code class="docutils literal notranslate"><span class="pre">spectrogram_cache</span></code> and
+<code class="docutils literal notranslate"><span class="pre">_cached_spectrogram</span></code> in <code class="docutils literal notranslate"><span class="pre">measurements/spectrum.py</span></code>, and the PSS and SSS
+measurements share <code class="docutils literal notranslate"><span class="pre">ssb_iq_cache</span></code>. Caches are scoped by
+<code class="docutils literal notranslate"><span class="pre">registry.cache_context(capture)</span></code>, which the sensor wraps around each capture.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">prefer_filtered=</span></code> / <code class="docutils literal notranslate"><span class="pre">prefer_aligned=</span></code>.</strong> <code class="docutils literal notranslate"><span class="pre">registry.measurement</span></code> records the two
+keywords on <code class="docutils literal notranslate"><span class="pre">AnalysisInfo</span></code>, and the registry wrapper selects the body input <code class="docutils literal notranslate"><span class="pre">x</span></code>
+before the call. An array passes through. An <code class="docutils literal notranslate"><span class="pre">AcquiredIQ</span></code> answers through
+<code class="docutils literal notranslate"><span class="pre">AcquiredIQ.preprocess</span></code>. That cached property returns a <code class="docutils literal notranslate"><span class="pre">Preprocessor</span></code>. The
+<code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code> base returns <code class="docutils literal notranslate"><span class="pre">x</span></code> for every preference; the sensor subclass
+conditions the raw waveform on the first call that needs each stage. The two
+keywords are preferences: an infinite <code class="docutils literal notranslate"><span class="pre">analysis_bandwidth</span></code> yields the unfiltered
+waveform, and a source without <code class="docutils literal notranslate"><span class="pre">signal_trigger</span></code> yields the unaligned one. The
+spectrogram family, the SSB spectrogram, and the resource-grid histogram register
+<code class="docutils literal notranslate"><span class="pre">prefer_filtered=False</span></code> and truncate in the frequency domain instead. The PSS and
+SSS sync detectors and correlations register both False, and the cyclic
+autocorrelation registers <code class="docutils literal notranslate"><span class="pre">prefer_aligned=False</span></code>. The power measurements and
+<code class="docutils literal notranslate"><span class="pre">iq_waveform</span></code> take the defaults. A <code class="docutils literal notranslate"><span class="pre">signal_trigger</span></code> measurement must register
+<code class="docutils literal notranslate"><span class="pre">prefer_aligned=False</span></code>; <code class="docutils literal notranslate"><span class="pre">registry.signal_trigger</span></code> rejects a <code class="docutils literal notranslate"><span class="pre">prefer_aligned=True</span></code>
+registration at import.
+<code class="docutils literal notranslate"><span class="pre">KwArgCache</span></code> keys on the identity of the selected array as well as the capture and
+kwargs. Measurements that share a cache must register the same preferences.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">registry.signal_trigger</span></code></strong> (<code class="docutils literal notranslate"><span class="pre">AlignmentSourceRegistry</span></code>). The decorator registers
+a measurement as a start-of-waveform detector. <code class="docutils literal notranslate"><span class="pre">Trigger</span></code> runs the measurement
+with <code class="docutils literal notranslate"><span class="pre">as_xarray=False</span></code>. The sensor uses the returned lags to align captures when a
+source spec sets <code class="docutils literal notranslate"><span class="pre">signal_trigger:</span></code> (<code class="docutils literal notranslate"><span class="pre">cellular_5g_pss_sync</span></code>,
+<code class="docutils literal notranslate"><span class="pre">cellular_5g_sss_sync</span></code>).</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Architecture</a><ul>
+<li><a class="reference internal" href="#package-layout">Package layout</a><ul>
+<li><a class="reference internal" href="#shims-over-striqt-waveform-lib">Shims over <code class="docutils literal notranslate"><span class="pre">striqt.waveform.lib</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#specs-are-the-schema">Specs are the schema</a></li>
+<li><a class="reference internal" href="#the-measurement-registry">The measurement registry</a><ul>
+<li><a class="reference internal" href="#analysis-groups">Analysis groups</a></li>
+<li><a class="reference internal" href="#registry-features-in-a-measurement-module">Registry features in a measurement module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="../guide/01_introduction.html"
+                          title="previous chapter">Introduction</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="waveform_numerics.html"
+                          title="next chapter">Waveform numerics</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/agents/architecture.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="waveform_numerics.html" title="Waveform numerics"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="../guide/01_introduction.html" title="Introduction"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Architecture</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>

@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Sensor architecture &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="../_static/documentation_options.js?v=82662543"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Command-Line Interface" href="../reference/cli.html" />
+    <link rel="prev" title="Waveform numerics" href="waveform_numerics.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="../">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="..//_static/NISTStyle.css">
+  <link rel="stylesheet" href="..//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="../reference/cli.html" title="Command-Line Interface"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="waveform_numerics.html" title="Waveform numerics"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Sensor architecture</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="sensor-architecture">
+<h1>Sensor architecture<a class="headerlink" href="#sensor-architecture" title="Link to this heading">¶</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">striqt.sensor</span></code> binds a source backend, peripherals, spec types, and an action into a
+named <em>sensor</em>, and runs actions against that binding through a threaded acquire,
+analyze, and write pipeline. This page describes the binding mechanism, the action
+runners, the per-capture signal path, and the process-global logging and concurrency
+state that the pipeline relies on. Paths are relative to <code class="docutils literal notranslate"><span class="pre">src/striqt/</span></code>.</p>
+<section id="sensor-bindings">
+<h2>Sensor bindings<a class="headerlink" href="#sensor-bindings" title="Link to this heading">¶</a></h2>
+<p>A <em>sensor</em> is a binding of (source backend, peripherals, spec types, action).
+<code class="docutils literal notranslate"><span class="pre">sensor/lib/bindings.py:bind_sensor</span></code> pairs a <code class="docutils literal notranslate"><span class="pre">Sensor</span></code> (implementation classes) with a
+<code class="docutils literal notranslate"><span class="pre">Schema</span></code> (spec types) and registers a <code class="docutils literal notranslate"><span class="pre">Controller</span></code> subclass under a string key.</p>
+<p>Each binding gets one tagged subclass of the action spec type <code class="docutils literal notranslate"><span class="pre">Schema.action</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">specs.Sweep</span></code>). A single <code class="docutils literal notranslate"><span class="pre">msgspec.defstruct</span></code> builds that subclass and re-annotates
+<code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">peripherals</span></code>, <code class="docutils literal notranslate"><span class="pre">captures</span></code> (when the action declares that field), and
+<code class="docutils literal notranslate"><span class="pre">analysis</span></code> (when the action is a <code class="docutils literal notranslate"><span class="pre">Sweep</span></code>) with the types of the schema. The tagged
+classes of registered bindings are unioned into the type returned by
+<code class="docutils literal notranslate"><span class="pre">get_tagged_sweep_type()</span></code>.</p>
+<p>The tag is the <code class="docutils literal notranslate"><span class="pre">sensor_binding:</span></code> key at the top of every sweep YAML. The tag selects
+the capture, source, peripheral, and analysis spec types that the rest of the file is
+validated against. Each binding key maps to one action: <code class="docutils literal notranslate"><span class="pre">air7101b_calibration</span></code> is a
+separate key from <code class="docutils literal notranslate"><span class="pre">air7101b</span></code>.</p>
+<p>The bound class has 4 class attributes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">sensor</span></code>: the <code class="docutils literal notranslate"><span class="pre">SensorBinding</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">schema</span></code>: the <code class="docutils literal notranslate"><span class="pre">Schema</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">controller</span></code>: the registered <code class="docutils literal notranslate"><span class="pre">Controller</span></code> subclass.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sweep_cls</span></code>: the bound <code class="docutils literal notranslate"><span class="pre">Sweep</span></code> class with the same spec types. When the action is a
+<code class="docutils literal notranslate"><span class="pre">Sweep</span></code>, <code class="docutils literal notranslate"><span class="pre">sweep_cls</span></code> is the class itself. Otherwise <code class="docutils literal notranslate"><span class="pre">sweep_cls</span></code> is an untagged
+companion named <code class="docutils literal notranslate"><span class="pre">&lt;key&gt;.sweep</span></code>.</p></li>
+</ul>
+<section id="action-specs">
+<h3>Action specs<a class="headerlink" href="#action-specs" title="Link to this heading">¶</a></h3>
+<p>Action specs form a data-only chain in <code class="docutils literal notranslate"><span class="pre">specs/structs.py</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ActionSpec</span></code>: <code class="docutils literal notranslate"><span class="pre">description</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">peripherals</span></code>, <code class="docutils literal notranslate"><span class="pre">extensions</span></code>, and <code class="docutils literal notranslate"><span class="pre">sink</span></code>. The
+<code class="docutils literal notranslate"><span class="pre">sink</span></code> is a <code class="docutils literal notranslate"><span class="pre">Sink</span></code> with <code class="docutils literal notranslate"><span class="pre">path</span></code>, <code class="docutils literal notranslate"><span class="pre">log_path</span></code>, and <code class="docutils literal notranslate"><span class="pre">log_level</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CapturePlan</span></code>, a subclass of <code class="docutils literal notranslate"><span class="pre">ActionSpec</span></code>: adds <code class="docutils literal notranslate"><span class="pre">captures</span></code>, <code class="docutils literal notranslate"><span class="pre">loops</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">adjust_captures</span></code>, with the pure loop checks.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Sweep</span></code>, a subclass of <code class="docutils literal notranslate"><span class="pre">CapturePlan</span></code>: adds <code class="docutils literal notranslate"><span class="pre">plot_hint</span></code>, <code class="docutils literal notranslate"><span class="pre">analysis</span></code>, and <code class="docutils literal notranslate"><span class="pre">options</span></code>,
+and narrows <code class="docutils literal notranslate"><span class="pre">sink</span></code> to <code class="docutils literal notranslate"><span class="pre">ZarrSink</span></code>, which adds the zarr store fields. <code class="docutils literal notranslate"><span class="pre">validate_sweep</span></code>
+checks a <code class="docutils literal notranslate"><span class="pre">Sweep</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ManualYFactorCalibration</span></code>, a subclass of <code class="docutils literal notranslate"><span class="pre">CapturePlan</span></code>: adds <code class="docutils literal notranslate"><span class="pre">calibration</span></code>. The
+<code class="docutils literal notranslate"><span class="pre">analysis</span></code> field is deprecated and ignored.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">specs.sequencing._expansion_args</span></code> takes <code class="docutils literal notranslate"><span class="pre">loop_only_nyquist</span></code> explicitly, so a
+<code class="docutils literal notranslate"><span class="pre">CapturePlan</span></code> expands without <code class="docutils literal notranslate"><span class="pre">options</span></code>. <code class="docutils literal notranslate"><span class="pre">specs/paths.py:PathFormatter</span></code> reads the action
+spec. The class name of the action spec is the <code class="docutils literal notranslate"><span class="pre">{sensor_binding}</span></code> field.</p>
+</section>
+</section>
+<section id="actions-and-runners">
+<h2>Actions and runners<a class="headerlink" href="#actions-and-runners" title="Link to this heading">¶</a></h2>
+<p>An <em>action</em> is an action spec type paired with a runner. <code class="docutils literal notranslate"><span class="pre">sensor/lib/actions/registry.py</span></code>
+maps action spec types to runner classes through <code class="docutils literal notranslate"><span class="pre">&#64;registry.runner(spec_type=...)</span></code>. The
+lookup walks the MRO of the bound class.</p>
+<p><code class="docutils literal notranslate"><span class="pre">actions/core.py:ActionRunner</span></code> is the <code class="docutils literal notranslate"><span class="pre">Protocol</span></code> that every runner satisfies. A runner
+is constructed from the action spec, decoded from a file or built from the API, and
+exposes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">spec</span></code>: the action spec. Construction stores the spec and does nothing else.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sweep</span></code>, a read-only property: the <code class="docutils literal notranslate"><span class="pre">Sweep</span></code> that <code class="docutils literal notranslate"><span class="pre">open_resources</span></code> opens the hardware
+for. Reading the property runs the derivation (<code class="docutils literal notranslate"><span class="pre">build_calibration_sweep</span></code>,
+<code class="docutils literal notranslate"><span class="pre">build_cellular_sweep</span></code>, both <code class="docutils literal notranslate"><span class="pre">lru_cache</span></code>d on the spec) and raises when the spec
+cannot be converted. A bound spec reads <code class="docutils literal notranslate"><span class="pre">sweep</span></code> at the end of <code class="docutils literal notranslate"><span class="pre">__post_init__</span></code>
+through <code class="docutils literal notranslate"><span class="pre">specs.action.validate_action</span></code>, so a bound spec that constructs is one that
+the runner can run. <code class="docutils literal notranslate"><span class="pre">SweepRunner.sweep</span></code> is the spec itself.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">open_sink(format_path)</span></code>: returns the sink that <code class="docutils literal notranslate"><span class="pre">open_resources</span></code> enters. A
+<code class="docutils literal notranslate"><span class="pre">sink.path</span></code> of None writes nothing.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">iterate(resources)</span></code>: runs the action and invokes the <code class="docutils literal notranslate"><span class="pre">on_analyzed</span></code> and <code class="docutils literal notranslate"><span class="pre">on_sink_cached</span></code>
+callbacks of <code class="docutils literal notranslate"><span class="pre">resources['callbacks']</span></code>.</p></li>
+</ul>
+<p>Nothing is inherited between runners. Each runner calls <code class="docutils literal notranslate"><span class="pre">iterate_captures</span></code>, the pipeline
+described under Sweep execution below, with the per-capture <code class="docutils literal notranslate"><span class="pre">extra_data=</span></code>
+hook and a shared <code class="docutils literal notranslate"><span class="pre">indexer=</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ActionSpec.check_schema(schema)</span></code> is a classmethod hook that <code class="docutils literal notranslate"><span class="pre">bind_sensor</span></code> calls, so an
+action can reject spec types at bind time. The calibration requires
+<code class="docutils literal notranslate"><span class="pre">channel_power_time_series</span></code> in <code class="docutils literal notranslate"><span class="pre">schema.analysis</span></code>. The cellular sweep requires every
+<code class="docutils literal notranslate"><span class="pre">Cellular5GNRAnalysis</span></code> field. The runners build a generated analysis as the group of the
+binding through <code class="docutils literal notranslate"><span class="pre">specs.action.analysis_group_type(spec)</span></code>, which is <code class="docutils literal notranslate"><span class="pre">BuiltinAnalyses</span></code> for
+an unbound spec.</p>
+<section id="the-sweep-runner">
+<h3>The sweep runner<a class="headerlink" href="#the-sweep-runner" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">SweepRunner</span></code> (<code class="docutils literal notranslate"><span class="pre">actions/sweep.py</span></code>) runs the spec itself. The runner opens a
+<code class="docutils literal notranslate"><span class="pre">ZarrCaptureSink</span></code>, or a <code class="docutils literal notranslate"><span class="pre">NoSink</span></code> when <code class="docutils literal notranslate"><span class="pre">sink.path</span></code> is None.</p>
+</section>
+<section id="the-y-factor-calibration-runner">
+<h3>The Y-factor calibration runner<a class="headerlink" href="#the-y-factor-calibration-runner" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">ManualYFactorRunner</span></code> (<code class="docutils literal notranslate"><span class="pre">actions/yfactor.py</span></code>) builds a sweep with the <code class="docutils literal notranslate"><span class="pre">lru_cache</span></code>d
+<code class="docutils literal notranslate"><span class="pre">build_calibration_sweep</span></code>. The built sweep has a generated <code class="docutils literal notranslate"><span class="pre">channel_power_time_series</span></code>
+analysis, <code class="docutils literal notranslate"><span class="pre">reuse_iq=True</span></code>, <code class="docutils literal notranslate"><span class="pre">loop_only_nyquist=True</span></code>, <code class="docutils literal notranslate"><span class="pre">skip_warmup=True</span></code>, and the <code class="docutils literal notranslate"><span class="pre">Sink</span></code>
+of the spec widened to a <code class="docutils literal notranslate"><span class="pre">ZarrSink</span></code>. <code class="docutils literal notranslate"><span class="pre">iterate</span></code> then runs the passes:</p>
+<ol class="arabic simple">
+<li><p>Confirm the ENR with the operator.</p></li>
+<li><p>For each port and diode state, prompt the operator, call <code class="docutils literal notranslate"><span class="pre">Controller.discard_iq</span></code>,
+and run the captures of that port through <code class="docutils literal notranslate"><span class="pre">iterate_captures</span></code> with
+<code class="docutils literal notranslate"><span class="pre">{'noise_diode_enabled':</span> <span class="pre">state}</span></code> as the <code class="docutils literal notranslate"><span class="pre">extra_data</span></code> mapping of the pipeline. The
+diode state is invisible to <code class="docutils literal notranslate"><span class="pre">buffers.is_reusable</span></code>, so the cached acquisition must not
+cross a switch.</p></li>
+<li><p>Collect the captures of every pass in the <code class="docutils literal notranslate"><span class="pre">MemoryCacheSink</span></code> (<code class="docutils literal notranslate"><span class="pre">lib/sinks.py</span></code>) that
+<code class="docutils literal notranslate"><span class="pre">open_sink</span></code> returns.</p></li>
+<li><p>After the last pass, <code class="docutils literal notranslate"><span class="pre">yfactor.save_yfactor_corrections</span></code> indexes the captures by the
+fields that <code class="docutils literal notranslate"><span class="pre">yfactor.calibration_fields(spec,</span> <span class="pre">sweep)</span></code> returns, computes the
+corrections with <code class="docutils literal notranslate"><span class="pre">compute_y_factor_corrections</span></code>, and writes the netCDF.</p></li>
+</ol>
+<p>The Y-factor math is in <code class="docutils literal notranslate"><span class="pre">actions/yfactor.py</span></code>. The lookups that measurement sweeps use
+are in <code class="docutils literal notranslate"><span class="pre">lib/compute/cal_lookups.py</span></code>. There is no calibration peripheral, derived capture
+class, or toggle loop.</p>
+<p>A calibration is bound with
+<code class="docutils literal notranslate"><span class="pre">bind_sensor(name,</span> <span class="pre">ctrl_cls.sensor,</span> <span class="pre">dataclasses.replace(ctrl_cls.schema,</span> <span class="pre">action=ManualYFactorCalibration))</span></code>.
+<code class="docutils literal notranslate"><span class="pre">bind_manual_yfactor_calibration</span></code> (in <code class="docutils literal notranslate"><span class="pre">lib/bindings.py</span></code>, re-exported by
+<code class="docutils literal notranslate"><span class="pre">striqt.sensor.calibration</span></code>) does that and emits a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>.</p>
+</section>
+</section>
+<section id="the-cellular-sweep">
+<h2>The cellular sweep<a class="headerlink" href="#the-cellular-sweep" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">Cellular5GNRSweep</span></code> (<code class="docutils literal notranslate"><span class="pre">specs/structs.py</span></code>) and <code class="docutils literal notranslate"><span class="pre">Cellular5GNRSweepRunner</span></code>
+(<code class="docutils literal notranslate"><span class="pre">actions/cellular.py</span></code>) are the third action.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">captures</span></code> of a <code class="docutils literal notranslate"><span class="pre">Cellular5GNRSweep</span></code> are the capture type of the binding and name a
+channel by <code class="docutils literal notranslate"><span class="pre">center_frequency</span></code>. <code class="docutils literal notranslate"><span class="pre">check_schema</span></code> requires the capture type to have that
+field. The root <code class="docutils literal notranslate"><span class="pre">cell_channels</span></code> table maps a label to a <code class="docutils literal notranslate"><span class="pre">CellChannel</span></code>:
+<code class="docutils literal notranslate"><span class="pre">channel_bandwidth</span></code>, <code class="docutils literal notranslate"><span class="pre">subcarrier_spacing</span></code> (30 kHz only), <code class="docutils literal notranslate"><span class="pre">ssb_frequency_offset</span></code>, the
+guard bands, the TDD pattern, and <code class="docutils literal notranslate"><span class="pre">min_sample_rate</span></code>. The <code class="docutils literal notranslate"><span class="pre">analysis</span></code> is a
+<code class="docutils literal notranslate"><span class="pre">Cellular5GNRAnalysis</span></code> of optional blocks named for the measurements that the blocks
+enable. Each block declares only the free parameters.</p>
+<p>Each block is declared with <code class="docutils literal notranslate"><span class="pre">&#64;subset_of(&lt;measurement</span> <span class="pre">spec&gt;,</span> <span class="pre">without=...,</span> <span class="pre">optional=...)</span></code>
+(<code class="docutils literal notranslate"><span class="pre">analysis/specs/helpers.py</span></code>). The decorator verifies at class creation that the kept
+fields match the measurement spec in type and default, and records the relation for
+<code class="docutils literal notranslate"><span class="pre">spec_subset</span></code>. <code class="docutils literal notranslate"><span class="pre">actions/cellular.py</span></code> gives the derivations of the omitted parameters in 3
+tables:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">FIXED</span></code>: parameters that the subcarrier spacing fixes.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DEFAULTED</span></code>: parameters that stay exposed as <code class="docutils literal notranslate"><span class="pre">Optional</span></code> and take the derived value
+when None.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PER_CAPTURE</span></code>: parameters written into the <code class="docutils literal notranslate"><span class="pre">adjust_analysis</span></code> of each capture from the
+channel of that capture.</p></li>
+</ul>
+<p>An omitted parameter in none of the tables stays at the measurement default.
+<code class="docutils literal notranslate"><span class="pre">check_block_fields</span></code> verifies at import that the tables agree with the declaration of
+each block.</p>
+<p><code class="docutils literal notranslate"><span class="pre">build_cellular_sweep</span></code> is cached and runs when the runner’s <code class="docutils literal notranslate"><span class="pre">sweep</span></code> is read at spec
+construction. The function resolves each capture against the table:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">sample_rate</span></code> comes from <code class="docutils literal notranslate"><span class="pre">striqt.waveform.comms_5gnr.nr_sample_rate</span></code>: the smallest
+multiple of 896·SCS at or above the channel bandwidth plus the FIR transition band.
+The 3GPP TS 38.104 table in <code class="docutils literal notranslate"><span class="pre">phy_3gpp.py</span></code> validates the bandwidth.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">analysis_bandwidth</span></code> equals the channel bandwidth.</p></li>
+<li><p>The cell parameters are written into <code class="docutils literal notranslate"><span class="pre">adjust_analysis</span></code> under the keys of the capture.</p></li>
+</ul>
+<p>The function then expands the analysis block into an instance of the analysis group of
+the binding from those tables: SCS/2 resolution with the 13/28 and 15/28 OFDM grid, 1
+resource block and 1 subcarrier integration bandwidths, a 10 ms cyclic period, and a 1
+symbol detector period.</p>
+<p>The derived <code class="docutils literal notranslate"><span class="pre">Sweep</span></code> keeps the loops and <code class="docutils literal notranslate"><span class="pre">adjust_captures</span></code> of the spec. A loop over
+<code class="docutils literal notranslate"><span class="pre">center_frequency</span></code> is rejected: captures are the innermost iteration, and the channels
+are listed as captures instead.</p>
+<p>Bind the action with <code class="docutils literal notranslate"><span class="pre">bind_sensor</span></code> and <code class="docutils literal notranslate"><span class="pre">action=Cellular5GNRSweep</span></code>. The built-in keys
+are <code class="docutils literal notranslate"><span class="pre">air7101b_cellular</span></code>, <code class="docutils literal notranslate"><span class="pre">air7201b_cellular</span></code>, and <code class="docutils literal notranslate"><span class="pre">air8201b_cellular</span></code> in
+<code class="docutils literal notranslate"><span class="pre">sensor/bindings.py</span></code>.</p>
+</section>
+<section id="extensions-and-the-downstream-project">
+<h2>Extensions and the downstream project<a class="headerlink" href="#extensions-and-the-downstream-project" title="Link to this heading">¶</a></h2>
+<p>Built-in bindings are in <code class="docutils literal notranslate"><span class="pre">sensor/bindings.py</span></code>. Out-of-tree bindings are loaded through
+the <code class="docutils literal notranslate"><span class="pre">extensions:</span></code> block of a sweep spec, which inserts a path and imports a module
+before the rest of the spec is decoded (<code class="docutils literal notranslate"><span class="pre">sensor/lib/io.py:_import_extensions_from_spec</span></code>).
+<code class="docutils literal notranslate"><span class="pre">bind_sensor</span></code> records the module of the caller on the controller class (<code class="docutils literal notranslate"><span class="pre">module=</span></code>
+overrides that), so that the API docs group derived bindings with the extension that
+defines the derived bindings.</p>
+<p>A derived binding changes the action or the analysis group with
+<code class="docutils literal notranslate"><span class="pre">dataclasses.replace(ctrl_cls.schema,</span> <span class="pre">action=...,</span> <span class="pre">analysis=...)</span></code>.
+<code class="docutils literal notranslate"><span class="pre">tests/sensor/sweeps/src/extensions.py</span></code> binds <code class="docutils literal notranslate"><span class="pre">site_quick</span></code> that way over
+<code class="docutils literal notranslate"><span class="pre">SiteQuickAnalyses</span></code>, and <code class="docutils literal notranslate"><span class="pre">tests/sensor/sweeps/site/site-quick.yaml</span></code> runs through the
+CLI test.</p>
+<p>The principal downstream user is the aggregate-directivity-acquisition project, which
+binds site-style sensors through <code class="docutils literal notranslate"><span class="pre">extensions:</span></code> and runs on a Jetson with cupy. The
+environment of that project does not install on a laptop, so the patterns of that
+project are reproduced in-tree: <code class="docutils literal notranslate"><span class="pre">tests/sensor/sweeps/src/extensions.py</span></code> and the <code class="docutils literal notranslate"><span class="pre">site*</span></code>
+sweep directories under <code class="docutils literal notranslate"><span class="pre">tests/sensor/sweeps/</span></code>. The GPU path is the production path but
+cannot be executed on a laptop. A cupy-only change is unverified until someone runs
+<code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">-e</span> <span class="pre">cupy</span> <span class="pre">pytest</span></code> on the Jetson. Cupy tests skip locally through the
+<code class="docutils literal notranslate"><span class="pre">_cupy</span> <span class="pre">is</span> <span class="pre">None</span></code> check in <code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code>.</p>
+</section>
+<section id="sweep-execution">
+<h2>Sweep execution<a class="headerlink" href="#sweep-execution" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">open_resources(spec,</span> <span class="pre">callbacks=...)</span></code> builds the runner registered for the type of the
+spec and opens the source, peripherals, and sink for <code class="docutils literal notranslate"><span class="pre">runner.sweep</span></code>. The returned
+<code class="docutils literal notranslate"><span class="pre">Resources</span></code> dict has the keys <code class="docutils literal notranslate"><span class="pre">action_spec</span></code> (the spec passed in), <code class="docutils literal notranslate"><span class="pre">sweep_spec</span></code> (the
+built sweep), <code class="docutils literal notranslate"><span class="pre">runner</span></code>, and <code class="docutils literal notranslate"><span class="pre">callbacks</span></code>.</p>
+<p>A front end registers hooks for one run as keywords of <code class="docutils literal notranslate"><span class="pre">open_resources</span></code>, each one
+callable or None: <code class="docutils literal notranslate"><span class="pre">on_source_opened(sweep,</span> <span class="pre">source_id)</span></code> runs from a worker thread after
+the source opens; <code class="docutils literal notranslate"><span class="pre">on_analyzed(dd)</span></code> receives the <code class="docutils literal notranslate"><span class="pre">DelayedDataset</span></code> of each capture in the
+analysis thread, after <code class="docutils literal notranslate"><span class="pre">compute.analyze</span></code> and before the dataset is submitted to
+<code class="docutils literal notranslate"><span class="pre">sink.append</span></code>; <code class="docutils literal notranslate"><span class="pre">on_sink_cached(resources,</span> <span class="pre">cache,</span> <span class="pre">capture,</span> <span class="pre">result,</span> <span class="pre">**kwargs)</span></code> runs in the
+analysis thread each time a measurement fills a <code class="docutils literal notranslate"><span class="pre">KwArgCache</span></code> (the pipeline forwards the
+cache’s own callback arguments and prepends <code class="docutils literal notranslate"><span class="pre">resources</span></code>, since the SNR line needs the
+calibration, <code class="docutils literal notranslate"><span class="pre">format_path</span></code>, and <code class="docutils literal notranslate"><span class="pre">source_id</span></code>). A front end that wants two behaviors on
+one event writes one function. A callback exception ends the run like an analysis
+error. No hooks are registered by default. <code class="docutils literal notranslate"><span class="pre">open_resources</span></code> bundles the three into the
+internal dataclass <code class="docutils literal notranslate"><span class="pre">lib/resources.py:SweepCallbacks</span></code> under <code class="docutils literal notranslate"><span class="pre">resources['callbacks']</span></code>,
+which <code class="docutils literal notranslate"><span class="pre">iterate_captures</span></code> reads; <code class="docutils literal notranslate"><span class="pre">iterate_sweep(res,</span> <span class="pre">callbacks=...)</span></code> replaces that
+bundle for one run.</p>
+<p><code class="docutils literal notranslate"><span class="pre">lib/compute/summary.py</span></code> returns structured data and never logs: <code class="docutils literal notranslate"><span class="pre">overloads(dd)</span></code> gives
+one <code class="docutils literal notranslate"><span class="pre">PortOverload</span></code> per port (<code class="docutils literal notranslate"><span class="pre">adc</span></code>, <code class="docutils literal notranslate"><span class="pre">im3_victims</span></code>) and <code class="docutils literal notranslate"><span class="pre">spectrogram_snr(sweep,</span> <span class="pre">capture,</span> <span class="pre">result)</span></code> one <code class="docutils literal notranslate"><span class="pre">SpectrogramSNR</span></code> per port with a finite SNR, None without a calibration;
+the <code class="docutils literal notranslate"><span class="pre">describe_*</span></code> functions render each as one line. The logging callbacks are CLI code:
+<code class="docutils literal notranslate"><span class="pre">cli/sensor_sweep.py:log_overloads</span></code> (<code class="docutils literal notranslate"><span class="pre">on_analyzed</span></code>) and <code class="docutils literal notranslate"><span class="pre">log_spectrogram_snr</span></code>
+(<code class="docutils literal notranslate"><span class="pre">on_sink_cached</span></code>, gated on <code class="docutils literal notranslate"><span class="pre">'spectrogram'</span> <span class="pre">in</span> <span class="pre">cache.name</span></code>), which <code class="docutils literal notranslate"><span class="pre">sensor-sweep</span></code> registers
+beside <code class="docutils literal notranslate"><span class="pre">confirm_labels</span></code> and <code class="docutils literal notranslate"><span class="pre">web-plotter</span></code> imports and calls from its own callbacks.
+<code class="docutils literal notranslate"><span class="pre">from_delayed</span></code> emits none of these messages.</p>
+<p><code class="docutils literal notranslate"><span class="pre">iterate_sweep(resources)</span></code> calls <code class="docutils literal notranslate"><span class="pre">resources['runner'].iterate</span></code>. Every runner ends in
+<code class="docutils literal notranslate"><span class="pre">actions/core.py:iterate_captures</span></code>, the three-stage software pipeline in threads
+(acquire, analyze, write). The docstring of <code class="docutils literal notranslate"><span class="pre">iterate_captures</span></code> diagrams the stage
+offsets. The <code class="docutils literal notranslate"><span class="pre">extra_data</span></code> of the runner is merged at the end of each acquisition, and
+the fields of the action spec are the dataset attrs. GPU analysis deliberately runs in
+the foreground thread.</p>
+<p>Captures are expanded from <code class="docutils literal notranslate"><span class="pre">captures:</span></code> plus <code class="docutils literal notranslate"><span class="pre">loops:</span></code> (<code class="docutils literal notranslate"><span class="pre">Range</span></code>, <code class="docutils literal notranslate"><span class="pre">List</span></code>, <code class="docutils literal notranslate"><span class="pre">Repeat</span></code>,
+<code class="docutils literal notranslate"><span class="pre">FrequencyBinRange</span></code>) by <code class="docutils literal notranslate"><span class="pre">specs.sequencing.loop_captures</span></code>. The per-source overrides from
+<code class="docutils literal notranslate"><span class="pre">adjust_captures</span></code> are then applied.</p>
+<p>Output is appended along the <code class="docutils literal notranslate"><span class="pre">capture</span></code> dimension of a zarr store by <code class="docutils literal notranslate"><span class="pre">ZarrCaptureSink</span></code>.
+<code class="docutils literal notranslate"><span class="pre">ZarrTimeAppendSink</span></code> instead appends along the spectrogram time axis and is reached
+only by passing an instance through <code class="docutils literal notranslate"><span class="pre">iterate_sweep(res,</span> <span class="pre">sink=...)</span></code>. Paths ending in
+<code class="docutils literal notranslate"><span class="pre">.zarr.zip</span></code> go through <code class="docutils literal notranslate"><span class="pre">Zipper</span></code>.</p>
+<section id="timestamps-and-the-trigger-strobe">
+<h3>Timestamps and the trigger strobe<a class="headerlink" href="#timestamps-and-the-trigger-strobe" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">SourceBackend.read</span></code> returns the time (ns) of the sample at <code class="docutils literal notranslate"><span class="pre">buffers[i][offset]</span></code>. The
+first read of a capture begins one lead overlap before the record, so the stamp precedes
+corrected sample 0 by <code class="docutils literal notranslate"><span class="pre">lead</span> <span class="pre">/</span> <span class="pre">fs_sdr</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">Controller.read_iq</span></code> passes that stamp and <code class="docutils literal notranslate"><span class="pre">overlaps[0]</span></code> to
+<code class="docutils literal notranslate"><span class="pre">sources/buffers.py:find_trigger_holdoff</span></code>, which returns the number of source samples
+dropped before the record: at least the lead, plus <code class="docutils literal notranslate"><span class="pre">transient_holdoff_time</span></code> after a
+re-arm (no carryover), rounded up to the next <code class="docutils literal notranslate"><span class="pre">trigger_strobe</span></code> edge when a strobe is
+set. The record start time is the stamp plus the holdoff.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">gapless</span></code>, <code class="docutils literal notranslate"><span class="pre">ReceiveBuffers.stash_carryover</span></code> keeps the trailing lead and tail of the
+record and stamps the first carried sample one lead before the next record. <code class="docutils literal notranslate"><span class="pre">apply</span></code>
+returns that stamp for the next capture in place of a source read.</p>
+<p><code class="docutils literal notranslate"><span class="pre">sources/base.py:VirtualSource</span></code> keeps a synthetic clock. The clock is 0 at the first
+<code class="docutils literal notranslate"><span class="pre">arm</span></code>, so corrected sample 0 of the first capture is on every strobe grid. A re-arm
+continues the stream: the first read after <code class="docutils literal notranslate"><span class="pre">arm</span></code> is stamped where the previous samples
+ended, and the origin of the new capture is one new-rate lead overlap later.
+<code class="docutils literal notranslate"><span class="pre">ZarrIQSource.read</span></code> replaces the stamp with the store’s <code class="docutils literal notranslate"><span class="pre">start_time</span></code> less the lead, so
+<code class="docutils literal notranslate"><span class="pre">start_time</span></code> stays the time of file index 0.</p>
+</section>
+<section id="the-per-capture-signal-path">
+<h3>The per-capture signal path<a class="headerlink" href="#the-per-capture-signal-path" title="Link to this heading">¶</a></h3>
+<p>The conditioning runs in <code class="docutils literal notranslate"><span class="pre">sensor/lib/compute/corrections.py:Preprocessor</span></code>, reached
+through <code class="docutils literal notranslate"><span class="pre">AcquiredIQ.preprocess</span></code> on the sensor <code class="docutils literal notranslate"><span class="pre">AcquiredIQ</span></code>
+(<code class="docutils literal notranslate"><span class="pre">sensor/specs/dataclasses.py</span></code>). Each stage runs on the first call that needs the
+stage and is memoized on the <code class="docutils literal notranslate"><span class="pre">Preprocessor</span></code>, one per acquisition. The preprocessor
+holds the acquisition through a weak reference. A <code class="docutils literal notranslate"><span class="pre">dataclasses.replace</span></code> copy,
+including the controller’s <code class="docutils literal notranslate"><span class="pre">reuse_iq</span></code> copy, starts with a fresh preprocessor. The
+stages, in order:</p>
+<ol class="arabic simple">
+<li><p>Resample to <code class="docutils literal notranslate"><span class="pre">sample_rate</span></code>: <code class="docutils literal notranslate"><span class="pre">_scale_only</span></code> when no resampling is needed, otherwise
+<code class="docutils literal notranslate"><span class="pre">_resample</span></code>, or <code class="docutils literal notranslate"><span class="pre">_oaresample</span></code> when <code class="docutils literal notranslate"><span class="pre">STRIQT_USE_OARESAMPLE=1</span></code>. This is the only
+stage that reads <code class="docutils literal notranslate"><span class="pre">x</span></code>, and the one that may consume <code class="docutils literal notranslate"><span class="pre">x</span></code> in place under
+<code class="docutils literal notranslate"><span class="pre">overwrite_x</span></code>.</p></li>
+<li><p>Conjugate for a high-side LO. <code class="docutils literal notranslate"><span class="pre">STRIQT_IGNORE_HIGHSIDE_LO</span></code> disables the conjugation.</p></li>
+<li><p>FIR low-pass to <code class="docutils literal notranslate"><span class="pre">analysis_bandwidth</span></code>. The filter runs only for a measurement
+registered <code class="docutils literal notranslate"><span class="pre">prefer_filtered=True</span></code> on a finite bandwidth.</p></li>
+<li><p>Trim to <code class="docutils literal notranslate"><span class="pre">duration</span></code>.</p></li>
+<li><p>Run the <code class="docutils literal notranslate"><span class="pre">signal_trigger</span></code> and shift. This stage runs for a measurement registered
+<code class="docutils literal notranslate"><span class="pre">prefer_aligned=True</span></code> when a trigger is set. The trigger measurement receives the
+<code class="docutils literal notranslate"><span class="pre">AcquiredIQ</span></code>, and the registry selects the input of the trigger with the
+preferences registered on the trigger. A trigger registered <code class="docutils literal notranslate"><span class="pre">prefer_aligned=True</span></code>
+is rejected at import.</p></li>
+</ol>
+<p><code class="docutils literal notranslate"><span class="pre">compute/analyze.py:analyze</span></code> installs the trigger and <code class="docutils literal notranslate"><span class="pre">overwrite_x</span></code> with
+<code class="docutils literal notranslate"><span class="pre">attach_corrections</span></code>, evaluates the measurements, and packs a <code class="docutils literal notranslate"><span class="pre">DelayedDataset</span></code>.</p>
+</section>
+<section id="warmup">
+<h3>Warmup<a class="headerlink" href="#warmup" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">prepare_compute(sweep)</span></code> runs <code class="docutils literal notranslate"><span class="pre">actions/warmup.py:warmup_sweep_for</span></code>. The result is <code class="docutils literal notranslate"><span class="pre">None</span></code>
+under <code class="docutils literal notranslate"><span class="pre">options.skip_warmup</span></code> or when <code class="docutils literal notranslate"><span class="pre">compute/gpu.py:sweep_touches_gpu</span></code> is false.
+Otherwise the result is a one-capture <code class="docutils literal notranslate"><span class="pre">NoSource</span></code> <code class="docutils literal notranslate"><span class="pre">Sweep</span></code> derived by
+<code class="docutils literal notranslate"><span class="pre">actions/warmup.py:derive_warmup_sweep</span></code>. The warmup sweep is bound per origin through
+<code class="docutils literal notranslate"><span class="pre">warmup_binding</span></code>, so that the captures of the warmup sweep keep the capture type of the
+origin. <code class="docutils literal notranslate"><span class="pre">open_warmup_resources</span></code> opens the <code class="docutils literal notranslate"><span class="pre">NoSource</span></code>, <code class="docutils literal notranslate"><span class="pre">NoPeripherals</span></code>, and <code class="docutils literal notranslate"><span class="pre">NoSink</span></code>
+resources, and a <code class="docutils literal notranslate"><span class="pre">SweepRunner</span></code> runs the warmup sweep, paying the JIT and import costs
+before the real captures.</p>
+</section>
+</section>
+<section id="logging-and-concurrency">
+<h2>Logging and concurrency<a class="headerlink" href="#logging-and-concurrency" title="Link to this heading">¶</a></h2>
+<p>Loggers are <code class="docutils literal notranslate"><span class="pre">logging.LoggerAdapter</span></code>s (<code class="docutils literal notranslate"><span class="pre">analysis/lib/util.py:StriqtLogger</span></code>) registered by
+bare suffix in <code class="docutils literal notranslate"><span class="pre">_logger_adapters</span></code> and fetched with <code class="docutils literal notranslate"><span class="pre">get_logger(name)</span></code>. The <code class="docutils literal notranslate"><span class="pre">'analysis'</span></code>
+logger is created when <code class="docutils literal notranslate"><span class="pre">striqt.analysis</span></code> imports. The <code class="docutils literal notranslate"><span class="pre">'sweep'</span></code>, <code class="docutils literal notranslate"><span class="pre">'source'</span></code>, <code class="docutils literal notranslate"><span class="pre">'sink'</span></code>,
+and <code class="docutils literal notranslate"><span class="pre">'periph'</span></code> loggers are created when <code class="docutils literal notranslate"><span class="pre">striqt.sensor.lib.util</span></code> imports. That import
+also calls <code class="docutils literal notranslate"><span class="pre">show_messages(logging.INFO)</span></code> and so installs stderr handlers as an import
+side effect.</p>
+<p>The underlying loggers are named <code class="docutils literal notranslate"><span class="pre">striqt.&lt;suffix&gt;</span></code>, so a handler on
+<code class="docutils literal notranslate"><span class="pre">logging.getLogger('striqt')</span></code> sees every one of those loggers. <code class="docutils literal notranslate"><span class="pre">log_to_file</span></code> collects the sweep log
+through such a handler.</p>
+<p>The adapter <code class="docutils literal notranslate"><span class="pre">extra</span></code> dict has the keys <code class="docutils literal notranslate"><span class="pre">capture_index</span></code>, <code class="docutils literal notranslate"><span class="pre">capture_count</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">capture_progress</span></code>, which the screen format prints. <code class="docutils literal notranslate"><span class="pre">sensor.lib.util.log_capture_context</span></code>
+swaps the <code class="docutils literal notranslate"><span class="pre">extra</span></code> dict per capture.</p>
+<p><code class="docutils literal notranslate"><span class="pre">stopwatch</span></code> logs at the custom levels <code class="docutils literal notranslate"><span class="pre">PERFORMANCE_INFO</span></code> (15) and <code class="docutils literal notranslate"><span class="pre">PERFORMANCE_DETAIL</span></code>
+(12). <code class="docutils literal notranslate"><span class="pre">log_verbosity(-1..3)</span></code> maps the CLI <code class="docutils literal notranslate"><span class="pre">-v</span></code> count to those levels.</p>
+<p><code class="docutils literal notranslate"><span class="pre">log_to_file</span></code> is wired from <code class="docutils literal notranslate"><span class="pre">Sink.log_path</span></code> and <code class="docutils literal notranslate"><span class="pre">Sink.log_level</span></code> by <code class="docutils literal notranslate"><span class="pre">open_resources</span></code>.
+The records are written as a JSON array, which is also valid YAML.</p>
+<p>All of this is process-global state. Tests that touch the logging state must snapshot
+and restore levels, handlers, and <code class="docutils literal notranslate"><span class="pre">extra</span></code>. The autouse <code class="docutils literal notranslate"><span class="pre">restore_logging_state</span></code> fixture
+in <code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code> does this for every test.</p>
+<section id="concurrency">
+<h3>Concurrency<a class="headerlink" href="#concurrency" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">analysis.util.compute_lock(array)</span></code> is an <code class="docutils literal notranslate"><span class="pre">RLock</span></code> taken only for cupy arrays, or when
+no array is passed. The lock serializes GPU work across threads.</p>
+<p><code class="docutils literal notranslate"><span class="pre">sensor/lib/util.py</span></code> provides the cooperative cancellation that the pipeline uses:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cancel_threads()</span></code> sets a global event.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">propagate_thread_interrupts()</span></code> raises <code class="docutils literal notranslate"><span class="pre">ThreadInterruptRequest</span></code> in worker threads
+only, never in the main thread.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">share_thread_interrupts()</span></code> clears the event on exit.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">ExceptionStack.defer()</span></code> collects exceptions from several threads. <code class="docutils literal notranslate"><span class="pre">handle()</span></code> re-raises
+one exception or an <code class="docutils literal notranslate"><span class="pre">ExceptionGroup</span></code>, and interrupts yield to real errors.
+<code class="docutils literal notranslate"><span class="pre">await_and_ignore</span></code> applies an <code class="docutils literal notranslate"><span class="pre">ExceptionStack</span></code> to a list of futures.</p>
+<p><code class="docutils literal notranslate"><span class="pre">threadpool</span></code> is a lazily created module attribute of <code class="docutils literal notranslate"><span class="pre">sensor/lib/util.py</span></code>, created on
+first access through the module <code class="docutils literal notranslate"><span class="pre">__getattr__</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">DebugOnException</span></code> prints IPython-style tracebacks (<code class="docutils literal notranslate"><span class="pre">sensor/lib/tracebacks.py</span></code>) and is
+the top-level handler of the CLI.</p>
+</section>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Sensor architecture</a><ul>
+<li><a class="reference internal" href="#sensor-bindings">Sensor bindings</a><ul>
+<li><a class="reference internal" href="#action-specs">Action specs</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#actions-and-runners">Actions and runners</a><ul>
+<li><a class="reference internal" href="#the-sweep-runner">The sweep runner</a></li>
+<li><a class="reference internal" href="#the-y-factor-calibration-runner">The Y-factor calibration runner</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#the-cellular-sweep">The cellular sweep</a></li>
+<li><a class="reference internal" href="#extensions-and-the-downstream-project">Extensions and the downstream project</a></li>
+<li><a class="reference internal" href="#sweep-execution">Sweep execution</a><ul>
+<li><a class="reference internal" href="#timestamps-and-the-trigger-strobe">Timestamps and the trigger strobe</a></li>
+<li><a class="reference internal" href="#the-per-capture-signal-path">The per-capture signal path</a></li>
+<li><a class="reference internal" href="#warmup">Warmup</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#logging-and-concurrency">Logging and concurrency</a><ul>
+<li><a class="reference internal" href="#concurrency">Concurrency</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="waveform_numerics.html"
+                          title="previous chapter">Waveform numerics</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="../reference/cli.html"
+                          title="next chapter">Command-Line Interface</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/agents/sensor.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="../reference/cli.html" title="Command-Line Interface"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="waveform_numerics.html" title="Waveform numerics"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Sensor architecture</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>

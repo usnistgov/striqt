@@ -80,12 +80,12 @@
 <h1>Schemas<a class="headerlink" href="#schemas" title="Link to this heading">¶</a></h1>
 <table class="docutils align-default" id="schema-json">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#air7201b">air7201b</a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#id1">air7201b</a></p></td>
 </tr>
 </tbody>
 </table>
 <section id="air7201b">
-<span id="air7201b"></span><h2>air7201b<a class="headerlink" href="#air7201b" title="Link to this heading">¶</a></h2>
+<span id="id1"></span><h2>air7201b<a class="headerlink" href="#air7201b" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -111,7 +111,7 @@
 <tr class="row-odd"><td><p>version</p></td>
 <td colspan="4"><p>unversioned</p></td>
 </tr>
-<tr class="row-even"><td colspan="6"><p><a class="reference internal" href="#description">Description</a></p></td>
+<tr class="row-even"><td colspan="6"><p><a class="reference internal" href="#id2">Description</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>plot_hint</p></li>
@@ -124,13 +124,13 @@
 <td><p>type</p></td>
 <td colspan="4"><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="5"><p><a class="reference internal" href="#plotoptions">PlotOptions</a></p></td>
+<tr class="row-odd"><td colspan="5"><p><a class="reference internal" href="#id3">PlotOptions</a></p></td>
 </tr>
 <tr class="row-even"><td><ul class="simple">
 <li><p>source</p></li>
 </ul>
 </td>
-<td colspan="6"><p><a class="reference internal" href="#air7201bsourcespec">Air7201BSourceSpec</a></p></td>
+<td colspan="6"><p><a class="reference internal" href="#id6">Air7201BSourceSpec</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>captures</p></li>
@@ -143,7 +143,7 @@
 <td colspan="5"></td>
 </tr>
 <tr class="row-odd"><td><p>items</p></td>
-<td colspan="5"><p><a class="reference internal" href="#soapycapture">SoapyCapture</a></p></td>
+<td colspan="5"><p><a class="reference internal" href="#id8">SoapyCapture</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="6"><ul class="simple">
 <li><p>loops</p></li>
@@ -157,15 +157,15 @@
 </tr>
 <tr class="row-even"><td rowspan="4"><p>items</p></td>
 <td rowspan="4"><p>anyOf</p></td>
-<td colspan="4"><p><a class="reference internal" href="#repeat">Repeat</a></p></td>
+<td colspan="4"><p><a class="reference internal" href="#id9">Repeat</a></p></td>
 </tr>
-<tr class="row-odd"><td colspan="4"><p><a class="reference internal" href="#list">List</a></p></td>
+<tr class="row-odd"><td colspan="4"><p><a class="reference internal" href="#id10">List</a></p></td>
 </tr>
-<tr class="row-even"><td colspan="4"><p><a class="reference internal" href="#range">Range</a></p></td>
+<tr class="row-even"><td colspan="4"><p><a class="reference internal" href="#id12">Range</a></p></td>
 </tr>
-<tr class="row-odd"><td colspan="4"><p><a class="reference internal" href="#frequencybinrange">FrequencyBinRange</a></p></td>
+<tr class="row-odd"><td colspan="4"><p><a class="reference internal" href="#id13">FrequencyBinRange</a></p></td>
 </tr>
-<tr class="row-even"><td rowspan="13"><ul class="simple">
+<tr class="row-even"><td rowspan="21"><ul class="simple">
 <li><p>adjust_captures</p></li>
 </ul>
 </td>
@@ -175,8 +175,8 @@
 <tr class="row-odd"><td><p>default</p></td>
 <td colspan="5"></td>
 </tr>
-<tr class="row-even"><td rowspan="11"><p>additionalProperties</p></td>
-<td rowspan="11"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="19"><p>additionalProperties</p></td>
+<td rowspan="19"><p>anyOf</p></td>
 <td><p>type</p></td>
 <td colspan="3"><p><em>object</em></p></td>
 </tr>
@@ -197,13 +197,44 @@
 <tr class="row-odd"><td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#captureremap">CaptureRemap</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id11">CaptureRemap</a></p></td>
 </tr>
 <tr class="row-odd"><td><p>type</p></td>
 <td colspan="3"><p><em>array</em></p></td>
 </tr>
+<tr class="row-even"><td colspan="4"><p>prefixItems</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>string</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="6"><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td rowspan="6"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td><p><em>number</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td><p><em>integer</em></p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td><p><em>string</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td><p><em>boolean</em></p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td><p><em>null</em></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id11">CaptureRemap</a></p></td>
+</tr>
 <tr class="row-even"><td><p>items</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td><p>maxItems</p></td>
 <td colspan="3"><p>2</p></td>
@@ -215,7 +246,7 @@
 <li><p>peripherals</p></li>
 </ul>
 </td>
-<td colspan="6"><p><a class="reference internal" href="#noperipherals">NoPeripherals</a></p></td>
+<td colspan="6"><p><a class="reference internal" href="#id14">NoPeripherals</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="2"><ul class="simple">
 <li><p>analysis</p></li>
@@ -224,7 +255,7 @@
 <td><p>default</p></td>
 <td colspan="5"></td>
 </tr>
-<tr class="row-odd"><td colspan="6"><p><a class="reference internal" href="#analysis">Analysis</a></p></td>
+<tr class="row-odd"><td colspan="6"><p><a class="reference internal" href="#id15">Analysis</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="4"><ul class="simple">
 <li><p>extensions</p></li>
@@ -240,7 +271,7 @@
 <tr class="row-even"><td><p>import_name</p></td>
 <td colspan="4"><p>null</p></td>
 </tr>
-<tr class="row-odd"><td colspan="6"><p><a class="reference internal" href="#extension">Extension</a></p></td>
+<tr class="row-odd"><td colspan="6"><p><a class="reference internal" href="#id31">Extension</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="8"><ul class="simple">
 <li><p>sink</p></li>
@@ -268,7 +299,7 @@
 <tr class="row-even"><td><p>max_chunk_bytes</p></td>
 <td colspan="4"><p>50000000</p></td>
 </tr>
-<tr class="row-odd"><td colspan="6"><p><a class="reference internal" href="#sink">Sink</a></p></td>
+<tr class="row-odd"><td colspan="6"><p><a class="reference internal" href="#id32">Sink</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="4"><ul class="simple">
 <li><p>options</p></li>
@@ -276,15 +307,15 @@
 </td>
 <td rowspan="3"><p>default</p></td>
 <td><p>reuse_iq</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td><p>loop_only_nyquist</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 <tr class="row-even"><td><p>skip_warmup</p></td>
-<td colspan="4"><p>True</p></td>
+<td colspan="4"><p>true</p></td>
 </tr>
-<tr class="row-odd"><td colspan="6"><p><a class="reference internal" href="#sweepoptions">SweepOptions</a></p></td>
+<tr class="row-odd"><td colspan="6"><p><a class="reference internal" href="#id33">SweepOptions</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>mock_source</p></li>
@@ -301,13 +332,13 @@
 <td colspan="4"><p><em>null</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="6"><p>False</p></td>
+<td colspan="6"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="description">
-<span id="description"></span><h2>Description<a class="headerlink" href="#description" title="Link to this heading">¶</a></h2>
+<span id="id2"></span><h2>Description<a class="headerlink" href="#description" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -340,13 +371,13 @@
 <td colspan="2"><p>unversioned</p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="plotoptions">
-<span id="plotoptions"></span><h2>PlotOptions<a class="headerlink" href="#plotoptions" title="Link to this heading">¶</a></h2>
+<span id="id3"></span><h2>PlotOptions<a class="headerlink" href="#plotoptions" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -358,13 +389,13 @@
 <li><p><strong>data</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p><a class="reference internal" href="#dataoptions">DataOptions</a></p></td>
+<td colspan="3"><p><a class="reference internal" href="#id4">DataOptions</a></p></td>
 </tr>
 <tr class="row-even"><td><ul class="simple">
 <li><p><strong>plotter</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p><a class="reference internal" href="#sharedplotoptions">SharedPlotOptions</a></p></td>
+<td colspan="3"><p><a class="reference internal" href="#id5">SharedPlotOptions</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>variables</p></li>
@@ -381,13 +412,13 @@
 <td><p><em>object</em></p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="dataoptions">
-<span id="dataoptions"></span><h2>DataOptions<a class="headerlink" href="#dataoptions" title="Link to this heading">¶</a></h2>
+<span id="id4"></span><h2>DataOptions<a class="headerlink" href="#dataoptions" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -441,13 +472,13 @@
 <td colspan="2"></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="sharedplotoptions">
-<span id="sharedplotoptions"></span><h2>SharedPlotOptions<a class="headerlink" href="#sharedplotoptions" title="Link to this heading">¶</a></h2>
+<span id="id5"></span><h2>SharedPlotOptions<a class="headerlink" href="#sharedplotoptions" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -556,13 +587,13 @@
 <td colspan="2"><p>{name} {start_time}.svg</p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="air7201bsourcespec">
-<span id="air7201bsourcespec"></span><h2>Air7201BSourceSpec<a class="headerlink" href="#air7201bsourcespec" title="Link to this heading">¶</a></h2>
+<span id="id6"></span><h2>Air7201BSourceSpec<a class="headerlink" href="#air7201bsourcespec" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -613,7 +644,7 @@
 <tr class="row-even"><td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#analysisgroup">AnalysisGroup</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id7">AnalysisGroup</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>array_backend</p></li>
@@ -737,16 +768,16 @@
 <td colspan="2"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>False</p></td>
+<td colspan="2"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="analysisgroup">
-<span id="analysisgroup"></span><h2>AnalysisGroup<a class="headerlink" href="#analysisgroup" title="Link to this heading">¶</a></h2>
+<span id="id7"></span><h2>AnalysisGroup<a class="headerlink" href="#analysisgroup" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td colspan="2"><p>base class for a defining set of Analysis specs</p></td>
@@ -757,13 +788,13 @@
 <tr class="row-odd"><td colspan="2"><p>properties</p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td><p>False</p></td>
+<td><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="soapycapture">
-<span id="soapycapture"></span><h2>SoapyCapture<a class="headerlink" href="#soapycapture" title="Link to this heading">¶</a></h2>
+<span id="id8"></span><h2>SoapyCapture<a class="headerlink" href="#soapycapture" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -854,7 +885,7 @@
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="3"><p>True</p></td>
+<td colspan="3"><p>true</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="5"><ul class="simple">
 <li><p>backend_sample_rate</p></li>
@@ -936,13 +967,13 @@
 <td><p><em>number</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="repeat">
-<span id="repeat"></span><h2>Repeat<a class="headerlink" href="#repeat" title="Link to this heading">¶</a></h2>
+<span id="id9"></span><h2>Repeat<a class="headerlink" href="#repeat" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -990,13 +1021,13 @@
 <td><p>1</p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="2"><p>False</p></td>
+<td colspan="2"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="list">
-<span id="list"></span><h2>List<a class="headerlink" href="#list" title="Link to this heading">¶</a></h2>
+<span id="id10"></span><h2>List<a class="headerlink" href="#list" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1030,20 +1061,20 @@
 <tr class="row-odd"><td><p>default</p></td>
 <td colspan="7"><p>capture</p></td>
 </tr>
-<tr class="row-even"><td rowspan="18"><ul class="simple">
+<tr class="row-even"><td rowspan="26"><ul class="simple">
 <li><p><strong>values</strong></p></li>
 </ul>
 </td>
 <td><p>type</p></td>
 <td colspan="7"><p><em>array</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="17"><p>items</p></td>
-<td rowspan="17"><p>anyOf</p></td>
+<tr class="row-odd"><td rowspan="25"><p>items</p></td>
+<td rowspan="25"><p>anyOf</p></td>
 <td><p>type</p></td>
 <td colspan="5"><p><em>object</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="11"><p>additionalProperties</p></td>
-<td rowspan="11"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="19"><p>additionalProperties</p></td>
+<td rowspan="19"><p>anyOf</p></td>
 <td><p>type</p></td>
 <td colspan="3"><p><em>object</em></p></td>
 </tr>
@@ -1064,13 +1095,44 @@
 <tr class="row-odd"><td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#captureremap">CaptureRemap</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id11">CaptureRemap</a></p></td>
 </tr>
 <tr class="row-odd"><td><p>type</p></td>
 <td colspan="3"><p><em>array</em></p></td>
 </tr>
+<tr class="row-even"><td colspan="4"><p>prefixItems</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>string</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="6"><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td rowspan="6"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td><p><em>number</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td><p><em>integer</em></p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td><p><em>string</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td><p><em>boolean</em></p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td><p><em>null</em></p></td>
+</tr>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id11">CaptureRemap</a></p></td>
+</tr>
 <tr class="row-even"><td><p>items</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td><p>maxItems</p></td>
 <td colspan="3"><p>2</p></td>
@@ -1094,13 +1156,13 @@
 <td colspan="5"><p><em>null</em></p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="8"><p>False</p></td>
+<td colspan="8"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="captureremap">
-<span id="captureremap"></span><h2>CaptureRemap<a class="headerlink" href="#captureremap" title="Link to this heading">¶</a></h2>
+<span id="id11"></span><h2>CaptureRemap<a class="headerlink" href="#captureremap" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1138,7 +1200,7 @@
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="3"><p>True</p></td>
+<td colspan="3"><p>true</p></td>
 </tr>
 <tr class="row-odd"><td colspan="5"><ul class="simple">
 <li><p>default</p></li>
@@ -1146,13 +1208,13 @@
 </td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="range">
-<span id="range"></span><h2>Range<a class="headerlink" href="#range" title="Link to this heading">¶</a></h2>
+<span id="id12"></span><h2>Range<a class="headerlink" href="#range" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1208,13 +1270,13 @@
 <td><p><em>number</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="2"><p>False</p></td>
+<td colspan="2"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="frequencybinrange">
-<span id="frequencybinrange"></span><h2>FrequencyBinRange<a class="headerlink" href="#frequencybinrange" title="Link to this heading">¶</a></h2>
+<span id="id13"></span><h2>FrequencyBinRange<a class="headerlink" href="#frequencybinrange" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1270,13 +1332,13 @@
 <td><p><em>number</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="2"><p>False</p></td>
+<td colspan="2"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="noperipherals">
-<span id="noperipherals"></span><h2>NoPeripherals<a class="headerlink" href="#noperipherals" title="Link to this heading">¶</a></h2>
+<span id="id14"></span><h2>NoPeripherals<a class="headerlink" href="#noperipherals" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1285,13 +1347,13 @@
 <tr class="row-even"><td colspan="2"><p>properties</p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td><p>False</p></td>
+<td><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="analysis">
-<span id="analysis"></span><h2>Analysis<a class="headerlink" href="#analysis" title="Link to this heading">¶</a></h2>
+<span id="id15"></span><h2>Analysis<a class="headerlink" href="#analysis" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1310,7 +1372,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#cellular5gnpsssync">Cellular5GNPSSSync</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id16">Cellular5GNPSSSync</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>cellular_5g_pss_correlation</p></li>
@@ -1323,7 +1385,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#cellular5gnrpsscorrelator">Cellular5GNRPSSCorrelator</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id17">Cellular5GNRPSSCorrelator</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>cellular_5g_ssb_spectrogram</p></li>
@@ -1336,7 +1398,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#cellular5gnrssbspectrogram">Cellular5GNRSSBSpectrogram</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id18">Cellular5GNRSSBSpectrogram</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>cellular_5g_sss_sync</p></li>
@@ -1349,7 +1411,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#cellular5gnssssync">Cellular5GNSSSSync</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id19">Cellular5GNSSSSync</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>cellular_5g_sss_correlation</p></li>
@@ -1362,7 +1424,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#cellular5gnrssscorrelator">Cellular5GNRSSSCorrelator</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id20">Cellular5GNRSSSCorrelator</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>cellular_cyclic_autocorrelation</p></li>
@@ -1375,7 +1437,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#cellularcyclicautocorrelator">CellularCyclicAutocorrelator</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id21">CellularCyclicAutocorrelator</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>channel_power_time_series</p></li>
@@ -1388,7 +1450,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#channelpowertimeseries">ChannelPowerTimeSeries</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id22">ChannelPowerTimeSeries</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>channel_power_histogram</p></li>
@@ -1401,7 +1463,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#channelpowerhistogram">ChannelPowerHistogram</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id23">ChannelPowerHistogram</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>spectrogram</p></li>
@@ -1414,7 +1476,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#spectrogram">Spectrogram</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id24">Spectrogram</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>cellular_resource_power_histogram</p></li>
@@ -1427,7 +1489,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#cellularresourcepowerhistogram">CellularResourcePowerHistogram</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id25">CellularResourcePowerHistogram</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>cyclic_channel_power</p></li>
@@ -1440,7 +1502,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#cyclicchannelpower">CyclicChannelPower</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id26">CyclicChannelPower</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>iq_waveform</p></li>
@@ -1453,7 +1515,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#iqwaveform">IQWaveform</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id27">IQWaveform</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>power_spectral_density</p></li>
@@ -1466,7 +1528,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#powerspectraldensity">PowerSpectralDensity</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id28">PowerSpectralDensity</a></p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>spectrogram_histogram</p></li>
@@ -1479,7 +1541,7 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#spectrogramhistogram">SpectrogramHistogram</a></p></td>
+<tr class="row-even"><td colspan="2"><p><a class="reference internal" href="#id29">SpectrogramHistogram</a></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>spectrogram_ratio_histogram</p></li>
@@ -1492,16 +1554,16 @@
 <td><p>type</p></td>
 <td><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#spectrogramhistogramratio">SpectrogramHistogramRatio</a></p></td>
+<tr class="row-odd"><td colspan="2"><p><a class="reference internal" href="#id30">SpectrogramHistogramRatio</a></p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="cellular5gnpsssync">
-<span id="cellular5gnpsssync"></span><h2>Cellular5GNPSSSync<a class="headerlink" href="#cellular5gnpsssync" title="Link to this heading">¶</a></h2>
+<span id="id16"></span><h2>Cellular5GNPSSSync<a class="headerlink" href="#cellular5gnpsssync" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1556,7 +1618,7 @@
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>delay</p></li>
@@ -1638,7 +1700,7 @@
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>default</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-even"><td rowspan="5"><ul class="simple">
 <li><p>max_beams</p></li>
@@ -1660,13 +1722,13 @@
 <td colspan="2"><p><em>null</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="cellular5gnrpsscorrelator">
-<span id="cellular5gnrpsscorrelator"></span><h2>Cellular5GNRPSSCorrelator<a class="headerlink" href="#cellular5gnrpsscorrelator" title="Link to this heading">¶</a></h2>
+<span id="id17"></span><h2>Cellular5GNRPSSCorrelator<a class="headerlink" href="#cellular5gnrpsscorrelator" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1721,7 +1783,7 @@
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>delay</p></li>
@@ -1790,16 +1852,16 @@
 <td colspan="2"><p><em>null</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="cellular5gnrssbspectrogram">
-<span id="cellular5gnrssbspectrogram"></span><h2>Cellular5GNRSSBSpectrogram<a class="headerlink" href="#cellular5gnrssbspectrogram" title="Link to this heading">¶</a></h2>
+<span id="id18"></span><h2>Cellular5GNRSSBSpectrogram<a class="headerlink" href="#cellular5gnrssbspectrogram" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
-<tr class="row-odd"><td colspan="4"><p>sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
+<tr class="row-odd"><td colspan="5"><p>sample_rate (float): output sample rate for the resampled synchronization waveform (samples/s)
 discovery_periodicity (float): time period between synchronization blocks (s)
 frequency_offset (float or dict[float, float]):</p>
 <blockquote>
@@ -1813,112 +1875,128 @@ frequency_offset (float or dict[float, float]):</p>
 </td>
 </tr>
 <tr class="row-even"><td><p>type</p></td>
-<td colspan="3"><p><em>object</em></p></td>
+<td colspan="4"><p><em>object</em></p></td>
 </tr>
-<tr class="row-odd"><td colspan="4"><p>properties</p></td>
+<tr class="row-odd"><td colspan="5"><p>properties</p></td>
 </tr>
 <tr class="row-even"><td rowspan="2"><ul class="simple">
 <li><p><strong>subcarrier_spacing</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>Subcarrier spacing (15e3, 30e3, 60e3, etc)</p></td>
+<td colspan="4"><p>Subcarrier spacing (15e3, 30e3, 60e3, etc)</p></td>
 </tr>
 <tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
 <tr class="row-even"><td rowspan="2"><ul class="simple">
 <li><p>sample_rate</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>7680000.0</p></td>
+<td colspan="3"><p>7680000.0</p></td>
 </tr>
 <tr class="row-even"><td rowspan="2"><ul class="simple">
 <li><p>discovery_periodicity</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>0.02</p></td>
+<td colspan="3"><p>0.02</p></td>
 </tr>
 <tr class="row-even"><td rowspan="2"><ul class="simple">
 <li><p>frequency_offset</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>0</p></td>
+<td colspan="3"><p>0</p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>max_block_count</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
-<td><p><em>integer</em></p></td>
+<td colspan="2"><p><em>integer</em></p></td>
 </tr>
 <tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="8"><ul class="simple">
+<tr class="row-odd"><td rowspan="11"><ul class="simple">
 <li><p>window</p></li>
 </ul>
 </td>
-<td colspan="3"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
+<td colspan="4"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
 </tr>
 <tr class="row-even"><td rowspan="2"><p>default</p></td>
-<td colspan="2"><p>kaiser_by_enbw</p></td>
+<td colspan="3"><p>kaiser_by_enbw</p></td>
 </tr>
-<tr class="row-odd"><td colspan="2"><p>2</p></td>
+<tr class="row-odd"><td colspan="3"><p>2</p></td>
 </tr>
-<tr class="row-even"><td rowspan="5"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="8"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>string</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>array</em></p></td>
+</tr>
+<tr class="row-even"><td colspan="3"><p>prefixItems</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
 <td><p>type</p></td>
 <td><p><em>string</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>array</em></p></td>
+<tr class="row-even"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>items</p></td>
-<td><p>False</p></td>
+<tr class="row-odd"><td><p>items</p></td>
+<td colspan="2"><p>false</p></td>
 </tr>
-<tr class="row-odd"><td><p>maxItems</p></td>
-<td><p>2</p></td>
+<tr class="row-even"><td><p>maxItems</p></td>
+<td colspan="2"><p>2</p></td>
 </tr>
-<tr class="row-even"><td><p>minItems</p></td>
-<td><p>2</p></td>
+<tr class="row-odd"><td><p>minItems</p></td>
+<td colspan="2"><p>2</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="3"><ul class="simple">
+<tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>lo_bandstop</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
+<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
-<td><p><em>number</em></p></td>
+<td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<tr class="row-odd"><td><p>additionalProperties</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="cellular5gnssssync">
-<span id="cellular5gnssssync"></span><h2>Cellular5GNSSSSync<a class="headerlink" href="#cellular5gnssssync" title="Link to this heading">¶</a></h2>
+<span id="id19"></span><h2>Cellular5GNSSSSync<a class="headerlink" href="#cellular5gnssssync" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -1973,7 +2051,7 @@ frequency_offset (float or dict[float, float]):</p>
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>delay</p></li>
@@ -2055,7 +2133,7 @@ frequency_offset (float or dict[float, float]):</p>
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>default</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-even"><td rowspan="5"><ul class="simple">
 <li><p>max_beams</p></li>
@@ -2077,13 +2155,13 @@ frequency_offset (float or dict[float, float]):</p>
 <td colspan="2"><p><em>null</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="cellular5gnrssscorrelator">
-<span id="cellular5gnrssscorrelator"></span><h2>Cellular5GNRSSSCorrelator<a class="headerlink" href="#cellular5gnrssscorrelator" title="Link to this heading">¶</a></h2>
+<span id="id20"></span><h2>Cellular5GNRSSSCorrelator<a class="headerlink" href="#cellular5gnrssscorrelator" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -2138,7 +2216,7 @@ frequency_offset (float or dict[float, float]):</p>
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>delay</p></li>
@@ -2207,13 +2285,409 @@ frequency_offset (float or dict[float, float]):</p>
 <td colspan="2"><p><em>null</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="cellularcyclicautocorrelator">
-<span id="cellularcyclicautocorrelator"></span><h2>CellularCyclicAutocorrelator<a class="headerlink" href="#cellularcyclicautocorrelator" title="Link to this heading">¶</a></h2>
+<span id="id21"></span><h2>CellularCyclicAutocorrelator<a class="headerlink" href="#cellularcyclicautocorrelator" title="Link to this heading">¶</a></h2>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="5"><p><em>object</em></p></td>
+</tr>
+<tr class="row-even"><td colspan="6"><p>properties</p></td>
+</tr>
+<tr class="row-odd"><td rowspan="7"><ul class="simple">
+<li><p>subcarrier_spacings</p></li>
+</ul>
+</td>
+<td colspan="5"><p>One or more subcarrier spacings (15e3, 30e3, 60e3, etc)</p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><p>default</p></td>
+<td colspan="4"><p>15000.0</p></td>
+</tr>
+<tr class="row-odd"><td colspan="4"><p>30000.0</p></td>
+</tr>
+<tr class="row-even"><td colspan="4"><p>60000.0</p></td>
+</tr>
+<tr class="row-odd"><td rowspan="3"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="3"><p><em>array</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>items</p></td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="10"><ul class="simple">
+<li><p>frame_range</p></li>
+</ul>
+</td>
+<td rowspan="2"><p>default</p></td>
+<td colspan="4"><p>0</p></td>
+</tr>
+<tr class="row-odd"><td colspan="4"><p>1</p></td>
+</tr>
+<tr class="row-even"><td rowspan="8"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="3"><p><em>integer</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>array</em></p></td>
+</tr>
+<tr class="row-even"><td colspan="4"><p>prefixItems</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>integer</em></p></td>
+</tr>
+<tr class="row-even"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>integer</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>items</p></td>
+<td colspan="3"><p>false</p></td>
+</tr>
+<tr class="row-even"><td><p>maxItems</p></td>
+<td colspan="3"><p>2</p></td>
+</tr>
+<tr class="row-odd"><td><p>minItems</p></td>
+<td colspan="3"><p>2</p></td>
+</tr>
+<tr class="row-even"><td rowspan="4"><ul class="simple">
+<li><p>frame_slots</p></li>
+</ul>
+</td>
+<td colspan="5"><p>string composed of (‘d’, ‘u’, ‘s’) specifying the sequence of slots in 1 TDD cellular frame, or None to fill with downlink</p></td>
+</tr>
+<tr class="row-odd"><td><p>default</p></td>
+<td colspan="4"><p>null</p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="3"><p><em>string</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>null</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="11"><ul class="simple">
+<li><p>symbol_range</p></li>
+</ul>
+</td>
+<td rowspan="2"><p>default</p></td>
+<td colspan="4"><p>0</p></td>
+</tr>
+<tr class="row-odd"><td colspan="4"><p>null</p></td>
+</tr>
+<tr class="row-even"><td rowspan="9"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="3"><p><em>integer</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>array</em></p></td>
+</tr>
+<tr class="row-even"><td colspan="4"><p>prefixItems</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>integer</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td rowspan="2"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td><p><em>integer</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td><p><em>null</em></p></td>
+</tr>
+<tr class="row-even"><td><p>items</p></td>
+<td colspan="3"><p>false</p></td>
+</tr>
+<tr class="row-odd"><td><p>maxItems</p></td>
+<td colspan="3"><p>2</p></td>
+</tr>
+<tr class="row-even"><td><p>minItems</p></td>
+<td colspan="3"><p>2</p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
+<li><p>generation</p></li>
+</ul>
+</td>
+<td><p>enum</p></td>
+<td colspan="4"><p>4G, 5G</p></td>
+</tr>
+<tr class="row-even"><td><p>default</p></td>
+<td colspan="4"><p>5G</p></td>
+</tr>
+<tr class="row-odd"><td><p>additionalProperties</p></td>
+<td colspan="5"><p>false</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="channelpowertimeseries">
+<span id="id22"></span><h2>ChannelPowerTimeSeries<a class="headerlink" href="#channelpowertimeseries" title="Link to this heading">¶</a></h2>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>object</em></p></td>
+</tr>
+<tr class="row-even"><td colspan="4"><p>properties</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li><p><strong>detector_period</strong></p></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="4"><ul class="simple">
+<li><p>power_detectors</p></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>array</em></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><p>default</p></td>
+<td colspan="2"><p>rms</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"><p>peak</p></td>
+</tr>
+<tr class="row-odd"><td><p>items</p></td>
+<td><p>type</p></td>
+<td><p><em>string</em></p></td>
+</tr>
+<tr class="row-even"><td><p>additionalProperties</p></td>
+<td colspan="3"><p>false</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="channelpowerhistogram">
+<span id="id23"></span><h2>ChannelPowerHistogram<a class="headerlink" href="#channelpowerhistogram" title="Link to this heading">¶</a></h2>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>object</em></p></td>
+</tr>
+<tr class="row-even"><td colspan="4"><p>properties</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li><p><strong>detector_period</strong></p></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="4"><ul class="simple">
+<li><p>power_detectors</p></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>array</em></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><p>default</p></td>
+<td colspan="2"><p>rms</p></td>
+</tr>
+<tr class="row-even"><td colspan="2"><p>peak</p></td>
+</tr>
+<tr class="row-odd"><td><p>items</p></td>
+<td><p>type</p></td>
+<td><p><em>string</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p><strong>power_low</strong></p></li>
+</ul>
+</td>
+<td colspan="3"><p>Minimum power bin</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p><strong>power_high</strong></p></li>
+</ul>
+</td>
+<td colspan="3"><p>Maximum power bin</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p><strong>power_resolution</strong></p></li>
+</ul>
+</td>
+<td colspan="3"><p>Power bin resolution</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td><p>additionalProperties</p></td>
+<td colspan="3"><p>false</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="spectrogram">
+<span id="id24"></span><h2>Spectrogram<a class="headerlink" href="#spectrogram" title="Link to this heading">¶</a></h2>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td colspan="5"><dl class="simple">
+<dt>time_aperture (float):</dt><dd><p>if specified, binned RMS averaging is applied along time axis in the
+spectrogram to yield this coarser resolution (s)</p>
+</dd>
+</dl>
+<p>dB (bool): if True, returned power is transformed into dB units</p>
+</td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="4"><p><em>object</em></p></td>
+</tr>
+<tr class="row-odd"><td colspan="5"><p>properties</p></td>
+</tr>
+<tr class="row-even"><td rowspan="9"><ul class="simple">
+<li><p><strong>window</strong></p></li>
+</ul>
+</td>
+<td colspan="4"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="8"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>string</em></p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="2"><p><em>array</em></p></td>
+</tr>
+<tr class="row-odd"><td colspan="3"><p>prefixItems</p></td>
+</tr>
+<tr class="row-even"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>string</em></p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td><p>items</p></td>
+<td colspan="2"><p>false</p></td>
+</tr>
+<tr class="row-odd"><td><p>maxItems</p></td>
+<td colspan="2"><p>2</p></td>
+</tr>
+<tr class="row-even"><td><p>minItems</p></td>
+<td colspan="2"><p>2</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li><p><strong>frequency_resolution</strong></p></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p>fractional_overlap</p></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="3"><p><em>string</em> / <em>number</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>default</p></td>
+<td colspan="3"><p>0</p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p>window_fill</p></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="3"><p><em>string</em> / <em>number</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>default</p></td>
+<td colspan="3"><p>1</p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><ul class="simple">
+<li><p>integration_bandwidth</p></li>
+</ul>
+</td>
+<td><p>default</p></td>
+<td colspan="3"><p>null</p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
+<li><p>trim_stopband</p></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="3"><p><em>boolean</em></p></td>
+</tr>
+<tr class="row-even"><td><p>default</p></td>
+<td colspan="3"><p>true</p></td>
+</tr>
+<tr class="row-odd"><td rowspan="4"><ul class="simple">
+<li><p>lo_bandstop</p></li>
+</ul>
+</td>
+<td><p>default</p></td>
+<td colspan="3"><p>null</p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><p>anyOf</p></td>
+<td colspan="3"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="3"><ul class="simple">
+<li><p>time_aperture</p></li>
+</ul>
+</td>
+<td><p>default</p></td>
+<td colspan="3"><p>null</p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
+</tr>
+<tr class="row-even"><td><p>additionalProperties</p></td>
+<td colspan="4"><p>false</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cellularresourcepowerhistogram">
+<span id="id25"></span><h2>CellularResourcePowerHistogram<a class="headerlink" href="#cellularresourcepowerhistogram" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -2221,54 +2695,146 @@ frequency_offset (float or dict[float, float]):</p>
 </tr>
 <tr class="row-even"><td colspan="5"><p>properties</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="7"><ul class="simple">
-<li><p>subcarrier_spacings</p></li>
+<tr class="row-odd"><td rowspan="9"><ul class="simple">
+<li><p><strong>window</strong></p></li>
 </ul>
 </td>
-<td colspan="4"><p>One or more subcarrier spacings (15e3, 30e3, 60e3, etc)</p></td>
+<td colspan="4"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
 </tr>
-<tr class="row-even"><td rowspan="3"><p>default</p></td>
-<td colspan="3"><p>15000.0</p></td>
-</tr>
-<tr class="row-odd"><td colspan="3"><p>30000.0</p></td>
-</tr>
-<tr class="row-even"><td colspan="3"><p>60000.0</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="3"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="8"><p>anyOf</p></td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td colspan="2"><p><em>array</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>items</p></td>
-<td><p>type</p></td>
-<td><p><em>number</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="7"><ul class="simple">
-<li><p>frame_range</p></li>
-</ul>
-</td>
-<td rowspan="2"><p>default</p></td>
-<td colspan="3"><p>0</p></td>
-</tr>
-<tr class="row-odd"><td colspan="3"><p>1</p></td>
-</tr>
-<tr class="row-even"><td rowspan="5"><p>anyOf</p></td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>integer</em></p></td>
+<td colspan="2"><p><em>string</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>type</p></td>
 <td colspan="2"><p><em>array</em></p></td>
 </tr>
+<tr class="row-even"><td colspan="3"><p>prefixItems</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>string</em></p></td>
+</tr>
+<tr class="row-even"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>number</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>items</p></td>
+<td colspan="2"><p>false</p></td>
+</tr>
+<tr class="row-even"><td><p>maxItems</p></td>
+<td colspan="2"><p>2</p></td>
+</tr>
+<tr class="row-odd"><td><p>minItems</p></td>
+<td colspan="2"><p>2</p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p><strong>subcarrier_spacing</strong></p></li>
+</ul>
+</td>
+<td colspan="4"><p>Subcarrier spacing (15e3, 30e3, 60e3, etc)</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p><strong>power_low</strong></p></li>
+</ul>
+</td>
+<td colspan="4"><p>Minimum power bin</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p><strong>power_high</strong></p></li>
+</ul>
+</td>
+<td colspan="4"><p>Maximum power bin</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><ul class="simple">
+<li><p><strong>power_resolution</strong></p></li>
+</ul>
+</td>
+<td colspan="4"><p>Power bin resolution</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="4"><ul class="simple">
+<li><p>average_rbs</p></li>
+</ul>
+</td>
+<td colspan="4"><p>True (or “half”) to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1- (or 1/2)-resource block</p></td>
+</tr>
+<tr class="row-odd"><td><p>default</p></td>
+<td colspan="3"><p>false</p></td>
+</tr>
+<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>boolean</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>enum</p></td>
+<td colspan="2"><p>half</p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><ul class="simple">
+<li><p>average_slots</p></li>
+</ul>
+</td>
+<td colspan="4"><p>True to coarsen spectrogram bins by averaging 1-symbol time resolution</p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="3"><p><em>boolean</em></p></td>
+</tr>
+<tr class="row-even"><td><p>default</p></td>
+<td colspan="3"><p>false</p></td>
+</tr>
+<tr class="row-odd"><td rowspan="10"><ul class="simple">
+<li><p>guard_bandwidths</p></li>
+</ul>
+</td>
+<td colspan="4"><p>Channel guard bandwidths to ignore on the left and right sides</p></td>
+</tr>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="3"><p><em>array</em></p></td>
+</tr>
+<tr class="row-odd"><td rowspan="2"><p>default</p></td>
+<td colspan="3"><p>0</p></td>
+</tr>
+<tr class="row-even"><td colspan="3"><p>0</p></td>
+</tr>
+<tr class="row-odd"><td colspan="4"><p>prefixItems</p></td>
+</tr>
+<tr class="row-even"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>number</em></p></td>
+</tr>
 <tr class="row-even"><td><p>items</p></td>
-<td colspan="2"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 <tr class="row-odd"><td><p>maxItems</p></td>
-<td colspan="2"><p>2</p></td>
+<td colspan="3"><p>2</p></td>
 </tr>
 <tr class="row-even"><td><p>minItems</p></td>
-<td colspan="2"><p>2</p></td>
+<td colspan="3"><p>2</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="4"><ul class="simple">
 <li><p>frame_slots</p></li>
@@ -2286,466 +2852,62 @@ frequency_offset (float or dict[float, float]):</p>
 <tr class="row-even"><td><p>type</p></td>
 <td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="7"><ul class="simple">
-<li><p>symbol_range</p></li>
-</ul>
-</td>
-<td rowspan="2"><p>default</p></td>
-<td colspan="3"><p>0</p></td>
-</tr>
-<tr class="row-even"><td colspan="3"><p>null</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="5"><p>anyOf</p></td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>integer</em></p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td colspan="2"><p><em>array</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>items</p></td>
-<td colspan="2"><p>False</p></td>
-</tr>
-<tr class="row-even"><td><p>maxItems</p></td>
-<td colspan="2"><p>2</p></td>
-</tr>
-<tr class="row-odd"><td><p>minItems</p></td>
-<td colspan="2"><p>2</p></td>
-</tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
-<li><p>generation</p></li>
-</ul>
-</td>
-<td><p>enum</p></td>
-<td colspan="3"><p>4G, 5G</p></td>
-</tr>
-<tr class="row-odd"><td><p>default</p></td>
-<td colspan="3"><p>5G</p></td>
-</tr>
-<tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="channelpowertimeseries">
-<span id="channelpowertimeseries"></span><h2>ChannelPowerTimeSeries<a class="headerlink" href="#channelpowertimeseries" title="Link to this heading">¶</a></h2>
-<table class="docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="3"><p><em>object</em></p></td>
-</tr>
-<tr class="row-even"><td colspan="4"><p>properties</p></td>
-</tr>
-<tr class="row-odd"><td><ul class="simple">
-<li><p><strong>detector_period</strong></p></li>
-</ul>
-</td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="4"><ul class="simple">
-<li><p>power_detectors</p></li>
-</ul>
-</td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>array</em></p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><p>default</p></td>
-<td colspan="2"><p>rms</p></td>
-</tr>
-<tr class="row-even"><td colspan="2"><p>peak</p></td>
-</tr>
-<tr class="row-odd"><td><p>items</p></td>
-<td><p>type</p></td>
-<td><p><em>string</em></p></td>
-</tr>
-<tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="channelpowerhistogram">
-<span id="channelpowerhistogram"></span><h2>ChannelPowerHistogram<a class="headerlink" href="#channelpowerhistogram" title="Link to this heading">¶</a></h2>
-<table class="docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="3"><p><em>object</em></p></td>
-</tr>
-<tr class="row-even"><td colspan="4"><p>properties</p></td>
-</tr>
-<tr class="row-odd"><td><ul class="simple">
-<li><p><strong>detector_period</strong></p></li>
-</ul>
-</td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="4"><ul class="simple">
-<li><p>power_detectors</p></li>
-</ul>
-</td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>array</em></p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><p>default</p></td>
-<td colspan="2"><p>rms</p></td>
-</tr>
-<tr class="row-even"><td colspan="2"><p>peak</p></td>
-</tr>
-<tr class="row-odd"><td><p>items</p></td>
-<td><p>type</p></td>
-<td><p><em>string</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
-<li><p><strong>power_low</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>Minimum power bin</p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
-<li><p><strong>power_high</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>Maximum power bin</p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
-<li><p><strong>power_resolution</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>Power bin resolution</p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="spectrogram">
-<span id="spectrogram"></span><h2>Spectrogram<a class="headerlink" href="#spectrogram" title="Link to this heading">¶</a></h2>
-<table class="docutils align-default">
-<tbody>
-<tr class="row-odd"><td colspan="4"><dl class="simple">
-<dt>time_aperture (float):</dt><dd><p>if specified, binned RMS averaging is applied along time axis in the
-spectrogram to yield this coarser resolution (s)</p>
-</dd>
-</dl>
-<p>dB (bool): if True, returned power is transformed into dB units</p>
-</td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td colspan="3"><p><em>object</em></p></td>
-</tr>
-<tr class="row-odd"><td colspan="4"><p>properties</p></td>
-</tr>
-<tr class="row-even"><td rowspan="6"><ul class="simple">
-<li><p><strong>window</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
-</tr>
-<tr class="row-odd"><td rowspan="5"><p>anyOf</p></td>
-<td><p>type</p></td>
-<td><p><em>string</em></p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td><p><em>array</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>items</p></td>
-<td><p>False</p></td>
-</tr>
-<tr class="row-even"><td><p>maxItems</p></td>
-<td><p>2</p></td>
-</tr>
-<tr class="row-odd"><td><p>minItems</p></td>
-<td><p>2</p></td>
-</tr>
-<tr class="row-even"><td><ul class="simple">
-<li><p><strong>frequency_resolution</strong></p></li>
-</ul>
-</td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
-<li><p>fractional_overlap</p></li>
-</ul>
-</td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
-</tr>
-<tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>0</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
-<li><p>window_fill</p></li>
-</ul>
-</td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
-</tr>
-<tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>1</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="3"><ul class="simple">
-<li><p>integration_bandwidth</p></li>
-</ul>
-</td>
-<td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
-</tr>
-<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
-<td><p>type</p></td>
-<td><p><em>number</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
-<li><p>trim_stopband</p></li>
-</ul>
-</td>
-<td><p>type</p></td>
-<td colspan="2"><p><em>boolean</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>True</p></td>
-</tr>
-<tr class="row-even"><td rowspan="4"><ul class="simple">
-<li><p>lo_bandstop</p></li>
-</ul>
-</td>
-<td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="3"><p>anyOf</p></td>
-<td colspan="2"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td><p><em>number</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="3"><ul class="simple">
-<li><p>time_aperture</p></li>
-</ul>
-</td>
-<td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
-<td><p>type</p></td>
-<td><p><em>number</em></p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="cellularresourcepowerhistogram">
-<span id="cellularresourcepowerhistogram"></span><h2>CellularResourcePowerHistogram<a class="headerlink" href="#cellularresourcepowerhistogram" title="Link to this heading">¶</a></h2>
-<table class="docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="3"><p><em>object</em></p></td>
-</tr>
-<tr class="row-even"><td colspan="4"><p>properties</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="6"><ul class="simple">
-<li><p><strong>window</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
-</tr>
-<tr class="row-even"><td rowspan="5"><p>anyOf</p></td>
-<td><p>type</p></td>
-<td><p><em>string</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>array</em></p></td>
-</tr>
-<tr class="row-even"><td><p>items</p></td>
-<td><p>False</p></td>
-</tr>
-<tr class="row-odd"><td><p>maxItems</p></td>
-<td><p>2</p></td>
-</tr>
-<tr class="row-even"><td><p>minItems</p></td>
-<td><p>2</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
-<li><p><strong>subcarrier_spacing</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>Subcarrier spacing (15e3, 30e3, 60e3, etc)</p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
-<li><p><strong>power_low</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>Minimum power bin</p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
-<li><p><strong>power_high</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>Maximum power bin</p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
-<li><p><strong>power_resolution</strong></p></li>
-</ul>
-</td>
-<td colspan="3"><p>Power bin resolution</p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
-</tr>
-<tr class="row-odd"><td rowspan="4"><ul class="simple">
-<li><p>average_rbs</p></li>
-</ul>
-</td>
-<td colspan="3"><p>True (or “half”) to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1- (or 1/2)-resource block</p></td>
-</tr>
-<tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>False</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
-<td><p>type</p></td>
-<td><p><em>boolean</em></p></td>
-</tr>
-<tr class="row-even"><td><p>enum</p></td>
-<td><p>half</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="3"><ul class="simple">
-<li><p>average_slots</p></li>
-</ul>
-</td>
-<td colspan="3"><p>True to coarsen spectrogram bins by averaging 1-symbol time resolution</p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td colspan="2"><p><em>boolean</em></p></td>
-</tr>
-<tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>False</p></td>
-</tr>
-<tr class="row-even"><td rowspan="7"><ul class="simple">
-<li><p>guard_bandwidths</p></li>
-</ul>
-</td>
-<td colspan="3"><p>Channel guard bandwidths to ignore on the left and right sides</p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>array</em></p></td>
-</tr>
-<tr class="row-even"><td rowspan="2"><p>default</p></td>
-<td colspan="2"><p>0</p></td>
-</tr>
-<tr class="row-odd"><td colspan="2"><p>0</p></td>
-</tr>
-<tr class="row-even"><td><p>items</p></td>
-<td colspan="2"><p>False</p></td>
-</tr>
-<tr class="row-odd"><td><p>maxItems</p></td>
-<td colspan="2"><p>2</p></td>
-</tr>
-<tr class="row-even"><td><p>minItems</p></td>
-<td colspan="2"><p>2</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="4"><ul class="simple">
-<li><p>frame_slots</p></li>
-</ul>
-</td>
-<td colspan="3"><p>string composed of (‘d’, ‘u’, ‘s’) specifying the sequence of slots in 1 TDD cellular frame, or None to fill with downlink</p></td>
-</tr>
-<tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
-</tr>
-<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
-<td><p>type</p></td>
-<td><p><em>string</em></p></td>
-</tr>
-<tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
-</tr>
 <tr class="row-odd"><td rowspan="4"><ul class="simple">
 <li><p>special_symbols</p></li>
 </ul>
 </td>
-<td colspan="3"><p>string composed of the characters (‘d’, ‘u’, ‘f’) indicating the sequence of symbol types (when ‘s’ is in frame_slots)</p></td>
+<td colspan="4"><p>string composed of the characters (‘d’, ‘u’, ‘f’) indicating the sequence of symbol types (when ‘s’ is in frame_slots)</p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
-<td><p><em>string</em></p></td>
+<td colspan="2"><p><em>string</em></p></td>
 </tr>
 <tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<td colspan="2"><p><em>null</em></p></td>
 </tr>
 <tr class="row-odd"><td rowspan="4"><ul class="simple">
 <li><p>cyclic_prefix</p></li>
 </ul>
 </td>
-<td colspan="3"><p>the 3GPP cyclic prefix type</p></td>
+<td colspan="4"><p>the 3GPP cyclic prefix type</p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>normal</p></td>
+<td colspan="3"><p>normal</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
 <td><p>enum</p></td>
-<td><p>normal</p></td>
+<td colspan="2"><p>normal</p></td>
 </tr>
 <tr class="row-even"><td><p>enum</p></td>
-<td><p>extended</p></td>
+<td colspan="2"><p>extended</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="4"><ul class="simple">
 <li><p>lo_bandstop</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
 <tr class="row-even"><td rowspan="3"><p>anyOf</p></td>
-<td colspan="2"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
+<td colspan="3"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
 </tr>
 <tr class="row-odd"><td><p>type</p></td>
-<td><p><em>number</em></p></td>
+<td colspan="2"><p><em>number</em></p></td>
 </tr>
 <tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<td colspan="2"><p><em>null</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="cyclicchannelpower">
-<span id="cyclicchannelpower"></span><h2>CyclicChannelPower<a class="headerlink" href="#cyclicchannelpower" title="Link to this heading">¶</a></h2>
+<span id="id26"></span><h2>CyclicChannelPower<a class="headerlink" href="#cyclicchannelpower" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -2806,13 +2968,13 @@ spectrogram to yield this coarser resolution (s)</p>
 <td><p><em>number</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="iqwaveform">
-<span id="iqwaveform"></span><h2>IQWaveform<a class="headerlink" href="#iqwaveform" title="Link to this heading">¶</a></h2>
+<span id="id27"></span><h2>IQWaveform<a class="headerlink" href="#iqwaveform" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -2849,13 +3011,13 @@ spectrogram to yield this coarser resolution (s)</p>
 <td><p><em>null</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="powerspectraldensity">
-<span id="powerspectraldensity"></span><h2>PowerSpectralDensity<a class="headerlink" href="#powerspectraldensity" title="Link to this heading">¶</a></h2>
+<span id="id28"></span><h2>PowerSpectralDensity<a class="headerlink" href="#powerspectraldensity" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -2863,411 +3025,459 @@ spectrogram to yield this coarser resolution (s)</p>
 </tr>
 <tr class="row-even"><td colspan="5"><p>properties</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="6"><ul class="simple">
+<tr class="row-odd"><td rowspan="9"><ul class="simple">
 <li><p><strong>window</strong></p></li>
 </ul>
 </td>
 <td colspan="4"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
 </tr>
-<tr class="row-even"><td rowspan="5"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="8"><p>anyOf</p></td>
 <td><p>type</p></td>
 <td colspan="2"><p><em>string</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>type</p></td>
 <td colspan="2"><p><em>array</em></p></td>
 </tr>
-<tr class="row-even"><td><p>items</p></td>
-<td colspan="2"><p>False</p></td>
-</tr>
-<tr class="row-odd"><td><p>maxItems</p></td>
-<td colspan="2"><p>2</p></td>
-</tr>
-<tr class="row-even"><td><p>minItems</p></td>
-<td colspan="2"><p>2</p></td>
+<tr class="row-even"><td colspan="3"><p>prefixItems</p></td>
 </tr>
 <tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>string</em></p></td>
+</tr>
+<tr class="row-even"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>number</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>items</p></td>
+<td colspan="2"><p>false</p></td>
+</tr>
+<tr class="row-even"><td><p>maxItems</p></td>
+<td colspan="2"><p>2</p></td>
+</tr>
+<tr class="row-odd"><td><p>minItems</p></td>
+<td colspan="2"><p>2</p></td>
+</tr>
+<tr class="row-even"><td><ul class="simple">
 <li><p><strong>frequency_resolution</strong></p></li>
 </ul>
 </td>
 <td><p>type</p></td>
 <td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>fractional_overlap</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
 <td colspan="3"><p><em>string</em> / <em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>default</p></td>
+<tr class="row-even"><td><p>default</p></td>
 <td colspan="3"><p>0</p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>window_fill</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
 <td colspan="3"><p><em>string</em> / <em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>default</p></td>
+<tr class="row-even"><td><p>default</p></td>
 <td colspan="3"><p>1</p></td>
 </tr>
-<tr class="row-even"><td rowspan="3"><ul class="simple">
+<tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>integration_bandwidth</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
 <td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
 <td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>type</p></td>
+<tr class="row-odd"><td><p>type</p></td>
 <td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
+<tr class="row-even"><td rowspan="2"><ul class="simple">
 <li><p>trim_stopband</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
 <td colspan="3"><p><em>boolean</em></p></td>
 </tr>
-<tr class="row-even"><td><p>default</p></td>
-<td colspan="3"><p>True</p></td>
+<tr class="row-odd"><td><p>default</p></td>
+<td colspan="3"><p>true</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="4"><ul class="simple">
+<tr class="row-even"><td rowspan="4"><ul class="simple">
 <li><p>lo_bandstop</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
 <td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-even"><td rowspan="3"><p>anyOf</p></td>
+<tr class="row-odd"><td rowspan="3"><p>anyOf</p></td>
 <td colspan="3"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
+<tr class="row-even"><td><p>type</p></td>
 <td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>type</p></td>
+<tr class="row-odd"><td><p>type</p></td>
 <td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="4"><ul class="simple">
+<tr class="row-even"><td rowspan="4"><ul class="simple">
 <li><p>time_statistic</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
 <td colspan="3"><p><em>array</em></p></td>
 </tr>
-<tr class="row-even"><td><p>default</p></td>
+<tr class="row-odd"><td><p>default</p></td>
 <td colspan="3"><p>mean</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="2"><p>items</p></td>
+<tr class="row-even"><td rowspan="2"><p>items</p></td>
 <td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
 <td><p><em>string</em></p></td>
 </tr>
-<tr class="row-even"><td><p>type</p></td>
+<tr class="row-odd"><td><p>type</p></td>
 <td><p><em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<tr class="row-even"><td><p>additionalProperties</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="spectrogramhistogram">
-<span id="spectrogramhistogram"></span><h2>SpectrogramHistogram<a class="headerlink" href="#spectrogramhistogram" title="Link to this heading">¶</a></h2>
+<span id="id29"></span><h2>SpectrogramHistogram<a class="headerlink" href="#spectrogramhistogram" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
-<td colspan="3"><p><em>object</em></p></td>
+<td colspan="4"><p><em>object</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="4"><p>properties</p></td>
+<tr class="row-even"><td colspan="5"><p>properties</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="6"><ul class="simple">
+<tr class="row-odd"><td rowspan="9"><ul class="simple">
 <li><p><strong>window</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
+<td colspan="4"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
 </tr>
-<tr class="row-even"><td rowspan="5"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="8"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>string</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>array</em></p></td>
+</tr>
+<tr class="row-even"><td colspan="3"><p>prefixItems</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
 <td><p>type</p></td>
 <td><p><em>string</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>array</em></p></td>
+<tr class="row-even"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>items</p></td>
-<td><p>False</p></td>
+<tr class="row-odd"><td><p>items</p></td>
+<td colspan="2"><p>false</p></td>
 </tr>
-<tr class="row-odd"><td><p>maxItems</p></td>
-<td><p>2</p></td>
+<tr class="row-even"><td><p>maxItems</p></td>
+<td colspan="2"><p>2</p></td>
 </tr>
-<tr class="row-even"><td><p>minItems</p></td>
-<td><p>2</p></td>
+<tr class="row-odd"><td><p>minItems</p></td>
+<td colspan="2"><p>2</p></td>
 </tr>
-<tr class="row-odd"><td><ul class="simple">
+<tr class="row-even"><td><ul class="simple">
 <li><p><strong>frequency_resolution</strong></p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>fractional_overlap</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
+<td colspan="3"><p><em>string</em> / <em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>0</p></td>
+<tr class="row-even"><td><p>default</p></td>
+<td colspan="3"><p>0</p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>window_fill</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
+<td colspan="3"><p><em>string</em> / <em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>1</p></td>
+<tr class="row-even"><td><p>default</p></td>
+<td colspan="3"><p>1</p></td>
 </tr>
-<tr class="row-even"><td rowspan="3"><ul class="simple">
+<tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>integration_bandwidth</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
-<td><p><em>number</em></p></td>
+<td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
+<tr class="row-even"><td rowspan="2"><ul class="simple">
 <li><p>trim_stopband</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>boolean</em></p></td>
+<td colspan="3"><p><em>boolean</em></p></td>
 </tr>
-<tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>True</p></td>
+<tr class="row-odd"><td><p>default</p></td>
+<td colspan="3"><p>true</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="4"><ul class="simple">
+<tr class="row-even"><td rowspan="4"><ul class="simple">
 <li><p>lo_bandstop</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-even"><td rowspan="3"><p>anyOf</p></td>
-<td colspan="2"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>number</em></p></td>
+<tr class="row-odd"><td rowspan="3"><p>anyOf</p></td>
+<td colspan="3"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
 </tr>
 <tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="3"><ul class="simple">
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>time_aperture</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
+<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
-<td><p><em>number</em></p></td>
+<td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p><strong>power_low</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>Minimum power bin</p></td>
+<td colspan="4"><p>Minimum power bin</p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p><strong>power_high</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>Maximum power bin</p></td>
+<td colspan="4"><p>Maximum power bin</p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p><strong>power_resolution</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>Power bin resolution</p></td>
+<td colspan="4"><p>Power bin resolution</p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<tr class="row-odd"><td><p>additionalProperties</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="spectrogramhistogramratio">
-<span id="spectrogramhistogramratio"></span><h2>SpectrogramHistogramRatio<a class="headerlink" href="#spectrogramhistogramratio" title="Link to this heading">¶</a></h2>
+<span id="id30"></span><h2>SpectrogramHistogramRatio<a class="headerlink" href="#spectrogramhistogramratio" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
-<td colspan="3"><p><em>object</em></p></td>
+<td colspan="4"><p><em>object</em></p></td>
 </tr>
-<tr class="row-even"><td colspan="4"><p>properties</p></td>
+<tr class="row-even"><td colspan="5"><p>properties</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="6"><ul class="simple">
+<tr class="row-odd"><td rowspan="9"><ul class="simple">
 <li><p><strong>window</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
+<td colspan="4"><p>window function specification following <cite>scipy.signal.get_window</cite></p></td>
 </tr>
-<tr class="row-even"><td rowspan="5"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="8"><p>anyOf</p></td>
+<td><p>type</p></td>
+<td colspan="2"><p><em>string</em></p></td>
+</tr>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>array</em></p></td>
+</tr>
+<tr class="row-even"><td colspan="3"><p>prefixItems</p></td>
+</tr>
+<tr class="row-odd"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
 <td><p>type</p></td>
 <td><p><em>string</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>array</em></p></td>
+<tr class="row-even"><td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>type</p></td>
+<td><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>items</p></td>
-<td><p>False</p></td>
+<tr class="row-odd"><td><p>items</p></td>
+<td colspan="2"><p>false</p></td>
 </tr>
-<tr class="row-odd"><td><p>maxItems</p></td>
-<td><p>2</p></td>
+<tr class="row-even"><td><p>maxItems</p></td>
+<td colspan="2"><p>2</p></td>
 </tr>
-<tr class="row-even"><td><p>minItems</p></td>
-<td><p>2</p></td>
+<tr class="row-odd"><td><p>minItems</p></td>
+<td colspan="2"><p>2</p></td>
 </tr>
-<tr class="row-odd"><td><ul class="simple">
+<tr class="row-even"><td><ul class="simple">
 <li><p><strong>frequency_resolution</strong></p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>fractional_overlap</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
+<td colspan="3"><p><em>string</em> / <em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>0</p></td>
+<tr class="row-even"><td><p>default</p></td>
+<td colspan="3"><p>0</p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>window_fill</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>string</em> / <em>number</em></p></td>
+<td colspan="3"><p><em>string</em> / <em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>default</p></td>
-<td colspan="2"><p>1</p></td>
+<tr class="row-even"><td><p>default</p></td>
+<td colspan="3"><p>1</p></td>
 </tr>
-<tr class="row-even"><td rowspan="3"><ul class="simple">
+<tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>integration_bandwidth</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
+<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
-<td><p><em>number</em></p></td>
+<td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="2"><ul class="simple">
+<tr class="row-even"><td rowspan="2"><ul class="simple">
 <li><p>trim_stopband</p></li>
 </ul>
 </td>
 <td><p>type</p></td>
-<td colspan="2"><p><em>boolean</em></p></td>
+<td colspan="3"><p><em>boolean</em></p></td>
 </tr>
-<tr class="row-even"><td><p>default</p></td>
-<td colspan="2"><p>True</p></td>
+<tr class="row-odd"><td><p>default</p></td>
+<td colspan="3"><p>true</p></td>
 </tr>
-<tr class="row-odd"><td rowspan="4"><ul class="simple">
+<tr class="row-even"><td rowspan="4"><ul class="simple">
 <li><p>lo_bandstop</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-even"><td rowspan="3"><p>anyOf</p></td>
-<td colspan="2"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
-</tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>number</em></p></td>
+<tr class="row-odd"><td rowspan="3"><p>anyOf</p></td>
+<td colspan="3"><p>mask with float(“nan”) at this bandwidth centered at baseband DC</p></td>
 </tr>
 <tr class="row-even"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td rowspan="3"><ul class="simple">
+<tr class="row-odd"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
+</tr>
+<tr class="row-even"><td rowspan="3"><ul class="simple">
 <li><p>time_aperture</p></li>
 </ul>
 </td>
 <td><p>default</p></td>
-<td colspan="2"><p>null</p></td>
+<td colspan="3"><p>null</p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><p>anyOf</p></td>
+<tr class="row-odd"><td rowspan="2"><p>anyOf</p></td>
 <td><p>type</p></td>
-<td><p><em>number</em></p></td>
+<td colspan="2"><p><em>number</em></p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td><p><em>null</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="2"><p><em>null</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p><strong>power_low</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>Minimum power bin</p></td>
+<td colspan="4"><p>Minimum power bin</p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p><strong>power_high</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>Maximum power bin</p></td>
+<td colspan="4"><p>Maximum power bin</p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td rowspan="2"><ul class="simple">
+<tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p><strong>power_resolution</strong></p></li>
 </ul>
 </td>
-<td colspan="3"><p>Power bin resolution</p></td>
+<td colspan="4"><p>Power bin resolution</p></td>
 </tr>
-<tr class="row-odd"><td><p>type</p></td>
-<td colspan="2"><p><em>number</em></p></td>
+<tr class="row-even"><td><p>type</p></td>
+<td colspan="3"><p><em>number</em></p></td>
 </tr>
-<tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<tr class="row-odd"><td><p>additionalProperties</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="extension">
-<span id="extension"></span><h2>Extension<a class="headerlink" href="#extension" title="Link to this heading">¶</a></h2>
+<span id="id31"></span><h2>Extension<a class="headerlink" href="#extension" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -3328,13 +3538,13 @@ spectrogram to yield this coarser resolution (s)</p>
 <td colspan="2"><p><em>null</em></p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="4"><p>False</p></td>
+<td colspan="4"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="sink">
-<span id="sink"></span><h2>Sink<a class="headerlink" href="#sink" title="Link to this heading">¶</a></h2>
+<span id="id32"></span><h2>Sink<a class="headerlink" href="#sink" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -3423,13 +3633,13 @@ spectrogram to yield this coarser resolution (s)</p>
 <td colspan="2"><p>50000000</p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="3"><p>False</p></td>
+<td colspan="3"><p>false</p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="sweepoptions">
-<span id="sweepoptions"></span><h2>SweepOptions<a class="headerlink" href="#sweepoptions" title="Link to this heading">¶</a></h2>
+<span id="id33"></span><h2>SweepOptions<a class="headerlink" href="#sweepoptions" title="Link to this heading">¶</a></h2>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p>type</p></td>
@@ -3445,7 +3655,7 @@ spectrogram to yield this coarser resolution (s)</p>
 <td><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td><p>False</p></td>
+<td><p>false</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="2"><ul class="simple">
 <li><p>loop_only_nyquist</p></li>
@@ -3455,7 +3665,7 @@ spectrogram to yield this coarser resolution (s)</p>
 <td><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-even"><td><p>default</p></td>
-<td><p>False</p></td>
+<td><p>false</p></td>
 </tr>
 <tr class="row-odd"><td rowspan="3"><ul class="simple">
 <li><p>skip_warmup</p></li>
@@ -3467,10 +3677,10 @@ spectrogram to yield this coarser resolution (s)</p>
 <td><p><em>boolean</em></p></td>
 </tr>
 <tr class="row-odd"><td><p>default</p></td>
-<td><p>True</p></td>
+<td><p>true</p></td>
 </tr>
 <tr class="row-even"><td><p>additionalProperties</p></td>
-<td colspan="2"><p>False</p></td>
+<td colspan="2"><p>false</p></td>
 </tr>
 </tbody>
 </table>

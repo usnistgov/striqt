@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Waveform numerics &#8212; striqt</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pyramid.css?v=63f5dc7c" />
+    <link rel="stylesheet" type="text/css" href="../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css?v=8cd3d715" />
+    <script src="../_static/documentation_options.js?v=82662543"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Sensor architecture" href="sensor.html" />
+    <link rel="prev" title="Architecture" href="architecture.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+<header class="nist-header">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>NIST Pages Template</title>
+  <meta name="viewport" content="width=device-width">
+  <meta name="description" content="striqt">
+  <link rel="canonical" href="../">
+  <link rel="shortcut icon" href="/favicon.ico">
+
+  <!-- Google Analytics -->
+  <!--<script type="text/javascript" id="_fed_an_js_tag" src="http://www.nist.gov/js/federated-analytics.all.min.js?agency=NIST&subagency=mml&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script> -->
+  <!-- DAP Analytics -->
+  <script type="text/javascript" id="_fed_an_ua_tag" src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=DOC&subagefncy=NIST&pua=UA-66610693-1&yt=true&exts=ppsx,pps,f90,sch,rtf,wrl,txz,m1v,xlsm,msi,xsd,f,tif,eps,mpg,xml,pl,xlt,c"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="..//_static/NISTStyle.css">
+  <link rel="stylesheet" href="..//_static/NISTPages.css">
+
+  <h1>
+    <a class="nist-logo" target="_blank" href="http://www.nist.gov/" title="Go to nist.gov">National Institute of Standards and Technology</a>
+  </h1>
+  <div class="nist-links">
+    <a class="nist-links-button" target="_blank" href="http://www.nist.gov">NIST Website</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="http://www.nist.gov/public_affairs/nandyou.cfm">About NIST</a>
+    <a class="nist-links-button mobile-hide" target="_blank" href="https://github.com/usnistgov">usnistgov on GitHub</a>
+  </div>
+  
+  <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!--[if lt IE 9]>
+  <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+  <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+  <![endif]-->
+</header>
+
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="sensor.html" title="Sensor architecture"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="architecture.html" title="Architecture"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Waveform numerics</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="waveform-numerics">
+<h1>Waveform numerics<a class="headerlink" href="#waveform-numerics" title="Link to this heading">¶</a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">striqt.waveform</span></code> is the numerical layer under the measurement packages. Every
+function in the package accepts numpy and cupy arrays and computes in 32-bit
+float. Paths below are relative to <code class="docutils literal notranslate"><span class="pre">src/striqt/waveform/</span></code> unless qualified.</p>
+<section id="backend-dispatch">
+<h2>Backend dispatch<a class="headerlink" href="#backend-dispatch" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">sw.array_namespace(x)</span></code> returns the array module of <code class="docutils literal notranslate"><span class="pre">x</span></code>. A function that must
+branch on backend uses that module rather than a hard-coded <code class="docutils literal notranslate"><span class="pre">numpy</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sw.is_cupy_array(x)</span></code> takes an array, not a namespace. <code class="docutils literal notranslate"><span class="pre">is_cupy_array(xp)</span></code> on a
+module is always False and silently disables the GPU path.</p></li>
+<li><p>The elementwise dB conversions in <code class="docutils literal notranslate"><span class="pre">lib/power/convert.py</span></code> evaluate with numexpr on
+numpy and with the <code class="docutils literal notranslate"><span class="pre">cupy.fuse</span></code> kernels in <code class="docutils literal notranslate"><span class="pre">lib/power/cuda_jit.py</span></code> on cupy. The
+two paths must stay in lockstep, including the <code class="docutils literal notranslate"><span class="pre">out=</span></code> handling through
+<code class="docutils literal notranslate"><span class="pre">_arraylike_with_buffer</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">comms.correlate_cyclic_shift</span></code> dispatches the same way, between
+<code class="docutils literal notranslate"><span class="pre">lib/comms/cp_cpu_jit.py</span></code> (numba <code class="docutils literal notranslate"><span class="pre">njit</span></code>) and <code class="docutils literal notranslate"><span class="pre">lib/comms/cp_cuda_jit.py</span></code>
+(<code class="docutils literal notranslate"><span class="pre">numba.cuda.jit</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lib/jit.py</span></code> sets <code class="docutils literal notranslate"><span class="pre">NUMBA_CACHE_DIR</span></code> to the platformdirs cache directory when the
+variable is unset, and stamps numba caches by content hash so that a reinstall
+does not invalidate the caches. The two kernel modules import <code class="docutils literal notranslate"><span class="pre">lib/jit.py</span></code> before
+numba so that the setting takes effect.</p></li>
+<li><p>coverage.py excludes the jitted and fused bodies through <code class="docutils literal notranslate"><span class="pre">exclude_also</span></code> in the
+<code class="docutils literal notranslate"><span class="pre">[tool.coverage.report]</span></code> table of <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>.</p></li>
+</ul>
+</section>
+<section id="fourier-package">
+<h2>Fourier package<a class="headerlink" href="#fourier-package" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">lib/fourier/</span></code> is split by concern. The modules below are listed in dependency order.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">windows.py</span></code>: <code class="docutils literal notranslate"><span class="pre">get_window</span></code> and the disk cache of window designs, the ENBW search
+(<code class="docutils literal notranslate"><span class="pre">find_window_param_from_enbw</span></code>), and the extra scipy-style windows.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fft.py</span></code>: <code class="docutils literal notranslate"><span class="pre">fft</span></code> and <code class="docutils literal notranslate"><span class="pre">ifft</span></code> with the cupy <code class="docutils literal notranslate"><span class="pre">out=</span></code> path, the exact <code class="docutils literal notranslate"><span class="pre">fftfreq</span></code> grid,
+<code class="docutils literal notranslate"><span class="pre">slice_freqs</span></code>, <code class="docutils literal notranslate"><span class="pre">truncate_freqs</span></code>, <code class="docutils literal notranslate"><span class="pre">null_lo</span></code>, <code class="docutils literal notranslate"><span class="pre">time_fftshift</span></code>, and the roundoff
+model <code class="docutils literal notranslate"><span class="pre">fft_tolerance_rms</span></code>, <code class="docutils literal notranslate"><span class="pre">on_peak_roundoff</span></code>, and <code class="docutils literal notranslate"><span class="pre">off_peak_floor_dBc</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">stft.py</span></code>: <code class="docutils literal notranslate"><span class="pre">stft</span></code> and <code class="docutils literal notranslate"><span class="pre">istft</span></code>, the stacking helpers, <code class="docutils literal notranslate"><span class="pre">zero_stft_by_freq</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">downsample_stft</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spectrum.py</span></code>: <code class="docutils literal notranslate"><span class="pre">spectrogram</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">filters.py</span></code>: <code class="docutils literal notranslate"><span class="pre">design_oafilter</span></code> and the COLA divisor table, <code class="docutils literal notranslate"><span class="pre">design_fir_lpf</span></code>,
+<code class="docutils literal notranslate"><span class="pre">oafilter</span></code>, and <code class="docutils literal notranslate"><span class="pre">oaconvolve</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">resamplers.py</span></code>: <code class="docutils literal notranslate"><span class="pre">design_cola_resampler</span></code>, <code class="docutils literal notranslate"><span class="pre">resample</span></code>, and <code class="docutils literal notranslate"><span class="pre">oaresample</span></code>.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">lib/fourier/__init__.py</span></code> imports only the submodules, so inside <code class="docutils literal notranslate"><span class="pre">lib</span></code> the names are
+reached as <code class="docutils literal notranslate"><span class="pre">fourier.stft.stft</span></code>, <code class="docutils literal notranslate"><span class="pre">fourier.windows.get_window</span></code>, and so on. The public
+shim is <code class="docutils literal notranslate"><span class="pre">striqt.waveform.fourier</span></code>.</p>
+</section>
+<section id="stft-layout">
+<h2>STFT layout<a class="headerlink" href="#stft-layout" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">stft(x,</span> <span class="pre">axis=a)</span></code> returns windows stacked on axis <code class="docutils literal notranslate"><span class="pre">a</span></code> and frequency bins on axis
+<code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">+</span> <span class="pre">1</span></code>.</p></li>
+<li><p>The bins are in ascending <code class="docutils literal notranslate"><span class="pre">fftfreq</span></code> order on return. The shift is baked into the
+window through <code class="docutils literal notranslate"><span class="pre">get_window(...,</span> <span class="pre">fftshift=True)</span></code>, so no <code class="docutils literal notranslate"><span class="pre">fftshift</span></code> follows the FFT.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">noverlap</span></code> must be 0 or <code class="docutils literal notranslate"><span class="pre">nperseg</span> <span class="pre">//</span> <span class="pre">2</span></code>. Other values raise.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fftfreq</span></code> computes the bin frequencies with <code class="docutils literal notranslate"><span class="pre">decimal</span></code>, so the grid is exact.</p></li>
+<li><p>Band selections through <code class="docutils literal notranslate"><span class="pre">_freq_band_edges</span></code> (<code class="docutils literal notranslate"><span class="pre">zero_stft_by_freq</span></code>,
+<code class="docutils literal notranslate"><span class="pre">downsample_stft</span></code>) are half-open, <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code>, on that grid.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">out=</span></code> arguments of <code class="docutils literal notranslate"><span class="pre">istft</span></code> and <code class="docutils literal notranslate"><span class="pre">downsample_stft</span></code> are honored through
+<code class="docutils literal notranslate"><span class="pre">_truncated_buffer</span></code>. <code class="docutils literal notranslate"><span class="pre">_truncated_buffer</span></code> returns a view of a contiguous buffer and
+copies only a non-contiguous one.</p></li>
+</ul>
+</section>
+<section id="resampling">
+<h2>Resampling<a class="headerlink" href="#resampling" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">design_cola_resampler</span></code> returns a <code class="docutils literal notranslate"><span class="pre">ResamplerDesign</span></code>. The ratio <code class="docutils literal notranslate"><span class="pre">nfft</span> <span class="pre">/</span> <span class="pre">nfft_out</span></code>
+equals <code class="docutils literal notranslate"><span class="pre">fs_sdr</span> <span class="pre">/</span> <span class="pre">fs_target</span></code> exactly, and both sizes are divisible by the COLA
+divisor of the window.</p></li>
+<li><p>The divisor table is <code class="docutils literal notranslate"><span class="pre">_COLA_WINDOW_SIZE_DIVISOR</span></code> in <code class="docutils literal notranslate"><span class="pre">filters.py</span></code>. The sensor
+resamples with the hamming window, <code class="docutils literal notranslate"><span class="pre">RESAMPLE_COLA_WINDOW</span></code> in
+<code class="docutils literal notranslate"><span class="pre">striqt/sensor/lib/compute/corrections.py</span></code>, whose divisor is 2.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">oaresample</span></code> and <code class="docutils literal notranslate"><span class="pre">resample</span></code> implement the design through STFT overlap-add.
+<code class="docutils literal notranslate"><span class="pre">oafilter</span></code> is the same machinery used as a low-pass.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">resample</span></code> fftshifts in the time domain (<code class="docutils literal notranslate"><span class="pre">time_fftshift</span></code>) so that downsampling
+becomes a slice of the frequency axis.</p></li>
+</ul>
+</section>
+<section id="caching">
+<h2>Caching<a class="headerlink" href="#caching" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">lib/util.py</span></code> provides <code class="docutils literal notranslate"><span class="pre">lru_cache</span></code>, a wrapper over <code class="docutils literal notranslate"><span class="pre">functools.lru_cache</span></code> that
+records each wrapped function in <code class="docutils literal notranslate"><span class="pre">_caches</span></code>. <code class="docutils literal notranslate"><span class="pre">clear_caches()</span></code> clears every
+recorded cache.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lib/util.py</span></code> also provides <code class="docutils literal notranslate"><span class="pre">persistent_cache</span></code>, a <code class="docutils literal notranslate"><span class="pre">shelve</span></code> file under the
+platformdirs cache directory. The window design searches (<code class="docutils literal notranslate"><span class="pre">get_window</span></code>,
+<code class="docutils literal notranslate"><span class="pre">find_window_param_from_enbw</span></code>) use the shelf so that a design survives across
+processes.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">persistent_cache</span></code> sits under <code class="docutils literal notranslate"><span class="pre">lru_cache</span></code> in <code class="docutils literal notranslate"><span class="pre">windows.py</span></code> but is not itself LRU.
+The access order is rebuilt from the shelf keys on every call, so the entry
+evicted past <code class="docutils literal notranslate"><span class="pre">maxsize</span></code> is whichever key the dbm backend iterates first.</p></li>
+<li><p>The test suite replaces the shelf with an in-memory dict through the
+session-scoped <code class="docutils literal notranslate"><span class="pre">isolated_persistent_cache</span></code> fixture in <code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code>. The
+macOS dbm backend corrupts under eviction and under concurrent writes from 2
+processes, and a corrupted shelf fails every later <code class="docutils literal notranslate"><span class="pre">get_window</span></code> call on the
+machine.</p></li>
+</ul>
+</section>
+<section id="ofdm-and-cellular">
+<h2>OFDM and cellular<a class="headerlink" href="#ofdm-and-cellular" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">lib/comms/</span></code> holds the OFDM frame models and the 5G NR synchronization.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">core.py</span></code>: <code class="docutils literal notranslate"><span class="pre">PhyOFDM</span></code>, the frame model shared by the standards below.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phy_3gpp.py</span></code>: <code class="docutils literal notranslate"><span class="pre">Phy3GPP</span></code>, for LTE and 5G NR. The cyclic prefix sizes and start
+indices follow 3GPP TS 38.211 §5.3.1.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">phy_802_16.py</span></code>: <code class="docutils literal notranslate"><span class="pre">Phy802_16</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cp.py</span></code>: <code class="docutils literal notranslate"><span class="pre">correlate_cyclic_shift</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sequences.py</span></code>: <code class="docutils literal notranslate"><span class="pre">m_sequence</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sync_5gnr.py</span></code>: <code class="docutils literal notranslate"><span class="pre">index_pss_symbols</span></code> encodes the SSB cases of 3GPP TS 38.213
+§4.1. <code class="docutils literal notranslate"><span class="pre">correlate_sync_sequence</span></code> returns a grid over (coarse lag, fine lag), with
+the axes named by <code class="docutils literal notranslate"><span class="pre">COARSE_LAG_DIM</span></code> and <code class="docutils literal notranslate"><span class="pre">FINE_LAG_DIM</span></code>.</p></li>
+</ul>
+<p>The tests validate the synchronization path at 30 kHz subcarrier spacing only. The
+cyclic prefix model at 15 kHz and 60 kHz is known wrong. The defect is recorded as
+strict xfails in <code class="docutils literal notranslate"><span class="pre">tests/waveform/test_waveform_comms_phy_3gpp.py</span></code>, and a fix changes
+the shape of <code class="docutils literal notranslate"><span class="pre">Phy3GPP.cp_sizes</span></code>.</p>
+</section>
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="../index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">Waveform numerics</a><ul>
+<li><a class="reference internal" href="#backend-dispatch">Backend dispatch</a></li>
+<li><a class="reference internal" href="#fourier-package">Fourier package</a></li>
+<li><a class="reference internal" href="#stft-layout">STFT layout</a></li>
+<li><a class="reference internal" href="#resampling">Resampling</a></li>
+<li><a class="reference internal" href="#caching">Caching</a></li>
+<li><a class="reference internal" href="#ofdm-and-cellular">OFDM and cellular</a></li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="architecture.html"
+                          title="previous chapter">Architecture</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="sensor.html"
+                          title="next chapter">Sensor architecture</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/agents/waveform_numerics.md.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a></li>
+        <li class="right" >
+          <a href="sensor.html" title="Sensor architecture"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="architecture.html" title="Architecture"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">striqt</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">Waveform numerics</a></li> 
+      </ul>
+    </div>
+<hr \>
+<section class="footer">
+<br><a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#privpolicy">Privacy Policy</a> | <a target="_blank" href="http://www.nist.gov/public_affairs/privacy.cfm#secnot">Security Notice</a> | <a href="http://www.nist.gov/public_affairs/privacy.cfm#accesstate">Accessibility Statement</a>
+<br><em>United States government work, not subject to copyright in the United States</em>
+</section>
+
+  </body>
+</html>
