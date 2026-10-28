@@ -10,8 +10,8 @@ def m_sequence(
 ) -> list[int]:
     """return a binary LFSR sequence of `length` bits from `initial` and feedback `taps`.
 
-    Bit ``i`` is the modulo-2 sum of bits ``i - t`` over `taps`; the first
-    ``len(initial)`` bits are `initial`. Values are 0 or 1.
+    The first ``len(initial)`` bits are `initial`. Each later bit ``i`` is the
+    modulo-2 sum of the bits ``i - t`` over ``t`` in `taps`. Values are 0 or 1.
     """
     x = list(initial)
     for i in range(len(initial), length):

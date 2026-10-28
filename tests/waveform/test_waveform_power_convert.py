@@ -1,4 +1,4 @@
-"""striqt.waveform.lib.power.convert: property tests of the dB conversions and their
+"""striqt.waveform.lib.power.convert: property tests of the dB conversions and the
 roundoff models, including numpy-vs-cupy agreement within ulp budgets.
 """
 
@@ -147,8 +147,8 @@ class TestConversionIdentities:
     @for_each_float_dtype
     @given(x=positive_power_arrays(dtype=np.float64))
     def test_log_conversion_is_scaled_log10(self, func, scale, dtype, x):
-        """Property: func(x) = scale*log10(x) within the exact-math budget of `dtype`,
-        with the oracle evaluated in float64 from the `dtype`-quantized input."""
+        """``func(x) == scale*log10(x)`` within the exact-math budget of `dtype`, with
+        the oracle evaluated in float64 from the `dtype`-quantized input"""
         x = x.astype(dtype)
         expected = scale * np.log10(x.astype(np.float64))
         tol = log_conversion_tol(dtype, scale, n_impl=1)
@@ -165,7 +165,8 @@ class TestAlgebraicProperties:
         n=st.integers(min_value=1, max_value=20),
     )
     def test_equal_values(self, dB, n):
-        """Property: dBlinmean([x, ..., x]) = x and dBlinsum([x, ..., x]) = x + 10*log10(n)."""
+        """``dBlinmean([x, ..., x]) == x`` and
+        ``dBlinsum([x, ..., x]) == x + 10*log10(n)``"""
         arr = np.array([dB] * n, dtype=np.float64)
         tol = linear_stat_tol(np.float64, abs(dB), n)
         assert_close(dBlinmean(arr), dB, **tol)
@@ -185,7 +186,8 @@ class TestAlgebraicProperties:
         )
     )
     def test_axis_reduces_dimension_and_relates_mean_to_sum(self, xp, axis, dB):
-        """Property: dBlinmean = dBlinsum - 10*log10(N) over the reduced axis."""
+        """``dBlinmean == dBlinsum - 10*log10(N)`` over the reduced axis, and the axis
+        is removed"""
         if axis is None:
             expected_shape, N = (), dB.size
         else:
@@ -212,15 +214,15 @@ class TestInputPreservation:
 
 
 class TestInPlaceComplexInput:
-    """Properties: a complex input overwritten in place comes back real-valued."""
+    """a complex input overwritten in place comes back real-valued"""
 
     @by_log_conversion
     @pytest.mark.parametrize('dtype', [np.complex64, np.complex128], ids=dtype_id)
     def test_overwrite_x_writes_magnitude_dB_into_real_part(
         self, xp, func, scale, dtype
     ):
-        """the result is scale*log10(|z|) in the real dtype of z, written into z's real
-        part"""
+        """the result is ``scale*log10(|z|)`` in the real dtype of `z`, written into
+        the real part of `z`"""
         magnitude = np.array([1e-3, 0.5, 1.0, 2.0, 1e3], dtype=np.float64)
         phase = np.linspace(0, np.pi, magnitude.size)
         z = as_xp(xp, (magnitude * np.exp(1j * phase)).astype(dtype))
@@ -234,7 +236,7 @@ class TestInPlaceComplexInput:
 
 
 class TestEdgeCases:
-    """Properties: zero inputs, the bounded zero floor, and empty arrays."""
+    """zero inputs, the bounded zero floor, and empty arrays"""
 
     @by_log_conversion
     def test_zero_produces_neg_inf(self, func, scale):
@@ -254,7 +256,7 @@ class TestEdgeCases:
 
 @pytest.mark.namespaces('numpy', 'cupy', 'dask')
 class TestMultiBackend:
-    """Properties that must hold on every available array namespace."""
+    """the properties that hold on every available array namespace"""
 
     @pytest.mark.parametrize('func', [powtodB, dBtopow, envtodB, envtopow], ids=func_id)
     @for_each_float_dtype
@@ -302,7 +304,8 @@ class TestMultiBackend:
 
     @given(env=envelope_arrays(dtype=np.float64))
     def test_complex_envelopes(self, xp, env):
-        """Property: envtopow(z) = |z|² and envtodB(z) = 20*log10(|z|) for complex z."""
+        """``envtopow(z) == |z|**2`` and ``envtodB(z) == 20*log10(|z|)`` for complex
+        `z`"""
         x = as_xp(xp, env)
 
         power = to_numpy(envtopow(x))
@@ -317,7 +320,7 @@ class TestMultiBackend:
 
 
 class TestAbsAndBoundedBranches:
-    """Properties: the `abs` and `bounded` arguments of powtodB and envtodB."""
+    """the `abs` and `bounded` arguments of `powtodB` and `envtodB`"""
 
     @by_log_conversion
     @given(x=positive_power_arrays(min_value=1e-6, max_value=1e6, dtype=np.float64))
@@ -326,7 +329,8 @@ class TestAbsAndBoundedBranches:
 
     @given(power=positive_power_arrays(min_value=1e-6, max_value=1e6, dtype=np.float64))
     def test_noabs_negative_input_is_nan(self, power):
-        """Property: without abs, log10 of a negative value is nan, not folded."""
+        """without `abs`, log10 of a negative value is nan rather than the value at
+        the magnitude"""
         assert np.all(np.isnan(powtodB(-power, abs=False)))
         assert np.all(np.isnan(envtodB(-power, abs=False)))
         assert np.all(np.isfinite(powtodB(-power, abs=True)))
@@ -340,7 +344,7 @@ class TestAbsAndBoundedBranches:
         data=st.data(),
     )
     def test_bound_is_applied_on_every_backend(self, xp, func, scale, power, abs, data):
-        """Property: the floor is applied by every backend's code path."""
+        """the floor is applied on the code path of every backend"""
         zero = data.draw(arrays(np.bool_, power.shape))
         # force one zero rather than assume(zero.any()), which would reject about
         # half of the draws for 1-element arrays
@@ -356,7 +360,7 @@ class TestAbsAndBoundedBranches:
 
 
 class TestArrayLikeHandling:
-    """The array-like unpacking and repackaging behind every conversion."""
+    """the array-like unpacking and repackaging behind every conversion"""
 
     @pytest.mark.parametrize(
         'min_dtype, match',
@@ -495,10 +499,10 @@ class TestArrayLikeHandling:
 
 
 class TestNumpyCupyCrossComparison:
-    """Cross-comparison of the numpy and cupy results of each conversion.
+    """the numpy and cupy results of each conversion compared against each other.
 
-    Tolerances come from the ulp budgets in striqt.waveform.lib.power, so a
-    difference larger than the 2 libraries' rounding bounds fails the test.
+    Tolerances come from the ulp budgets in `striqt.waveform.lib.power`, so a
+    difference larger than the rounding bounds of the 2 libraries fails the test.
     """
 
     @pytest.mark.parametrize(
@@ -516,7 +520,7 @@ class TestNumpyCupyCrossComparison:
     def test_log_conversions(
         self, cupy_available, func, scale, limits, abs, bounded, dtype, data
     ):
-        """Cross-comparison on each fused kernel variant."""
+        """each fused kernel variant agrees between the backends"""
         lim = limits[dtype]
         x = data.draw(one_d_powers(min_value=1 / lim, max_value=lim, dtype=dtype))
         result_np, result_cp = numpy_and_cupy(
@@ -542,7 +546,7 @@ class TestNumpyCupyCrossComparison:
 
     @given(env=ONE_D_ENVELOPES)
     def test_envtopow(self, cupy_available, env):
-        """Cross-comparison: real and complex input both give a real result."""
+        """real and complex input both give a real result"""
         result_np, result_cp = numpy_and_cupy(cupy_available, envtopow, env)
 
         assert np.isrealobj(result_np)
@@ -563,7 +567,7 @@ class TestNumpyCupyCrossComparison:
 
     @given(power=FLOAT32_POWERS)
     def test_overwrite_x(self, cupy_available, power):
-        """Cross-comparison: in-place evaluation writes the result into the input."""
+        """in-place evaluation writes the result into the input"""
         power_cp = cupy_available.asarray(power)
         result_cp = powtodB(power_cp, overwrite_x=True)
 
@@ -572,7 +576,7 @@ class TestNumpyCupyCrossComparison:
         assert_close(result_cp, powtodB(power), **tol)
 
     def test_xarray_cupy_data(self, cupy_available):
-        """Cross-comparison: a DataArray wrapping cupy data keeps cupy data."""
+        """a DataArray wrapping cupy data keeps cupy data"""
         xr = pytest.importorskip('xarray')
 
         data = np.linspace(0.5, 2.0, 8, dtype=np.float32)

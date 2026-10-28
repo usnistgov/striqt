@@ -106,7 +106,8 @@ class TestStopwatch:
     @pytest.fixture
     def records(self, caplog):
         caplog.set_level(util.PERFORMANCE_DETAIL, logger='striqt.analysis')
-        # caplog.records is re-created for the call phase, so resolve it lazily
+        # caplog.records is re-created for the call phase, so the list is read at
+        # call time
         return lambda: caplog.records
 
     def test_logs_elapsed_time(self, records):
@@ -146,7 +147,7 @@ class TestStopwatch:
 
 # %% compute_lock
 def lock_is_free(lock):
-    """whether another thread could take `lock` right now"""
+    """return True if another thread can acquire `lock` without blocking."""
     result = []
 
     def probe():
@@ -250,8 +251,8 @@ def test_elementwise_atol_without_an_off_peak_depth_is_flat():
 
 
 def test_elementwise_atol_grows_with_depth_and_diverges_at_off_peak_dBc():
-    """the bound equals `peak` at the peak element, widens below it, and is infinite
-    from `off_peak_dBc.peak` down"""
+    """the bound equals `peak` at the peak element, widens below the peak, and is
+    infinite from `off_peak_dBc.peak` down"""
     err = 1e-4
     additive = 5e-4
     tol = sa.specs.Tolerance(

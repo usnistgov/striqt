@@ -18,7 +18,7 @@ def sweep_touches_gpu(sweep: specs.Sweep) -> bool:
 
     analysis_dict = sweep.analysis.to_dict()
     if tuple(analysis_dict.keys()) != (sa.measurements.iq_waveform.__name__,):
-        # everything except iq_waveform requires a warmup
+        # iq_waveform is the one measurement that runs no GPU kernel
         return True
 
     # check the inner loop (explicit) values

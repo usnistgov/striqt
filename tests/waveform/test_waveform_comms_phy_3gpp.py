@@ -22,8 +22,8 @@ SLOT_PERIODS = {15e3: 1e-3, 30e3: 0.5e-3, 60e3: 0.25e-3, 120e3: 125e-6, 240e3: 6
 
 
 def scs_cp_layout(reason_15khz, reason_60khz):
-    """SCS_5G as parametrize values, with the 15 and 60 kHz cyclic prefix layout
-    defects marked as strict xfails under the given reasons"""
+    """return `SCS_5G` as parametrize values, with the 15 and 60 kHz cyclic prefix
+    layout defects marked as strict xfails under `reason_15khz` and `reason_60khz`."""
     xfail = functools.partial(pytest.mark.xfail, strict=True)
     return [
         pytest.param(15e3, marks=xfail(reason=reason_15khz)),
@@ -33,10 +33,10 @@ def scs_cp_layout(reason_15khz, reason_60khz):
 
 
 def cp_index_reference(phy, frames, symbols, slots):
-    """straightforward loop construction of the cyclic prefix index tensor.
+    """build the cyclic prefix index tensor by loops.
 
-    Axis order (symbol, slot, frame, cp sample), with singleton axes removed as the
-    library does.
+    The axis order is (symbol, slot, frame, cp sample), with singleton axes removed as
+    the library does.
     """
     slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[phy.subcarrier_spacing]
     symbols = range(phy.FFT_PER_SLOT) if symbols == 'all' else symbols
@@ -75,8 +75,8 @@ class TestPhy3GPP:
         """3GPP TS 38.211 5.3.1: normal CP is 144*kappa*2**-mu samples, with an
         extra 16*kappa in the first symbol of a subframe.
 
-        Symbol 7 is left to `test_subframe_cp_layout`. At 15 kHz it carries the
-        subframe's second extra CP, which Phy3GPP omits.
+        Symbol 7 is left to `test_subframe_cp_layout`. At 15 kHz that symbol has the
+        second extra CP of the subframe. `Phy3GPP` omits that CP.
         """
         nfft = round(sample_rate / scs)
         mu = round(np.log2(scs / 15e3))
@@ -100,7 +100,8 @@ class TestPhy3GPP:
         assert phy.cp_sizes[0] == normal_cp + 16 * nfft * 2**mu // 2048
         assert phy.cp_sizes[0] - phy.cp_sizes[1] == round(sample_rate / 1.92e6)
 
-        # the contiguous block is one slot of symbols; the index attributes tile it
+        # the contiguous block is one slot of symbols, and the index attributes tile
+        # the block
         assert phy.contiguous_size == int(phy.cp_sizes.sum() + 14 * nfft)
         assert phy.cp_start_idx[0] == 0
         assert_array_equal(np.diff(phy.cp_start_idx), phy.cp_sizes[:-1] + nfft)
@@ -181,7 +182,7 @@ class TestPhy3GPP:
 
 
 def all_or_some(max_index):
-    """'all' or a tuple of up to 4 distinct indexes in [0, max_index]"""
+    """draw ``'all'`` or a tuple of up to 4 distinct indexes in [0, `max_index`]."""
     indexes = st.integers(0, max_index)
     some = st.lists(indexes, min_size=1, max_size=4, unique=True).map(tuple)
     return st.one_of(st.just('all'), some)
@@ -247,7 +248,7 @@ class TestSlotPeriod:
 
 
 class TestCupy:
-    """the phy and its index tensor on cupy against the numpy result"""
+    """the phy and the index tensor on cupy against the numpy result"""
 
     def test_phy_and_index(self, cupy_available):
         ref = phy_5g(30e3)

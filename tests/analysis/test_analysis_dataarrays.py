@@ -4,7 +4,7 @@ selects when an analysis group is evaluated on a waveform.
 The measurements are chosen for cost: a 1000-sample tone through the IQ passthrough
 and the channel power detectors, which run without a window design or a resampler.
 `Preprocessor` is checked on the base class, which returns `x` for every preference,
-and through a recording subclass that proves the registry selected the input.
+and through a recording subclass that records the preferences the registry passes.
 """
 
 from __future__ import annotations
@@ -38,8 +38,8 @@ def iq() -> np.ndarray:
 
 
 def raw_measurement(iq: np.ndarray, name: str) -> np.ndarray:
-    """the array that the registered measurement `name` returns on `iq` when called
-    with ``as_xarray=False``"""
+    """return the array that the measurement registered as `name` returns for `iq`
+    with ``as_xarray=False``."""
     spec = getattr(GROUP, name)
     data, _ = sa.registry[type(spec)].func(
         iq, CAPTURE, as_xarray=False, **spec.to_dict()
@@ -126,8 +126,8 @@ def test_as_xarray_delayed_returns_delayed_arrays(
 
 
 def test_evaluate_by_spec_hands_the_acquisition_to_the_measurement() -> None:
-    """a measurement given an AcquiredIQ measures the array that its `preprocess`
-    returns for the registered preferences of the measurement"""
+    """a measurement given an `AcquiredIQ` receives the array that the `preprocess` of
+    the acquisition returns for the preferences registered with the measurement"""
     capture = sa.specs.Capture(duration=16e-6, sample_rate=1e6)
     x = np.arange(32, dtype='complex64').reshape(2, 16)
     iq = RecordingIQ(x=x, capture=capture)

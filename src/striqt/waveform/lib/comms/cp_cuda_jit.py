@@ -11,7 +11,7 @@ import numba as nb
 
 @numba.cuda.jit(cache=True)
 def _corr_at_indices(inds, x, nfft: int, ncp: int, norm: bool, out):
-    # iterate in parallel across the points in the output correlation
+    # j: autocorrelation sequence (output) index
     j = numba.cuda.grid(1)
 
     if j < nfft + ncp:

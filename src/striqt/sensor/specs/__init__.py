@@ -1,8 +1,9 @@
 """schema for the specification of calibration and sweeps"""
 
-# the structs' __module__ is rewritten to this package below, and msgspec resolves
-# their string annotations in this namespace, so the modules those annotations name
-# must stay bound here. 'pd' also stands in for python 3.15 lazy imports
+# the __module__ of each struct is rewritten to this package below, and msgspec
+# resolves the string annotations of the structs in this namespace, so the modules
+# that the annotations name must stay bound here. 'pd' also stands in for python
+# 3.15 lazy imports
 
 from __future__ import annotations as __
 

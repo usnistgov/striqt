@@ -22,7 +22,8 @@ from .shared import registry
 from .. import specs
 from ..lib import register
 
-# every measurement and trigger registered above must have its field on the bundles
+# every registered measurement and trigger must have a field on BuiltinAnalyses or
+# BuiltinTriggers
 register.check_group_fields(
     specs.BuiltinAnalyses,
     {info.name: spec_type for spec_type, info in registry.items()},

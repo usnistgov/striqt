@@ -36,9 +36,7 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
 
 
 def log_overloads(dd: 'ss.lib.compute.DelayedDataset') -> None:
-    """warn on the ``analysis`` logger when a port of the capture overloaded.
-
-    A WARNING is logged when `overloads` finds an overloaded port.
+    """log a WARNING on the ``analysis`` logger when a port of `dd.capture` overloaded.
 
     Args:
         dd: the analyzed capture
@@ -60,8 +58,8 @@ def log_spectrogram_snr(
 ) -> None:
     """log the peak SNR of each port at INFO on the ``analysis`` logger.
 
-    One line per port is logged when `cache` is the spectrogram cache and the sweep
-    has a calibration.
+    One line per port is logged when `cache` is a spectrogram cache and
+    `sweep.source.calibration` is set.
 
     Args:
         resources: the open resources of the run

@@ -37,15 +37,14 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
     def _generator_kws(
         self, count: int, start_index: int, xp: ModuleType
     ) -> dict[str, Any]:
-        """build the `striqt.analysis.testing` keywords shared by every source here.
+        """return the `striqt.analysis.testing` generator keywords for one read.
 
-        The sample rate is the source's rather than the capture's, because host
-        resampling happens after acquisition. `duration` is None because `count`
-        pins the sample window.
+        ``sample_rate`` is the source rate from the resampler design of the armed
+        capture, and ``duration`` is None.
 
         Returns:
             a dict with keys ``duration``, ``sample_rate`` (in S/s), ``start_index``,
-            ``count``, ``xp`` and ``dtype`` (the source's `transport_dtype`)
+            ``count``, ``xp``, and ``dtype`` (the `transport_dtype` of the source)
         """
         return dict(
             duration=None,
@@ -57,11 +56,11 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
         )
 
     def _port_position(self, port: int) -> tuple[int, int]:
-        """return the row index of `port` in the capture and the capture's port count.
+        """return the row index of `port` in the armed capture and the port count.
 
-        The generators return rows in capture order. A source called one port at a
-        time needs the position of that port rather than the port number, which can
-        differ (``port: [1, 0]``). A scalar `port` field is the only row.
+        Rows follow the order of the `port` field of the capture. The row index
+        differs from the port number when the field is not sorted (``port: [1, 0]``).
+        A scalar `port` field is row 0 of 1.
         """
         ports = self._capture.port
 

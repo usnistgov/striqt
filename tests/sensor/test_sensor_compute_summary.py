@@ -69,9 +69,9 @@ def test_adc_overload_is_headroom_at_or_below_zero(headroom, adc):
 
 def test_im3_victims_follow_the_im3_rule():
     """third-order products of a channel visited at higher gain grow 2 dB per dB of
-    gain difference relative to the signal, so 10 dB of IF headroom at 0 dB gain is
-    overrun by the 30 dB gain capture at 2 GHz on port 0 (10 + 2/3 * (0 - 30) < 0)
-    but not by the 1 GHz capture at equal gain, nor on port 1"""
+    gain difference relative to the signal. 10 dB of IF headroom at 0 dB gain is
+    overrun by the 30 dB gain capture at 2 GHz on port 0 (10 + 2/3 * (0 - 30) < 0),
+    but not by the 1 GHz capture at equal gain, nor on port 1."""
     ports = summary.overloads(delayed({'if_headroom': (10.0, 10.0)}))
     assert [p.im3_victims for p in ports] == [(2e9,), ()]
     assert [p.adc for p in ports] == [False, False]
@@ -125,16 +125,17 @@ def air_sweep(capture, calibration=None):
 
 
 def spectrogram_result(peak_dBm, shape=(1, 4, 8)):
-    """a linear-power spectrogram whose only feature is one bin at `peak_dBm`"""
+    """return a linear-power spectrogram with one bin at `peak_dBm` above a 1e-30
+    floor"""
     spg = np.full(shape, 1e-30, dtype='float32')
     spg[0, shape[1] // 2, shape[2] // 2] = 10 ** (peak_dBm / 10)
     return spg, {'noise_bandwidth': NOISE_BANDWIDTH}
 
 
 def test_spectrogram_snr_is_the_peak_above_the_calibrated_noise(calibration_nc):
-    """the SNR is the spectrogram peak above the calibrated system noise k*T*B raised
-    by the noise figure the calibration file records for the capture's port and
-    center frequency (5 dB at port 0, 1 GHz)"""
+    """the SNR is the spectrogram peak above the calibrated system noise kTB plus the
+    noise figure recorded in the calibration file for the port and center frequency
+    of the capture (5 dB at port 0, 1 GHz)"""
     capture = soapy_capture()
     noise_dBm = 5.0 + 10 * math.log10(BOLTZMANN_MW * T_REF * NOISE_BANDWIDTH)
 

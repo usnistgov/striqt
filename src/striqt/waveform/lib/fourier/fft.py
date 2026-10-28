@@ -1,5 +1,5 @@
-"""FFT evaluation on numpy and cupy, the exact `fftfreq` grid and band selectors on
-that grid, and the roundoff model that budgets FFT error.
+"""FFT evaluation on numpy and cupy, the `fftfreq` grid with band selectors on that
+grid, and the FFT roundoff model.
 
 On cupy, `fft` and `ifft` honor the `out=` buffer and run in chunks of
 `MAX_CUPY_FFT_SAMPLES` samples when that is set.
@@ -41,10 +41,9 @@ MAX_CUPY_FFT_SAMPLES = None
 
 # %% roundoff model
 #
-# The FFT roundoff models below are rms models with fitted constants (see the functions
-# for their provenance). FFT_ROUNDOFF_SAFETY is the margin applied to the tolerances
-# built on them. The errors of independent backends add in quadrature (measured
-# 0.83-1.0).
+# The FFT roundoff models are rms models with fitted constants; FFT_ROUNDOFF_SAFETY is
+# the margin applied to the tolerances built on the models. The errors of independent
+# backends add in quadrature (measured 0.83-1.0).
 FFT_ROUNDOFF_SAFETY = 3
 
 
@@ -89,10 +88,10 @@ def fft_tolerance_rms(
     *,
     array_backend: ArrayBackend = 'numpy',
 ) -> float:
-    """return the rms tolerance on one backend's error against an exact reference.
+    """return the rms tolerance on the error of one backend against an exact reference.
 
-    The tolerance is relative to the output rms and exceeds `fft_roundoff_rms` by
-    the module's safety margin. `fft_roundoff_rms` documents the arguments.
+    The tolerance is relative to the output rms and is `fft_roundoff_rms` of the same
+    arguments times `FFT_ROUNDOFF_SAFETY`.
     """
     return FFT_ROUNDOFF_SAFETY * fft_roundoff_rms(
         dtype, nffts, n_elementwise, array_backend=array_backend
@@ -122,8 +121,8 @@ def on_peak_roundoff(dtype: DTypeLike) -> float:
 def rms_tolerance_dBc(sigma: float) -> float:
     """convert a relative rms amplitude tolerance `sigma` to error power in dBc.
 
-    `sigma` is relative to the output rms, so the result is the error power relative
-    to the signal: negative for `sigma` below 1, and unbounded below as `sigma`
+    `sigma` is relative to the output rms. The result is the error power relative to
+    the signal, negative for `sigma` below 1 and unbounded below as `sigma`
     approaches 0.
     """
     return float(20 * np.log10(sigma))
@@ -132,13 +131,19 @@ def rms_tolerance_dBc(sigma: float) -> float:
 def off_peak_floor_dBc(
     sigma: float, nfft: int, size: int | None = None, dtype: DTypeLike = 'complex64'
 ) -> float:
-    """express the roundoff floor in off-peak bins of a matched-filter output, in dBc.
+    """return the roundoff floor (in dBc) in the off-peak bins of a matched-filter output.
 
     The matched input (a bin-centered tone) occupies one bin while roundoff of
-    relative rms `sigma` spreads evenly over all `nfft` bins, so the floor below the
-    peak deepens with `nfft`. With `size`, the result is the peak tolerance over that
-    many off-peak bins, which is the larger of the white-noise tail and the
-    structured `on_peak_roundoff` of `dtype`.
+    relative rms `sigma` spreads evenly over all `nfft` bins. The floor below the
+    peak therefore deepens with `nfft`.
+
+    Args:
+        sigma: the rms roundoff relative to the output rms
+        nfft: the number of bins the roundoff spreads over
+        size: the number of off-peak bins checked; the result is then the larger of
+            the white-noise tail over `size` bins and `on_peak_roundoff`, and None
+            selects the rms floor
+        dtype: the working dtype of `on_peak_roundoff`
     """
     if size is None:
         return rms_tolerance_dBc(sigma / np.sqrt(nfft))
@@ -259,14 +264,21 @@ def fftfreq(
     as_index: bool = True,
     xp: ModuleType = np,
 ) -> Array:
-    """compute fftfreq for a specified sample rate.
+    """return the ascending `fftfreq` grid (in Hz) of `nfft` bins at sample rate `fs`.
 
-    `as_index` selects the accuracy:
-    - with as_index=True, the result is accurate to full supported
-      floating point precision using fixed-point evaluation
-    - with as_index=False, the result is at least as accurate as
-      `scipy.fft.fftfreq`, which includes rounding error relative
-      to floating point precision
+    The result is cached and must not be modified in place.
+
+    Args:
+        nfft: the number of bins
+        fs: the sample rate (in S/s)
+        dtype: the floating-point dtype of the result
+        as_index: True evaluates each bin in decimal arithmetic, exact to the
+            rounding of `dtype`; False evaluates in floating point, at least as
+            accurately as `scipy.fft.fftfreq`
+        xp: the array namespace of the result
+
+    Returns:
+        a 1-D array of `nfft` bin center frequencies from ``-fs/2`` toward ``fs/2``
     """
 
     if not as_index:

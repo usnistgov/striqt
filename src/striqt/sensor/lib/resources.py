@@ -1,7 +1,7 @@
 """open the hardware and software resources of an action as one context.
 
 The source, peripherals, sink, calibration file, log file, and compute warmup open
-concurrently in `util.threadpool`. A failure in any of them closes the others.
+concurrently in `util.threadpool`. A failure in one closes the others.
 """
 
 from __future__ import annotations as __
@@ -41,20 +41,20 @@ if TYPE_CHECKING:
 class SweepCallbacks:
     """the hooks of one run of an action.
 
-    An exception from any hook ends the run.
+    An exception from any hook ends the run. `on_analyzed` and `on_sink_cached` run
+    in the analysis thread. That thread blocks until the hook returns. The `kwargs`
+    of `on_sink_cached` are the measurement keywords.
     """
 
     on_source_opened: SourceOpenCallback | None = None
     """hook run once with ``(sweep, source_id)`` in a worker thread after the source
     opens and before the first capture"""
     on_analyzed: AnalyzedCallback | None = None
-    """hook run with the `DelayedDataset` of each capture, after the analysis of that
-    capture and before the sink receives the dataset. The analysis thread blocks until
-    the hook returns."""
+    """hook run with the `DelayedDataset` of each capture before the sink receives
+    the dataset"""
     on_sink_cached: CachedCallback | None = None
     """hook run with ``(resources, cache, capture, result, **kwargs)`` each time a
-    measurement fills a `KwArgCache`. `kwargs` are the measurement keywords. The
-    analysis thread blocks until the hook returns."""
+    measurement fills a `KwArgCache`"""
 
 
 if TYPE_CHECKING:
@@ -84,7 +84,7 @@ if TYPE_CHECKING:
         Generic[SS, SP, SC, SA, PS, PC],
         total=False,
     ):
-        """`Resources` with every key optional."""
+        """`Resources` with every key optional"""
 
         source: controller.Controller[SS, SP, SC, SA, PS, PC]
         sink: SinkBase
@@ -119,7 +119,7 @@ else:
         callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
     class AnyResources(typing_extensions.TypedDict, total=False):
-        """`Resources` with every key optional."""
+        """`Resources` with every key optional"""
 
         source: controller.Controller
         sink: SinkBase
@@ -157,8 +157,8 @@ class ConnectionManager(
         super().__init__()
         self._resources = AnyResources(sweep_spec=sweep_spec)
 
-    # ExitStack is inherited for its callback registry, but `with` yields the
-    # resources it collected rather than the stack itself
+    # ExitStack is inherited for the callback registry. `with` yields the collected
+    # resources rather than the stack
     def __enter__(self) -> Resources[SS, SP, SC, SA, PS, PC]:  # ty: ignore[invalid-method-override]
         return self.resources
 
@@ -186,7 +186,7 @@ def _open_devices(
     skip_peripherals: bool = False,
     format_path: specs.paths.PathFormatter | None = None,
 ):
-    """open the source and peripherals; `skip_peripherals` substitutes `NoPeripherals`"""
+    """open the source and peripherals, with `NoPeripherals` when `skip_peripherals`"""
 
     source = util.threadpool.submit(ctrl_cls.from_sweep_spec, spec, format_path)
 
@@ -233,30 +233,30 @@ def open_resources(
 ) -> ConnectionManager[SS, SP, SC, SA, PS, PC]:
     """open the sensor hardware and software contexts needed to run `spec`.
 
-    The action runner registered for the type of `spec` is built first. The source,
-    peripherals, the sink from the runner's `open_sink`, and the warmup are opened
-    for the runner's `sweep`. The resources of the returned `ConnectionManager` are
-    open and ready for `iterate_sweep`.
-
-    `on_source_opened` runs once with ``(sweep, source_id)`` in a worker thread after
-    the source opens and before the first capture. `on_analyzed` runs in the analysis
-    thread with the `DelayedDataset` of each capture before the sink receives the
-    dataset. `on_sink_cached` runs in the analysis thread each time a measurement
-    fills a `KwArgCache`, with `resources` followed by the arguments of the cache
-    callback. An exception from a hook ends the run.
+    The source, peripherals, sink, calibration file, and log file open concurrently
+    for the `sweep` of the action runner built from `spec`. The compute warmup runs
+    in the calling thread. The returned `ConnectionManager` yields the open
+    `Resources` on entry and closes every resource on exit. An exception from a hook
+    ends the run. Progress is logged at INFO on the ``sweep`` logger.
 
     Args:
-        spec: the action spec to open resources for
-        spec_path: the path of the file `spec` was read from, which sets the working
-            directory and the ``{spec_path}`` path field; None leaves both unset
+        spec: the action spec
+        spec_path: the file from which `spec` was read, or None; sets the process
+            working directory and the ``{spec_path}`` path field
         test_only: if True, open `NoPeripherals` in place of the peripherals and
             skip the compute warmup
-        on_source_opened: hook run after the source opens
-        on_analyzed: hook run after each capture is analyzed
-        on_sink_cached: hook run when a measurement cache fills
+        on_source_opened: hook run once with ``(sweep, source_id)`` in a worker
+            thread after the source opens and before the first capture
+        on_analyzed: hook run in the analysis thread with the `DelayedDataset` of
+            each capture, before the sink receives the dataset
+        on_sink_cached: hook run in the analysis thread with ``(resources, cache,
+            capture, result, **kwargs)`` each time a measurement fills a `KwArgCache`
 
     Raises:
         TypeError: if no action runner is registered for the type of `spec`
+        KeyError: if no sensor binding is registered for the type of `spec`
+        ExceptionGroup: if more than one resource fails to open; a single failure
+            raises that exception
     """
 
     from .compute import prepare_compute
@@ -294,7 +294,6 @@ def open_resources(
         with exc.defer():
             # foreground thread 1: initialize warmup sweeps
             try:
-                # prioritize compute during startup; load up buffers
                 compute_iter = prepare_compute(sweep, skip_warmup=test_only)
                 next(compute_iter)
             except Exception:
@@ -320,7 +319,6 @@ def open_resources(
         with exc.defer():
             # finish any warmups
             try:
-                # prioritize compute during startup; load up buffers
                 for _ in compute_iter:
                     pass
             except Exception:

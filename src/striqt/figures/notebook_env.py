@@ -1,7 +1,7 @@
 # A plotting environment for notebooks
 
-# Set up the plotting environment for notebooks that are exported
-# to pdf or html output.
+# figure titles and captions are written into the image 'Title' metadata for export
+# to pdf or html
 from __future__ import annotations
 import datetime
 import functools
@@ -55,10 +55,13 @@ FigureCanvasSVG.print_svg, FigureCanvasSVG._ps = (  # type: ignore
 
 @functools.wraps(backend_inline.set_matplotlib_formats)
 def set_matplotlib_formats(formats, *args, **kws):
-    """apply wrappers that write the figure title and caption into the image 'Title' metadata.
+    """set inline figure formats and display a label and caption below each figure.
 
-    The title comes from the figure suptitle or the last axis title. The caption comes
-    from `set_caption`.
+    The arguments are those of `backend_inline.set_matplotlib_formats`.
+    The label is the figure suptitle, or the title of the last axes without a
+    suptitle, lowercased with runs of non-alphanumeric characters replaced by ``-``.
+    The caption is the text from `set_caption`. The IPython `print_figure` function
+    is replaced process-wide.
     """
 
     backend_inline.set_matplotlib_formats(formats, *args, **kws)
@@ -109,6 +112,9 @@ def set_caption(*args):
 
     Call as ``set_caption(fig, text)``, or as ``set_caption(text)`` for the current
     figure.
+
+    Raises:
+        ValueError: if called with neither 1 nor 2 positional arguments
     """
     global _captions
 

@@ -44,7 +44,7 @@ def stages():
 
 
 def fresh_raw(stages):
-    """a copy of the raw acquisition, indexed as iterate_sweep would before analysis"""
+    """return a copy of the raw acquisition of `stages` with `sweep_index` set to 0"""
     return dataclasses.replace(
         stages.raw,
         x=stages.raw.x.copy(),
@@ -83,9 +83,9 @@ def test_analyze_rejects_a_bare_capture(stages):
 
 
 def test_a_source_only_capture_field_reuses_the_analysis_caches(stages):
-    """the analysis-side caches are keyed on a projection of the capture
-    (`sa.specs.helpers.lru_cache_on_converted`), so a sweep that loops over a field no
-    measurement reads - here the synthetic source's `snr` - pays for them once"""
+    """the analysis-side caches are keyed on a projection of the capture through
+    `lru_cache_on_converted`. A sweep that loops over a field no measurement reads,
+    here the `snr` of the synthetic source, misses each cache once."""
     spectrum = sa.measurements.spectrum
     cached = (spectrum.validated_spectrogram_sizing, spectrum.spectrogram_freqs)
     for func in cached:
@@ -173,8 +173,8 @@ def test_prepare_compute_yields_once_without_a_warmup(skip_warmup, sweep):
 
 @pytest.mark.namespaces('cupy')
 def test_prepare_compute_runs_a_warmup_sweep_on_cupy(array_backend):
-    """the warmup is one capture through iterate_sweep(always_yield=True), so its
-    3 pipeline stages yield 2 placeholders and 1 result"""
+    """the warmup is one capture through ``iterate_sweep(always_yield=True)``. The 3
+    pipeline stages yield 2 placeholders and 1 result."""
     source = SOURCE.replace(array_backend=array_backend)
     sweep = preset_sweep(
         'single_tone',

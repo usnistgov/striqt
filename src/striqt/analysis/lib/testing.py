@@ -1,11 +1,10 @@
 """generate reference synthetic waveforms for tests and the synthetic sensor sources.
 
 Each generator returns an array of shape ``(ports, count)`` in the array namespace
-`xp` and is *windowable*: `start_index` is an absolute sample index, so a call with
-`start_index` and `count` is exactly the slice ``[:, start_index:start_index + count]``
-of the whole-capture call. Index 0 is the first sample of a capture, and a negative
-`start_index` extends the waveform backward in time for the pre-roll that the
-sensor's resampler and filter overlaps consume.
+`xp`. `start_index` is an absolute sample index, and a call with `start_index` and
+`count` equals the slice ``[:, start_index:start_index + count]`` of the
+whole-capture call. Index 0 is the first sample of a capture. A negative
+`start_index` extends the waveform backward in time.
 """
 
 from __future__ import annotations as __
@@ -48,20 +47,20 @@ def _sample_indices(start_index: int, count: int, xp: ModuleType) -> Array:
 
 
 def _expand_ports(x: Array, ports: int, xp: ModuleType) -> Array:
-    # a broadcast view would be read-only, which is surprising for a waveform
+    # `broadcast_to` returns a read-only view
     return xp.broadcast_to(x, (ports, x.shape[-1])).copy()
 
 
-# offset of the pre-roll seed from the user's seed; both fit RandomState's
-# 32-bit range when the user's seed is below 2**31
+# seed offset of the pre-roll stream; both seeds fit the 32-bit range of
+# RandomState when the caller's seed is below 2**31
 PREROLL_SEED_OFFSET = 2**31
 
 
 def _complex_normal_draws(*, ports: int, size: int, seed: int, xp: ModuleType) -> Array:
-    """generate complex64 draws whose real and imaginary parts are standard normal.
+    """generate complex64 draws with standard normal real and imaginary parts.
 
-    The draws are interleaved port-by-port within each sample, so the first `size`
-    samples of every port are a prefix of the stream from ``RandomState(seed)``.
+    Draws are interleaved across ports within each sample. The first `size` samples
+    of every port are a prefix of the stream from ``RandomState(seed)``.
 
     Returns:
         an array of shape ``(ports, size)`` and dtype complex64 in the namespace `xp`
@@ -115,14 +114,14 @@ def tone(
     """generate a unit-amplitude complex tone at `frequency`.
 
     The phase is zero at absolute sample index 0 regardless of `start_index`, and
-    advances `frequency` cycles per second. Mean power is 1. The power measurements
-    treat ``|iq|**2`` as mW and read this as 0 dBm.
+    advances `frequency` cycles per second. Mean power is 1, i.e., 0 dBm in the mW
+    convention of the power measurements.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
         sample_rate: IQ sample rate, in Hz
         frequency: tone frequency, in Hz relative to the center frequency
-        ports: number of receive ports, which all get the same samples
+        ports: number of receive ports; every port has the same samples
         start_index: absolute index of the first returned sample
         count: number of samples, or None for `duration` less `start_index`
         xp: the array namespace to generate with
@@ -160,8 +159,8 @@ def single_tone(
 
     The tone is `tone` at the sum of `frequency_offset` and `lo_offset`, with unit
     amplitude and zero phase at absolute sample index 0. When `snr` is set,
-    `circular_awgn` is added at a total power `snr` dB below the tone's mean power
-    of 1. Each port gets the same tone, and independent noise.
+    `circular_awgn` is added at a total power `snr` dB below the tone mean power of
+    1. Every port has the same tone and independent noise.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
@@ -216,20 +215,16 @@ def circular_awgn(
 ) -> Array:
     """generate circularly-symmetric complex gaussian noise of total power `power`.
 
-    The real and imaginary parts are independent and each has variance
-    ``power / 2``, so the mean of ``|iq|**2`` is `power`. Each port is an
-    independent draw. White noise of power spectral density ``noise_psd`` mW/Hz
-    spread over the full sample rate has total power ``noise_psd * sample_rate``,
-    which the sensor's `noise` source passes as `power`.
+    The real and imaginary parts are independent, each with variance ``power / 2``.
+    The mean of ``|iq|**2`` is `power`. Each port is an independent draw. White
+    noise with power spectral density ``noise_psd`` mW/Hz over the full sample rate
+    has total power ``noise_psd * sample_rate`` mW.
 
-    The draws are interleaved port-by-port within each sample, so the first
-    ``start_index + count`` samples of every port are a prefix of the stream from
-    ``RandomState(seed)``. The prefix property makes the result windowable. Samples
-    at negative indices come from a second stream seeded ``2**31`` above `seed` and
-    running backward from index -1. The pre-roll is independent noise of the same
-    power, and a window that crosses index 0 is still the corresponding slice of
-    any longer window. Both seeds must fit the 32-bit range of ``RandomState``, so
-    `seed` must be below ``2**31``.
+    Samples at indices ``i >= 0`` are the stream from ``RandomState(seed)``,
+    interleaved across ports within each sample. Samples at negative indices are a
+    second stream seeded ``seed + 2**31`` and running backward from index -1,
+    independent of the first stream and of the same power. A window at any
+    `start_index` is the corresponding slice of any longer window.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
@@ -247,8 +242,9 @@ def circular_awgn(
 
     Raises:
         ValueError: when `ports` is below 1, when `duration` and `count` are both
-            None, when the resolved `count` is negative, or when `start_index` is
-            negative and `seed` is outside ``[0, 2**31)``
+            None, when the resolved `count` is negative, when `seed` is outside
+            ``[0, 2**32)``, or when `start_index` is negative and `seed` is at or
+            above ``2**31``
     """
     count = _resolve_count(duration, sample_rate, start_index, count, ports)
     values = _windowed_normal_draws(
@@ -274,10 +270,10 @@ def sawtooth(
 ) -> Array:
     """generate a real-valued sawtooth ramp that repeats every `period` s.
 
-    Each ramp rises linearly from 0 toward the amplitude whose power is `power` dB
-    (1 at 0 dB), resetting at absolute sample index 0 and every `period` s before
-    and after that index. The peak is never reached. The imaginary part is 0. Each
-    port gets the same samples.
+    Each ramp rises linearly from 0 toward the amplitude with power `power` dB (1
+    at 0 dB). Ramps reset at absolute sample index 0 and at every multiple of
+    `period` s before and after that index. The peak is never reached. The
+    imaginary part is 0. Every port has the same samples.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
@@ -322,10 +318,10 @@ def dirac_delta(
 ) -> Array:
     """generate a single impulse at `time` in a field of zeros.
 
-    The impulse is real, with the amplitude whose power is `power` dB (1 at 0 dB),
-    and sits at the absolute sample index nearest `time` s from the start of the
-    capture; the returned array is all zeros when that index falls outside the
-    returned window. Each port gets the same samples.
+    The impulse is real, with the amplitude with power `power` dB (1 at 0 dB), at
+    the absolute sample index nearest `time` s from the start of the capture. The
+    returned array is all zeros when that index falls outside the returned window.
+    Every port has the same samples.
 
     Args:
         duration: capture duration, in s, used only when `count` is None

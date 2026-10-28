@@ -1,5 +1,5 @@
-"""Power detectors binned in time along an axis, their cyclic statistics, and the
-roundoff models the tests measure them against."""
+"""Power detectors binned in time along an axis, the cyclic statistics of the binned
+power, and the roundoff models of both."""
 
 from __future__ import annotations as __
 
@@ -73,9 +73,9 @@ def stat_rtol(dtype: DTypeLike, kind: str | float, n_impl: int = 1) -> float:
     """return the worst-case rtol of the `kind` statistic applied to exact samples.
 
     `kind` is a shorthand of `stat_ufunc_from_shorthand`. The result is 0 for a
-    selection or a mean, whose accumulation roundoff is `bin_power_rms`, and a fixed
-    multiple of the unit roundoff of `dtype` for a quantile or the median, which
-    interpolate once. `n_impl` is 1 against exact math and 2 against a second
+    selection or a mean; `bin_power_rms` bounds the accumulation roundoff of a mean.
+    A quantile or the median interpolates once, for a fixed multiple of the unit
+    roundoff of `dtype`. `n_impl` is 1 against exact math and 2 against a second
     implementation.
 
     Raises:
@@ -179,28 +179,27 @@ def iq_to_cyclic_power(
 
     Channel power along `axis` is first binned with each power detector on
     `detector_period`, giving a time series of ``K`` detector samples. That series
-    is re-indexed as a matrix of cycles and cycle lags: detector sample ``k`` lands
-    in cycle ``k // L`` at lag ``(k % L) * detector_period``, where
+    is re-indexed as a matrix of cycles and cycle lags: detector sample ``k`` is in
+    cycle ``k // L`` at lag ``(k % L) * detector_period``, where
     ``L = cyclic_period / detector_period`` is the number of detector bins per
     cycle and ``M = K / L`` is the number of cycles in the capture. Each cyclic
-    statistic then reduces the cycle axis, so the value at lag index ``m``
-    summarizes the ``M`` power samples that share the same time offset from the
-    start of a cycle. The result spans one `cyclic_period` at the resolution of
-    `detector_period` with ``L`` samples per detector and statistic, independent
-    of the capture length.
+    statistic then reduces the cycle axis. The value at lag index ``m`` summarizes
+    the ``M`` power samples at the same time offset from the start of a cycle. The
+    result spans one `cyclic_period` at the resolution of `detector_period` with
+    ``L`` samples per detector and statistic, independent of the capture length.
 
-    Choosing `cyclic_period` as a common multiple of the periods of the expected
-    signals (for example 10 ms for the LCM of TDD cellular frames, 5 ms WiMAX
-    frames, and the 1 ms pulse repetition interval of the SPN-43 radar) aligns their
-    features across cycles. Each then resolves at fixed lags, while occupancy with
-    an incommensurate period is spread across all lags. Uplink and downlink levels
-    of a TDD network can then be read from disjoint lag windows. Statistics are
-    evaluated in linear power units, not dB.
+    A `cyclic_period` that is a common multiple of the periods of the expected
+    signals (e.g., 10 ms for TDD cellular frames, 5 ms WiMAX frames, and the 1 ms
+    pulse repetition interval of the SPN-43 radar) aligns the features of those
+    signals across cycles. Each feature then resolves at fixed lags, while occupancy
+    with an incommensurate period is spread across all lags. Uplink and downlink
+    levels of a TDD network are then separated into disjoint lag windows.
+    Statistics are evaluated in linear power units, not dB.
 
     A mismatch ``dT`` between `cyclic_period` and the true signal period, such as
     a sample clock offset, drifts features by ``M * dT / detector_period`` lags by
     the end of the capture and bleeds power between neighboring lags. Features
-    stay within one lag while ``M * dT`` is below `detector_period`, which limits
+    stay within one lag while ``M * dT`` is below `detector_period`. This bounds
     the number of cycles ``M``.
 
     Args:
@@ -239,7 +238,7 @@ def iq_to_cyclic_power(
     if axis < 0:
         axis = x.ndim + axis
 
-    # the binned power is computed here from the IQ, so detectors are required
+    # the binned power is computed here from the IQ, which needs at least one detector
     if detectors is None:
         raise ValueError(
             'supply detectors argument to evaluate binned power from time domain IQ'

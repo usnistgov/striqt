@@ -3,10 +3,10 @@ resource grid measurements.
 
 `tests/waveform/test_waveform_comms_sync_5gnr.py` and
 `tests/waveform/test_waveform_comms_cp.py` prove the correlators and the cyclic prefix
-kernel numerically; these tests cover the (capture, spec) validation the measurement
+kernel numerically. These tests cover the (capture, spec) validation the measurement
 layer adds, and the coordinates and levels of the spectrogram products. Two frames at
-3.84 MS/s is the smallest capture at which a 30 kHz cell search (case C, 3GPP TS 38.213
-Section 4.1) and a two-frame `frame_range` both fit.
+3.84 MS/s is the smallest capture in which a 30 kHz cell search (case C, 3GPP TS 38.213
+Section 4.1) and a 2-frame `frame_range` both fit.
 """
 
 from __future__ import annotations
@@ -57,7 +57,8 @@ def capture(
 
 
 def measure(spec, cap: sa.specs.Capture):
-    """run the registered measurement for `spec` the way the registry calls it"""
+    """run the measurement registered for `spec` on unit-power white noise over `cap`,
+    with ``as_xarray=False``."""
     info = sa.registry[type(spec)]
     iq = testing.circular_awgn(cap.duration, cap.sample_rate, power=1.0)
     return info.func(iq, cap, as_xarray=False, **spec.to_dict())
@@ -68,8 +69,8 @@ def measure(spec, cap: sa.specs.Capture):
 
 @pytest.mark.parametrize('cls', SSB_SPEC_TYPES, ids=SSB_IDS)
 def test_ssb_measurements_share_one_validator(cls):
-    """`sss_params` reaches every check in `pss_params`, so the 4 registrations
-    resolve their sync layout through one function"""
+    """`sss_params` reaches every check in `pss_params`, so one validator serves the 4
+    registrations"""
     assert sa.registry[cls].validate is cellular.validated_5g_ssb_sync_params
 
 
@@ -113,8 +114,8 @@ SSB_REJECTED = {
 }
 
 
-# the 4 registrations share one validator (checked above). Every case runs on one
-# spec type; one case on each other type checks the `$.{name}` prefix of its path.
+# the 4 registrations share one validator, so every case runs on one spec type. One
+# case on each other type checks the `$.{name}` prefix of the error path.
 SSB_REJECTED_CASES = [
     pytest.param(SSB_SPEC_TYPES[0], case, id=f'{SSB_IDS[0]}-{case}')
     for case in SSB_REJECTED
@@ -126,8 +127,9 @@ SSB_REJECTED_CASES = [
 
 @pytest.mark.parametrize('cls, case', SSB_REJECTED_CASES)
 def test_ssb_layout_the_resampler_cannot_produce_is_rejected(cls, case):
-    """`fourier.resample` and `correlate_sync_sequence` raise on these once they have
-    IQ; the validator rejects them at the measurement path, naming the field"""
+    """`fourier.resample` and `correlate_sync_sequence` raise on these layouts once
+    given IQ. The validator rejects each layout at the measurement path and names the
+    field."""
     cap, kwargs, message = SSB_REJECTED[case]
     spec = cls(**{**SSB, **kwargs})
 
@@ -178,7 +180,7 @@ AUTOCORRELATION_REJECTED = {
 def test_autocorrelation_index_out_of_the_capture_is_rejected(case):
     """`Phy3GPP.index_cyclic_prefix` bounds the symbol axis but not the frame axis.
     The correlation kernel reads frame indices past the capture as zeros. An
-    all-uplink frame leaves the downlink correlation with no indices at all"""
+    all-uplink frame leaves the downlink correlation with no indices."""
     kwargs, message = AUTOCORRELATION_REJECTED[case]
     spec = sa.specs.CellularCyclicAutocorrelator(subcarrier_spacings=SCS, **kwargs)
 
@@ -189,9 +191,9 @@ def test_autocorrelation_index_out_of_the_capture_is_rejected(case):
 
 
 def test_autocorrelation_guards_a_waveform_shorter_than_its_capture():
-    """the wrapper validates the capture, not the array, so a direct caller of the
-    body with fewer samples than the capture declares is stopped before the kernel
-    reads past the end"""
+    """the wrapper validates the capture, not the array, so a direct call of the body
+    with fewer samples than the capture declares raises before the kernel reads past
+    the end"""
     body = sa.measurements.cellular_cyclic_autocorrelation.__wrapped__
     spec = sa.specs.CellularCyclicAutocorrelator(
         subcarrier_spacings=SCS, frame_range=(0, 2)
@@ -221,12 +223,14 @@ def ssb_of(duration, frequency=None, **kwargs):
 
 
 def ssb_tone_level_dB() -> float:
-    """level of a tone centered on a 15 kHz bin after integration to one 30 kHz bin.
+    """return the level (dB) of a tone centered on a 15 kHz bin after integration to
+    one 30 kHz bin.
 
-    The STFT window is a boxcar of `window_fill` * nfft samples zero-padded to nfft.
-    Its ENBW is nfft/L bins, so the tone bin alone reads 10*log10(L/nfft). Its
-    Dirichlet kernel is not zero on the neighboring bins. The integration sums the
-    tone bin with one neighbor at sinc(L/nfft)**2 of the tone's power.
+    The STFT window is a boxcar of L = `window_fill` * nfft samples zero-padded to
+    nfft. The ENBW of the window is nfft/L bins, so the tone bin alone is at
+    10*log10(L/nfft). The Dirichlet kernel of the window is not zero on the
+    neighboring bins. The integration sums the tone bin with one neighbor at
+    sinc(L/nfft)**2 of the tone power.
     """
     _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
     nfft = round(2 * SSB_SPECTROGRAM_FS / SSB_SPECTROGRAM_SCS)
@@ -259,7 +263,7 @@ class TestCellular5GSSBSpectrogram:
         spg = levels(da)
         assert np.all(np.argmax(spg, axis=-1) == expected)
 
-        # a stationary tone reads the same in every symbol of every block
+        # a stationary tone has the same level in every symbol of every block
         peak = spg[..., expected]
         assert peak.max() == peak.min()
 
@@ -308,7 +312,8 @@ class TestCellular5GSSBSpectrogram:
     )
     def test_incompatible_burst_layout_is_rejected(self, duration, kwargs, message):
         """the frequency cut and the per-block reshape at the end of the measurement
-        would fail on these; the validator names the field first"""
+        fail on these layouts. The validator rejects each layout first and names the
+        field."""
         with pytest.raises(msgspec.ValidationError, match=re.escape(message)) as ex:
             ssb_of(duration, **kwargs)
 
@@ -320,7 +325,8 @@ class TestCellular5GSSBSpectrogram:
 
 def test_pss_correlation_noise_bandwidth_is_one_subcarrier():
     """the unit-energy PSS template passes one subcarrier of white noise per lag, so
-    |R|^2 of white noise averages N0 * subcarrier_spacing, which the attrs state"""
+    |R|^2 of white noise averages N0 * subcarrier_spacing. The `noise_bandwidth` attr
+    equals `subcarrier_spacing`."""
     cap = capture()
     spec = sa.specs.Cellular5GNRPSSCorrelator(**SSB)
     R, metadata = measure(spec, cap)
@@ -329,7 +335,7 @@ def test_pss_correlation_noise_bandwidth_is_one_subcarrier():
     assert metadata['noise_bandwidth'] == SCS
     assert metadata['long_name'] == 'PSS cross-covariance (√mW/30 kHz)'
 
-    # the awgn has unit power over CELL_FS; the last lags of each block are zero
+    # the awgn has unit power over CELL_FS. The last lags of each block are zero
     psd = 1.0 / CELL_FS
     power = np.abs(np.asarray(R)) ** 2
     lags = power.shape[-1]
@@ -343,9 +349,9 @@ def test_pss_correlation_noise_bandwidth_is_one_subcarrier():
 
 
 def test_ssb_spectrogram_white_noise_reads_one_subcarrier():
-    """the sum of 2 half-subcarrier bins has a mean of N0 * subcarrier_spacing for
-    white noise, and the resolution bandwidth is that of the boxcar over the
-    window_fill samples"""
+    """for white noise, the sum of 2 half-subcarrier bins has a mean of
+    N0 * subcarrier_spacing. The `resolution_bandwidth` attr is that of the boxcar
+    over the `window_fill` samples."""
     periods = 10
     da = ssb_of(periods * SSB_SPECTROGRAM_PERIODICITY)
 
@@ -371,9 +377,10 @@ def test_ssb_spectrogram_white_noise_reads_one_subcarrier():
 # %% cellular_resource_power_histogram
 
 # the cellular resource grid requires sample_rate/(subcarrier_spacing/2) divisible by
-# 28, because its spectrogram overlaps 13/28 of the window and fills 15/28 of it. At
-# 15 kHz subcarriers, 210 kHz gives the smallest such FFT (28 bins, hopping 1 symbol of
-# 15 samples). 2 ms covers 2 of the 10 slots in the frame, which is all the mask needs.
+# 28, because the spectrogram overlaps 13/28 of the window and fills 15/28 of the
+# window. At 15 kHz subcarriers, 210 kHz gives the smallest such FFT (28 bins, hopping
+# 1 symbol of 15 samples). 2 ms covers 2 of the 10 slots in a frame, and the slot mask
+# needs no more.
 RESOURCE_GRID_FS = 210e3
 RESOURCE_GRID_DURATION = 2e-3
 RESOURCE_GRID_SCS = 15e3
@@ -411,8 +418,8 @@ def test_cellular_resource_power_histogram_bin_coordinate_bandwidth(
     average_rbs, resource_blocks
 ):
     """the bin coordinate and the histogram have the noise bandwidth of one bin:
-    a subcarrier, or the 6 subcarriers averaged per half resource block (a full
-    block exceeds the 150 kHz analysis bandwidth of the test capture)"""
+    a subcarrier, or the 6 subcarriers averaged per half resource block. A full block
+    exceeds the 150 kHz analysis bandwidth of the test capture."""
     da = resource_histogram(frame_slots='dddddddddd', average_rbs=average_rbs)
 
     bandwidth = 12 * RESOURCE_GRID_SCS * resource_blocks
@@ -433,9 +440,9 @@ def test_cellular_resource_power_histogram_link_direction_coordinate():
 
 
 def test_cellular_resource_power_histogram_all_downlink_frame():
-    """an all-downlink frame masks every uplink resource element with nan, which the
-    histogram drops. The uplink row is exactly zero rather than nan, and the downlink
-    row sums to the whole fraction"""
+    """an all-downlink frame masks every uplink resource element with nan, and the
+    histogram drops nan. The uplink row is exactly zero rather than nan. The downlink
+    row sums to 1."""
     da = resource_histogram(frame_slots='d' * RESOURCE_GRID_SLOTS)
 
     downlink, uplink = da.values[0]
@@ -444,8 +451,8 @@ def test_cellular_resource_power_histogram_all_downlink_frame():
 
 
 def test_cellular_resource_power_histogram_splits_link_directions():
-    """the normalization sums over link direction as well as power bin, so the two
-    rows of a mixed frame share the fraction of 1 instead of each summing to 1"""
+    """the normalization sums over link direction as well as power bin, so the 2 rows
+    of a mixed frame share the fraction of 1 instead of each summing to 1"""
     da = resource_histogram(frame_slots='d' + 'u' * (RESOURCE_GRID_SLOTS - 1))
 
     downlink, uplink = da.values[0]
@@ -456,11 +463,11 @@ def test_cellular_resource_power_histogram_splits_link_directions():
 
 def test_cellular_resource_power_histogram_guard_bandwidths():
     """a guard band masks the frequency bins at the edges of the analysis band with
-    nan, which drops them from the histogram.
+    nan, and the histogram drops nan.
 
     A constant-envelope input makes every symbol of the grid identical, so each
     retained frequency bin contributes the same count and the smallest non-zero
-    fraction is the reciprocal of the number of retained bins.
+    fraction is the reciprocal of the retained bin count.
     """
     retained = []
     for guard_bandwidths in [(0, 0), (15e3, 15e3), (30e3, 30e3)]:
@@ -489,7 +496,7 @@ def test_cellular_resource_power_histogram_guard_bandwidths():
             'integration_bandwidth must not exceed the analyzed bandwidth',
         ),
         (
-            # 13 symbols: one short of the slot that average_slots reduces over
+            # 13 symbols: one short of the slot over which average_slots reduces
             RESOURCE_GRID_CAPTURE.replace(duration=1e-3),
             {'average_slots': True},
             'duration must span at least one slot to average across slots',
@@ -505,7 +512,8 @@ def test_cellular_resource_power_histogram_rejects_undersized_grids(
     capture, kwargs, message
 ):
     """`truncate_freqs` and both `binned_mean` calls fail on these grids with
-    array-shape errors; the validator rejects them first at the measurement path"""
+    array-shape errors. The validator rejects each grid first, at the measurement
+    path."""
     iq = sa.testing.tone(capture.duration, RESOURCE_GRID_FS)
     with pytest.raises(msgspec.ValidationError, match=message) as ex:
         sa.measurements.cellular_resource_power_histogram(

@@ -3,8 +3,8 @@
 
 The device streams complex Gaussian noise from a receiver with a per-port noise
 figure after a noise source that a "noise diode" can switch on, plus optional CW
-tones. Both follow the receiver model in `sweep_strategies`, so calibration sweeps
-run against the device have closed-form expected results.
+tones. Noise and tones follow the receiver model in `sweep_strategies`. A calibration
+sweep run against the device has closed-form expected results.
 """
 
 from __future__ import annotations
@@ -76,7 +76,10 @@ class Range:
 
 
 class ArgInfo:
-    """attribute-only, like the SWIG object: indexing it raises TypeError"""
+    """an attribute-only argument description, as the SWIG `ArgInfo` is.
+
+    Indexing an instance raises TypeError.
+    """
 
     def __init__(self, key, *, units='', value='', options=()):
         self.key = key
@@ -105,7 +108,7 @@ class SignalModel:
     pps_present: bool = True
 
     def noise_variance(self, port, gain_dB, sample_rate, center_frequency):
-        """total noise power per complex sample, in full-scale units"""
+        """return the total noise power per complex sample, in full-scale units"""
         return yfactor_rms_power(
             gain_dB,
             noise_figure_lookup(self.nf_dB, port, center_frequency),
@@ -118,7 +121,8 @@ class SignalModel:
         )
 
     def waveform(self, port, start, count, *, gain_dB, lo_frequency, sample_rate, rng):
-        """`count` samples starting `start` samples after stream activation"""
+        """return `count` complex64 samples of `port` from `start` samples after stream
+        activation"""
         sigma2 = self.noise_variance(port, gain_dB, sample_rate, lo_frequency)
         x = rng.normal(scale=np.sqrt(sigma2 / 2), size=(2, count))
         x = (x[0] + 1j * x[1]).astype('complex64')
@@ -144,7 +148,8 @@ class FakeStream:
 
 
 class FakeDevice:
-    """the subset of SoapySDR.Device that striqt touches, shaped like an Airstack"""
+    """the subset of the `SoapySDR.Device` interface that `SoapySource` calls, with the
+    capabilities of an Airstack"""
 
     def __init__(self, module: FakeSoapySDR, **kwargs):
         self.module = module
@@ -421,7 +426,7 @@ class FakeDevice:
 
 
 class FakeSoapySDR:
-    """stands in for the SoapySDR module"""
+    """a stand-in for the `SoapySDR` module"""
 
     Range = Range
     ArgInfo = ArgInfo

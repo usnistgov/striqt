@@ -1,8 +1,9 @@
-"""a site-style sensor binding over the synthetic single-tone source
+"""a site-style sensor binding over the synthetic single-tone source.
 
-Mirrors the shape of the out-of-tree extension modules that sweep YAML files load
-through their `extensions:` block: capture and peripheral spec subclasses, a source
-with a fixed hardware id, and a y-factor calibration binding derived from the sensor.
+The module has the shape of an out-of-tree extension module loaded through the
+`extensions:` block of a sweep YAML file: capture and peripheral spec subclasses, a
+source with a fixed hardware id, and a Y-factor calibration binding derived from the
+sensor.
 """
 
 # ruff: noqa: UP007, UP045  msgspec resolves these annotations at runtime on py3.9
@@ -107,7 +108,8 @@ site_cellular = bindings.bind_sensor(
 class SiteQuickAnalyses(
     specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True
 ):
-    """the measurements of fragments/analysis/quick.yaml, and no others"""
+    """the analysis group of the measurements in ``fragments/analysis/quick.yaml``, and
+    no others"""
 
     spectrogram: Optional[sa.specs.Spectrogram] = None
     power_spectral_density: Optional[sa.specs.PowerSpectralDensity] = None

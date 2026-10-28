@@ -21,7 +21,7 @@ class TestSpectrogram:
     @given(x=noise_waveforms(min_size=256, max_size=512), params=stft_parameters())
     def test_output_shape(self, x, params):
         """the spectrogram has the shape and axes of the stft and the real dtype of
-        its input (min_size=256 guarantees len(x) >= max(nperseg))"""
+        the input. ``min_size=256`` guarantees ``len(x) >= max(nperseg)``."""
         _, _, X = stft(x, truncate=True, **params)
         freqs, times, Sxx = spectrogram(x, truncate=True, **params)
 

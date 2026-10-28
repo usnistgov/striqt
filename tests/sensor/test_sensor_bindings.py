@@ -60,9 +60,9 @@ def test_tagged_union_arms_match_the_registry():
 
 
 def test_yaml_spec_decodes_into_the_tagged_class_of_its_binding(subtests):
-    """the tagged class of a plain sweep binding is its own `sweep_cls`, its
-    `controller` is the registered controller class, and its `sensor` is the
-    `SensorBinding` of `get_controller(spec)`"""
+    """the tagged class of a plain sweep binding is the `sweep_cls` of that class. The
+    `controller` attribute is the registered controller class, and `sensor` is the
+    `SensorBinding` of ``get_controller(spec)``."""
     spec = ss.read_yaml_spec(SWEEP_DIR / 'air7101b.yaml')
     ctrl_cls = ss.bindings.air7101b
     cls = type(spec)
@@ -98,8 +98,9 @@ class TestBindSensor:
         assert 'calibration' in sweep_cls.__struct_fields__
 
     def test_a_non_sweep_action_gets_a_companion_sweep_class(self, isolated_bindings):
-        """the companion class has the action's spec types and binding and is neither
-        tagged nor registered. The runner builds the sweep that runs from it."""
+        """the companion class has the spec types and binding of the action and is
+        neither tagged nor registered. The runner builds the sweep that runs from the
+        companion class."""
         schema = tone_schema(action=ss.specs.ManualYFactorCalibration)
         ctrl_cls = ss.bindings.bind_sensor(
             'companion_test', tone_sensor(), schema, register=False
@@ -128,8 +129,9 @@ class TestBindSensor:
         )
 
     def test_an_existing_binding_derives_through_schema_action(self, isolated_bindings):
-        """the `sweep_spec_cls` of a `SensorBinding` is its tagged class, which is
-        not a base for a second binding. The action comes from the schema."""
+        """the `sweep_spec_cls` of a `SensorBinding` is the tagged class, and the
+        tagged class is not a base for a second binding. The action comes from the
+        schema."""
         ctrl_cls = ss.bindings.bind_sensor(
             'derived_test',
             TONE.sensor,
@@ -169,8 +171,8 @@ def test_extension_module_registers_site_bindings(subtests):
 
 
 def test_derived_calibration_binding_records_the_extension_module():
-    """the extension module binds its calibration with `bind_sensor`, and the API
-    documentation groups the controller under that module"""
+    """the controllers bound in the extension module have `__module__` set to that
+    module. The API documentation groups a controller under `__module__`."""
     import site_strategies as S
 
     assert S.EXT.site_single_tone_calibration.__module__ == S.EXT.__name__
@@ -181,9 +183,9 @@ def test_derived_calibration_binding_records_the_extension_module():
 
 
 def test_bind_manual_yfactor_calibration_is_deprecated(isolated_bindings):
-    """the function warns and binds what `bind_sensor` binds from the schema with
-    `action` replaced by `ManualYFactorCalibration`. The controller's module is the
-    caller's unless `module=` names another."""
+    """the function warns and binds the controller that `bind_sensor` binds from the
+    schema with `action` replaced by `ManualYFactorCalibration`. The module of the
+    controller is the module of the caller unless `module=` names another."""
     with pytest.warns(DeprecationWarning, match='bind_sensor'):
         derived = ss.lib.bindings.bind_manual_yfactor_calibration(
             'deprecated_cal_test', TONE
@@ -228,8 +230,8 @@ class TestCellularBinding:
 
 class TestCheckSchema:
     def test_cellular_action_needs_a_center_frequency_field(self, isolated_bindings):
-        """`SingleToneCapture` has no `center_frequency`, which `cell_channels` is
-        matched against"""
+        """`cell_channels` is matched against `center_frequency`, and
+        `SingleToneCapture` has no such field"""
         assert 'center_frequency' not in TONE.schema.capture.__struct_fields__
         with pytest.raises(TypeError, match='center_frequency'):
             ss.bindings.bind_sensor(
@@ -255,8 +257,8 @@ class TestCheckSchema:
             )
 
     def test_cellular_action_needs_every_measurement_it_generates(self):
-        """`QuickAnalyses` lacks `power_spectral_density`, the second field of
-        `Cellular5GNRAnalysis`"""
+        """`Cellular5GNRAnalysis` generates `power_spectral_density`, and
+        `QuickAnalyses` lacks that field"""
         schema = dataclasses.replace(CELLULAR.schema, analysis=QuickAnalyses)
         with pytest.raises(TypeError, match='power_spectral_density'):
             ss.specs.Cellular5GNRSweep.check_schema(schema)
@@ -317,8 +319,8 @@ class TestAnalysisSchema:
             assert period == pytest.approx(1e-4)
 
     def test_measurement_outside_the_group_is_rejected(self):
-        """a `BuiltinAnalyses` passed directly, or a dict naming a measurement the
-        group lacks, both fail at `analysis`"""
+        """a `BuiltinAnalyses` passed directly and a dict naming a measurement outside
+        the group both fail at `analysis`"""
         cls = quick_binding().sensor.sweep_spec_cls
         raises_on_both_paths(
             cls,
@@ -379,9 +381,9 @@ class ToyPower(sa.specs.Analysis, frozen=True, kw_only=True):
 def test_an_extension_measurement_runs_from_the_analysis_block(
     isolated_analysis_registry, isolated_bindings
 ):
-    """a measurement registered outside striqt.analysis.measurements is reached from
-    the ``analysis:`` block of a binding whose group names it, and the value of the
-    spec field in the block reaches the output variable"""
+    """a measurement registered outside `striqt.analysis.measurements` runs from the
+    ``analysis:`` block of a binding with a group that names the measurement. The
+    value of the spec field in the block reaches the output variable."""
 
     @sa.registry.measurement(ToyPower, dtype='float32', dims=())
     def toy_power(

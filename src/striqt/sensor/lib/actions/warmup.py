@@ -1,10 +1,8 @@
 """the warmup: a one-capture `NoSource` sweep run before a GPU sweep.
 
-The warmup pays the python import and JIT compilation costs of the analysis before
-the first hardware capture. `prepare_compute` runs the warmup sweep through a
-`SweepRunner` while `open_resources` opens the hardware. The warmup sweep is derived
-from the sweep being prepared, and the resources of the warmup sweep are opened by
-`open_warmup_resources` rather than by `open_resources`.
+The warmup runs the python imports and JIT compilation of the analysis before the
+first hardware capture. The warmup sweep is derived from the sweep to run, and the
+resources of the warmup are opened without hardware or files.
 """
 
 from __future__ import annotations as __
@@ -31,8 +29,9 @@ def warmup_binding(
 ) -> type[Controller[specs.NoSource, specs.NoPeripherals, Any, Any, Any, Any]]:
     """return the unregistered ``warmup`` binding for the capture type of `origin`.
 
-    The binding has the ``warmup`` sensor's implementation classes and source spec
-    and `origin`'s capture and peripherals spec types.
+    The binding combines the implementation classes and source spec of the
+    ``warmup`` sensor with the capture, peripherals, and analysis spec types of
+    `origin`. The result is memoized by `origin`.
     """
     from ...bindings import warmup
     from .. import bindings
@@ -57,20 +56,24 @@ def warmup_binding(
 def derive_warmup_sweep(
     sweep_spec: specs.Sweep[Any, Any, SC, SA], count: int = 1
 ) -> specs.Sweep[specs.NoSource, specs.NoPeripherals, SC, SA]:
-    """return the `Sweep` whose run pays the import and JIT costs of `sweep_spec`.
+    """return the warmup `Sweep` for `sweep_spec`.
 
-    The warmup source is a `NoSource` with `max(port) + 1` ports over every port a
-    capture or a port loop names, and the `master_clock_rate` and `signal_trigger`
-    of `sweep_spec.source`. The captures are the first `count` captures that
-    `sweep_spec.loops` expands to, with no loops of their own. `analysis` is copied.
-    `sink` is copied with `path` set to None, and the warmup writes nothing. The
-    returned spec is an instance of the `warmup_binding` of the sweep's binding.
+    The source is a `NoSource` with ``max(port) + 1`` ports over every port that a
+    capture or a `port` loop names, and the `master_clock_rate` and `signal_trigger`
+    of `sweep_spec.source`. The captures are the first `count` captures of the loop
+    expansion of `sweep_spec`, with no loops. `analysis` is copied. `sink` is copied
+    with `path` None. The result is an instance of the sweep class of the
+    `warmup_binding` of the binding of `sweep_spec`.
+
+    Args:
+        sweep_spec: the sweep to run after the warmup
+        count: the number of expanded captures to keep
     """
     from .. import bindings
 
     binding = warmup_binding(bindings.get_controller(sweep_spec))
 
-    # ports are numbered from 0, so the source needs max(port) + 1 of them
+    # ports are numbered from 0, so the source needs max(port) + 1 ports
     ports: list[Any] = [c.port for c in sweep_spec.captures]
     max_rx_ports = 0
     for loop in sweep_spec.loops:
@@ -112,10 +115,10 @@ def derive_warmup_sweep(
 def warmup_sweep_for(
     sweep: specs.Sweep[Any, Any, SC, SA],
 ) -> specs.Sweep[Any, Any, SC, SA] | None:
-    """return the `Sweep` to run before `sweep`, or None when none is needed.
+    """return the warmup `Sweep` for `sweep`, or None.
 
-    None when `sweep.options.skip_warmup` is set or the sweep does not use the GPU
-    (`compute.gpu.sweep_touches_gpu`); otherwise `derive_warmup_sweep(sweep)`.
+    None is returned when `sweep.options.skip_warmup` is set or `sweep_touches_gpu`
+    is false for `sweep`.
     """
     if sweep.options.skip_warmup or not gpu.sweep_touches_gpu(sweep):
         return None
@@ -125,11 +128,11 @@ def warmup_sweep_for(
 def open_warmup_resources(
     runner: ActionRunner[Any, specs.NoSource, specs.NoPeripherals, SC, SA, PS, PC],
 ) -> Resources[specs.NoSource, specs.NoPeripherals, SC, SA, PS, PC]:
-    """open the resources that a warmup `runner` iterates over.
+    """return the resources of a warmup `runner`, opened without hardware or files.
 
-    The source is a `NoSource` controller for `runner.sweep.source`; the peripherals
-    and sink are `NoPeripherals` and `NoSink`, which touch no hardware and no files.
-    The caller closes the returned ``source``.
+    The source is a `NoSource` controller for `runner.sweep.source`, the peripherals
+    are `NoPeripherals`, and the sink is a `NoSink`. The ``source`` entry is returned
+    unentered.
     """
     from ...bindings import warmup
 

@@ -6,7 +6,11 @@ from .typing import Peripherals, SP, SC
 
 
 class PeripheralsBase(Peripherals[SP, SC]):
-    """context-manager base implementation of the `Peripherals` protocol"""
+    """base `Peripherals` implementation that opens on construction.
+
+    Construction reads the `peripherals` block of the sweep and calls `open`. Exit
+    from the context manager calls `close`.
+    """
 
     spec: SP
 

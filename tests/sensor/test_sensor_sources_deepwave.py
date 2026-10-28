@@ -157,8 +157,8 @@ AIRSTACK_CAPTURE = {
 
 @pytest.fixture(scope='module')
 def airstack_source_spec():
-    """the air7101b source spec, skipped unless striqt imported the real SoapySDR
-    and a radio answers the enumeration"""
+    """return the air7101b source spec, or skip unless striqt imported the real
+    SoapySDR and a radio answers the enumeration"""
     pytest.importorskip('SoapySDR')
     if (
         soapy.SoapySDR is None

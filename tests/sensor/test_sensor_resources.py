@@ -45,7 +45,8 @@ class BindingPeripherals(ss.peripherals.NoPeripherals):
 
 
 def test_test_only_opens_no_peripherals_and_runs_the_sweep(monkeypatch):
-    """test_only substitutes the no-op NoPeripherals for the binding's peripherals"""
+    """`test_only` substitutes the no-op `NoPeripherals` for the peripherals of the
+    binding"""
     sweep = tone_sweep(OFFSETS)
     binding = ss.lib.bindings.get_controller(sweep).sensor
     monkeypatch.setattr(binding, 'peripherals_cls', BindingPeripherals)
@@ -72,8 +73,8 @@ class FailingOpenSink(ss.sinks.NoSink):
     'cls', [FailingInitSink, FailingOpenSink], ids=['init', 'open']
 )
 def test_sink_failure_surfaces_and_closes_the_source(cls, isolated_lookup, monkeypatch):
-    """a sink that fails in the runner's `open_sink` or on entry propagates out of
-    `open_resources`, which releases the source it opened in parallel"""
+    """a sink that fails in `open_sink` of the runner or on entry propagates out of
+    `open_resources`. The source opened in parallel is released."""
     monkeypatch.setattr(
         ss.lib.actions.SweepRunner, 'open_sink', lambda self, fmt: cls(self.sweep)
     )

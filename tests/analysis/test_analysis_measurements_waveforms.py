@@ -2,7 +2,7 @@
 
 The tests cover what the measurement wrapping adds to a slice of the corrected IQ:
 the conversion of the time bounds to sample indices, the index coordinate, and the
-registered tolerance, which passes the caller's input error straight through.
+registered tolerance. The tolerance passes `input_error` through unchanged.
 """
 
 from __future__ import annotations
@@ -26,7 +26,8 @@ def capture(duration=DURATION, sample_rate=FS) -> sa.specs.Capture:
 
 
 def tolerance(spec, duration=DURATION, **kws) -> sa.specs.Tolerance:
-    """the tolerance registered for `spec` on a capture of `duration`"""
+    """return the tolerance registered for `spec` on a capture of `duration` (s) at
+    `FS`."""
     return registered_tolerance(capture(duration=duration), spec, **kws)
 
 
@@ -85,7 +86,7 @@ class TestIqWaveform:
 
     def test_reversed_window_is_empty(self):
         """a window that ends before it starts yields an empty result rather than an
-        error. No contract specifies this outcome."""
+        error. The empty result is current behavior, not a contract."""
         iq = self.waveform()
         da = sa.measurements.iq_waveform(
             iq, capture(), start_time_sec=6e-5, stop_time_sec=2e-5
@@ -95,10 +96,9 @@ class TestIqWaveform:
         assert da.coords['iq_index'].size == 0
 
     def test_tolerance_is_the_input_error_on_the_envelope_level(self):
-        """the slice adds no error of its own, so exact IQ passes through with a zero
-        budget. An rms amplitude error `r` in the IQ reads on the envelope level
-        ``20*log10|iq|`` as an rms of ``20*log10(1 + r)`` dB with a larger peak over
-        the slice"""
+        """the slice adds no error, so exact IQ passes through with a zero budget. An
+        rms amplitude error `r` in the IQ is an rms error of ``20*log10(1 + r)`` dB on
+        the envelope level ``20*log10|iq|``, with a larger peak over the slice."""
         exact = tolerance(sa.specs.IQWaveform())
         assert exact == sa.specs.Tolerance(
             units='dB', rtol=0.0, on_peak=sa.specs.ErrorBound(rms=0.0, peak=0.0)

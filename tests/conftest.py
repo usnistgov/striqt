@@ -46,13 +46,13 @@ class _MemoryShelf(UserDict):
 
 @pytest.fixture(autouse=True, scope='session')
 def isolated_persistent_cache():
-    """Back util.persistent_cache with an in-memory dict for the test session.
+    """back `util.persistent_cache` with an in-memory dict for the test session.
 
     The on-disk shelf is dbm.ndbm on macOS. That backend corrupts once the cache
-    evicts past its size limit (the window-parameter searches alone write dozens of
+    evicts past the size limit (the window-parameter searches alone write dozens of
     entries per call) or when 2 test processes write concurrently. After either,
-    every later get_window call on the machine fails. Tests also must not leave
-    one-off entries in the developer's cache.
+    every later `get_window` call on the machine fails. Tests also must not leave
+    one-off entries in the cache of the developer.
     """
     from striqt.waveform.lib import util
 
@@ -65,15 +65,14 @@ def isolated_persistent_cache():
         util._get_cache_shelf = original
 
 
-# ---------------------------------------------------------------------------
-# Array namespaces (numpy, cupy, dask)
-# ---------------------------------------------------------------------------
+# %% Array namespaces (numpy, cupy, dask)
 
 
 def _get_cupy():
-    """the cupy module when a CUDA device is available, otherwise None"""
-    # importing pandas and scipy here would reify striqt's lazy imports even
-    # when cupy is absent, which is what tests/test_imports.py guards against
+    """return the cupy module when a CUDA device is available, otherwise None."""
+    # an unconditional import of pandas and scipy here would reify the lazy imports
+    # of striqt even when cupy is absent. tests/test_imports.py asserts that the lazy
+    # imports stay unreified
     if importlib.util.find_spec('cupy') is None:
         return None
 
@@ -104,13 +103,13 @@ if _cupy is None:
         stacklevel=1,
     )
 
-# checked without importing, which would reify scipy
+# an import of dask would reify scipy, so the check uses find_spec
 _dask_is_available = importlib.util.find_spec('dask') is not None
 
 
 def namespace_module(name: str):
-    """the array module named 'numpy', 'cupy' or 'dask', skipping the test when cupy
-    or dask is unavailable"""
+    """return the array module named 'numpy', 'cupy', or 'dask', or skip the test
+    when cupy or dask is unavailable."""
     if name == 'numpy':
         return np
     elif name == 'cupy':
@@ -128,13 +127,14 @@ def namespace_module(name: str):
 
 @pytest.fixture
 def cupy_available():
-    """the cupy module, skipping the test when no CUDA device is available"""
+    """return the cupy module, or skip the test when no CUDA device is available."""
     return namespace_module('cupy')
 
 
 @pytest.fixture(scope='module')
 def real_soapy():
-    """the real SoapySDR module, as striqt imported it; skipped under uv"""
+    """return the SoapySDR module that striqt imported, or skip the test when the
+    bindings are absent (the uv fallback environment)."""
     from striqt.sensor.lib.sources import soapy
 
     pytest.importorskip('SoapySDR')
@@ -157,13 +157,14 @@ def pytest_generate_tests(metafunc):
 
 @pytest.fixture
 def xp(request):
-    """each array namespace in turn; cupy and dask cases skip when unavailable"""
+    """return the array namespace of the current parameter. The cupy and dask cases
+    skip when the backend is unavailable."""
     return namespace_module(request.param)
 
 
 def as_xp(xp, *arrays):
-    """numpy arrays converted into the namespace `xp`; one array in, one array out,
-    otherwise a tuple"""
+    """convert numpy `arrays` into the namespace `xp`. One array returns one array,
+    several return a tuple."""
 
     def convert(arr):
         if xp is np:
@@ -176,9 +177,7 @@ def as_xp(xp, *arrays):
     return converted[0] if len(converted) == 1 else converted
 
 
-# ---------------------------------------------------------------------------
-# Hypothesis strategies for array-based property testing
-# ---------------------------------------------------------------------------
+# %% Hypothesis strategies for array-based property testing
 
 bounded_ints = st.integers(min_value=-(10**6), max_value=10**6)
 finite_floats = st.floats(allow_nan=False, allow_infinity=False)
@@ -187,7 +186,7 @@ scalars = st.one_of(st.none(), st.booleans(), bounded_ints, finite_floats, short
 
 
 def float_dtypes(dtype=None):
-    """float32 and float64, or only `dtype` when given"""
+    """draw float32 or float64, or only `dtype` when given."""
     if dtype is None:
         return st.sampled_from([np.float32, np.float64])
     return st.just(dtype)
@@ -200,7 +199,8 @@ def _shape_strategy(min_dims, max_dims, min_side, max_side):
 
 
 def float_arrays(shape, dtype=np.float64, min_value=-10.0, max_value=10.0):
-    """finite values of `dtype` in [min_value, max_value] (rounded to the dtype)"""
+    """draw arrays of `shape` with finite `dtype` values in [`min_value`,
+    `max_value`], the bounds rounded to `dtype`."""
     dtype = np.dtype(dtype)
     lo, hi = float(dtype.type(min_value)), float(dtype.type(max_value))
     elements = st.floats(
@@ -222,7 +222,9 @@ def bounded_float_arrays(
     min_dims: int = 1,
     max_dims: int = 2,
 ):
-    """float32 or float64 arrays (or `dtype`) with values in [min_value, max_value]"""
+    """draw float32 or float64 arrays (or `dtype`) with `min_dims` to `max_dims`
+    dimensions, sides of `min_size` to `max_size`, and values in [`min_value`,
+    `max_value`]."""
 
     @st.composite
     def _bounded(draw):
@@ -234,12 +236,13 @@ def bounded_float_arrays(
 
 
 def positive_power_arrays(min_value: float = 1e-15, max_value: float = 1e15, **kws):
-    """positive power values spanning typical RF measurements (-150 to +150 dBm)"""
+    """draw arrays of positive linear power values in [`min_value`, `max_value`], by
+    default 1e-15 to 1e15 mW (-150 to +150 dBm)."""
     return bounded_float_arrays(min_value, max_value, **kws)
 
 
 def dB_arrays(min_value: float = -150.0, max_value: float = 150.0, **kws):
-    """dB values in the typical measurement range"""
+    """draw arrays of dB values in [`min_value`, `max_value`]."""
     return bounded_float_arrays(min_value, max_value, **kws)
 
 
@@ -253,9 +256,11 @@ def envelope_arrays(
     min_dims: int = 1,
     max_dims: int = 2,
 ):
-    """envelope (amplitude) values with magnitude in [min_magnitude, max_magnitude].
+    """draw envelope (amplitude) arrays with magnitude in [`min_magnitude`,
+    `max_magnitude`].
 
-    With `include_complex`, half of the examples have a uniformly drawn phase.
+    With `include_complex`, half of the examples are complex with a uniformly drawn
+    phase.
     """
 
     @st.composite
@@ -280,9 +285,9 @@ def shaped_arrays(
     min_value: float = -10.0,
     max_value: float = 10.0,
 ):
-    """(array, axis) pairs, with axis drawn from [-ndim, ndim).
+    """draw (array, axis) pairs with `axis` in [-ndim, ndim).
 
-    Negative axes are drawn as often as positive ones so that axis-normalization
+    Negative axes are drawn as often as positive ones, so the axis-normalization
     branches are exercised.
     """
 
@@ -297,7 +302,8 @@ def shaped_arrays(
 
 
 def gaussian_iq(shape, dtype=np.complex64, seed: int = 0):
-    """unit-variance gaussian noise from a fixed seed; complex unless `dtype` is real"""
+    """return standard normal noise of `shape` from `seed`, complex unless `dtype` is
+    real."""
     rng = np.random.default_rng(seed)
     x = rng.standard_normal(shape)
     if np.dtype(dtype).kind == 'c':
@@ -313,17 +319,17 @@ def iq_waveforms(
     dtype=None,
     log_power: tuple[int, int] = (0, 0),
 ):
-    """gaussian noise waveforms, complex unless `dtype` is a real float type.
+    """draw gaussian noise waveforms, complex unless `dtype` is a real float type.
 
-    Hypothesis draws the dtype, the sample count (a multiple of `multiple_of`), the
-    power in decades from the `log_power` range, and a seed; the samples come from a
-    generator with that seed so that examples are reproducible and shrink toward
-    short waveforms.
+    The draw selects the dtype, the sample count (a multiple of `multiple_of` in
+    [`min_size`, `max_size`]), the power in decades from the `log_power` range, and
+    a seed. The samples come from a generator with that seed, so examples are
+    reproducible and shrink toward short waveforms.
 
     Args:
-        channels: None for a 1-D waveform, or the number of rows of a 2-D
-            (channel, sample) array as the analysis measurements use
-        dtype: a dtype, a sequence of dtypes to draw from, or None for complex64
+        channels: `None` for a 1-D waveform, or the row count of a 2-D
+            (channel, sample) array
+        dtype: a dtype, a sequence of dtypes to draw from, or `None` for complex64
             and complex128
     """
     if dtype is None:
@@ -348,9 +354,7 @@ def iq_waveforms(
     return _iq()
 
 
-# ---------------------------------------------------------------------------
-# Sweep test fixtures
-# ---------------------------------------------------------------------------
+# %% Sweep test fixtures
 
 SWEEP_DIR = Path(__file__).parent / 'sensor' / 'sweeps'
 
@@ -376,7 +380,7 @@ def calibration_sweep():
 
 @pytest.fixture
 def fake_source_id(monkeypatch):
-    """stand in for the hardware id lookup that PathFormatter performs"""
+    """replace the hardware id lookup with a stub returning ``'beef'``."""
     import striqt.sensor as ss
 
     monkeypatch.setattr(
@@ -387,14 +391,15 @@ def fake_source_id(monkeypatch):
 
 @pytest.fixture
 def array_backend(xp) -> str:
-    """the Source.array_backend name selecting the `xp` namespace; cupy skips with it"""
+    """return the `Source.array_backend` name that selects the `xp` namespace. The
+    cupy case skips with `xp`."""
     return 'cupy' if xp.__name__ == 'cupy' else 'numpy'
 
 
 @pytest.fixture
 def isolated_lookup(monkeypatch):
-    """fresh controller registries, so a test can open sources without seeing or
-    disturbing the process-global lookup entries of other tests"""
+    """replace the controller registries with empty ones for the test, so sources
+    opened by the test do not read or alter the process-global lookup entries."""
     from collections import defaultdict
     from threading import Event
 
@@ -408,7 +413,8 @@ def isolated_lookup(monkeypatch):
 
 @pytest.fixture
 def scripted_input(monkeypatch):
-    """answer `sa.util.blocking_input` from a queue of answers and record the prompts"""
+    """replace `sa.util.blocking_input` with a stub that pops ``script['answers']``
+    and appends each prompt to ``script['prompts']``, and return `script`."""
     import striqt.analysis as sa
 
     script = {'answers': [], 'prompts': []}
@@ -423,8 +429,8 @@ def scripted_input(monkeypatch):
 
 @pytest.fixture
 def isolated_bindings(monkeypatch):
-    """restore the module globals `registry` and `tagged_sweeps` of `ss.lib.bindings`,
-    which `bind_sensor` updates, after the test"""
+    """restore the module globals `registry` and `tagged_sweeps` of `ss.lib.bindings`
+    after the test. `bind_sensor` updates both."""
     import striqt.sensor as ss
 
     bindings = ss.lib.bindings
@@ -435,12 +441,12 @@ def isolated_bindings(monkeypatch):
 
 @pytest.fixture
 def isolated_analysis_registry():
-    """restore the live `sa.registry` after a test registers a measurement with it.
+    """restore the live `sa.registry` after a test registers a measurement.
 
     `registry.measurement` writes the dict items and the `names`, `caches`,
     `coordinates`, `signal_trigger`, `parameter_defaults`, and `parameter_fields`
-    attributes; every `sw.util.lru_cache` is cleared at teardown because the group
-    validation and tolerance caches key on the registered spec types."""
+    attributes. Teardown also clears every `sw.util.lru_cache`. The group validation
+    and tolerance caches key on the registered spec types."""
     import striqt.analysis as sa
     import striqt.waveform as sw
 
@@ -470,12 +476,12 @@ def isolated_analysis_registry():
 
 @pytest.fixture
 def corrections_flags(monkeypatch):
-    """set(use_oaresample=None, ignore_highside_lo=None) -> None: override the
-    STRIQT_USE_OARESAMPLE / STRIQT_IGNORE_HIGHSIDE_LO switches of
-    striqt.sensor.lib.compute.corrections for one test.
+    """override the `USE_OARESAMPLE` and `IGNORE_HIGHSIDE_LO` switches of
+    `striqt.sensor.lib.compute.corrections` for one test through the returned
+    ``set(use_oaresample=None, ignore_highside_lo=None)``.
 
-    The resampler and overlap designs are lru-cached on arguments that do not include
-    the flags, so the caches are cleared whenever a flag changes and again on exit.
+    The resampler and overlap designs are lru-cached on arguments without the flags,
+    so the caches are cleared on every call of `set` and again at teardown.
     """
     import striqt.waveform as sw
     from striqt.sensor.lib.compute import corrections
@@ -496,8 +502,8 @@ def corrections_flags(monkeypatch):
 
 @pytest.fixture
 def armed_tone_controller(isolated_lookup):
-    """a single_tone Controller on the synthetic FunctionSource, armed with the
-    scale-only preset capture"""
+    """yield a `single_tone` Controller on the synthetic function source, armed with
+    the scale-only preset capture."""
     from sweep_strategies import SOURCE
     from synthetic_sources import SCALE_ONLY, preset_capture
 
@@ -509,8 +515,8 @@ def armed_tone_controller(isolated_lookup):
 
 
 def assert_source_released(lookup, sweep):
-    """assert that the controller registry has no open controller for the sweep's
-    source, so the next open does not find a closed one"""
+    """assert that `lookup` has no controller for the source of `sweep`, so the next
+    open does not find a closed one."""
     import striqt.sensor as ss
 
     assert not isinstance(lookup._get(sweep.source), ss.lib.controller.Controller)
@@ -518,8 +524,9 @@ def assert_source_released(lookup, sweep):
 
 @pytest.fixture
 def run_sweep_to_zarr(tmp_path, fake_source_id):
-    """run(spec, name='out.zarr.zip') -> (spec as run, store path) after a sweep end
-    to end into tmp_path, without chdir (no spec path is given to open_resources)"""
+    """run a sweep end to end into `tmp_path` through the returned
+    ``run(spec, name='out.zarr.zip') -> (spec as run, store path)``. `open_resources`
+    receives no spec path, so the working directory is unchanged."""
     import striqt.sensor as ss
 
     def run(spec, name='out.zarr.zip'):
@@ -532,9 +539,7 @@ def run_sweep_to_zarr(tmp_path, fake_source_id):
     return run
 
 
-# ---------------------------------------------------------------------------
-# Spec construction paths
-# ---------------------------------------------------------------------------
+# %% Spec construction paths
 
 
 @pytest.fixture(params=('direct', 'from_dict'))
@@ -546,11 +551,13 @@ def construct(request):
 
 
 def raises_on_both_paths(cls, exc, match, **kws):
-    """assert that constructing `cls` raises `exc` directly and via from_dict.
+    """assert that constructing `cls` from `kws` raises `exc` matching `match`, both
+    directly and through `from_dict`.
 
-    msgspec re-raises ValueError and TypeError from __post_init__ as its own
-    ValidationError on the conversion path, so either is accepted there. Nested spec
-    values in `kws` are converted to builtins for the from_dict path.
+    msgspec re-raises `ValueError` and `TypeError` from `__post_init__` as
+    `msgspec.ValidationError` on the conversion path, so either exception is accepted
+    there. Nested spec values in `kws` are converted to builtins for the `from_dict`
+    path.
     """
     with pytest.raises(exc, match=match):
         cls(**kws)
@@ -559,20 +566,19 @@ def raises_on_both_paths(cls, exc, match, **kws):
 
 
 def construct_both(cls, **kws):
-    """(direct, from_dict) instances of `cls` built from the same keywords"""
+    """return the (direct, from_dict) instances of `cls` built from `kws`."""
     return cls(**kws), cls.from_dict(_spec_kws_to_builtins(kws))
 
 
 def _spec_kws_to_builtins(kws: dict) -> dict:
-    # nested capture specs have frozendict fields, which need the specs' enc_hook
+    # nested capture specs have frozendict fields, and msgspec needs the spec enc_hook
+    # to encode a frozendict
     import striqt.analysis as sa
 
     return msgspec.to_builtins(kws, enc_hook=sa.specs.helpers._enc_hook)
 
 
-# ---------------------------------------------------------------------------
-# Site-style sweeps: extension module binding + per-source overrides
-# ---------------------------------------------------------------------------
+# %% Site-style sweeps: extension module binding + per-source overrides
 
 SITE_DIR = SWEEP_DIR / 'site'
 SITE_SPEC = SITE_DIR / 'site-cpu.yaml'
@@ -602,7 +608,8 @@ def site_calibration_sweep():
 
 @pytest.fixture
 def fake_radio_id(monkeypatch):
-    """stand in for the hardware id lookup, returning the id keyed in sites/radio02.yaml"""
+    """replace the hardware id lookup with a stub returning `RADIO_ID`, the id keyed
+    in sites/radio02.yaml."""
     from site_strategies import RADIO_ID
 
     import striqt.sensor as ss
@@ -615,7 +622,8 @@ def fake_radio_id(monkeypatch):
 
 @pytest.fixture
 def write_yaml(tmp_path):
-    """write dedented YAML text to `tmp_path / relpath`, creating parent directories"""
+    """write dedented YAML text to ``tmp_path / relpath`` through the returned
+    ``write(relpath, text) -> Path``. Parent directories are created."""
     import textwrap
 
     def write(relpath: str, text: str) -> Path:
@@ -629,10 +637,11 @@ def write_yaml(tmp_path):
 
 @pytest.fixture
 def isolated_extension_import():
-    """hide the test suite's `extensions` module so a spec can import its own.
+    """hide the `extensions` module of the test suite so a spec can import a
+    different module of that name.
 
-    Restores sys.path and sys.modules afterwards; leaving a temporary module
-    cached under the name `extensions` would break every later site YAML read.
+    `sys.path` and `sys.modules` are restored at teardown. A temporary module left
+    cached as `extensions` would break every later site YAML read.
     """
     import sys
 
@@ -649,9 +658,7 @@ def isolated_extension_import():
             sys.modules['extensions'] = saved_module
 
 
-# ---------------------------------------------------------------------------
-# Fake SoapySDR
-# ---------------------------------------------------------------------------
+# %% Fake SoapySDR
 
 FAKE_SOAPY_SPEC = SWEEP_DIR / 'fake_soapy-cpu.yaml'
 FAKE_SOAPY_CALIBRATION_SPEC = SWEEP_DIR / 'fake_soapy-calibration-cpu.yaml'
@@ -660,7 +667,8 @@ FAKE_SOAPY_CELLULAR_SPEC = SWEEP_DIR / 'fake_soapy-cellular-cpu.yaml'
 
 @pytest.fixture
 def fake_soapy(monkeypatch):
-    """a FakeSoapySDR module installed as striqt.sensor.lib.sources.soapy.SoapySDR"""
+    """yield a `FakeSoapySDR` module installed as
+    `striqt.sensor.lib.sources.soapy.SoapySDR`."""
     from fake_soapy import install_fake_soapy
 
     import striqt.waveform as sw
@@ -672,7 +680,8 @@ def fake_soapy(monkeypatch):
 
 @pytest.fixture
 def fake_soapy_ext(fake_soapy):
-    """the fake_soapy_bindings module, registered by reading fake_soapy-cpu.yaml"""
+    """return the `fake_soapy_bindings` module, registered by reading
+    `fake_soapy-cpu.yaml`."""
     import sys
 
     import striqt.sensor as ss
@@ -683,10 +692,10 @@ def fake_soapy_ext(fake_soapy):
 
 @pytest.fixture
 def fake_controller(fake_soapy_ext):
-    """open(**kws) -> a Controller for the fake_soapy binding on rx ports (0, 1), to
-    use as a context manager.
+    """return ``open(**kws)``, a factory of `Controller` context managers for the
+    `fake_soapy` binding on rx ports (0, 1).
 
-    `reuse_iq` and `rx_ports` go to the controller; every other keyword goes to the
+    `reuse_iq` and `rx_ports` go to the controller. Every other keyword goes to the
     source spec.
     """
     import striqt.sensor as ss
@@ -701,14 +710,15 @@ def fake_controller(fake_soapy_ext):
 
 @pytest.fixture
 def soapy_device(fake_soapy):
-    """one fake device opened through the sequence form of SoapySDR.Device"""
+    """return one fake device opened through the sequence form of
+    `SoapySDR.Device`."""
     return fake_soapy.Device(({},))[0]
 
 
 @pytest.fixture
 def soapy_stream(soapy_device):
-    """an RxStream on `soapy_device` with a default SoapySource spec, set up and
-    enabled on port 0"""
+    """yield an `RxStream` on `soapy_device` with a default `SoapySource` spec, set up
+    and enabled on port 0."""
     from soapy_factories import source_spec
 
     from striqt.sensor.lib.sources import soapy
@@ -721,8 +731,8 @@ def soapy_stream(soapy_device):
 
 @pytest.fixture
 def clear_function_caches():
-    """clear the striqt.waveform function caches after the test (read_calibration and
-    the lookups cache by path)"""
+    """clear the `striqt.waveform` function caches at teardown. `read_calibration`
+    and the lookups cache by path."""
     import striqt.waveform as sw
 
     yield
@@ -731,8 +741,8 @@ def clear_function_caches():
 
 @pytest.fixture
 def calibration_nc(tmp_path, clear_function_caches):
-    """path of a saved Y-factor calibration with a frequency-dependent noise figure on
-    port 0 and a flat one on port 1"""
+    """return the path of a saved Y-factor calibration with a frequency-dependent
+    noise figure on port 0 and a flat noise figure on port 1."""
     from sweep_strategies import save_yfactor_calibration
 
     nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
@@ -749,7 +759,8 @@ class FakeRun(NamedTuple):
     results: object
 
     def calibration(self, **sel):
-        """the calibration saved at `path`, selected by field values"""
+        """return the calibration saved at `path`, selected by the `sel` field
+        values."""
         import striqt.sensor as ss
 
         return ss.read_calibration(self.path).sel(**sel)
@@ -757,20 +768,21 @@ class FakeRun(NamedTuple):
 
 @pytest.fixture(scope='module')
 def fake_sweep_runner(tmp_path_factory):
-    """run(spec_path_or_spec, *, output_name, **replace) -> FakeRun against one fake
-    SoapySDR module installed for the whole test module, with the calibration prompts
-    answered and the source id lookup stubbed to 'beef'.
+    """run sweeps against one fake SoapySDR module installed for the whole test
+    module, through the returned
+    ``run(spec_path_or_spec, *, output_name, **replace) -> FakeRun``.
 
-    The prompts are answered by confirming the ENR and switching the fake noise diode
-    on 'enable|disable noise diode at port N'.
+    The calibration prompts are answered by confirming the ENR and by switching the
+    fake noise diode when a prompt asks to enable or disable the diode at a port. The
+    source id lookup is stubbed to ``'beef'``.
 
-    `replace` fields are applied to the sweep spec before it runs; the sink path is
+    `replace` fields are applied to the sweep spec before the run. The sink path is
     replaced by `output_name` under a fresh temporary directory. `FakeRun.prompts`
-    lists only the prompts of that run, and `FakeRun.results` is the sink output
-    concatenated along `capture` (an empty list when the sink yields nothing).
+    lists only the prompts of that run. `FakeRun.results` is the sink output
+    concatenated along `capture`, or an empty list when the sink yields nothing.
 
     A module that uses this fixture must not also use the function-scoped
-    `fake_soapy` fixture. A second install_fake_soapy shadows the first.
+    `fake_soapy` fixture. A second `install_fake_soapy` shadows the first.
     """
     import re
     from pathlib import Path
@@ -822,13 +834,13 @@ def fake_sweep_runner(tmp_path_factory):
 
 @pytest.fixture(autouse=True)
 def restore_logging_state():
-    """snapshot and restore the process-global logging state that show_messages,
-    log_to_file, log_capture_context and StriqtLogger mutate.
+    """snapshot and restore the process-global logging state that `show_messages`,
+    `log_to_file`, `log_capture_context`, and `StriqtLogger` mutate.
 
-    Only the adapters that existed at setup are restored. Adapters created during
-    the test are left as they are. They come from the lazy import of a striqt
-    package, and the modules that import them at module level would otherwise
-    find their adapter deleted.
+    Only the adapters that existed at setup are restored. An adapter created during
+    the test is left in place. Such an adapter comes from the lazy import of a striqt
+    package, and a module that imported the adapter at module level would find the
+    adapter deleted.
     """
     import logging
 
@@ -872,9 +884,7 @@ def restore_logging_state():
             parent._striqt_handler = file_handler
 
 
-# ---------------------------------------------------------------------------
-# Hardware tests
-# ---------------------------------------------------------------------------
+# %% Hardware tests
 
 HARDWARE_ENV = 'STRIQT_TEST_HARDWARE'
 

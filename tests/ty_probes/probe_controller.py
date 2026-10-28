@@ -1,4 +1,4 @@
-"""a sensor binding exposes its source and capture spec fields as keyword parameters"""
+"""a sensor binding exposes the source and capture spec fields as keyword parameters"""
 
 from __future__ import annotations
 

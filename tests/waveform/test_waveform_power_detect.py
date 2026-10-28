@@ -1,5 +1,5 @@
 """striqt.waveform.lib.power.detect: property tests of the binned power detectors,
-cyclic statistics, the sample CCDF, and their roundoff models, including numpy-vs-cupy
+cyclic statistics, the sample CCDF, and the roundoff models, including numpy-vs-cupy
 agreement within ulp budgets.
 """
 
@@ -96,7 +96,8 @@ class TestStatUfuncFromShorthand:
 
 
 class TestRoundoffModels:
-    """The tolerance models that the rest of this module measures the library against."""
+    """the tolerance models against which the rest of this module measures the
+    library"""
 
     def test_bin_power_rms_is_zero_for_selections_and_quantiles(self, subtests):
         for kind in ['min', 'max', 'peak', 0.5]:
@@ -126,7 +127,8 @@ for_each_bin_kind = pytest.mark.parametrize('kind', sorted(BIN_STATS, key=str))
 
 @st.composite
 def cyclic_power_cases(draw, channels=(1, 2)):
-    """(iq, bin size, bins per cycle, cycle count) for iq_to_cyclic_power"""
+    """draw (iq, bin size, bins per cycle, cycle count) arguments for
+    `iq_to_cyclic_power`."""
     size = draw(st.sampled_from([2, 4, 8]))
     bins_per_cycle = draw(st.sampled_from([2, 3, 5]))
     n_cycles = draw(st.integers(min_value=1, max_value=6))
@@ -138,8 +140,8 @@ def cyclic_power_cases(draw, channels=(1, 2)):
 
 
 def bin_power_bound(dtype, size, outputs, n_impl=1, kind='mean'):
-    """worst-case rtol over `outputs` binned statistics of `size` samples: the
-    deterministic part plus the peak of the rms accumulation model"""
+    """return the worst-case rtol over `outputs` binned statistics of `size` samples:
+    the deterministic part plus the peak of the rms accumulation model."""
     peak = max(peak_factor(outputs), 1.0)
     return bin_power_rtol(dtype, n_impl, kind) + peak * bin_power_rms(
         dtype, size, n_impl, kind
@@ -163,9 +165,10 @@ class TestIqToBinPower:
 
     def test_quantile_of_a_long_heavy_tailed_bin_is_exact_on_every_numpy(self):
         """numpy < 2.3 casts a scalar q to float32 (numpy.lib._function_base_impl,
-        quantile), which shifts the virtual index (n-1)*q by ~n*2**-25 samples before
-        interpolating between the 2 neighboring order statistics. On a heavy-tailed
-        bin of 2**20 samples that read 124 u against a budget of 28 u."""
+        quantile). The cast shifts the virtual index (n-1)*q by about n*2**-25 samples
+        before the interpolation between the 2 neighboring order statistics. On a
+        heavy-tailed bin of 2**20 samples the error is 124 u against a budget of
+        28 u."""
         n, q = 2**20, 0.999
         rng = np.random.default_rng(0)
         power = np.exp(3 * rng.standard_normal((2, n)))
@@ -184,8 +187,8 @@ class TestIqToBinPower:
     @pytest.mark.parametrize('channels', [None, 3])
     @given(data=st.data())
     def test_matches_reference(self, size, kind, channels, data):
-        """Property: each bin is the statistic of |iq|**2 over `size` samples,
-        for a 1-D waveform (axis 0) and a (channel, sample) array (axis 1).
+        """each bin is the statistic of |iq|**2 over `size` samples, for a 1-D
+        waveform (axis 0) and a (channel, sample) array (axis 1).
 
         The kinds are one name from each group of BIN_STATS. The aliases are
         covered by TestStatUfuncFromShorthand, and the cupy cross-comparison runs
@@ -230,7 +233,7 @@ class TestIqToBinPower:
             iq_to_bin_power(iq, 1.0, ratio)
 
     def test_truncate_allows_fractional_bin_period(self):
-        """truncate=True intentionally rounds a fractional Tbin/Ts to whole samples."""
+        """``truncate=True`` rounds a fractional Tbin/Ts to whole samples"""
         iq = np.ones(64, dtype=np.complex64)
         result = iq_to_bin_power(iq, 1.0, 4.4, truncate=True)
         assert result.shape == (64 // 4,)
@@ -238,8 +241,8 @@ class TestIqToBinPower:
     @pytest.mark.parametrize('size', BIN_SIZES[1:])
     @given(data=st.data())
     def test_randomize(self, size, data):
-        """Property: every random bin is the mean power of some `size` contiguous
-        samples, i.e., a value of the sliding-window mean of |iq|**2."""
+        """every random bin is the mean power of some `size` contiguous samples, i.e.,
+        a value of the sliding-window mean of |iq|**2"""
         iq = data.draw(
             iq_waveforms(min_size=4 * size, max_size=32 * size, multiple_of=size)
         )
@@ -272,8 +275,8 @@ class TestIqToBinPower:
 
 
 class TestIqToCyclicPower:
-    """iq_to_cyclic_power on (channel, sample) input with axis=1, as the
-    cyclic_channel_power measurement calls it.
+    """`iq_to_cyclic_power` on (channel, sample) input with axis=1, as the
+    `cyclic_channel_power` measurement calls the function.
 
     The expectations follow doc/papers/cyclic_power.tex: the detector output is
     folded into a (cycle, lag) matrix with cyclic_period / detector_period lags per
@@ -285,16 +288,16 @@ class TestIqToCyclicPower:
 
     @staticmethod
     def evaluate(iq, size, lags, **kws):
-        """iq_to_cyclic_power with unit sample period, `size` samples per detector
-        bin and `lags` bins per cycle"""
+        """run `iq_to_cyclic_power` with unit sample period, `size` samples per
+        detector bin, and `lags` bins per cycle."""
         kws = {'detectors': TestIqToCyclicPower.DETECTORS, **kws}
         kws = {'cycle_stats': TestIqToCyclicPower.CYCLE_STATS, 'axis': 1, **kws}
         return iq_to_cyclic_power(iq, 1.0, size, size * lags, **kws)
 
     @given(case=cyclic_power_cases())
     def test_matches_reference(self, case):
-        """Property: each statistic is the column-wise reduction of the binned power
-        reshaped to (cycle, lag), including a quantile statistic."""
+        """each statistic is the column-wise reduction of the binned power reshaped to
+        (cycle, lag), including a quantile statistic"""
         iq, size, bins_per_cycle, n_cycles = case
         channels = iq.shape[0]
 
@@ -315,8 +318,8 @@ class TestIqToCyclicPower:
 
     @given(case=cyclic_power_cases())
     def test_lag_average_of_mean_rms_is_the_waveform_power(self, case):
-        """Property: the fold keeps every detector sample (K = L * M), so averaging
-        the mean rms trace over lags recovers the mean power of the waveform."""
+        """the fold keeps every detector sample (K = L * M), so averaging the mean rms
+        trace over lags recovers the mean power of the waveform"""
         iq, size, bins_per_cycle, _ = case
 
         kws = {'detectors': ('rms',), 'cycle_stats': ('mean',)}
@@ -333,9 +336,9 @@ class TestIqToCyclicPower:
     def test_commensurate_signal_has_no_spread(
         self, periods_per_cycle, n_cycles, subtests
     ):
-        """A signal whose period divides cyclic_period repeats identically in every
-        cycle, so every statistic returns the one-cycle power envelope. The lag count
-        is fixed by cyclic_period / detector_period rather than by n_cycles."""
+        """a signal with a period that divides `cyclic_period` repeats identically in
+        every cycle, so every statistic returns the one-cycle power envelope. The lag
+        count is fixed by cyclic_period / detector_period rather than by n_cycles."""
         size, lags = 4, 10
         rng = np.random.default_rng(0)
         envelope = rng.uniform(0.5, 2.0, size=(2, lags // periods_per_cycle))
@@ -354,10 +357,10 @@ class TestIqToCyclicPower:
                     assert_close(result[detector][stat], expected, rtol=rtol)
 
     def test_pulse_period_selectivity(self):
-        """Pulses whose period divides the cycle stay at fixed lags with zero spread.
-        Pulses at a period coprime with the lag count visit every lag: the max
-        trace is the pulse power everywhere, the min trace is zero, and the mean
-        is the pulse power diluted by the period."""
+        """pulses with a period that divides the cycle stay at fixed lags with zero
+        spread. Pulses with a period coprime to the lag count visit every lag: the max
+        trace is the pulse power everywhere, the min trace is zero, and the mean is
+        the pulse power divided by the period."""
         size, lags, n_cycles, pulse = 2, 8, 12, 4.0
 
         def pulse_train(period):
@@ -385,10 +388,10 @@ class TestIqToCyclicPower:
     def test_cycle_period_mismatch_bleeds_into_the_next_lag(
         self, drift_per_cycle, bleeds
     ):
-        """A period mismatch drifts a feature by (n_cycles - 1) * drift_per_cycle
+        """a period mismatch drifts a feature by (n_cycles - 1) * drift_per_cycle
         samples over the capture. The peak trace keeps the pulse in one lag with no
-        spread while that stays below the bin size, and leaks it into the next lag
-        once it reaches the bin size."""
+        spread while the drift is below the bin size. Once the drift reaches the bin
+        size, the pulse leaks into the next lag."""
         size, lags, n_cycles = 8, 4, 5
         iq = np.zeros((1, size * lags * n_cycles), dtype=np.complex64)
         for cycle in range(n_cycles):
@@ -418,10 +421,10 @@ class TestIqToCyclicPower:
             )
 
     def test_truncate_drops_trailing_bins_of_the_time_axis(self, subtests):
-        """A 2-port capture at 107.52 MS/s with 1/28 ms detector bins (3840
-        samples) contains 25 bins, which truncate=True folds into 2 cycles of 10 lags
-        and drops the last 5. A unit-envelope input has power exactly 1 in every
-        bin, so each statistic is exactly 1 at every lag."""
+        """a 2-port capture at 107.52 MS/s with 1/28 ms detector bins (3840 samples)
+        contains 25 bins. ``truncate=True`` folds 20 bins into 2 cycles of 10 lags and
+        drops the last 5. A unit-envelope input has power exactly 1 in every bin, so
+        each statistic is exactly 1 at every lag."""
         Ts = 1 / 107.52e6
         detector_period = 1 / 28000
         kws = {'cyclic_period': 10 * detector_period, 'axis': 1}
@@ -438,8 +441,8 @@ class TestIqToCyclicPower:
                     assert_array_equal(value, 1.0)
 
     def test_1d_input(self):
-        """The paper defines the input as a single power time series, and axis=0 is
-        the default."""
+        """the paper defines the input as a single power time series, and ``axis=0``
+        is the default"""
         iq = np.random.default_rng(0).normal(size=64).astype(np.complex64)
         result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0)
         assert result['rms']['mean'].shape == (4,)
@@ -460,7 +463,7 @@ def ccdf_reference(a, edges, density):
 
 @st.composite
 def ccdf_cases(draw):
-    """(samples, sorted edges, density) arguments for sample_ccdf"""
+    """draw (samples, sorted edges, density) arguments for `sample_ccdf`."""
     sizes = st.integers(min_value=1, max_value=200)
     sample_values = st.floats(min_value=-100, max_value=100, allow_nan=False)
     a = draw(arrays(dtype=np.float64, shape=sizes, elements=sample_values))
@@ -490,10 +493,10 @@ class TestSampleCcdf:
 
 
 class TestNumpyCupyCrossComparison:
-    """Cross-comparison of the numpy and cupy results of each detector.
+    """the numpy and cupy results of each detector compared against each other.
 
-    Tolerances come from the ulp budgets in striqt.waveform.lib.power, so a
-    difference larger than the 2 libraries' rounding bounds fails the test.
+    Tolerances come from the ulp budgets in `striqt.waveform.lib.power`, so a
+    difference larger than the rounding bounds of the 2 libraries fails the test.
     """
 
     @for_each_bin_size
@@ -533,7 +536,7 @@ class TestNumpyCupyCrossComparison:
 
     @given(case=ccdf_cases())
     def test_sample_ccdf(self, cupy_available, case):
-        """Cross-comparison: counting is exact, so the backends agree exactly."""
+        """counting is exact, so the backends agree exactly"""
         a, edges, density = case
         result_np, result_cp = numpy_and_cupy(
             cupy_available, sample_ccdf, a, edges, density=density

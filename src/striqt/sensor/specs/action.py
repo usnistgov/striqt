@@ -1,8 +1,8 @@
 """validation of an action spec after construction.
 
-A bound spec's `__post_init__` ends by calling into this module. A constructed spec
-is therefore a validated one. Errors are `SpecValidationError`s located at the field of the
-spec that caused them, with a loop point for an expanded capture.
+A spec is validated at the end of `__post_init__`, and a constructed spec is
+therefore a validated one. Each error is a `SpecValidationError` located at the
+failing field of the spec, with the loop point for an expanded capture.
 """
 
 from __future__ import annotations as __
@@ -62,9 +62,9 @@ def validate_sweep(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
-    """raise on anything in `sweep` that would fail once the sweep ran.
+    """validate the loops, measurement names, analysis, and signal path of `sweep`.
 
-    A `Sweep` runs this at construction. The checks, in order:
+    The checks, in order:
 
     * the `loops` entries: a `repeat` only outermost, and at most one loop per field;
     * a loop over a field that the `captures` entries set to different values;
@@ -167,14 +167,12 @@ def _validate_loop_capture_collisions(
 
 
 def _validate_measurement_names(sweep: structs.Sweep) -> None:
-    """reject a measurement whose name shadows a capture field.
+    """reject a measurement named like a capture field.
 
-    The two would collide as the capture coordinate and data variable of the same
-    name in the saved dataset. A sweep with neither `captures` nor a sensor binding
-    has no capture class to check against and passes.
+    A sweep with neither `captures` nor a sensor binding passes.
 
     Raises:
-        SpecValidationError: at ``$.analysis``, naming the first such measurement
+        SpecValidationError: at ``$.analysis``, for the first such measurement
     """
     if len(sweep.captures) > 0:
         coord_fields = set(sweep.captures[0].__struct_fields__)
@@ -198,12 +196,12 @@ def _validate_sweep_analysis(
 ) -> None:
     """validate each unique (capture, analysis) combination that `sweep` runs.
 
-    A sweep whose `analysis` block sets no measurement passes without expanding.
+    A sweep with no measurement enabled in `analysis` passes without expanding.
 
     Raises:
-        SpecValidationError: naming the measurement that rejected the first offending
-            capture, located by the `sweep.captures` entry and the loop point that
-            produced the capture
+        SpecValidationError: for the first capture that a measurement rejects,
+            located by the `sweep.captures` entry and the loop point that produced
+            the capture
     """
 
     if len(sweep.analysis.to_dict()) == 0:
@@ -223,17 +221,16 @@ def _validate_sweep_corrections(
 ) -> None:
     """reject each unique capture that the conditioning stages could not process for `sweep`.
 
-    The checks are the trigger lookup, `design_resampler`, `design_fir_lpf`, and,
-    when `USE_OARESAMPLE` is set, the LO shift check of `oaresample`. The resampler
-    design is skipped for a `FileCapture`; the analysis filter is still checked. The
-    parity check of `resample` on the padded acquisition runs at acquisition time,
-    not here.
+    The checks are the trigger lookup, the analysis filter band of each capture
+    with a finite `analysis_bandwidth`, the resampler design, and the LO shift of
+    the overlap-add resampler when `USE_OARESAMPLE` is set. A `FileCapture` skips
+    the resampler and LO shift checks.
 
     Raises:
         SpecValidationError: at ``$.source.signal_trigger`` when `sweep.analysis`
-            lacks the measurement the trigger runs, or otherwise at the
+            lacks the measurement that the trigger runs, or otherwise at the
             `analysis_bandwidth`, `sample_rate`, or `lo_shift` field of the first
-            offending capture, located by the `sweep.captures` entry and the loop
+            rejected capture, located by the `sweep.captures` entry and the loop
             point that produced the capture
     """
     from ..lib import compute
@@ -274,9 +271,8 @@ def _unique_capture_origins(
 ) -> Iterator[tuple[SC, structs.AnalysisGroup, sequencing.CaptureOrigin]]:
     """iterate the distinct ``(key(capture), analysis)`` combinations of `sweep`.
 
-    The analysis is `sweep.analysis` with the capture's `adjust_analysis` applied.
-    A sweep with neither `captures` nor a sensor binding yields nothing rather than
-    raising, so that such a sweep stays constructible.
+    The analysis is `sweep.analysis` with the `adjust_analysis` of the capture
+    applied. A sweep with neither `captures` nor a sensor binding yields nothing.
 
     Yields:
         ``(capture, analysis, origin)`` for the first capture of each combination,

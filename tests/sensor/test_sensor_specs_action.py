@@ -48,8 +48,8 @@ DOWNSTREAM_SWEEP = (
 
 
 def test_validate_sweep_reports_a_per_source_override():
-    """`source_id` selects an `adjust_captures` block that `Sweep.__post_init__` cannot
-    reach, since it resolves only the 'defaults' block"""
+    """`source_id` selects an `adjust_captures` block that `Sweep.__post_init__` does
+    not reach. The constructor resolves only the ``'defaults'`` block."""
     sweep = make_sweep(
         captures=(make_capture(),),
         loops=(ss.specs.List(field='frequency_offset', values=(0.0, 1e5)),),
@@ -74,8 +74,8 @@ def test_validate_sweep_reports_a_per_source_override():
 
 
 def test_validate_sweep_ignores_loops_over_sensor_only_fields(monkeypatch):
-    """`snr` is invisible to the analysis layer, so both captures project onto one
-    `AnalysisCapture` and the pair is validated once"""
+    """`snr` is invisible to the analysis layer. Both captures project onto one
+    `AnalysisCapture`, and the pair is validated once."""
     # build before patching, since Sweep.__post_init__ validates too and would be counted
     sweep = make_sweep(
         captures=(make_capture(),),
@@ -143,7 +143,8 @@ def test_a_trigger_without_its_measurement_is_rejected_at_the_source():
 
 
 def test_file_sources_skip_the_resampler_design_but_not_the_filter():
-    """the file, not `master_clock_rate`, sets the rate the design would run from"""
+    """the sample rate of the file, not `master_clock_rate`, is the input rate of the
+    resampler design"""
     source = ss.specs.MATSource(path='absent.mat', master_clock_rate=1e6)
     capture = ss.specs.FileCapture(
         port=0, sample_rate=2e6, duration=1e-3, host_resample=False

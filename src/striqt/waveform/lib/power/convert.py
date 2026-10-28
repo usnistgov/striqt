@@ -102,8 +102,7 @@ def log_conversion_tol(
     Both are fixed multiples of the unit roundoff of `dtype`, and ``atol`` also
     scales with `scale`. `n_impl` is 1 against exact math and 2 against a second
     implementation; `complex_input` adds the roundoff of ``|x|``. Roundoff on the
-    input side of the log becomes an absolute dB error, which bounds the
-    result near 0 dB where ulps of the output are meaningless.
+    input side of the log is an absolute dB error.
     """
     u = unit_roundoff(dtype)
     # the log call, the rounded scale constant, and the product rounding
@@ -217,8 +216,7 @@ def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array
     the detector bin of an impulse. The result is non-negative and grows with
     `depth_dBc`: a float for a scalar `depth_dBc` and a float64 numpy array
     otherwise. The bound is ``-20*log10(1 - r)`` for the relative amplitude error
-    ``r = err * 10**(depth_dBc/20)`` of the element, and is infinite where ``r >= 1``,
-    which leaves the element unchecked.
+    ``r = err * 10**(depth_dBc/20)`` of the element, and is infinite where ``r >= 1``.
     """
     r = err * 10 ** (np.asarray(depth_dBc, dtype='float64') / 20)
     with np.errstate(divide='ignore'):
@@ -236,13 +234,11 @@ def _lin_to_dB(
 ) -> _ALN:
     """compute ``scale*log10(abs(x) + eps)`` or ``scale*log10(x + eps)``.
 
-    The evaluation is ``scale_ln*log(...)`` with ``scale_ln = scale/ln(10)`` rounded
-    to the real computation dtype. `eps` is 0 unless `bounded`. With `bounded`, `eps`
-    is the smallest normal value of the computation dtype for `scale` 10, and the
-    square root of that value for `scale` 20, as a scalar of that dtype. With
-    `overwrite_x`, the result is written into `x` unless `min_dtype` widens `x`
-    first. A complex `x` overwritten in place is returned as the real view of the
-    buffer of `x` on every backend.
+    ``eps`` is 0 unless `bounded`. With `bounded`, ``eps`` is the smallest normal
+    value of the computation dtype for `scale` 10, and the square root of that value
+    for `scale` 20. With `overwrite_x`, the result is written into `x` unless
+    `min_dtype` widens `x` first. A complex `x` overwritten in place is returned as
+    the real view of the buffer of `x`.
     """
 
     values, out, xp = _arraylike_with_buffer(x, overwrite_x, min_dtype=min_dtype)
@@ -310,8 +306,8 @@ def powtodB(
 ) -> _ALN:
     """compute ``10*log10(abs(x))``, or ``10*log10(x)`` when `abs` is False.
 
-    The computation is elementwise through numexpr on numpy and fused kernels on
-    cupy, in a floating-point dtype no narrower than `min_dtype`.
+    The computation is elementwise in a floating-point dtype no narrower than
+    `min_dtype`.
 
     Args:
         x: values in linear power units, as a number, array, or pandas/xarray object
@@ -327,9 +323,9 @@ def powtodB(
             `x` is widened to `min_dtype`
 
     Returns:
-        the dB values, real-valued, in the container type of `x` (a Python number for
-        a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
-        xarray ``units`` attribute converted from linear power to dB)
+        the dB values, real-valued, in the container type of `x`: a Python number
+        for a number, otherwise the array, pandas, or xarray type of `x`. An xarray
+        ``units`` attribute is converted from linear power to dB.
 
     Raises:
         TypeError: if `min_dtype` is None or narrower than float32, or if no array
@@ -350,8 +346,8 @@ def dBtopow(
 ) -> _ALN:
     """compute ``10**(x/10)``.
 
-    The computation is elementwise through numexpr on numpy and a fused kernel on
-    cupy, in a floating-point dtype no narrower than `min_dtype`.
+    The computation is elementwise in a floating-point dtype no narrower than
+    `min_dtype`.
 
     Args:
         x: values in dB, as a number, array, or pandas/xarray object
@@ -361,9 +357,9 @@ def dBtopow(
             `x` is widened to `min_dtype`
 
     Returns:
-        the values in linear power units, in the container type of `x` (a Python
-        number for a number, otherwise the array, `pandas` or `xarray` type of `x`,
-        with an xarray ``units`` attribute converted from dB to linear power)
+        the values in linear power units, in the container type of `x`: a Python
+        number for a number, otherwise the array, pandas, or xarray type of `x`. An
+        xarray ``units`` attribute is converted from dB to linear power.
 
     Raises:
         TypeError: if `min_dtype` is None or narrower than float32, or if no array
@@ -398,8 +394,8 @@ def envtopow(
 ) -> _ALN:
     """compute ``abs(x)**2``.
 
-    The computation is elementwise through numexpr on numpy and a fused kernel on
-    cupy, in a floating-point dtype no narrower than `min_dtype`.
+    The computation is elementwise in a floating-point dtype no narrower than
+    `min_dtype`.
 
     Args:
         x: values in linear amplitude (envelope) units, real or complex, as a
@@ -411,9 +407,9 @@ def envtopow(
             `x` is widened to `min_dtype`
 
     Returns:
-        the power values, real-valued, in the container type of `x` (a Python number
-        for a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
-        xarray ``units`` attribute converted from amplitude to linear power)
+        the power values, real-valued, in the container type of `x`: a Python number
+        for a number, otherwise the array, pandas, or xarray type of `x`. An xarray
+        ``units`` attribute is converted from amplitude to linear power.
 
     Raises:
         TypeError: if `min_dtype` is None or narrower than float32, or if no array
@@ -453,8 +449,8 @@ def envtodB(
 ) -> _ALN:
     """compute ``20*log10(abs(x))``, or ``20*log10(x)`` when `abs` is False.
 
-    The computation is elementwise through numexpr on numpy and fused kernels on
-    cupy, in a floating-point dtype no narrower than `min_dtype`.
+    The computation is elementwise in a floating-point dtype no narrower than
+    `min_dtype`.
 
     Args:
         x: values in linear amplitude (envelope) units, as a number, array, or
@@ -471,9 +467,9 @@ def envtodB(
             `x` is widened to `min_dtype`
 
     Returns:
-        the dB values, real-valued, in the container type of `x` (a Python number for
-        a number, otherwise the array, `pandas` or `xarray` type of `x`, with an
-        xarray ``units`` attribute converted from amplitude to dB)
+        the dB values, real-valued, in the container type of `x`: a Python number
+        for a number, otherwise the array, pandas, or xarray type of `x`. An xarray
+        ``units`` attribute is converted from amplitude to dB.
 
     Raises:
         TypeError: if `min_dtype` is None or narrower than float32, or if no array
@@ -559,9 +555,9 @@ def _arraylike_with_buffer(
     Returns:
         ``(values, out, xp)``: the array to compute on, with dtype at least
         `min_dtype`; the buffer to evaluate into, which is `values` itself when
-        overwriting or widened, a new real-valued array shaped like `values` on the
-        numexpr and fused-kernel paths, and None on dask or any other namespace;
-        and the array namespace of `values`
+        overwriting or widened, a new real-valued array shaped like `values` on
+        numpy and cupy, and None on any other namespace; and the array namespace of
+        `values`
 
     Raises:
         TypeError: if `min_dtype` is None or narrower than float32, or if no array
@@ -588,7 +584,6 @@ def _arraylike_with_buffer(
         raise TypeError(f'unable to associate an array with type {type_!r} with input')
     values = typing.cast('Array', values)
 
-    # widen to min_dtype when the input is narrower
     dtype = values.dtype
     if np.dtype(min_dtype) <= dtype:
         promote_dtype = None
@@ -621,10 +616,10 @@ def _real_buffer(out: Array) -> Array:
 
 
 def _use_cuda_kernels(values: Array) -> bool:
-    """report whether `values` is evaluated with the fused kernels in `cuda_jit`.
+    """return True when `values` is evaluated with the fused kernels in `cuda_jit`.
 
-    The kernels assign through ``out[:]``, which 0-d arrays do not support, so cupy
-    scalars take the generic array-API path.
+    The kernels assign through ``out[:]``, which a 0-d array does not support. A cupy
+    scalar takes the generic array-API path.
     """
     return is_cupy_array(values) and values.ndim > 0
 

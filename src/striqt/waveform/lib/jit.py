@@ -19,7 +19,8 @@ if not os.environ.get('NUMBA_CACHE_DIR'):
         pass
 
 # numba invalidates .nbc cache files when the source file mtime changes, which happens on
-# every pip reinstall even when the content is identical — use content hash instead
+# every pip reinstall even when the content is identical; a content hash replaces the
+# mtime in the stamp
 from numba.core.caching import _SourceFileBackedLocatorMixin as _Locator
 
 

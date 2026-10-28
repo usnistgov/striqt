@@ -110,7 +110,7 @@ def _bandwidth_grid():
     ids=['finite', 'infinite'],
 )
 def test_limit_nyquist_bandwidth(analysis_bandwidth, expected):
-    """a finite bandwidth is kept as it is, and an infinite one becomes each
+    """a finite bandwidth is unchanged, and an infinite bandwidth becomes each
     backend sample rate"""
     bw = yfactor._limit_nyquist_bandwidth(_bandwidth_grid())
     assert bw.sel(analysis_bandwidth=analysis_bandwidth).values.tolist() == expected
@@ -141,9 +141,9 @@ def test_explicit_detector_period_is_used():
     ids=['capture', 'loop'],
 )
 def test_default_detector_period_is_the_one_duration(loops, period):
-    """the default period is one bin per capture. The rms mean that the Y-factor
-    math uses does not depend on the bin count, and the PAPR diagnostics collapse
-    to 0 dB. A looped duration overrides the capture's own."""
+    """the default period is one bin per capture. The rms mean of the Y-factor math
+    does not depend on the bin count, and the PAPR diagnostics collapse to 0 dB. A
+    looped duration overrides the duration of the capture."""
     sweep = make_calibration_sweep(
         captures=(make_calibration_capture(duration=2e-3),), loops=loops
     )
@@ -152,8 +152,8 @@ def test_default_detector_period_is_the_one_duration(loops, period):
 
 
 def test_calibration_analysis_is_the_group_of_the_binding():
-    """the generated analysis is an instance of `schema.analysis`, which the
-    binding's `check_schema` has required to declare `channel_power_time_series`"""
+    """the generated analysis is an instance of `schema.analysis`. The `check_schema`
+    of the binding requires that group to declare `channel_power_time_series`."""
     cls = quick_binding(ss.specs.ManualYFactorCalibration).sensor.sweep_spec_cls
     spec = cls(
         source=SOURCE,
@@ -165,8 +165,9 @@ def test_calibration_analysis_is_the_group_of_the_binding():
 
 
 def test_default_detector_period_needs_one_duration():
-    """the bound spec's constructor reads the runner's `sweep`, which raises the
-    `detector_period` error"""
+    """the constructor of the bound spec builds the `sweep` of the runner. A duration
+    loop with 2 values leaves no single duration, and the `detector_period` error is
+    raised at construction."""
     with pytest.raises(msgspec.ValidationError, match=r'calibration\.detector_period'):
         make_calibration_sweep(loops=(DURATION_LOOP,))
 
@@ -234,8 +235,8 @@ def test_pass_sweep_fixes_the_port_and_drops_the_port_loop():
 
 
 def test_explicit_captures_with_implied_loops():
-    """2 explicit captures at different ports give one pass per port over that
-    port's capture. The whole calibration acquires 2 ports x 2 states x 1 capture."""
+    """2 explicit captures at different ports give one pass per port over the capture
+    at that port. The whole calibration acquires 2 ports x 2 states x 1 capture."""
     sweep = ss.read_yaml_spec(SITE_DIR / 'site-calibration-explicit.yaml')
     runner = ManualYFactorRunner(sweep)
     assert 'external_lo_frequency' in sweep.calibration.implied_loops
@@ -394,8 +395,11 @@ def test_each_pass_begins_with_a_fresh_acquisition(monkeypatch, scripted_input):
 
 
 def _run_passes_into_a_memory_sink(runner, monkeypatch, scripted_input):
-    """drive every pass of `runner` with no acquisitions into a `MemoryCacheSink`
-    and return the calls made to `save_yfactor_corrections`"""
+    """run every pass of `runner` with no acquisitions into a `MemoryCacheSink`.
+
+    Returns:
+        the `path` and `enr_dB` of each call to `save_yfactor_corrections`
+    """
     scripted_input['answers'] += ['y'] + [''] * len(
         yfactor.calibration_passes(runner.spec)
     )

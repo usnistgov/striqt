@@ -13,8 +13,8 @@ if typing.TYPE_CHECKING:
     from numbers import Number
     from types import ModuleType
 
-    # bury this type checking in here to avoid lengthening the import time of
-    # striqt.waveform if cupy isn't installed
+    # the cupy import is confined to TYPE_CHECKING: at runtime, a failed cupy import
+    # would lengthen the import of striqt.waveform
     try:
         import cupy as cp  # ty: ignore[unresolved-import]
 

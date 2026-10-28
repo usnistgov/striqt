@@ -1,9 +1,5 @@
 """factories for SoapySDR-backed spec instances and the fake device, shared by the
-sensor tests.
-
-Not a conftest. The sensor test modules import it by bare name; fixtures are
-defined in the root conftest.
-"""
+sensor tests."""
 
 from __future__ import annotations
 
@@ -37,8 +33,8 @@ _CLASS_ATTRS = (
 
 
 def soapy_capture(**kws) -> ss.specs.SoapyCapture:
-    """a SoapyCapture at the fake device's master clock rate, with `kws` overriding
-    the defaults"""
+    """return a `SoapyCapture` at the master clock rate of the fake device, with `kws`
+    overriding the defaults"""
     return ss.specs.SoapyCapture(**{**CAPTURE_DEFAULTS, **kws})
 
 
@@ -55,12 +51,12 @@ def _source_preset_cls(class_attrs: tuple):
 
 
 def source_spec(**overrides) -> ss.specs.SoapySource:
-    """a SoapySource at the fake device's master clock rate.
+    """return a `SoapySource` at the master clock rate of the fake device.
 
-    Field overrides are passed through; overrides of the class attributes
+    Field overrides are passed to the constructor. Overrides of the class attributes
     `rx_enable_delay`, `stream_all_rx_ports`, `transport_dtype`,
-    `shared_rx_sample_clock` and `transient_holdoff_time` select a cached SoapySource
-    subclass that defines them.
+    `shared_rx_sample_clock`, and `transient_holdoff_time` select a cached
+    `SoapySource` subclass that defines those attributes.
     """
     class_attrs = tuple(
         sorted((k, overrides.pop(k)) for k in list(overrides) if k in _CLASS_ATTRS)
@@ -70,6 +66,6 @@ def source_spec(**overrides) -> ss.specs.SoapySource:
 
 
 def call_names(device, *names) -> list[str]:
-    """the names of the calls recorded by the fake `device` that match `names`, in
-    call order"""
+    """return the names of the recorded calls of the fake `device` that match `names`,
+    in call order"""
     return [c[0] for c in device.calls_named(*names)]

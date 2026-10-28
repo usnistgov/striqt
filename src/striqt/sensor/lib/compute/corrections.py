@@ -47,9 +47,9 @@ def attach_corrections(
     signal_trigger: sa.Trigger | None = None,
     overwrite_x: bool = False,
 ) -> specs.AcquiredIQ:
-    """return a copy of `iq` with `signal_trigger` and `overwrite_x` set for `preprocess`.
+    """return a copy of `iq` with the given `signal_trigger` and `overwrite_x`.
 
-    The copy starts with empty conditioning stages.
+    The copy has a `Preprocessor` of its own with every stage empty.
 
     Args:
         signal_trigger: the trigger that `preprocess` runs for alignment; None
@@ -101,10 +101,10 @@ class Preprocessor(sa.Preprocessor):
         `capture.duration`, and shift by the trigger lags.
 
         Args:
-            prefer_filtered: True for the waveform low-passed to
+            prefer_filtered: True selects the waveform low-passed to
                 `capture.analysis_bandwidth`; the unfiltered waveform is returned
                 when `needs_analysis_filter` is false
-            prefer_aligned: True for the waveform shifted by the trigger lags; the
+            prefer_aligned: True selects the waveform shifted by the trigger lags; the
                 unaligned waveform is returned when no trigger is set
 
         Returns:
@@ -114,10 +114,10 @@ class Preprocessor(sa.Preprocessor):
 
         Raises:
             TypeError: if `capture` is not a `SensorCapture`
-            RuntimeError: if the trigger measurement selected ``prefer_aligned=True``,
-                or if the acquisition has been garbage collected
-            ValueError: if the acquisition is too short for the resampler or the
-                trigger shifts
+            RuntimeError: if called with `prefer_aligned` True from inside the trigger
+                measurement, or if the acquisition has been garbage collected
+            ValueError: if the acquisition is shorter than the resampler or the
+                trigger shifts require
         """
         iq = self.iq
         capture = _sensor_capture(iq)
@@ -148,7 +148,7 @@ class Preprocessor(sa.Preprocessor):
 
 
 def needs_analysis_filter(iq: specs.AcquiredIQ) -> bool:
-    """return whether `preprocess` runs the FIR low-pass to `analysis_bandwidth` for `iq`.
+    """return whether `preprocess` low-passes `iq` to `analysis_bandwidth` with the FIR.
 
     The filter runs when `analysis_bandwidth` is finite, except on the oaresample
     path, where the resampler applies the low-pass.
@@ -172,7 +172,8 @@ def _trigger_of(iq: specs.AcquiredIQ) -> sa.Trigger | None:
 
 
 def _resampled_stage(pp: Preprocessor) -> tuple[Array, int | None]:
-    """return `x` scaled, resampled, and conjugated, with the lead offset in samples.
+    """return ``(y, lead)``: `x` scaled, resampled, and conjugated, and the lead pad in
+    output samples.
 
     No other stage reads `x` of the acquisition. The stage modifies that `x` in
     place when `overwrite_x` of the acquisition is set.
@@ -262,8 +263,7 @@ def _filtered_stage(pp: Preprocessor) -> Array:
 def _trigger_shifts(pp: Preprocessor) -> Array:
     """return the per-port shift, in samples, from the trigger of the acquisition.
 
-    The trigger is called with the acquisition itself, so the input of the trigger
-    measurement is selected through `pp` while `aligning` is set.
+    `aligning` is set while the trigger measurement runs on the acquisition.
     """
     if pp.shifts is not None:
         return pp.shifts
@@ -290,25 +290,29 @@ def get_correction_overlaps(
     setup: specs.Source,
     analysis: specs.AnalysisGroup | None = None,
 ) -> tuple[int, int]:
-    """return the (lead, tail) acquisition overlap of `capture` in source-rate samples.
+    """return the ``(lead, tail)`` acquisition overlap of `capture` in source samples.
 
     The lead absorbs the transient of the analysis FIR, which `AcquiredIQ.preprocess`
     applies at `capture.sample_rate` after resampling. The tail absorbs that
-    transient and the largest lag of the trigger that `analysis` selects. The lead
-    and tail together pad
-    the record of `source_record_size` samples to a whole number of resampler FFTs.
+    transient and the largest lag of the trigger named by ``setup.signal_trigger``.
+    The lead and tail pad the record of `source_record_size` samples to a whole
+    number of resampler FFTs.
 
     Args:
-        capture: the capture whose duration, sample rate, and analysis bandwidth size
-            the record and the filter
-        setup: the source whose `master_clock_rate` fixes the resampler design and
-            the trigger lag
-        analysis: the analysis group whose `signal_trigger` sets the tail reserved
-            for alignment, or None to reserve none
+        capture: the capture with the `duration`, `sample_rate`, and
+            `analysis_bandwidth` that size the record and the filter
+        setup: the source with the `master_clock_rate` that fixes the resampler
+            design and the trigger lag
+        analysis: the analysis group with the measurement spec of the trigger, or
+            None to reserve no tail for alignment
 
     Returns:
         ``(lead, tail)`` counts of samples at the source rate ``fs_sdr`` of the
         resampler design, each non-negative
+
+    Raises:
+        ValueError: if ``setup.signal_trigger`` names a measurement that `analysis`
+            does not enable
     """
 
     from .analyze import get_trigger_from_spec
@@ -329,8 +333,8 @@ def _get_resampler_overlaps(
             transient for a trigger shift
 
     Returns:
-        ``(lead, tail)`` at the source rate; on the default path the record padded
-        by them is a whole number of resampler FFTs (`_get_resample_overlap`)
+        ``(lead, tail)`` at the source rate; on the default path, the padded record
+        is a whole number of resampler FFTs (`_get_resample_overlap`)
     """
 
     if USE_OARESAMPLE:
@@ -342,7 +346,7 @@ def _get_resampler_overlaps(
 def needs_resample(
     analysis_filter: sw.ResamplerDesign, capture: specs.SensorCapture
 ) -> bool:
-    """determine whether host resampling is needed to filter or resample"""
+    """return whether `capture.host_resample` is set and `analysis_filter` resamples."""
     if not capture.host_resample:
         return False
 
@@ -430,16 +434,15 @@ def design_resampler(
 
 
 def validate_fir_band(capture: specs.SensorCapture) -> None:
-    """raise what `scipy.signal.firls` rejects inside `design_fir_lpf` for `capture`.
+    """raise unless the analysis FIR of `capture` has a positive passband below Nyquist.
 
-    Every band needs a positive width, so the `FIR_TRANSITION_BW` (in Hz) transition
-    band centered on ``analysis_bandwidth / 2`` must lie strictly inside
+    The transition band is `FIR_TRANSITION_BW` (Hz) wide and centered on
+    ``analysis_bandwidth / 2``. The band must lie strictly inside
     ``(0, sample_rate / 2)``.
 
     Raises:
-        ValueError: the passband below the transition band is empty, or the
-            transition band reaches ``sample_rate / 2``. The message names
-            `analysis_bandwidth` and `sample_rate` rather than the filter bands.
+        ValueError: if the passband below the transition band is empty, or if the
+            transition band reaches ``sample_rate / 2``
     """
     bw = capture.analysis_bandwidth
     fs = capture.sample_rate
@@ -459,15 +462,14 @@ def validate_fir_band(capture: specs.SensorCapture) -> None:
 
 
 def validate_oaresample_shift(design: sw.ResamplerDesign) -> None:
-    """raise what `striqt.waveform.oaresample` rejects for `design`.
+    """raise unless `striqt.waveform.oaresample` accepts the ``lo_offset`` of `design`.
 
     A zero ``lo_offset`` always passes.
 
     Raises:
-        ValueError: ``lo_offset`` is nonzero while upsampling, is not a multiple of
-            the resampler's FFT bin spacing (in Hz, set by ``fs_sdr`` and ``nfft``),
-            or shifts the output passband outside the source bandwidth. The message
-            names `lo_shift` rather than the resampler design.
+        ValueError: if ``lo_offset`` is nonzero while upsampling, is not a multiple
+            of the FFT bin spacing ``fs_sdr / nfft`` (Hz) of the resampler, or shifts
+            the output passband outside the source bandwidth
     """
     shift = design['lo_offset']
     nfft = design['nfft']
@@ -559,7 +561,18 @@ def _scale_only(
 def _resample(
     iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
-    """resample `iq.x` to the capture sample rate, recentering the LO shift."""
+    """return ``(y, lead)``: `iq.x` resampled to `capture.sample_rate` and the lead pad.
+
+    `y` begins with the lead pad and ends with the resampled tail pad, and `lead` is
+    the lead pad in output samples.
+
+    The `lo_offset` of the resampler design is shifted to 0 Hz. `iq.x` is consumed
+    in place when `overwrite_x` is set.
+
+    Raises:
+        ValueError: if the record does not resample to a whole number of output
+            samples, or the LO offset is not a whole number of bins of the record
+    """
     x = iq.x
     source_spec = iq.source_spec
     capture = iq.capture
@@ -593,17 +606,16 @@ def _resample(
 def _oaresample(
     iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
-    """resample `iq.x` in one STFT pass and return ``(waveform, lead offset)``.
+    """return `iq.x` resampled in one STFT pass and the lead pad in output samples.
 
-    The acquisition must contain the capture plus the pads that
-    `_get_oaresample_overlaps` gives for `min_overlap`. The returned waveform starts
-    at the lead pad at `capture.sample_rate`, low-passed to `analysis_bandwidth` when
-    that is finite and shifted by the `lo_offset` of the resampler design. The
-    returned waveform includes the resampled tail pad. The returned offset is the
-    resampled lead pad, in samples at `capture.sample_rate`.
+    The returned waveform begins with the lead pad and ends with the resampled tail
+    pad, at `capture.sample_rate`. The waveform is low-passed to `analysis_bandwidth`
+    when finite and shifted by the `lo_offset` of the resampler design. `iq.x` is
+    consumed in place when `overwrite_x` is set.
 
     Raises:
-        ValueError: if the acquisition is shorter than the capture plus the pads
+        ValueError: if the acquisition is shorter than the capture plus the pads of
+            `_get_oaresample_overlaps` for `min_overlap`
     """
     x = iq.x
     source_spec = iq.source_spec
@@ -680,15 +692,16 @@ def _get_oaresample_overlaps(
     nfft = design['nfft']
     nfft_out = design['nfft_out']
 
-    # only the COLA overlap fraction is needed here; the size argument sizes
-    # design_oafilter's own padding
+    # only the COLA overlap fraction is needed here; the size argument sizes the
+    # padding internal to design_oafilter
     overlap_scale = sw.fourier.design_oafilter(
         nfft, window=design['window'], nfft_out=nfft_out, nfft=nfft, extend=True
     )[2]
     noverlap = round(nfft * overlap_scale)
     hop = nfft - noverlap
 
-    # resampling by nfft_out / nfft maps only multiples of this onto whole output samples
+    # resampling by nfft_out / nfft maps only multiples of lead_step onto whole output
+    # samples
     lead_step = nfft // gcd(nfft, nfft_out)
     lead = sw.util.ceildiv(noverlap, lead_step) * lead_step
 
@@ -703,13 +716,12 @@ def source_record_size(capture: specs.SensorCapture, design: sw.ResamplerDesign)
 
     The count is the output sample count ``round(duration * sample_rate)`` scaled by
     the exact ``nfft / nfft_out`` ratio of `design`, in integer arithmetic, with a
-    half sample rounded up. The acquisition read count, the resampler pads, and the
-    tolerance model all take the record length from this function.
+    half sample rounded up.
     """
     samples_out = round(capture.duration * capture.sample_rate)
     nfft, nfft_out = design['nfft'], design['nfft_out']
-    # integer round-half-up; the float product duration * fs_sdr lands below the
-    # half sample when both factors are inexact and would round the other way
+    # integer round-half-up: the float product duration * fs_sdr falls below the half
+    # sample when both factors are inexact, and round() would then round down
     return (2 * samples_out * nfft + nfft_out) // (2 * nfft_out)
 
 

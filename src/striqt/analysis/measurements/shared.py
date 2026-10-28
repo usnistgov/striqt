@@ -31,8 +31,8 @@ def capture_sample_count(capture: specs.Capture) -> int:
 def capture_noise_bandwidth(capture: specs.Capture) -> float:
     """return the noise bandwidth (in Hz) of the IQ that a measurement receives.
 
-    The IQ is low-pass filtered to `analysis_bandwidth` when that is finite. Otherwise
-    the resampler passband spans the full `sample_rate`.
+    Returns:
+        `analysis_bandwidth` when finite, otherwise `sample_rate`
     """
     if math.isfinite(capture.analysis_bandwidth):
         return float(capture.analysis_bandwidth)
@@ -47,25 +47,23 @@ def bandwidth_attrs(
     *,
     resolution_bandwidth: float | None = None,
 ) -> dict[str, Any]:
-    """return the attrs of a power output with the noise bandwidth `noise_bandwidth`.
+    """return the attrs of a power output with noise bandwidth `noise_bandwidth`.
 
     White noise with power spectral density N0 has a mean power of
-    ``N0 * noise_bandwidth`` in the output. A calibrated noise density in dBm/Hz plus
-    ``10*log10(noise_bandwidth)`` is therefore the expected noise level of the output.
+    ``N0 * noise_bandwidth`` in the output.
 
     Args:
         noise_bandwidth: in Hz
-        units: the unit of the output values without a bandwidth, ``'dBm'`` or ``'√mW'``
-        quantity: the name of the output, which starts `long_name`
+        units: the unit of the output values, ``'dBm'`` or ``'√mW'``
+        quantity: the name of the output, which begins `long_name`
         resolution_bandwidth: the equivalent noise bandwidth (in Hz) of the analysis
-            window of a spectrum, which sets the output level of a CW tone; None
-            omits the key
+            window, which sets the output level of a CW tone; None omits the key
 
     Returns:
         a dict with ``'units'``, ``'noise_bandwidth'``, ``'long_name'`` as
         ``'<quantity> (<units>/<bandwidth>)'`` such as
         ``'Power spectral density (dBm/360 kHz)'``, and ``'resolution_bandwidth'``
-        when given
+        when not None
     """
     from ..lib.dataarrays import format_units
 
@@ -80,11 +78,16 @@ def bandwidth_attrs(
 
 
 def check_statistics(field: str, statistics: Sequence[str | float]) -> None:
-    """raise `ValueError` for any `statistics` entry that is not a supported statistic.
+    """check that each entry of `statistics` names a supported statistic.
 
-    Supported are 'min', 'max', 'peak', 'mean', 'rms', 'median', and quantiles in
-    ``[0, 1]`` (`sw.power_analysis.stat_ufunc_from_shorthand`); `field` is the spec
-    field named in the message.
+    Args:
+        field: name of the spec field that set `statistics`, named in the error
+        statistics: ``'min'``, ``'max'``, ``'peak'``, ``'mean'``, ``'rms'``,
+            ``'median'``, or a quantile in ``[0, 1]``
+            (`sw.power_analysis.stat_ufunc_from_shorthand`)
+
+    Raises:
+        ValueError: if an entry of `statistics` is not a supported statistic
     """
     from striqt.waveform.lib.power import stat_ufunc_from_shorthand
 
@@ -109,18 +112,17 @@ def check_frequency_band(
 ) -> int:
     """return the number of bins in the band that `field` selects.
 
-    `offset` must fall on the ``sample_rate / nfft`` grid, and the band must lie
-    within ``±sample_rate / 2``. `bandwidth` is rounded to the nearest whole number of
-    bins and is not otherwise checked against the grid, so a value between grid
-    multiples passes.
+    `offset` must fall on the ``sample_rate / nfft`` grid. The band must lie within
+    ``±sample_rate / 2``. A `bandwidth` between grid multiples is accepted and
+    rounded to the nearest whole number of bins.
 
     Args:
-        field: name of the spec field that set `bandwidth`, for the message
+        field: name of the spec field that set `bandwidth`, named in the error
         nfft: number of bins across `sample_rate`, which sets the grid spacing
         sample_rate: in S/s
-        bandwidth: width of the band in Hz, rounded to the nearest whole number of bins
-        offset: center of the band relative to baseband DC in Hz
-        offset_field: name of the spec field that set `offset`, for the message
+        bandwidth: width of the band in Hz
+        offset: center of the band in Hz relative to baseband DC
+        offset_field: name of the spec field that set `offset`, named in the error
 
     Returns:
         the number of bins the band spans after rounding, at least 0
@@ -154,20 +156,18 @@ def check_frequency_band(
 def quantization_dB(dtype: DTypeLike, limit_digits: int | None = None) -> float:
     """bound the error (in dB) of rounding and storing a dB level.
 
-    The level is rounded to `limit_digits` decimals and stored as `dtype`; the bound
-    holds for levels within 200 dB of 0 dB.
+    The bound holds for levels within 200 dB of 0 dB.
 
     Args:
         dtype: the floating-point storage type of the level
-        limit_digits: decimals kept by rounding; `None` skips the decimal rounding
+        limit_digits: decimals kept by rounding; `None` selects no decimal rounding
 
     Returns:
         a positive bound in dB set by the rounding step of `limit_digits` and the
-        spacing of `dtype` at 200 dB; the storage term alone when `limit_digits` is
-        `None`
+        spacing of `dtype` at 200 dB
     """
-    # a tolerance function never sees output values, so the storage rounding is bounded
-    # over the level range rather than at the level actually produced
+    # tolerance functions run before the output exists. The storage spacing is taken
+    # at the top of a 200 dB level range instead of at the level produced.
     level_range_dB = 200.0
     step = float(np.spacing(np.asarray(level_range_dB, dtype=dtype)))
     decimal = 0.0 if limit_digits is None else 10.0 ** (-limit_digits)
@@ -189,12 +189,12 @@ def level_tolerance(
     The peak amplitude error over `size` output elements includes the on-peak
     roundoff of `dtype` whenever `amplitude_rms` is nonzero. `off_peak_dBc` gives the
     depths (in dBc) at which the rms and the peak amplitude errors equal the amplitude
-    of an element. `util.elementwise_atol` diverges at the peak depth.
+    of an element.
 
     Args:
-        amplitude_rms: relative rms error of the amplitude the power is taken from
-            (input roundoff and any FFT passes, added in quadrature by the caller)
-        size: number of output elements the bound holds over
+        amplitude_rms: relative rms error of the amplitude underlying the power
+            (input roundoff and FFT roundoff, combined in quadrature by the caller)
+        size: number of output elements covered by the bound
         power_rtol: worst-case relative error of squaring the amplitude and of any
             reduction summed in order (`sw.power_analysis.bin_power_rtol`,
             `sw.arrays.accum_rtol`)
@@ -202,13 +202,12 @@ def level_tolerance(
             (`sw.power_analysis.log_conversion_tol`)
         quantization: storage rounding in dB (`quantization_dB`)
         power_rms: rms relative error of a reduction over a contiguous axis
-            (`sw.power_analysis.bin_power_rms`); the worst case of this error over
-            `size` outputs enters the peak bound
+            (`sw.power_analysis.bin_power_rms`)
         dtype: complex dtype of the amplitude, which sets the on-peak roundoff term
 
     Returns:
-        the `specs.Tolerance` with ``units='dB'``; `off_peak_dBc` is `None` when
-        `amplitude_rms` is 0
+        the `specs.Tolerance` in dB, with `off_peak_dBc` None when `amplitude_rms`
+        is 0
     """
     peak_amplitude = sw.fourier.peak_factor(size) * amplitude_rms
     if amplitude_rms > 0:

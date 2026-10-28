@@ -44,12 +44,13 @@ class TestGetWindow:
         nwindow=st.integers(min_value=8, max_value=256),
     )
     def test_normalization(self, name, nwindow):
-        """norm=True gives unit mean square; norm=False peaks at 1 and is non-negative"""
+        """``norm=True`` gives unit mean square. ``norm=False`` peaks at 1 and is
+        non-negative."""
         w = get_window(name, nwindow, norm=True)
         assert_allclose(np.mean(np.abs(w) ** 2), 1.0, rtol=1e-6)
 
         w = get_window(name, nwindow, fftshift=False, norm=False)
-        # blackman's endpoints are zero up to roundoff
+        # the blackman endpoints are zero up to roundoff
         assert np.all(w >= -1e-10)
         assert np.max(w) <= 1.0 + 1e-10
 
@@ -58,7 +59,7 @@ class TestGetWindow:
         nwindow=st.integers(min_value=8, max_value=128),
     )
     def test_fftshift_preserves_energy(self, name, nwindow):
-        """an odd size shifts by half a sample, which makes the window complex"""
+        """an odd size shifts by half a sample, so the window is complex"""
         w0 = get_window(name, nwindow, fftshift=False, norm=False)
         w = get_window(name, nwindow, fftshift=True, norm=False)
         assert np.iscomplexobj(w) == bool(nwindow % 2)
@@ -82,7 +83,7 @@ class TestGetWindow:
 
     def test_equivalent_argument_spellings_share_one_cache_entry(self):
         """the analysis warms the cache with a dtype string and no xp, while stft
-        asks with a numpy dtype object and its namespace; both must hit one entry"""
+        asks with a numpy dtype object and the namespace. Both must hit one entry."""
         window, nwindow, nzero = ('kaiser', 11.884), 3840, 3328
         get_window.cache_clear()
 

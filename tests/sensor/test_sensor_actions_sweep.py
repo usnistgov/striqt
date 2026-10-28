@@ -1,8 +1,8 @@
 """striqt.sensor.lib.actions.sweep: SweepRunner, and the iterate_sweep dispatch through
 resources['runner'].
 
-The pipeline that `SweepRunner.iterate` runs is covered in
-`test_sensor_actions_core.py` through `ss.iterate_sweep`.
+The pipeline run by `SweepRunner.iterate` is covered in `test_sensor_actions_core.py`
+through `ss.iterate_sweep`.
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ def test_build_sweep_is_the_spec_itself():
 
 
 class RecordingRunner(SweepRunner):
-    """a `SweepRunner` whose `iterate` yields the resources and keyword arguments
-    it received"""
+    """a `SweepRunner` with an `iterate` that yields the received resources and
+    keyword arguments"""
 
     def iterate(self, resources, *, always_yield=False, yield_values=True, loop=False):
         yield (

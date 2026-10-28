@@ -24,7 +24,8 @@ from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
 
 class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
-    """the contract between an action spec and the code that runs the spec."""
+    """the role of the object that runs one action spec: derive the `Sweep`, open the
+    sink, and iterate the captures."""
 
     spec: TA
     """the action spec given at construction"""
@@ -35,21 +36,18 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
 
     @property
     def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
-        """the `Sweep` derived from `spec`.
-
-        The source, peripherals, and sink are opened for this `Sweep`.
+        """the `Sweep` derived from `spec`, for which the source, peripherals, and sink
+        are opened.
 
         Raises:
-            msgspec.ValidationError: if a field of `spec` is rejected; the error path
-                names the field
+            msgspec.ValidationError: if a field of `spec` is rejected
         """
         ...
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        """return the sink for `sweep`.
+        """return the sink for `sweep`, not yet entered.
 
-        The caller enters the returned sink. A ``sweep.sink.path`` of None selects a
-        sink that writes nothing.
+        A ``sweep.sink.path`` of None selects a sink that writes nothing.
 
         Args:
             format_path: the formatter of the ``{field}`` templates in the sink path,
@@ -71,13 +69,16 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
 
         Args:
             resources: the open resources
-            always_yield: if True, yield `None` on steps that produce no result
-            yield_values: if False, yield `None` instead of the sink result
-            loop: if True, the action repeats from the beginning after the last capture
+            always_yield: with `yield_values` False, True yields None at every step
+                and False yields nothing
+            yield_values: True yields the sink result of every step
+            loop: True cycles through the captures from the first after the last
 
         Yields:
-            what `sink.append` returned for each capture, or None as `always_yield`
-            and `yield_values` select
+            the return value of ``sink.append`` for each capture, or None at the
+            steps before the first sink write; with `yield_values` False, None at
+            every step or nothing as `always_yield` selects. The iteration never
+            ends when `loop` is True.
         """
         ...
 
@@ -90,17 +91,21 @@ def iterate_sweep(
     loop: bool = False,
     **replace: Unpack[AnyResources[SS, SP, SC, SA, PS, PC]],
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-    """run the action in `resources` using `iterate_captures`.
+    """run the `iterate` of ``resources['runner']`` over `resources`.
 
     Args:
-        resources: dictionary of open resources returned by `open_resources`
-        always_yield: if True, yield `None` on steps that produce no result
-        yield_values: if False, yield `None` instead of the sink result
-        loop: if True, the action repeats from the beginning after the last capture
-        **replace: resources that replace the entries of `resources` for this run
+        resources: the open resources of `open_resources`
+        always_yield: with `yield_values` False, True yields None at every step and
+            False yields nothing
+        yield_values: True yields the sink result of every step
+        loop: True cycles through the captures from the first after the last
+        **replace: entries that replace those of `resources` for this run
 
     Yields:
-        the return value from each append to the sink, or None
+        the return value of ``sink.append`` for each capture, or None at the steps
+        before the first sink write; with `yield_values` False, None at every step
+        or nothing as `always_yield` selects. The iteration never ends when `loop`
+        is True.
     """
     runner = resources['runner']
     return runner.iterate(
@@ -121,11 +126,12 @@ def iterate_captures(
     indexer: AcquisitionIndexer | None = None,
     **replace: 'Unpack[AnyResources[SS, SP, SC, SA, PS, PC]]',
 ) -> Generator['xr.Dataset|compute.DelayedDataset|None']:
-    """step through the captures of a sweep in the acquire, analyze, and sink pipeline.
+    """run the captures of ``resources['sweep_spec']`` through the acquire, analyze, and
+    sink pipeline.
 
-    Acquisition, analysis, and the sink write of 3 consecutive captures run in
-    parallel. The N captures of the sweep take N + 2 steps, and each step ends with
-    one yield:
+    Acquisition, analysis, and the sink write of 3 consecutive captures run
+    concurrently. The N captures of the sweep take N + 2 steps, and each step ends
+    with one yield:
 
     ```
     0. `(Acquire 0)` ➔ yield `None`
@@ -136,30 +142,34 @@ def iterate_captures(
     N+1. `(Sink N-1)` ➔ yield `(Result N-1)`
     ```
 
-    `Result i` is what `sink.append` returned for capture `i`. With `yield_values`
-    False, every step yields `None` when `always_yield` is True and the generator
-    yields nothing when `always_yield` is False. The attrs of each result are the
-    fields of ``resources['action_spec']``. The attrs differ from the fields of
-    ``resources['sweep_spec']`` when the runner derived the sweep from the spec.
+    `Result i` is the return value of ``sink.append`` for capture `i`. With
+    `yield_values` False and `always_yield` True, every step yields None. With both
+    False, the generator yields nothing. The attrs of each result are the fields of
+    ``resources['action_spec']``.
 
-    The `on_analyzed` and `on_sink_cached` hooks of ``resources['callbacks']`` run in the
-    calling thread. An exception from a hook ends the pipeline like an analysis error.
+    The captures are the loop expansion of the sweep for the open source. A `Repeat`
+    first in `loops` runs the expanded captures `count` times. One `indexer` shared
+    by several calls numbers the captures of all of those calls consecutively.
+
+    The `on_analyzed` and `on_sink_cached` hooks of ``resources['callbacks']`` run in
+    the calling thread. An exception from a hook ends the pipeline.
 
     Args:
-        resources: dictionary of open resources returned by `open_resources`
-        always_yield: with `yield_values` False, yield `None` at every step
-        yield_values: if False, yield nothing, or `None` per step with `always_yield`
-        loop: if True, the sweep repeats from the beginning after the last capture
-        extra_data: merged into the `extra_data` of every acquisition after the
-            peripherals' data, and overrides the peripherals' data on a shared key
+        resources: the open resources of `open_resources`
+        always_yield: with `yield_values` False, True yields None at every step and
+            False yields nothing
+        yield_values: True yields the sink result of every step
+        loop: True cycles through the captures from the first after the last
+        extra_data: entries merged into the `extra_data` of every acquisition after
+            the data of the peripherals; a shared key takes the value from here
         indexer: the counter that stamps `capture_index` and `sweep_index` on each
-            acquisition. One object passed to several calls numbers the captures of
-            all of those calls consecutively. None creates a counter over the
-            captures of this sweep.
+            acquisition, or None for a counter over the captures of this sweep
+        **replace: entries that replace those of `resources` for this run
 
     Yields:
-        what `sink.append` returned for each capture, or None, as the steps above
-        describe
+        None at steps 0 and 1 and then `Result i` at step ``i + 2``; or None at every
+        step; or nothing, as `yield_values` and `always_yield` select. The iteration
+        ends after step N + 1, or never when `loop` is True.
     """
 
     resources = Resources(resources, **replace)
@@ -286,16 +296,16 @@ def _log_progress_contexts(index, count):
 
 
 class AcquisitionIndexer:
-    """the counter that numbers the acquisitions of one logical sweep.
+    """the counter that stamps `capture_index` and `sweep_index` on the acquisitions
+    of one sweep.
 
     `capture_index` wraps to 0 at `captures_per_sweep`, and `sweep_index` then
-    advances. One instance passed to several `iterate_captures` calls numbers their
-    captures as one sweep. `apply` is not thread-safe and must run once per
-    acquisition, in order.
+    advances. `apply` is not thread-safe and must run once per acquisition, in order.
     """
 
     def __init__(self, captures_per_sweep: int):
-        """
+        """start both indexes at 0.
+
         Args:
             captures_per_sweep: the capture count at which `capture_index` wraps to 0
                 and `sweep_index` advances
@@ -306,10 +316,11 @@ class AcquisitionIndexer:
         self.sweep_start_time: 'pd.Timestamp|None' = None
 
     def apply(self, info: specs.AcquisitionInfo) -> specs.AcquisitionInfo:
-        """return a copy of `info` stamped with the current indexes, and advance.
+        """return a copy of `info` with `sweep_index` and `capture_index` set.
 
-        On a `SoapyAcquisitionInfo`, `sweep_start_time` is set to the `start_time`
-        of the first capture of the current sweep.
+        The counter advances by one capture. On a `SoapyAcquisitionInfo`,
+        `sweep_start_time` is set to the `start_time` of the first capture of the
+        current sweep.
         """
         result = info.replace(
             sweep_index=self.sweep_index, capture_index=self.capture_index
@@ -340,8 +351,9 @@ def _acquire_both(
 ) -> specs.AcquiredIQ:
     """arm and acquire from the source and peripherals.
 
-    The dict returned by the peripherals, then `extra_data`, are merged into the
-    `extra_data` of the returned acquisition struct in that order.
+    The `extra_data` of the result merges the entries of the acquisition, of the
+    peripherals, and of `extra_data`; a later source overrides an earlier one on a
+    shared key.
     """
 
     assert this is not None
@@ -354,8 +366,8 @@ def _acquire_both(
         peripherals = util.threadpool.submit(res['peripherals'].arm, c)
         util.await_and_ignore([source, peripherals], 'arm sensor')
 
-    # the previous call armed `this` as its `next_`, except for the first capture of
-    # a call or when `this` differs from what a previous pipeline run left armed
+    # the previous call armed `this` as its `next_`; re-arm only for the first capture
+    # of a run, or when another run left a different capture armed
     try:
         armed = res['source'].capture_spec
     except AttributeError:

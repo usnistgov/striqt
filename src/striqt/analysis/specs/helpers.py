@@ -170,15 +170,13 @@ def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
 
 # %% validation of (capture, analysis spec) combinations
 class SpecValidationError(msgspec.ValidationError):
-    """signal a spec validation failure with a msgspec-style field path.
+    """a spec validation failure with a msgspec-style field path.
 
-    `path` is one chain of field accesses from a single document root. The chain
-    renders as msgspec renders a path (``$.analysis.spectrogram``) and leads the
-    message. `locations` are further roots that locate the same failure, rendered
-    as an ``at ... on ...`` trailer in the order given. A rejected capture is
-    located by a ``captures:`` entry, the ``loops:`` point that generated the
-    capture, and the measurement key that rejected the capture. msgspec propagates
-    an instance raised in `__post_init__` unchanged, with the path.
+    `path` is the chain of field accesses from the document root, rendered as
+    msgspec renders a path (``$.analysis.spectrogram``) ahead of `message`.
+    `locations` are further roots at which the same failure is located, rendered
+    as an ``at ... on ...`` trailer in the order given. msgspec propagates an
+    instance raised in `__post_init__` unchanged.
     """
 
     def __init__(
@@ -217,7 +215,7 @@ def validation_path(*parts: str) -> Iterator[None]:
 
     Raises:
         SpecValidationError: in place of a `SpecValidationError`, `ValueError`,
-            `TypeError` or `msgspec.ValidationError` raised in the block, with
+            `TypeError`, or `msgspec.ValidationError` raised in the block, with
             `parts` joined ahead of the field path of the original exception
     """
 
@@ -232,11 +230,14 @@ def validation_path(*parts: str) -> Iterator[None]:
 # %% struct field subsets
 @dataclasses.dataclass(frozen=True)
 class SpecSubset:
-    """the relation `subset_of` records for a decorated struct type."""
+    """the field relation between a struct decorated with `subset_of` and its base."""
 
     base: type[msgspec.Struct]
+    """the struct type with the reference fields"""
     without: frozenset[str]
+    """names of the `base` fields that the subset omits"""
     optional: frozenset[str]
+    """names of the kept fields widened to ``Optional`` with default ``None``"""
 
 
 _spec_subsets: dict[type[msgspec.Struct], SpecSubset] = {}
@@ -252,19 +253,23 @@ def subset_of(
 
     Each field of the decorated struct must match the field of `base` with the same
     name in annotated type and default. A field named in `optional` is instead
-    annotated ``Optional[<base type>]`` with default ``None``. The decorated class is
-    returned unchanged and the relation is retrievable with `spec_subset`.
+    annotated ``Optional[<base type>]`` with default ``None``. The decorator records
+    the relation for `spec_subset`.
 
     Args:
-        base: the struct type whose fields are the reference
+        base: the struct type with the reference fields
         without: names of `base` fields that the decorated struct omits
         optional: names of kept fields that the decorated struct widens to
             ``Optional`` with a ``None`` default
 
+    Returns:
+        a decorator that returns the decorated class unchanged
+
     Raises:
-        TypeError: when the fields, annotated types, or defaults of the decorated
-            class differ from those of `base` minus `without`, or when `without` or
-            `optional` names a field that does not exist
+        TypeError: from the returned decorator, when the fields, annotated types, or
+            defaults of the decorated class differ from those of `base` minus
+            `without`, or when `without` or `optional` names a field that does not
+            exist
     """
     without = frozenset(without)
     optional = frozenset(optional)
@@ -326,23 +331,27 @@ def spec_subset(cls: type[msgspec.Struct]) -> SpecSubset | None:
 def convert_spec_cached(spec_cls: type[_T], spec: Any) -> _T:
     """project `spec` onto the fields that `spec_cls` declares.
 
-    Results are stored in a process-global `lru_cache` of 4096 entries that
-    `clear_caches` empties.
+    Results are cached in a process-global `lru_cache` of 4096 entries.
+    `clear_caches` empties the cache.
 
     Returns:
         an instance of `spec_cls` with the matching fields of `spec`, or `spec`
         itself when ``type(spec)`` is `spec_cls`
+
+    Raises:
+        msgspec.ValidationError: when `spec` lacks a required field of `spec_cls` or
+            a field value does not convert to the annotated type
     """
     return convert_spec(spec, type=spec_cls)
 
 
 def to_analysis_capture(capture: structs.Capture) -> structs.AnalysisCapture:
-    """project a capture down to the fields the analysis layer can read.
+    """project a capture onto the fields of `AnalysisCapture`.
 
     Returns:
-        an `AnalysisCapture` with the matching fields of `capture`, shared through
-        the cache of `convert_spec_cached`; `capture` itself when ``type(capture)``
-        is `AnalysisCapture`
+        an `AnalysisCapture` with the matching fields of `capture`, from the cache
+        of `convert_spec_cached`, or `capture` itself when ``type(capture)`` is
+        `AnalysisCapture`
     """
     from . import structs
 
@@ -379,19 +388,21 @@ def lru_cache_on_converted(
 
     Each of the first ``len(spec_types)`` positional arguments is converted with
     `convert_spec_cached` before the cache lookup. Calls that differ only in fields
-    the target types do not declare share one entry. The decorated function
-    annotates the projected arguments with the type the body receives. A caller may
-    pass anything `convert_spec` accepts at those positions.
+    the target types do not declare share one entry. A caller may pass anything
+    `convert_spec` accepts at those positions.
 
     Args:
-        spec_types: the struct type that each leading positional argument is
-            projected onto, in order
+        spec_types: the target struct type of each leading positional argument, in
+            order
         maxsize: the `lru_cache` size, or None for unbounded
 
     Returns:
-        a decorator whose wrapper exposes `cache_clear` and `cache_info` and is
-        registered for `clear_caches`; the wrapper raises `TypeError` when fewer
-        than ``len(spec_types)`` arguments arrive by position
+        a decorator; the wrapper the decorator returns exposes `cache_clear` and
+        `cache_info` and is registered for `clear_caches`
+
+    Raises:
+        TypeError: from the wrapper, when fewer than ``len(spec_types)`` arguments
+            are passed by position
     """
 
     def wrapper(func: Callable[..., _R]) -> LRUWrapped[..., _R]:
@@ -423,7 +434,13 @@ def lru_cache_on_converted(
 
 
 def _unwrap_type_info(type_: mi.Type) -> tuple[dict[str, Any], list[mi.Type]]:
-    """strip `Metadata` and `Optional` wrappers from `type_` into (attrs, member types)."""
+    """strip the `Metadata` and ``Optional`` wrappers of `type_`.
+
+    Returns:
+        the ``extra`` dict of the outermost `Metadata`, or an empty dict, and the
+        list of member types under the wrappers without ``None`` and variadic tuple
+        members
+    """
     attrs: dict[str, Any] | None = None
     types = [type_]
 
@@ -574,7 +591,14 @@ def unfreeze(
     obj: Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _V,
     max_depth: int | None = None,
 ) -> 'dict[_K, _V]|list[_V]|_V':
-    """recursively transform tuple and frozendict into list and dict"""
+    """convert the tuple and `frozendict` values of `obj` to list and dict.
+
+    Args:
+        max_depth: the number of nesting levels converted, or None for every level
+
+    Returns:
+        a dict for a mapping, a list for a tuple or list, or `obj` unchanged
+    """
     if isinstance(obj, (list, tuple)):
         nd = None if max_depth is None else max_depth - 1
         if nd is None or nd > 0:

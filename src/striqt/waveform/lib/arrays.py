@@ -104,10 +104,10 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
 
 # %% roundoff model
 #
-# Every tolerance in striqt.waveform is derived from the unit roundoff of the working
-# dtype and a count of the roundings a routine performs, so that a violation means the
-# routine rounds worse than its model rather than worse than a hand-picked number.
-# ROUNDOFF_SAFETY is the margin applied to the elementwise budgets.
+# Every tolerance in striqt.waveform is a count of the roundings a routine performs
+# times the unit roundoff of the working dtype. A violation then means the routine
+# rounds worse than its model, not worse than a hand-picked number. ROUNDOFF_SAFETY is
+# the margin applied to the elementwise budgets.
 ROUNDOFF_SAFETY = 2
 
 
@@ -124,11 +124,15 @@ def unit_roundoff(dtype: DTypeLike) -> float:
 def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """return the relative rms roundoff of a sum or mean over `n` terms of `dtype`.
 
-    The reduction runs along a contiguous axis, which numpy and cupy accumulate
-    partly in order and partly by tree. The result grows with the square root of
-    `n` from a floor of a few unit roundoffs of `dtype`. The strided-axis bound is
-    `accum_rtol`. `n_impl` independent implementations add in quadrature: 1 against
-    an exact reference, 2 between two backends.
+    The model applies to a reduction along a contiguous axis; `accum_rtol` bounds a
+    reduction along a strided axis. The result grows with the square root of `n`
+    from a floor of a few unit roundoffs of `dtype`.
+
+    Args:
+        dtype: the accumulation dtype; a complex dtype selects the real component
+        n: the number of terms summed
+        n_impl: the number of independent implementations compared, added in
+            quadrature: 1 against an exact reference, 2 between two backends
     """
     # A reduction over a contiguous axis is not summed in order. numpy sums it pairwise
     # (numpy/_core/src/umath/loops_utils.h.src; before numpy 2.3 per 8192-element
@@ -151,10 +155,15 @@ def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
 def accum_rtol(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """bound the relative roundoff of a sum or mean over `n` terms of `dtype`.
 
-    The reduction runs along a strided axis, which numpy accumulates in order. The
-    bound grows linearly with `n` in unit roundoffs of `dtype` (measured 1600 u
-    rms and 2000 u max at n = 1e6, against the 2e6 u of this bound). `n_impl` is 1
-    against an exact reference and 2 between two implementations.
+    The model applies to a reduction along a strided axis, which is summed in order.
+    The bound grows linearly with `n` in unit roundoffs of `dtype` (measured 1600 u
+    rms and 2000 u max at n = 1e6, against the 2e6 u of this bound).
+
+    Args:
+        dtype: the accumulation dtype; a complex dtype selects the real component
+        n: the number of terms summed
+        n_impl: the number of independent implementations compared: 1 against an
+            exact reference, 2 between two implementations
     """
     return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
 
@@ -179,15 +188,26 @@ def binned_mean(
     reject_extrema=False,
     fft=True,
 ) -> Array:
-    """reduce an array by averaging into bins on the specified axis.
+    """return the mean of `x` over bins of `count` samples along `axis`.
 
-    Arguments:
-        x: input array
-        count: bin count to average
-        axis: axis along which to implement the binned mean
-        truncate: True to truncate incomplete bins at the edges, or False to raise exception
-        reject_extrema: if True, the min and max samples from each bin are excluded
-        fft: if True, bins align with fft bins (centered, instead of left side)
+    Args:
+        x: the array to bin; NaN samples are excluded from each mean
+        count: the number of samples per bin
+        axis: the axis to bin, which the result shortens by a factor of `count`
+        truncate: True drops the samples at the edges of `axis` that do not fill a
+            bin; False raises `ValueError` for a length that is not a multiple of
+            `count`
+        reject_extrema: True excludes the minimum and maximum sample of each bin
+        fft: True centers a bin on index ``x.shape[axis] // 2``, the DC bin of an
+            `fftfreq` axis, and drops edge samples symmetrically; False starts the
+            first bin at index 0
+
+    Returns:
+        the binned means, in the array namespace of `x`
+
+    Raises:
+        ValueError: if `truncate` is False and ``x.shape[axis]`` is not a multiple of
+            `count`
     """
 
     xp = array_namespace(x)
@@ -273,71 +293,29 @@ def _sliding_window_output_shape(
 
 
 def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=False):
-    """
-    Create a sliding window view into the array with the given window shape.
+    """return a read-only view of `x` with a sliding window of `window_shape`.
 
-    The window slides across all dimensions of the array and extracts subsets
-    of the array at all window positions. A sliding window is also called a
-    rolling or moving window.
+    The view follows `numpy.lib.stride_tricks.sliding_window_view` and is evaluated
+    in the array namespace of `x`.
 
+    Args:
+        x: the array to view
+        window_shape: the window size over each axis in `axis`; an int is one axis
+        axis: the axis or axes along which the window slides; None applies
+            ``window_shape[i]`` to axis ``i`` of `x`
+        subok: True passes an `ndarray` subclass through; False returns a base-class
+            array
+        writeable: must be False
 
-    Parameters
-    ----------
-    x : array_like
-        Array to create the sliding window view from.
-    window_shape : int or tuple of int
-        Size of window over each axis that takes part in the sliding window.
-        If `axis` is not present, must have same length as the number of input
-        array dimensions. Single integers `i` are treated as if they were the
-        tuple `(i,)`.
-    axis : int or tuple of int, optional
-        Axis or axes along which the sliding window is applied.
-        By default, the sliding window is applied to all axes and
-        `window_shape[i]` refers to axis `i` of `x`.
-        If `axis` is given as a `tuple of int`, `window_shape[i]` refers to
-        the axis `axis[i]` of `x`.
-        Single integers `i` are treated as if they were the tuple `(i,)`.
-    subok : bool, optional
-        If True, sub-classes are passed through; otherwise the returned
-        array is forced to a base-class array (default).
-    writeable : bool, optional -- not supported
-        When true, allow writing to the returned view. The default is false.
-        The returned view contains the same memory location multiple times,
-        so writing to one location changes others.
+    Returns:
+        a view of shape ``x_shape_trimmed + window_shape``, where ``x_shape_trimmed``
+        is ``x.shape`` with each windowed axis shortened by one less than its window
+        size; the window axes are the trailing axes
 
-    Returns
-    -------
-    view : ndarray
-        Sliding window view of the array. The sliding window dimensions are
-        inserted at the end, and the original dimensions are trimmed as
-        required by the size of the sliding window.
-        That is, ``view.shape = x_shape_trimmed + window_shape``, where
-        ``x_shape_trimmed`` is ``x.shape`` with every entry reduced by one less
-        than the corresponding window size.
-
-
-    See also
-    --------
-    numpy.lib.stride_tricks.as_strided
-
-    Notes
-    --------
-    This function is adapted from numpy.lib.stride_tricks.as_strided.
-
-    Examples
-    --------
-    >>> x = _cupy.arange(6)
-    >>> x.shape
-    (6,)
-    >>> v = sliding_window_view(x, 3)
-    >>> v.shape
-    (4, 3)
-    >>> v
-    array([[0, 1, 2],
-           [1, 2, 3],
-           [2, 3, 4],
-           [3, 4, 5]])
-
+    Raises:
+        NotImplementedError: if `writeable` is True
+        ValueError: if `window_shape` has a negative entry, exceeds the shape of
+            `x`, or has a length different from the number of axes in `axis`
     """
 
     try:
@@ -355,7 +333,6 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=Fa
     if writeable:
         raise NotImplementedError('Writeable views are not supported.')
 
-    # convert input to array, possibly keeping subclass
     x = xp.array(x, copy=False, subok=subok)
 
     out_shape = _sliding_window_output_shape(x.shape, window_shape, axis)

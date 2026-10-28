@@ -32,8 +32,8 @@ def _get_start_stop_index(
     spec: specs.IQWaveform,
     allow_none: bool = True,
 ) -> tuple[int | None, int | None]:
-    # bounds are clamped into the capture so that the index range agrees with the
-    # waveform slice, which numpy clips silently
+    # numpy clips an out-of-range slice silently. Clamping keeps the index coordinate
+    # the same length as the slice.
     size = round(capture.duration * capture.sample_rate)
 
     if spec.start_time_sec is None:
@@ -64,7 +64,7 @@ def iq_waveform_tolerance(
 ) -> specs.Tolerance:
     """bound the error (in dB) of the IQ sample magnitudes.
 
-    The slice itself is exact, so the bound is `input_error` passed through.
+    The slice adds no error. The bound is `input_error` alone.
 
     Args:
         input_error: relative rms error of the IQ amplitude (linear, unitless)
@@ -74,7 +74,7 @@ def iq_waveform_tolerance(
         the `specs.Tolerance` in dB over the sliced samples
     """
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)
-    # the slice may be empty, where peak_factor's log is undefined
+    # peak_factor takes a log, which is undefined for an empty slice
     size = max(stop - start, 1)
     return shared.level_tolerance(
         amplitude_rms=input_error,
@@ -101,9 +101,13 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     tolerance=iq_waveform_tolerance,
 )
 def iq_waveform(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
-    """package the IQ waveform as a measurement result.
+    """return the IQ samples between `start_time_sec` and `stop_time_sec`.
 
-    The values are in √mW, and ``|iq|**2`` is power in mW. The output has no
+    The input is the IQ after the `analysis_bandwidth` filter and trigger alignment.
+    Per capture, the output has the dimension ``(iq_index,)`` of sample indexes into
+    the capture. The values are complex64 in √mW. The squared magnitude ``|iq|**2``
+    is power in mW. A None time bound selects the start or the end of the capture.
+    A bound outside the capture is clamped to the capture. The output has no
     `noise_bandwidth` attr. The noise bandwidth of each capture is the
     `analysis_bandwidth` coordinate, or `sample_rate` where `analysis_bandwidth` is
     infinite.
@@ -114,9 +118,9 @@ def iq_waveform(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
 
     spec = specs.IQWaveform.from_dict(kwargs)
 
-    # no noise_bandwidth attr: the bandwidth is the capture's analysis_bandwidth (or
-    # sample_rate), which can differ between the captures of one sweep, and a variable
-    # attr is written once per store. Readers use the analysis_bandwidth coordinate.
+    # no noise_bandwidth attr: the bandwidth is the analysis_bandwidth (or sample_rate)
+    # of the capture, which varies between the captures of one sweep, and a variable
+    # attr is written once per store
     metadata = spec.to_dict()
 
     start, stop = _get_start_stop_index(capture, spec)

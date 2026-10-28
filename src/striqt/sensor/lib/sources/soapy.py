@@ -72,7 +72,7 @@ class _SoapyArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
 
 
 class _SoapySensorReading(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    """a device sensor and the reading taken when the device was probed."""
+    """a device sensor and the reading taken when the device was probed"""
 
     name: str
     info: _SoapyArgInfo
@@ -86,7 +86,7 @@ class _SoapySensorReading(specs.SpecBase, kw_only=True, frozen=True, cache_hash=
 
 
 class _SoapyPortInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
-    """Capability metadata for a single RX or TX channel."""
+    """capability metadata of one RX or TX channel"""
 
     port_info: dict[str, str]
     full_duplex: bool
@@ -141,7 +141,7 @@ def _get_adc_peak(x: 'Array', capture: specs.SoapyCapture, source: specs.SoapySo
 def _probe_channel(
     device: SoapySDR.Device, direction: int, port: int
 ) -> _SoapyPortInfo:
-    """return the capabilities of channel `port` in `direction`, read from `device`."""
+    """return the capabilities of channel `port` in `direction`, read from `device`"""
 
     args = (direction, port)
 
@@ -223,17 +223,14 @@ def _assign_iq_calibration(iq: specs.AcquiredIQ):
 
 
 def probe_soapy_info(device: SoapySDR.Device, retries: int | None = None) -> SoapyInfo:
-    """probe a SoapySDR device and return the capabilities as a `SoapyInfo` struct.
+    """return the capabilities of `device` as a `SoapyInfo`.
 
-    The fields follow the C++ ``SoapySDRUtil --probe`` output. Every sensor of the
+    The fields follow the ``SoapySDRUtil --probe`` output. Every sensor of the
     device is read during the probe.
 
     Args:
-        device: an open SoapySDR.Device
-        retries: stored as the `retries` field of the result; not used by the probe
-
-    Returns:
-        a `SoapyInfo` struct of capability metadata for the device
+        device: an open ``SoapySDR.Device``
+        retries: stored as the `retries` field of the result
     """
     global_sensors = {
         key: _SoapySensorReading(
@@ -468,7 +465,6 @@ class RxStream:
             (samples received, start clock timestamp (ns))
         """
 
-        # translate soapy error codes into exceptions
         if sr.ret >= 0:
             result = sr.ret, sr.timeNs
         elif sr.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
@@ -545,7 +541,6 @@ class HardwareTimeSync:
         device.setHardwareTime(time_to_set_ns, 'pps')
 
         if frac_secs > 0.2:
-            # system time and PPS disagree by more than 0.2 s
             sa.util.get_logger('source').warning(
                 f'system time and PPS out of sync by {frac_secs:0.2f}s'
             )
@@ -658,7 +653,6 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
 
         self.rx_stream.enable(self.device, False)
 
-        # rebuild the stream when the port set changes
         ports_changed = self.rx_stream.capture_changes_port(capture)
         if self._capture is None or ports_changed:
             self.rx_stream.setup(self.device, capture.port)

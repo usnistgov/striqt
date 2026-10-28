@@ -116,11 +116,11 @@ def __getattr__(name):
 
 
 class ExceptionStack:
-    """Creates a context manager object that accumulates exceptions.
+    """context manager that collects the exceptions raised in `defer` blocks.
 
-    Any exception raised within a `defer()` context is stashed to be raised later.
-    An exception (possibly an ExceptionGroup) is raised when the ExceptionStack
-    context exits, or on a call to `handle()`.
+    The collected exceptions are raised by `handle`, on exit from the context, and
+    on garbage collection. With `cancel_on_except`, an exception in a `defer` block
+    also calls `cancel_threads`.
     """
 
     def __init__(self, group_label: str | None = None, cancel_on_except: bool = False):
@@ -269,33 +269,32 @@ def retry(
     exception_func: Callable[..., None] = lambda *args, **kws: None,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
 ) -> 'PassThroughWrapper[P, R]':
-    """calls to the decorated function are repeated, suppressing specified exception(s), until a
-    maximum number of retries has been attempted.
+    """return a decorator that repeats a call on the exceptions `excs`.
 
-    If the function raises the exception the specified number of times, the underlying exception is raised.
-    Otherwise, return the result of the function call.
+    The decorated function is called up to `tries` times. The result of the first
+    call that raises no exception in `excs` is returned. An exception in `excs` on
+    the last call is raised. Before each repeated call, `exception_func` is called
+    with the arguments of the call. The thread then sleeps for the current delay.
 
-    Example:
+    Args:
+        excs: the exception class, or classes, that trigger a repeat
+        tries: the maximum number of calls, at least 1
+        delay: the sleep (in s) before the second call
+        backoff: the factor applied to the sleep after each repeat
+        exception_func: called with the arguments of the call before each repeat
+        logger: logs at INFO on the first repeat when given
 
-        Retry a telnet connection 5 times on ConnectionRefusedError::
+    Raises:
+        ValueError: if `tries` is less than 1
 
-            import telnetlib
+    Examples:
+        Repeat a telnet connection up to 5 times on `ConnectionRefusedError`:
 
-
-            # Retry a telnet connection 5 times if the telnet library raises ConnectionRefusedError
-            @retry(ConnectionRefusedError, tries=5)
-            def open(host, port):
-                t = telnetlib.Telnet()
-                t.open(host, port, 5)
-                return t
-
-    Arguments:
-        excs: Exception (sub)class (or tuple of exception classes) to watch for
-        tries: number of calls before the exception is raised
-        delay: initial delay between retries in seconds
-        backoff: backoff to multiply to the delay for each retry
-        exception_func: function to call on exception before the next retry
-        logger: if specified, a log info message is emitted on the first retry
+        >>> @retry(ConnectionRefusedError, tries=5)
+        ... def open(host, port):
+        ...     t = telnetlib.Telnet()
+        ...     t.open(host, port, 5)
+        ...     return t
     """
 
     if tries < 1:
@@ -483,8 +482,8 @@ def log_to_file(log_path: str | Path, level_name: str):
     )
 
     handler.setFormatter(formatter)
-    # the striqt.* child loggers carry their own levels from show_messages, so a
-    # level on this parent would never gate their records
+    # show_messages sets a level on each striqt.* child logger, so a level on this
+    # parent logger would not gate the records. The handler level does
     handler.setLevel(_LOG_LEVEL_NAMES[level_name])
 
     striqt_logger = cast(Any, logger)

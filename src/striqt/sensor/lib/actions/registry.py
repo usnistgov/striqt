@@ -16,17 +16,17 @@ if TYPE_CHECKING:
 
 
 class ActionRegistry(dict['type[specs.ActionSpec]', 'type[ActionRunner]']):
-    """map from an action spec type to the `ActionRunner` subclass for that type."""
+    """map from an action spec type to the runner implementation for the type."""
 
     def runner(
         self, spec_type: type[specs.ActionSpec[Any, Any, Any]]
     ) -> Callable[[type[TR]], type[TR]]:
-        """register the decorated `ActionRunner` subclass as the runner of `spec_type`.
+        """return a decorator that registers a class as the runner of `spec_type`.
 
         The decorator returns the class unchanged.
 
         Raises:
-            TypeError: if a runner is already registered for `spec_type`
+            TypeError: on decoration, if a runner is already registered for `spec_type`
         """
 
         def wrapper(cls: type[TR]) -> type[TR]:
@@ -42,7 +42,7 @@ class ActionRegistry(dict['type[specs.ActionSpec]', 'type[ActionRunner]']):
     def lookup(
         self, spec: specs.ActionSpec | type[specs.ActionSpec]
     ) -> type[ActionRunner[Any, Any, Any, Any, Any, Any, Any]]:
-        """return the runner registered for the spec type or the nearest base.
+        """return the runner of the first registered class in the MRO of the spec type.
 
         Args:
             spec: an action spec instance or an action spec type

@@ -4,8 +4,8 @@
 property-test the underlying kernels, so these tests cover what the measurement wrapping
 adds: coordinates, axis order, dtype, the dB conversion, and detector and statistic
 selection. A unit-amplitude tone has mean ``|x|**2 == 1``, so the dBm scale is
-``10*log10(mean |x|**2)`` with no offset.
-Tolerances are the ones each measurement registers.
+``10*log10(mean |x|**2)`` with no offset. Tolerances are the ones each measurement
+registers.
 """
 
 from __future__ import annotations
@@ -52,14 +52,16 @@ def cyclic(iq, duration=DURATION, **kws):
 
 
 def validate_cyclic(capture: sa.specs.Capture, spec: sa.specs.CyclicChannelPower):
-    """call the registered validator the way the registry wrapper does"""
+    """run the validator registered for `CyclicChannelPower` on the analysis
+    projection of `capture` and `spec`."""
     validate = sa.registry[sa.specs.CyclicChannelPower].validate
     assert validate is not None
     return validate(sa.specs.helpers.to_analysis_capture(capture), spec)
 
 
 def tolerance(spec, duration=DURATION, **kws) -> sa.specs.Tolerance:
-    """the tolerance registered for `spec` on a capture of `duration`"""
+    """return the tolerance registered for `spec` on a capture of `duration` (s) at
+    `FS`."""
     return registered_tolerance(capture(duration=duration), spec, **kws)
 
 
@@ -96,10 +98,10 @@ class TestChannelPowerTimeSeries:
         np.testing.assert_array_equal(da.coords['time_elapsed'].values, expected)
 
     def test_sawtooth_peak_exceeds_rms_by_the_ramp_ratio(self):
-        # a ramp of N samples reaching amplitude A takes the values A*i/N. Its peak
-        # power is (A*(N-1)/N)**2 and its mean power A**2*(N-1)*(2*N-1)/(6*N**2), so
+        # a ramp of N samples reaching amplitude A takes the values A*i/N. The peak
+        # power is (A*(N-1)/N)**2 and the mean power A**2*(N-1)*(2*N-1)/(6*N**2), so
         # the ratio 6*(N-1)/(2*N-1) approaches the continuous-ramp value of 3 as N
-        # grows. A whole number of ramps per detector bin makes it exact.
+        # grows. A whole number of ramps per detector bin makes the ratio exact.
         period = 1e-3
         n = round(period * FS)
         duration = 2 * period
@@ -128,7 +130,8 @@ class TestChannelPowerTimeSeries:
 
     def test_float_quantile_detector_is_rejected(self):
         """`stat_ufunc_from_shorthand` accepts a quantile, but `power_detectors` is
-        typed as a tuple of str (unlike `cyclic_statistics`), so the spec refuses one"""
+        typed as a tuple of str, unlike `cyclic_statistics`. The spec rejects a float
+        entry."""
         iq = testing.tone(DURATION, FS, frequency=1e5)
         with pytest.raises(msgspec.ValidationError, match='Expected `str`'):
             cpts(iq, power_detectors=('peak', 0.5))
@@ -163,9 +166,9 @@ class TestChannelPowerTimeSeries:
     )
     def test_unevenly_tiled_capture_is_rejected(self, kwargs, duration, message):
         """the cases are a `detector_period` of 10/3 samples at `sample_rate`, a
-        capture 10.5 detector periods long, and a detector `stat_ufunc_from_shorthand`
-        does not know. `iq_to_bin_power` and `axis_to_blocks` reject all 3 once they
-        have IQ; the validator rejects them before any is acquired."""
+        capture 10.5 detector periods long, and a detector name unknown to
+        `stat_ufunc_from_shorthand`. `iq_to_bin_power` and `axis_to_blocks` reject all
+        3 once given IQ. The validator rejects each before any IQ is acquired."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(
             msgspec.ValidationError, match=re.escape(message)
@@ -198,7 +201,8 @@ class TestChannelPowerTimeSeries:
     def test_tolerance_accumulates_over_the_detector_bin_not_the_capture(self):
         """each level averages `detector_period * sample_rate` power samples, so the
         rms budget grows with the detector period. A longer capture at the same
-        detector period only adds levels, which widens the worst case but not the rms"""
+        detector period adds levels. More levels widen the worst case but not the
+        rms."""
         base = tolerance(CPTS_SPEC)
         longer_bin = tolerance(
             CPTS_SPEC.replace(detector_period=1000 * DETECTOR_PERIOD),
@@ -212,8 +216,9 @@ class TestChannelPowerTimeSeries:
         assert longer_capture.on_peak.peak > base.on_peak.peak
 
     def test_tolerance_accumulates_only_for_the_averaging_detectors(self):
-        """peak and min select one sample exactly, so their budget does not grow with
-        the detector period the way the rms mean's does"""
+        """peak and min select one sample exactly, so the budget of a selection
+        detector does not grow with the detector period. The budget of the rms mean
+        does."""
         rms = tolerance(CPTS_SPEC.replace(power_detectors=('rms',)))
         peak = tolerance(CPTS_SPEC.replace(power_detectors=('peak',)))
         longer = CPTS_SPEC.replace(detector_period=5 * DETECTOR_PERIOD)
@@ -287,11 +292,11 @@ class TestCyclicChannelPower:
         ],
     )
     def test_unevenly_nested_periods_are_rejected(self, kwargs, duration, message):
-        """the 3 couplings the measurement docstring states: `duration` is 1.5 cycles,
-        `cyclic_period` is 2.5 detector periods, and `detector_period` is 10/3 samples
-        at `sample_rate`; then a detector and a quantile that the statistic table does
-        not implement. Each is caught before any IQ is touched, so the error names
-        the measurement's field path."""
+        """the 3 couplings the measurement docstring states: a `duration` of 1.5
+        cycles, a `cyclic_period` of 2.5 detector periods, and a `detector_period` of
+        10/3 samples at `sample_rate`. The 2 remaining cases are a detector and a
+        quantile that the statistic table does not implement. Each case is rejected
+        before any IQ is read, at the field path of the measurement."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(
             msgspec.ValidationError, match=re.escape(message)
@@ -323,7 +328,8 @@ class TestCyclicChannelPower:
 
     def test_statistics_are_taken_in_linear_power(self):
         """cycles that alternate between 0 dBm and 20 dBm average to 17.03 dBm in
-        linear power but to 10 dBm in dB, so the mean statistic distinguishes them"""
+        linear power but to 10 dBm in dB. The mean statistic equals the linear-power
+        average."""
         duration = 2 * CYCLIC_PERIOD
         cycle_size = round(CYCLIC_PERIOD * FS)
         amplitudes = np.repeat(np.float32([1.0, 10.0]), cycle_size)
@@ -342,8 +348,8 @@ class TestCyclicChannelPower:
 
     def test_tolerance_accumulates_over_the_cycles_in_the_capture(self):
         """a cyclic statistic reduces `duration / cyclic_period` detector samples on
-        top of the detector's own averaging, so unlike `channel_power_time_series` the
-        exact-input budget grows with the capture duration"""
+        top of the averaging of the detector, so the exact-input budget grows with the
+        capture duration, unlike that of `channel_power_time_series`"""
         one_cycle = tolerance(CYCLIC_SPEC)
         many_cycles = tolerance(CYCLIC_SPEC, duration=10 * CYCLIC_PERIOD)
 
@@ -352,8 +358,8 @@ class TestCyclicChannelPower:
 
     def test_quantile_statistic_adds_an_interpolation_rounding(self):
         """a quantile interpolates between 2 cycle samples where a selection returns
-        one exactly. The tuples have equal length because the peak term also grows
-        with the number of output elements."""
+        one exactly. The peak term also grows with the output element count, so both
+        tuples have 3 statistics."""
         selections = tolerance(
             CYCLIC_SPEC.replace(cyclic_statistics=('min', 'max', 'peak'))
         )
@@ -384,9 +390,9 @@ RTOL = elementwise_rtol(np.float32)
     ids=['level-13dB', 'level0dB', 'level7dB', 'above_power_high', 'below_power_low'],
 )
 def test_channel_power_histogram_constant_level_fills_one_bin(level, expected_bin):
-    """every detector reading of a constant-envelope tone is the same level, so the
-    whole normalized fraction lands in the bin centered on it, or in the infinite
-    catch-all bin when the level falls outside the grid"""
+    """every detector output of a constant-envelope tone is the same level, so the
+    whole normalized fraction is in the bin centered on that level, or in the infinite
+    catch-all bin when the level is outside the grid"""
     iq = sa.testing.tone(HIST_DURATION, FS) * 10 ** (level / 20)
 
     da = sa.measurements.channel_power_histogram(
@@ -403,10 +409,10 @@ def test_channel_power_histogram_constant_level_fills_one_bin(level, expected_bi
 
 
 def test_channel_power_histogram_fractions_sum_to_one():
-    """the counts are normalized so that each (port, detector) row sums to 1, even
-    though the sum in the source runs over both detectors at once"""
-    # one ramp across the whole capture, so each detector period reads a level of its
-    # own rather than repeating one bin
+    """each (port, detector) row of the normalized counts sums to 1. The normalizing
+    sum in the source runs over both detectors at once."""
+    # one ramp across the whole capture, so each detector period has a different
+    # level rather than repeating one bin
     iq = sa.testing.sawtooth(HIST_DURATION, FS, period=HIST_DURATION, ports=2)
 
     da = sa.measurements.channel_power_histogram(
@@ -421,7 +427,7 @@ def test_channel_power_histogram_fractions_sum_to_one():
     assert_close(da.values.sum(axis=-1), np.ones((2, 2)), rtol=RTOL)
 
 
-# 3 dB steps from -40 dB reach 8 dB, so `power_high` is appended as its own center
+# 3 dB steps from -40 dB reach 8 dB, so `power_high` is appended as a separate center
 OFF_GRID_BINS = [-40, -37, -34, -31, -28, -25, -22, -19, -16, -13, -10, -7, -4, -1]
 OFF_GRID_BINS += [2, 5, 8, 10]
 
@@ -455,8 +461,8 @@ def test_channel_power_histogram_bin_coordinate(
 
 
 def test_channel_power_histogram_shares_the_time_series_validator():
-    """the histogram bins the time series, so the detector names and the tiling
-    rules that reject one must reject the other, at the histogram's own path"""
+    """the histogram bins the time series, so the detector names and tiling rules
+    that reject the time series reject the histogram, at the path of the histogram"""
     assert (
         sa.registry[sa.specs.ChannelPowerHistogram].validate
         is sa.registry[sa.specs.ChannelPowerTimeSeries].validate
@@ -484,8 +490,8 @@ def test_channel_power_histogram_shares_the_time_series_validator():
 def test_channel_power_outputs_set_no_noise_bandwidth():
     """the time series, cyclic power, histogram, and the histogram bin coordinate set
     no `noise_bandwidth` attr and no bandwidth in `long_name`. The noise bandwidth of
-    these outputs is the per-capture `analysis_bandwidth`, which one attr on a
-    variable of a store cannot represent"""
+    these outputs is the per-capture `analysis_bandwidth`. One attr on a store
+    variable cannot represent a per-capture value."""
     cap = sa.specs.Capture(
         duration=HIST_DURATION, sample_rate=FS, analysis_bandwidth=FS / 4
     )
@@ -512,8 +518,8 @@ POWER_IDS = [type(spec).__name__ for spec in POWER_SPECS]
 @pytest.mark.parametrize('spec', POWER_SPECS, ids=POWER_IDS)
 def test_tolerance_is_backend_independent_since_no_fft_is_involved(spec):
     """the detectors square, bin, and take a log elementwise on either backend, so the
-    budget has no backend term of its own; the FFT roundoff that separates cupy from
-    numpy reaches these measurements only through the caller's `input_error`"""
+    budget has no backend term. The FFT roundoff that separates cupy from numpy
+    reaches these measurements only through `input_error`."""
     numpy_tol = tolerance(spec, input_error=1e-4, array_backend='numpy')
     cupy_tol = tolerance(spec, input_error=1e-4, array_backend='cupy')
     assert cupy_tol == numpy_tol

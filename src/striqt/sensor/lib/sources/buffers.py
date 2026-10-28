@@ -80,18 +80,19 @@ class ReceiveBuffers(typing.Generic[SC]):
     ) -> None:
         """stash the unused tail of `samples` to carry over into the next capture.
 
-        The stashed `start_time_ns` is the time of the first carried-over sample,
-        which `apply` returns as the time of the first sample of the next buffer.
+        The stashed `start_time_ns` is the time of the first carried-over sample.
+        `apply` returns that time as the time of the first sample of the next buffer.
         A source that is not gapless stashes nothing.
 
         Args:
             samples: the source-rate samples returned for the capture, with shape
                 (ports, count)
-            sample_start_ns: the time (in ns) of sample `start_overlap` of
-                `samples`, which is the first sample of the corrected record
+            sample_start_ns: the time (in ns) of the first record sample,
+                ``samples[:, start_overlap]``
             unused_sample_count: the count of trailing samples of `samples` past
                 the record
-            capture: the capture whose resampler design sets the source rate
+            capture: the capture; the resampler design of the capture sets the
+                source rate
             start_overlap: the lead overlap (in source-rate samples) that precedes
                 the record in `samples`
         """
@@ -220,7 +221,7 @@ def _alloc_empty_iq(
     else:
         samples = all_samples = prior
 
-    # the channel buffers that the stream fills. under stream_all_rx_ports, ports
+    # the channel buffers that the stream fills. Under `stream_all_rx_ports`, ports
     # outside the capture point at a throwaway buffer
     num_rx_ports = controller.source_info.min_port_count(len(ports))
     if controller.source_spec.stream_all_rx_ports and len(ports) != num_rx_ports:
@@ -336,8 +337,7 @@ def is_reusable(
     Reuse requires the same radio sample rate and LO offset from `design_resampler`
     at `mcr`, an `analysis_bandwidth` that is finite for both or infinite for both,
     and equality on every other field except `sample_rate`, `host_resample`,
-    `backend_sample_rate`, and `adjust_analysis`. `None` for either capture is never
-    reusable.
+    `backend_sample_rate`, and `adjust_analysis`. A None capture is never reusable.
     """
 
     if c1 is None or c2 is None:

@@ -1,7 +1,7 @@
-"""Shared builders for the waveform tests: the comms fixtures (the 3GPP PHY at the
+"""shared builders for the waveform tests: the comms fixtures (the 3GPP PHY at the
 analysis sample rate, cyclic-prefix cases on a synthetic OFDM waveform, and silent
-synchronization blocks carrying embedded PSS symbols) and the fourier strategies
-(noise waveforms, sample rates, STFT parameters, and the cross-backend FFT tolerance).
+synchronization blocks with embedded PSS symbols) and the fourier strategies (noise
+waveforms, sample rates, STFT parameters, and the cross-backend FFT tolerance).
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ SCS_5G = (15e3, 30e3, 60e3)
 
 
 def corr_atol_for(x, n_inds, norm, n_impl=1):
-    """cp.corr_atol with the dtype and scale taken from the waveform `x`"""
+    """return `cp.corr_atol` for `n_inds` index pairs with the dtype and peak power
+    scale of `x`."""
     scale = float(np.abs(x).max() ** 2)
     return cp.corr_atol(x.dtype, n_inds, norm, scale=scale, n_impl=n_impl)
 
@@ -40,13 +41,15 @@ def phy_5g(scs, fs=FS, xp=None):
 
 
 def sync_params(scs=30e3, fs=FS, **kws):
-    """the parameters of the sensor sweep configurations: 30 kHz shared spectrum"""
+    """return `pss_params` for the sensor sweep configuration: `shared_spectrum`
+    defaults to True at 30 kHz."""
     kws.setdefault('shared_spectrum', round(scs) == 30_000)
     return sync_5gnr.pss_params(sample_rate=fs, subcarrier_spacing=scs, **kws)
 
 
 def ofdm_slots(phy, n_slots, seed=0, dtype=np.complex64):
-    """`n_slots` contiguous slots of unit-power QPSK OFDM symbols with cyclic prefixes"""
+    """return `n_slots` contiguous slots of unit-power QPSK OFDM symbols with cyclic
+    prefixes."""
     rng = np.random.default_rng(seed)
     nfft = int(phy.nfft)
     qpsk = np.array([1 + 1j, 1 - 1j, -1 + 1j, -1 - 1j]) / np.sqrt(2)
@@ -60,8 +63,8 @@ def ofdm_slots(phy, n_slots, seed=0, dtype=np.complex64):
 
 
 def cp_case(n_slots=None):
-    """(phy, waveform, cyclic prefix indexes) at 30 kHz over `n_slots` slots, or over
-    every slot of a frame when `n_slots` is None"""
+    """return (phy, waveform, cyclic prefix indexes) at 30 kHz over `n_slots` slots,
+    or over every slot of a frame when `n_slots` is `None`."""
     phy = phy_5g(30e3)
     slots = 'all' if n_slots is None else tuple(range(n_slots))
     n_slots = n_slots or phy.SCS_TO_SLOTS_PER_FRAME[30e3]
@@ -69,8 +72,9 @@ def cp_case(n_slots=None):
 
 
 def embed_symbol(iq, phy, body, symbol_index, delay, port=0, scale=1.0):
-    """write an OFDM symbol (with its cyclic prefix) into `iq` at the nominal position
-    of `symbol_index` in the frame structure, offset by `delay` samples"""
+    """write `body` with the cyclic prefix of `symbol_index` into `iq` at the nominal
+    position of that symbol in the frame structure, offset by `delay` samples, and
+    return the start index."""
     slot, symbol = divmod(symbol_index, phy.FFT_PER_SLOT)
     start = slot * phy.contiguous_size + phy.cp_start_idx[symbol] + delay
     ncp = int(phy.cp_sizes[symbol])
@@ -80,8 +84,8 @@ def embed_symbol(iq, phy, body, symbol_index, delay, port=0, scale=1.0):
 
 
 def pss_setup(fs=FS):
-    """(params, phy, pss, bodies) for 30 kHz PSS detection at `fs`, where `bodies`
-    are the PSS symbols without their cyclic prefix"""
+    """return (params, phy, pss, bodies) for 30 kHz PSS detection at `fs`. `bodies` is
+    `pss` without the cyclic prefix."""
     params = sync_params(fs=fs)
     phy = phy_5g(30e3, fs)
     pss = sync_5gnr.pss_5g_nr(fs, 30e3)
@@ -94,8 +98,8 @@ def silent_block(params, n_blocks=1, ports=1):
 
 
 def embed_pss_ports(embeds, scales=None, n_blocks=1):
-    """(params, pss, iq) for a silent synchronization block carrying one PSS symbol
-    per port, each given as an (n_id2, beam, delay) triple"""
+    """return (params, pss, iq) for a silent synchronization block with one PSS symbol
+    per port. Each entry of `embeds` is an (n_id2, beam, delay) triple."""
     params, phy, pss, bodies = pss_setup()
     scales = scales or [1.0] * len(embeds)
 
@@ -107,7 +111,8 @@ def embed_pss_ports(embeds, scales=None, n_blocks=1):
 
 
 def get_ssb_iq(iq, fs_in=FS, **kws):
-    """get_5g_ssb_iq with the 30 kHz, 20 ms discovery defaults of the measurements"""
+    """run `get_5g_ssb_iq` with the 30 kHz, 20 ms discovery defaults of the
+    measurements."""
     kws = {
         'discovery_periodicity': 20e-3,
         'fs_out': FS,
@@ -120,8 +125,8 @@ def get_ssb_iq(iq, fs_in=FS, **kws):
 
 # %% fourier strategies
 def cross_backend_sigma(dtype, nffts, n_elementwise=0):
-    """rms tolerance on the difference between the numpy and cupy results, each within
-    its own backend's FFT roundoff budget"""
+    """return the rms tolerance on the difference between the numpy and cupy results,
+    each within the FFT roundoff budget of the backend."""
     return cross_backend(
         fft_tolerance_rms(dtype, nffts, n_elementwise),
         fft_tolerance_rms(dtype, nffts, n_elementwise, array_backend='cupy'),
@@ -135,7 +140,8 @@ def sample_rates(min_rate: float = 1e3, max_rate: float = 100e6):
 
 
 def noise_waveforms(min_size=64, max_size=2048, dtype=None):
-    """even-length complex noise spanning the power range of the sensor's inputs"""
+    """draw even-length complex noise over 16 decades of power, the range of the
+    sensor inputs."""
     return iq_waveforms(
         min_size, max_size, multiple_of=2, dtype=dtype, log_power=(-13, 3)
     )
@@ -143,8 +149,11 @@ def noise_waveforms(min_size=64, max_size=2048, dtype=None):
 
 @st.composite
 def stft_parameters(draw):
-    """Window names and sizes are drawn from short lists so that get_window's
-    persistent on-disk cache does not fill with one-off entries."""
+    """draw STFT parameters: `nperseg`, `noverlap`, `fs`, and `window`.
+
+    Window names and sizes come from short lists, so the persistent on-disk cache of
+    `get_window` does not fill with one-off entries.
+    """
     nperseg = draw(st.sampled_from([64, 128, 256]))
     return {
         'nperseg': nperseg,

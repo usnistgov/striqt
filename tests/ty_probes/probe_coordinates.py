@@ -1,4 +1,4 @@
-"""a registered coordinate factory keeps its (capture, spec) parameter types"""
+"""a registered coordinate factory keeps the (capture, spec) parameter types"""
 
 from __future__ import annotations
 

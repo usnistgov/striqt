@@ -160,7 +160,8 @@ class TestFreeze:
     def test_depth_converts_only_shallower_levels(self, tree, max_depth):
         result = freeze(tree, max_depth)
         assert listify(result) == listify(tree)
-        # any max_depth <= 1 converts only the root; the rest of the tree is untouched
+        # any max_depth <= 1 converts only the root and leaves the rest of the tree
+        # untouched
         assert has_mutable_below(result) == has_mutable_below(tree, max(max_depth, 1))
         if max_depth <= 1:
             assert result == freeze(tree, 1)
@@ -214,7 +215,7 @@ class DepthProbe(msgspec.Struct):
 
 @VAR_TUPLE_DEPTH_XFAIL
 def test_freeze_depths_count_dict_list_and_tuple_nesting():
-    # sets and scalars contribute no depth; freeze() does not convert sets
+    # sets and scalars contribute no depth, and freeze() does not convert sets
     assert inspect_freeze_depths(DepthProbe) == {
         'a': 3,
         'b': 1,
@@ -315,7 +316,8 @@ def test_json_schema_of_bound_sweep(synthetic_sweep):
 
 
 def test_convert_dict_lax_floats():
-    # loop points arrive as strings from YAML; strict=False is what coerces them
+    # loop points arrive as strings from YAML, and strict=False coerces a string to
+    # float
     assert convert_dict('1e6', float) == pytest.approx(1e6)
 
 
@@ -352,7 +354,7 @@ def test_spec_dict_fields_are_frozen_to_their_depth(construct):
     spec = construct(DictField, d={'a': [1, {'b': 2}]})
     assert isinstance(spec.d, frozendict)
     assert type(spec.d['a']) is tuple
-    # the field's freeze depth is 1, so the dict inside the tuple stays a dict
+    # the freeze depth of the field is 1, so the dict inside the tuple stays a dict
     assert spec.d == {'a': (1, {'b': 2})}
     assert type(spec.d['a'][1]) is dict
     hash(construct(DictField, d={'a': [1]}))
@@ -461,9 +463,9 @@ SOAPY_KWS = {
 
 
 def test_convert_spec_cached_hands_back_an_exact_match_unchanged():
-    """`lru_cache_on_converted` requires that projecting a spec that is already the
-    target type returns the same object. Converting it a second time then cannot add
-    a second cache entry for one value."""
+    """`lru_cache_on_converted` requires that projecting a spec already of the target
+    type returns the same object. A second conversion then cannot add a second cache
+    entry for one value."""
     capture = sa.specs.AnalysisCapture(duration=1e-3, sample_rate=1e6)
     assert convert_spec_cached(sa.specs.AnalysisCapture, capture) is capture
 
@@ -513,8 +515,8 @@ def test_to_analysis_capture_defaults_absent_center_frequency_to_none():
 
 
 def test_to_analysis_capture_collapses_fields_the_analysis_layer_ignores():
-    """the projection exists so that a sweep looping over a sensor-only field does
-    not multiply the validator cache keys"""
+    """a sweep looping over a sensor-only field maps to one projected capture, so the
+    validator cache has one key for the whole loop"""
     kws = {'port': 0, 'center_frequency': 3.5e9, 'duration': 1e-3, 'sample_rate': 1e6}
     low = to_analysis_capture(ss.specs.SoapyCapture(gain=0.0, **kws))
     high = to_analysis_capture(ss.specs.SoapyCapture(gain=30.0, **kws))
@@ -604,10 +606,10 @@ def test_a_projected_argument_passed_by_keyword_raises():
     ids=['clear_caches', 'cache_clear'],
 )
 def test_the_cache_is_reachable_through_the_wrapper(clear):
-    """functools.wraps does not copy cache_clear or cache_info off an lru_cache
-    wrapper, so the decorator re-exposes them by hand. Without those attributes a
-    decorated function has no reachable cache. It cannot be reset between
-    measurements, and the global sw.util.cache_info() report cannot see it."""
+    """`functools.wraps` does not copy `cache_clear` or `cache_info` off an
+    `lru_cache` wrapper, so the decorator re-exposes both. Without those attributes
+    the cache of a decorated function cannot be reset between measurements and is
+    missing from the `sw.util.cache_info()` report."""
     calls = []
 
     @lru_cache_on_converted(ss.specs.SensorCapture)
@@ -699,7 +701,8 @@ def test_spec_validation_error_prepend_carries_the_locations_through():
 
 
 def test_spec_validation_error_at_and_prepend_are_independent():
-    """the 2 axes commute, so a validator may interleave them as it unwinds"""
+    """`at` and `prepend` commute, so a validator may interleave the 2 calls while
+    unwinding"""
     exc = SpecValidationError('bad value', ('.spectrogram',))
     interleaved = exc.prepend('.analysis').at(".loops: {'repeat': 0}")
     interleaved = interleaved.prepend('.nfft').at('.captures[0]')
@@ -787,9 +790,9 @@ class _RaisingLocatedSpec(sa.specs.SpecBase, frozen=True, kw_only=True):
 def test_spec_validation_error_survives_msgspec_decoding(
     decode, expected_locations, expected_str
 ):
-    """msgspec re-raises a plain ValueError from __post_init__ as its own
-    ValidationError, but a ValidationError subclass propagates unchanged, so the
-    path assembled in __post_init__ stays authoritative"""
+    """msgspec re-raises a plain `ValueError` from `__post_init__` as a
+    `msgspec.ValidationError`, but a `ValidationError` subclass propagates unchanged.
+    The path assembled in `__post_init__` is preserved."""
     with pytest.raises(SpecValidationError) as excinfo:
         decode()
 

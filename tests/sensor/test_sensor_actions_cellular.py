@@ -120,13 +120,14 @@ MEASUREMENTS = {
 
 
 def enabled(analysis: ss.specs.BundledAnalysis) -> dict:
-    """the enabled measurement specs of `analysis` by name"""
+    """return the enabled measurement specs of `analysis` keyed by field name"""
     specs = {k: getattr(analysis, k) for k in analysis.__struct_fields__}
     return {k: v for k, v in specs.items() if v is not None}
 
 
 def one_block_sweep(field: str, block=None, **kws):
-    """a cellular sweep whose analysis enables only `field`, over one 10 ms frame"""
+    """return a cellular sweep over one 10 ms frame with only `field` enabled in the
+    analysis"""
     block = BLOCKS[field] if block is None else block
     analysis = ss.specs.Cellular5GNRAnalysis(**{field: block})
     kws.setdefault('captures', (make_cellular_capture(duration=FRAME),))
@@ -224,8 +225,8 @@ def test_resolve_capture_generates_the_analysis_adjustments():
 
 
 def test_resolve_capture_keeps_the_adjustments_of_the_capture():
-    """a key the capture sets wins over the generated one, and an unrelated key
-    is kept beside them"""
+    """a key set by the capture wins over the generated value, and an unrelated key
+    of the capture is kept"""
     capture = make_cellular_capture(
         adjust_analysis={'max_beams': 2, 'frequency_offset': -1e6}
     )
@@ -301,7 +302,8 @@ def test_channel_subcarrier_spacing_is_the_shared_spacing():
 
 
 def test_channel_subcarrier_spacing_rejects_mixed_spacings():
-    """`CellChannel` accepts 30 kHz only, so the 15 kHz channel is forced onto a copy"""
+    """`CellChannel` accepts 30 kHz only. The 15 kHz channel is written onto a copy with
+    `force_setattr`."""
     at_15k = copy.copy(OTHER_CHANNEL)
     msgspec.structs.force_setattr(at_15k, 'subcarrier_spacing', 15e3)
     with pytest.raises(msgspec.ValidationError, match='cell_channels'):
@@ -313,8 +315,8 @@ def test_channel_subcarrier_spacing_rejects_mixed_spacings():
 
 @pytest.mark.parametrize('field', list(MEASUREMENTS), ids=list(MEASUREMENTS))
 def test_each_block_enables_its_measurement_with_the_spacing_filled(field):
-    """the block's free parameters are copied and the spacing-dependent ones
-    filled; no other measurement is enabled"""
+    """the free parameters of the block are copied, the spacing-dependent parameters
+    are filled, and no other measurement is enabled"""
     name, derived = MEASUREMENTS[field]
     spec = one_block_sweep(field)
     analysis = enabled(cellular.cellular_analysis(spec, SCS))
@@ -339,8 +341,8 @@ def test_time_series_detector_period_defaults_to_one_symbol(detector_period, exp
 
 
 def test_cellular_analysis_is_the_group_of_the_binding():
-    """the generated analysis is an instance of `schema.analysis`, so a binding over
-    a group of only the cellular measurements decodes and runs"""
+    """the generated analysis is an instance of the `schema.analysis` of the binding,
+    including a group restricted to the cellular measurements"""
     cls = restricted_cellular_binding().sensor.sweep_spec_cls
     block = ss.specs.Cellular5GNRAnalysis(
         channel_power_time_series=BLOCKS['channel_power_time_series']
@@ -365,8 +367,8 @@ def test_pss_trigger_runs_with_the_pss_sync_block():
 
 
 def test_struct_trigger_needs_no_pss_sync_block():
-    """the struct form of signal_trigger carries its own spec, so the derived sweep
-    triggers without the measurement in its analysis"""
+    """the struct form of `signal_trigger` includes the trigger spec. The derived sweep
+    triggers without the `cellular_5g_pss_sync` measurement in the analysis."""
     bundle = ss.specs.BuiltinTriggers(
         cellular_5g_pss_sync=sa.specs.Cellular5GNPSSSync(subcarrier_spacing=SCS)
     )
@@ -405,15 +407,16 @@ class _ToyBlock(ss.specs.SpecBase, frozen=True, kw_only=True):
 
 
 def _classify(monkeypatch, **tables):
-    """run check_block_fields on the toy block with the module tables replaced"""
+    """run `check_block_fields` on the toy block with the `FIXED` and `DEFAULTED`
+    tables of the module replaced by `tables`"""
     for k in ('FIXED', 'DEFAULTED'):
         monkeypatch.setattr(cellular, k, {'toy': tables.get(k, {})})
     cellular.check_block_fields(_ToyBlock, _ToyMeasurement, 'toy')
 
 
 def test_check_block_fields_accepts_an_agreeing_classification(monkeypatch):
-    """frequency_resolution fixed, frame_slots per capture, detector_period defaulted,
-    generation omitted with no table entry"""
+    """the check passes with `frequency_resolution` fixed, `frame_slots` per capture,
+    `detector_period` defaulted, and `generation` omitted without a table entry"""
     _classify(
         monkeypatch,
         FIXED={'frequency_resolution': lambda scs: scs},
@@ -449,9 +452,9 @@ def test_check_block_fields_rejects_a_block_of_another_measurement():
 
 
 def test_every_cellular_block_is_classified():
-    """the check that runs at import, asserted by name: each block is a declared
-    subset of the measurement spec of the same name, and the FIXED, PER_CAPTURE, and
-    DEFAULTED tables agree with that declaration"""
+    """each block is a declared subset of the measurement spec of the same name, and
+    the `FIXED`, `PER_CAPTURE`, and `DEFAULTED` tables agree with that declaration.
+    Every field of `Cellular5GNRAnalysis` is a field of `BuiltinAnalyses`."""
     cellular.check_all_blocks()
     assert set(ss.specs.Cellular5GNRAnalysis.__struct_fields__) <= set(
         ss.specs.BuiltinAnalyses.__struct_fields__
@@ -539,7 +542,7 @@ ALL_ADJUSTMENTS = {
 )
 def test_build_sweep_adjusts_only_the_parameters_a_measurement_reads(fields, keys):
     """the PSS correlator reads the SSB offset, spacing, and symbol indexes but no
-    TDD pattern or guard bandwidth; the IQ waveform reads nothing of the channel"""
+    TDD pattern or guard bandwidth. The IQ waveform reads nothing of the channel."""
     analysis = ss.specs.Cellular5GNRAnalysis(**{f: BLOCKS[f] for f in fields})
     runner = make_cellular_runner(
         captures=(make_cellular_capture(duration=FRAME),), analysis=analysis
@@ -562,7 +565,8 @@ def test_registry_runs_the_cellular_sweep_with_its_runner():
 
 
 def test_in_memory_run_yields_one_dataset_per_capture_at_the_derived_rate():
-    """a 20 MHz channel derives 26.88 MS/s; 1 ms of the time series is 28 symbols"""
+    """a 20 MHz channel derives 26.88 MS/s, and 1 ms of the time series at 30 kHz
+    spacing is 28 symbols"""
     channel = make_cell_channel(channel_bandwidth=20e6)
     captures = (make_cellular_capture(), make_cellular_capture(gain=0))
     spec = make_cellular_sweep(

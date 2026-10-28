@@ -30,7 +30,7 @@ _data_plots: dict[str, _DataVariablePlotter] = {}
 def _coord_names(spec_type: type[sa.specs.Analysis]) -> tuple[str, ...]:
     """return the coordinate names of the measurement registered for `spec_type`.
 
-    The order is the `coord_factories` order of the registration.
+    The order is that of `coord_factories` in the registry entry.
     """
     factories = sa.registry[spec_type].coord_factories
     return tuple(sa.registry.coordinates[f].name for f in factories)
@@ -199,7 +199,7 @@ def power_spectral_density(
 ) -> _Path | None:
     name = sa.measurements.power_spectral_density.__name__
     _, x = _coord_names(sa.specs.PowerSpectralDensity)
-    # older stores name these 'persistence_spectrum' and 'persistence_statistics'
+    # a store may name these 'persistence_spectrum' and 'persistence_statistics'
     if name not in data.data_vars and 'persistence_spectrum' in data.data_vars:
         name = 'persistence_spectrum'
     if hue == 'time_statistic' and 'persistence_statistics' in data:

@@ -18,11 +18,10 @@ from .registry import registry
 
 @registry.runner(spec_type=specs.Sweep)
 class SweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
-    """run the captures of a `Sweep` through `iterate_captures`.
+    """the runner of a `Sweep`.
 
-    `spec` and `sweep` are the same object. ``resources['sweep_spec']`` and the
-    `on_source_opened` callbacks of `open_resources` receive the spec unchanged. The
-    output is a `ZarrCaptureSink` at `sink.path`. A path of None writes nothing.
+    `sweep` is `spec` itself. The sink is a `ZarrCaptureSink` at ``sweep.sink.path``,
+    or a `NoSink` when the path is None.
     """
 
     spec: specs.Sweep[SS, SP, SC, SA]

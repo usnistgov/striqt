@@ -1,4 +1,5 @@
-"""striqt.analysis.lib.io: YAML decoding with `!include`"""
+"""striqt.analysis.lib.io: YAML decoding with `!include`, and the attr repair of stores
+written with bandwidth-suffixed units"""
 
 from __future__ import annotations
 
@@ -15,8 +16,8 @@ load = sa.lib.io.decode_from_yaml_file
 
 
 def test_glob_include_merges_in_sorted_filename_order(write_yaml):
-    """the files are written out of name order. A key that 2 files set takes the
-    value from the later name."""
+    """the files are written out of name order. A key set by 2 files takes the value
+    from the file with the later name."""
     write_yaml('sites/c.yaml', 'z: 3\n')
     write_yaml('sites/a.yaml', 'x: 1\ny: 1\n')
     write_yaml('sites/b.yaml', 'y: 2\nz: 2\n')
@@ -107,9 +108,9 @@ def test_flow_sequence_mapping_keys_become_tuples(write_yaml):
     [('3750e6', '3750e6'), ('inf', 'inf'), ('.inf', math.inf)],
 )
 def test_scalar_typing(write_yaml, text, expected):
-    # YAML 1.1 leaves engineering-notation numbers as strings, so loop points
-    # like 3750e6 reach _build_loop_points_dict untyped and it must coerce them
-    # to the capture field type (xfail-audit #1)
+    # YAML 1.1 leaves engineering-notation numbers as strings, so a loop point like
+    # 3750e6 reaches _build_loop_points_dict as a string and is coerced there to the
+    # capture field type (xfail-audit #1)
     value = load(write_yaml('spec.yaml', f'v: {text}\n'))['v']
     assert value == expected
     assert type(value) is type(expected)
@@ -119,9 +120,9 @@ def test_scalar_typing(write_yaml, text, expected):
 
 
 def legacy_store_dataset():
-    """a dataset with the bandwidth encoded in `units`, no `noise_bandwidth` on the bin
-    coordinate, the sample rate as the correlator `noise_bandwidth`, and a store-wide
-    `noise_bandwidth` on the channel power outputs"""
+    """build a dataset with the bandwidth encoded in `units`, no `noise_bandwidth` on
+    the bin coordinate, the sample rate as the correlator `noise_bandwidth`, and a
+    store-wide `noise_bandwidth` on the channel power outputs."""
     import numpy as np
     import xarray as xr
 
@@ -257,8 +258,9 @@ def test_repair_legacy_attrs_corrects_the_correlator_noise_bandwidth():
 
 
 def test_repair_legacy_attrs_removes_capture_bandwidth_attrs():
-    """a store-wide `noise_bandwidth` and bandwidth-suffixed `long_name` on channel
-    power and IQ outputs are removed; the bandwidth of those outputs is per capture"""
+    """a store-wide `noise_bandwidth` and a bandwidth-suffixed `long_name` on the
+    channel power and IQ outputs are removed. The bandwidth of those outputs is set per
+    capture."""
     ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
 
     names = (
@@ -276,7 +278,7 @@ def test_repair_legacy_attrs_removes_capture_bandwidth_attrs():
 
 
 def test_repair_legacy_attrs_keeps_spectral_densities_and_current_stores():
-    """dBm/Hz is a density, not a bandwidth label, and a second pass changes nothing"""
+    """dBm/Hz is a density, not a bandwidth label. A second pass changes nothing."""
     ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
     assert ds.system_noise.attrs['units'] == 'dBm/Hz'
     assert ds.system_noise.attrs['standard_name'] == 'System noise'

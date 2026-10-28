@@ -79,7 +79,7 @@ class AcquiredIQ:
 
     @cached_property
     def preprocess(self) -> Preprocessor:
-        """the `Preprocessor` of this acquisition, one per instance.
+        """return the `Preprocessor` of this acquisition, one per instance.
 
         A `dataclasses.replace` copy starts with a `Preprocessor` of its own.
         """
@@ -129,8 +129,8 @@ def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str
     pow10 = np.clip(pow10, min(_ENG_PREFIXES), max(_ENG_PREFIXES))
 
     mant = sign * value / (10.0**pow10)
-    # a mantissa like 999.9... rounds to 1000 instead of 1 k, so carry it into the
-    # next prefix. Values at the largest prefix in `_ENG_PREFIXES` are not carried.
+    # a mantissa that formats as 1000 (e.g., 999.99) is carried into the next prefix,
+    # except at the largest prefix in `_ENG_PREFIXES`
     if (
         force_prefix is None
         and abs(float(format(mant, fmt))) >= 1000
@@ -247,10 +247,9 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
 def _restore_padded_coord_dtype(da: 'xr.DataArray', info: register.CoordInfo) -> None:
     """restore the integer or bool dtype declared for coordinate `info.name` of `da`.
 
-    `xr.DataArray.pad` fills with nan and so promotes integer and bool coordinates
-    to float. The coordinate is replaced in place with zeros of `info.dtype`, since
-    `build_dataarray` overwrites every element from the coordinate factory afterward.
-    Coordinates of other dtypes, or already of `info.dtype`, are left untouched.
+    The coordinate is replaced in place with zeros of `info.dtype` when `info.dtype`
+    is an integer or bool dtype and the coordinate dtype differs. Other coordinates
+    are left unchanged.
     """
 
     dtype = np.dtype(info.dtype)
@@ -259,6 +258,7 @@ def _restore_padded_coord_dtype(da: 'xr.DataArray', info: register.CoordInfo) ->
     if dtype.kind not in 'iub' or coord.dtype == dtype:
         return
 
+    # `DataArray.pad` fills with nan and promotes integer and bool coordinates to float
     da[info.name] = xr.zeros_like(coord, dtype=dtype)
 
 
@@ -370,12 +370,7 @@ def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
 
 @dataclasses.dataclass
 class DelayedDataArray(collections.UserDict):
-    """wrap the result returned by a channel analysis function.
-
-    The conversion to `xarray.DataArray` is delayed to leave the GPU time to
-    initiate the evaluation of multiple analyses before they are materialized on
-    the CPU.
-    """
+    """the result of one measurement before conversion to `xarray.DataArray`."""
 
     capture: specs.Capture
     spec: specs.Analysis
@@ -384,6 +379,17 @@ class DelayedDataArray(collections.UserDict):
     attrs: dict
 
     def compute(self) -> DelayedDataArray:
+        """return a copy with `result` materialized to numpy.
+
+        A cupy or torch `result` is transferred from the device here; a numpy
+        `result` is shared.
+
+        Returns:
+            a `DelayedDataArray` with the same `capture`, `spec`, `info`, and `attrs`
+
+        Raises:
+            TypeError: when `result` is not a numpy, cupy, or torch array
+        """
         return DelayedDataArray(
             # datacls=self.datacls,
             capture=self.capture,
@@ -394,6 +400,21 @@ class DelayedDataArray(collections.UserDict):
         )
 
     def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
+        """return the `xarray.DataArray` of `result` with the coordinates of `info`.
+
+        Args:
+            expand_dims: names of leading dimensions added ahead of the measurement
+                dimensions, or None for none
+
+        Returns:
+            a `xarray.DataArray` named `info.name`, with the attrs of `info`, the
+            fields of `spec`, and `attrs`
+
+        Raises:
+            ValueError: when the shape of `result` does not match the dimensions or a
+                coordinate factory returns the wrong shape
+            TypeError: when `result` is a dict
+        """
         return build_dataarray(self, expand_dims=expand_dims)
 
 
@@ -402,11 +423,15 @@ class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
 
     `as_xarray` selects the result type of `analyze_by_spec`: ``True`` for an
     `xarray.Dataset`, ``'delayed'`` for `DelayedDataArray` results, or ``False``
-    for the bare arrays in the array namespace of the input. `block_each` applies
-    to ``True`` and ``'delayed'`` and materializes each result to numpy as soon as
-    the measurement returns. `expand_dims` names the leading dimension of each
-    `xarray.DataArray` when `as_xarray` is ``True``. That dimension indexes the
-    port axis of the input.
+    for the bare arrays in the array namespace of the input. `registry` supplies
+    the measurement function of each spec type. `block_each` True materializes
+    each result to numpy as soon as the measurement returns, when
+    `as_xarray` is ``True`` or ``'delayed'``. `expand_dims` names the leading
+    dimension of each `xarray.DataArray` when `as_xarray` is ``True``, and that
+    dimension indexes the port axis of the input.
+
+    Raises:
+        TypeError: when `as_xarray` is not ``True``, ``False``, or ``'delayed'``
     """
 
     as_xarray: TAR
@@ -436,23 +461,26 @@ def evaluate_by_spec(
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
     Args:
-        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. The
-            registry selects the conditioning of each measurement through `preprocess`
-        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
-            fields of `spec` are skipped
+        iq: the waveform with shape (port, sample), or an `AcquiredIQ` from which
+            each measurement selects the conditioned waveform
+        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`; the ``None``
+            fields are skipped
         capture: the acquisition parameters of `iq`
-        options: `options.as_xarray` selects the result type. ``True`` or
-            ``'delayed'`` return a `DelayedDataArray` per measurement, materialized
-            to numpy when `options.block_each` is set. ``False`` returns the bare
-            array of each measurement in the array namespace of `iq`, without the
-            measurement attrs. `options.block_each` applies only to ``True`` and
-            ``'delayed'``
+        options: the result type and the registry of the measurement functions
 
     Returns:
-        a dict keyed by measurement name, in the field order of `spec`
+        a dict keyed by measurement name, in the field order of `spec`: a
+        `DelayedDataArray` per measurement when `options.as_xarray` is ``True`` or
+        ``'delayed'``, materialized to numpy when `options.block_each` is set; the
+        bare array of each measurement in the array namespace of `iq`, without
+        attrs, when ``False``
 
     Raises:
-        TypeError: if `spec` is not an `AnalysisGroup`
+        TypeError: when `spec` is not an `AnalysisGroup`
+        KeyError: when the spec type of an enabled field is not in
+            `options.registry`
+        specs.helpers.SpecValidationError: when a measurement validator rejects
+            the ``(capture, spec)`` combination
     """
 
     spec_dict: dict[str, dict[str, typing.Any]]
@@ -556,13 +584,13 @@ def analyze_by_spec(
     """evaluate the enabled measurements of `spec` on the IQ waveform.
 
     Args:
-        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. The
-            registry selects the conditioning of each measurement through `preprocess`
-        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
-            fields of `spec` are skipped
+        iq: the waveform with shape (port, sample), or an `AcquiredIQ` from which
+            each measurement selects the conditioned waveform
+        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`; the ``None``
+            fields are skipped
         capture: the acquisition parameters of `iq`
-        options: `options.as_xarray` selects the return type. ``None`` evaluates
-            with the live registry and `as_xarray` of ``True``
+        options: the result type and the registry, or ``None`` for the default
+            registry with `as_xarray` ``True``
 
     Returns:
         by `options.as_xarray`:
@@ -574,7 +602,11 @@ def analyze_by_spec(
           namespace of `iq`
 
     Raises:
-        TypeError: if `spec` is not an `AnalysisGroup`
+        TypeError: when `spec` is not an `AnalysisGroup`
+        KeyError: when the spec type of an enabled field is not in
+            `options.registry`
+        specs.helpers.SpecValidationError: when a measurement validator rejects
+            the ``(capture, spec)`` combination
     """
 
     if options is None:

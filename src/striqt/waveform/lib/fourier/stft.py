@@ -2,8 +2,7 @@
 the frequency domain (band zeroing and rational downsampling).
 
 `stft(x, axis=a)` stacks windows on axis `a` and frequency bins, in ascending `fftfreq`
-order, on `a + 1`. `out=` buffers are honored through `_truncated_buffer`, which views a
-contiguous buffer and copies a non-contiguous one.
+order, on `a + 1`. An `out=` buffer is viewed when contiguous and copied otherwise.
 """
 
 from __future__ import annotations as __
@@ -69,35 +68,39 @@ def stft(
     return_axis_arrays=True,
     out=None,
 ) -> tuple[_AT, _AT, _AT]:
-    """compute a reduced-parameter STFT in the style of `scipy.signal.stft` on numpy
-    or cupy arrays.
+    """return the short-time Fourier transform of `x` along `axis`.
 
-    See `scipy.signal.stft` for the definition.
+    The transform follows `scipy.signal.stft` with a reduced parameter set.
 
     Args:
-        x: input array
-
-        fs: sampling rate
-
-        window: a window array, or a name or (name, parameter) pair as in `scipy.signal.get_window`
-
-        nperseg: the size of the FFT (= segment size used if overlapping)
-
-        noverlap: if nonzero, compute windowed FFTs that overlap by this many bins (only 0 and nperseg//2 supported)
-
-        axis: the axis on which to compute the STFT
-
-        truncate: whether to allow truncation of `x` to enforce full fft block sizes
-
-    Raises:
-        NotImplementedError: if axis != 0
-
-        ValueError: if truncate == False and x.shape[axis] is not a whole
-            number of segments at the given nperseg and noverlap
+        x: the waveform, with time on `axis`
+        fs: the sample rate (in S/s) of `x`, which scales the returned axes
+        window: a window array of ``nperseg - nzero`` samples, or a name or
+            ``(name, parameter)`` pair for `get_window`; None selects ``'rect'``
+        nperseg: the segment length and FFT size (in samples)
+        noverlap: the overlap (in samples) of consecutive segments
+        nzero: the number of trailing samples of each segment that are zeroed; the
+            window spans the first ``nperseg - nzero``
+        axis: the time axis of `x`
+        truncate: True drops trailing samples of `x` that do not fill a segment;
+            False raises `ValueError` for a partial segment
+        norm: None, or ``'power'`` to scale the window to unit time-averaged power
+        overwrite_x: True writes the result into the buffer of `x` when `noverlap` is
+            0 and `out` is None; ignored otherwise
+        return_axis_arrays: True returns the frequency and time axes with the
+            transform; False returns the transform alone
+        out: a buffer with the shape and dtype of the transform
 
     Returns:
-        stft (see `scipy.signal.stft`)
+        ``(freqs, times, y)``: `freqs` is the ascending bin center frequencies (in
+        Hz), `times` the segment start times (in s), and `y` the transform with
+        segments on `axis` and `nperseg` bins on ``axis + 1``, in the array
+        namespace of `x`; `y` alone when `return_axis_arrays` is False
 
+    Raises:
+        TypeError: if `norm` is neither None nor ``'power'``
+        ValueError: if `truncate` is False and ``x.shape[axis]`` is not a whole
+            number of segments at `nperseg` and `noverlap`
     """
 
     xp = array_namespace(x)
@@ -256,13 +259,17 @@ def _stack_stft_windows(
     axis: int = 0,
     out=None,
 ) -> Array:
-    """stack the overlapping windowed segments of `x` on a new axis at `axis + 1`.
-
-    The parameter set is a subset of that of `scipy.signal.stft`.
+    """stack the windowed segments of `x` on `axis`, with the samples of each on ``axis + 1``.
 
     Args:
-        x: the 1-D waveform (or N-D tensor of waveforms)
-        axis: the waveform axis; stft will be evaluated across all other axes
+        x: the waveform, with time on `axis`
+        window: the window of `nperseg` samples applied to each segment
+        nperseg: the segment length (in samples)
+        noverlap: the overlap (in samples) of consecutive segments
+        norm: None divides the window by the sum of its magnitude at the hop
+            stride; ``'power'`` applies the window unscaled
+        axis: the time axis of `x`
+        out: a buffer with the shape and dtype of the result
     """
 
     xp = array_namespace(x)
@@ -383,16 +390,23 @@ def downsample_stft(
 ) -> tuple[Array, Array]:
     """downsample an STFT in the frequency domain by trimming to `nfft_out` bins.
 
-    The downsampling ratio is ``nfft_out / y.shape[axis + 1]``, and the kept bins are
-    shifted to center the passband. `design_oafilter` selects an `nfft_out`.
+    The downsampling ratio is ``nfft_out / y.shape[axis + 1]``. The kept bins are
+    centered on the passband, with the passband center at the output DC bin.
 
-    Arguments:
-        freqs: the list of FFT bin center frequencies
-        y: the stft
-        nfft_out: the number of points in the output fft
+    Args:
+        freqs: the ascending bin center frequencies (in Hz) of `y`
+        y: the STFT, with segments on `axis` and bins on ``axis + 1``
+        nfft_out: the number of bins kept
+        passband: the band edges (in Hz) of the bins that are kept nonzero; None at
+            either edge extends the band to that end of `freqs`
+        axis: the segment axis of `y`
+        out: a buffer of at least the output size in the dtype of `y`
 
     Returns:
-        A tuple containing the new `freqs` range and the trimmed `y`
+        ``(freqs_out, y_out)``: the `nfft_out` bin center frequencies at the bin
+        spacing of `freqs`, and the STFT with `nfft_out` bins on ``axis + 1`` and
+        zeros outside the passband; `y_out` is a view of `y` when no bin is zeroed
+        and `out` shares memory with `y`
     """
     xp = array_namespace(y)
     ax = axis + 1

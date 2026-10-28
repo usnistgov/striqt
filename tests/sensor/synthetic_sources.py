@@ -1,10 +1,9 @@
 """factories and oracles for sweeps over the synthetic (function generator) sources.
 
 The synthetic bindings call the `striqt.analysis.testing` generators at the source
-sample rate with absolute indices referenced to the corrected capture, so the
+sample rate with absolute indices referenced to the corrected capture. Thus, the
 corrected output is the same generator evaluated at `capture.sample_rate` from
-index 0. The presets keep every acquisition under 5e4 samples per port. Not a
-conftest. The sensor test modules import it by bare name.
+index 0. The presets keep every acquisition under 5e4 samples per port.
 """
 
 from __future__ import annotations
@@ -113,7 +112,8 @@ NO_SINK = ss.specs.ZarrSink(path=None)
 
 
 def preset_capture(binding: str, **kws):
-    """a capture spec for `binding` from RESAMPLE_FILTER updated with `kws`"""
+    """return the capture spec of `binding` built from `RESAMPLE_FILTER` updated with
+    `kws`"""
     return BINDINGS[binding].schema.capture(**{**RESAMPLE_FILTER, **kws})
 
 
@@ -126,7 +126,8 @@ def preset_sweep(
     source=SOURCE,
     **replace,
 ):
-    """a sweep spec bound to `binding` that writes nothing unless `sink` is given"""
+    """return a sweep spec bound to `binding` with `NO_SINK` unless `replace` gives
+    `sink`"""
     cls = BINDINGS[binding].sensor.sweep_spec_cls
     replace.setdefault('sink', NO_SINK)
     return cls(
@@ -139,9 +140,12 @@ def preset_sweep(
 
 
 def tone_capture(preset: dict, **kws) -> ss.specs.SingleToneCapture:
-    """a single_tone capture from `preset` at a 1 MHz offset with no added noise, so
-    that a result attributed to the wrong capture disagrees with its generator
-    oracle; `kws` override both"""
+    """return a `single_tone` capture from `preset` at a 1 MHz offset with no added
+    noise, with `kws` overriding both.
+
+    A result attributed to the wrong capture disagrees with the generator oracle of
+    that capture.
+    """
     fields = {**preset, 'frequency_offset': 1e6, 'snr': None, **kws}
     return preset_capture('single_tone', **fields)
 
@@ -149,26 +153,27 @@ def tone_capture(preset: dict, **kws) -> ss.specs.SingleToneCapture:
 def tone_captures(
     offsets: Iterable[float], **kws
 ) -> tuple[ss.specs.SingleToneCapture, ...]:
-    """a ONE_PORT tone_capture per frequency offset"""
+    """return one `ONE_PORT` `tone_capture` per entry of `offsets` (Hz)"""
     return tuple(tone_capture(ONE_PORT, **kws, frequency_offset=f) for f in offsets)
 
 
 def tone_sweep(offsets, *, analysis=IQ_ONLY, **replace):
-    """a NO_SINK sweep over tone_captures(offsets)"""
+    """return a `single_tone` sweep with `NO_SINK` over ``tone_captures(offsets)``"""
     return preset_sweep(
         'single_tone', tone_captures(offsets), analysis=analysis, **replace
     )
 
 
 def fs_sdr(capture, source=SOURCE) -> float:
-    """the source sample rate that the conditioning resamples `capture` from"""
+    """return the source sample rate (S/s) from which `capture` is resampled"""
     return float(
         ss.lib.compute.design_resampler(capture, source.master_clock_rate)['fs_sdr']
     )
 
 
 def spectrogram_frames(capture, spec) -> tuple[int, float]:
-    """(frame count, hop period) of the spectrogram of `capture` under `spec`"""
+    """return the frame count and hop period (s) of the spectrogram of `capture` under
+    `spec`"""
     nfft = round(capture.sample_rate / spec.frequency_resolution)
     hop = nfft - round(Fraction(spec.fractional_overlap) * nfft)
     count = round(capture.duration * capture.sample_rate)
@@ -176,8 +181,8 @@ def spectrogram_frames(capture, spec) -> tuple[int, float]:
 
 
 def source_count(capture, source=SOURCE) -> int:
-    """the source-rate sample count of `capture.duration`, from the exact rational
-    resampler ratio with a half sample rounded up"""
+    """return the source-rate sample count of `capture.duration`, from the exact
+    rational resampler ratio with a half sample rounded up"""
     design = ss.lib.compute.design_resampler(capture, source.master_clock_rate)
     samples_out = round(capture.duration * capture.sample_rate)
     exact = Fraction(samples_out * design['nfft'], design['nfft_out'])
@@ -185,8 +190,8 @@ def source_count(capture, source=SOURCE) -> int:
 
 
 def expected_raw(binding: str, capture, source=SOURCE, *, overlaps=None, xp=np):
-    """the acquisition buffer [lead overlap | source_count | tail overlap] as one
-    generator call at fs_sdr starting at index -lead"""
+    """return the acquisition buffer ``[lead overlap | source_count | tail overlap]`` as
+    one generator call at `fs_sdr` starting at index ``-lead``"""
     if overlaps is None:
         overlaps = ss.lib.compute.get_correction_overlaps(capture, source, None)
     fs = fs_sdr(capture, source)
@@ -197,7 +202,7 @@ def expected_raw(binding: str, capture, source=SOURCE, *, overlaps=None, xp=np):
 
 
 def build_acquired_iq(x, capture, source=SOURCE, *, info=None):
-    """`x` packaged as the AcquiredIQ that a controller returns before any correction"""
+    """return `x` packaged as the `AcquiredIQ` of `capture` before any correction"""
     return ss.specs.AcquiredIQ(
         x=x,
         capture=capture,
@@ -212,9 +217,14 @@ class Stages(NamedTuple):
     """the acquisition of one capture and the same acquisition set up for conditioning"""
 
     raw: ss.specs.AcquiredIQ
+    """``[lead overlap | round(duration*fs_sdr) | tail overlap]`` at `fs_sdr`"""
     corrected: ss.specs.AcquiredIQ
+    """`raw` with the trigger and `overwrite_x` attached; `unfiltered`, `filtered`,
+    and `aligned` select the conditioned waveforms at `capture.sample_rate`"""
     overlaps: tuple[int, int]
+    """lead and tail overlap sample counts at `fs_sdr`"""
     resampler: dict
+    """the resampler design of the controller"""
 
 
 def acquire_corrected(
@@ -229,13 +239,14 @@ def acquire_corrected(
 ) -> Stages:
     """acquire `capture` from a fresh controller and attach the conditioning.
 
-    `binding` is a key of BINDINGS or a bound sensor. `array_backend` replaces that
-    field of `source` when given.
-
-    `raw.x` is [lead overlap | round(duration*fs_sdr) | tail overlap] at fs_sdr;
-    `corrected` is `raw` with `signal_trigger` and `overwrite_x` attached, and
-    `unfiltered`, `filtered`, and `aligned` select the conditioned waveforms at
-    capture.sample_rate.
+    Args:
+        binding: a key of `BINDINGS` or a bound sensor
+        capture: the capture spec to arm
+        source: the function source spec
+        analysis: the analysis targeted by the controller, or None
+        array_backend: replaces that field of `source` when given
+        signal_trigger: attached to `corrected`
+        overwrite_x: attached to `corrected`
     """
     if isinstance(binding, str):
         binding = BINDINGS[binding]
@@ -254,27 +265,29 @@ def acquire_corrected(
 
 
 def unfiltered(iq: sa.AcquiredIQ) -> sw.typing.Array:
-    """the resampled waveform before the analysis filter, trigger-shifted if a trigger is set"""
+    """return the resampled waveform before the analysis filter, trigger-shifted when
+    a trigger is set"""
     return iq.preprocess(prefer_filtered=False, prefer_aligned=True)
 
 
 def filtered(iq: sa.AcquiredIQ) -> sw.typing.Array:
-    """the resampled and low-passed waveform, without the trigger shift"""
+    """return the resampled and low-passed waveform, without the trigger shift"""
     return iq.preprocess(prefer_filtered=True, prefer_aligned=False)
 
 
 def aligned(iq: sa.AcquiredIQ) -> sw.typing.Array:
-    """the resampled, low-passed and trigger-shifted waveform"""
+    """return the resampled, low-passed, and trigger-shifted waveform"""
     return iq.preprocess(prefer_filtered=True, prefer_aligned=True)
 
 
 def generator(
     binding: str, capture, *, sample_rate, start_index, count, xp=np, ports=None
 ):
-    """the `striqt.analysis.testing` waveform of `capture`, shape (ports, count).
+    """return the `striqt.analysis.testing` waveform of `capture`, shape
+    ``(ports, count)``.
 
-    `ports` defaults to the capture's port count; the noise-bearing generators need
-    exactly that to reproduce the acquisition row for row.
+    `ports` defaults to the port count of `capture`. The noise-bearing generators
+    reproduce the acquisition row for row only at that count.
     """
     if ports is None:
         ports = len(capture.port) if isinstance(capture.port, tuple) else 1
@@ -286,11 +299,11 @@ def generator(
 
 
 def expected_corrected(binding: str, capture, *, count=None, xp=np):
-    """the corrected waveform of `capture` under the uniform time origin: the
-    generator at capture.sample_rate from index 0.
+    """return the corrected waveform of `capture` under the uniform time origin: the
+    generator at `capture.sample_rate` from index 0.
 
-    None for noise. Only its power survives resampling, since the source draws it
-    at fs_sdr.
+    The return is None for the noise binding. The source draws noise at `fs_sdr`, and
+    only the noise power survives resampling.
     """
     if binding == 'noise':
         return None
@@ -307,11 +320,15 @@ def expected_corrected(binding: str, capture, *, count=None, xp=np):
 
 
 def run_in_memory(sweep, *, loop=False, take=None, **replace) -> list:
-    """run `sweep` through open_resources and iterate_sweep with NoSink, returning
-    one xarray.Dataset per capture (the first `take` with `loop`)"""
+    """run `sweep` through `open_resources` and `iterate_sweep` with a `NoSink`.
+
+    Returns:
+        one `xarray.Dataset` per capture, truncated to the first `take` when `take`
+        is set
+    """
     datasets = []
     with ss.open_resources(sweep, None) as resources:
-        # nothing is written even for a sweep whose sink names a path
+        # nothing is written even when the sink of the sweep names a path
         replace.setdefault('sink', ss.sinks.NoSink(sweep))
         results = ss.iterate_sweep(resources, loop=loop, **replace)
         for dd in results:
@@ -324,9 +341,9 @@ def run_in_memory(sweep, *, loop=False, take=None, **replace) -> list:
 
 
 class FakeTrigger:
-    """stands in for `striqt.analysis.Trigger`: shifts each port by a fixed lag.
+    """a stand-in for `striqt.analysis.Trigger` that shifts each port by a fixed lag.
 
-    `lags` is one lag per port in seconds; a scalar applies to every port.
+    `lags` is one lag (s) per port; a scalar applies to every port.
     """
 
     def __init__(self, lags, max_lag=None):

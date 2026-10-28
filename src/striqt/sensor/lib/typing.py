@@ -112,13 +112,17 @@ class SourceBackend(Protocol[_SS, SC]):
             buffers: one array per port of the armed capture, in capture port order
             offset: the index in each buffer of the first sample written
             count: the number of samples requested per port
-            timeout_sec: the wait for `count` samples, or None to wait indefinitely
+            timeout_sec: the maximum wait (in s) for `count` samples, or None to
+                wait indefinitely
             on_overflow: ``'except'`` to raise on a stream overflow, ``'ignore'`` to
                 continue
 
         Returns:
             the number of samples written per port, and the time (in ns) of the
             sample at ``buffers[i][offset]``
+
+        Raises:
+            OverflowError: if the stream overflowed and `on_overflow` is ``'except'``
         """
         ...
 

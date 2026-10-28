@@ -29,10 +29,14 @@ def sync_params(
     spec: _Cellular5GNRSSBCorrelator,
     kind: Literal['pss', 'sss'],
 ) -> sw.comms_5gnr.SyncParams:
-    """return the 3GPP sync layout implied by `spec` for the `kind` of sync signal.
+    """return the `sw.comms_5gnr.SyncParams` of `spec` for one sync signal.
 
-    `kind` selects `sw.comms_5gnr.pss_params` or `sw.comms_5gnr.sss_params`, which resolve the SSB
-    case (3GPP TS 38.213 §4.1) from `capture.center_frequency`.
+    A `symbol_indexes` of ``'auto'`` selects the SSB case (3GPP TS 38.213 §4.1) from
+    `subcarrier_spacing`, `shared_spectrum`, and `capture.center_frequency`. A
+    `center_frequency` of None selects the full candidate count of the case.
+
+    Args:
+        kind: the sync signal, ``'pss'`` or ``'sss'``
     """
     if kind == 'pss':
         build = sw.comms_5gnr.pss_params
@@ -58,9 +62,9 @@ def ssb_block_count(
 ) -> int:
     """return the number of sync blocks in `duration` (in s), at least 1.
 
-    The count is the number of `spec.discovery_periodicity` intervals in `duration`,
-    rounded to the nearest whole number and capped at `spec.max_block_count` when that
-    is set.
+    The count is the number of `discovery_periodicity` intervals in `duration`,
+    rounded to the nearest whole number and capped at `max_block_count`. A
+    `max_block_count` of None applies no cap.
     """
     total_blocks = round(duration / spec.discovery_periodicity)
     if spec.max_block_count is None:
@@ -99,8 +103,8 @@ def cellular_ssb_start_time(
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator | specs.Cellular5GNRSSSCorrelator,
 ) -> np.ndarray:
-    # the bare Capture projection has no center_frequency, so the cell search
-    # case is resolved here as for an unknown band
+    # the Capture projection has center_frequency None. The SSB case is resolved as
+    # for an unknown band.
     params = sync_params(capture, spec, 'pss')
     count = ssb_block_count(params.duration, spec)
 
@@ -132,13 +136,14 @@ _SSB_CORRELATION_COORDS = [
 def validated_5g_ssb_sync_params(
     capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator
 ) -> sw.comms_5gnr.SyncParams:
-    """return the `sw.comms_5gnr.SyncParams` of a capture, checking the SSB sizing.
+    """return the `sw.comms_5gnr.SyncParams` of `capture` under `spec`.
 
     Raises:
-        ValueError: if `spec.frequency_offset` is not a multiple of the resampler
-            frequency step (the reciprocal of the capture duration), if the capture
-            cannot be resampled to `spec.sample_rate` about that offset, or if the
-            resampled block does not contain whole 10 ms frames
+        ValueError: if `frequency_offset` is not a multiple of the reciprocal of the
+            capture duration, if the capture cannot be resampled to `sample_rate`
+            about `frequency_offset`, if the resampled block is not a whole number of
+            10 ms frames, or if the correlation span of `symbol_indexes` and
+            `max_lag_symbols` does not fit in one frame
     """
     params = sync_params(capture, spec, 'sss')
 
@@ -192,18 +197,18 @@ def get_5g_ssb_iq(
 ) -> Array:
     """return the sync block IQ shifted to baseband and resampled to `spec.sample_rate`.
 
-    The band centered at `spec.frequency_offset` (in Hz from the capture center) is
-    shifted to 0 Hz and resampled from `capture.sample_rate` to `spec.sample_rate`. The
-    returned array is cached per (capture, `spec`) by `ssb_iq_cache`, so the PSS and
-    SSS correlators share one resampling.
+    The band centered at `frequency_offset` (in Hz from the capture center) is
+    shifted to 0 Hz and resampled from `capture.sample_rate` to `sample_rate`. Inside
+    a `registry.cache_context`, `ssb_iq_cache` returns the stored result for the
+    same `iq` object, `capture`, and `spec`.
 
     Args:
         iq: shape (port, sample), at `capture.sample_rate`
-        oaresample: resample by overlap-add of short blocks instead of one FFT over the
-            whole capture
+        oaresample: True resamples by overlap-add of short blocks instead of one FFT
+            over the whole capture
 
     Returns:
-        shape (port, sample) at `spec.sample_rate`, in the array namespace of `iq`
+        shape (port, sample) at `sample_rate`, in the array namespace of `iq`
     """
 
     return sw.comms_5gnr.get_5g_ssb_iq(
@@ -226,15 +231,21 @@ def cellular_stft_window_fractions(
 
     The fractions hold only at a frequency resolution of half the subcarrier spacing,
     where one FFT window spans 2 subcarrier periods and a slot spans 15 subcarrier
-    periods (3GPP TS 38.211 §5.3.1). `window_fill` is the mean share of one window
-    occupied by one OFDM symbol with the cyclic prefix of that symbol.
-    `fractional_overlap` is the remainder. The two fractions lie in (0, 1) and sum to
-    1. `cyclic_prefix` selects the 14- or 12-symbol slot.
+    periods (3GPP TS 38.211 §5.3.1).
+
+    Args:
+        cyclic_prefix: ``'normal'`` selects the 14-symbol slot and ``'extended'`` the
+            12-symbol slot
+
+    Returns:
+        2 fractions in (0, 1) that sum to 1: `fractional_overlap`, and `window_fill`
+        as the mean share of one window occupied by one OFDM symbol with the cyclic
+        prefix of that symbol
     """
     if cyclic_prefix == 'normal':
         return Fraction(13, 28), Fraction(15, 28)
     else:
-        # cyclic_prefix is a Literal, so 'extended' is the only other value
+        # the Literal leaves 'extended' as the only other value
         return Fraction(11, 24), Fraction(13, 24)
 
 
@@ -303,11 +314,12 @@ def cellular_5g_pss_sync(
 ) -> Measurement:
     """return the start-of-waveform delay (in s) detected from the PSS correlation.
 
-    The output is one lag per port, or one lag shared across the ports when
-    `per_port` is False, chosen from the `cellular_5g_pss_correlation` output and
-    offset by `delay` rounded to a sample at `sample_rate`. The measurement is
-    registered as a `signal_trigger`. A source spec that sets ``signal_trigger`` to
-    this measurement aligns captures by the output.
+    The input is the IQ before the `analysis_bandwidth` filter and before trigger
+    alignment. Per capture, the output is one float32 value per port, or one value
+    shared across the ports when `per_port` is False. The value is the lag chosen
+    from the `cellular_5g_pss_correlation` output plus `delay` rounded to a sample at
+    `sample_rate`. The output is a signal trigger: a source with ``signal_trigger``
+    set to this measurement aligns the capture by the output.
 
     Args:
     {args}
@@ -336,19 +348,25 @@ def cellular_5g_pss_correlation(
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR primary synchronization signal.
 
-    The IQ is shifted and resampled to the sync block, then cross-correlated with the
-    PSS sequence of each cell sector ID. The output is the complex correlation (in
-    √mW) with dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
-    `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s), truncated to the first
-    `max_block_count` sync blocks when that is set. The PSS template has unit energy
-    over the 127 PSS subcarriers. The squared magnitude of a peak on a lag sample
-    equals the received PSS symbol power.
-    White noise with power spectral density N0 has a mean squared magnitude of
-    ``N0 * subcarrier_spacing`` in each lag, and the `noise_bandwidth` attr is
-    `subcarrier_spacing`.
+    The input is the IQ before the `analysis_bandwidth` filter and before trigger
+    alignment. The band at `frequency_offset` is shifted to baseband and resampled
+    to `sample_rate`, then cross-correlated with the PSS sequence of each cell sector
+    ID (3GPP TS 38.211 §7.4.2.2). Per capture, the output is the complex64
+    correlation (in √mW) with dimensions `cellular_cell_id2`,
+    `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index`, and
+    `cellular_ssb_lag` (in s). The output keeps the first `max_block_count` sync
+    blocks. A `max_block_count` of None keeps every block. The PSS template has unit
+    energy over the 127 PSS subcarriers. The squared magnitude of a peak on a lag
+    sample equals the received PSS symbol power. White noise with power spectral
+    density N0 has a mean squared magnitude of ``N0 * subcarrier_spacing`` in each
+    lag. The `noise_bandwidth` attr is `subcarrier_spacing`.
 
     References:
-        3GPP TS 38.211 Table 7.4.3.1-1 and §7.4.2.2; 3GPP TS 38.213 §4.1
+        3GPP TS 38.211, "NR; Physical channels and modulation," Table 7.4.3.1-1
+        and §7.4.2.2. https://www.3gpp.org/DynaReport/38211.htm
+
+        3GPP TS 38.213, "NR; Physical layer procedures for control," §4.1.
+        https://www.3gpp.org/DynaReport/38213.htm
 
     Args:
     {args}
@@ -433,11 +451,12 @@ def cellular_5g_sss_sync(
 ) -> Measurement:
     """return the start-of-waveform delay (in s) detected from the SSS correlation.
 
-    The output is one lag per port, or one lag shared across the ports when
-    `per_port` is False, chosen from the `cellular_5g_sss_correlation` output and
-    offset by `delay` rounded to a sample at `sample_rate`. The measurement is
-    registered as a `signal_trigger`. A source spec that sets ``signal_trigger`` to
-    this measurement aligns captures by the output.
+    The input is the IQ before the `analysis_bandwidth` filter and before trigger
+    alignment. Per capture, the output is one float32 value per port, or one value
+    shared across the ports when `per_port` is False. The value is the lag chosen
+    from the `cellular_5g_sss_correlation` output plus `delay` rounded to a sample at
+    `sample_rate`. The output is a signal trigger: a source with ``signal_trigger``
+    set to this measurement aligns the capture by the output.
 
     Args:
     {args}
@@ -466,18 +485,25 @@ def cellular_5g_sss_correlation(
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR secondary synchronization signal.
 
-    The IQ is shifted and resampled to the sync block, then cross-correlated with the
-    SSS sequences. The output is the complex correlation (in
-    √mW) with dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
-    `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s), truncated to the first
-    `max_block_count` sync blocks when that is set. The SSS template has unit energy
-    over the 127 SSS subcarriers. The squared magnitude of a peak on a lag sample equals
-    the received SSS symbol power. White noise with power spectral density N0 has a
-    mean squared magnitude of ``N0 * subcarrier_spacing`` in each lag, and the
-    `noise_bandwidth` attr is `subcarrier_spacing`.
+    The input is the IQ before the `analysis_bandwidth` filter and before trigger
+    alignment. The band at `frequency_offset` is shifted to baseband and resampled
+    to `sample_rate`, then cross-correlated with the SSS sequences (3GPP TS 38.211
+    §7.4.2.3). Per capture, the output is the complex64 correlation (in √mW) with
+    dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
+    `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s). The output keeps the
+    first `max_block_count` sync blocks. A `max_block_count` of None keeps every
+    block. The SSS template has unit energy over the 127 SSS subcarriers. The squared
+    magnitude of a peak on a lag sample equals the received SSS symbol power. White
+    noise with power spectral density N0 has a mean squared magnitude of
+    ``N0 * subcarrier_spacing`` in each lag. The `noise_bandwidth` attr is
+    `subcarrier_spacing`.
 
     References:
-        3GPP TS 38.211 Table 7.4.3.1-1 and §7.4.2.3; 3GPP TS 38.213 §4.1
+        3GPP TS 38.211, "NR; Physical channels and modulation," Table 7.4.3.1-1
+        and §7.4.2.3. https://www.3gpp.org/DynaReport/38211.htm
+
+        3GPP TS 38.213, "NR; Physical layer procedures for control," §4.1.
+        https://www.3gpp.org/DynaReport/38213.htm
 
     Args:
     {args}
@@ -564,10 +590,10 @@ def _ssb_spectrogram_spec(spec: specs.Cellular5GNRSSBSpectrogram) -> specs.Spect
 def validated_ssb_spectrogram_sizing(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
 ) -> spectrum.SpectrogramSizing:
-    """check the STFT sizing of the SSB spectrogram and return the sizing.
+    """return the STFT sizing of the SSB spectrogram of `capture` under `spec`.
 
     The symbol layout follows `subcarrier_spacing` and `discovery_periodicity` alone.
-    The TS 38.213 SSB case is not consulted.
+    The 3GPP TS 38.213 §4.1 SSB case is not read.
 
     Raises:
         ValueError: if the STFT does not fit the capture (as
@@ -575,7 +601,7 @@ def validated_ssb_spectrogram_sizing(
             multiple of `subcarrier_spacing`, if the `sample_rate` band about
             `frequency_offset` lies outside the capture bandwidth, if
             `discovery_periodicity` is shorter than one OFDM symbol, or if the capture
-            does not end on a discovery period or after a complete burst set
+            ends neither on a discovery period nor after a complete burst set
     """
     sizing = spectrum.validated_spectrogram_sizing(capture, _ssb_spectrogram_spec(spec))
 
@@ -653,20 +679,23 @@ def cellular_5g_ssb_spectrogram(
 ) -> Measurement:
     """evaluate a spectrogram of each 5G NR SSB burst set by OFDM symbol and subcarrier.
 
-    The STFT hops once per OFDM symbol, and the half-subcarrier bins are integrated
-    pairwise to one bin per subcarrier of `subcarrier_spacing` before the frequency
-    axis is trimmed to the `sample_rate` band about `frequency_offset`. Only the
-    symbols of the burst set at the start of each `discovery_periodicity` are kept.
+    The input is the IQ before the `analysis_bandwidth` filter and after trigger
+    alignment. The STFT hops once per OFDM symbol. Half-subcarrier bins are summed
+    pairwise to one bin per subcarrier of `subcarrier_spacing`. The frequency axis
+    is trimmed to the `sample_rate` band about `frequency_offset`. Only the symbols
+    of the burst set in the first 2 ms of each `discovery_periodicity` are kept
+    (3GPP TS 38.213 §4.1).
 
-    The output is power per subcarrier (dBm in a noise bandwidth of one
-    `subcarrier_spacing`, float16) with dimensions `cellular_ssb_index` (burst set
-    within the capture), `cellular_ssb_symbol_index` (OFDM symbol within the burst
-    set), and `cellular_ssb_baseband_frequency` (in Hz, relative to
-    `frequency_offset`). The `noise_bandwidth` and `resolution_bandwidth` attrs follow
-    the `spectrogram` measurement.
+    Per capture, the output is power per subcarrier in dBm in a noise bandwidth of
+    one `subcarrier_spacing`, with dimensions `cellular_ssb_index` (burst set within
+    the capture), `cellular_ssb_symbol_index` (OFDM symbol within the burst set),
+    and `cellular_ssb_baseband_frequency` (in Hz, relative to `frequency_offset`).
+    Values are rounded to 3 decimals and stored as float16. The `noise_bandwidth`
+    and `resolution_bandwidth` attrs follow the `spectrogram` measurement.
 
     References:
-        3GPP TS 38.213 §4.1
+        3GPP TS 38.213, "NR; Physical layer procedures for control," §4.1.
+        https://www.3gpp.org/DynaReport/38213.htm
 
     Args:
     {args}
@@ -685,7 +714,7 @@ def cellular_5g_ssb_spectrogram(
         dtype='float16',
     )
 
-    # keep only the first 2 slots in the frame
+    # keep the burst set at the start of each discovery period
     symbol_index = np.arange(spg.shape[1])
     mask_time = (symbol_index % discovery_symbols) < symbol_count
     spg = spg[:, mask_time]
@@ -733,19 +762,29 @@ def tdd_config_from_str(
     normal_cp=True,
     flex_as=None,
 ) -> NormalizedTDDSlotConfig:
-    """generate a symbol-by-symbol sequence of masking arrays for uplink and downlink.
+    """return the normalized TDD slot layout of one 10 ms frame.
 
-    `frame_slots` must have the slot count of one 10 ms frame at `subcarrier_spacing`
-    for 5G NR or LTE.
-
-    Arguments:
-        frame_slots: a string composed of the characters {'d', 'u', 's'} that
-            indicate the sequence of slots in 1 cellular frame (or None for all downlink)
-        special_symbols: a string composed of the characters {'d', 'u', 'f'} that
-            indicate the sequence of symbol types in the special slot (or None for all downlink)
+    Args:
+        subcarrier_spacing: in Hz; sets the slot count of the frame
+        frame_slots: the slot types of the frame as a string of ``'d'``, ``'u'``, and
+            ``'s'`` characters, one per slot; a single character for every slot; or
+            None for all downlink
+        special_symbols: the symbol types of each ``'s'`` slot as a string of ``'d'``,
+            ``'u'``, and ``'f'`` characters; with an ``'s'`` slot and None, every
+            symbol of the frame is downlink
+        normal_cp: 14 symbols per slot when True, 12 when False
+        flex_as: ``'d'`` or ``'u'``, the link direction that claims flexible
+            symbols; None masks flexible symbols from both
 
     Returns:
-        the `NormalizedTDDSlotConfig` with the per-symbol code maps and slot indexes
+        the `NormalizedTDDSlotConfig` with lowercase slot and symbol strings, the
+        per-symbol code maps of each link direction, and the slot indexes of each
+        link direction
+
+    Raises:
+        ValueError: if `frame_slots` has a length other than 1 or the slot count of
+            the frame, or if either string contains a character outside the alphabet
+            of that string
     """
 
     expect_slot_count = round(10 * subcarrier_spacing / 15e3)
@@ -954,10 +993,10 @@ def _subcarrier_spacing_tuple(
 def validated_autocorrelation_lag_count(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
 ) -> int:
-    """check the frame configuration and index ranges and return the lag axis length.
+    """return the length of the `cyclic_sample_lag` axis.
 
-    The lag axis length is the longest, across the requested subcarrier spacings, of
-    the shortest OFDM symbol (in samples) at each spacing.
+    The length is the largest, over `subcarrier_spacings`, of the shortest OFDM
+    symbol (in samples) at each spacing.
 
     Raises:
         ValueError: if `frame_slots` has no downlink slot at some subcarrier spacing,
@@ -1027,19 +1066,23 @@ def validated_autocorrelation_lag_count(
 def cellular_cyclic_autocorrelation(
     x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
-    """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
-    cyclic prefix sample lag offsets.
+    """evaluate the cyclic-prefix autocorrelation of the IQ at each 4G or 5G symbol lag.
 
-    The correlation can be configured to evaluate across specified ranges of frame
-    indices, slot indices (across the frames), and symbol indices (across the slots).
-    Each range may be specified as a single number ("first $N$ indices") or as a
-    tuple that is passed to the python builtin `range`.
+    The input is the IQ after the `analysis_bandwidth` filter and before trigger
+    alignment. For each spacing in `subcarrier_spacings`, the IQ is correlated with
+    a copy of the IQ delayed by the OFDM symbol length, summed over the
+    cyclic-prefix samples of the symbols that `frame_range` and `symbol_range`
+    select. The downlink slots and the uplink slots of `frame_slots` are summed
+    separately. Per capture, the output is the correlation magnitude in mW as
+    float32 with dimensions ``(link_direction, subcarrier_spacing,
+    cyclic_sample_lag)``. `cyclic_sample_lag` (in s) spans the longest symbol over
+    the spacings. Entries past the symbol length of a spacing are ``nan``, as is the
+    ``'uplink'`` row when `frame_slots` has no uplink slot. `frame_range` and
+    `symbol_range` are a count of indexes from 0, or a ``(start, stop)`` pair as for
+    the Python builtin `range`.
 
     Args:
     {args}
-
-    Returns:
-        a float32 array in the array namespace of `x`
     """
 
     spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
@@ -1108,13 +1151,13 @@ def cellular_cyclic_autocorrelation(
 def cellular_resource_power_bin(
     capture: specs.Capture, spec: specs.CellularResourcePowerHistogram
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
-    """return the histogram power bins (in dBm) and the attrs naming their bandwidth.
+    """return the `cellular_resource_power_bin` coordinate values and attrs.
 
     Returns:
-        the bins from `power_low` to `power_high` in steps of `power_resolution`,
-        bracketed by ``-inf`` and ``inf`` catch-all bins, and the attrs of
-        `shared.bandwidth_attrs` for the resource grid: ``'units'`` of dBm,
-        `noise_bandwidth`, and `resolution_bandwidth` in Hz
+        the bin centers of `power.make_power_bins` in dBm, with ``-inf`` and ``inf``
+        catch-all bins, and the attrs of `shared.bandwidth_attrs` for the resource
+        grid: ``'units'`` of dBm, `long_name`, and `noise_bandwidth` and
+        `resolution_bandwidth` in Hz
     """
 
     bins = power.make_power_bins(
@@ -1150,9 +1193,9 @@ def apply_mask(
 ) -> 'Array':
     """split a spectrogram into TDD link directions, masking the rest with NaN.
 
-    The guard bands are NaN-filled in `spectrogram` in place. The returned array is a
-    copy per link direction in which the symbols not carrying that direction, per
-    `build_tdd_link_symbol_masks`, are NaN as well.
+    The guard bands are NaN-filled in `spectrogram` in place. The returned array has
+    one copy of `spectrogram` per link direction, with the symbols of the other link
+    directions set to NaN (`build_tdd_link_symbol_masks`).
 
     Args:
         spectrogram: shape (port, symbol, frequency), in linear power, with one STFT
@@ -1165,18 +1208,18 @@ def apply_mask(
             `tdd_config_from_str`
         guard_left: width (in Hz) nulled at the low-frequency channel edge
         guard_right: width (in Hz) nulled at the high-frequency channel edge
-        link_direction: ``'downlink'``, ``'uplink'``, or a tuple of them; each
-            becomes one entry along the output's link direction axis
-        flex_as: which link direction (``'d'`` or ``'u'``) claims flexible symbols;
-            None masks them from both
+        link_direction: ``'downlink'``, ``'uplink'``, or a tuple of these; one entry
+            along the link direction axis of the output per element
+        flex_as: ``'d'`` or ``'u'``, the link direction that claims flexible
+            symbols; None masks flexible symbols from both
         normal_cp: 14 symbols per slot when True, 12 when False
 
     Returns:
         shape (port, link direction, symbol, frequency)
 
     Raises:
-        ValueError: if `link_direction` contains anything but ``'downlink'`` and
-            ``'uplink'``
+        ValueError: if `link_direction` contains a value other than ``'downlink'``
+            or ``'uplink'``
     """
 
     if isinstance(link_direction, str):
@@ -1233,25 +1276,25 @@ def build_tdd_link_symbol_masks(
 
     Args:
         subcarrier_spacing: in Hz; sets the number of slots per 10 ms frame
-        frame_slots: the slot types in one frame as a string of ``'d'``, ``'u'`` and
+        frame_slots: the slot types in one frame as a string of ``'d'``, ``'u'``, and
             ``'s'`` characters, one per slot, or a single character for every slot
         special_symbols: the symbol types of each ``'s'`` slot as a string of
-            ``'d'``, ``'u'`` and ``'f'`` characters; None treats every symbol of a
-            special slot as downlink
+            ``'d'``, ``'u'``, and ``'f'`` characters, as for `tdd_config_from_str`
         link_direction: ``'downlink'`` or ``'uplink'`` for each row of the output
-        count: number of symbols along the output's last axis, tiled and truncated
-            from whole frames; None gives one frame
+        count: number of symbols along the last axis of the output, tiled and
+            truncated from whole frames
         normal_cp: 14 symbols per slot when True, 12 when False
-        flex_as: which link direction (``'d'`` or ``'u'``) claims flexible symbols;
-            None masks them from both
+        flex_as: ``'d'`` or ``'u'``, the link direction that claims flexible
+            symbols; None masks flexible symbols from both
 
     Returns:
         float32 array of shape (len(`link_direction`), `count`), with 1 at the
         symbols of the link direction and NaN elsewhere
 
     Raises:
-        ValueError: if `frame_slots` has the wrong length for `subcarrier_spacing` or
-            either string contains a character outside the alphabet of that string
+        ValueError: if `frame_slots` has the wrong length for `subcarrier_spacing`,
+            or if either string contains a character outside the alphabet of that
+            string
     """
 
     tdd_config = tdd_config_from_str(
@@ -1309,37 +1352,35 @@ def _resource_grid_spectrogram_spec(
 
 
 class ResourceGridSizing(typing.NamedTuple):
-    """frame layout and STFT sizing that a (capture, resource grid spec) pair implies.
-
-    `frame_slots` is the normalized slot string of one frame, `spectrogram` the STFT
-    spec that hops once per OFDM symbol, `time_bin_averaging` the number of hops in
-    one slot (None when `average_slots` is off), and `noise_bandwidth` and
-    `resolution_bandwidth` (in Hz) the `spectrum.SpectrogramSizing` values of the
-    STFT for one histogram bin.
-    """
+    """the frame layout and STFT sizing of one capture under a resource grid spec."""
 
     frame_slots: str
+    """normalized slot string of one frame"""
     spectrogram: specs.Spectrogram
+    """the STFT spec that hops once per OFDM symbol"""
     time_bin_averaging: typing.Optional[int]
+    """STFT hops in one slot, or None when `average_slots` is False"""
     noise_bandwidth: float
+    """noise bandwidth (in Hz) of one histogram bin, as for
+    `spectrum.SpectrogramSizing`"""
     resolution_bandwidth: float
+    """equivalent noise bandwidth (in Hz) of the analysis window, as for
+    `spectrum.SpectrogramSizing`"""
 
 
 def validated_resource_grid_sizing(
     capture: specs.Capture, spec: specs.CellularResourcePowerHistogram
 ) -> ResourceGridSizing:
-    """check the frame layout and STFT sizing of the resource grid and return them.
+    """return the frame layout and STFT sizing of `capture` under `spec`.
 
-    `tdd_config_from_str` owns the `frame_slots` and `special_symbols` rules. Slot
-    averaging must land on a whole number of STFT hops. The spectrogram sizing cannot
-    make that check because the time aperture is derived here rather than given.
+    With `average_slots`, one slot must span a whole number of STFT hops.
 
     Raises:
-        ValueError: if `frame_slots` requests a special slot without `special_symbols`,
-            if the frame strings are malformed (as `tdd_config_from_str`), if the STFT
-            does not fit the capture (as `spectrum.validated_spectrogram_sizing`), or,
-            with `average_slots`, if a slot is not a whole number of hops or the capture
-            is shorter than one slot
+        ValueError: if `frame_slots` has an ``'s'`` slot without `special_symbols`,
+            if either frame string is malformed (as `tdd_config_from_str`), if the
+            STFT does not fit the capture (as `spectrum.validated_spectrogram_sizing`),
+            or, with `average_slots`, if a slot is not a whole number of hops or the
+            capture is shorter than one slot
     """
     if (
         spec.frame_slots is not None
@@ -1403,15 +1444,17 @@ def validated_resource_grid_sizing(
 def cellular_resource_power_histogram(
     x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
-    """histogram the power of a cellular resource grid on each port, by link direction.
+    """evaluate the fraction of resource grid elements in each power bin per link.
 
-    A spectrogram with one bin per subcarrier (or per resource block, with
-    `average_rbs`) and one hop per OFDM symbol is split into downlink and uplink
-    symbols by `apply_mask`, averaged over each slot when `average_slots` is set, and
-    converted to dBm before binning. The output is the fraction of all resource grid
-    elements on the port, with dimensions `link_direction` and
-    `cellular_resource_power_bin` (in dBm per bin bandwidth); the fractions of both
-    link directions together sum to 1 on each port.
+    The input is the IQ before the `analysis_bandwidth` filter and after trigger
+    alignment. A spectrogram with one bin per subcarrier (or per resource block,
+    with `average_rbs`) and one hop per OFDM symbol is split into downlink and
+    uplink symbols by `frame_slots` and `special_symbols`. With `average_slots`, the
+    power is averaged over each slot. The power is converted to dBm before binning.
+    Per capture, the output is float32 with dimensions `link_direction` and
+    `cellular_resource_power_bin` (in dBm per bin bandwidth). The fractions of both
+    link directions together sum to 1 on each port. Subcarriers inside the
+    `guard_bandwidths` and flexible symbols are excluded from the count.
 
     Args:
     {args}
@@ -1447,8 +1490,8 @@ def cellular_resource_power_histogram(
         xp=xp,
     )
 
-    # the time binning follows the mask to allow for averaging across mask
-    # boundaries
+    # masking precedes the slot average. A slot that mixes link directions then
+    # averages to nan instead of a blend of the two.
     if sizing.time_bin_averaging is not None:
         masked_spgs = sw.binned_mean(
             masked_spgs, sizing.time_bin_averaging, axis=2, fft=False
