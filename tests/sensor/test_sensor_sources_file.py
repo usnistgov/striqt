@@ -1,7 +1,7 @@
 """striqt.sensor.lib.sources.file: the zarr, MAT, and TDMS file sources.
 
 All 3 share the uniform time origin of `VirtualSource.get_waveform`: file index 0
-is corrected output sample 0, so the lead overlap that `correct_iq` trims is a zero
+is corrected output sample 0, so the lead overlap that the conditioning trims is a zero
 pre-roll rather than file data. The oracle for each round trip is the array that was
 written to the file, read back independently of the source under test.
 """
@@ -19,6 +19,7 @@ from synthetic_sources import (
     FILTER_SIZE,
     SCALE_ONLY,
     acquire_corrected,
+    filtered,
     preset_capture,
     preset_sweep,
     run_in_memory,
@@ -201,8 +202,8 @@ def test_zarr_acquire_layout(zarr_iq_file):
     capture = file_capture()
     lead, tail = ss.lib.compute.get_correction_overlaps(capture, spec, None)
     raw = acquire_corrected(ss.bindings.zarr_iq, capture, source=spec).raw
-    assert raw.pre_align.shape == (2, lead + READ_SAMPLES + tail)
-    assert_preroll_then_file(raw.pre_align, lead, zarr_rows(zarr_iq_file, 1))
+    assert raw.x.shape == (2, lead + READ_SAMPLES + tail)
+    assert_preroll_then_file(raw.x, lead, zarr_rows(zarr_iq_file, 1))
 
 
 def test_zarr_acquire_layout_with_a_trigger_strobe(zarr_iq_file):
@@ -216,7 +217,7 @@ def test_zarr_acquire_layout_with_a_trigger_strobe(zarr_iq_file):
 
     raw = acquire_corrected(ss.bindings.zarr_iq, capture, source=spec).raw
 
-    assert_preroll_then_file(raw.pre_align, lead, zarr_rows(zarr_iq_file, 1))
+    assert_preroll_then_file(raw.x, lead, zarr_rows(zarr_iq_file, 1))
 
 
 @pytest.mark.parametrize('capture_index', [0, 1], ids=['first', 'second'])
@@ -227,8 +228,8 @@ def test_zarr_round_trip_scale_only(zarr_iq_file, capture_index):
     stages = acquire_corrected(ss.bindings.zarr_iq, file_capture(), source=source)
     corrected = stages.corrected
     expected = zarr_rows(zarr_iq_file, capture_index)[:, :READ_SAMPLES]
-    assert corrected.pre_align.dtype == expected.dtype
-    np.testing.assert_array_equal(to_numpy(corrected.pre_align), expected)
+    assert filtered(corrected).dtype == expected.dtype
+    np.testing.assert_array_equal(to_numpy(filtered(corrected)), expected)
 
 
 def test_zarr_round_trip_filtered(zarr_iq_file):
@@ -239,9 +240,9 @@ def test_zarr_round_trip_filtered(zarr_iq_file):
     capture = file_capture(**READ_FILTER_ONLY)
     corrected = acquire_corrected(ss.bindings.zarr_iq, capture, source=source).corrected
     expected = zarr_rows(zarr_iq_file, 1)[:, :READ_SAMPLES]
-    assert corrected.pre_align.shape == expected.shape
+    assert filtered(corrected).shape == expected.shape
     assert_close(
-        interior(corrected.pre_align, FILTER_SIZE // 2),
+        interior(filtered(corrected), FILTER_SIZE // 2),
         interior(expected, FILTER_SIZE // 2),
         sigma=FIR_LEAKAGE,
     )
@@ -336,7 +337,7 @@ def test_mat_round_trip_scale_only(mat_files, rows, port):
     )
     assert stages.raw.info.backend_sample_rate == FS
     expected = mat_files[rows].waveform[:, :READ_SAMPLES]
-    np.testing.assert_array_equal(to_numpy(stages.corrected.pre_align), expected)
+    np.testing.assert_array_equal(to_numpy(filtered(stages.corrected)), expected)
 
 
 def test_mat_loop_repeats_file(mat_files):
@@ -350,7 +351,7 @@ def test_mat_loop_repeats_file(mat_files):
     file = mat_files[1].waveform
     count = round(duration * FS)
     expected = np.concatenate([file, file[:, : count - FILE_SAMPLES]], axis=1)
-    np.testing.assert_array_equal(to_numpy(corrected.pre_align), expected)
+    np.testing.assert_array_equal(to_numpy(filtered(corrected)), expected)
 
 
 # %% TDMSSource
@@ -437,7 +438,7 @@ def test_tdms_round_trip_scale_only(tdms_file):
     stages = acquire_corrected(ss.bindings.tdms_file, capture, source=source)
     assert stages.raw.info.center_frequency == CENTER_FREQUENCY
     assert_close(
-        stages.corrected.pre_align[0],
+        filtered(stages.corrected)[0],
         tdms_file.waveform[:READ_SAMPLES],
         **TDMS_SCALING_TOL,
     )

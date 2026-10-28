@@ -1,5 +1,5 @@
-"""striqt.sensor.lib.compute.analyze: packaging around correct_iq and the measurement
-registry, trigger selection, and the warmup decision
+"""striqt.sensor.lib.compute.analyze: packaging around the conditioning of AcquiredIQ
+and the measurement registry, trigger selection, and the warmup decision
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from synthetic_sources import (
     IQ_ONLY,
     SPECTROGRAM,
     acquire_corrected,
+    filtered,
     preset_sweep,
     tone_captures,
 )
@@ -46,7 +47,7 @@ def fresh_raw(stages):
     """a copy of the raw acquisition, indexed as iterate_sweep would before analysis"""
     return dataclasses.replace(
         stages.raw,
-        pre_align=stages.raw.pre_align.copy(),
+        x=stages.raw.x.copy(),
         info=stages.raw.info.replace(sweep_index=0),
     )
 
@@ -59,38 +60,26 @@ def fresh_raw(stages):
     [('delayed', compute.DelayedDataset), (True, xr.Dataset)],
     ids=['delayed', 'dataset'],
 )
-def test_analyze_result_matches_correct_iq(stages, as_xarray, container):
-    result = compute.analyze(
-        fresh_raw(stages), options(correction=True, as_xarray=as_xarray)
-    )
+def test_analyze_result_matches_the_filtered_selection(stages, as_xarray, container):
+    result = compute.analyze(fresh_raw(stages), options(as_xarray=as_xarray))
     assert isinstance(result, container)
     ds = result if as_xarray is True else compute.from_delayed(result)
-    assert np.array_equal(ds.iq_waveform.values, stages.corrected.pre_align)
+    assert np.array_equal(ds.iq_waveform.values, filtered(stages.corrected))
 
 
 def test_as_xarray_false_returns_the_delayed_arrays(stages):
     """current behavior, not a contract: the values are DelayedDataArray results
     keyed by measurement name, not bare arrays as the annotation says"""
-    result = compute.analyze(
-        fresh_raw(stages), options(correction=True, as_xarray=False)
-    )
+    result = compute.analyze(fresh_raw(stages), options(as_xarray=False))
     assert isinstance(result, dict)
     assert set(result) == {'iq_waveform'}
     assert isinstance(result['iq_waveform'], sa.dataarrays.DelayedDataArray)
 
 
-def test_without_correction_the_iq_passes_through(stages):
-    iq = dataclasses.replace(
-        stages.corrected, info=stages.raw.info.replace(sweep_index=0)
-    )
-    ds = compute.analyze(iq, options(correction=False, as_xarray=True))
-    assert np.array_equal(ds.iq_waveform.values, stages.corrected.pre_align)
-
-
 def test_analyze_rejects_a_bare_capture(stages):
     iq = dataclasses.replace(fresh_raw(stages), capture=sa.specs.Capture())
     with pytest.raises(TypeError, match='SensorCapture'):
-        compute.analyze(iq, options(correction=False, as_xarray=True))
+        compute.analyze(iq, options(as_xarray=True))
 
 
 def test_a_source_only_capture_field_reuses_the_analysis_caches(stages):
@@ -104,7 +93,6 @@ def test_a_source_only_capture_field_reuses_the_analysis_caches(stages):
 
     opts = options(
         sweep_spec=preset_sweep('single_tone', (CAPTURE,), analysis=SPECTROGRAM),
-        correction=True,
         as_xarray=True,
     )
     for snr in (None, 10.0):

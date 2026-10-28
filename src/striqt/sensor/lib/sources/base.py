@@ -85,9 +85,18 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
 
 
 class VirtualSource(SourceBackend[SS, SC]):
+    """a source that reads samples from `get_waveform` on a synthetic time base.
+
+    The time base is 0 at the first `arm`, and `_sync_time_ns` is the time of
+    corrected sample 0 of the armed capture. A re-arm continues the stream: the first
+    sample read after `arm` is stamped where the samples read before the re-arm ended.
+    """
+
     setup_spec: SS
     _samples_elapsed = 0
     _sync_time_ns = 0
+    _stream_end_ns = 0
+    _origin_pending = False
     _overlaps: tuple[int, int] = (0, 0)
     _capture: SC
 
@@ -95,7 +104,10 @@ class VirtualSource(SourceBackend[SS, SC]):
         self.setup_spec = spec
 
     def reset_sample_counter(self, value: int = 0) -> None:
-        """advance the time base by the elapsed samples and restart at `value`."""
+        """restart the sample counter at `value`.
+
+        The next read is stamped where the samples read so far ended.
+        """
         self._sync_time_source()
         self._samples_elapsed = value
 
@@ -111,8 +123,8 @@ class VirtualSource(SourceBackend[SS, SC]):
         """return `count` samples of `port` starting at absolute sample `start_index`.
 
         Indices are at the source sample rate and are referenced to the corrected
-        capture: index 0 is the first sample of the output of `correct_iq`, and
-        negative indices are the leading-overlap pre-roll that `correct_iq` trims. A
+        capture: index 0 is the first sample of the conditioned capture, and
+        negative indices are the leading-overlap pre-roll that the conditioning trims. A
         source with no samples there (a file) fills those samples with zeros. The
         base class raises `NotImplementedError`.
 
@@ -151,6 +163,14 @@ class VirtualSource(SourceBackend[SS, SC]):
 
         start_index = self._samples_elapsed - self._overlaps[0]
 
+        if self._origin_pending:
+            # the lead overlap of the re-armed capture arrives in `trigger`, after
+            # `arm`, so the origin is placed here rather than at the reset
+            self._sync_time_ns = self._stream_end_ns - self._sample_time_ns(
+                -self._overlaps[0]
+            )
+            self._origin_pending = False
+
         for port, buf in zip(ports, buffers):
             values = self.get_waveform(
                 count, start_index, port=port, xp=getattr(self, 'xp', np)
@@ -166,23 +186,25 @@ class VirtualSource(SourceBackend[SS, SC]):
     def _sample_time_ns(self, index: int) -> int:
         """return the time (in ns) of source sample `index` after the time origin.
 
-        Index 0 is the first sample of the output of `correct_iq`. The result is
-        negative for the leading-overlap pre-roll and is rounded to 1 ns.
+        Index 0 is the first sample of the corrected waveform at the capture sample
+        rate. The result is negative for the leading-overlap pre-roll and is rounded
+        to 1 ns.
         """
         fs = float(self.get_resampler(self._capture)['fs_sdr'])
         return round(index * 1_000_000_000 / fs)
 
     def _sync_time_source(self) -> None:
-        """advance the synthetic time base (in ns) by the duration of the samples read.
+        """record the time (in ns) at which the samples read since the last reset end.
 
-        The duration is evaluated at the source sample rate of the armed capture.
-        Before the first `arm`, the time base is 0.
+        The end time is evaluated at the source sample rate of the armed capture.
+        Nothing changes when no samples were read since the last reset.
         """
         capture = getattr(self, '_capture', None)
-        if capture is None:
+        if capture is None or self._samples_elapsed == 0:
             return
-        fs = float(self.get_resampler(capture)['fs_sdr'])
-        self._sync_time_ns += round(self._samples_elapsed * 1_000_000_000 / fs)
+        index = self._samples_elapsed - self._overlaps[0]
+        self._stream_end_ns = self._sync_time_ns + self._sample_time_ns(index)
+        self._origin_pending = True
 
     def get_resampler(self, capture) -> 'sw.ResamplerDesign':
         from ..compute import design_resampler

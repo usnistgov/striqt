@@ -20,6 +20,7 @@ from synthetic_sources import (
     SCALE_ONLY,
     acquire_corrected,
     expected_raw,
+    filtered,
     preset_capture,
 )
 
@@ -147,8 +148,8 @@ class TestReadRetries:
             iq = ctrl.acquire()
 
             assert len(device.calls_named('activateStream')) == 2
-            assert iq.pre_align.shape[0] == 2
-            assert iq.pre_align.all()
+            assert iq.x.shape[0] == 2
+            assert iq.x.all()
             # the retried acquisition restarted the holdoff from its own activation
             assert iq.info.start_time.value > device.streams[0].activate_time_ns
 
@@ -198,8 +199,8 @@ def test_acquire_layout_is_lead_data_tail_from_the_generator(
     capture = preset_capture('sawtooth', **LAYOUT_PRESETS[preset])
     iq = open_and_acquire('sawtooth', capture, source)
     expected = expected_raw('sawtooth', capture, source)
-    assert iq.pre_align.shape == expected.shape
-    assert_close(iq.pre_align, expected)
+    assert iq.x.shape == expected.shape
+    assert_close(iq.x, expected)
 
 
 def test_acquire_metadata_defaults(isolated_lookup, subtests):
@@ -218,8 +219,9 @@ def test_acquire_metadata_defaults(isolated_lookup, subtests):
             assert iq.info.source_id == ctrl.source_id
             assert iq.info.capture_index == 0
             assert iq.info.signal_trigger is None
-        with subtests.test('stages other than pre_align are unset'):
-            assert iq.pre_filter is None and iq.aligned is None
+        with subtests.test('no conditioning is attached'):
+            assert iq.signal_trigger is None and not iq.overwrite_x
+            assert 'preprocess' not in vars(iq)
         with subtests.test('capture and source specs are attached'):
             assert iq.capture == capture and iq.source_spec == SOURCE
 
@@ -243,7 +245,7 @@ def test_corrected_output_starts_on_the_strobe_grid(
     stages = acquire_corrected('dirac_delta', capture, source=source)
 
     assert stages.overlaps[0] % round(STROBE * stages.resampler['fs_sdr']) != 0
-    peaks = np.argmax(np.abs(to_numpy(stages.corrected.pre_align)), axis=1)
+    peaks = np.argmax(np.abs(to_numpy(filtered(stages.corrected))), axis=1)
     assert list(peaks) == [round(time * capture.sample_rate)] * 2
 
 
@@ -253,7 +255,7 @@ def test_acquire_on_cupy_returns_device_arrays(xp, isolated_lookup):
     iq = open_and_acquire(
         'single_tone', preset_capture('single_tone', **SCALE_ONLY), source
     )
-    assert sw.is_cupy_array(iq.pre_align)
+    assert sw.is_cupy_array(iq.x)
 
 
 # %% acquire: reuse_iq
@@ -287,11 +289,12 @@ def test_reuse_iq(reuse_iq, second_capture, shares_buffer, isolated_lookup):
 
     assert (first.capture, second.capture) == (REUSABLE, second_capture)
     if shares_buffer:
-        assert second.pre_align is first.pre_align
+        assert second.x is first.x
+        assert second.preprocess is not first.preprocess
     else:
-        assert not np.shares_memory(first.pre_align, second.pre_align)
+        assert not np.shares_memory(first.x, second.x)
         expected = expected_raw('single_tone', second_capture, SOURCE)
-        assert_close(second.pre_align, expected)
+        assert_close(second.x, expected)
 
 
 def test_discard_iq_forces_a_fresh_acquisition(isolated_lookup):
@@ -307,8 +310,8 @@ def test_discard_iq_forces_a_fresh_acquisition(isolated_lookup):
         ctrl._arm_spec(REUSABLE)
         third = ctrl.acquire()
 
-    assert not np.shares_memory(first.pre_align, second.pre_align)
-    assert third.pre_align is second.pre_align, 'reuse resumes after the discard'
+    assert not np.shares_memory(first.x, second.x)
+    assert third.x is second.x, 'reuse resumes after the discard'
 
 
 def test_reuse_iq_clears_the_soapy_start_time(fake_controller):
@@ -326,7 +329,7 @@ def test_reuse_iq_clears_the_soapy_start_time(fake_controller):
 
     assert first.info.start_time is not None
     assert second.info.start_time is None
-    assert second.pre_align is first.pre_align
+    assert second.x is first.x
 
 
 def test_gapless_repeats_are_stamped_one_record_apart(fake_controller):
@@ -365,8 +368,8 @@ def test_one_port_capture_after_a_two_port_capture_has_one_row(isolated_lookup):
         third = ctrl.acquire()
 
     expected = expected_raw('sawtooth', one_port_short, SOURCE)
-    assert third.pre_align.shape == expected.shape
-    assert_close(third.pre_align, expected)
+    assert third.x.shape == expected.shape
+    assert_close(third.x, expected)
 
 
 class HalfReads(BINDINGS['sawtooth'].sensor.source_cls):
@@ -401,7 +404,7 @@ def test_partial_reads_are_completed_contiguously(monkeypatch, isolated_lookup):
         read_calls = ctrl.backend.read_calls
 
     assert read_calls > 1
-    assert_close(iq.pre_align, expected_raw('sawtooth', capture, SOURCE))
+    assert_close(iq.x, expected_raw('sawtooth', capture, SOURCE))
 
 
 def test_overfilled_buffer_is_a_memory_error(monkeypatch, isolated_lookup):
@@ -434,8 +437,8 @@ def test_acquire_with_explicit_overlaps_matches_the_default(armed_tone_controlle
     default = ctrl.acquire()
 
     assert explicit.info.signal_trigger is None
-    assert explicit.pre_align.shape == default.pre_align.shape
-    np.testing.assert_array_equal(explicit.pre_align, default.pre_align)
+    assert explicit.x.shape == default.x.shape
+    np.testing.assert_array_equal(explicit.x, default.x)
 
 
 def test_acquire_before_arming_is_an_error(isolated_lookup):
@@ -463,7 +466,7 @@ class TestControllerAcquire:
             stream = device.streams[0]
             holdoff = round(2e-3 * MCR)
             read_sizes = [c[1] for c in device.calls_named('readStream')]
-            assert read_sizes == [iq.pre_align.shape[1], holdoff]
+            assert read_sizes == [iq.x.shape[1], holdoff]
 
             # the timestamp lies inside the acquisition window
             window_ns = round(sum(read_sizes) * 1e9 / MCR)
@@ -482,8 +485,8 @@ class TestControllerAcquire:
         # -60 dBm through 50 dB of gain is -10 dBfs; port 0 would be noise only.
         # The model's own noise floor biases the level 0.014 dB above the tone, so
         # the bound is that mismatch and not the sample fluctuation
-        assert iq.pre_align.shape[0] == 1
-        assert dBfs(iq.pre_align)[0] == pytest.approx(-10.0, abs=0.05)
+        assert iq.x.shape[0] == 1
+        assert dBfs(iq.x)[0] == pytest.approx(-10.0, abs=0.05)
 
     def test_noise_level_matches_the_model(self, fake_soapy, fake_controller):
         with fake_controller() as ctrl:
@@ -495,8 +498,8 @@ class TestControllerAcquire:
             10 * np.log10(fake_soapy.model.noise_variance(1, -10, MCR, 1e9)),
         ]
         # the mean of N exponentially distributed sample powers, at 3 sigma
-        sigma = 3 / np.sqrt(iq.pre_align.shape[1])
-        assert dBfs(iq.pre_align) == pytest.approx(
+        sigma = 3 / np.sqrt(iq.x.shape[1])
+        assert dBfs(iq.x) == pytest.approx(
             expected, abs=sw.power_analysis.level_tolerance_dB(sigma, power=True)
         )
 

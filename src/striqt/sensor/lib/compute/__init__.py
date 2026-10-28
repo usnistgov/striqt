@@ -3,10 +3,12 @@ from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
 from . import cal_lookups, summary
 from .analyze import analyze, prepare_compute, get_trigger_from_spec
 from .corrections import (
-    correct_iq,
+    attach_corrections,
     design_resampler,
+    needs_analysis_filter,
     get_correction_overlaps,
     needs_resample,
+    Preprocessor,
     source_record_size,
 )
 from .tolerance import (

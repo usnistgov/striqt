@@ -23,6 +23,11 @@ repository.
   sweeps over the four synthetic bindings checked against the generators. Sensor signal-path
   properties (origin/delay, level, band placement, stage semantics) live in
   `test_sensor_compute_corrections.py` on `acquire_corrected`, not at the sweep level.
+- **The noise-line and histogram-limit helpers of `striqt.figures`** are tested in
+  `tests/figures/` against the synthetic 3-capture datasets of `figures_datasets.py`
+  (`make_dataset`, `predicted_levels_dBm`, `occupied_bins`), with the expected levels and
+  bin supports from the dataset construction; the one plotting test runs headless through
+  `MPLBACKEND=agg`, set in the root conftest before any third-party import.
 - **The type checker's view** of the keyword-unpacking signatures is pinned by
   `tests/test_typing.py` and the probes under `tests/ty_probes/` (see Typing); import-time
   side effects by `tests/test_imports.py`; the docstring prose gate (no "it"/"its" for code,

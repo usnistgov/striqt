@@ -238,19 +238,55 @@ Output is appended along the `capture` dimension of a zarr store by `ZarrCapture
 only by passing an instance through `iterate_sweep(res, sink=...)`. Paths ending in
 `.zarr.zip` go through `Zipper`.
 
+### Timestamps and the trigger strobe
+
+`SourceBackend.read` returns the time (ns) of the sample at ``buffers[i][offset]``. The
+first read of a capture begins one lead overlap before the record, so the stamp precedes
+corrected sample 0 by `lead / fs_sdr`.
+
+`Controller.read_iq` passes that stamp and `overlaps[0]` to
+`sources/buffers.py:find_trigger_holdoff`, which returns the number of source samples
+dropped before the record: at least the lead, plus `transient_holdoff_time` after a
+re-arm (no carryover), rounded up to the next `trigger_strobe` edge when a strobe is
+set. The record start time is the stamp plus the holdoff.
+
+With `gapless`, `ReceiveBuffers.stash_carryover` keeps the trailing lead and tail of the
+record and stamps the first carried sample one lead before the next record. `apply`
+returns that stamp for the next capture in place of a source read.
+
+`sources/base.py:VirtualSource` keeps a synthetic clock. The clock is 0 at the first
+`arm`, so corrected sample 0 of the first capture is on every strobe grid. A re-arm
+continues the stream: the first read after `arm` is stamped where the previous samples
+ended, and the origin of the new capture is one new-rate lead overlap later.
+`ZarrIQSource.read` replaces the stamp with the store's `start_time` less the lead, so
+`start_time` stays the time of file index 0.
+
 ### The per-capture signal path
 
-`sensor/lib/compute/corrections.py:correct_iq` applies these steps in order:
+The conditioning runs in `sensor/lib/compute/corrections.py:Preprocessor`, reached
+through `AcquiredIQ.preprocess` on the sensor `AcquiredIQ`
+(`sensor/specs/dataclasses.py`). Each stage runs on the first call that needs the
+stage and is memoized on the `Preprocessor`, one per acquisition. The preprocessor
+holds the acquisition through a weak reference. A `dataclasses.replace` copy,
+including the controller's `reuse_iq` copy, starts with a fresh preprocessor. The
+stages, in order:
 
 1. Resample to `sample_rate`: `_scale_only` when no resampling is needed, otherwise
-   `_resample`, or `_oaresample` when `STRIQT_USE_OARESAMPLE=1`.
+   `_resample`, or `_oaresample` when `STRIQT_USE_OARESAMPLE=1`. This is the only
+   stage that reads `x`, and the one that may consume `x` in place under
+   `overwrite_x`.
 2. Conjugate for a high-side LO. `STRIQT_IGNORE_HIGHSIDE_LO` disables the conjugation.
-3. FIR low-pass to `analysis_bandwidth` when finite.
+3. FIR low-pass to `analysis_bandwidth`. The filter runs only for a measurement
+   registered `prefer_filtered=True` on a finite bandwidth.
 4. Trim to `duration`.
-5. Run the `signal_trigger` and shift.
+5. Run the `signal_trigger` and shift. This stage runs for a measurement registered
+   `prefer_aligned=True` when a trigger is set. The trigger measurement receives the
+   `AcquiredIQ`, and the registry selects the input of the trigger with the
+   preferences registered on the trigger. A trigger registered `prefer_aligned=True`
+   is rejected at import.
 
-`compute/analyze.py:analyze` applies `correct_iq`, evaluates the measurements, and packs a
-`DelayedDataset`.
+`compute/analyze.py:analyze` installs the trigger and `overwrite_x` with
+`attach_corrections`, evaluates the measurements, and packs a `DelayedDataset`.
 
 ### Warmup
 

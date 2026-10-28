@@ -6,11 +6,12 @@ import collections
 import dataclasses
 import math
 import typing
+import weakref
 
 from .. import specs
 from . import register, util
 from .typing import TAR
-from .util import array_api_compat, np, xr
+from .util import array_api_compat, cached_property, np, xr
 
 import striqt.waveform as sw
 
@@ -24,12 +25,65 @@ CAPTURE_DIM = 'capture'
 PORT_DIM = 'port'
 
 
+class Preprocessor:
+    """the conditioned-waveform selector of one acquisition.
+
+    The base class returns `x` of the acquisition for every preference. A subclass
+    that conditions the waveform lazily overrides `__call__`.
+    """
+
+    def __init__(self, iq: AcquiredIQ) -> None:
+        """store a weak reference to `iq`."""
+        self._iq_ref: weakref.ref[AcquiredIQ] = weakref.ref(iq)
+
+    @property
+    def iq(self) -> AcquiredIQ:
+        """the acquisition that owns this preprocessor.
+
+        Raises:
+            RuntimeError: when the acquisition has been garbage collected
+        """
+        iq = self._iq_ref()
+        if iq is None:
+            raise RuntimeError('the acquisition of this preprocessor was released')
+        return iq
+
+    def __call__(
+        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+    ) -> Array:
+        """return the waveform conditioned as the preferences request.
+
+        Args:
+            prefer_filtered: True selects the waveform low-passed to the capture
+                `analysis_bandwidth` when the acquisition applies one
+            prefer_aligned: True selects the waveform shifted by the signal trigger
+                when the acquisition runs one
+
+        Returns:
+            the shape (port, sample) array in the namespace of `x`
+
+        Raises:
+            RuntimeError: when the acquisition has been garbage collected
+        """
+        return self.iq.x
+
+
 @dataclasses.dataclass
 class AcquiredIQ:
-    pre_align: Array
-    pre_filter: Array | None
-    aligned: Array | None
+    """an acquired IQ waveform `x` with the capture that describes the acquisition."""
+
+    x: Array
+    """the acquired waveform with shape (port, sample)"""
     capture: specs.Capture | None
+    """the acquisition parameters of `x`, or None when not known"""
+
+    @cached_property
+    def preprocess(self) -> Preprocessor:
+        """the `Preprocessor` of this acquisition, one per instance.
+
+        A `dataclasses.replace` copy starts with a `Preprocessor` of its own.
+        """
+        return Preprocessor(self)
 
 
 _ENG_PREFIXES = {
@@ -366,6 +420,13 @@ class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
         assert self.registry is not None
 
 
+def _raw_array(iq: Array | AcquiredIQ) -> Array:
+    """return the acquired array of `iq`, or `iq` when the argument is an array."""
+    if isinstance(iq, AcquiredIQ):
+        return iq.x
+    return iq
+
+
 def evaluate_by_spec(
     iq: Array | AcquiredIQ,
     spec: specs.AnalysisGroup,
@@ -375,8 +436,8 @@ def evaluate_by_spec(
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
     Args:
-        iq: the waveform with shape (ports, samples), or an `AcquiredIQ` whose
-            stages are selected per measurement by `prefer_iq_source`
+        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. The
+            registry selects the conditioning of each measurement through `preprocess`
         spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
             fields of `spec` are skipped
         capture: the acquisition parameters of `iq`
@@ -402,14 +463,11 @@ def evaluate_by_spec(
     else:
         raise TypeError('invalid analysis spec argument')
 
-    if not isinstance(iq, AcquiredIQ):
-        iq = AcquiredIQ(pre_align=iq, pre_filter=None, aligned=None, capture=None)
-
     spec_dict = spec.to_dict()
     results = {}
     as_xarray = 'delayed' if options.as_xarray else False
 
-    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+    if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.configure_cupy()
 
     for name in spec_dict.keys():
@@ -419,14 +477,7 @@ def evaluate_by_spec(
             func_kws = spec_dict[name]
             if not func_kws:
                 continue
-            if meas.prefer_iq_source == 'pre_filter':
-                iq_sel = iq.pre_filter
-            elif iq.aligned is None or meas.prefer_iq_source == 'pre_align':
-                iq_sel = iq.pre_align
-            else:
-                iq_sel = iq.aligned
-
-            ret = meas.func(iq=iq_sel, capture=capture, as_xarray=as_xarray, **func_kws)
+            ret = meas.func(iq=iq, capture=capture, as_xarray=as_xarray, **func_kws)
 
             if not as_xarray:
                 results[name] = ret[0]
@@ -443,7 +494,7 @@ def evaluate_by_spec(
         assert isinstance(res, DelayedDataArray)
         results[name] = res.compute()
 
-    if sw.is_cupy_array(getattr(iq, 'pre_align', iq)):
+    if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.free_cupy_mempool()
 
     return results
@@ -505,8 +556,8 @@ def analyze_by_spec(
     """evaluate the enabled measurements of `spec` on the IQ waveform.
 
     Args:
-        iq: the waveform with shape (ports, samples), or an `AcquiredIQ` whose
-            stages are selected per measurement by `prefer_iq_source`
+        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. The
+            registry selects the conditioning of each measurement through `preprocess`
         spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
             fields of `spec` are skipped
         capture: the acquisition parameters of `iq`

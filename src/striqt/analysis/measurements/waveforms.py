@@ -100,7 +100,7 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     store_compressed=False,
     tolerance=iq_waveform_tolerance,
 )
-def iq_waveform(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
+def iq_waveform(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """package the IQ waveform as a measurement result.
 
     The values are in √mW, and ``|iq|**2`` is power in mW. The output has no
@@ -121,4 +121,4 @@ def iq_waveform(iq: Array, capture: specs.Capture, **kwargs: Any) -> Measurement
 
     start, stop = _get_start_stop_index(capture, spec)
 
-    return iq[:, start:stop], metadata
+    return x[:, start:stop], metadata

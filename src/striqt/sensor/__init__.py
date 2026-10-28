@@ -10,7 +10,5 @@ from .io import (
 )
 from .lib import sources, typing
 from .lib.actions import iterate_sweep
-
-from .lib.compute import correct_iq
 from .lib.resources import open_resources
 from .__about__ import __version__

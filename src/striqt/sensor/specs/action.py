@@ -71,7 +71,7 @@ def validate_sweep(
     * a measurement name that shadows a capture field;
     * each unique (capture, analysis) combination against the registered
       measurements;
-    * each unique capture against the signal path of `correct_iq`: trigger lookup,
+    * each unique capture against the conditioning signal path: trigger lookup,
       resampler design, analysis filter, and LO shift.
 
     The captures checked are those that `loop_captures` expands for `source_id`.
@@ -221,7 +221,7 @@ def _validate_sweep_corrections(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
-    """reject each unique capture that `correct_iq` could not process for `sweep`.
+    """reject each unique capture that the conditioning stages could not process for `sweep`.
 
     The checks are the trigger lookup, `design_resampler`, `design_fir_lpf`, and,
     when `USE_OARESAMPLE` is set, the LO shift check of `oaresample`. The resampler

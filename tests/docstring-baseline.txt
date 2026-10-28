@@ -2,8 +2,6 @@
 # before the gate was added. Entries are removed as they are fixed; none are added.
 # re-baselined 2026-10-28 when the gate changed from "it"/"its" to personal pronouns and "whose"
 src/striqt/analysis/lib/dataarrays.py::DelayedDataArray
-src/striqt/analysis/lib/dataarrays.py::analyze_by_spec
-src/striqt/analysis/lib/dataarrays.py::evaluate_by_spec
 src/striqt/analysis/lib/io.py::repair_legacy_attrs
 src/striqt/analysis/lib/register.py::AnalysisRegistry.measurement
 src/striqt/analysis/lib/register.py::check_group_fields
@@ -42,7 +40,6 @@ src/striqt/sensor/lib/compute/cal_lookups.py::lookup_system_noise_power
 src/striqt/sensor/lib/compute/corrections.py::_get_resampler_overlaps
 src/striqt/sensor/lib/compute/corrections.py::get_correction_overlaps
 src/striqt/sensor/lib/compute/tolerance.py::capture_tolerances
-src/striqt/sensor/lib/compute/tolerance.py::correction_error
 src/striqt/sensor/lib/resources.py::<module>
 src/striqt/sensor/lib/sources/buffers.py::ReceiveBuffers.stash_carryover
 src/striqt/sensor/specs/action.py::<module>
@@ -68,4 +65,3 @@ src/striqt/waveform/lib/power/convert.py::<module>
 src/striqt/waveform/lib/power/detect.py::<module>
 src/striqt/waveform/lib/power/detect.py::iq_to_cyclic_power
 src/striqt/waveform/lib/power/detect.py::stat_rtol
-src/striqt/waveform/lib/util.py::lazy_import

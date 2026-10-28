@@ -1,11 +1,12 @@
-"""striqt.sensor.lib.compute.corrections: the per-capture signal path of correct_iq,
-the resampler design, and the acquisition overlap that the resampler and analysis
-filter consume
+"""striqt.sensor.lib.compute.corrections: the per-capture signal path of
+AcquiredIQ.preprocess, the resampler design, and the acquisition overlap that the
+resampler and analysis filter consume
 """
 
 from __future__ import annotations
 
 import dataclasses
+import gc
 from collections.abc import Callable
 from math import inf, isfinite
 from typing import TypeVar
@@ -32,18 +33,26 @@ from synthetic_sources import (
     SCALE_ONLY,
     FakeTrigger,
     acquire_corrected,
+    aligned,
     build_acquired_iq,
     expected_corrected,
     expected_raw,
+    filtered,
     fs_sdr,
     generator,
     preset_capture,
     source_count,
+    unfiltered,
 )
 
-import striqt.sensor as ss
+import striqt.analysis as sa
 import striqt.waveform as sw
-from striqt.sensor.lib.compute import correction_error, corrections
+from striqt.sensor.lib.compute import (
+    attach_corrections,
+    correction_error,
+    corrections,
+    get_trigger_from_spec,
+)
 from striqt.sensor.lib.sources import buffers
 from striqt.waveform.fourier import on_peak_roundoff
 
@@ -76,7 +85,7 @@ RESAMPLED_PRESETS = pytest.mark.parametrize(
 )
 
 
-def _resample_tol(preset, raw, stage='pre_filter') -> dict:
+def _resample_tol(preset, raw, filtered=False) -> dict:
     """assert_close keywords for the correction of the acquisition `raw` up to `stage`
     of the corrected AcquiredIQ, or exact equality for a preset that the firmware rate
     serves without resampling"""
@@ -84,9 +93,9 @@ def _resample_tol(preset, raw, stage='pre_filter') -> dict:
         return {}
     # _build_iq wraps an array of any namespace in the numpy-backed SOURCE spec, so
     # the backend follows the array
-    backend = 'cupy' if sw.is_cupy_array(raw.pre_align) else 'numpy'
+    backend = 'cupy' if sw.is_cupy_array(raw.x) else 'numpy'
     sigma = correction_error(
-        raw.capture, raw.source_spec, array_backend=backend, stage=stage
+        raw.capture, raw.source_spec, array_backend=backend, filtered=filtered
     )
     return {'sigma': sigma}
 
@@ -121,7 +130,7 @@ def assert_impulse_at(x, capture, time):
     assert _impulse_indexes(x) == [index] * to_numpy(x).shape[0]
 
 
-# %% correct_iq: time origin
+# %% select: time origin
 
 
 @pytest.mark.parametrize(
@@ -136,7 +145,7 @@ def test_output_is_the_generator_from_index_zero(preset, array_backend):
     expected = expected_corrected('sawtooth', capture)
 
     assert expected.shape[1] == round(capture.duration * capture.sample_rate)
-    assert np.array_equal(to_numpy(stages.corrected.pre_filter), expected)
+    assert np.array_equal(to_numpy(unfiltered(stages.corrected)), expected)
 
 
 @PRESET_PARAMS
@@ -148,11 +157,11 @@ def test_tone_phase_matches_the_generator(preset, array_backend):
     expected = expected_corrected('single_tone', capture)
 
     assert_close(
-        stages.corrected.pre_filter, expected, **_resample_tol(preset, stages.raw)
+        unfiltered(stages.corrected), expected, **_resample_tol(preset, stages.raw)
     )
 
 
-# %% correct_iq: level
+# %% select: level
 
 
 @PRESET_PARAMS
@@ -167,7 +176,7 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
     amplitude = 10 ** (IMPULSE_POWER_DB / 20)
     impulse = expected_corrected('dirac_delta', capture)
 
-    with subtests.test(stage='pre_filter'):
+    with subtests.test(stage='unfiltered'):
         # a brick-wall resample keeps the N_out central bins of the flat spectrum
         # and scales by N_out/N_in, so the on-sample impulse becomes fs/fs_sdr;
         # the inverse FFT of a flat spectrum concentrates roundoff on the impulse's
@@ -176,18 +185,18 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
         tol = _resample_tol(preset, stages.raw)
         if tol:
             tol['atol'] = on_peak_roundoff(np.complex64) * amplitude * ratio
-        assert_close(stages.corrected.pre_filter, ratio * impulse, **tol)
+        assert_close(unfiltered(stages.corrected), ratio * impulse, **tol)
 
-    with subtests.test(stage='pre_align'):
-        pre_align = to_numpy(stages.corrected.pre_align)
-        assert_impulse_at(pre_align, capture, IMPULSE_TIME)
+    with subtests.test(stage='filtered'):
+        x_filtered = to_numpy(filtered(stages.corrected))
+        assert_impulse_at(x_filtered, capture, IMPULSE_TIME)
         if isfinite(capture.analysis_bandwidth):
             # the center tap of a unit-DC-gain windowed-sinc lowpass at cutoff bw/2
             # is bw/fs, up to the passband error that the DC normalization moves
             peak = amplitude * capture.analysis_bandwidth / fs_sdr
-            assert_close(np.abs(pre_align[:, index]), peak, rtol=FIR_LEAKAGE)
+            assert_close(np.abs(x_filtered[:, index]), peak, rtol=FIR_LEAKAGE)
         else:
-            assert np.array_equal(pre_align, to_numpy(stages.corrected.pre_filter))
+            assert np.array_equal(x_filtered, to_numpy(unfiltered(stages.corrected)))
 
 
 @CHEAP_PRESETS
@@ -202,18 +211,18 @@ def test_voltage_scale(preset, voltage_scale, array_backend):
         'single_tone', **preset, frequency_offset=TONE_FREQUENCY, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
-    xp = sw.array_namespace(stages.raw.pre_align)
+    xp = sw.array_namespace(stages.raw.x)
     scale = voltage_scale if np.isscalar(voltage_scale) else xp.asarray(voltage_scale)
 
-    corrected = ss.correct_iq(dataclasses.replace(stages.raw, voltage_scale=scale))
+    corrected = attach_corrections(dataclasses.replace(stages.raw, voltage_scale=scale))
 
     expected = np.reshape(voltage_scale, (-1, 1)) * expected_corrected(
         'single_tone', capture
     )
-    assert_close(corrected.pre_filter, expected, **_resample_tol(preset, stages.raw))
+    assert_close(unfiltered(corrected), expected, **_resample_tol(preset, stages.raw))
 
 
-# %% correct_iq: conjugation
+# %% select: conjugation
 
 
 @CHEAP_PRESETS
@@ -223,11 +232,13 @@ def test_conjugate_flips_only_the_flagged_port(preset, array_backend):
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
 
-    corrected = ss.correct_iq(dataclasses.replace(stages.raw, conjugate=(True, False)))
+    corrected = attach_corrections(
+        dataclasses.replace(stages.raw, conjugate=(True, False))
+    )
 
     expected = expected_corrected('single_tone', capture)
     expected[0] = np.conj(expected[0])
-    assert_close(corrected.pre_filter, expected, **_resample_tol(preset, stages.raw))
+    assert_close(unfiltered(corrected), expected, **_resample_tol(preset, stages.raw))
 
 
 def test_ignore_highside_lo_bypasses_the_conjugate(corrections_flags):
@@ -237,10 +248,12 @@ def test_ignore_highside_lo_bypasses_the_conjugate(corrections_flags):
     )
     stages = acquire_corrected('single_tone', capture)
 
-    corrected = ss.correct_iq(dataclasses.replace(stages.raw, conjugate=(True, True)))
+    corrected = attach_corrections(
+        dataclasses.replace(stages.raw, conjugate=(True, True))
+    )
 
     expected = expected_corrected('single_tone', capture)
-    assert np.array_equal(corrected.pre_filter, expected)
+    assert np.array_equal(unfiltered(corrected), expected)
 
 
 def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
@@ -251,14 +264,14 @@ def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
     iq = dataclasses.replace(stages.raw, conjugate=(True, False))
-    before = to_numpy(iq.pre_align).copy()
+    before = to_numpy(iq.x).copy()
 
-    ss.correct_iq(iq, overwrite_x=False)
+    unfiltered(attach_corrections(iq, overwrite_x=False))
 
-    assert np.array_equal(to_numpy(iq.pre_align), before)
+    assert np.array_equal(to_numpy(iq.x), before)
 
 
-# %% correct_iq: analysis filter
+# %% select: analysis filter
 
 
 @FILTERED_PRESETS
@@ -268,32 +281,213 @@ def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
     ids=['in_band', 'out_of_band'],
 )
 def test_analysis_filter_passband(preset, frequency, passes, array_backend):
-    """pre_filter is the resampled tone either way; pre_align keeps it, with no
-    delay, only inside analysis_bandwidth"""
+    """the unfiltered waveform is the resampled tone either way; the filtered
+    waveform keeps the tone, with no delay, only inside analysis_bandwidth"""
     capture = preset_capture(
         'single_tone', **preset, frequency_offset=frequency, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
-    pre_filter = to_numpy(stages.corrected.pre_filter)
-    pre_align = to_numpy(stages.corrected.pre_align)
+    x_unfiltered = to_numpy(unfiltered(stages.corrected))
+    x_filtered = to_numpy(filtered(stages.corrected))
 
     if passes:
-        assert_close(pre_align, pre_filter, atol=FIR_LEAKAGE)
+        assert_close(x_filtered, x_unfiltered, atol=FIR_LEAKAGE)
     else:
-        assert rms(pre_align) < FIR_LEAKAGE * rms(pre_filter)
+        assert rms(x_filtered) < FIR_LEAKAGE * rms(x_unfiltered)
 
 
-# %% correct_iq: trigger alignment
+# %% select: laziness and memoization
+
+
+def _count_calls(monkeypatch, module, name):
+    """replace `module.name` with a counting wrapper and return the list of calls"""
+    calls = []
+    original = getattr(module, name)
+
+    def counting(*args, **kwargs):
+        calls.append(None)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, name, counting)
+    return calls
+
+
+def test_the_analysis_filter_runs_only_for_a_filtered_selection(monkeypatch):
+    capture = preset_capture(
+        'single_tone', **FILTER_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
+    )
+    iq = acquire_corrected('single_tone', capture).corrected
+    calls = _count_calls(monkeypatch, sw, 'oaconvolve')
+
+    unfiltered(iq)
+    unfiltered(iq)
+    assert calls == []
+
+    filtered(iq)
+    filtered(iq)
+    assert len(calls) == 1
+
+
+def test_select_returns_one_object_per_effective_conditioning(subtests):
+    capture = preset_capture(
+        'single_tone', **FILTER_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
+    )
+    iq = acquire_corrected('single_tone', capture).corrected
+
+    with subtests.test('a repeated selection is the memo entry'):
+        assert filtered(iq) is filtered(iq)
+        assert unfiltered(iq) is unfiltered(iq)
+    with subtests.test('filtered and unfiltered are distinct'):
+        assert filtered(iq) is not unfiltered(iq)
+    with subtests.test('without a trigger, aligned collapses onto unaligned'):
+        assert aligned(iq) is filtered(iq)
+
+
+def test_an_infinite_bandwidth_collapses_filtered_onto_unfiltered():
+    capture = preset_capture(
+        'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
+    )
+    iq = acquire_corrected('single_tone', capture).corrected
+    assert filtered(iq) is unfiltered(iq)
+
+
+def test_the_oaresample_path_collapses_filtered_onto_unfiltered(corrections_flags):
+    """oaresample applies the low-pass inside the resampler, so no FIR stage runs"""
+    corrections_flags(use_oaresample=True)
+    capture = preset_capture('dirac_delta', **RESAMPLE_FILTER, time=IMPULSE_TIME)
+    iq = acquire_corrected('dirac_delta', capture).corrected
+    assert filtered(iq) is unfiltered(iq)
+
+
+@pytest.mark.parametrize('overwrite_x', [False, True], ids=['copy', 'in_place'])
+def test_overwrite_x_decides_whether_the_scaling_consumes_x(overwrite_x):
+    capture = preset_capture(
+        'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
+    )
+    raw = dataclasses.replace(
+        acquire_corrected('single_tone', capture).raw, voltage_scale=0.5
+    )
+    before = raw.x.copy()
+    iq = attach_corrections(raw, overwrite_x=overwrite_x)
+
+    out = unfiltered(iq)
+
+    assert np.shares_memory(out, iq.x) == overwrite_x
+    assert np.array_equal(iq.x, before) != overwrite_x
+
+
+def test_replace_starts_with_empty_stages(subtests):
+    capture = preset_capture(
+        'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
+    )
+    iq = acquire_corrected('single_tone', capture).corrected
+    unfiltered(iq)
+    assert iq.preprocess.outputs
+
+    with subtests.test('repeated access is one preprocessor'):
+        assert iq.preprocess is iq.preprocess
+        assert isinstance(iq.preprocess, corrections.Preprocessor)
+    with subtests.test('a replace copy starts a preprocessor of its own'):
+        copy = dataclasses.replace(iq)
+        assert copy.preprocess is not iq.preprocess
+        assert not copy.preprocess.outputs
+        assert copy.preprocess.iq is copy
+    with subtests.test('attach_corrections starts a preprocessor of its own'):
+        attached = attach_corrections(iq)
+        assert attached.preprocess is not iq.preprocess
+        assert not attached.preprocess.outputs
+    with pytest.raises(TypeError, match='preprocess'):
+        dataclasses.replace(iq, preprocess=iq.preprocess)
+
+
+def test_a_preprocessor_outlives_its_acquisition_only_as_an_error():
+    capture = preset_capture(
+        'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
+    )
+    iq = acquire_corrected('single_tone', capture).corrected
+    pp = iq.preprocess
+    unfiltered(iq)
+    del iq
+    gc.collect()
+
+    with pytest.raises(RuntimeError, match='released'):
+        pp(prefer_filtered=False)
+
+
+class _AlignedInputTrigger(FakeTrigger):
+    """a trigger that asks for the aligned waveform while computing the alignment"""
+
+    def __call__(
+        self, iq: sw.typing.Array | sa.AcquiredIQ, capture: sa.specs.Capture
+    ) -> sw.typing.Array:
+        assert isinstance(iq, sa.AcquiredIQ)
+        iq.preprocess(prefer_aligned=True)
+        return super().__call__(iq, capture)
+
+
+def test_a_trigger_that_selects_aligned_input_is_rejected(xp):
+    capture = preset_capture('dirac_delta', **SCALE_ONLY, time=IMPULSE_TIME)
+    trigger = _AlignedInputTrigger(TRIGGER_LAGS)
+    raw = _build_iq_for_trigger('dirac_delta', capture, trigger, xp)
+    iq = attach_corrections(raw, signal_trigger=trigger)
+
+    with pytest.raises(RuntimeError, match='prefer_aligned'):
+        aligned(iq)
+
+
+def test_attach_corrections_falls_back_to_the_trigger_in_info(xp):
+    capture = preset_capture('dirac_delta', **SCALE_ONLY, time=IMPULSE_TIME)
+    trigger = FakeTrigger(TRIGGER_LAGS)
+    raw = _build_iq_for_trigger('dirac_delta', capture, trigger, xp)
+    raw.info = raw.info.replace(signal_trigger=trigger)
+
+    implicit = aligned(attach_corrections(raw))
+    explicit = aligned(attach_corrections(raw, signal_trigger=trigger))
+
+    assert implicit is not filtered(attach_corrections(raw))
+    assert np.array_equal(to_numpy(implicit), to_numpy(explicit))
+
+
+def test_a_pss_trigger_with_frequency_domain_measurements_skips_the_fir():
+    """the sync detectors and the spectral measurements select unfiltered input, so a
+    triggered capture with only those enabled never runs the analysis FIR"""
+    capture = preset_capture(
+        'single_tone',
+        **{**FILTER_ONLY, 'duration': 10e-3, 'port': 0},
+        frequency_offset=TONE_FREQUENCY,
+        snr=None,
+    )
+    analysis = sa.specs.BuiltinAnalyses.from_dict({
+        'cellular_5g_pss_sync': {'subcarrier_spacing': 30e3, 'shared_spectrum': True},
+        'power_spectral_density': {'window': 'hann', 'frequency_resolution': 8e3},
+    })
+    source = FUNCTION_SOURCE.replace(signal_trigger='cellular_5g_pss_sync')
+    raw = acquire_corrected(
+        'single_tone', capture, source=source, analysis=analysis
+    ).raw
+    trigger = get_trigger_from_spec(source, analysis)
+    iq = attach_corrections(raw, signal_trigger=trigger)
+    options = sa.EvaluationOptions(as_xarray='delayed', registry=sa.registry)
+
+    with sa.registry.cache_context(capture):
+        results = sa.analyze_by_spec(iq, analysis, capture, options)
+
+    assert set(results) == {'cellular_5g_pss_sync', 'power_spectral_density'}
+    assert iq.preprocess.shifts is not None
+    assert iq.preprocess.filtered is None
+
+
+# %% select: trigger alignment
 
 
 @CHEAP_PRESETS
-def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
+def test_trigger_shifts_aligned_and_leaves_unaligned(preset, xp, subtests):
     capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
     trigger = FakeTrigger(TRIGGER_LAGS)
     raw = _build_iq_for_trigger('dirac_delta', capture, trigger, xp)
     fs = capture.sample_rate
     size_out = round(capture.duration * fs)
-    tol = _resample_tol(preset, raw, stage='pre_align')
+    tol = _resample_tol(preset, raw, filtered=True)
     ratio = fs / raw.resampler['fs_sdr']
     if tol:
         # the resample concentrates its roundoff on the impulse's own on-peak sample,
@@ -301,10 +495,10 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
         # (as in test_impulse_level_through_the_stages)
         tol['atol'] = on_peak_roundoff(np.complex64) * ratio
 
-    corrected = ss.correct_iq(raw, signal_trigger=trigger)
+    corrected = attach_corrections(raw, signal_trigger=trigger)
 
-    with subtests.test(stage='pre_align'):
-        assert_impulse_at(corrected.pre_align, capture, IMPULSE_TIME)
+    with subtests.test(stage='filtered'):
+        assert_impulse_at(filtered(corrected), capture, IMPULSE_TIME)
 
     for port, lag in enumerate(TRIGGER_LAGS):
         shift = round(lag * fs)
@@ -317,11 +511,11 @@ def test_trigger_shifts_aligned_and_leaves_pre_align(preset, xp, subtests):
                 count=size_out,
                 ports=1,
             )
-            assert corrected.aligned.shape[1] == size_out
-            assert_close(corrected.aligned[port : port + 1], ratio * expected, **tol)
+            assert aligned(corrected).shape[1] == size_out
+            assert_close(aligned(corrected)[port : port + 1], ratio * expected, **tol)
 
 
-# %% correct_iq: experimental oaresample path (STRIQT_USE_OARESAMPLE=1)
+# %% select: experimental oaresample path (STRIQT_USE_OARESAMPLE=1)
 
 
 @RESAMPLED_PRESETS
@@ -331,10 +525,10 @@ def test_oaresample_acquisition(preset, corrections_flags):
 
     stages = acquire_corrected('dirac_delta', capture)
 
-    assert_impulse_at(stages.corrected.pre_align, capture, IMPULSE_TIME)
+    assert_impulse_at(filtered(stages.corrected), capture, IMPULSE_TIME)
 
 
-# %% correct_iq: LO shift
+# %% select: LO shift
 
 
 @pytest.mark.parametrize('lo_shift', ['left', 'right'])
@@ -362,7 +556,7 @@ def test_lo_shift_is_removed_from_the_output(lo_shift, frequency):
         snr=None,
     )
     stages = acquire_corrected('single_tone', capture)
-    x = stages.corrected.pre_align
+    x = filtered(stages.corrected)
     fs = capture.sample_rate
 
     assert abs(tone_frequency(x[0], fs) - frequency) < fs / x.shape[1]
@@ -565,7 +759,7 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
 
     assert lead >= 0 and tail >= 0
     # the FIR transient spans FILTER_SIZE//2 samples at the output rate, where
-    # correct_iq applies the filter, at each end of the record
+    # the analysis filter stage applies the filter, at each end of the record
     filter_out = FILTER_SIZE // 2 if isfinite(capture.analysis_bandwidth) else 0
     assert lead * capture.sample_rate / fs >= filter_out
     # a trigger shift of up to max_lag then reads that far past the transient
@@ -641,8 +835,8 @@ def test_impulse_acquisition(preset):
     capture = preset_capture('dirac_delta', **preset, time=IMPULSE_TIME)
     stages = acquire_corrected('dirac_delta', capture)
     size_out = round(capture.duration * capture.sample_rate)
-    assert stages.corrected.pre_align.shape[1] == size_out
-    assert_impulse_at(stages.corrected.pre_align, capture, IMPULSE_TIME)
+    assert filtered(stages.corrected).shape[1] == size_out
+    assert_impulse_at(filtered(stages.corrected), capture, IMPULSE_TIME)
 
 
 # %% source_record_size
@@ -680,7 +874,7 @@ def test_oaresample_pads_use_the_exact_record_size(corrections_flags):
 
     stages = acquire_corrected('dirac_delta', capture)
 
-    assert_impulse_at(stages.corrected.pre_align, capture, IMPULSE_TIME)
+    assert_impulse_at(filtered(stages.corrected), capture, IMPULSE_TIME)
 
 
 # %% _resample
@@ -698,4 +892,4 @@ def test_resample_rejects_a_length_that_does_not_divide():
     iq = _build_iq('dirac_delta', capture, (lead + 1, tail))
 
     with pytest.raises(ValueError, match=f'{count} samples at {fs} S/s'):
-        ss.correct_iq(iq)
+        unfiltered(attach_corrections(iq))

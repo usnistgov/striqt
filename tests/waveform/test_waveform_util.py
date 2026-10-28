@@ -1,7 +1,10 @@
-"""striqt.waveform.lib.util: the disk-backed call cache"""
+"""striqt.waveform.lib.util: lazy imports and the disk-backed call cache"""
 
 from __future__ import annotations
 
+import importlib
+import json
+import sys
 import threading
 from collections import UserDict
 
@@ -139,3 +142,38 @@ def test_the_wrapped_functions_own_error_propagates_unchanged(shelf):
 
     assert not util._cache_shelf_disabled
     assert len(shelf) == 0
+
+
+# %% lazy_import
+
+
+def test_lazy_import_binds_a_submodule_onto_its_imported_parent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`import json.tool` leaves `json.tool` resolvable, so `lazy_import` must too"""
+    monkeypatch.delitem(sys.modules, 'json.tool', raising=False)
+    monkeypatch.delattr(json, 'tool', raising=False)
+
+    module = util.lazy_import('json.tool')
+
+    assert json.tool is module
+    # the binding must not have reified the module
+    assert type(module).__name__ == '_LazyModule'
+    assert importlib.import_module('json.tool') is module
+
+
+def test_lazy_import_of_dask_array_leaves_the_dask_attribute_resolvable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """array_api_compat 1.11 tests `isinstance(x, dask.array.Array)` after a bare
+    `import dask.array`, which returns the lazy entry without binding it"""
+    dask = pytest.importorskip('dask')
+    monkeypatch.delitem(sys.modules, 'dask.array', raising=False)
+    monkeypatch.delattr(dask, 'array', raising=False)
+
+    module = util.lazy_import('dask.array')
+
+    import dask.array as da
+
+    assert dask.array is module
+    assert da is module

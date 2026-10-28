@@ -19,7 +19,7 @@ remaining observations are in the list at the end of this file). Items 74 to 76
 were added on 2026-09-17 while writing the first direct tests of the
 `striqt.analysis` measurements, and all three were fixed on 2026-09-17 and 18.
 Items 77 to 89 were added on 2026-09-18 by the refocus of `tests/sensor/` on the
-sensor signal path (uniform time origin, `correct_iq` stage values, buffers,
+sensor signal path (uniform time origin, conditioning stage values, buffers,
 controller, pipeline, sinks, file sources), which also fixed thirteen defects in
 the same change without giving them a number (listed under "Fixed on 2026-09-18
 without a ledger number" below). Item 90 was added on 2026-09-23 by the
@@ -54,8 +54,8 @@ For each xfail I:
 3. Traced callers (`grep` over `src/` and `tests/sensor/sweeps/`) to decide
    whether the production path reaches the defect. "Production path" means
    `sensor-sweep` → `read_yaml_spec` → `open_resources` → `iterate_sweep` →
-   `correct_iq` → registered measurements. The `site*.yaml` sweeps and
-   `tests/sensor/sweeps/src/extensions.py` stand in for the downstream
+   registry wrapper → `AcquiredIQ.preprocess` → measurement body. The `site*.yaml`
+   sweeps and `tests/sensor/sweeps/src/extensions.py` stand in for the downstream
    aggregate-directivity-acquisition (ADA) project, whose environment does not
    install here.
 4. Where cheap, reproduced the defect end to end in the `test39` environment

@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 
         def __call__(
             self,
-            iq: Array,
+            x: Array,
             capture: specs.Capture,
             *args: P.args,
             **kwargs: P.kwargs,
@@ -91,7 +91,7 @@ if TYPE_CHECKING:
         @overload
         def __call__(
             self,
-            iq: Array,
+            iq: Union[Array, dataarrays.AcquiredIQ],
             capture: specs.Capture,
             as_xarray: Literal[True] = ...,
             *args: P.args,
@@ -101,7 +101,7 @@ if TYPE_CHECKING:
         @overload
         def __call__(
             self,
-            iq: Array,
+            iq: Union[Array, dataarrays.AcquiredIQ],
             capture: specs.Capture,
             as_xarray: Literal[False],
             *args: P.args,
@@ -111,7 +111,7 @@ if TYPE_CHECKING:
         @overload
         def __call__(
             self,
-            iq: Array,
+            iq: Union[Array, dataarrays.AcquiredIQ],
             capture: specs.Capture,
             as_xarray: Literal['delayed'],
             *args: P.args,
@@ -120,7 +120,7 @@ if TYPE_CHECKING:
 
         def __call__(
             self,
-            iq: Array,
+            iq: Union[Array, dataarrays.AcquiredIQ],
             capture: specs.Capture,
             as_xarray: specs.types.AsXArray = True,
             *args: P.args,

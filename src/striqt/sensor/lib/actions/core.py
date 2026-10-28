@@ -182,7 +182,6 @@ def iterate_captures(
         sweep_spec=spec,
         registry=sa.registry,
         extra_attrs=resources['action_spec'].to_dict(True, allow_tuple_keys=False),
-        correction=True,
         cache_callback=cache_callback,
         as_xarray='delayed',
         block_each=True,  # data corruption has been observed otherwise

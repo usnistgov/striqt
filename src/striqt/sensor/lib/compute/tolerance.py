@@ -1,7 +1,8 @@
 """budget the roundoff error of a sweep, capture by capture.
 
-The roundoff of the correction stage, set by the FFT sizes that `correct_iq` runs on
-a capture, is the `input_error` passed to the tolerance function of each measurement.
+The roundoff of the conditioning stages, set by the FFT sizes that
+`AcquiredIQ.preprocess` runs on a capture, is the `input_error` passed to the tolerance
+function of each measurement.
 """
 
 from __future__ import annotations as __
@@ -81,27 +82,26 @@ def correction_error(
     analysis: specs.AnalysisGroup | None = None,
     *,
     array_backend: specs.types.ArrayBackend | None = None,
-    stage: Literal['pre_filter', 'pre_align'] = 'pre_align',
+    filtered: bool = True,
 ) -> float:
-    """bound the rms amplitude error that `correct_iq` leaves in a capture's IQ.
+    """bound the rms amplitude error of the conditioned IQ of `capture`.
 
-    The bound grows with the FFT sizes the correction runs, which follow from
+    The bound grows with the FFT sizes the conditioning runs, which follow from
     `capture.duration`, the ratio of `source.master_clock_rate` to
     `capture.sample_rate`, whether `capture.analysis_bandwidth` is finite, and the
     alignment overlap of the trigger in `analysis`. A capture that is neither
     resampled nor filtered is bounded by the roundoff of the voltage scaling alone.
 
     Args:
-        capture: the capture whose `duration`, `sample_rate`, and
-            `analysis_bandwidth` set the FFT sizes
-        source: the source whose `master_clock_rate` fixes the resampler design and
-            whose `array_backend` is the default backend
-        analysis: the measurements the sweep runs, whose `signal_trigger` sets the
-            alignment overlap; None budgets no trigger
-        stage: the `AcquiredIQ` stage whose error is wanted; ``'pre_filter'`` stops
-            before the FIR low-pass
-        array_backend: the backend whose FFT roundoff model applies, or None for
-            `source.array_backend`
+        capture: the capture with the `duration`, `sample_rate`, and
+            `analysis_bandwidth` that set the FFT sizes
+        source: the source with the `master_clock_rate` that fixes the resampler
+            design, and the default `array_backend`
+        analysis: the measurements the sweep runs, with the `signal_trigger` that
+            sets the alignment overlap; None budgets no trigger
+        filtered: False for the error of the waveform before the FIR low-pass
+        array_backend: the backend with the FFT roundoff model that applies, or
+            None for `source.array_backend`
 
     Returns:
         the rms error relative to the output rms (dimensionless and positive),
@@ -121,7 +121,7 @@ def correction_error(
         n_out = round(n_in * capture.sample_rate / design['fs_sdr'])
         nffts += [n_in, n_out]
 
-    filtered = stage == 'pre_align' and isfinite(capture.analysis_bandwidth)
+    filtered = filtered and isfinite(capture.analysis_bandwidth)
     if filtered and not (resampled and corrections.USE_OARESAMPLE):
         n_out = round(capture.duration * capture.sample_rate)
         fir_nfft = _oaconvolve_nfft(n_out, corrections.FILTER_SIZE, array_backend)

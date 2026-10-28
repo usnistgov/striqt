@@ -119,11 +119,23 @@ Three registry features matter when reading a measurement module.
   `_cached_spectrogram` in `measurements/spectrum.py`, and the PSS and SSS
   measurements share `ssb_iq_cache`. Caches are scoped by
   `registry.cache_context(capture)`, which the sensor wraps around each capture.
-- **`prefer_iq_source=`.** The IQ handed to a measurement is one of three stages of
-  `dataarrays.AcquiredIQ`: `pre_align` (resampled and filtered), `pre_filter`
-  (resampled only), or `aligned` (after trigger shifts). Sync detectors ask for
-  `pre_align`. Everything else defaults to `aligned`, falling back to `pre_align`
-  when no trigger ran.
+- **`prefer_filtered=` / `prefer_aligned=`.** `registry.measurement` records the two
+  keywords on `AnalysisInfo`, and the registry wrapper selects the body input `x`
+  before the call. An array passes through. An `AcquiredIQ` answers through
+  `AcquiredIQ.preprocess`. That cached property returns a `Preprocessor`. The
+  `striqt.analysis` base returns `x` for every preference; the sensor subclass
+  conditions the raw waveform on the first call that needs each stage. The two
+  keywords are preferences: an infinite `analysis_bandwidth` yields the unfiltered
+  waveform, and a source without `signal_trigger` yields the unaligned one. The
+  spectrogram family, the SSB spectrogram, and the resource-grid histogram register
+  `prefer_filtered=False` and truncate in the frequency domain instead. The PSS and
+  SSS sync detectors and correlations register both False, and the cyclic
+  autocorrelation registers `prefer_aligned=False`. The power measurements and
+  `iq_waveform` take the defaults. A `signal_trigger` measurement must register
+  `prefer_aligned=False`; `registry.signal_trigger` rejects a `prefer_aligned=True`
+  registration at import.
+  `KwArgCache` keys on the identity of the selected array as well as the capture and
+  kwargs. Measurements that share a cache must register the same preferences.
 - **`registry.signal_trigger`** (`AlignmentSourceRegistry`). The decorator registers
   a measurement as a start-of-waveform detector. `Trigger` runs the measurement
   with `as_xarray=False`. The sensor uses the returned lags to align captures when a

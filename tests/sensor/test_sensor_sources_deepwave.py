@@ -213,10 +213,10 @@ class TestAirstackHardware:
             second = ctrl.acquire()
 
         overlaps = ss.lib.compute.get_correction_overlaps(capture, airstack_source_spec)
-        assert first.pre_align.shape == (2, 125_000 + sum(overlaps))
-        assert first.pre_align.dtype == np.complex64
-        assert np.isfinite(first.pre_align).all()
-        assert np.abs(first.pre_align).max() <= 1.0
+        assert first.x.shape == (2, 125_000 + sum(overlaps))
+        assert first.x.dtype == np.complex64
+        assert np.isfinite(first.x).all()
+        assert np.abs(first.x).max() <= 1.0
         assert first.info.backend_sample_rate == pytest.approx(125e6)
 
         host_now = soapy.time.time()
