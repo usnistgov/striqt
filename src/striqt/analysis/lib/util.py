@@ -29,6 +29,10 @@ if TYPE_CHECKING:
 
     from .. import specs
 
+    cached_property = property
+else:
+    from functools import cached_property
+
 _compute_lock = threading.RLock()
 _logger_adapters = {}
 

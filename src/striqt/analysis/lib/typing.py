@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 
         def __call__(
             self,
-            iq: Union[Array, dataarrays.AcquiredIQ],
+            x: Array,
             capture: specs.Capture,
             *args: P.args,
             **kwargs: P.kwargs,

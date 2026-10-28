@@ -384,8 +384,9 @@ def test_an_extension_measurement_runs_from_the_analysis_block(
     spec field in the block reaches the output variable"""
 
     @sa.registry.measurement(ToyPower, dtype='float32', dims=())
-    def toy_power(iq, capture, scale: float = 1.0):
-        x = sa.select_waveform(iq)
+    def toy_power(
+        x: np.ndarray, capture: sa.specs.Capture, scale: float = 1.0
+    ) -> np.ndarray:
         return np.full(x.shape[0], scale, dtype='float32')
 
     class ToyAnalyses(

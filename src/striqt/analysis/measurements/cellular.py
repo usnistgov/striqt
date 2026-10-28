@@ -8,7 +8,7 @@ from typing import Any, Literal
 from .. import specs
 
 from ..lib import register, util
-from ..lib.dataarrays import CAPTURE_DIM, select_waveform
+from ..lib.dataarrays import CAPTURE_DIM
 from ..lib.util import np, pd
 from . import power, shared, spectrum
 from .shared import registry, hint_keywords
@@ -18,7 +18,6 @@ import striqt.waveform as sw
 if typing.TYPE_CHECKING:
     from typing_extensions import Unpack
 
-    from ..lib.dataarrays import AcquiredIQ
     from ..lib.typing import Array, Measurement, ToleranceKws
     from ..specs.structs import _Cellular5GNRSSBCorrelator, _Cellular5GNRSSBSync
 
@@ -296,9 +295,11 @@ def choose_pss_sync_offsets(
     store_compressed=False,
     attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
     validate=validated_5g_ssb_sync_params,
+    prefer_filtered=False,
+    prefer_aligned=False,
 )
 def cellular_5g_pss_sync(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """return the start-of-waveform delay (in s) detected from the PSS correlation.
 
@@ -311,7 +312,6 @@ def cellular_5g_pss_sync(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False, prefer_aligned=False)
 
     spec = specs.Cellular5GNPSSSync.from_dict(kwargs).validate()
     offs = choose_pss_sync_offsets(x, capture=capture, spec=spec)
@@ -328,9 +328,11 @@ def cellular_5g_pss_sync(
     store_compressed=False,
     attrs={'standard_name': 'PSS Cross-Covariance'},
     validate=validated_5g_ssb_sync_params,
+    prefer_filtered=False,
+    prefer_aligned=False,
 )
 def cellular_5g_pss_correlation(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR primary synchronization signal.
 
@@ -351,7 +353,6 @@ def cellular_5g_pss_correlation(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False, prefer_aligned=False)
 
     spec = specs.Cellular5GNRPSSCorrelator.from_dict(kwargs).validate()
 
@@ -424,9 +425,11 @@ def choose_sss_sync_offsets(
     store_compressed=False,
     attrs={'standard_name': 'SSS Synchronization Delay', 'units': 's'},
     validate=validated_5g_ssb_sync_params,
+    prefer_filtered=False,
+    prefer_aligned=False,
 )
 def cellular_5g_sss_sync(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """return the start-of-waveform delay (in s) detected from the SSS correlation.
 
@@ -439,7 +442,6 @@ def cellular_5g_sss_sync(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False, prefer_aligned=False)
 
     spec = specs.Cellular5GNSSSSync.from_dict(kwargs).validate()
     offs = choose_sss_sync_offsets(x, capture=capture, spec=spec)
@@ -456,9 +458,11 @@ def cellular_5g_sss_sync(
     store_compressed=False,
     attrs={'standard_name': 'SSS Cross-Covariance'},
     validate=validated_5g_ssb_sync_params,
+    prefer_filtered=False,
+    prefer_aligned=False,
 )
 def cellular_5g_sss_correlation(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """correlate each port of the IQ against the 5G NR secondary synchronization signal.
 
@@ -478,7 +482,6 @@ def cellular_5g_sss_correlation(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False, prefer_aligned=False)
 
     spec = specs.Cellular5GNRSSSCorrelator.from_dict(kwargs).validate()
 
@@ -643,9 +646,10 @@ def ssb_spectrogram_tolerance(
     attrs={'standard_name': 'SSB Spectrogram'},
     validate=validated_ssb_spectrogram_sizing,
     tolerance=ssb_spectrogram_tolerance,
+    prefer_filtered=False,
 )
 def cellular_5g_ssb_spectrogram(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate a spectrogram of each 5G NR SSB burst set by OFDM symbol and subcarrier.
 
@@ -667,7 +671,6 @@ def cellular_5g_ssb_spectrogram(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False)
 
     spec = specs.Cellular5GNRSSBSpectrogram.from_dict(kwargs).validate()
 
@@ -1019,9 +1022,10 @@ def validated_autocorrelation_lag_count(
     spec_type=specs.CellularCyclicAutocorrelator,
     attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
     validate=validated_autocorrelation_lag_count,
+    prefer_aligned=False,
 )
 def cellular_cyclic_autocorrelation(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate the cyclic autocorrelation of the IQ sequence based on 4G or 5G cellular
     cyclic prefix sample lag offsets.
@@ -1035,9 +1039,8 @@ def cellular_cyclic_autocorrelation(
     {args}
 
     Returns:
-        a float32 array in the array namespace of `iq`
+        a float32 array in the array namespace of `x`
     """
-    x = select_waveform(iq, prefer_aligned=False)
 
     spec = specs.CellularCyclicAutocorrelator.from_dict(kwargs)
 
@@ -1395,9 +1398,10 @@ def validated_resource_grid_sizing(
     spec_type=specs.CellularResourcePowerHistogram,
     attrs={'standard_name': 'Fraction of resource grid'},
     validate=validated_resource_grid_sizing,
+    prefer_filtered=False,
 )
 def cellular_resource_power_histogram(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """histogram the power of a cellular resource grid on each port, by link direction.
 
@@ -1412,7 +1416,6 @@ def cellular_resource_power_histogram(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False)
     spec = specs.CellularResourcePowerHistogram.from_dict(kwargs)
 
     xp = sw.array_namespace(x)

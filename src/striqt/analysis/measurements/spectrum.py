@@ -8,7 +8,6 @@ from .. import specs
 
 from ..lib import dataarrays, register
 from ..lib.util import np
-from ..lib.dataarrays import select_waveform
 from . import power, shared
 from .shared import registry, hint_keywords
 
@@ -17,7 +16,6 @@ import striqt.waveform as sw
 if typing.TYPE_CHECKING:
     from typing_extensions import Unpack
 
-    from ..lib.dataarrays import AcquiredIQ
     from ..lib.typing import Array, Measurement, ToleranceKws
 
 
@@ -423,10 +421,9 @@ def spectrogram_tolerance(
     attrs={'standard_name': 'PSD'},
     validate=validated_spectrogram_sizing,
     tolerance=spectrogram_tolerance,
+    prefer_filtered=False,
 )
-def spectrogram(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
-) -> Measurement:
+def spectrogram(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """evaluate a power spectrogram of the IQ by STFT.
 
     The input is the resampled IQ before the `analysis_bandwidth` low-pass filter and
@@ -451,7 +448,6 @@ def spectrogram(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False)
     spec = specs.Spectrogram.from_dict(kwargs).validate()
     spg, attrs = evaluate_spectrogram(
         x, capture, spec, dB=True, limit_digits=2, dtype='float16'
@@ -517,9 +513,10 @@ def power_spectral_density_tolerance(
     attrs={'standard_name': 'Power spectral density'},
     validate=validated_psd_sizing,
     tolerance=power_spectral_density_tolerance,
+    prefer_filtered=False,
 )
 def power_spectral_density(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """estimate the power spectral density by the Welch method.
 
@@ -534,7 +531,6 @@ def power_spectral_density(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False)
 
     spec = specs.PowerSpectralDensity.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
@@ -628,9 +624,10 @@ def spectrogram_power_bin(
     dtype='float32',
     attrs={'standard_name': 'Fraction of counts'},
     validate=validated_spectrogram_sizing,
+    prefer_filtered=False,
 )
 def spectrogram_histogram(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate the fraction of spectrogram pixels that fall in each power bin.
 
@@ -645,7 +642,6 @@ def spectrogram_histogram(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False)
     spec = specs.SpectrogramHistogram.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 
@@ -708,9 +704,10 @@ def spectrogram_ratio_power_bin(
     dtype='float32',
     attrs={'standard_name': 'Fraction of counts'},
     validate=validated_spectrogram_sizing,
+    prefer_filtered=False,
 )
 def spectrogram_ratio_histogram(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate a histogram of the spectrogram power ratio between two channels.
 
@@ -726,7 +723,6 @@ def spectrogram_ratio_histogram(
     Args:
     {args}
     """
-    x = select_waveform(iq, prefer_filtered=False)
     spec = specs.SpectrogramHistogramRatio.from_dict(kwargs)
     spg_spec = specs.Spectrogram.from_spec(spec)
 

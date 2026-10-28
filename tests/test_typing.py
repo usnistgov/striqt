@@ -69,11 +69,13 @@ def test_unknown_keyword_through_unpack_is_flagged() -> None:
 
 
 # %% hint_keywords
-def measurement_call(func: str, required: list[str], *extra: str) -> str:
-    """a call of `func` with every `required` field satisfied by `anything()`, unless
-    the field is named again in `extra`"""
+def measurement_call(
+    func: str, required: list[str], *extra: str, iq: str = 'iq'
+) -> str:
+    """a call of `func` on the waveform expression `iq` with every `required` field
+    satisfied by `anything()`, unless the field is named again in `extra`"""
     kws = [f'{name}=anything()' for name in required if not _named(name, extra)]
-    return f'{func}(iq, cap, {", ".join([*kws, *extra])})'
+    return f'{func}({iq}, cap, {", ".join([*kws, *extra])})'
 
 
 def _named(name: str, extra: tuple[str, ...]) -> bool:
@@ -81,9 +83,10 @@ def _named(name: str, extra: tuple[str, ...]) -> bool:
 
 
 def registry_probe() -> str:
-    """a probe calling every registered measurement: valid calls must return the
-    `as_xarray` types, an unknown keyword must be rejected, and each spec field must
-    reject an `object()`, which proves that the field is a known, typed parameter"""
+    """a probe calling every registered measurement: valid calls on an array and on
+    an `AcquiredIQ` must return the `as_xarray` types, an unknown keyword must be
+    rejected, and each spec field must reject an `object()`, which proves that the
+    field is a known, typed parameter"""
     modules = sorted({info.func.__module__ for info in sa.registry.values()})
     lines = [
         'from typing import Any',
@@ -106,8 +109,13 @@ def registry_probe() -> str:
         func = f'{info.func.__module__}.{info.name}'
         fields = msgspec.structs.fields(spec_type)
         required = [f.name for f in fields if f.required]
+        acquired = 'sa.AcquiredIQ(x=iq, capture=cap)'
         lines += [
             f'    assert_type({measurement_call(func, required)}, xr.DataArray)',
+            '    assert_type(',
+            f'        {measurement_call(func, required, iq=acquired)},',
+            '        xr.DataArray,',
+            '    )',
             '    assert_type(',
             f'        {measurement_call(func, required, "as_xarray=" + repr("delayed"))},',
             '        DelayedDataArray,',

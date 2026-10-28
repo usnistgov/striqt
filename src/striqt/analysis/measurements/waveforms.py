@@ -4,7 +4,6 @@ import typing
 from typing import Any, Literal
 
 from .. import specs
-from ..lib.dataarrays import select_waveform
 from ..lib.util import pd
 from . import shared
 from .shared import hint_keywords, registry
@@ -12,7 +11,6 @@ from .shared import hint_keywords, registry
 if typing.TYPE_CHECKING:
     from striqt.waveform.lib.typing import ArrayBackend
 
-    from ..lib.dataarrays import AcquiredIQ
     from ..lib.typing import Array, Measurement
 
 
@@ -102,9 +100,7 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     store_compressed=False,
     tolerance=iq_waveform_tolerance,
 )
-def iq_waveform(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
-) -> Measurement:
+def iq_waveform(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """package the IQ waveform as a measurement result.
 
     The values are in √mW, and ``|iq|**2`` is power in mW. The output has no
@@ -115,7 +111,6 @@ def iq_waveform(
     Args:
     {args}
     """
-    x = select_waveform(iq)
 
     spec = specs.IQWaveform.from_dict(kwargs)
 

@@ -6,7 +6,7 @@ from .lib.dataarrays import (
     AcquiredIQ,
     analyze_by_spec,
     EvaluationOptions,
-    select_waveform,
+    Preprocessor,
 )
 from .lib.io import dump, load, open_store
 from .lib.register import AnalysisRegistry, Trigger

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import weakref
 from fractions import Fraction
+from functools import cached_property
 from typing import Optional
 
 import msgspec
@@ -64,6 +65,102 @@ def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=No
         return np.zeros((1, 2), dtype='float32')
 
     return registry, toy
+
+
+# %% prefer_filtered= and prefer_aligned= on measurement registration
+
+
+class RecordingPreprocessor(sa.Preprocessor):
+    """a `Preprocessor` that returns ``x + 1`` and records the preferences of each call"""
+
+    def __init__(self, iq: sa.AcquiredIQ) -> None:
+        super().__init__(iq)
+        self.calls: list[tuple[bool, bool]] = []
+
+    def __call__(
+        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+    ) -> np.ndarray:
+        self.calls.append((prefer_filtered, prefer_aligned))
+        return self.iq.x + 1
+
+
+class RecordingIQ(sa.AcquiredIQ):
+    @cached_property
+    def preprocess(self) -> RecordingPreprocessor:
+        return RecordingPreprocessor(self)
+
+
+def build_preference_registry(**preferences: bool):
+    """a registry with one measurement registered with `preferences` that records the
+    array handed to its body"""
+    registry = register.AnalysisRegistry()
+    received = []
+
+    @registry.measurement(ToySpec, dtype='complex64', dims=('toy',), **preferences)
+    def toy(x, capture, **kwargs):
+        received.append(x)
+        return x
+
+    return registry, toy, received
+
+
+def test_registration_records_the_preferences():
+    registry, _, _ = build_preference_registry(
+        prefer_filtered=False, prefer_aligned=False
+    )
+    info = registry[ToySpec]
+    assert (info.prefer_filtered, info.prefer_aligned) == (False, False)
+
+
+def test_the_preferences_default_to_true():
+    registry, _, _ = build_preference_registry()
+    info = registry[ToySpec]
+    assert (info.prefer_filtered, info.prefer_aligned) == (True, True)
+
+
+def test_the_wrapper_hands_the_body_the_preprocessed_array():
+    _, toy, received = build_preference_registry(
+        prefer_filtered=False, prefer_aligned=True
+    )
+    x = np.arange(8, dtype='complex64').reshape(1, 8)
+    iq = RecordingIQ(x=x, capture=CAPTURE)
+
+    toy(iq, CAPTURE, as_xarray=False)
+
+    assert iq.preprocess.calls == [(False, True)]
+    (body_input,) = received
+    assert np.array_equal(body_input, x + 1)
+
+
+def test_the_wrapper_passes_a_bare_array_through():
+    _, toy, received = build_preference_registry(prefer_filtered=False)
+    x = np.arange(8, dtype='complex64').reshape(1, 8)
+
+    toy(x, CAPTURE, as_xarray=False)
+
+    (body_input,) = received
+    assert body_input is x
+
+
+def test_signal_trigger_rejects_a_measurement_that_prefers_aligned_input():
+    registry, toy, _ = build_preference_registry(prefer_aligned=True)
+
+    def lag(capture, spec):
+        return np.arange(2)
+
+    with pytest.raises(ValueError, match='prefer_aligned=False'):
+        registry.signal_trigger(ToySpec, lag_coord_func=lag)(toy)
+    assert not registry.signal_trigger
+
+
+def test_signal_trigger_accepts_a_measurement_that_prefers_unaligned_input():
+    registry, toy, _ = build_preference_registry(prefer_aligned=False)
+
+    def lag(capture, spec):
+        return np.arange(2)
+
+    registry.signal_trigger(ToySpec, lag_coord_func=lag)(toy)
+    assert registry.signal_trigger[toy].meas_spec_type is ToySpec
 
 
 # %% validate= on measurement registration

@@ -51,7 +51,7 @@ class KwArgCache:
     """
 
     _key: frozenset | None = None
-    _key_iq: Array | AcquiredIQ | None = None
+    _key_iq: Array | None = None
     _value = None
     enabled = False
     _callback = None
@@ -75,7 +75,7 @@ class KwArgCache:
         self._key_iq = None
         self._value = None
 
-    def lookup(self, iq: Array | AcquiredIQ, kws: dict):
+    def lookup(self, iq: Array, kws: dict):
         if self._key is None or not self.enabled:
             return None
 
@@ -84,7 +84,7 @@ class KwArgCache:
         else:
             return None
 
-    def update(self, iq: Array | AcquiredIQ, kws: dict, value):
+    def update(self, iq: Array, kws: dict, value):
         if not self.enabled:
             return
         self._key = self.kw_key(kws)
@@ -94,18 +94,18 @@ class KwArgCache:
     def apply(self, func: 'AnalysisFunc[P, RM]') -> 'AnalysisFunc[P, RM]':
         @functools.wraps(func)
         def wrapped(
-            iq: Array | AcquiredIQ,
+            x: Array,
             capture: specs.Capture,
             *args: P.args,
             **kwargs: P.kwargs,
         ) -> RM:
             all_kws = dict(kwargs, capture=capture)  # ty: ignore[no-matching-overload]
-            match = self.lookup(iq, all_kws)
+            match = self.lookup(x, all_kws)
             if match is not None:
                 return match
 
-            ret = func(iq, capture, *args, **kwargs)
-            self.update(iq, all_kws, ret)
+            ret = func(x, capture, *args, **kwargs)
+            self.update(x, all_kws, ret)
             if self._callback is None or self._callback_capture is None:
                 pass
             else:
@@ -203,6 +203,10 @@ class SyncInfo(NamedTuple):
 
 
 class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
+    def __init__(self, registry: AnalysisRegistry) -> None:
+        super().__init__()
+        self._registry = registry
+
     def __call__(
         self,
         meas_spec_type: type[specs.Analysis],
@@ -214,14 +218,28 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
 
         The lag dimension of the measurement output is taken from `lag_coord_func`.
 
-        Arguments:
-            lag_coord_func: the coordinate factory of the measurement's lag axis.
+        Args:
+            meas_spec_type: the spec type of a measurement already registered with
+                ``prefer_aligned=False``
+            lag_coord_func: the coordinate factory of the lag axis of the measurement
+            name: the trigger name, or None for the `__name__` of the measurement
+
+        Raises:
+            ValueError: from the returned decorator, when the measurement was
+                registered with ``prefer_aligned=True``
+            TypeError: from the returned decorator, when `name` is already registered
         """
 
         def wrapper(
             func: WrappedAnalysis[P, RM],
         ) -> WrappedAnalysis[P, RM]:
             sync_name = func.__name__ if name is None else name
+
+            if self._registry[meas_spec_type].prefer_aligned:
+                raise ValueError(
+                    f'the signal_trigger measurement {func.__name__!r} must be '
+                    'registered with prefer_aligned=False'
+                )
 
             if sync_name in self:
                 raise TypeError(
@@ -238,6 +256,23 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
             return func
 
         return wrapper
+
+
+def _select_input(
+    iq: Array | AcquiredIQ, *, prefer_filtered: bool, prefer_aligned: bool
+) -> Array:
+    """return the array a measurement body receives for `iq`.
+
+    An array is returned unchanged. For an `AcquiredIQ`, the return value is
+    `preprocess` of `iq` called with the two preferences.
+    """
+    from .dataarrays import AcquiredIQ
+
+    if isinstance(iq, AcquiredIQ):
+        return iq.preprocess(
+            prefer_filtered=prefer_filtered, prefer_aligned=prefer_aligned
+        )
+    return iq
 
 
 AnalysisValidator = Callable[['specs.AnalysisCapture', Any], Any]
@@ -258,6 +293,8 @@ class AnalysisInfo(NamedTuple):
     attrs: dict
     depends: Iterable[AnalysisFunc]
     store_compressed: bool
+    prefer_filtered: bool
+    prefer_aligned: bool
     dims: tuple[str, ...] | None = None
     validate: AnalysisValidator | None = None
     tolerance: AnalysisTolerance | None = None
@@ -279,7 +316,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         self.names: set[str] = set()
         self.caches = {}
         self.coordinates = CoordRegistry()
-        self.signal_trigger = AlignmentSourceRegistry()
+        self.signal_trigger = AlignmentSourceRegistry(self)
         self.parameter_defaults = {}
         self.parameter_fields = {}
 
@@ -294,6 +331,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         depends: Iterable[Callable] | Callable = [],
         caches: Iterable[KwArgCache] | KwArgCache | None = None,
         store_compressed: bool = True,
+        prefer_filtered: bool = True,
+        prefer_aligned: bool = True,
         attrs: dict[str, Any] = {},
         validate: AnalysisValidator | None = None,
         tolerance: AnalysisTolerance | None = None,
@@ -305,12 +344,13 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         analysis group of the sensor binding declares an ``Optional[spec_type]``
         field of the same `name`. `specs.BuiltinAnalyses` is the default group.
 
-        The decorated function is called as ``func(iq, capture, **spec.to_dict())``.
-        `iq` is passed as the caller gave it, an array or an `AcquiredIQ`, and the
-        function selects the waveform through `select_waveform`. The function returns
-        an array, or an ``(array, attrs)`` tuple, with axes `dims`.
+        The decorated function is called as ``func(x, capture, **spec.to_dict())``.
         The wrapper that replaces the function accepts ``(iq, capture,
-        as_xarray=True, **kwargs)`` with the fields of `spec_type` as keywords. The
+        as_xarray=True, **kwargs)`` with the fields of `spec_type` as keywords. `iq`
+        is an array or an `AcquiredIQ`. An array `iq` is passed through as `x`. From
+        an `AcquiredIQ`, the wrapper selects `x` through `AcquiredIQ.preprocess` as
+        `prefer_filtered` and `prefer_aligned` request. The function returns an array,
+        or an ``(array, attrs)`` tuple, with axes `dims`. The
         `__signature__` of the wrapper and the ``{args}`` placeholder in the docstring
         are filled from `spec_type`. The wrapper runs `validate` before touching IQ,
         raising `specs.helpers.SpecValidationError` on a rejected combination, and
@@ -332,6 +372,12 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             caches: `KwArgCache` instances shared with other measurements, which
                 `cache_context` scopes to one capture
             store_compressed: False to store the output uncompressed in zarr
+            prefer_filtered: False to measure the waveform before the
+                `analysis_bandwidth` low-pass; applies only when the acquisition
+                filters
+            prefer_aligned: False to measure the waveform before the signal-trigger
+                shift; applies only when the acquisition runs a trigger. A
+                `signal_trigger` measurement must set False
             attrs: attrs of the output `xarray.DataArray`; the spec fields and any
                 attrs returned by the function take precedence
             validate: checks the (capture, spec) combination without touching IQ. The
@@ -362,6 +408,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             dtype=dtype,
             attrs=attrs,
             store_compressed=store_compressed,
+            prefer_filtered=prefer_filtered,
+            prefer_aligned=prefer_aligned,
             dims=dims,
             validate=validate,
             tolerance=tolerance,
@@ -412,7 +460,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                     with specs.helpers.validation_path(f'.{info_kws["name"]}'):
                         validate(specs.helpers.to_analysis_capture(capture), spec)
 
-                ret = func(iq, capture, *args, **spec.to_dict())
+                x = _select_input(
+                    iq, prefer_filtered=prefer_filtered, prefer_aligned=prefer_aligned
+                )
+                ret = func(x, capture, *args, **spec.to_dict())
 
                 data, more_attrs = normalize_factory_return(ret, name=func.__name__)
 
@@ -801,7 +852,7 @@ def _make_measurement_signature(spec_cls):
 
 def _make_measurement_docstring(spec_cls):
     extra_prepend = {
-        'iq': 'input waveform array, or an `AcquiredIQ` from which the measurement selects the conditioned waveform',
+        'iq': 'input waveform array, or an `AcquiredIQ` from which the registry selects the conditioned waveform',
         'capture': 'acquisition specification',
         'as_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
     }

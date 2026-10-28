@@ -6,11 +6,12 @@ import collections
 import dataclasses
 import math
 import typing
+import weakref
 
 from .. import specs
 from . import register, util
 from .typing import TAR
-from .util import array_api_compat, np, xr
+from .util import array_api_compat, cached_property, np, xr
 
 import striqt.waveform as sw
 
@@ -24,58 +25,65 @@ CAPTURE_DIM = 'capture'
 PORT_DIM = 'port'
 
 
+class Preprocessor:
+    """the conditioned-waveform selector of one acquisition.
+
+    The base class returns `x` of the acquisition for every preference. A subclass
+    that conditions the waveform lazily overrides `__call__`.
+    """
+
+    def __init__(self, iq: AcquiredIQ) -> None:
+        """store a weak reference to `iq`."""
+        self._iq_ref: weakref.ref[AcquiredIQ] = weakref.ref(iq)
+
+    @property
+    def iq(self) -> AcquiredIQ:
+        """the acquisition that owns this preprocessor.
+
+        Raises:
+            RuntimeError: when the acquisition has been garbage collected
+        """
+        iq = self._iq_ref()
+        if iq is None:
+            raise RuntimeError('the acquisition of this preprocessor was released')
+        return iq
+
+    def __call__(
+        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+    ) -> Array:
+        """return the waveform conditioned as the preferences request.
+
+        Args:
+            prefer_filtered: True selects the waveform low-passed to the capture
+                `analysis_bandwidth` when the acquisition applies one
+            prefer_aligned: True selects the waveform shifted by the signal trigger
+                when the acquisition runs one
+
+        Returns:
+            the shape (port, sample) array in the namespace of `x`
+
+        Raises:
+            RuntimeError: when the acquisition has been garbage collected
+        """
+        return self.iq.x
+
+
 @dataclasses.dataclass
 class AcquiredIQ:
-    """an acquired IQ waveform `x` with the capture that describes the acquisition.
-
-    `select` returns `x` for every preference. A subclass that conditions the
-    waveform overrides `select`.
-    """
+    """an acquired IQ waveform `x` with the capture that describes the acquisition."""
 
     x: Array
     """the acquired waveform with shape (port, sample)"""
     capture: specs.Capture | None
     """the acquisition parameters of `x`, or None when not known"""
 
-    def select(
-        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
-    ) -> Array:
-        """return the waveform conditioned as `prefer_filtered` and `prefer_aligned` allow.
+    @cached_property
+    def preprocess(self) -> Preprocessor:
+        """the `Preprocessor` of this acquisition, one per instance.
 
-        Args:
-            prefer_filtered: True for the waveform low-passed to the capture
-                `analysis_bandwidth`, when the acquisition applies one
-            prefer_aligned: True for the waveform shifted by the signal trigger, when
-                the acquisition runs one
-
-        Returns:
-            the shape (port, sample) array in the namespace of `x`. The base class
-            returns `x` unchanged
+        A `dataclasses.replace` copy starts with a `Preprocessor` of its own.
         """
-        return self.x
-
-
-def select_waveform(
-    iq: Array | AcquiredIQ, *, prefer_filtered: bool = True, prefer_aligned: bool = True
-) -> Array:
-    """return the waveform to measure from an array or an `AcquiredIQ`.
-
-    An array is returned unchanged. For an `AcquiredIQ`, the return value is
-    `AcquiredIQ.select` of `iq` with the same preferences.
-
-    Args:
-        iq: shape (port, sample) array, or the acquisition that wraps one
-        prefer_filtered: True for the waveform low-passed to the capture
-            `analysis_bandwidth`, when the acquisition applies one
-        prefer_aligned: True for the waveform shifted by the signal trigger, when the
-            acquisition runs one
-
-    Returns:
-        shape (port, sample) array in the namespace of the acquisition
-    """
-    if isinstance(iq, AcquiredIQ):
-        return iq.select(prefer_filtered=prefer_filtered, prefer_aligned=prefer_aligned)
-    return iq
+        return Preprocessor(self)
 
 
 _ENG_PREFIXES = {
@@ -428,8 +436,8 @@ def evaluate_by_spec(
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
     Args:
-        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. Each
-            measurement body selects the conditioning through `select_waveform`
+        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. The
+            registry selects the conditioning of each measurement through `preprocess`
         spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
             fields of `spec` are skipped
         capture: the acquisition parameters of `iq`
@@ -548,8 +556,8 @@ def analyze_by_spec(
     """evaluate the enabled measurements of `spec` on the IQ waveform.
 
     Args:
-        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. Each
-            measurement body selects the conditioning through `select_waveform`
+        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. The
+            registry selects the conditioning of each measurement through `preprocess`
         spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
             fields of `spec` are skipped
         capture: the acquisition parameters of `iq`

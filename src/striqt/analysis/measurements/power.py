@@ -7,14 +7,12 @@ from .. import specs
 
 from ..lib import dataarrays, register, util
 from ..lib.util import np
-from ..lib.dataarrays import select_waveform
 from . import shared
 from .shared import registry, hint_keywords
 
 import striqt.waveform as sw
 
 if typing.TYPE_CHECKING:
-    from ..lib.dataarrays import AcquiredIQ
     from ..lib.typing import Array, Measurement
 
 
@@ -173,7 +171,7 @@ def evaluate_channel_power_time_series(
     tolerance=channel_power_tolerance,
 )
 def channel_power_time_series(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate a time series of binned channel power for each power detector.
 
@@ -191,7 +189,6 @@ def channel_power_time_series(
     Args:
     {args}
     """
-    x = select_waveform(iq)
     spec = specs.ChannelPowerTimeSeries.from_dict(kwargs)
 
     results = evaluate_channel_power_time_series(x, capture=capture, spec=spec)
@@ -287,7 +284,7 @@ def channel_power_bin(
     validate=validated_channel_power_binning,
 )
 def channel_power_histogram(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate the fraction of channel power readings that fall in each power bin.
 
@@ -303,7 +300,6 @@ def channel_power_histogram(
     Args:
     {args}
     """
-    x = select_waveform(iq)
 
     spec = specs.ChannelPowerHistogram.from_dict(kwargs)
 
@@ -458,7 +454,7 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.nda
     tolerance=cyclic_channel_power_tolerance,
 )
 def cyclic_channel_power(
-    iq: Array | AcquiredIQ, capture: specs.Capture, **kwargs: Any
+    x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
     """evaluate cyclic statistics of channel power across the cycles in a capture.
 
@@ -487,7 +483,6 @@ def cyclic_channel_power(
     Args:
     {args}
     """
-    x = select_waveform(iq)
     spec = specs.CyclicChannelPower.from_dict(kwargs)
 
     xp = sw.array_namespace(x)
