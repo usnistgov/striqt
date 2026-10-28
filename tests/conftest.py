@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import warnings
 from collections import UserDict
 from pathlib import Path
 from threading import Lock
 from typing import NamedTuple
+
+# matplotlib reads the backend on first import. The figures tests plot headless.
+os.environ.setdefault('MPLBACKEND', 'agg')
 
 import msgspec
 import numpy as np
