@@ -12,7 +12,7 @@ from striqt.analysis import testing
 from striqt.sensor.lib import sources
 
 # served by the firmware rate (host_resample=False), so the generator runs at the
-# capture's own sample rate and no design decision enters the expected values
+# sample rate of the capture and no design decision enters the expected values
 SAMPLE_RATE = 15.36e6
 PERIOD = 1e-4
 # asymmetric, so that a read positioned by the tail overlap instead of the lead shows
@@ -49,7 +49,8 @@ def _no_source():
 
 
 def _buffers(count, ports=2):
-    """one NaN-filled row per port, so that an unwritten sample is visible"""
+    """return one NaN-filled complex64 row per port, in which an unwritten sample stays
+    NaN"""
     return [np.full(count, np.nan, dtype='complex64') for _ in range(ports)]
 
 
@@ -100,8 +101,8 @@ def test_timestamps_advance_by_the_samples_read(armed):
 
 
 def test_first_read_is_stamped_at_the_lead_overlap_before_the_time_origin():
-    """buffer position 0 is source sample -OVERLAPS[0], so the first read is stamped
-    that many sample periods before the source's time origin"""
+    """buffer position 0 is source sample ``-OVERLAPS[0]``, and the first read is
+    stamped that many sample periods before the time origin of the source"""
     source, _ = _sawtooth_source()
 
     _, first_ns = source.read(_buffers(COUNT), 0, COUNT)
@@ -127,9 +128,9 @@ def test_arm_restarts_the_stream():
     'rearm_rate', [SAMPLE_RATE, SAMPLE_RATE / 2], ids=['same_rate', 'half_rate']
 )
 def test_rearm_continues_the_time_base_at_the_previous_rate(rearm_rate, resetup):
-    """the re-armed stream is stamped where the previous one ended, with the samples
-    read converted at the rate of the capture that produced them, and the time origin
-    of the re-armed capture is one lead overlap at the new rate after that stamp"""
+    """the re-armed stream is stamped where the previous stream ended, with the samples
+    read converted at the rate of the previous capture. The time origin of the
+    re-armed capture is one lead overlap at the new rate after that stamp."""
     source, capture = _sawtooth_source()
     _, first_ns = source.read(_buffers(COUNT), 0, COUNT)
 
@@ -146,7 +147,7 @@ def test_rearm_continues_the_time_base_at_the_previous_rate(rearm_rate, resetup)
 
 
 def test_rows_follow_the_capture_port_order():
-    """buffers[i] is the capture's i-th port, which is port 1 for port=(1, 0)"""
+    """``buffers[i]`` is the i-th port of the capture, port 1 for ``port=(1, 0)``"""
     kws = {'port': (1, 0), 'noise_psd': NOISE_PSD}
     source, _ = _armed(
         sources.NoiseSource, FUNCTION_SOURCE, ss.specs.NoiseCapture, **kws

@@ -31,7 +31,8 @@ CellularSubcarrierSpacingTuple = Annotated[
     Meta('One or more subcarrier spacings (15e3, 30e3, 60e3, etc)', units='Hz'),
 ]
 CellularCyclicPrefix = Annotated[
-    Literal['normal', 'extended'], Meta('the 3GPP cyclic prefix type')
+    Literal['normal', 'extended'],
+    Meta('cyclic prefix length of the 3GPP numerology (TS 38.211 Table 4.2-1)'),
 ]
 CellularAverageSlots = Annotated[
     bool, Meta('True to coarsen spectrogram bins by averaging 1-symbol time resolution')
@@ -39,7 +40,8 @@ CellularAverageSlots = Annotated[
 CellularAverageRBs = Annotated[
     Union[bool, Literal['half']],
     Meta(
-        'True (or "half") to coarsen spectrogram bins by integrating 1-subcarrier frequency resolution into 1 or ½ RBs'
+        'frequency resolution of the spectrogram: False for 1 subcarrier, True for 1 '
+        "resource block (12 subcarriers), or 'half' for 6 subcarriers"
     ),
 ]
 CenterFrequencyScalar = Annotated[float, Meta('RF center frequency', 'Hz', gt=0)]
@@ -50,7 +52,8 @@ CenterFrequency = Annotated[
 CyclicPeriod = Annotated[
     float,
     Meta(
-        'Cyclic analysis period, a common multiple of the periods of the expected signals',
+        'Cycle period of the channel power statistics, a whole multiple of '
+        '`detector_period` and a common multiple of the expected signal periods',
         's',
     ),
 ]
@@ -62,13 +65,13 @@ CyclicStatistics = Annotated[
 ]
 DetectorPeriod = Annotated[
     fractions.Fraction,
-    Meta('Power detector bin duration, a whole number of waveform samples', 's'),
+    Meta('Power detector bin duration, a whole multiple of the sample period', 's'),
 ]
 Duration = Annotated[float, Meta('Duration of the analysis waveform', 's')]
 GuardBandwidths = Annotated[
     tuple[float, float],
     Meta(
-        'Guard bandwidths trimmed from [low, high] edges of the analysis band',
+        'Bandwidths excluded at the (low, high) edges of the analysis band',
         units='Hz',
     ),
 ]
@@ -87,12 +90,15 @@ PerPort = Annotated[
     bool, Meta('whether to evaluate signal synchronization separately on each port')
 ]
 PowerDetectors = Annotated[
-    tuple[str, ...], Meta("Power detectors applied to each bin: 'rms' and/or 'peak'")
+    tuple[str, ...],
+    Meta("Power detectors evaluated in each bin: 'rms', 'peak', or both"),
 ]
 PowerBinMin = Annotated[float, Meta('Minimum power bin', units='dB power')]
 PowerBinMax = Annotated[float, Meta('Maximum power bin', units='dB power')]
 PowerBinStep = Annotated[float, Meta('Power bin resolution', units='dB')]
-SampleRate = Annotated[float, Meta('Analysis sample rate', 'S/s', gt=0)]
+SampleRate = Annotated[
+    float, Meta('Sample rate of the analyzed IQ waveform', 'S/s', gt=0)
+]
 WindowFill = Annotated[
     float, Meta('Fraction of a symbol to fill with weighting function', gt=0, le=1)
 ]

@@ -1,9 +1,5 @@
 """Window design for spectral analysis: the cached `get_window` family and window
-functions not included in `scipy.signal`.
-
-`register_extra_windows` enters the extra windows into scipy's lookup table, where
-`scipy.signal.get_window` and `get_window` resolve them by name.
-"""
+functions not included in `scipy.signal`."""
 
 from __future__ import annotations as __
 
@@ -19,7 +15,11 @@ if typing.TYPE_CHECKING:
 
 # %% Extra windows
 def _len_guards(M):
-    """report whether `M` is 0 or 1; raise for a non-integer or negative `M`"""
+    """return True when the window length `M` is 0 or 1.
+
+    Raises:
+        ValueError: if `M` is not a non-negative integer
+    """
     if int(M) != M or M < 0:
         raise ValueError('Window length M must be a non-negative integer')
     return M <= 1
@@ -96,16 +96,26 @@ def cosh(M: int, alpha, sym=True) -> np.ndarray:
 
 
 def acg(M: int, sigma_t: float, sym=True, dtype='float64'):
-    """returns approximate confined gaussian window.
+    """return the approximate confined Gaussian (ACG) window of `M` samples.
 
-    The ACG window closely approximates the Slepian window.
+    The ACG window approximates the DPSS (Slepian) window.
 
     Args:
-        M: window size, in samples
-        sigma_t: The (3-dB) uncertainty resolution in time bins
-    Reference:
-        S. Starosielec, D. Hägele, "Discrete-time windows with minimal RMS bandwidth for given RMS temporal width,
-        Signal Processing," Signal Processing Vol. 102, Sept. 2014, Pages 240-246.
+        M: the window length (in samples)
+        sigma_t: the rms temporal width of the window as a fraction of `M`
+        sym: True for a symmetric window; False for a periodic (DFT-even) window
+        dtype: the floating-point dtype of the result
+
+    Returns:
+        a 1-D numpy array of `M` samples with peak value 1
+
+    Raises:
+        ValueError: if `M` is not a non-negative integer
+
+    References:
+        S. Starosielec and D. Hägele, "Discrete-time windows with minimal RMS
+        bandwidth for given RMS temporal width," Signal Processing, vol. 102,
+        pp. 240-246, Sept. 2014.
     """
 
     if _len_guards(M):
@@ -125,8 +135,10 @@ def acg(M: int, sigma_t: float, sym=True, dtype='float64'):
 
 
 def register_extra_windows():
-    """add 'acg', 'cosh', 'modified_bessel', and 'knab' windows to
-    the window functions registered for access by `scipy.signal.get_window`.
+    """register the ``'acg'``, ``'cosh'``, ``'modified_bessel'``, and ``'knab'`` windows with scipy.
+
+    The registration modifies the window table of `scipy.signal.get_window` for the
+    process.
     """
     import scipy.signal.windows._windows as _windows
 
@@ -213,10 +225,11 @@ def get_window(
 ) -> Array:
     """return a window of `nwindow` samples for `xp`, zero-padded to `nwindow + nzero`.
 
-    The design is cached in memory and on disk (`persistent_cache`), so a call that
-    misses both costs the scipy window design and a disk write. Equivalent spellings
-    of the arguments (a dtype given as a string or a `numpy.dtype`, `xp` given or
-    omitted, positional or keyword `nzero`) share one cache entry.
+    The design is cached in memory and on disk. A call that misses both runs the
+    scipy window design and writes to the disk cache. Equivalent spellings of the
+    arguments (a dtype given as a string or a `numpy.dtype`, `xp` given or omitted,
+    positional or keyword `nzero`) share one cache entry. A numpy result is the
+    cached array and must not be modified in place.
 
     Args:
         name_or_tuple: a window name, ``(name, parameter)`` tuple, or Kaiser beta
@@ -265,11 +278,10 @@ typing.cast(typing.Any, get_window).cache_clear = _cached_design_window.cache_cl
 def equivalent_noise_bandwidth(window: WindowSpecType, N, fftbins=True, cached=True):
     """return the equivalent noise bandwidth (ENBW) of a window, in bins.
 
-    One bin is ``fs / N`` wide for a window of `N` nonzero samples (F. J. Harris,
-    Proc. IEEE 66(1), 1978), so the ENBW in Hz is the returned value times ``fs / N``.
-    An FFT of the window zero-padded to ``N + nzero`` samples has bins of
-    ``fs / (N + nzero)``, and the same ENBW spans ``(N + nzero) / N`` times as many of
-    those bins.
+    One bin is ``fs / N`` wide for a window of `N` nonzero samples (Harris 1978). The
+    ENBW in Hz is the returned value times ``fs / N``. An FFT of the window
+    zero-padded to ``N + nzero`` samples has bins of ``fs / (N + nzero)``. The same
+    ENBW spans ``(N + nzero) / N`` times as many of those bins.
 
     Args:
         window: the window name or ``(name, parameter)`` for `get_window`
@@ -279,6 +291,10 @@ def equivalent_noise_bandwidth(window: WindowSpecType, N, fftbins=True, cached=T
 
     Returns:
         the ENBW as a float: 1.0 for a rectangular window and larger for every other
+
+    References:
+        F. J. Harris, "On the use of windows for harmonic analysis with the discrete
+        Fourier transform," Proc. IEEE, vol. 66, no. 1, pp. 51-83, Jan. 1978.
     """
     if cached:
         w = get_window(window, N, fftbins=fftbins)
@@ -291,24 +307,25 @@ def equivalent_noise_bandwidth(window: WindowSpecType, N, fftbins=True, cached=T
 def find_window_param_from_enbw(
     window_name: str, target: float, *, nfft: int = 4096, atol=1e-6
 ) -> float:
-    """find the parameter that satisfies the specified equivalent-noise bandwidth (ENBW)
-    for a given single-parameter window.
+    """return the parameter of `window_name` with equivalent noise bandwidth `target`.
 
-    The parameter is estimated at the given `nfft`, and converges toward a limiting
-    value as `nfft` grows.
+    The parameter is found for a window of `nfft` samples and converges to a limit as
+    `nfft` grows. For `target` of at least 1.1, the result is slightly below
+    ``target**2`` for ``'dpss'`` and slightly below ``pi * target**2`` for
+    ``'kaiser'``.
 
-    For `target` of at least 1.1:
-        * when `window_name == 'dpss'`: the result is slightly smaller than `target**2`
-        * when `window_name == 'kaiser'`: the result is slightly smaller than `pi * target**2`
-
-    Arguments:
-        window_name: one of 'kaiser', 'dpss', or 'chebwin'
-        target: the desired equivalent noise bandwidth (in FFT bins)
-        nfft: the window size used to estimate ENBW
-        atol: the absolute error tolerance in the estimated NW
+    Args:
+        window_name: ``'kaiser'``, ``'dpss'``, or ``'chebwin'``
+        target: the equivalent noise bandwidth (in bins), above ``1 + 1/nfft``
+        nfft: the window length (in samples) at which the ENBW is evaluated
+        atol: the absolute tolerance on the parameter
 
     Returns:
-        result parameter suited for `get_window((window_name, result), ...)`
+        the parameter for ``get_window((window_name, result), ...)``
+
+    Raises:
+        ValueError: if `target` is at most ``1 + 1/nfft``, or if `window_name` is not
+            one of the three above
     """
     from scipy.optimize import bisect
 

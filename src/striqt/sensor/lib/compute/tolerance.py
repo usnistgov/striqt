@@ -27,9 +27,9 @@ else:
 def _next_fast_len(n: int, array_backend: specs.types.ArrayBackend) -> int:
     """return the fast FFT length (in samples) at or above `n` for `array_backend`.
 
-    Falls back to scipy's rule when the backend's own is not importable, so a cupy
-    sweep can be budgeted on a host without cupy. The two rules disagree by a few
-    samples at most, below what the sqrt(log2 N) roundoff model resolves.
+    The scipy rule is used when the cupy rule is not importable. The 2 rules differ
+    by a few samples at most, below the resolution of the sqrt(log2 N) roundoff
+    model.
     """
     try:
         return corrections._get_next_fast_len(n, array_backend)
@@ -64,9 +64,9 @@ def _correction_overlaps(
 ) -> tuple[int, int]:
     """return the (leading, trailing) overlap sample counts of the correction stage.
 
-    The counts are those `corrections.get_correction_overlaps` gives for
-    `array_backend` rather than for `source.array_backend`, with the same fallback to
-    numpy as `_next_fast_len` when that backend is not importable.
+    The counts are those of `corrections.get_correction_overlaps` for `array_backend`
+    in place of `source.array_backend`, falling back to numpy when the backend is not
+    importable.
     """
     source = source.replace(array_backend=array_backend)
     try:
@@ -99,9 +99,9 @@ def correction_error(
             design, and the default `array_backend`
         analysis: the measurements the sweep runs, with the `signal_trigger` that
             sets the alignment overlap; None budgets no trigger
-        filtered: False for the error of the waveform before the FIR low-pass
         array_backend: the backend with the FFT roundoff model that applies, or
             None for `source.array_backend`
+        filtered: False for the error of the waveform before the FIR low-pass
 
     Returns:
         the rms error relative to the output rms (dimensionless and positive),
@@ -145,12 +145,12 @@ def capture_tolerances(
     measurement's tolerance function.
 
     Args:
-        array_backend: the backend whose roundoff model applies, or None for
+        array_backend: the backend with the roundoff model that applies, or None for
             `source.array_backend`
 
     Returns:
-        a `Tolerance` per measurement, keyed by measurement name; measurements
-        without a tolerance function are omitted (see `AnalysisRegistry.tolerances`)
+        a `Tolerance` per measurement, keyed by measurement name; a measurement
+        without a tolerance function is omitted
     """
     if array_backend is None:
         array_backend = source.array_backend
@@ -169,12 +169,12 @@ def sweep_tolerances(
 
     The captures are exactly those `specs.sequencing.loop_captures` expands for
     `source_id`: the per-source `adjust_captures` overrides are applied there, a
-    looped field keeps the loop's value over any adjustment, and a `repeat` loop is
+    looped field keeps the loop value over any adjustment, and a `repeat` loop is
     listed once.
 
     Returns:
         ``(capture, tolerances)`` pairs, with `tolerances` as `capture_tolerances`
-        returns for the sweep's source backend
+        returns for the backend of `sweep.source`
     """
     result = []
     for capture in specs.sequencing.loop_captures(sweep, source_id=source_id):
@@ -198,11 +198,10 @@ def worst_case_tolerances(
     """return the loosest budget of each analysis product over the captures of a sweep.
 
     Every field of the result is at least as loose as that field in each entry.
-    `rtol` and both bounds of `on_peak` are no smaller than any entry's.
-    `off_peak_dBc` is no deeper below the peak than any entry's; a shallower depth
-    leaves more of the output unchecked. None (everything resolved) is the
-    strictest and is replaced by any finite depth. `units` are those of the first
-    entry.
+    `rtol` and both bounds of `on_peak` are the maximum over the entries.
+    `off_peak_dBc` is no deeper below the peak than in any entry. None (everything
+    resolved) is the strictest depth and is replaced by any finite depth. `units`
+    are those of the first entry.
 
     Args:
         entries: ``(capture, tolerances)`` pairs as `sweep_tolerances` returns

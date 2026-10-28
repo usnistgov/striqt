@@ -129,7 +129,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
             )
 
     if 'channel' in dataset.coords:
-        # older stores name the port coordinate 'channel'
+        # stores that name the port coordinate 'channel'
         dataset = dataset.rename_vars({'channel': 'port'})
 
     dataset = sf.util.query_match_at_index(

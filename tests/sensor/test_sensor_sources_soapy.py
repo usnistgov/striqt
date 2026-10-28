@@ -1,4 +1,5 @@
-"""striqt.sensor.lib.sources.soapy: the pieces that run without a SoapySDR module"""
+"""striqt.sensor.lib.sources.soapy: the stream, time sync, and source against the fake
+SoapySDR device and the null driver"""
 
 from __future__ import annotations
 
@@ -160,7 +161,7 @@ def test_validate_stream_read_errors(
 
 
 def _samples(xp, peaks, count=64):
-    """one row per port, each with |x| peaking at the given value"""
+    """return one row per port, each with ``|x|`` peaking at the value in `peaks`"""
     rows = []
     for peak in peaks:
         x = np.zeros(count, dtype='complex64')
@@ -279,8 +280,10 @@ def test_probe_soapy_info_with_a_channel_sensor(soapy_device):
 
 
 def _stream(device, spec=None, **kws):
-    """an RxStream on `device` that is not yet set up; `soapy_stream` covers the
-    default spec on port 0"""
+    """return an `RxStream` on `device` that is not yet set up.
+
+    The `soapy_stream` fixture covers the default spec on port 0.
+    """
     if spec is None:
         spec = source_spec()
     return soapy.RxStream(spec, soapy.probe_soapy_info(device), **kws)
@@ -386,7 +389,7 @@ def _float_buffers(count, ports=1):
 
 
 def _read8(stream, device, last_sync_time=None):
-    """an 8-sample read into fresh buffers, at the whole-buffer offset and count"""
+    """return an 8-sample read into fresh buffers, at offset 0 for the whole buffer"""
     return stream.read(
         device, _float_buffers(8), 0, 8, 0.1, last_sync_time=last_sync_time
     )
@@ -578,7 +581,7 @@ STREAM_ALL = {'stream_all_rx_ports': True, 'rx_enable_delay': 0.35}
 
 
 def _source(**spec_kws):
-    """a SoapySource that streams every rx port after an enable delay"""
+    """return a `SoapySource` that streams every RX port after an enable delay"""
     return soapy.SoapySource(source_spec(**STREAM_ALL, **spec_kws))
 
 
@@ -818,7 +821,7 @@ def null_device(real_soapy):
 
 class TestNullDriver:
     def test_device_sequence_form(self, real_soapy, null_device):
-        # the SWIG proxy is not an instance of the module's Device class
+        # the SWIG proxy is not an instance of the Device class of the module
         assert type(null_device).__name__ == 'Device'
         assert null_device.getDriverKey() == 'null'
         assert real_soapy.Device.enumerate({'driver': 'null'}) == ()

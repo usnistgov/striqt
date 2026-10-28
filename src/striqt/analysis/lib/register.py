@@ -42,12 +42,10 @@ else:
 class KwArgCache:
     """a single-element cache of a measurement result keyed on input, capture, and keywords.
 
-    The cache is disabled until entered as a context manager, and exiting clears the
-    entry and the callback. `apply` wraps a measurement function so that a call with
-    the same input array object, the same capture, and the same values of the
-    `fields` named at construction returns the cached result. The input is compared
-    by identity, and the cache keeps a reference to the input until the entry is
-    cleared.
+    The key is the identity of the input array, the capture, and the values of the
+    `fields` named at construction. The cache is disabled until entered as a context
+    manager, and exit clears the entry and the callback. The cache keeps a reference
+    to the input array until the entry is cleared.
     """
 
     _key: frozenset | None = None
@@ -92,6 +90,19 @@ class KwArgCache:
         self._value = value
 
     def apply(self, func: 'AnalysisFunc[P, RM]') -> 'AnalysisFunc[P, RM]':
+        """wrap `func` to return the cached result on a repeated call.
+
+        Args:
+            func: a measurement function called as ``func(x, capture, **kwargs)``
+
+        Returns:
+            a wrapper with the signature of `func`. While the cache is enabled, a
+            call with the same `x` object, the same `capture`, and the same values of
+            the `fields` named at construction returns the cached result. Any other
+            call runs `func`, stores the result, and invokes the callback set by
+            `set_callback` with the cache, the capture, the result, and the keywords.
+        """
+
         @functools.wraps(func)
         def wrapped(
             x: Array,
@@ -124,10 +135,16 @@ class KwArgCache:
         self._callback_capture = capture
 
     def __enter__(self):
+        """enable the cache.
+
+        Returns:
+            `self`
+        """
         self.enabled = True
         return self
 
     def __exit__(self, *exc_info):
+        """disable the cache and clear the entry and the callback."""
         self.enabled = False
         self._callback = None
         self.clear()
@@ -150,10 +167,25 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
         dims: tuple[str, ...] | None = None,
         attrs: dict = {},
     ) -> CoordFuncWrapper[TC, TM, R]:
-        """register a coordinate factory function.
+        """register the decorated function as the coordinate factory named `name`.
 
-        The factory function must return an iterable containing coordinate
-        values, or None to indicate a named placeholder for a dimension.
+        The factory is called as ``func(capture, spec)`` and returns the coordinate
+        values along `dims`, or None for a dimension without coordinate values.
+
+        Args:
+            dtype: numpy dtype of the coordinate values
+            name: the coordinate name, or None for the `__name__` of the factory
+            dims: the dimension names of the coordinate, a single name, or None
+                for ``(name,)``
+            attrs: attrs of the coordinate variable
+
+        Returns:
+            a decorator that registers the factory and returns it unchanged
+
+        Raises:
+            TypeError: from the returned decorator, when `name` is None and the
+                factory has no `__name__`
+            KeyError: from the returned decorator, when `name` is already registered
         """
         kws = locals()
 
@@ -216,7 +248,7 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
     ) -> Callable[[WrappedAnalysis[P, RM]], WrappedAnalysis[P, RM]]:
         """register the decorated measurement as a signal trigger.
 
-        The lag dimension of the measurement output is taken from `lag_coord_func`.
+        The entry is keyed by both `name` and the measurement wrapper.
 
         Args:
             meas_spec_type: the spec type of a measurement already registered with
@@ -224,7 +256,13 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
             lag_coord_func: the coordinate factory of the lag axis of the measurement
             name: the trigger name, or None for the `__name__` of the measurement
 
+        Returns:
+            a decorator that registers the measurement wrapper and returns it
+            unchanged
+
         Raises:
+            KeyError: from the returned decorator, when `meas_spec_type` is not
+                registered
             ValueError: from the returned decorator, when the measurement was
                 registered with ``prefer_aligned=True``
             TypeError: from the returned decorator, when `name` is already registered
@@ -261,10 +299,11 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
 def _select_input(
     iq: Array | AcquiredIQ, *, prefer_filtered: bool, prefer_aligned: bool
 ) -> Array:
-    """return the array a measurement body receives for `iq`.
+    """return the measurement input array selected from `iq`.
 
-    An array is returned unchanged. For an `AcquiredIQ`, the return value is
-    `preprocess` of `iq` called with the two preferences.
+    Returns:
+        `iq` when it is an array; for an `AcquiredIQ`, the waveform from `preprocess`
+        with `prefer_filtered` and `prefer_aligned`
     """
     from .dataarrays import AcquiredIQ
 
@@ -279,8 +318,8 @@ AnalysisValidator = Callable[['specs.AnalysisCapture', Any], Any]
 
 # func(capture: AnalysisCapture, spec, *, array_backend: ArrayBackend = 'numpy',
 #      input_error: float = 0.0) -> Tolerance
-# `input_error` is the relative rms amplitude error already present in the IQ handed
-# to the measurement; the sensor's correction stage supplies it.
+# `input_error` is the relative rms amplitude error already present in the IQ, as a
+# ratio
 AnalysisTolerance = Callable[..., 'specs.Tolerance']
 
 
@@ -340,37 +379,36 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         """register the decorated function as the measurement configured by `spec_type`.
 
         Registration mutates this registry when the decorator is applied. A sweep
-        reaches the measurement through the ``analysis:`` block only when the
-        analysis group of the sensor binding declares an ``Optional[spec_type]``
-        field of the same `name`. `specs.BuiltinAnalyses` is the default group.
+        enables the measurement through an ``Optional[spec_type]`` field named `name`
+        in an analysis group such as `specs.BuiltinAnalyses`.
 
-        The decorated function is called as ``func(x, capture, **spec.to_dict())``.
-        The wrapper that replaces the function accepts ``(iq, capture,
-        as_xarray=True, **kwargs)`` with the fields of `spec_type` as keywords. `iq`
-        is an array or an `AcquiredIQ`. An array `iq` is passed through as `x`. From
-        an `AcquiredIQ`, the wrapper selects `x` through `AcquiredIQ.preprocess` as
-        `prefer_filtered` and `prefer_aligned` request. The function returns an array,
-        or an ``(array, attrs)`` tuple, with axes `dims`. The
-        `__signature__` of the wrapper and the ``{args}`` placeholder in the docstring
-        are filled from `spec_type`. The wrapper runs `validate` before touching IQ,
-        raising `specs.helpers.SpecValidationError` on a rejected combination, and
-        then returns an `xarray.DataArray` with a leading ``port`` dimension when
-        `as_xarray` is True, a `DelayedDataArray` when `as_xarray` is ``'delayed'``,
-        or the ``(array, attrs)`` pair when `as_xarray` is False.
+        The decorated function is called as ``func(x, capture, **spec.to_dict())``
+        with `x` an array of shape (port, sample), and returns an array with axes
+        `dims` or an ``(array, attrs)`` tuple. The returned wrapper is called as
+        ``wrapper(iq, capture, as_xarray=True, **kwargs)`` with the fields of
+        `spec_type` as keywords. The `__signature__` of the wrapper and the
+        ``{args}`` placeholder in the docstring are filled from `spec_type`. An
+        array `iq` is passed to the function as `x`. From an `AcquiredIQ`,
+        `AcquiredIQ.preprocess` selects `x` as `prefer_filtered` and
+        `prefer_aligned` request. `validate` runs before the IQ is read and raises
+        `specs.helpers.SpecValidationError` on a rejected combination. The wrapper
+        returns, by `as_xarray`: ``True``, an `xarray.DataArray` with a leading
+        ``port`` dimension; ``'delayed'``, a `DelayedDataArray`; ``False``, the
+        ``(array, attrs)`` pair.
 
         Args:
-            spec_type: the `specs.Analysis` subclass whose fields are the keyword
-                arguments of the measurement; one measurement per type
+            spec_type: the `specs.Analysis` subclass with the keyword arguments of
+                the measurement as fields; one measurement per type
             dtype: numpy dtype name of the output array
             name: the output data variable name, or None for the function `__name__`
-            dims: dimension names of the output axes, or None to take them in order
-                from the coordinates that `coord_factories` produce
+            dims: dimension names of the output axes, or None for the dimensions of
+                `coord_factories`, in order
             coord_factories: functions registered with `coordinates` that produce the
                 coordinate values along `dims` from ``(capture, spec)``
-            depends: measurements whose intermediate this one reuses; recorded on
-                the `AnalysisInfo` entry and not otherwise consumed
-            caches: `KwArgCache` instances shared with other measurements, which
-                `cache_context` scopes to one capture
+            depends: measurements with an intermediate this one reuses; recorded on
+                the `AnalysisInfo` entry and not otherwise read
+            caches: `KwArgCache` instances that `cache_context` enables for one
+                capture; shared with other measurements
             store_compressed: False to store the output uncompressed in zarr
             prefer_filtered: False to measure the waveform before the
                 `analysis_bandwidth` low-pass; applies only when the acquisition
@@ -380,14 +418,12 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 `signal_trigger` measurement must set False
             attrs: attrs of the output `xarray.DataArray`; the spec fields and any
                 attrs returned by the function take precedence
-            validate: checks the (capture, spec) combination without touching IQ. The
-                return value is ignored here. By convention the return value is the
-                derived sizing that the measurement consumes, and the validator is
-                named for that sizing (`validated_*`)
-            tolerance: derives the roundoff error budget of the output from the
-                (capture, spec) combination without touching IQ, as a
-                `specs.Tolerance`. The function is called with the keywords
-                `array_backend` and `input_error` (see `AnalysisTolerance`)
+            validate: a function of ``(capture, spec)`` that raises on a rejected
+                combination without reading IQ; `capture` is the
+                `specs.AnalysisCapture` projection, and the return value is ignored
+            tolerance: a function of ``(capture, spec, *, array_backend,
+                input_error)`` that returns the `specs.Tolerance` of the output
+                without reading IQ
 
         Returns:
             a decorator that registers the decorated function and returns the wrapper
@@ -395,8 +431,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         Raises:
             ValueError: when `spec_type` is already registered
             TypeError: when a `coord_factories` entry is not callable; from the
-                returned decorator, when `name` is already registered or `caches`
-                contains something other than `KwArgCache` instances
+                returned decorator, when `name` is already registered, when `caches`
+                contains something other than `KwArgCache` instances, or when a field
+                of `spec_type` shares a name with a field of another registered spec
+                and differs in type
         """
 
         if isinstance(dims, str):
@@ -447,8 +485,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             ) -> Measurement:
                 from .dataarrays import DelayedDataArray
 
-                # 'delayed' defers materialization to xarray until
-                # `DelayedDataArray.to_xarray`
                 if as_xarray not in ('delayed', True, False):
                     raise ValueError(
                         'xarray argument must be one of (True, False, "delayed")'
@@ -559,8 +595,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
         Measurements left unset in `analysis`, and those registered without a
         `validate=` function, are skipped. Results are cached on the
-        `specs.AnalysisCapture` projection of `capture`, so captures that differ
-        only in fields the analysis layer ignores share one entry.
+        `specs.AnalysisCapture` projection of `capture`. Captures equal in that
+        projection share one entry.
 
         Raises:
             specs.helpers.SpecValidationError: on the first invalid combination,
@@ -581,7 +617,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         Results are cached on the `specs.AnalysisCapture` projection of `capture`.
 
         Args:
-            array_backend: the array namespace the measurements evaluate in, which
+            array_backend: the array namespace of the measurement evaluation;
                 selects the roundoff model
             input_error: relative rms amplitude error already present in the IQ
                 handed to the measurements, as a ratio
@@ -668,10 +704,12 @@ def cached_registry_context(
 def _optional_spec_fields(group_type: type[specs.AnalysisGroup]) -> dict[str, type]:
     """return the spec type of each ``Optional[spec] = None`` field of `group_type`.
 
+    Returns:
+        the spec type of each field, keyed by field name, in field order
+
     Raises:
-        TypeError: naming the first field that is not an optional spec with default
-            None, or `group_type` when the struct is defined without
-            ``omit_defaults=True``
+        TypeError: when a field is not an optional spec with default None, or when
+            `group_type` is defined without ``omit_defaults=True``
     """
     actual: dict[str, type] = {}
     for field in msgspec.structs.fields(group_type):
@@ -698,12 +736,12 @@ def check_group_fields(
 
     Args:
         group_type: the struct to check
-        expected: measurement name to spec type, as the registry records them
+        expected: the spec type of each measurement, keyed by registered name
 
     Raises:
-        TypeError: naming the field that is not an optional spec with default None,
-            or `group_type` when defined without ``omit_defaults=True``, or listing
-            the missing, unregistered, and mismatched field names
+        TypeError: when a field of `group_type` is not an optional spec with default
+            None, when `group_type` is defined without ``omit_defaults=True``, or
+            when the fields differ from `expected` in name or spec type
     """
     actual = _optional_spec_fields(group_type)
     if actual != expected:
@@ -728,12 +766,12 @@ def check_group_registered(
 
     Args:
         group_type: the struct to check
-        registry: the registry the measurements of `group_type` must be in
+        registry: the registry that must contain every spec type of `group_type`
 
     Raises:
-        TypeError: naming the field that is not an optional spec with default None,
-            `group_type` when defined without ``omit_defaults=True``, the spec type
-            that is not registered, or the field whose name differs from the
+        TypeError: when a field of `group_type` is not an optional spec with default
+            None, when `group_type` is defined without ``omit_defaults=True``, when a
+            spec type is not registered, or when a field name differs from the
             registered name
     """
     for name, spec_type in _optional_spec_fields(group_type).items():
@@ -852,9 +890,9 @@ def _make_measurement_signature(spec_cls):
 
 def _make_measurement_docstring(spec_cls):
     extra_prepend = {
-        'iq': 'input waveform array, or an `AcquiredIQ` from which the registry selects the conditioned waveform',
-        'capture': 'acquisition specification',
-        'as_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
+        'iq': 'IQ waveform of shape (port, sample), or an `AcquiredIQ` from which the conditioned waveform is selected',
+        'capture': 'the acquisition parameters of `iq`',
+        'as_xarray': "True for an `xarray.DataArray`, False for an ``(array, attrs)`` tuple, or 'delayed' for a `DelayedDataArray`",
     }
     extra_types = {
         'iq': 'Array or AcquiredIQ',

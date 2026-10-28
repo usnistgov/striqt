@@ -1,7 +1,6 @@
 """the action that runs a `Cellular5GNRSweep` as a `Sweep`.
 
-The `Sweep` is built once per spec, when the runner is constructed, and cached on the
-spec.
+The `Sweep` is built once per spec and memoized by `build_cellular_sweep`.
 """
 
 from __future__ import annotations as __
@@ -26,8 +25,8 @@ from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
 
-# the OFDM symbol grid of a normal cyclic prefix slot: 14 symbols whose STFT windows
-# overlap by 13/28 and fill 15/28 of each hop at SCS/2 resolution
+# the OFDM symbol grid of a normal cyclic prefix slot: 14 symbols per slot; at SCS/2
+# resolution the STFT windows overlap by 13/28 and fill 15/28 of each hop
 SYMBOL_FRACTIONAL_OVERLAP = Fraction(13, 28)
 SYMBOL_WINDOW_FILL = Fraction(15, 28)
 FRAME_PERIOD = 10e-3
@@ -36,15 +35,20 @@ PSS_SYNC_TRIGGER = 'cellular_5g_pss_sync'
 
 
 def symbol_period(subcarrier_spacing: float) -> Fraction:
-    """return the duration (in s) of one OFDM symbol with a normal cyclic prefix."""
+    """return the duration (in s) of one OFDM symbol at `subcarrier_spacing` (Hz).
+
+    The symbol has the normal cyclic prefix, 14 symbols per slot (3GPP TS 38.211
+    §4.3.2).
+    """
     slots_per_frame = round(10 * subcarrier_spacing / 15e3)
     return Fraction(1, 100 * slots_per_frame * SYMBOLS_PER_SLOT)
 
 
 def ssb_symbol_indexes(channel: specs.CellChannel) -> Any:
-    """return the `symbol_indexes` of `channel`: `ssb_case`, or the case of the spacing.
+    """return the SSB case of `channel` for the `symbol_indexes` analysis parameter.
 
-    The default is the TS 38.213 §4.1 case ``'a'`` at 15 kHz and ``'c'`` at 30 kHz.
+    `ssb_case` is returned when set. Otherwise the case is ``'a'`` at 15 kHz and
+    ``'c'`` at 30 kHz (3GPP TS 38.213 §4.1), and ``'auto'`` at any other spacing.
     """
     if channel.ssb_case is not None:
         return channel.ssb_case
@@ -65,8 +69,8 @@ def match_channel(
         index: the position of `capture` in `spec.captures`, for the error location
 
     Raises:
-        SpecValidationError: if the ports name different center frequencies, or no
-            channel has the capture's center frequency
+        SpecValidationError: if `capture` has no `center_frequency`, if the ports
+            differ in center frequency, or if no channel is at that frequency
     """
     at = (f'.captures[{index}]', '.center_frequency')
     center_frequency = getattr(capture, 'center_frequency', None)
@@ -111,8 +115,8 @@ def resolve_capture(
             at the class defaults
         channel: the matched `CellChannel`
         index: the position of `capture` in `spec.captures`, for the error location
-        consumed_keys: the analysis parameter names some enabled measurement reads;
-            generated keys outside that set are omitted. None generates every key.
+        consumed_keys: the parameter names of the enabled measurements; a generated
+            key outside the set is dropped. None keeps every key.
 
     Raises:
         SpecValidationError: if the capture sets a `sample_rate` or
@@ -201,15 +205,15 @@ def _spacings(scs: float) -> tuple[float, ...]:
     return (scs,)
 
 
-# the spectrogram parameters of the OFDM symbol grid defined above
+# the spectrogram parameters that place the bins on the OFDM symbol grid
 _GRID: dict[str, Callable[[float], Any]] = {
     'frequency_resolution': _half,
     'fractional_overlap': lambda scs: SYMBOL_FRACTIONAL_OVERLAP,
     'window_fill': lambda scs: SYMBOL_WINDOW_FILL,
 }
 
-# measurement parameters that the subcarrier spacing fixes, by measurement name; they
-# are absent from the block struct of the same name. A resource block is 12
+# measurement parameters that the subcarrier spacing fixes, by measurement name; the
+# block struct of the same name omits these fields. A resource block is 12
 # subcarriers (3GPP TS 38.211 §4.4.4.1).
 FIXED: dict[str, dict[str, Callable[[float], Any]]] = {
     'spectrogram': {**_GRID, 'integration_bandwidth': _resource_block},
@@ -228,8 +232,8 @@ DEFAULTED: dict[str, dict[str, Callable[[float], Any]]] = {
     'channel_power_histogram': {'detector_period': symbol_period},
 }
 
-# measurement parameters that `resolve_capture` writes into each capture's
-# `adjust_analysis` from its channel
+# measurement parameters that `resolve_capture` writes into the `adjust_analysis` of
+# each capture from the matched channel
 PER_CAPTURE = frozenset({
     'frequency_offset',
     'guard_bandwidths',
@@ -250,16 +254,19 @@ def _optional_inner(field: msgspec.structs.FieldInfo) -> type[msgspec.Struct]:
 def check_block_fields(
     block_type: type[msgspec.Struct], spec_type: type[msgspec.Struct], name: str
 ) -> None:
-    """raise unless the tables for `name` agree with the declaration of `block_type`.
+    """raise unless `block_type` matches the `FIXED`, `PER_CAPTURE`, and `DEFAULTED`
+    tables for `name`.
 
-    `block_type` is declared with `subset_of` on `spec_type`. The `FIXED[name]` keys
-    and the `PER_CAPTURE` names that `spec_type` has are among the fields the block
-    omits, and `DEFAULTED[name]` names exactly the fields the block widens to Optional.
-    An omitted field in neither table stays at the measurement default.
+    `block_type` must be declared with `subset_of` on `spec_type`. Every key of
+    ``FIXED[name]``, and every `PER_CAPTURE` name that is a field of `spec_type`,
+    must be among the omitted fields. The Optional fields must be exactly the keys of
+    ``DEFAULTED[name]``. An omitted field in neither table keeps the measurement
+    default.
 
     Raises:
-        TypeError: naming the undeclared block, the mismatched base, or the table
-            entries that the block declaration contradicts
+        TypeError: if `block_type` is not a `subset_of` `spec_type`, if a fixed or
+            per-capture field is exposed, or if the Optional fields differ from
+            ``DEFAULTED[name]``
     """
     subset = spec_subset(block_type)
     if subset is None:
@@ -295,8 +302,8 @@ def check_all_blocks() -> None:
     """run `check_block_fields` for every block of `Cellular5GNRAnalysis`.
 
     Raises:
-        TypeError: for a block whose name is not a measurement, or from
-            `check_block_fields`
+        TypeError: if a field of `Cellular5GNRAnalysis` is not a measurement name, or
+            from `check_block_fields`
     """
     measurement_types = {
         f.name: _optional_inner(f)
@@ -321,12 +328,16 @@ def cellular_analysis(
     The result is an instance of the analysis group of the binding of `spec`. Each
     enabled block becomes the measurement of the same name, with the exposed
     parameters copied, the `FIXED` parameters computed from the spacing, and a None
-    `DEFAULTED` parameter replaced by the derived value.
+    `DEFAULTED` parameter replaced by the derived value. A struct-form
+    `signal_trigger` is accepted with or without the block of the same name.
+
+    Args:
+        subcarrier_spacing: the one subcarrier spacing (Hz) of the channels
 
     Raises:
-        SpecValidationError: if `spec.source.signal_trigger` is the PSS sync name and
-            the block of that name is None, or any other trigger name. The struct
-            form of `signal_trigger` is accepted without a block
+        SpecValidationError: if `spec.source.signal_trigger` is a string other than
+            `PSS_SYNC_TRIGGER`, or is `PSS_SYNC_TRIGGER` while the block of that
+            name is None
     """
     scs = subcarrier_spacing
     result: dict[str, dict[str, Any]] = {}
@@ -341,8 +352,8 @@ def cellular_analysis(
         kws.update({key: fn(scs) for key, fn in FIXED.get(name, {}).items()})
         result[name] = kws
 
-    # a string trigger takes its spec from the sweep analysis, so the analysis must
-    # enable that measurement; the struct form of signal_trigger brings its own spec
+    # a string trigger reads its measurement spec from the sweep analysis, which must
+    # enable that measurement; a struct-form signal_trigger includes the spec
     trigger = spec.source.signal_trigger
     if isinstance(trigger, str) and trigger not in result:
         if trigger == PSS_SYNC_TRIGGER:
@@ -364,15 +375,15 @@ def cellular_analysis(
 def build_cellular_sweep(
     spec: specs.Cellular5GNRSweep[SS, SP, SC, SA],
 ) -> specs.Sweep[SS, SP, SC, SA]:
-    """return the `Sweep` that `open_resources` opens for a `Cellular5GNRSweep`.
+    """return the `Sweep` derived from a `Cellular5GNRSweep`.
 
-    The sweep has the spec's captures resolved against `cell_channels`
-    (`resolve_capture`), the spec's loops and `adjust_captures` unchanged, and the
-    analysis of `cellular_analysis`. The sweep is an instance of the `sweep_cls` of
-    the spec class, and the result is cached on `spec`.
+    The captures of `spec` are resolved against `cell_channels` by `resolve_capture`.
+    The loops and `adjust_captures` are copied, and the analysis is
+    `cellular_analysis`. The result is an instance of the `sweep_cls` of the spec
+    class and is memoized by `spec`.
 
     Raises:
-        TypeError: if `spec` is not an instance of a bound spec class
+        TypeError: if the class of `spec` is not bound to a sensor
         SpecValidationError: for a loop over `center_frequency`, a capture without a
             channel, channels of mixed subcarrier spacing, or a capture that sets a
             derived field
@@ -416,10 +427,10 @@ def build_cellular_sweep(
 
 @registry.runner(spec_type=specs.Cellular5GNRSweep)
 class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
-    """run a `Cellular5GNRSweep`.
+    """the runner of a `Cellular5GNRSweep`.
 
-    `sweep` is `build_cellular_sweep` of the spec. The output is a `ZarrCaptureSink`
-    at `sink.path`, or nothing when the path is None.
+    `sweep` is `build_cellular_sweep` of `spec`. The sink is a `ZarrCaptureSink` at
+    ``sweep.sink.path``, or a `NoSink` when the path is None.
     """
 
     spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]
@@ -432,7 +443,9 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
         """the `Sweep` built by `build_cellular_sweep` from `spec`.
 
         Raises:
-            msgspec.ValidationError: if a field of `spec` is rejected
+            TypeError: if the class of `spec` is not bound to a sensor
+            SpecValidationError: if the captures, loops, or channels of `spec` fail
+                the checks of `build_cellular_sweep`
         """
         return build_cellular_sweep(self.spec)
 

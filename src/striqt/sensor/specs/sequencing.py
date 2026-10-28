@@ -2,8 +2,8 @@
 
 Loops nest over the listed captures, the `adjust_captures` remaps for the open source
 apply on top, and the loop point is applied last. A looped field wins over an
-adjustment. Each expanded capture keeps a record of the entry and loop point that
-produced the capture, from which the validators in `action` locate errors in the file.
+adjustment. Each expanded capture is paired with the entry and loop point that
+produced the capture.
 """
 
 from __future__ import annotations as __
@@ -36,11 +36,7 @@ if TYPE_CHECKING:
 
 
 class CaptureOrigin(NamedTuple):
-    """locate an expanded capture in the sweep specification that produced the capture.
-
-    The expanded index alone does not identify a place in the user's file.
-    `spec_index` and `loop_points` do.
-    """
+    """the place in a sweep specification that produced an expanded capture."""
 
     capture_index: int
     """position in the expanded capture tuple"""
@@ -49,7 +45,7 @@ class CaptureOrigin(NamedTuple):
     """index into `sweep.captures`, or None when the sweep lists no captures"""
 
     loop_points: frozendict
-    """the loop point that produced this capture, keyed by (isin, field)"""
+    """the loop point that produced the capture, keyed by ``(isin, field)``"""
 
 
 def loop_captures(
@@ -64,9 +60,9 @@ def loop_captures(
     The loops are nested in declaration order, outermost first, with `sweep.captures`
     innermost: 2 captures under a 3-point loop give 6 captures ordered
     ``(point0, capture0), (point0, capture1), (point1, capture0), ...``. A leading
-    `Repeat` is not expanded here; the sweep runner multiplies this tuple by
-    `Repeat.count`. When `sweep.captures` is empty, each loop point builds a new
-    capture, and the loops must then supply every field the capture class requires.
+    `Repeat` is not expanded. When `sweep.captures` is empty, each loop point builds
+    a new capture, and the loops must then supply every field the capture class
+    requires.
 
     Each capture is assembled in three passes, the later ones winning:
 
@@ -91,8 +87,8 @@ def loop_captures(
             alone, and the per-source remaps are not applied.
         only_fields: keep only the capture loops naming one of these fields, dropping
             the rest. Analysis loops are unaffected.
-        limit: stop expanding after this many captures. Applied before the
-            `options.loop_only_nyquist` filter, so the result may hold fewer.
+        limit: the maximum number of expanded captures; the `loop_only_nyquist`
+            filter applies after the limit and may remove more
 
     Returns:
         the expanded captures, as instances of the capture class of the sweep. Empty
@@ -101,12 +97,12 @@ def loop_captures(
         of the point.
 
     Raises:
-        msgspec.ValidationError: a loop names a field the capture class does not
-            declare; the sweep has neither explicit captures nor a sensor binding,
-            leaving no capture class to instantiate; a loop point does not convert to
-            the type of the capture field; an expanded capture violates a `Meta`
-            bound or a `Capture.__post_init__` rule that no single input violates
-            alone; or the loops left a required capture field unset.
+        msgspec.ValidationError: if a loop names a field the capture class does not
+            declare; if the sweep has neither explicit captures nor a sensor
+            binding; if a loop point does not convert to the type of the capture
+            field; if an expanded capture violates a `Meta` bound or a
+            `Capture.__post_init__` rule that no single input violates alone; or if
+            the loops left a required capture field unset
     """
 
     args, kws = _expansion_args(
@@ -127,19 +123,17 @@ def loop_capture_origins(
     The arguments are those of `loop_captures`.
 
     Captures that compare equal collapse onto the first origin. Equal captures arise
-    when a `List` repeats a value, when two loop points coerce to one value (loop
-    points are coerced with ``strict=False``, so ``'1e6'`` and ``1e6`` are one
-    point), and when an `adjust_captures` fixed value flattens the field that
-    distinguished two `sweep.captures` entries. Use `loop_captures` where the
-    multiplicity matters.
+    when a `List` repeats a value, when two loop points coerce to one value
+    (``'1e6'`` and ``1e6`` are one point), and when an `adjust_captures` fixed value
+    flattens the field that distinguished two `sweep.captures` entries.
 
     Returns:
         a `frozendict` from each distinct capture to the `CaptureOrigin` of the first
         occurrence of the capture, keyed in expansion order
 
     Raises:
-        msgspec.ValidationError: as `loop_captures`.
-        TypeError: an analysis loop point that is unhashable after freezing.
+        msgspec.ValidationError: as `loop_captures`
+        TypeError: if an analysis loop point is unhashable after freezing
     """
     args, kws = _expansion_args(
         sweep, source_id, only_fields, limit, sweep.options.loop_only_nyquist
@@ -234,13 +228,12 @@ def _expansion_args(
     """marshal `plan` into the arguments of `_expand_capture_loops_with_origins`.
 
     Args:
-        plan: the spec whose `captures`, `loops`, and `adjust_captures` are expanded
+        plan: the spec with the `captures`, `loops`, and `adjust_captures` to expand
         source_id: as `loop_captures`
         only_fields: as `loop_captures`
         limit: as `loop_captures`
-        loop_only_nyquist: drop each expanded capture whose finite
-            `analysis_bandwidth` exceeds the capture `sample_rate`. A `Sweep` passes
-            ``options.loop_only_nyquist``.
+        loop_only_nyquist: True drops each expanded capture with a finite
+            `analysis_bandwidth` above the capture `sample_rate`
 
     Returns:
         ``(args, kws)`` to splat into `_expand_capture_loops_with_origins`, with the
@@ -272,11 +265,10 @@ def _expand_capture_loops_with_origins(
     loop_only_nyquist: bool = False,
     limit: int | None = None,
 ) -> tuple[tuple[SC, ...], tuple[CaptureOrigin, ...]]:
-    """expand `loops` over `captures` into captures paired with their origins.
+    """expand `loops` over `captures` into captures paired with the origin of each.
 
-    This is the cached expansion pass behind `loop_captures`, whose docstring gives
-    the precedence rules and the meaning of each argument. `cls` is the capture class
-    to instantiate, required when `captures` is empty.
+    The precedence rules and the arguments are those of `loop_captures`. `cls` is
+    the capture class to instantiate, required when `captures` is empty.
 
     Returns:
         ``(captures, origins)`` of equal length, with each `CaptureOrigin.capture_index`
@@ -295,7 +287,7 @@ def _expand_capture_loops_with_origins(
     loop_points = _build_loop_points_dict(loops, cls, only_fields)
 
     if len(captures) == 0 and len(loop_points) == 0:
-        # nothing is left to build a capture from, so don't build a default one
+        # no captures and no loop points: do not build a default capture
         return (), ()
 
     loop_starts = {k: v[0] for k, v in loop_points.items() if len(v) > 0}
@@ -334,8 +326,8 @@ def _expand_capture_loops_with_origins(
                 for c in new
             )
 
-        # analysis loop points skip the coercion in _build_loop_points_dict, so they
-        # can still be a bare list or dict from yaml, which no mapping could key on
+        # analysis loop points skip the coercion in _build_loop_points_dict and may
+        # still be an unhashable list or dict from yaml
         frozen_point = frozendict({
             k: sa.specs.helpers.freeze(v) for k, v in point.items()
         })
@@ -384,20 +376,17 @@ def _build_loop_points_dict(
 ) -> _LoopPointsDict:
     """map ``(isin, field)`` to the loop points, keeping only `only_fields` if given.
 
-    Capture loop points are coerced to the capture field type so that remaps keyed
-    on a looped field see typed values rather than JSON/YAML decoded strings;
-    analysis loop points are left as decoded. `only_fields` drops capture loops
-    only, and is applied here rather than by the caller so that the indexes in error
-    messages stay positions in the loop list the user wrote.
+    Capture loop points are coerced to the capture field type, and analysis loop
+    points are left as decoded. `only_fields` drops capture loops only.
 
     Returns:
         the points of each loop with a `field`, in `loops` order, keyed by
         ``(loop.isin, loop.field)``; `repeat` loops are omitted
 
     Raises:
-        SpecValidationError: at ``$.loops`` for a capture loop over a field
+        SpecValidationError: at ``$.loops`` for a capture loop over a field that
             `capture_cls` does not declare, or at ``$.loops[i]`` for a point that
-            does not convert to the field's type
+            does not convert to the type of the field
     """
     loop_points: _LoopPointsDict = {}
     loop_indexes: dict[tuple[types.IsIn, str], int] = {}
@@ -466,12 +455,12 @@ def _loop_point_error(
     field_type: Any,
     ex: msgspec.ValidationError,
 ) -> SpecValidationError:
-    """build the error for a loop at ``$.loops[index]`` whose points did not convert.
+    """build the error for the loop at ``$.loops[index]`` with unconvertible points.
 
     Returns:
-        a `SpecValidationError` whose message names the first point that fails
-        alone and the field `name`, or repeats `ex` when no single point reproduces
-        the failure
+        a `SpecValidationError` for the first point that fails alone and the field
+        `name`, or one with the message of `ex` when no single point reproduces the
+        failure
     """
     path = ('.loops', f'[{index}]')
     located = _locate_conversion_failure(points, field_type)
@@ -515,7 +504,7 @@ def _expanded_capture_error(
 
 
 def _merge_analysis_loops(points: _LoopPointsDict) -> dict[str, Any]:
-    """apply any loops where isin == 'analysis' into capture.adjust_analysis"""
+    """regroup `points` by field, with analysis points under ``'adjust_analysis'``"""
 
     updates: dict[str, Any] = {}
     analysis_updates = {}
@@ -531,10 +520,10 @@ def _merge_analysis_loops(points: _LoopPointsDict) -> dict[str, Any]:
 
 
 def _merge_capture_updates(*dicts: dict[str, Any]) -> dict[str, Any]:
-    """merge the given dicts as `dicts[0] | dicts[1] | ... | dicts[len(dicts)]`.
+    """merge `dicts` left to right, with the later value of a repeated key winning.
 
-    The ``'adjust_analysis'`` entries of the dicts are merged the same way into one
-    mapping in the result.
+    The ``'adjust_analysis'`` mappings of the dicts are merged the same way into
+    one mapping.
     """
     capture = {}
     adjust_analysis = {}
@@ -656,15 +645,15 @@ def list_capture_adjustments(
 ) -> dict[str, tuple[Any, ...]]:
     """list the unique values of each adjusted capture field across the sweep.
 
-    The values are read from the expanded captures, so they are what the runner
-    produces. A loop over an adjusted field wins over the adjustment (see
-    `loop_captures`), and the listing shows the loop values in loop order. A
-    `CaptureRemap` miss that leaves the field unset contributes nothing for that
-    capture, as in `adjust_captures`.
+    The values are those of the expanded captures. A loop over an adjusted field
+    wins over the adjustment (see `loop_captures`), and the listing shows the loop
+    values in loop order. A `CaptureRemap` miss that leaves the field unset
+    contributes nothing for that capture.
 
     Args:
-        sweep: the sweep whose `adjust_captures` block is listed
-        source_id: hex id of the source whose block applies on top of ``'defaults'``
+        sweep: the sweep with the `adjust_captures` block to list
+        source_id: hex id of the source; the block of that source applies on top of
+            ``'defaults'``
 
     Returns:
         the unique values of each adjusted field in first-seen order, keyed by
@@ -692,7 +681,14 @@ def list_capture_adjustments(
 def _convert_label_lookup_keys(
     sweep: structs.CapturePlan,
 ) -> structs.AdjustCapturesType:
-    """convert label lookup key types to match the corresponding capture fields"""
+    """coerce the `adjust_captures` lookup keys of `sweep` to the keyed field types.
+
+    Raises:
+        SpecValidationError: if a source key is neither ``'defaults'`` nor a hex id,
+            if a block is not a mapping, if a field is reserved or unknown for the
+            capture type, or if a lookup key does not convert to the type of the
+            keyed field
+    """
 
     result = {}
     capture_cls = captures.get_capture_type(type(sweep))
@@ -883,12 +879,12 @@ def describe_capture_origin(
     """locate an expanded capture in the sweep, as sibling paths for an error message.
 
     The loop point is rendered as one mapping in `loops` declaration order. A
-    `repeat` is rendered as the tag of the loop at pass 0. Capture fields are read
-    back from `capture`, so the value shown is the coerced value. Two loops that name
-    the same field in different `isin` blocks collapse onto one entry.
+    `repeat` is rendered as the tag of the loop at pass 0. Capture field values are
+    those of `capture`, after coercion. Two loops that name the same field in
+    different `isin` blocks collapse onto one entry.
 
     Args:
-        loops: the `loops` of the sweep, in the order the user wrote them
+        loops: the `loops` of the sweep, in declaration order
         capture: the expanded capture, or the mapping the expansion assembled for a
             capture that failed to convert to the capture class
         origin: the origin `loop_capture_origins` recorded for `capture`
@@ -908,7 +904,7 @@ def describe_capture_origin(
             # dropped by only_fields
             continue
         elif loop.isin == 'capture':
-            # from the capture, so that the value is the coerced one that it ran with
+            # the capture value is the coerced value
             points[loop.field] = _read_capture_field(capture, loop.field)
         else:
             points[loop.field] = origin.loop_points[loop.isin, loop.field]

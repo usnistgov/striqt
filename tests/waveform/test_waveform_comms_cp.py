@@ -24,10 +24,10 @@ THREADS_PER_BLOCK = 32
 
 
 def corr_reference(inds, x, nfft, ncp, norm):
-    """float64 evaluation of the cyclic-prefix correlation computed by _corr_at_indices.
+    """return the float64 cyclic-prefix correlation that `_corr_at_indices` computes.
 
-    Index pairs that run past the end of `x` are dropped, as the CPU kernel's zero-fill
-    does for any index order.
+    Index pairs that run past the end of `x` are dropped, as the zero-fill of the CPU
+    kernel does for any index order.
     """
     xc = np.asarray(x).astype(np.complex128)
     inds = np.asarray(inds)
@@ -51,13 +51,13 @@ def corr_reference(inds, x, nfft, ncp, norm):
 def corr_cases(
     min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False, sorted_inds=False
 ):
-    """Strategy for (inds, x, nfft, ncp, norm) kernel arguments.
+    """draw (inds, x, nfft, ncp, norm) kernel arguments.
 
     The waveform length is drawn so that some examples run index pairs past the end of
-    `x`, which exercises the kernels' out-of-range branches. The indices are drawn in
+    `x` and reach the out-of-range branches of the kernels. The indices are in
     arbitrary order unless `sorted_inds`, so an out-of-range pair may precede a valid
-    one. With `ncp_from_inds`, ncp is the number of indices, as cp.correlate_cyclic_shift
-    infers it from the last axis of `inds`.
+    one. With `ncp_from_inds`, `ncp` is the index count, as `cp.correlate_cyclic_shift`
+    infers from the last axis of `inds`.
     """
 
     @st.composite
@@ -72,7 +72,7 @@ def corr_cases(
         inds = draw(st.lists(positions, min_size=n_inds, max_size=n_inds, unique=True))
         inds = np.asarray(sorted(inds) if sorted_inds else inds, dtype=np.int64)
         # every lag keeps at least one valid pair (from the smallest index) so the
-        # correlation is defined; larger indexes may still run past the end of x
+        # correlation is defined. Larger indexes may still run past the end of x
         min_size = int(inds.min()) + 2 * nfft + ncp
         full_size = int(inds.max()) + 2 * nfft + ncp
         size = draw(st.integers(min_value=min_size, max_value=full_size))
@@ -89,7 +89,7 @@ def assert_matches_reference(out, inds, x, nfft, ncp, norm):
 
 
 class TestCorrAtIndicesKernels:
-    """The numba kernels called directly, against the numpy reference."""
+    """the numba kernels called directly, against the numpy reference"""
 
     @given(case=corr_cases())
     def test_cpu(self, case):
@@ -114,7 +114,7 @@ class TestCorrAtIndicesKernels:
         return out
 
     # the CUDA kernel stops at the first out-of-range pair, which only matches the
-    # reference for sorted indices; test_cuda_unsorted_indices covers the rest
+    # reference for sorted indices. test_cuda_unsorted_indices covers the rest
     @given(case=corr_cases(sorted_inds=True))
     def test_cuda(self, cupy_available, case):
         inds, x, nfft, ncp, norm = case
@@ -171,7 +171,7 @@ class TestCorrelateCyclicShift:
         # the cyclic prefix is an exact copy of the symbol tail
         assert R[0] == pytest.approx(1, abs=corr_atol_for(x, inds.size, norm=True))
 
-        # partial overlap decays linearly over the prefix length; the remaining
+        # partial overlap decays linearly over the prefix length. The remaining
         # pairs are independent QPSK products that average out
         lags = np.arange(ncp)
         assert_close(R[:ncp], 1 - lags / ncp, atol=0.1)

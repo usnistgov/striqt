@@ -22,9 +22,9 @@ class PortOverload:
     adc: bool
     """True when the ADC headroom at the port is at or below 0 dB"""
     im3_victims: tuple[float, ...]
-    """sorted center frequencies (Hz) of the sweep captures at the port where the
-    third-order products of this capture exceed the IF headroom. Empty when
-    `if_headroom` is absent from `extra_data`."""
+    """center frequencies (Hz), sorted, of the sweep captures at this port where the
+    third-order products of this capture exceed the IF headroom; empty when
+    `if_headroom` is absent from `extra_data`"""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -79,9 +79,12 @@ def _im3_victims(
     capture: specs.SoapyCapture,
     if_headroom: float,
 ) -> tuple[float, ...]:
-    """return the sorted center frequencies (Hz) at the port of `capture` where a sweep
-    capture has gain high enough for the third-order products of `capture` to exceed
-    `if_headroom` (dB)"""
+    """return the sorted center frequencies (Hz) that the third-order products of
+    `capture` overload.
+
+    A sweep capture at the port of `capture` is a victim when `if_headroom` (dB) plus
+    2/3 of the gain (dB) of `capture` above that capture is at or below 0.
+    """
     sweep_captures = cast('tuple[specs.SoapyCapture, ...]', sweep.captures)
     gains = specs.sequencing.max_by_frequency('gain', sweep_captures, sweep.loops)
     assert not isinstance(capture.gain, tuple)
@@ -132,20 +135,24 @@ def spectrogram_snr(
 ) -> tuple[SpectrogramSNR, ...] | None:
     """return the peak SNR of each port in the spectrogram `result`.
 
-    The spectrogram is linear power with the port on axis 0, and
-    ``attrs['noise_bandwidth']`` is in Hz. `sweep.source.calibration` selects the
-    noise figure and `sweep.source.master_clock_rate` the calibration row.
+    `sweep.source.calibration` selects the noise figure and
+    `sweep.source.master_clock_rate` the calibration row.
 
     Args:
         sweep: the sweep with the calibration
         capture: the capture of the spectrogram
-        result: the cached ``(spectrogram, attrs)`` pair
+        result: the cached ``(spectrogram, attrs)`` pair; the spectrogram is linear
+            power with the port on axis 0, and ``attrs['noise_bandwidth']`` is in Hz
         format_path: the formatter of the ``{field}`` templates in the calibration
             path, or None
 
     Returns:
         one entry per port with a finite SNR, in `split_capture_ports` order, or None
         when `sweep.source.calibration` is None
+
+    Raises:
+        KeyError: if the radio settings of a port are not in the calibration grid
+        ValueError: if the center frequency of a port is outside the calibrated range
     """
     cal = sweep.source.calibration
     if cal is None:
@@ -185,7 +192,7 @@ def describe_spectrogram_snr(
     """return the one-line description of `entry`.
 
     A field set by an adjustment in `adjust_spec` is described by the field that
-    drives the adjustment.
+    selects the adjustment.
 
     Args:
         source_id: the source id that selects the entries of `adjust_spec`

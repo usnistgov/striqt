@@ -37,10 +37,11 @@ def get_path_fields(
     """return the ``{field_name}`` values for sink and calibration path templates.
 
     Args:
-        sweep: the spec whose type name and `adjust_captures` supply the fields
+        sweep: the action spec; the type name and `adjust_captures` of `sweep`
+            supply the fields
         source_id: hex id of the open source, or a callable that returns the id
-        spec_path: the file `sweep` was read from, or None when `sweep` was not read
-            from a file
+        spec_path: the path of the file that defined `sweep`, or None for a spec
+            constructed in code
 
     Returns:
         ``start_time`` (``%Y%m%d-%Hh%Mm%S`` at the time of the call),

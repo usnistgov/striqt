@@ -17,7 +17,7 @@ get_format_fields = ss.specs.paths.get_format_fields
 
 
 def _owner_noise_bandwidth(data: 'xr.Dataset', coord_name: str) -> float | None:
-    """return the `noise_bandwidth` attr of a data variable on the dimension of `coord_name`.
+    """return the `noise_bandwidth` attr (Hz) of a variable spanning `coord_name`.
 
     None when `coord_name` is a data variable or a scalar, or when no data variable on
     the dimension of `coord_name` has the attr.
@@ -35,12 +35,14 @@ def _owner_noise_bandwidth(data: 'xr.Dataset', coord_name: str) -> float | None:
 def noise_bandwidth(data: 'xr.Dataset', var_name: str) -> 'xr.DataArray | float | None':
     """return the noise bandwidth (in Hz) of a data variable or power-bin coordinate.
 
-    The `noise_bandwidth` attr of `var_name` is returned when present. For a
-    coordinate without the attr, the result is the `noise_bandwidth` of a data
-    variable on the dimension of the coordinate. For values with `units` of dBm or
-    √mW and no attr, the result is the `analysis_bandwidth` coordinate where that is
-    finite and the `sample_rate` coordinate where `analysis_bandwidth` is infinite.
-    Any other variable has no noise bandwidth.
+    The first matching rule applies:
+
+    * `var_name` has a `noise_bandwidth` attr: that value;
+    * `var_name` is a coordinate: the `noise_bandwidth` attr of a data variable on
+      the dimension of the coordinate;
+    * `var_name` has `units` beginning with dBm or √mW: the `analysis_bandwidth`
+      coordinate where finite, and the `sample_rate` coordinate where infinite;
+    * otherwise: None.
 
     Returns:
         a float, a DataArray over the captures when the bandwidth is a capture
@@ -205,10 +207,17 @@ def histogram_bin_limits(
 ) -> 'tuple[xr.DataArray | None, float]':
     """return the plot limits (in dBm) of a power histogram.
 
+    Args:
+        data: the dataset with the histogram `var_name` and the coordinate `bin_dim`
+        var_name: the power histogram variable
+        bin_dim: the power-bin coordinate (dBm) of `var_name`
+        pad_low: the margin (dB) below the system noise level
+        pad_hi: the margin (dB) above the highest populated bin
+
     Returns:
-        the lower limit per capture, `get_system_noise` minus `pad_low` or None
-        without a noise level, and the scalar upper limit, the highest populated bin
-        over all captures plus `pad_hi`
+        ``(low, high)``: `low` is the system noise level per capture minus
+        `pad_low`, or None when `data` has no noise level for `bin_dim`; `high` is
+        the highest populated bin over all captures plus `pad_hi`
     """
     noise = get_system_noise(data, bin_dim)
     low = None if noise is None else noise - pad_low

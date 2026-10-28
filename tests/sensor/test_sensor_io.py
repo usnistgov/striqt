@@ -210,9 +210,9 @@ CELLULAR_SPECS = {
 
 @pytest.mark.parametrize('name', list(CELLULAR_SPECS), ids=list(CELLULAR_SPECS))
 def test_cellular_sweeps_decode(name):
-    """a `sensor_binding` bound with the `Cellular5GNRSweep` action decodes to that
-    action's tagged subclass, whose `sweep_cls` is the companion `Sweep` class with
-    the binding's capture type"""
+    """a `sensor_binding` bound with the `Cellular5GNRSweep` action decodes to the
+    tagged subclass of that action. The `sweep_cls` of that subclass is the companion
+    `Sweep` class with the capture type of the binding."""
     spec = ss.read_yaml_spec(CELLULAR_SPECS[name])
     cls = type(spec)
     assert issubclass(cls, ss.specs.Cellular5GNRSweep)
@@ -226,8 +226,8 @@ def test_cellular_sweeps_decode(name):
 
 
 def _write_cellular_variant(tmp_path, **replace) -> Path:
-    """write the fake-soapy cellular YAML to `tmp_path` with top-level blocks
-    replaced, and its `extensions.import_path` made absolute"""
+    """write the fake-soapy cellular YAML to `tmp_path` with the top-level blocks in
+    `replace` substituted and `extensions.import_path` made absolute"""
     tree = dict(sa.lib.io.decode_from_yaml_file(FAKE_SOAPY_CELLULAR_SPEC))
     src_dir = FAKE_SOAPY_CELLULAR_SPEC.parent / tree['extensions']['import_path']
     tree['extensions'] = {**tree['extensions'], 'import_path': str(src_dir)}
@@ -321,8 +321,8 @@ def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
 
 
 def test_read_zarr_spec_drops_the_removed_extensions_sink_attr(run_sweep_to_zarr):
-    """a store written when ``extensions.sink`` was a spec field carries the key in
-    its attrs. The reader warns and discards it."""
+    """a store with an ``extensions.sink`` key in the attrs decodes with a
+    `DeprecationWarning`, and the key is discarded"""
     import zarr
 
     spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')

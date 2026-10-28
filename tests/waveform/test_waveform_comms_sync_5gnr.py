@@ -1,8 +1,10 @@
 """striqt.waveform.lib.comms.sync_5gnr: the 5G NR synchronization used by the cellular
-measurements. The checks compare the PSS/SSS sequences, the SSB cases of TS 38.213
-Section 4.1, the sync parameters, SSB IQ extraction, the correlation grid, and the
-offset choice against an independent restatement of the standard or a synthetic
-waveform with a known sync sequence, and the numpy and cupy paths against each other.
+measurements.
+
+The checks compare the PSS/SSS sequences, the SSB cases of TS 38.213 Section 4.1, the
+sync parameters, SSB IQ extraction, the correlation grid, and the offset choice against
+an independent restatement of the standard or a synthetic waveform with a known sync
+sequence. The numpy and cupy paths are compared against each other.
 """
 
 from __future__ import annotations
@@ -45,10 +47,11 @@ SC_COUNT = 127
 
 
 def sync_bins(nfft, offset_bins=0):
-    """fft bin indices (in fftfreq order) occupied by a 5G NR sync sequence.
+    """return the FFT bin indices (in fftfreq order) occupied by a 5G NR sync sequence
+    shifted by `offset_bins`.
 
-    The PSS/SSS occupy subcarriers 56..182 of the 240-subcarrier SSB, i.e., -64..62
-    relative to the SSB center.
+    The PSS/SSS occupy subcarriers 56..182 of the 240-subcarrier SSB (TS 38.211 Table
+    7.4.3.1-1), i.e., -64..62 relative to the SSB center.
     """
     k = np.arange(-64, 63) + offset_bins
     return k % nfft
@@ -104,8 +107,8 @@ class TestSyncSequences:
         # the shortest cyclic prefix duration is zero-filled
         assert_array_equal(pss[:, :cp], 0)
 
-        # the body is the inverse FFT of the m-sequence on the SSB's PSS
-        # subcarriers, normalized to unit energy in the frequency domain
+        # the body is the inverse FFT of the m-sequence on the PSS subcarriers of the
+        # SSB, normalized to unit energy in the frequency domain
         X = np.fft.fft(pss[:, cp:].astype(np.complex128), axis=1)
         expected = np.zeros((3, nfft), dtype=np.complex128)
         for n_id2 in range(3):
@@ -263,8 +266,8 @@ class TestSyncParams:
         assert params.lag_count == 3 * params.short_symbol_size
 
     def test_adjacent_symbol_indexes_need_explicit_max_lag_symbols(self):
-        """the automatic lag search spans at least the 4 symbols of one SSB, which
-        symbols 1 apart cannot separate"""
+        """the automatic lag search spans at least the 4 symbols of one SSB, and
+        symbols 1 apart cannot separate that span"""
         with pytest.raises(ValueError, match=r'\(2, 3\).*max_lag_symbols'):
             sync_params(symbol_indexes=(2, 3))
 
@@ -352,8 +355,8 @@ class TestGet5gSsbIq:
         out = self._ssb_iq(iq, frequency_offset=frequency_offset)
 
         mid = interior(out, 2000, axis=1)
-        # the shift is applied in whole input bins, so allow half a bin of
-        # quantization beyond the estimator's resolution
+        # the shift is applied in whole input bins, so the bound adds half a bin of
+        # quantization to the resolution of the estimator
         f_est = tone_frequency(mid[0], FS)
         assert f_est == pytest.approx(f0, abs=grid / 2 + FS / mid.shape[1])
         assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
@@ -447,8 +450,8 @@ class TestCorrelateSyncSequence:
             )
 
     def test_sync_frame_count_rejects_a_span_beyond_the_frame(self):
-        """symbol 280 lies past the 20 slots (280 symbols) of a 30 kHz frame, so its
-        21-slot correlation span cannot come from one frame"""
+        """symbol 280 is past the 20 slots (280 symbols) of a 30 kHz frame, so the
+        21-slot correlation span of that symbol cannot come from one frame"""
         params, _, pss, _ = pss_setup()
         beyond = sync_params(symbol_indexes=(280,))
         assert beyond.slot_count == 21
@@ -456,8 +459,8 @@ class TestCorrelateSyncSequence:
             sync_5gnr.correlate_sync_sequence(silent_block(params), pss, params=beyond)
 
     def test_sync_frame_count_rejects_too_few_lags(self):
-        """one slot of 3840 samples less its 4 excess CP samples cannot fit a 3840
-        sample lag search"""
+        """one slot of 3840 samples less the 4 excess CP samples cannot fit a
+        3840-sample lag search"""
         params = dataclasses.replace(
             sync_params(), slot_count=1, corr_size=3840, lag_count=3840
         )

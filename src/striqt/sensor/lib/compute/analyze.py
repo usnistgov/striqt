@@ -103,14 +103,26 @@ def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
 ) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
-    """analyze an acquisition according to the sweep specification in `options`.
+    """run the analysis of ``options.sweep_spec`` on `iq`.
 
-    The registry selects the conditioning of `iq` for each measurement through
-    `preprocess`. A conditioning stage runs on the first selection that needs the
-    stage. The results include the acquisition data and metadata.
+    The analysis is ``options.sweep_spec.analysis`` adjusted by
+    ``iq.capture.adjust_analysis``. Each measurement selects a conditioning of `iq`
+    through `preprocess`, and a conditioning stage runs on the first selection that
+    needs the stage. The resampling stage consumes `iq.x` in place unless
+    ``options.sweep_spec.options.reuse_iq`` is set. cupy arrays in `iq.extra_data`
+    are replaced in place by numpy copies. The `cache_callback` of `options` runs
+    each time a measurement fills a cache.
+
+    Returns:
+        as `options.as_xarray` selects: a dict of arrays by measurement name
+        (False), a `DelayedDataset` (``'delayed'``), or an `xr.Dataset` (True); the
+        latter 2 have the capture fields and acquisition info as coordinates and
+        `iq.extra_data` as variables
 
     Raises:
         TypeError: if `iq.capture` is not a `SensorCapture`
+        ValueError: if ``iq.source_spec.signal_trigger`` names a measurement that
+            the analysis does not enable
     """
 
     if isinstance(iq.capture, specs.SensorCapture):
@@ -160,13 +172,19 @@ def analyze(
 def prepare_compute(
     spec: specs.Sweep[Any, Any, Any, Any], skip_warmup: bool = False
 ) -> Generator[xr.Dataset | DelayedDataset | None]:
-    """import the compute backend of `spec`, then run the warmup sweep, if any.
+    """import the compute backend of `spec`, then run the warmup sweep.
 
-    The imports and the cupy configuration run before the first yield. When
-    `skip_warmup` is set or `warmup_sweep_for(spec)` returns None, a single None is
-    yielded. Otherwise the yields are those of a `SweepRunner` over the warmup sweep
-    on the resources of `open_warmup_resources`, and nothing is yielded when that
-    sweep has no captures.
+    The cupy imports and configuration run before the first yield when
+    ``spec.source.array_backend`` is ``'cupy'``. The ``Mean of empty slice``
+    `RuntimeWarning` is filtered out process-wide.
+
+    Args:
+        skip_warmup: True runs no warmup sweep
+
+    Yields:
+        one None when `skip_warmup` is set or `warmup_sweep_for` returns None;
+        otherwise the yields of a `SweepRunner` over the warmup sweep with
+        `always_yield` set, and nothing when the warmup sweep has no captures
     """
     if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):

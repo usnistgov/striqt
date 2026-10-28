@@ -1,4 +1,4 @@
-"""striqt.sensor.lib.sources.function: the mapping from a capture's ports onto the
+"""striqt.sensor.lib.sources.function: the mapping from the ports of a capture onto the
 `striqt.analysis.testing` generators that the synthetic sources call"""
 
 from __future__ import annotations
@@ -113,8 +113,8 @@ def test_get_waveform_is_the_generator_at_the_absolute_index(binding, start_inde
 
 
 def test_host_resampled_capture_generates_at_the_source_rate():
-    """the source runs at the radio's rate, which is the smallest integer division of
-    the master clock at or above the capture rate (125 MHz / 20 for 6 MS/s)"""
+    """the source runs at the radio rate: the smallest integer division of the master
+    clock at or above the capture rate (125 MHz / 20 for 6 MS/s)"""
     source, _ = _armed_binding(
         'single_tone', sample_rate=6e6, host_resample=True, snr=None
     )
@@ -127,8 +127,8 @@ def test_host_resampled_capture_generates_at_the_source_rate():
 
 
 def test_sawtooth_closed_form_on_a_binary_grid():
-    """(t % period) / period at a power-of-two rate and period is the exact
-    fraction (i mod 2**14) / 2**14, so the source must reproduce it bit for bit"""
+    """(t % period) / period at a power-of-two rate and period is the exact fraction
+    ``(i mod 2**14) / 2**14``, and the source reproduces that fraction bit for bit"""
     rate = 2.0**24
     spec = ss.specs.FunctionSource(master_clock_rate=rate, num_rx_ports=1)
     capture = ss.specs.SawtoothCapture(
@@ -151,8 +151,8 @@ def test_sawtooth_closed_form_on_a_binary_grid():
 
 
 def test_single_tone_sits_at_the_lo_shifted_frequency():
-    """a lo_shift design moves the radio LO by lo_offset, so the radio samples the
-    tone at frequency_offset + lo_offset at fs_sdr"""
+    """a `lo_shift` design moves the radio LO by `lo_offset`, and the radio samples the
+    tone at ``frequency_offset + lo_offset`` at `fs_sdr`"""
     frequency_offset = -1e6
     source, capture = _armed_binding(
         'single_tone',
@@ -177,7 +177,8 @@ def test_single_tone_sits_at_the_lo_shifted_frequency():
 
 
 def test_dirac_delta_index_is_not_compensated():
-    """the impulse of a pre-roll read sits at round(time*fs_sdr) - start_index"""
+    """the impulse of a pre-roll read is at index
+    ``round(time*fs_sdr) - start_index``"""
     source, capture = _armed_binding('dirac_delta')
     start_index = -700
 

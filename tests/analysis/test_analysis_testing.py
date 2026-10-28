@@ -1,8 +1,9 @@
-"""closed forms, windowing, and seeding of the striqt.analysis.testing generators.
+"""striqt.analysis.testing: closed forms, windowing, and seeding of the generators.
 
-The measurement tests assert against the closed forms documented in that module, so
-these tests pin the closed forms themselves: a unit tone of mean power 1, noise of
-total power `noise_psd * sample_rate`, and amplitudes of `10**(power/20)`.
+The measurement tests assert against the closed forms documented in
+`striqt.analysis.testing`, so these tests pin the closed forms: a unit tone of mean
+power 1, noise of total power `noise_psd * sample_rate`, and amplitudes of
+`10**(power/20)`.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ FS = 1e6
 DURATION = 1e-4
 SIZE = round(DURATION * FS)
 
-# long enough that the statistical tests below are decided far from their bounds
+# long enough that the statistical tests below are decided far from the bounds
 STAT_SIZE = 1 << 14
 STAT_DURATION = STAT_SIZE / FS
 
@@ -69,7 +70,7 @@ def mean_power(x, axis=None):
 
 
 def generate(func, xp, duration=DURATION, fs=FS, **kws):
-    """one generator call on the `xp` backend, returned as a numpy array"""
+    """call `func` on the `xp` backend and return the result as a numpy array."""
     return to_numpy(func(duration, fs, xp=xp, **kws))
 
 
@@ -80,7 +81,8 @@ def generate(func, xp, duration=DURATION, fs=FS, **kws):
 @pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
 @pytest.mark.parametrize('dtype', [None, 'complex128'], ids=['default', 'complex128'])
 def test_generator_dtype(xp, name, dtype):
-    """the windowing tests below cover the shape on every port count and backend"""
+    """the dtype is complex64 unless requested. The windowing tests below cover the
+    shape on every port count and backend."""
     func, kws = GENERATORS[name]
     requested = {} if dtype is None else {'dtype': dtype}
     x = func(DURATION, FS, xp=xp, **kws, **requested)
@@ -199,8 +201,8 @@ def test_circular_awgn_seed_determines_the_samples(xp):
 
 @pytest.mark.parametrize('power', [0, 3, -6], ids='power{}'.format)
 def test_sawtooth_ramps_and_resets(xp, power):
-    # a binary-exact sample rate and period, so that i/fs % period is exact and the
-    # ramp reaches its last step rather than rounding up to the reset
+    # a binary-exact sample rate and period make i/fs % period exact, so the ramp
+    # reaches the last step rather than rounding up to the reset
     fs = 2**20
     samples_per_period = 16
     period = samples_per_period / fs
@@ -223,14 +225,13 @@ def test_sawtooth_ramps_and_resets(xp, power):
 
 @pytest.mark.parametrize('power', [0, -6], ids='power{}'.format)
 def test_sawtooth_follows_the_closed_form(xp, power):
-    """At an exact reset (`t == k * period`) the ramp has a jump discontinuity
-    from `amplitude` back to `0`. `period` (1e-5) and `FS` (1e6) are not exact
-    binary fractions, so `i / FS` at a reset sample only approximates that
-    instant. The sample is a floating-point tie between the 2 endpoints of the
-    discontinuity, and `numpy` and `cupy` may resolve the modulo to different
-    sides. Away from the resets the closed form is unambiguous and is checked
-    pointwise. At the resets the check is the weaker, backend-agnostic
-    invariant that the sample is close to `0` or close to `amplitude`.
+    """at an exact reset (``t == k * period``) the ramp jumps from `amplitude` back
+    to 0. `period` (1e-5) and `FS` (1e6) are not binary fractions, so ``i / FS`` at
+    a reset sample only approximates that instant. The sample is a floating-point
+    tie between the 2 endpoints of the discontinuity, and numpy and cupy may resolve
+    the modulo to different sides. Away from the resets the closed form is checked
+    pointwise. At the resets the check is that the sample is close to 0 or close to
+    `amplitude`.
     """
     period = 1e-5
     x = to_numpy(testing.sawtooth(DURATION, FS, period=period, power=power, xp=xp))
@@ -316,8 +317,8 @@ def test_count_defaults_to_the_remainder_of_the_capture(xp, start_index, count):
 def test_window_across_zero_matches_the_longer_window(
     xp, name, start_index, count, ports
 ):
-    """the windowing identity with index 0 inside the reference window, so that the
-    pre-roll and the capture are each the corresponding slice of one longer call"""
+    """the windowing identity with index 0 inside the reference window: the pre-roll
+    and the capture are each the corresponding slice of one longer call"""
     func, kws = GENERATORS[name]
     whole = generate(
         func, xp, ports=ports, start_index=-PREROLL, count=PREROLL + SIZE, **kws
@@ -341,7 +342,7 @@ def test_tone_preroll_follows_the_closed_form(xp):
 
 
 def test_sawtooth_preroll_follows_the_closed_form(xp):
-    # binary-exact rate and period so that `t % period` is exact (see
+    # a binary-exact rate and period make `t % period` exact (see
     # test_sawtooth_ramps_and_resets)
     fs = 2**20
     samples_per_period = 16

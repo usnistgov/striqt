@@ -182,8 +182,9 @@ _CAPTURE_BANDWIDTH_NAMES = frozenset({
 def _owner_noise_bandwidth(data: xr.Dataset, coord_name: str) -> float | None:
     """return the `noise_bandwidth` attr of a data variable on the dimension of `coord_name`.
 
-    None when `coord_name` is a scalar or no data variable on the dimension of
-    `coord_name` has the attr.
+    Returns:
+        the attr of the first such data variable, in Hz, or None when `coord_name`
+        is a scalar coordinate or no data variable on the dimension has the attr
     """
     coord = data[coord_name]
     if coord.ndim == 0:
@@ -203,19 +204,20 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
     conditions:
 
     * `channel_power_time_series`, `channel_power_histogram`, `cyclic_channel_power`,
-      `iq_waveform`, or the `channel_power_bin` coordinate with `noise_bandwidth`: the
-      attr is removed, with any `long_name` that ends in a bandwidth. The noise
-      bandwidth of these outputs is the per-capture `analysis_bandwidth` coordinate.
+      `iq_waveform`, and the `channel_power_bin` coordinate: `noise_bandwidth` is
+      removed, and `long_name` is removed when it ends in a bandwidth. The noise
+      bandwidth of these outputs is the `analysis_bandwidth` of the capture.
     * A variable with `units` starting in ``'√mW'`` and equal `noise_bandwidth` and
       `sample_rate` attrs: `noise_bandwidth` is set to the `subcarrier_spacing` attr of
       the variable.
-    * A ``*_power_bin`` coordinate without `noise_bandwidth`: the attr is copied from
-      a data variable on the dimension of the coordinate.
+    * A ``*_power_bin`` coordinate without `noise_bandwidth` and with `units` not
+      starting in ``'dB/'``: `noise_bandwidth` is copied from a data variable on the
+      dimension of the coordinate.
     * `units` of the form ``'<unit>/<bandwidth>'`` other than ``'dBm/Hz'``: `units`
       is set to ``'<unit>'``. For a unit other than dB, `long_name` is set to
       ``'<long_name or standard_name> (<unit>/<bandwidth>)'`` with the bandwidth from
       `noise_bandwidth`.
-    * A data variable on a ``*_power_bin`` dimension whose coordinate has `units` of
+    * A data variable on a ``*_power_bin`` dimension with a coordinate in `units` of
       dB: `noise_bandwidth` is removed.
     * `system_noise` without `standard_name`: `standard_name` is set to
       ``'System noise'``.
@@ -260,7 +262,7 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
         attrs = var.attrs
         match = _BANDWIDTH_UNITS.match(str(attrs.get('units', '')))
         if match is None or match.group(2) == 'Hz':
-            # 'dBm/Hz' is a spectral density, not a bandwidth label
+            # 'dBm/Hz' denotes a spectral density and keeps its units
             continue
         unit = match.group(1)
         attrs['units'] = unit
@@ -306,26 +308,24 @@ def decode_from_yaml_file(path: str | Path, *, type: type[_S]) -> _S: ...
 def decode_from_yaml_file(
     path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
 ) -> dict[str, typing.Any] | specs.SpecBase:
-    """Deserialize an object from YAML.
+    """decode a YAML file into a dict or a spec struct.
 
-    Parameters
-    ----------
-    buf : path
-        Path to the YAML file.
-    type : type, optional
-        A type that is a subclass of `striqt.analysis.specs.SpecBase`
-        to decode the object as. If provided, the message is type checked
-        and decoded as the specified type. Defaults to `Any`, in which case
-        the message is decoded using the default YAML types.
+    ``!include`` tags are expanded relative to the directory of the file that
+    contains the tag, and YAML sequences decode as tuples.
 
-    Returns
-    -------
-    obj : Any
-        The deserialized object.
+    Args:
+        path: the YAML file
+        type: `dict` for the mapping as decoded, or a `specs.SpecBase` subclass to
+            convert the mapping into
 
-    See Also
-    --------
-    `msgspec.yaml.decode`
+    Returns:
+        the decoded dict, or an instance of `type`
+
+    Raises:
+        TypeError: when `type` is neither `dict` nor a `specs.SpecBase` subclass
+        FileNotFoundError: when `path` or an ``!include`` pattern matches no file
+        yaml.YAMLError: when the document is malformed
+        msgspec.ValidationError: when the document does not match `type`
     """
 
     with open(path) as f, _YAMLIncludeConstructor(path):
@@ -857,10 +857,15 @@ _YAMLFrozenLoader.add_constructor(
 
 
 def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
-    """expand the ``!include`` patterns in `node` into sorted absolute paths.
+    """expand the ``!include`` patterns in `node` into sorted paths.
 
-    Relative patterns are globbed under `root_dir`, which is the directory of the
-    file that contains the tag.
+    Args:
+        node: a scalar node with one glob pattern, or a sequence node of patterns
+        root_dir: the directory under which relative patterns are globbed
+
+    Raises:
+        FileNotFoundError: when a pattern matches no file
+        TypeError: when `node` is neither a scalar nor a sequence
     """
 
     def glob_path(s: str) -> list[str]:

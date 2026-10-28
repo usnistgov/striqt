@@ -1,7 +1,6 @@
 """sinks that write or collect the analyzed dataset of each capture.
 
 Every sink is constructed from a `Sweep` and reads the `sink` block of that sweep.
-The action runner selects the sink class.
 """
 
 from __future__ import annotations as __
@@ -74,7 +73,17 @@ class Zipper:
         out_file: str | Path | None = None,
         force: bool = False,
     ) -> Zipper:
-        """instantiate a zipper from an existing zarr directory"""
+        """return a `Zipper` for the existing zarr directory `input_dir`.
+
+        Args:
+            input_dir: the ``.zarr`` directory to archive
+            out_file: the zip path; None selects `input_dir` with ``.zip`` appended
+            force: if True, overwrite an existing `out_file`
+
+        Raises:
+            IOError: if `input_dir` does not exist, or if `out_file` exists and
+                `force` is False
+        """
         input_dir = Path(input_dir)
 
         if not input_dir.exists():
@@ -117,12 +126,11 @@ class Zipper:
 
 
 class SinkBase(Generic[specs.SC]):
-    """accept the analyzed dataset of one capture at a time for writing or collection.
+    """base sink that accepts the analyzed dataset of one capture at a time.
 
-    A sink is constructed from a `Sweep` and entered as a context manager before the
-    first `append`. `append` receives the `DelayedDataset` of one capture and returns
-    the value the pipeline yields for that capture. Writes run on 1 worker thread,
-    and `wait` blocks until the pending write completes.
+    A sink is constructed from a `Sweep`, reads the `sink` block of that sweep, and
+    is entered as a context manager before the first `append`. Writes run on 1
+    worker thread.
     """
 
     def __init__(
@@ -303,7 +311,7 @@ class ZarrSinkBase(SinkBase):
 
 
 class ZarrCaptureSink(ZarrSinkBase):
-    """append the dataset of each capture to a zarr store along `capture`."""
+    """append the dataset of each capture to a zarr store along `capture`"""
 
     def append(self, capture_result: compute.DelayedDataset):
         ret = super().append(capture_result)
@@ -359,10 +367,8 @@ class ZarrCaptureSink(ZarrSinkBase):
 class ZarrTimeAppendSink(ZarrSinkBase):
     """append the spectrogram of each capture along the spectrogram time axis.
 
-    No action runner selects this sink. The caller enters an instance as a context
-    manager and passes the instance through ``iterate_sweep(resources, sink=...)``.
     The captures of one write batch share one `capture` index, and each batch is
-    appended along `capture`.
+    appended along `capture`. The store is written without compression.
 
     Raises:
         ValueError: if `sweep_spec.analysis` has no `spectrogram`

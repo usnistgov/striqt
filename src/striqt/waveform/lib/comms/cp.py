@@ -1,8 +1,5 @@
-"""Cyclic-prefix correlation at index sets.
-
-`correlate_cyclic_shift` dispatches to the numba kernels in the sibling modules
-`cp_cpu_jit` (numpy) and `cp_cuda_jit` (cupy).
-"""
+"""Cyclic-prefix correlation at index sets, evaluated by numba kernels (CPU for numpy
+arrays, CUDA for cupy arrays)."""
 
 from __future__ import annotations as __
 
@@ -20,18 +17,21 @@ def correlate_cyclic_shift(
 ) -> Array:
     """correlate `x` with a copy of `x` delayed `nfft` samples at the index sets `inds`.
 
+    At lag ``j``, the result sums ``x[i + j] * conj(x[i + j + nfft])`` over every
+    index ``i`` in `inds`. Index pairs that run past the end of `x` contribute zero.
+
     Args:
-        inds: integer sample indices into `x`, with the cyclic-prefix sample on the
-            last axis; the last-axis size ``ncp`` is the number of index pairs summed
-            per output lag, and the leading axes are flattened before use
+        inds: integer sample indices into `x` of cyclic-prefix samples, in the array
+            namespace of `x`, with the sample within each prefix on the last axis of
+            size ``ncp``
         x: complex waveform, 1-D
         nfft: the delay (in samples) from a sample to the cyclic copy of that sample
-        norm: True normalizes each lag by the geometric mean of the powers in the
-            two windows; False divides by the number of index pairs
-        out: buffer of length ``nfft + ncp`` and the dtype of `x`
+        norm: True divides each lag by the geometric mean of the summed powers at
+            the two index sets; False divides by the number of indices
+        out: buffer of length ``nfft + ncp`` in the dtype of `x`
 
     Returns:
-        correlation at each lag, length ``nfft + ncp``, in the dtype and array
+        the correlation at each of the ``nfft + ncp`` lags, in the dtype and array
         namespace of `x`; `out` when given
     """
     xp = array_namespace(x)
@@ -64,13 +64,9 @@ def corr_atol(
 ) -> float:
     """bound the absolute roundoff of `correlate_cyclic_shift` against exact arithmetic.
 
-    The bound grows linearly with `n_inds` in unit roundoffs of `dtype`. Each
-    product ``a*conj(b)`` and the power terms are rounded at the input precision
-    before the complex128 accumulation, and the result is rounded once more on
-    output. With ``norm=True`` the Cauchy-Schwarz bound ``sum|a||b| <= sqrt(Pa*Pb)``
-    makes the error relative to a unit-scale output, and `scale` is ignored. With
-    ``norm=False`` the error is relative to the largest product magnitude, which the
-    caller passes as ``scale = max|x|**2``.
+    The bound grows linearly with `n_inds` in unit roundoffs of `dtype`. With
+    ``norm=True`` the output is unit-scale and `scale` is ignored. With ``norm=False``
+    the bound is relative to the largest product magnitude `scale`.
 
     Args:
         dtype: the input dtype (real or complex)
@@ -79,6 +75,10 @@ def corr_atol(
         scale: ``max|x|**2`` when `norm` is False
         n_impl: 1 against exact arithmetic, 2 against a second implementation
     """
+    # each product a*conj(b) and each power term is rounded once at the input
+    # precision before the complex128 accumulation, and the output is rounded once
+    # more; with norm=True the Cauchy-Schwarz bound sum|a||b| <= sqrt(Pa*Pb) keeps
+    # the output at unit scale
     u = unit_roundoff(dtype)
     scale = 1.0 if norm else scale
     return ROUNDOFF_SAFETY * n_impl * (n_inds + 3) * u * scale

@@ -81,7 +81,8 @@ gain_tuples = st.lists(gains, min_size=1, max_size=5).map(tuple)
 
 @st.composite
 def consistent_port_gain(draw):
-    """a port value with a gain of a shape that SoapyCapture accepts for it"""
+    """draw a port value and a gain of a shape that `SoapyCapture` accepts for that
+    port"""
     port = draw(port_values)
     if isinstance(port, tuple) and draw(st.booleans()):
         return port, tuple(
@@ -638,8 +639,9 @@ class TestManualYFactorCalibration:
         )
 
     def test_legacy_analysis_block_is_ignored_with_a_warning(self):
-        """calibration files from before 2026-10 carry the `analysis` block that the
-        runner generates itself"""
+        """a calibration file with an `analysis` block decodes with a
+        `DeprecationWarning`, and the block is discarded. The runner generates the
+        analysis."""
         tree = make_calibration_sweep().to_dict(unfreeze=True)
         tree['analysis'] = {
             'channel_power_time_series': {'detector_period': 0.01},

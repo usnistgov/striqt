@@ -1,9 +1,9 @@
 """striqt.sensor.lib.sources.file: the zarr, MAT, and TDMS file sources.
 
 All 3 share the uniform time origin of `VirtualSource.get_waveform`: file index 0
-is corrected output sample 0, so the lead overlap that the conditioning trims is a zero
-pre-roll rather than file data. The oracle for each round trip is the array that was
-written to the file, read back independently of the source under test.
+is corrected output sample 0, and the lead overlap that the conditioning trims is a
+zero pre-roll rather than file data. The oracle for each round trip is the array that
+was written to the file, read back independently of the source under test.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ FS = SCALE_ONLY['sample_rate']
 CENTER_FREQUENCY = 3.7e9
 START_TIME = np.datetime64('2026-01-01T00:00:00', 'ns')
 # the file spans 2 ms; the captures read 0.5 ms so that the tail overlap of a
-# filtered capture (16640 samples at FS) still lies inside the file
+# filtered capture (16640 samples at FS) is still inside the file
 FILE_DURATION = 2e-3
 FILE_SAMPLES = round(FILE_DURATION * FS)
 READ_DURATION = 0.5e-3
@@ -60,7 +60,7 @@ def file_capture(**kws):
 
 
 def assert_preroll_then_file(waveform, fill, file_rows, **tol):
-    """`waveform` is `fill` zeros followed by the start of `file_rows`"""
+    """assert that `waveform` is `fill` zeros followed by the start of `file_rows`"""
     waveform = to_numpy(waveform)
     assert not waveform[..., :fill].any(), 'pre-roll is not zero'
     assert_close(
@@ -83,8 +83,8 @@ def assert_preroll_then_file(waveform, fill, file_rows, **tol):
     ids=['fully_negative', 'straddling', 'ends_at_zero', 'from_zero', 'positive'],
 )
 def test_split_preroll(start_index, count, expected):
-    """the fill is the number of requested indices below zero; the file read
-    starts at the first non-negative one and supplies the rest"""
+    """the fill is the number of requested indices below zero. The file read starts at
+    the first non-negative index and supplies the rest."""
     assert _split_preroll(start_index, count) == expected
 
 
@@ -93,8 +93,9 @@ def test_split_preroll(start_index, count, expected):
 
 @pytest.fixture(scope='module')
 def zarr_iq_file(tmp_path_factory):
-    """a zarr store of the corrected iq_waveform of 2 single-tone captures on 2 ports
-    at FS, with the coordinates ZarrIQSource.arm reads from a sensor store"""
+    """return the path, stored rows, and captures of a zarr store of the corrected
+    `iq_waveform` of 2 single-tone captures on 2 ports at `FS`, with the coordinates
+    that `ZarrIQSource.arm` reads from a sensor store"""
     import xarray as xr
 
     fields = {**SCALE_ONLY, 'duration': FILE_DURATION, 'snr': None}
@@ -126,7 +127,7 @@ def zarr_spec(zarr_iq_file, **select):
 
 
 def zarr_rows(zarr_iq_file, capture_index):
-    """the stored rows of one capture, in port order"""
+    """return the stored rows of capture `capture_index`, in port order"""
     return zarr_iq_file.stored[2 * capture_index : 2 * capture_index + 2]
 
 
@@ -170,9 +171,9 @@ def test_zarr_get_waveform_dtype(zarr_iq_file, dtype, expected):
 
 @pytest.mark.parametrize('lead', [0, 512], ids=['no_lead', 'lead'])
 def test_zarr_read_timestamps(zarr_iq_file, lead):
-    """the first chunk is stamped with the store's start_time less the lead overlap
-    pre-roll that precedes file index 0; later chunks return 0 (current behavior, not
-    a contract: Controller.read_iq only keeps the first)"""
+    """the first chunk is stamped with the `start_time` of the store less the lead
+    overlap pre-roll before file index 0. Later chunks return 0, current behavior and
+    not a contract: `Controller.read_iq` keeps only the first stamp."""
     source = ss.lib.sources.ZarrIQSource(zarr_spec(zarr_iq_file, capture_index=0))
     source.setup()
     source.arm(file_capture())
@@ -187,7 +188,7 @@ def test_zarr_read_timestamps(zarr_iq_file, lead):
 
 
 def test_zarr_acquisition_info(zarr_iq_file):
-    """arm fills the acquisition metadata from the store's coordinates"""
+    """`arm` fills the acquisition metadata from the coordinates of the store"""
     source = zarr_spec(zarr_iq_file, capture_index=1)
     raw = acquire_corrected(ss.bindings.zarr_iq, file_capture(), source=source).raw
     assert raw.info.center_frequency == CENTER_FREQUENCY
@@ -207,9 +208,9 @@ def test_zarr_acquire_layout(zarr_iq_file):
 
 
 def test_zarr_acquire_layout_with_a_trigger_strobe(zarr_iq_file):
-    """the strobe grid is referenced to the store's start_time at file index 0, so
-    with a lead overlap shorter than the strobe period the first grid edge after the
-    pre-roll is file index 0, which stays at corrected sample 0"""
+    """the strobe grid is referenced to the `start_time` of the store at file index 0.
+    With a lead overlap shorter than the strobe period, the first grid edge after the
+    pre-roll is file index 0, and file index 0 stays at corrected sample 0."""
     spec = zarr_spec(zarr_iq_file, capture_index=1).replace(trigger_strobe=STROBE)
     capture = file_capture(**READ_FILTER_ONLY)
     lead, _ = ss.lib.compute.get_correction_overlaps(capture, spec, None)
@@ -233,9 +234,9 @@ def test_zarr_round_trip_scale_only(zarr_iq_file, capture_index):
 
 
 def test_zarr_round_trip_filtered(zarr_iq_file):
-    """the zero pre-roll is a step at index 0 for the FIR, so its ringing spans the
-    first FILTER_SIZE//2 output samples; the interior is the stored tone (in the
-    passband) to within the FIR's passband ripple"""
+    """the zero pre-roll is a step at index 0 for the FIR, and the ringing spans the
+    first ``FILTER_SIZE//2`` output samples. The interior is the stored in-band tone
+    to within the passband ripple of the FIR."""
     source = zarr_spec(zarr_iq_file, capture_index=1)
     capture = file_capture(**READ_FILTER_ONLY)
     corrected = acquire_corrected(ss.bindings.zarr_iq, capture, source=source).corrected
@@ -258,7 +259,7 @@ def test_zarr_round_trip_filtered(zarr_iq_file):
     ),
 )
 def test_zarr_resampler_pins_file_rate(zarr_iq_file):
-    """a capture at half the file rate must be resampled from the file rate"""
+    """a capture at half the file rate is resampled from the file rate"""
     spec = zarr_spec(zarr_iq_file, capture_index=0)
     capture = ss.specs.FileCapture(
         port=(0, 1),
@@ -278,7 +279,8 @@ def test_zarr_resampler_pins_file_rate(zarr_iq_file):
 
 @pytest.fixture(scope='module')
 def mat_files(tmp_path_factory):
-    """.mat files with a 'waveform' matrix of 1 and of 2 tone rows"""
+    """return ``.mat`` files with a ``'waveform'`` matrix of 1 and of 2 tone rows, keyed
+    by row count"""
     from scipy.io import savemat
 
     root = tmp_path_factory.mktemp('mat')
@@ -299,7 +301,7 @@ def mat_spec(mat_file, **kws):
 def mat_waveform(
     mat_file: SimpleNamespace, fill: int, **spec_kws: object
 ) -> np.ndarray:
-    """return PREROLL_COUNT samples of port 0 of `mat_file` from index ``-fill``"""
+    """return `PREROLL_COUNT` samples of port 0 of `mat_file` from index ``-fill``"""
     source = ss.lib.sources.MATSource(mat_spec(mat_file, **spec_kws))
     try:
         return source.get_waveform(PREROLL_COUNT, -fill, port=0, xp=np)
@@ -309,7 +311,7 @@ def mat_waveform(
 
 @PREROLL_FILLS
 def test_mat_get_waveform_preroll(mat_files, array_backend, fill):
-    """the stream's 'waveform' default applies when the spec leaves `key` unset"""
+    """the default `key` ``'waveform'`` applies when the spec leaves `key` unset"""
     waveform = mat_waveform(mat_files[1], fill, array_backend=array_backend)
     assert waveform.shape == (1, PREROLL_COUNT)
     assert_preroll_then_file(waveform, fill, mat_files[1].waveform)
@@ -362,9 +364,11 @@ INT16_FULL_SCALE = np.iinfo(np.int16).max
 
 @pytest.fixture(scope='module')
 def tdms_file(tmp_path_factory):
-    """a TDMS file in the header + interleaved int16 I/Q layout TDMSSource reads,
-    quantized from a tone: full scale int16 is the reference level in dBm; skipped
-    where nptdms is not installed"""
+    """return a TDMS file in the header plus int16 I/Q layout that `TDMSSource` reads,
+    quantized from a tone with full-scale int16 at the reference level in dBm.
+
+    The fixture skips where nptdms is not installed.
+    """
     pytest.importorskip('nptdms')
     from nptdms import ChannelObject, GroupObject, TdmsWriter
 
@@ -419,7 +423,8 @@ def test_tdms_get_waveform_preroll(tdms_file, xp, fill):
 
 
 def test_tdms_resampler_uses_header_rate(tdms_file):
-    """the file, not the spec's master clock, fixes the resampler's input rate"""
+    """the sample rate of the file header, not the `master_clock_rate` of the spec, is
+    the input rate of the resampler"""
     capture = ss.specs.FileCapture(
         port=0, sample_rate=FS / 2, duration=READ_DURATION, analysis_bandwidth=math.inf
     )

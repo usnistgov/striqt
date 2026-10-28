@@ -1,8 +1,4 @@
-"""strategies and factories for the sweep and capture helper tests.
-
-Not a conftest. A second rootless conftest would shadow the root one that other test
-directories import by name.
-"""
+"""strategies and factories for the sweep and capture spec tests."""
 
 # ruff: noqa: UP045  msgspec resolves the QuickAnalyses annotations at runtime on py3.9
 from __future__ import annotations
@@ -62,7 +58,8 @@ class QuickAnalyses(
 
 @functools.lru_cache
 def quick_binding(action=ss.specs.Sweep) -> type[ss.lib.controller.Controller]:
-    """the single_tone sensor bound for `action` with `QuickAnalyses`, unregistered"""
+    """return the `single_tone` sensor bound for `action` over `QuickAnalyses`,
+    unregistered"""
     schema = dataclasses.replace(
         ss.bindings.single_tone.schema, action=action, analysis=QuickAnalyses
     )
@@ -82,7 +79,7 @@ class ActionCls(
     frozen=True,
     kw_only=True,
 ):
-    """an action spec over SOURCE's type with no captures block"""
+    """an action spec over the type of `SOURCE` with no captures block"""
 
 
 class PlanCls(
@@ -117,7 +114,8 @@ lo_frequencies = st.floats(min_value=1e6, max_value=1e10)
 
 @st.composite
 def ports_and_lo(draw):
-    """a port tuple with a matching external_lo_frequency tuple, scalar, or None"""
+    """draw a port tuple and an `external_lo_frequency` value: a tuple of the same
+    length, a scalar, or None"""
     port = draw(port_tuples)
     per_port = st.tuples(*[lo_frequencies] * len(port))
     lo = draw(st.one_of(st.none(), lo_frequencies, per_port))
@@ -271,14 +269,15 @@ def make_calibration_sweep(**kws):
 
 
 def as_sweep(spec):
-    """the Sweep that runs for an action spec: itself, or the one its runner builds"""
+    """return the `Sweep` that runs for `spec`: `spec` itself, or the sweep built by
+    the runner of `spec`"""
     if isinstance(spec, ss.specs.Sweep):
         return spec
     return ss.lib.actions.registry.lookup(spec)(spec).sweep
 
 
 def make_calibration_runner(**kws):
-    """the ManualYFactorRunner of make_calibration_sweep(**kws)"""
+    """return the `ManualYFactorRunner` of ``make_calibration_sweep(**kws)``"""
     return ss.lib.actions.ManualYFactorRunner(make_calibration_sweep(**kws))
 
 
@@ -309,12 +308,13 @@ YFACTOR_GRID = {
 
 
 def receiver_gain(gain_dB, front_end_gain_dB=50.0, fs_mW=1.0):
-    """power gain from the receiver input (mW) to full scale"""
+    """return the power gain from the receiver input (mW) to full-scale units"""
     return 10 ** ((front_end_gain_dB + gain_dB) / 10) / fs_mW
 
 
 def noise_figure_lookup(nf_dB, port, center_frequency) -> float:
-    """nf_dB is {port: value} or {port: {center_frequency: value}}"""
+    """return the noise figure (dB) of `port` at `center_frequency` from `nf_dB`, keyed
+    ``{port: value}`` or ``{port: {center_frequency: value}}``"""
     value = nf_dB[port]
     if isinstance(value, dict):
         return value[center_frequency]
@@ -324,7 +324,8 @@ def noise_figure_lookup(nf_dB, port, center_frequency) -> float:
 def yfactor_rms_power(
     gain_dB, nf_dB, bandwidth, *, diode_on, enr_dB=YFACTOR_ENR_DB, T0=T_REF, **gain_kws
 ):
-    """rms output power in full-scale units of the modeled receiver"""
+    """return the rms output power (full-scale units) of the modeled receiver in
+    `bandwidth` (Hz)"""
     Te = T0 * (10 ** (nf_dB / 10) - 1)
     Tsource = T0 + np.where(diode_on, T0 * 10 ** (enr_dB / 10), 0.0)
     return (
@@ -352,9 +353,13 @@ def make_yfactor_dataset(
     time_count=4,
     **gain_kws,
 ):
-    """a calibration dataset as save_yfactor_corrections indexes the collected captures:
-    one dimension per calibration field plus noise_diode_enabled, and a constant
-    channel_power_time_series drawn from the receiver model at enr_dB"""
+    """return a calibration dataset with one dimension per key of `grid` plus
+    `noise_diode_enabled`.
+
+    The `channel_power_time_series` variable (dBfs) is constant over `time_count`
+    bins at the receiver model power for `enr_dB`, with the peak detector `papr_dB`
+    above the rms detector.
+    """
     import xarray as xr
 
     coords = {'noise_diode_enabled': [False, True]}
@@ -388,7 +393,8 @@ def make_yfactor_dataset(
 
 
 def expected_yfactor(grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, *, T0=T_REF, **gain_kws):
-    """closed-form corrections for make_yfactor_dataset over the same grid"""
+    """return the closed-form `noise_figure` (dB), `temperature` (K), and
+    `power_correction` of the receiver model over `grid`"""
     import xarray as xr
 
     nf = _noise_figure_grid(grid, nf_dB)
@@ -425,7 +431,12 @@ def assert_corrections_match(actual, expected, tol_dB=EXACT_DB, names=CORRECTION
 def save_yfactor_calibration(
     path, grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, **kws
 ) -> str:
-    """write the corrections for make_yfactor_dataset to a netCDF file and return its path"""
+    """write the Y-factor corrections of ``make_yfactor_dataset(grid, nf_dB, **kws)`` to
+    a netCDF file at `path`.
+
+    Returns:
+        `path` as a string
+    """
     from striqt.sensor.lib import io
     from striqt.sensor.lib.actions import yfactor
 
@@ -453,21 +464,23 @@ CELL_LABEL = '3750 MHz'
 
 
 def make_cell_channel(**kws):
-    """CELL_CHANNEL with its fields replaced by `kws`, validated"""
+    """return `CELL_CHANNEL` with fields replaced by `kws`, validated"""
     return ss.specs.CellChannel(**{**CELL_CHANNEL.to_dict(), **kws})
 
 
 def cellular_sweep_cls():
-    """the bound `site_cellular` spec class; importing `site_strategies` registers
-    the site extension module"""
+    """return the bound `site_cellular` sweep spec class.
+
+    The import of `site_strategies` registers the site extension module.
+    """
     from site_strategies import EXT
 
     return EXT.site_cellular.sensor.sweep_spec_cls
 
 
 def make_cellular_capture(**kws):
-    """a site capture at the CELL_CHANNEL center frequency with `sample_rate` and
-    `analysis_bandwidth` at their defaults, as a cellular sweep requires"""
+    """return a site capture at the `CELL_CHANNEL` center frequency with `sample_rate`
+    and `analysis_bandwidth` left at the defaults"""
     kws = {
         'port': 0,
         'center_frequency': CELL_CHANNEL.center_frequency,
@@ -502,7 +515,7 @@ def make_cellular_sweep(**kws):
 
 
 def make_cellular_runner(**kws):
-    """the Cellular5GNRSweepRunner of make_cellular_sweep(**kws)"""
+    """return the `Cellular5GNRSweepRunner` of ``make_cellular_sweep(**kws)``"""
     return ss.lib.actions.Cellular5GNRSweepRunner(make_cellular_sweep(**kws))
 
 
@@ -523,7 +536,7 @@ CellularAnalyses = msgspec.defstruct(
 
 
 def restricted_cellular_binding() -> type[ss.lib.controller.Controller]:
-    """the `site_cellular` sensor bound over `CellularAnalyses`, unregistered"""
+    """return the `site_cellular` sensor bound over `CellularAnalyses`, unregistered"""
     from site_strategies import EXT
 
     return _restricted_cellular_binding(EXT.site_cellular)

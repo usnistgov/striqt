@@ -1,5 +1,5 @@
 """striqt.waveform.lib.fourier.fft: the FFT roundoff model, the exact `fftfreq` grid and
-its band selectors, the time-domain fftshift, and the cupy FFT `out=` and chunking
+the band selectors, the time-domain fftshift, and the cupy FFT `out=` and chunking
 paths, on numpy and cupy.
 """
 
@@ -50,7 +50,8 @@ OFF_PEAK_NFFTS = [64, 256, 1024, 4096]
 
 
 def fft_sizes(min_size: int = 4, max_size: int = 512):
-    """powers of two, or arbitrary even sizes (resample requires an even length)"""
+    """draw powers of 2, or arbitrary even sizes in [`min_size`, `max_size`]
+    (`resample` requires an even length)."""
     powers = st.integers(min_value=2, max_value=9).map(lambda p: 2**p)
     arbitrary = st.integers(min_value=min_size, max_value=max_size).filter(
         lambda n: n % 2 == 0
@@ -60,7 +61,8 @@ def fft_sizes(min_size: int = 4, max_size: int = 512):
 
 @pytest.fixture
 def max_cupy_fft_chunk():
-    """a setter for the cupy FFT chunk size; the prior value is restored afterwards"""
+    """yield the setter of the cupy FFT chunk size. The prior value is restored at
+    teardown."""
     previous = get_max_cupy_fft_chunk()
     yield set_max_cupy_fft_chunk
     set_max_cupy_fft_chunk(previous)
@@ -111,8 +113,8 @@ class TestRoundoffModels:
 class TestFftfreq:
     @given(nfft=st.integers(min_value=2, max_value=512), fs=sample_rates())
     def test_grid(self, nfft, fs):
-        """nfft bins spaced fs/nfft apart and symmetric about 0; an even nfft
-        includes -fs/2 but not +fs/2"""
+        """nfft bins spaced fs/nfft apart and symmetric about 0. An even nfft includes
+        -fs/2 but not +fs/2."""
         freqs = fftfreq(nfft, fs)
         assert freqs.shape == (nfft,)
         assert_allclose(np.diff(freqs), fs / nfft, rtol=1e-10)
@@ -162,8 +164,8 @@ class TestFrequencySlicing:
         bins = np.arange(nfft)[s]
 
         assert bins.size == bw_bins
-        # an even bin count cannot be centered on a bin, so the mean may sit half
-        # a bin off the offset
+        # an even bin count cannot be centered on a bin, so the mean may be half a
+        # bin off the offset
         assert abs(bins.mean() - (nfft // 2 + offset_bins)) <= 0.5
 
         x = np.arange(nfft, dtype=np.float32)[np.newaxis, np.newaxis, :]
@@ -252,15 +254,14 @@ class TestTimeFftshift:
 
 # %% the roundoff model against the kernels
 class TestOffPeakFloor:
-    """Roundoff in the off-peak bins of a unit, bin-centered complex64 tone, on each
+    """roundoff in the off-peak bins of a unit, bin-centered complex64 tone, on each
     array namespace.
 
     With an integer number of cycles per segment (and a rectangular window for the
-    STFT) the exact spectrum occupies the on-peak bin alone, so every other bin
-    measures roundoff alone against a float64 reference of the same float32-quantized
-    input. For the time-domain outputs of resample and oaconvolve the bins are those
-    of the error spectrum, taken in float64 so the analysis adds no roundoff of its
-    own.
+    STFT) the exact spectrum occupies the on-peak bin alone, so every other bin is
+    roundoff alone, measured against a float64 reference of the same float32-quantized
+    input. For the time-domain outputs of `resample` and `oaconvolve` the bins are
+    those of the error spectrum, taken in float64 so the analysis adds no roundoff.
     """
 
     NSEG = 4
@@ -268,9 +269,14 @@ class TestOffPeakFloor:
 
     @staticmethod
     def _assert_off_peak_bins(err_off_peak, tone_peak, nfft, sigma):
-        """`err_off_peak`: the roundoff in the off-peak bins of an `nfft`-point
-        spectrum; `tone_peak`: the tone's own on-peak bin value, which the dBc floor
-        is relative to; `sigma`: the rms error model relative to the output rms"""
+        """assert that the rms and peak of `err_off_peak` are below the dBc floors
+        that `sigma` implies.
+
+        Args:
+            err_off_peak: the roundoff in the off-peak bins of an `nfft`-point spectrum
+            tone_peak: the on-peak bin value of the tone, the reference of the dBc floor
+            sigma: the rms error model relative to the output rms
+        """
         with np.errstate(divide='ignore'):
             rms_dBc = 20 * np.log10(rms(err_off_peak) / tone_peak)
             peak_dBc = 20 * np.log10(np.abs(err_off_peak).max() / tone_peak)
@@ -286,9 +292,9 @@ class TestOffPeakFloor:
         )
 
     def _assert_off_peak_error_spectrum(self, out, out_ref, sigma):
-        """bound the spectrum of the roundoff error in a time-domain output of a unit
-        tone, excluding the tone's own on-peak bin; `sigma` is the rms error model
-        relative to the unit input"""
+        """assert the off-peak floor on the error spectrum of a time-domain output of
+        a unit tone, excluding the on-peak bin of the tone. `sigma` is the rms error
+        model relative to the unit input."""
         err = np.fft.fft(to_numpy(out).astype(np.complex128) - out_ref)
         size = err.size
         off_peak = np.ones(size, dtype=bool)
@@ -302,7 +308,8 @@ class TestOffPeakFloor:
         return stft(x, fs=1.0, window='rect', nperseg=nfft, noverlap=0)[2]
 
     def _bin_centered_tone(self, nfft: int, k: int) -> np.ndarray:
-        """a unit tone with `k` cycles per `nfft`-sample segment, over NSEG segments"""
+        """return a unit tone with `k` cycles per `nfft`-sample segment, over `NSEG`
+        segments."""
         return testing.tone(None, nfft, frequency=k, count=self.NSEG * nfft)[0]
 
     @given(
@@ -315,8 +322,8 @@ class TestOffPeakFloor:
         X_ref = self._stft(x.astype(np.complex128), nfft)
         X = to_numpy(self._stft(xp.asarray(x), nfft)).astype(np.complex128)
 
-        # the bins are in ascending fftfreq order, and a unit tone fills its bin
-        # with the rect window's unit gain
+        # the bins are in ascending fftfreq order, and a unit tone fills one bin
+        # with the unit gain of the rect window
         peak_bin = k + nfft // 2
         assert np.all(np.argmax(np.abs(X), axis=1) == peak_bin)
         tone_peak = np.abs(X_ref[0, peak_bin])
@@ -358,7 +365,7 @@ class TestOffPeakFloor:
     )
     def test_oaconvolve_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         x = self._bin_centered_tone(nfft, tone_bin(nfft, bin_fraction))
-        # a unit-gain lowpass; the tone may fall in its stopband, so bounds are
+        # a unit-gain lowpass. The tone may fall in the stopband, so bounds are
         # anchored to the input tone rather than the output
         kernel = np.hanning(self.KERNEL_TAPS).astype(np.float32)
         kernel /= kernel.sum()
@@ -375,8 +382,8 @@ class TestOffPeakFloor:
 
 # %% numpy vs cupy
 class TestNumpyCupyCrossComparison:
-    """Tolerances for the FFT-based functions come from `cross_backend_sigma`,
-    parameterized by the FFT sizes and elementwise operations each function performs.
+    """tolerances for the FFT-based functions come from `cross_backend_sigma`,
+    parameterized by the FFT sizes and elementwise operations each function performs
     """
 
     @given(nfft=fft_sizes(min_size=8, max_size=512), fs=sample_rates())

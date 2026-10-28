@@ -19,8 +19,8 @@ from .core import PhyOFDM, _index_or_all
 def slot_period(subcarrier_spacing: float) -> float:
     """return the duration (in s) of one 3GPP slot at `subcarrier_spacing`.
 
-    A 10 ms radio frame holds 10 subframes of ``subcarrier_spacing/15e3`` slots each
-    (3GPP TS 38.211 Section 4.3.2).
+    A 10 ms radio frame has 10 subframes of ``subcarrier_spacing/15e3`` slots each
+    (3GPP TS 38.211 §4.3.2).
     """
     return 10e-3 / (10 * subcarrier_spacing / 15e3)
 
@@ -91,7 +91,7 @@ def nr_occupied_bandwidth(channel_bandwidth: float, subcarrier_spacing: float) -
         subcarrier_spacing: 15e3, 30e3, or 60e3 (Hz)
 
     Raises:
-        ValueError: if the table has no entry for the pair
+        ValueError: if 3GPP TS 38.104 Table 5.3.2-1 has no entry for the pair
     """
     try:
         n_rb = NR_FR1_RESOURCE_BLOCKS[subcarrier_spacing][channel_bandwidth]
@@ -110,7 +110,7 @@ def nr_sample_rate(
     min_sample_rate: float | None = None,
     transition_bandwidth: float = 250e3,
 ) -> float:
-    """return the smallest sample rate (in S/s) that the cellular measurements accept.
+    """return the smallest 5G NR analysis sample rate (in S/s) for a channel.
 
     The rate is a multiple of ``896 * subcarrier_spacing`` (26.88 MS/s at 30 kHz) at
     or above ``channel_bandwidth + transition_bandwidth`` and `min_sample_rate`.
@@ -153,7 +153,12 @@ def _get_3gpp_index_cyclic_prefix(
     symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
     slots: tuple[int, ...] | typing.Literal['all'] = 'all',
 ):
-    """build the index tensor for cyclic prefix correlation over the selected frames, slots, and symbols"""
+    """return the cyclic-prefix sample indices of `phy` in the selected frames, slots, and symbols.
+
+    Raises:
+        ValueError: if `symbols` or `slots` is neither ``'all'`` nor a sequence of
+            indices within one slot or frame
+    """
     xp = array_namespace(phy.cp_sizes)
 
     frames = xp.array(frames)
@@ -169,7 +174,6 @@ def _get_3gpp_index_cyclic_prefix(
         symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp
     )
 
-    # build each grid axis separately
     grid = []
 
     # axis 0: symbol number within each slot
@@ -311,7 +315,22 @@ class Phy3GPP(PhyOFDM):
         symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
         slots: tuple[int, ...] | typing.Literal['all'] = 'all',
     ):
-        """build the index tensor for cyclic prefix correlation over the selected frames, slots, and symbols"""
+        """return the sample indices of the cyclic prefixes in the selected frames, slots, and symbols.
+
+        Args:
+            frames: the 10 ms frame numbers, counted from the start of the waveform
+            symbols: the symbol numbers within each slot, or ``'all'``
+            slots: the slot numbers within each frame, or ``'all'``
+
+        Returns:
+            integer indices of shape ``(symbol, slot, frame, prefix sample)`` with
+            singleton axes removed, in the array namespace of `cp_sizes`; the last
+            axis has the length of the shortest cyclic prefix
+
+        Raises:
+            ValueError: if `symbols` or `slots` is neither ``'all'`` nor a sequence of
+                indices within one slot or frame
+        """
         return _get_3gpp_index_cyclic_prefix(
             self, frames=frames, symbols=symbols, slots=slots
         )

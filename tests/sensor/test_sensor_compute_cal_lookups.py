@@ -3,7 +3,7 @@ calibration.
 
 The lookups are checked against files that `save_yfactor_corrections` writes from
 model captures and from the closed loop through the fake SoapySDR device. The
-Y-factor math itself is covered in `test_sensor_actions_yfactor.py`.
+Y-factor math is covered in `test_sensor_actions_yfactor.py`.
 """
 
 from __future__ import annotations
@@ -86,7 +86,8 @@ def _lookup_pc(path, capture, **kws):
 
 @pytest.fixture
 def legacy_channel_nc(tmp_path, calibration_nc):
-    """calibration_nc with the port coordinate under its former name, channel"""
+    """return the path of a copy of `calibration_nc` with the `port` coordinate renamed
+    ``channel``"""
     path = tmp_path / 'legacy.nc'
     saved = ss.lib.io.read_calibration(calibration_nc)
     ss.lib.io.save_calibration(path, saved.rename(port='channel'))
@@ -95,7 +96,8 @@ def legacy_channel_nc(tmp_path, calibration_nc):
 
 @pytest.fixture
 def squeezed_lo_shift_nc(tmp_path, calibration_nc):
-    """calibration_nc with the single-valued lo_shift dimension squeezed away"""
+    """return the path of a copy of `calibration_nc` with the single-valued `lo_shift`
+    dimension squeezed out"""
     path = tmp_path / 'squeezed.nc'
     saved = ss.lib.io.read_calibration(calibration_nc)
     ss.lib.io.save_calibration(path, saved.squeeze('lo_shift'))
@@ -217,8 +219,8 @@ class TestLookupSystemNoisePower:
         assert noise.item() == pytest.approx(8.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
     def test_bandwidth_and_temperature_scale_the_result(self, calibration_nc):
-        """a bandwidth other than 1 Hz gives a power in dBm with the bandwidth in
-        the `noise_bandwidth` attr, the convention of the power measurements"""
+        """a bandwidth other than 1 Hz gives a power in dBm at temperature `T` with the
+        bandwidth in the `noise_bandwidth` attr"""
         noise = self._lookup(calibration_nc, soapy_capture(), B=1e6, T=300.0)
         expected = 5.0 + 10 * np.log10(BOLTZMANN_MW * 300.0 * 1e6)
         assert noise.item() == pytest.approx(expected)
@@ -277,7 +279,8 @@ FLUSH_LOOPS = (
 
 
 def _capture_dataset(runner, capture, index, start, diode_on):
-    """one capture's result as from_delayed shapes it, with the receiver model's power"""
+    """return the result of one capture in the layout of `from_delayed`, with the rms
+    power of the receiver model"""
     info = ss.specs.SoapyAcquisitionInfo(
         sweep_start_time=start,
         start_time=start + pd.Timedelta(seconds=index),
@@ -307,8 +310,12 @@ def _capture_dataset(runner, capture, index, start, diode_on):
 
 
 def _flush_model_captures(path):
-    """run save_yfactor_corrections over a full grid of model captures in the order
-    the runner's passes collect them, and return the calibration spec"""
+    """run `save_yfactor_corrections` over a full grid of model captures in the pass
+    order of the runner.
+
+    Returns:
+        the calibration spec of the runner
+    """
     captures = (make_calibration_capture(sample_rate=MCR, host_resample=False),)
     cal = ss.specs.ManualYFactorSpec(enr=YFACTOR_ENR_DB, ambient_temperature=290.0)
     source = CalSourceCls(array_backend='numpy')
@@ -338,8 +345,8 @@ def _flush_model_captures(path):
 
 @pytest.fixture(scope='module')
 def flushed_calibration(tmp_path_factory) -> FakeRun:
-    """the corrections save_yfactor_corrections saves from a full grid of model
-    captures, as a FakeRun with the sweep but no prompts, fake device, or results"""
+    """return a `FakeRun` over the corrections saved from a full grid of model captures,
+    with the sweep but no prompts, fake device, or results"""
     path = tmp_path_factory.mktemp('yfactor') / 'flushed.nc'
     sweep = _flush_model_captures(path)
     return FakeRun(str(path), [], sweep, None, None)
@@ -378,8 +385,9 @@ def fake_calibration_run(fake_sweep_runner) -> FakeRun:
 
 @pytest.fixture
 def fake_model(fake_calibration_run):
-    """the fake device's signal model with the noise diodes switched off, which the
-    calibration sweep leaves on. Tones set by the test are cleared afterwards."""
+    """yield the signal model of the fake device with the noise diodes switched off.
+    The calibration sweep leaves the diodes on. Tones set by the test are cleared
+    afterwards."""
     model = fake_calibration_run.fake.model
     model.diode_on.clear()
     yield model
@@ -447,7 +455,8 @@ class TestFakeMeasurementSweep:
         rms = _rms_dBm(ds).values
         assert rms[0] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
         assert rms[2] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
-        # wider tolerance for the noise-only port, whose FIR passband is not exactly 40 MHz
+        # a wider tolerance for the noise-only port, where the FIR passband is not
+        # exactly 40 MHz
         assert rms[1] == pytest.approx(_expected_dBm(1, 40e6), abs=0.15)
         assert ds.system_noise.attrs['units'] == 'dBm/Hz'
         assert ds.system_noise.values == pytest.approx(

@@ -1,7 +1,7 @@
 """strategies, spec factories, and shared constants for the analysis tests.
 
-Not a conftest. A second rootless conftest would shadow the root one that other test
-directories import by name.
+This module is not a conftest. A nested conftest would shadow the root conftest that
+the other test directories import by name.
 """
 
 from __future__ import annotations
@@ -20,8 +20,11 @@ from striqt.analysis.specs.helpers import frozendict
 
 
 def registered_tolerance(capture, spec, **kwargs) -> sa.specs.Tolerance:
-    """the tolerance registered for the measurement that `spec` selects, fetched
-    through the registry walk a consumer would use"""
+    """return the tolerance registered for the measurement that `spec` selects.
+
+    The tolerance is read through `sa.registry.tolerances` on a `BuiltinAnalyses`
+    group, the same path a sweep uses.
+    """
     name = sa.registry[type(spec)].name
     group = sa.specs.BuiltinAnalyses(**{name: spec})
     return sa.registry.tolerances(capture, group, **kwargs)[name]
@@ -94,17 +97,17 @@ def descending_ranges(draw):
 
 # %% (capture, spec) domains of the registered validators
 #
-# Each strategy draws pairs that straddle a validator's rules, so that the pass and
-# reject regions both get exercised: sample counts below one FFT and odd, offsets off
-# the resampler grid, durations that are not whole 10 ms frames, statistic names and
-# quantiles outside [0, 1], frame ranges past the capture, analysis bandwidths above
-# the sample rate. The power bins are fixed because no validator reads them.
+# Each strategy draws pairs on both sides of a validator's rules: sample counts below
+# one FFT and odd, offsets off the resampler grid, durations that are not whole 10 ms
+# frames, statistic names and quantiles outside [0, 1], frame ranges past the capture,
+# analysis bandwidths above the sample rate. The power bins are fixed because no
+# validator reads the bins.
 
 POWER_BINS = {'power_low': -40.0, 'power_high': 10.0, 'power_resolution': 1.0}
 
 STATISTICS = ('mean', 'max', 'min', 'rms', 'peak', 'median', 0.5, 0.25)
 BAD_STATISTICS = (1.5, -0.1, 'bogus')
-# power_detectors is typed tuple[str, ...], so a quantile never reaches its validator
+# power_detectors is typed tuple[str, ...], so a quantile never reaches the validator
 DETECTORS = ('rms', 'peak', 'max', 'min', 'mean', 'median')
 
 # the sample rates at which the 3GPP cyclic prefixes are whole samples: multiples of
@@ -115,9 +118,9 @@ TDD_20_SLOTS = 'dddsuudddddddsuudddd'
 TDD_10_SLOTS = 'dsuuuuuuuu'
 
 # the STFT nfft is sample_rate/(subcarrier_spacing/2) and must be a multiple of 28
-# for the 13/28 overlap and 15/28 window fill to land on whole samples. 420 kHz is the
-# smallest rate that satisfies it, so this is the cheapest capture that spans a whole
-# 20 ms discovery period
+# for the 13/28 overlap and 15/28 window fill to be whole samples. 420 kHz is the
+# smallest rate that satisfies this constraint, so it gives the cheapest capture that
+# spans a whole 20 ms discovery period
 SSB_SPECTROGRAM_SCS = 30e3
 SSB_SPECTROGRAM_FS = 420e3
 SSB_SPECTROGRAM_SAMPLE_RATE = 120e3
@@ -135,14 +138,15 @@ def ssb_spectrogram_capture(duration) -> sa.specs.Capture:
 
 
 def capture_of(samples: int, sample_rate: float, **kwargs: Any) -> sa.specs.Capture:
-    """a capture of `samples` at `sample_rate`, with any other fields as given"""
+    """return a `Capture` of `samples` samples at `sample_rate` (Hz), with `kwargs` as
+    the remaining fields."""
     return sa.specs.Capture(
         duration=samples / sample_rate, sample_rate=sample_rate, **kwargs
     )
 
 
 def _split_capture(params: dict) -> tuple[sa.specs.Capture, dict]:
-    """pop the capture fields off a drawn parameter set"""
+    """split a drawn parameter set into a `Capture` and the remaining spec fields."""
     params = dict(params)
     capture = capture_of(
         params.pop('samples'),
@@ -157,7 +161,8 @@ def _statistic_tuples(values, max_size=3):
 
 
 def _perturbed(draw, valid: dict, perturbations: dict) -> dict:
-    """`valid`, with one field replaced by a drawn failure-mode value half the time"""
+    """return `valid` unchanged or, with probability 1/2, with one field replaced by a
+    draw from `perturbations`."""
     if not draw(st.booleans()):
         return valid
     field = draw(st.sampled_from(sorted(perturbations)))
@@ -166,7 +171,12 @@ def _perturbed(draw, valid: dict, perturbations: dict) -> dict:
 
 @st.composite
 def stft_pairs(draw, spec_type=sa.specs.Spectrogram, **extra):
-    """(capture, spec) for the spectrogram family, with `extra` fields drawn as given"""
+    """draw a (capture, spec) pair for the spectrogram family.
+
+    Each `extra` entry maps a spec field name to ``(valid, bad)``: a strategy for the
+    accepted values and a strategy for the rejected values, or `None` for a field that
+    no validator rejects.
+    """
     fs = draw(st.sampled_from((1.024e6, 2.048e6)))
     nfft = draw(st.sampled_from((8, 16, 64)))
     resolution = fs / nfft
@@ -207,7 +217,8 @@ def stft_pairs(draw, spec_type=sa.specs.Spectrogram, **extra):
 
 @st.composite
 def detector_pairs(draw, spec_type=sa.specs.ChannelPowerTimeSeries, **extra):
-    """(capture, spec) for the binned power detectors, with `extra` fields drawn"""
+    """draw a (capture, spec) pair for the binned power detectors. `extra` is as in
+    `stft_pairs`."""
     valid = {
         'samples': draw(st.sampled_from((100, 1000))),
         'sample_rate': 1e6,
@@ -231,7 +242,8 @@ def detector_pairs(draw, spec_type=sa.specs.ChannelPowerTimeSeries, **extra):
 
 @st.composite
 def ssb_correlator_pairs(draw, spec_type=sa.specs.Cellular5GNRPSSCorrelator, **extra):
-    """(capture, spec) for the PSS/SSS correlators and synchronizers"""
+    """draw a (capture, spec) pair for the PSS/SSS correlators and synchronizers.
+    `extra` is as in `stft_pairs`."""
     samples = draw(st.integers(min_value=1, max_value=2)) * CELL_FRAME
     step = CELL_FS / samples
     scs = draw(st.sampled_from((15e3, 30e3)))
@@ -287,7 +299,8 @@ def ssb_spectrogram_pairs(draw):
     scs = draw(st.sampled_from((15e3, 30e3)))
     period = draw(st.sampled_from((10e-3, 20e-3)))
     # the burst set is the first 2 of the 10*scs/15e3 slots in a 10 ms frame. The
-    # STFT yields its last symbol only once a whole window (2/scs) follows
+    # STFT yields the last symbol of the burst set only once a whole window (2/scs)
+    # follows
     burst = 2e-3 * 15e3 / scs
     trailing_burst = period + 2 * burst + 2 / scs
     valid = {
@@ -327,7 +340,8 @@ def autocorrelation_pairs(draw):
         scs_choices += [60e3, (15e3, 30e3, 60e3)]
     scs = draw(st.sampled_from(scs_choices))
     frame_ranges = [(0, 1), 1] + ([(0, 2), (1, 2)] if frames == 2 else [])
-    # one TDD pattern length fits every spacing only when there is one spacing
+    # a TDD slot pattern has the slot count of one spacing, so a pattern is drawn only
+    # when a single spacing is set
     frame_slots = [None, 'd']
     if isinstance(scs, float):
         frame_slots.append(TDD_20_SLOTS if round(scs) == 30_000 else TDD_10_SLOTS)
@@ -454,14 +468,15 @@ def container_depth(obj) -> int:
 
 
 def has_mutable_below(obj, level: int = 0) -> bool:
-    """True if a list or dict sits at nesting level >= level (the root is level 0)"""
+    """return True if a list or dict is at nesting level `level` or deeper (the root is
+    level 0)."""
     if level <= 0 and isinstance(obj, (list, dict)):
         return True
     return any(has_mutable_below(v, level - 1) for v in _children(obj))
 
 
 def has_frozen_below(obj, level: int = 0) -> bool:
-    """True if a tuple or frozendict sits at nesting level >= level"""
+    """return True if a tuple or frozendict is at nesting level `level` or deeper."""
     if level <= 0 and isinstance(obj, (tuple, frozendict)):
         return True
     return any(has_frozen_below(v, level - 1) for v in _children(obj))

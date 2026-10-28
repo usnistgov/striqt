@@ -1,7 +1,7 @@
 """Rational resampling by FFT and by STFT overlap-add from one COLA design.
 
-Every implementation takes the `ResamplerDesign` of `design_cola_resampler`, whose
-``nfft / nfft_out`` equals ``fs_sdr / fs_target`` exactly.
+The FFT sizes of a `ResamplerDesign` are in the exact ratio of the input to the
+output sample rate.
 """
 
 from __future__ import annotations as __
@@ -38,14 +38,14 @@ def _prime_fft_sizes(min=2, max=OLA_MAX_FFT_SIZE):
 class ResamplerDesign(typing.TypedDict):
     """the radio and COLA resampler settings that realize a target sample rate.
 
-    ``fs_sdr`` and ``fs`` both hold the radio sample rate (in S/s) that the
-    resampler takes as input. ``nfft`` and ``nfft_out`` are the input and output
-    FFT sizes, in the exact ratio of the radio rate to the target rate and both
-    divisible by the COLA divisor of ``window``. ``lo_offset`` is the offset (in
-    Hz) by which the radio is tuned below the center frequency: a whole number of
-    ``fs_sdr / nfft`` bins, or zero without an LO shift; ``frequency_shift`` records
-    the requested direction. ``passband`` holds the protected band edges (in Hz)
-    relative to the tuned LO, or ``(None, None)`` when the bandwidth is unbounded.
+    ``fs_sdr`` and ``fs`` are both the radio sample rate (in S/s) at the resampler
+    input. ``nfft`` and ``nfft_out`` are the input and output FFT sizes, in the exact
+    ratio of the radio rate to the target rate and both divisible by the COLA
+    divisor of ``window``. ``lo_offset`` is the offset (in Hz) by which the radio is
+    tuned below the center frequency: a whole number of ``fs_sdr / nfft`` bins, or 0
+    without an LO shift. ``frequency_shift`` is the requested shift direction.
+    ``passband`` is the pair of protected band edges (in Hz) relative to the tuned
+    LO, or ``(None, None)`` for an unbounded bandwidth.
     """
 
     fs_sdr: float
@@ -76,10 +76,9 @@ def design_cola_resampler(
     The design resamples from the radio rate ``fs_sdr`` (an integer division of
     `fs_base`, unless given) to `fs_target` with FFT sizes in the ratio
     ``nfft / nfft_out == fs_sdr / fs_target`` exactly, both divisible by the COLA
-    divisor of `window`. With `shift`, the radio is to be tuned ``lo_offset`` below
-    the center frequency, which places the LO leakage outside the protected band.
-    ``fs_sdr`` is then raised until the `fs_target`-wide output band around
-    ``lo_offset`` fits inside the Nyquist band of the radio. The magnitude of
+    divisor of `window`. With `shift`, the radio is tuned ``lo_offset`` below the
+    center frequency, and ``fs_sdr`` is the largest integer division of `fs_base`
+    at or above ``fs_target + min_oversampling * bw + bw_lo``. The magnitude of
     ``lo_offset`` is ``bw / 2 + bw_lo / 2`` rounded up to a whole number of
     ``fs_sdr / nfft`` bins, up to one bin more than that sum.
 
@@ -93,11 +92,10 @@ def design_cola_resampler(
         min_oversampling: the factor applied to `bw` when sizing ``fs_sdr`` for an
             LO shift
         min_fft_size: the smallest ``nfft_out`` candidate considered
-        shift: ``'left'`` or ``'right'`` moves the LO leakage below or above the
-            protected band; ``'none'``, None, or False leaves the LO at the center
+        shift: ``'left'`` or ``'right'`` places the protected band below or above
+            the tuned LO; ``'none'``, None, or False leaves the LO at the center
             frequency
-        avoid_primes: whether to reject ``nfft_out`` candidates that are large
-            primes. An FFT of prime size is slow
+        avoid_primes: True rejects ``nfft_out`` candidates that are large primes
         window: a key of the COLA window divisor table; None selects ``'hamming'``
         fs_sdr: the radio sample rate (in S/s) to use instead of selecting one
 
@@ -263,9 +261,9 @@ def resample_edges(
 ) -> tuple[int, int] | None:
     """return the input bin range ``[edge_low, edge_high)`` that `resample` keeps.
 
-    The range indexes the `nfft_in`-bin spectrum of the input in ascending frequency
-    order, which `resample` copies into `nfft_out` output samples when downsampling
-    by a band `shift` of that many bins. None means the unshifted band.
+    The range indexes the `nfft_in`-bin spectrum in ascending frequency order. The
+    range is `nfft_out` bins wide and centered `shift` bins above the input center.
+    The result is None for a `shift` of 0.
 
     Raises:
         ValueError: if `nfft_in` is odd, if `shift` is nonzero while upsampling
@@ -301,9 +299,29 @@ def resample(
     scale: Array | float = 1,
     shift: int = 0,
 ) -> _AT:
-    """partial reimplementation of scipy.signal.resample optimized for reduced memory.
+    """resample `x` to `num` samples along `axis` by FFT, as `scipy.signal.resample`.
 
-    No new buffers are allocated when downsampling if `overwrite_x` is `True`.
+    Args:
+        x: the waveform, or with ``domain='frequency'`` the spectrum of the waveform
+            in ascending frequency order
+        num: the number of output samples along `axis`
+        axis: the axis to resample
+        window: must be None
+        domain: ``'time'`` takes `x` as a waveform; ``'frequency'`` takes `x` as a
+            spectrum
+        overwrite_x: True evaluates in the buffer of `x`; when downsampling, no new
+            array is then allocated
+        scale: a gain applied to the output
+        shift: the offset (in input bins) of the kept band above the input center
+            when downsampling, as in `resample_edges`
+
+    Returns:
+        the resampled waveform with `num` samples on `axis`, in the dtype and array
+        namespace of `x`; `x` itself when ``x.shape[axis] == num``
+
+    Raises:
+        ValueError: if `domain` is not ``'time'`` or ``'frequency'``, if `window` is
+            not None, or if `resample_edges` rejects `shift`
     """
     if domain not in ('time', 'freq', 'frequency'):
         raise ValueError(

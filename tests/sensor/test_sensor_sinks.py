@@ -29,13 +29,13 @@ OFFSETS = (1e6, 2e6)
 
 
 def zarr_sweep(path, offsets, *, analysis=IQ_ONLY, **sink_kws):
-    """a tone sweep whose `ZarrSink` writes to `path`"""
+    """return a tone sweep with a `ZarrSink` at `path`"""
     sweep = tone_sweep(offsets, analysis=analysis)
     return sweep.replace(sink=ss.specs.ZarrSink(path=str(path), **sink_kws))
 
 
 def run_to_store(sweep):
-    """the datasets that the sink returned from each append"""
+    """return the datasets that the sink returned from each append"""
     with ss.open_resources(sweep, None) as res:
         return [ds for ds in ss.iterate_sweep(res) if ds is not None]
 
@@ -64,7 +64,7 @@ def test_batch_tracker_cycles_the_homogeneous_group_sizes():
 
 def test_batch_tracker_merges_captures_of_different_shape():
     """a group closes only once every distinct capture shape is both pending and
-    still to come, so 2 captures of 1 ms followed by 1 of 2 ms form a single group"""
+    still to come. 2 captures of 1 ms followed by 1 of 2 ms form a single group."""
     captures = tone_captures((1e6, 2e6)) + (
         preset_capture('single_tone', **{**ONE_PORT, 'duration': 2e-3}, snr=None),
     )
@@ -119,14 +119,14 @@ def test_time_append_sink_requires_a_spectrogram():
 
 
 def test_time_append_sink_concatenates_the_frames(tmp_path):
-    """2 captures written as 1 batch form 1 row whose spectrogram time axis
-    contains both captures' frames back to back on a uniform grid"""
+    """2 captures written as 1 batch form 1 row. The spectrogram time axis of that row
+    has the frames of both captures back to back on a uniform grid."""
     sweep = zarr_sweep(
         tmp_path / 'spg.zarr', OFFSETS, analysis=SPECTROGRAM, batched_write_count=2
     )
     frames, hop_period = spectrogram_frames(sweep.captures[0], SPECTROGRAM.spectrogram)
 
-    # the runner's ZarrCaptureSink would open the same store if the sweep it opens
+    # the ZarrCaptureSink of the runner would open the same store if the opened sweep
     # kept the path. A zarr sink looks up the source id in its constructor, which
     # requires the source to be open first
     unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
@@ -180,7 +180,11 @@ def test_runner_opens_the_sink_that_the_path_selects(
 
 
 def make_tree(root: Path) -> set[str]:
-    """a small directory tree under `root`; returns its file paths relative to root"""
+    """write a small directory tree under `root`.
+
+    Returns:
+        the file paths relative to `root`
+    """
     files = {'zarr.json', 'a/c/0.0', 'a/zarr.json', 'b/0'}
     for rel in files:
         path = root / rel

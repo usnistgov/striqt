@@ -35,7 +35,8 @@ STROBE_TIME = 2**-12
 def stub_controller(
     capture: ss.specs.SensorCapture, source: ss.specs.Source = SOURCE
 ) -> SimpleNamespace:
-    """the controller attributes that ReceiveBuffers and _alloc_empty_iq read"""
+    """return a namespace with the controller attributes that `ReceiveBuffers` and
+    `_alloc_empty_iq` read"""
     return SimpleNamespace(
         capture_spec=capture,
         source_spec=source,
@@ -49,8 +50,10 @@ GAPLESS_SOURCE = source_spec(gapless=True, time_sync_at='open')
 def receive_buffers(
     capture: ss.specs.SensorCapture, source: ss.specs.Source = GAPLESS_SOURCE
 ) -> buffers.ReceiveBuffers:
-    """a ReceiveBuffers on stub_controller(capture, source); the gapless default is
-    what the carryover path needs"""
+    """return a `ReceiveBuffers` over ``stub_controller(capture, source)``.
+
+    The carryover path requires the gapless default.
+    """
     return buffers.ReceiveBuffers(stub_controller(capture, source))
 
 
@@ -60,8 +63,8 @@ def receive_buffers(
 @pytest.mark.parametrize('preset', list(PRESETS), ids=list(PRESETS))
 @pytest.mark.parametrize('overlap', [0, 100], ids=lambda n: f'overlap{n}')
 def test_get_read_count_is_the_source_rate_sample_count_plus_overlap(preset, overlap):
-    """the source must deliver the source-rate record of the capture, with a half
-    sample rounded up, plus the requested overlap"""
+    """the read count is the source-rate record of the capture, with a half sample
+    rounded up, plus the requested overlap"""
     capture = preset_capture('single_tone', **PRESETS[preset])
     expected = source_count(capture, SOURCE) + overlap
 
@@ -69,8 +72,8 @@ def test_get_read_count_is_the_source_rate_sample_count_plus_overlap(preset, ove
 
 
 def test_get_read_count_holdoff_adds_transient_and_two_strobe_periods():
-    """the holdoff padding covers the transient plus 2 strobe periods at the
-    source rate; without include_holdoff neither setting contributes"""
+    """the holdoff padding covers the transient plus 2 strobe periods at the source
+    rate. Without `include_holdoff` neither setting contributes."""
     source = source_spec(
         transient_holdoff_time=HOLDOFF_TIME, trigger_strobe=STROBE_TIME
     )
@@ -107,8 +110,8 @@ def test_find_trigger_holdoff_aligns_to_the_strobe(
     overlap and, on a fresh arm, the transient holdoff.
 
     The upper bound records current behavior rather than a contract: the
-    implementation may skip up to one extra strobe period beyond the first edge
-    that satisfies the minimum.
+    implementation skips up to one extra strobe period beyond the first edge that
+    satisfies the minimum.
     """
     strobe = strobe_us * 1e-6
     source = source_spec(transient_holdoff_time=HOLDOFF_TIME, trigger_strobe=strobe)
@@ -160,8 +163,8 @@ def test_cast_iq_complex64_returns_an_equal_copy():
 
 
 def test_cast_iq_int16_interleaved_pairs_become_unscaled_complex64():
-    """transport int16 interleaves (I, Q) pairs; the cast is exact and leaves the
-    full-scale factor to voltage_scale"""
+    """transport int16 interleaves (I, Q) pairs. The cast is exact and leaves the
+    full-scale factor to `voltage_scale`."""
     source = source_spec(transport_dtype='int16')
     ports, acquired = 2, 300
     pairs = (np.arange(ports * 2 * acquired) * 7919 - 32768) % 65536 - 32768
@@ -403,8 +406,8 @@ def test_alloc_reuses_a_prior_buffer_that_is_large_enough():
     ],
 )
 def test_alloc_does_not_reuse_a_prior_buffer_of_the_wrong_shape(prior_capture, capture):
-    """a reused buffer is returned whole along the port axis, so it must have
-    exactly one row per port and at least the read count of columns"""
+    """a reused buffer is returned whole along the port axis. The buffer has exactly
+    one row per port and at least the read count of columns."""
     prior = np.empty((2, _read_count(prior_capture)), dtype='complex64')
     ports = _port_count(capture)
     _, (samples, streams) = buffers._alloc_empty_iq(

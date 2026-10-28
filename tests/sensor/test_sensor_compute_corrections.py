@@ -56,8 +56,8 @@ from striqt.sensor.lib.compute import (
 from striqt.sensor.lib.sources import buffers
 from striqt.waveform.fourier import on_peak_roundoff
 
-# 0.5 ms is a whole number of samples at every preset's source and capture rate, so
-# the impulse sits on an output sample. The brick-wall resample of an impulse is
+# 0.5 ms is a whole number of samples at the source and capture rate of every preset,
+# so the impulse falls on an output sample. The brick-wall resample of an impulse is
 # exactly fs/fs_sdr there and zero on every other output sample
 IMPULSE_TIME = 0.5e-3
 IMPULSE_POWER_DB = -6.0
@@ -86,9 +86,9 @@ RESAMPLED_PRESETS = pytest.mark.parametrize(
 
 
 def _resample_tol(preset, raw, filtered=False) -> dict:
-    """assert_close keywords for the correction of the acquisition `raw` up to `stage`
-    of the corrected AcquiredIQ, or exact equality for a preset that the firmware rate
-    serves without resampling"""
+    """return the `assert_close` keywords for the correction of the acquisition `raw`,
+    through the analysis filter when `filtered` is True, or an empty dict (exact
+    equality) for a preset served at the firmware rate without resampling"""
     if not preset.get('host_resample', True):
         return {}
     # _build_iq wraps an array of any namespace in the numpy-backed SOURCE spec, so
@@ -101,17 +101,17 @@ def _resample_tol(preset, raw, filtered=False) -> dict:
 
 
 def _build_iq(binding, capture, overlaps, xp=np):
-    """the AcquiredIQ that `binding` produces for `capture` and `overlaps`, without a
-    controller: the generator at fs_sdr from index -overlaps[0]"""
+    """return the `AcquiredIQ` of `binding` for `capture` and `overlaps` without a
+    controller: the generator at `fs_sdr` from index ``-overlaps[0]``"""
     x = expected_raw(binding, capture, overlaps=overlaps, xp=xp)
     return build_acquired_iq(x, capture)
 
 
 def _build_iq_for_trigger(binding, capture, trigger, xp):
-    """_build_iq with the tail overlap that `trigger` needs.
+    """return `_build_iq` with the tail overlap sized for `trigger`.
 
-    Controller.acquire() sizes the overlap from the trigger named in the analysis
-    spec, which a stand-in trigger cannot be, so the sizing is repeated here.
+    `Controller.acquire` sizes the overlap from the trigger named in the analysis
+    spec. A stand-in trigger has no name there, and the sizing is repeated here.
     """
     lag_pad = corrections._get_max_trigger_lag(FUNCTION_SOURCE, capture, trigger)
     overlaps = corrections._get_resampler_overlaps(
@@ -125,7 +125,7 @@ def _impulse_indexes(x):
 
 
 def assert_impulse_at(x, capture, time):
-    """every port of `x` peaks on the output sample of `time`"""
+    """assert that every port of `x` peaks on the output sample of `time` (s)"""
     index = round(time * capture.sample_rate)
     assert _impulse_indexes(x) == [index] * to_numpy(x).shape[0]
 
@@ -137,9 +137,9 @@ def assert_impulse_at(x, capture, time):
     'preset', [SCALE_ONLY, FILTER_ONLY], ids=['scale_only', 'filter_only']
 )
 def test_output_is_the_generator_from_index_zero(preset, array_backend):
-    """A sawtooth rather than a tone, so that a trim that is off by any number of
-    samples shows. The resample presets are left to the impulse test, because a
-    ramp's discontinuities ring through a brick-wall resampler."""
+    """a sawtooth exposes a trim that is off by any number of samples, unlike a tone.
+    The discontinuities of a ramp ring through a brick-wall resampler, and the
+    resample presets are left to the impulse test."""
     capture = preset_capture('sawtooth', **preset, period=1e-4)
     stages = acquire_corrected('sawtooth', capture, array_backend=array_backend)
     expected = expected_corrected('sawtooth', capture)
@@ -206,7 +206,7 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
     ids=['scalar', 'per_port'],
 )
 def test_voltage_scale(preset, voltage_scale, array_backend):
-    """powers of two, so the scaling itself is exact and only the resample rounds"""
+    """the scales are powers of 2, the scaling is exact, and only the resample rounds"""
     capture = preset_capture(
         'single_tone', **preset, frequency_offset=TONE_FREQUENCY, snr=None
     )
@@ -257,8 +257,8 @@ def test_ignore_highside_lo_bypasses_the_conjugate(corrections_flags):
 
 
 def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
-    """the scale-only path returns the acquisition buffer itself when voltage_scale
-    is 1, so an in-place conjugate there would corrupt a reused acquisition"""
+    """the scale-only path returns the acquisition buffer when `voltage_scale` is 1.
+    An in-place conjugate there would corrupt a reused acquisition."""
     capture = preset_capture(
         'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
     )
@@ -281,8 +281,8 @@ def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
     ids=['in_band', 'out_of_band'],
 )
 def test_analysis_filter_passband(preset, frequency, passes, array_backend):
-    """the unfiltered waveform is the resampled tone either way; the filtered
-    waveform keeps the tone, with no delay, only inside analysis_bandwidth"""
+    """the unfiltered waveform is the resampled tone at both frequencies. The filtered
+    waveform keeps the tone, with no delay, only inside `analysis_bandwidth`."""
     capture = preset_capture(
         'single_tone', **preset, frequency_offset=frequency, snr=None
     )
@@ -300,7 +300,11 @@ def test_analysis_filter_passband(preset, frequency, passes, array_backend):
 
 
 def _count_calls(monkeypatch, module, name):
-    """replace `module.name` with a counting wrapper and return the list of calls"""
+    """replace `module.name` with a counting wrapper.
+
+    Returns:
+        the list that receives one entry per call of the wrapper
+    """
     calls = []
     original = getattr(module, name)
 
@@ -352,7 +356,7 @@ def test_an_infinite_bandwidth_collapses_filtered_onto_unfiltered():
 
 
 def test_the_oaresample_path_collapses_filtered_onto_unfiltered(corrections_flags):
-    """oaresample applies the low-pass inside the resampler, so no FIR stage runs"""
+    """oaresample applies the low-pass inside the resampler, and no FIR stage runs"""
     corrections_flags(use_oaresample=True)
     capture = preset_capture('dirac_delta', **RESAMPLE_FILTER, time=IMPULSE_TIME)
     iq = acquire_corrected('dirac_delta', capture).corrected
@@ -415,7 +419,7 @@ def test_a_preprocessor_outlives_its_acquisition_only_as_an_error():
 
 
 class _AlignedInputTrigger(FakeTrigger):
-    """a trigger that asks for the aligned waveform while computing the alignment"""
+    """a trigger that selects the aligned waveform while computing the alignment"""
 
     def __call__(
         self, iq: sw.typing.Array | sa.AcquiredIQ, capture: sa.specs.Capture
@@ -449,8 +453,8 @@ def test_attach_corrections_falls_back_to_the_trigger_in_info(xp):
 
 
 def test_a_pss_trigger_with_frequency_domain_measurements_skips_the_fir():
-    """the sync detectors and the spectral measurements select unfiltered input, so a
-    triggered capture with only those enabled never runs the analysis FIR"""
+    """the sync detectors and the spectral measurements select unfiltered input. A
+    triggered capture with only those enabled never runs the analysis FIR."""
     capture = preset_capture(
         'single_tone',
         **{**FILTER_ONLY, 'duration': 10e-3, 'port': 0},
@@ -490,7 +494,7 @@ def test_trigger_shifts_aligned_and_leaves_unaligned(preset, xp, subtests):
     tol = _resample_tol(preset, raw, filtered=True)
     ratio = fs / raw.resampler['fs_sdr']
     if tol:
-        # the resample concentrates its roundoff on the impulse's own on-peak sample,
+        # the resample concentrates its roundoff on the on-peak sample of the impulse,
         # which the rms model of _resample_tol instead spreads over the whole window
         # (as in test_impulse_level_through_the_stages)
         tol['atol'] = on_peak_roundoff(np.complex64) * ratio
@@ -533,8 +537,8 @@ def test_oaresample_acquisition(preset, corrections_flags):
 
 @pytest.mark.parametrize('lo_shift', ['left', 'right'])
 def test_lo_shift_design_moves_the_lo_out_of_band(lo_shift):
-    """the LO leakage sits at 0 Hz in the radio's baseband, so the shifted passband
-    must exclude it while still fitting the radio's Nyquist band"""
+    """the LO leakage is at 0 Hz in the baseband of the radio. The shifted passband
+    excludes 0 Hz and fits inside the Nyquist band of the radio."""
     capture = preset_capture('single_tone', **LO_SHIFT_CAPTURE, lo_shift=lo_shift)
     design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
     half_bw = capture.analysis_bandwidth / 2
@@ -634,7 +638,7 @@ def test_fir_band_edges_are_rejected(analysis_bandwidth, match):
 @pytest.mark.parametrize('offset', [-1e3, 0.0], ids=['inside', 'on_the_edge'])
 @pytest.mark.parametrize('edge', ['nyquist', 'zero'])
 def test_fir_band_edges_agree_with_the_filter_design(edge, offset):
-    """the rejection is exactly where scipy.signal.firls stops designing the filter:
+    """the rejection is exactly where `scipy.signal.firls` stops designing the filter:
     a band of zero width, at either end, is already too narrow"""
     fs = 1e6
     if edge == 'nyquist':
@@ -713,7 +717,8 @@ F = TypeVar('F', bound=Callable[..., None])
 
 
 def soapy_record_examples(**extra: float) -> Callable[[F], F]:
-    """stack an `example` of each SOAPY_RECORDS point, plus `extra`, on a property"""
+    """return a decorator that stacks an `example` of each `SOAPY_RECORDS` point, plus
+    `extra`, on a property test"""
 
     def decorate(test: F) -> F:
         for point in SOAPY_RECORDS:
@@ -781,10 +786,10 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
 def test_overlaps_pad_to_a_whole_resampler_block(
     sample_rate, count, bandwidth_fraction
 ):
-    """the overlaps need not be even or equal: together they pad the source-rate
-    record to a length that resamples to a whole number of output samples, as
-    _resample requires. read_iq reads exactly that padded record. The example is a
-    25:24 ratio whose record length is an exact half sample"""
+    """the lead and tail overlaps need not be even or equal. Together the overlaps pad
+    the source-rate record to a length that resamples to a whole number of output
+    samples, as `_resample` requires. `read_iq` reads exactly that padded record. The
+    example is a 25:24 ratio with a record length of an exact half sample."""
     capture = _drawn_capture(sample_rate, count, bandwidth_fraction)
     lead, tail = corrections._get_resampler_overlaps(capture, FUNCTION_SOURCE)
     fs = fs_sdr(capture)
@@ -807,9 +812,9 @@ DOCUMENTED_OVERLAPS = {
 
 @pytest.mark.parametrize('name', list(PRESETS))
 def test_preset_overlaps_are_acquirable(name):
-    """Pin the preset overlaps that synthetic_sources documents, so that a change in
-    the overlap sizing shows up as a harness change rather than as unrelated
-    acquisition failures."""
+    """the preset overlaps equal the values documented in `synthetic_sources`. A change
+    in the overlap sizing then fails here rather than as unrelated acquisition
+    failures."""
     capture = preset_capture('single_tone', **PRESETS[name])
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
     assert overlaps == DOCUMENTED_OVERLAPS[name]
@@ -843,9 +848,9 @@ def test_impulse_acquisition(preset):
 
 
 def test_source_record_size_rounds_an_exact_half_sample_up():
-    """23076 samples at 10 MS/s from the 125 MS/s clock resample 25:24, so the source
-    record is 24037.5 samples exactly; the float product duration * fs_sdr falls
-    below the half and would round down"""
+    """23076 samples at 10 MS/s from the 125 MS/s clock resample 25:24, and the source
+    record is exactly 24037.5 samples. The float product ``duration * fs_sdr`` falls
+    below the half and would round down."""
     capture = _drawn_capture(1e7, 23076, inf)
     design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
     assert (design['nfft'], design['nfft_out']) == (550, 528)
@@ -855,9 +860,10 @@ def test_source_record_size_rounds_an_exact_half_sample_up():
 
 def test_oaresample_pads_use_the_exact_record_size(corrections_flags):
     """7680 samples at 7.68 MS/s from the 125 MS/s clock are a 7812.5-sample source
-    record, which `source_record_size` rounds up to 7813 where the float product
-    rounds down to 7812. The oaresample pads must bring the 7813-sample record to a
-    whole number of STFT hops, or the output slips by one source sample"""
+    record. `source_record_size` rounds the record up to 7813 where the float product
+    rounds down to 7812. The oaresample pads bring the 7813-sample record to a whole
+    number of STFT hops. Pads sized for 7812 samples slip the output by one source
+    sample."""
     corrections_flags(use_oaresample=True)
     capture = preset_capture(
         'dirac_delta',
@@ -881,8 +887,8 @@ def test_oaresample_pads_use_the_exact_record_size(corrections_flags):
 
 
 def test_resample_rejects_a_length_that_does_not_divide():
-    """6.25 MS/s to 6 MS/s is 25:24, so one sample more than the (350, 350) overlaps
-    leaves a padded length that is not a multiple of 25"""
+    """6.25 MS/s to 6 MS/s is 25:24. One sample more than the (350, 350) overlaps
+    leaves a padded length that is not a multiple of 25."""
     capture = preset_capture('dirac_delta', **RESAMPLE_ONLY, time=IMPULSE_TIME)
     lead, tail = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
     fs = fs_sdr(capture)

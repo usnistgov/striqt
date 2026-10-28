@@ -68,28 +68,36 @@ def lookup_system_noise_power(
     B=1.0,
     xp=None,
 ):
-    """return the noise power of the receive system referred to the calibrated input.
+    """return the system noise power (dBm) referred to the calibrated input, per port.
 
-    The level is ``k * T * B * F`` in dBm, the noise power that the sensor measures
-    with the input terminated at temperature `T`. `F` is the linear noise figure from
-    the calibration file at the capture's port, gain, sample rate, and analysis
-    bandwidth, interpolated in center frequency. An antenna at a noise temperature
-    other than `T` gives a different measured floor.
+    The power is ``k * T * B * F``, the noise power that the sensor measures with the
+    input terminated at temperature `T`. `F` is the linear noise figure from the
+    calibration file at the port, gain, LO shift, backend sample rate, and analysis
+    bandwidth of `capture`, interpolated in center frequency.
 
     Args:
-        cal_data: path to the calibration corrections file, or None for no calibration
-        capture: the capture whose calibration row is selected
-        master_clock_rate: the SDR master clock rate (in S/s), which sets the
-            backend sample rate of the row
-        format_path: formatter for the calibration path fields
-        T: the source temperature (in K) that the noise figure is referred to
-        B: the noise bandwidth (in Hz); 1 Hz gives a power spectral density in dBm/Hz
-        xp: array namespace for the result
+        cal_data: the path of the calibration corrections file, or None for no
+            calibration
+        capture: the capture that selects the calibration row, one row per port
+        master_clock_rate: the SDR master clock rate (S/s), which sets the backend
+            sample rate of the row
+        format_path: the formatter of the ``{field}`` templates in `cal_data`, or None
+        T: the source temperature (K) that the noise figure is referred to
+        B: the noise bandwidth (Hz); 1 Hz gives a power spectral density
+        xp: the array namespace of the result, or None for numpy
 
     Returns:
-        a DataArray on the capture dimension, in dBm/Hz when `B` is 1 Hz and in dBm
-        with a `noise_bandwidth` attr otherwise. The `reference_temperature` attr is
-        `T`. None when `cal_data` is None or has no corrections.
+        a `DataArray` on the capture dimension, one value per port, in dBm/Hz when
+        `B` is 1 and in dBm with a `noise_bandwidth` attr otherwise; the
+        `reference_temperature` attr is `T`. None when `cal_data` is None or the
+        file has no corrections.
+
+    Raises:
+        TypeError: if `cal_data` is neither a path nor None
+        KeyError: if the port, gain, LO shift, backend sample rate, or analysis
+            bandwidth of a port is not in the calibration grid
+        ValueError: if the center frequency of a port is outside the calibrated
+            range, or no calibrated row remains for the port
     """
     from scipy.constants import Boltzmann
 
@@ -159,7 +167,6 @@ def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
         else:
             del invalid_matches[field]
 
-    # describe the remaining mismatches
     for field, value in invalid_matches.items():
         try:
             cal.sel({field: value})
@@ -241,9 +248,9 @@ def _lookup_calibration_var(
 
 
 def _get_port_variable(ds: 'xr.DataArray|xr.Dataset') -> str:
-    """return the name of the port coordinate variable, 'port' or 'channel'.
+    """return the port coordinate name of `ds`.
 
-    Older calibration files name the coordinate 'channel'.
+    ``'port'`` is returned when present, otherwise ``'channel'``.
     """
     if ds is None:
         return PORT_DIM

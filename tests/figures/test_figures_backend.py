@@ -38,7 +38,7 @@ def test_facet_values_by_dimension_position() -> None:
 
 
 def test_facet_values_reduce_captures_that_share_a_facet() -> None:
-    """2 captures at 1 GHz share one facet, which gets the minimum of the 2 levels"""
+    """the facet shared by the 2 captures at 1 GHz takes the minimum of the 2 levels"""
     values = noise_levels().set_xindex('center_frequency')
     grid = fake_grid([{'center_frequency': 1e9}, {'center_frequency': 2e9}])
 
@@ -74,8 +74,8 @@ def test_facet_values_without_names_follow_the_capture_order() -> None:
 
 
 def test_histogram_facet_limits_and_noise_lines_are_per_capture() -> None:
-    """the facet of each capture is limited to the noise floor of that capture and
-    marked with one vertical line at the system noise level of that capture"""
+    """the x limits of each facet start 12 dB below the noise level of that capture.
+    One vertical line marks the system noise level of that capture."""
     import matplotlib.pyplot as plt
 
     opts = specs.SharedPlotOptions(col='capture', col_label_format='{capture}')

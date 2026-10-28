@@ -6,7 +6,7 @@ import types
 
 
 def format_type_hint(hint) -> str:
-    """format a type hint as a string, recursing into the type arguments."""
+    """return the display string of a type hint, without module paths."""
     # 1. Base cases: None, Any, and Ellipsis
     if hint is None or hint is type(None):
         return 'None'
@@ -19,7 +19,7 @@ def format_type_hint(hint) -> str:
     args = typing.get_args(hint)
 
     if origin:
-        # unions, including the pipe syntax
+        # `types.UnionType` is absent on Python 3.9
         if origin is typing.Union or (
             hasattr(types, 'UnionType') and origin is types.UnionType
         ):
@@ -29,7 +29,6 @@ def format_type_hint(hint) -> str:
         if origin is typing.Literal:
             return f'Literal[{", ".join(repr(a) for a in args)}]'
 
-        # the container name without the module path (e.g., 'list', 'dict', 'tuple')
         origin_name = getattr(origin, '__name__', str(origin)).replace('typing.', '')
 
         # Recurse through the arguments
@@ -43,7 +42,6 @@ def format_type_hint(hint) -> str:
     if hasattr(hint, '__name__'):
         return hint.__name__
 
-    # fallback for hints without a `__name__`
     return str(hint).replace('typing.', '')
 
 
@@ -61,11 +59,12 @@ def clean_type_string(type_str):
 
 
 def parse_type_and_meta(hint):
-    """extract the `msgspec.Meta` objects from a type hint and the type arguments.
+    """split a type hint into the un-annotated hint and its `msgspec.Meta` objects.
 
     Returns:
-        the hint with the `Annotated` wrappers removed, and the list of metas;
-        `Literal` values and Ellipsis are returned unchanged
+        a ``(hint, metas)`` tuple: `hint` with every `Annotated` wrapper removed,
+        recursively through the type arguments, and the list of the `msgspec.Meta`
+        objects found; a `Literal` hint is returned unchanged with an empty list
     """
 
     origin = typing.get_origin(hint)
@@ -109,10 +108,12 @@ def parse_type_and_meta(hint):
 
 @functools.cache
 def describe_msgspec_fields(obj: type[msgspec.Struct]):
-    """return the ``(descriptions, types)`` dicts of a `msgspec.Struct`, keyed by field.
+    """return the ``(descriptions, types)`` dicts of the fields of `obj`, keyed by name.
 
-    Descriptions come from `Meta.description` with the constraints appended; types are
-    formatted by `format_type_hint`.
+    A description is the first `Meta.description` of the field, followed by the
+    constraints and units in parentheses. A type is the display string of the field
+    annotation. Both dicts are empty when the type hints of `obj` do not resolve.
+    Results are cached per struct type.
     """
     descriptions = {}
     types = {}
@@ -173,14 +174,18 @@ def describe_msgspec_fields(obj: type[msgspec.Struct]):
 def struct_args_docstring(
     obj, indent_spaces: int = 4, extra_prepend={}, extra_append={}, extra_types={}
 ) -> str:
-    """generate an ``Args:`` docstring block from the field metadata of `obj`.
+    """return the ``Args:`` entries of a Google-style docstring for the fields of `obj`.
 
     Args:
-        obj: the Struct to document
-        indent_spaces (int): The number of spaces to indent the arguments.
+        obj: a `msgspec.Struct` type or instance
+        indent_spaces: indentation of each entry, in spaces
+        extra_prepend: descriptions of entries placed before the fields, keyed by name
+        extra_append: descriptions of entries placed after the fields, keyed by name
+        extra_types: type strings that replace the formatted field types, keyed by name
 
     Returns:
-        str: the Google-style ``Args:`` entries, one per field, separated by blank lines
+        the entries, one per name, separated by blank lines; an empty string when
+        there are no entries
     """
     if not isinstance(obj, type):
         obj = type(obj)
@@ -195,8 +200,7 @@ def struct_args_docstring(
     lines = []
     base_indent = ' ' * indent_spaces
 
-    # `describe_msgspec_fields` populates both dicts with the same keys in the same
-    # order, so iterating `descriptions` covers `types`
+    # both dicts have the field names as keys; only the `extra_*` names can differ
     for field_name in descriptions.keys():
         type_str = types.get(field_name, 'Any')
         desc = descriptions.get(field_name, '')

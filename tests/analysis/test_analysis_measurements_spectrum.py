@@ -1,10 +1,10 @@
 """striqt.analysis.measurements.spectrum: the spectrogram-derived measurements.
 
-Level assertions are anchored on a bin-centered unit tone: a boxcar window reads
-exactly ``0.0`` dB in the peak bin, and any other window reads
+Level assertions are anchored on a bin-centered unit tone. Through a boxcar window the
+peak bin is exactly ``0.0`` dB. Through any other window the peak bin is
 ``-10*log10(enbw_bins)``. The spectrogram is normalized to a power spectral density
-labeled with ``noise_bandwidth = frequency_resolution`` while the tone's power spreads
-over the window's equivalent noise bandwidth.
+with ``noise_bandwidth = frequency_resolution``, while the tone power spreads over the
+equivalent noise bandwidth of the window.
 """
 
 from __future__ import annotations
@@ -51,17 +51,18 @@ FFT_SIGMA = fft_tolerance_rms(np.complex64, [NFFT])
 
 
 def bin_centered_tone_level_dB(window, nfft=NFFT):
-    """dB level of the peak bin of a bin-centered unit tone, per the module docstring"""
+    """return the level (dB) of the peak bin of a bin-centered unit tone through
+    `window`: -10*log10 of the ENBW in bins."""
     enbw_bins = sw.equivalent_noise_bandwidth(window, nfft)
     return -10 * np.log10(float(enbw_bins))
 
 
 def centered_bin_count(size, count):
-    """number of `count`-wide bins that `sw.binned_mean(..., fft=True)` keeps.
+    """return the count of `count`-wide bins that `sw.binned_mean(..., fft=True)` keeps
+    over `size` FFT bins.
 
-    It centers one bin on DC and keeps an odd number of them, so the partial bins at
-    both edges of the frequency axis are dropped rather than the axis being divided
-    evenly.
+    `binned_mean` centers one bin on DC and keeps an odd number of bins, so the
+    partial bins at both edges of the frequency axis are dropped.
     """
     return 2 * ((size // 2 - count // 2) // count) + 1
 
@@ -114,9 +115,9 @@ class TestSpectrogram:
         peak_index = NFFT // 2 + tone_bin
         others = np.delete(spg, peak_index, axis=-1)
 
-        # a boxcar window puts the whole tone in its on-peak bin, so its immediate
-        # neighbors read only FFT roundoff referred to the 0 dB tone, like every
-        # other off-peak bin
+        # a boxcar window puts the whole tone in the on-peak bin, so the immediate
+        # neighbors are FFT roundoff relative to the 0 dB tone, like every other
+        # off-peak bin
         off_peak_floor = off_peak_floor_dBc(FFT_SIGMA, NFFT, size=others.shape[-1])
         assert spg[:, :, [peak_index - 1, peak_index + 1]].max() < off_peak_floor
         assert others.max() < off_peak_floor
@@ -176,9 +177,8 @@ class TestSpectrogram:
         freqs = da.spectrogram_baseband_frequency.values
         assert_close(np.diff(freqs), frequency_bins * RES, rtol=RTOL_FLOAT64)
 
-        # the frequency bins are summed, not averaged, so a tone that fits inside one
-        # of them keeps the level it had at the finer resolution while the bandwidth
-        # it is referred to grows
+        # the frequency bins are summed, not averaged, so a tone inside one bin keeps
+        # the level of the finer resolution while the noise_bandwidth grows
         assert ref_metadata['noise_bandwidth'] == RES
         assert ref_metadata['units'] == 'dBm'
         assert ref_metadata['long_name'] == 'Power spectral density (dBm/16 kHz)'
@@ -239,7 +239,8 @@ class TestSpectrogram:
             (
                 {'frequency_resolution': FS / 7, 'lo_bandstop': FS / 7},
                 'lo_bandstop must select a band of whole bins centered at baseband DC',
-                # an odd nfft puts DC between two bins
+                # slice_freqs centers the band at index nfft/2, a half-integer for
+                # an odd nfft
                 [f'lo_bandstop: {FS / 7}', f'sample_rate: {FS}', '7-bin'],
             ),
             (
@@ -264,8 +265,8 @@ class TestSpectrogram:
         ],
     )
     def test_non_integer_binning_raises(self, kwargs, message, quantities):
-        """the sizing validator rejects these before any IQ is touched, so the error
-        is a msgspec.ValidationError that names the measurement's field path"""
+        """the sizing validator rejects these before any IQ is read, so the error is a
+        `msgspec.ValidationError` at the field path of the measurement"""
         iq = testing.tone(DURATION, FS)
         with pytest.raises(
             msgspec.ValidationError, match=re.escape(message)
@@ -274,16 +275,15 @@ class TestSpectrogram:
 
         assert str(excinfo.value).startswith('$.spectrogram: ')
 
-        # the validator itself raises the bare error; the field path is attached by
-        # whichever caller has the surrounding context
+        # the validator raises the bare error. The caller attaches the field path
         spec_fields = {'window': 'boxcar', 'frequency_resolution': RES, **kwargs}
         with pytest.raises(ValueError, match=re.escape(message)) as valueinfo:
             sa.measurements.spectrum.validated_spectrogram_sizing(
                 CAPTURE, sa.specs.Spectrogram(**spec_fields)
             )
 
-        # the validator is the only layer that knows which quantities the rule
-        # compared, so it names them in a parenthetical after the rule text
+        # only the validator has the quantities the rule compared, so the message
+        # lists the quantities in a parenthetical after the rule text
         for quantity in quantities:
             assert quantity in str(valueinfo.value)
 
@@ -302,8 +302,9 @@ class TestSpectrogram:
         ids=['shorter_than_nfft', 'analysis_bandwidth_above_sample_rate'],
     )
     def test_incompatible_capture_raises(self, capture, message):
-        """`sw.stft` and `sw.fourier.truncate_freqs` reject these with array-shape
-        messages once IQ is in hand; the validator names the capture field"""
+        """`sw.stft` and `sw.fourier.truncate_freqs` reject these captures with
+        array-shape messages once given IQ. The validator rejects each capture first
+        and names the capture field."""
         iq = testing.tone(capture.duration, FS)
         with pytest.raises(msgspec.ValidationError, match=message) as excinfo:
             spg_of(iq, capture, as_xarray=False)
@@ -311,8 +312,8 @@ class TestSpectrogram:
         assert str(excinfo.value).startswith('$.spectrogram: ')
 
     def test_odd_nfft_cannot_be_trimmed_to_the_analysis_bandwidth(self):
-        """with 7 bins, DC falls between 2 of them, so the half-open band that
-        `trim_stopband` keeps has no whole-bin edges"""
+        """`slice_freqs` centers the band that `trim_stopband` keeps at index nfft/2,
+        a half-integer for 7 bins, so the band has no whole-bin edges"""
         capture = CAPTURE.replace(analysis_bandwidth=FS / 2)
         iq = testing.tone(DURATION, FS)
         with pytest.raises(msgspec.ValidationError, match='analysis_bandwidth'):
@@ -334,10 +335,11 @@ NOISE_PSD = 1e-6
 
 
 def noise_level_tolerance_dB(window, bins, windows, window_fill=1.0) -> float:
-    """5-sigma bound (in dB) on the mean of `windows` x `bins` noise bin powers.
+    """return the 5-sigma bound (dB) on the mean of `windows` x `bins` noise bin
+    powers.
 
-    Adjacent bins are correlated over the window's ENBW, which multiplies the
-    variance of the mean over bins by the ENBW in bins.
+    Adjacent bins are correlated over the ENBW of the window, so the variance of the
+    mean over bins is multiplied by the ENBW in bins.
     """
     nwindow = round(window_fill * NFFT)
     enbw_bins = float(sw.equivalent_noise_bandwidth(window, nwindow))
@@ -355,8 +357,8 @@ def mean_linear_power(da) -> float:
 )
 def test_spectrogram_white_noise_reads_noise_bandwidth(window, window_fill):
     """white noise with power spectral density N0 has a mean bin power of
-    N0 * noise_bandwidth for every window and window fill, and the stored attr equals
-    frequency_resolution"""
+    N0 * noise_bandwidth for every window and window fill. The `noise_bandwidth` attr
+    equals `frequency_resolution`."""
     iq = testing.circular_awgn(NOISE_DURATION, FS, power=NOISE_PSD * FS)
     da = spg_of(
         iq,
@@ -380,8 +382,8 @@ def test_spectrogram_white_noise_reads_noise_bandwidth(window, window_fill):
 
 
 def test_integrated_spectrogram_white_noise_reads_integration_bandwidth():
-    """the sum of 4 bins has 4 times the noise power, and noise_bandwidth is 4 times
-    the resolution"""
+    """the sum of 4 bins has 4 times the noise power. The `noise_bandwidth` attr is 4
+    times the resolution."""
     frequency_bins = 4
     iq = testing.circular_awgn(NOISE_DURATION, FS, power=NOISE_PSD * FS)
     da = spg_of(
@@ -425,9 +427,9 @@ def test_power_spectral_density_white_noise_reads_noise_bandwidth():
     'window_fill', [1, fractions.Fraction(1, 2)], ids=['fill1', 'fill1/2']
 )
 def test_resolution_bandwidth_sets_the_tone_level(window, window_fill):
-    """a bin-centered tone has frequency_resolution / resolution_bandwidth of the tone
-    power in the tone bin, where the attr is the ENBW in Hz of the nonzero part of the
-    window"""
+    """a bin-centered tone has `frequency_resolution` / `resolution_bandwidth` of the
+    tone power in the tone bin. The `resolution_bandwidth` attr is the ENBW (Hz) of
+    the nonzero part of the window."""
     nwindow = round(window_fill * NFFT)
     enbw_bins = float(sw.equivalent_noise_bandwidth(window, nwindow))
     expected_rbw = enbw_bins * FS / nwindow
@@ -453,7 +455,7 @@ def test_resolution_bandwidth_sets_the_tone_level(window, window_fill):
 # %% power_spectral_density
 
 PSD_STATISTICS = ('min', 0.5, 'mean', 'max')
-# 16 windows so that the quantile has something to interpolate between
+# 16 windows give the quantile 16 samples per bin to interpolate
 PSD_DURATION = 16 * NFFT / FS
 PSD_CAPTURE = sa.specs.Capture(duration=PSD_DURATION, sample_rate=FS)
 
@@ -494,7 +496,7 @@ class TestPowerSpectralDensity:
 
         expected = levels(spg).max(axis=1)
         # the 2 paths quantize independently: `spectrogram` rounds to 2 decimals
-        # before its float16 cast, and `power_spectral_density` only casts
+        # before the float16 cast, and `power_spectral_density` only casts
         atol = (
             registered_tolerance(PSD_CAPTURE, spg_spec()).on_peak.peak
             + registered_tolerance(
@@ -541,8 +543,9 @@ class TestPowerSpectralDensity:
         'statistic', ['bogus', 1.5, -0.1], ids=['unknown_name', 'above_one', 'negative']
     )
     def test_unsupported_time_statistic_is_rejected(self, statistic):
-        """`stat_ufunc_from_shorthand` and `xp.quantile` would raise on these mid-
-        measurement; the validator rejects them at the field before any IQ"""
+        """`stat_ufunc_from_shorthand` and `xp.quantile` raise on these statistics
+        mid-measurement. The validator rejects each at the field before any IQ is
+        read."""
         iq = testing.tone(PSD_DURATION, FS)
         with pytest.raises(
             msgspec.ValidationError, match=f'time_statistic entry {statistic!r}'
@@ -576,7 +579,8 @@ def spectrogram_histogram_of(iq, window='hamming', **kwargs):
 
 
 def test_spectrogram_histogram_fractions_sum_to_one():
-    """both ports are normalized by the count of port 0, which is the same count"""
+    """both ports are normalized by the pixel count of port 0. Every port has the same
+    pixel count, so each row sums to 1."""
     iq = sa.testing.circular_awgn(HIST_DURATION, HIST_FS, power=1e-6 * HIST_FS, ports=2)
 
     da = spectrogram_histogram_of(iq)
@@ -586,16 +590,15 @@ def test_spectrogram_histogram_fractions_sum_to_one():
 
 
 def test_spectrogram_histogram_concentrates_bin_centered_tone():
-    """a tone on an FFT bin center, taken through a rectangular window, puts all of
-    its power in 1 of the `HIST_NFFT` bins of every STFT window and exactly 0 in the rest.
+    """a tone on an FFT bin center through a boxcar window puts all of the tone power
+    in 1 of the `HIST_NFFT` bins of every STFT window and exactly 0 in the rest.
 
-    The populated bin therefore reads 0 dBm rather than a level referred to the 50 kHz
-    noise bandwidth that the units attr reports. The empty bins fall in the -inf
-    catch-all.
+    The populated bin is at 0 dBm, the tone power, independent of the 50 kHz
+    `noise_bandwidth` attr. The empty bins are in the -inf catch-all bin.
 
     The fractions are 19/20 and 1/20. `HIST_NFFT` is 20, not a power of 2, so neither
-    fraction is dyadic. They are computed here in float32 to match the measurement's
-    registered dtype and compared with a float32 tolerance rather than exact equality.
+    fraction is dyadic and the comparison uses a float32 tolerance rather than exact
+    equality.
     """
     iq = sa.testing.tone(
         HIST_DURATION, HIST_FS, frequency=2 * HIST_FREQUENCY_RESOLUTION
@@ -620,8 +623,8 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
 def test_spectrogram_histogram_bin_coordinate(
     integration_bandwidth, noise_bandwidth, long_name
 ):
-    """the bin coordinate is the shared power grid with the noise bandwidth of the
-    readings, the same attr as on the histogram variable"""
+    """the bin coordinate is the shared power grid. The `noise_bandwidth` attr of the
+    coordinate equals that of the histogram variable."""
     iq = sa.testing.tone(HIST_DURATION, HIST_FS)
 
     da = spectrogram_histogram_of(iq, integration_bandwidth=integration_bandwidth)
@@ -642,8 +645,8 @@ HIST_NOISE_LEVEL_DBM = -10.0
 
 def test_spectrogram_histogram_white_noise_peaks_at_the_noise_bandwidth_level():
     """the mode of the dB histogram of exponentially distributed bin powers is at the
-    dB of the mean, N0 * noise_bandwidth, and the fraction-weighted linear mean equals
-    that power"""
+    dB of the mean, N0 * noise_bandwidth. The fraction-weighted linear mean equals
+    that power."""
     noise_mW = 10 ** (HIST_NOISE_LEVEL_DBM / 10)
     psd = noise_mW / HIST_FREQUENCY_RESOLUTION
     iq = sa.testing.circular_awgn(HIST_NOISE_DURATION, HIST_FS, power=psd * HIST_FS)
@@ -693,11 +696,11 @@ def ratio_histogram(iq, **kwargs):
 
 
 def two_ports_offset_by(offset_dB):
-    """noise repeated on 2 ports, with port 1 scaled up by `offset_dB`.
+    """return noise repeated on 2 ports, with port 1 scaled by `offset_dB` (dB).
 
-    Noise rather than a tone keeps every spectrogram bin well above the float32
-    roundoff floor. In the near-empty bins of a tone's spectrogram the cross-port
-    ratio is roundoff noise rather than the applied offset.
+    Noise rather than a tone keeps every spectrogram bin above the float32 roundoff
+    floor. In the near-empty bins of the spectrogram of a tone, the cross-port ratio
+    is roundoff rather than the applied offset.
     """
     iq = sa.testing.circular_awgn(HIST_DURATION, HIST_FS, power=1e-6 * HIST_FS, ports=2)
     iq[1] = iq[0] * 10 ** (offset_dB / 20)
@@ -707,7 +710,7 @@ def two_ports_offset_by(offset_dB):
 @pytest.mark.parametrize('offset_dB', [0.0, 6.0, -7.0], ids='offset{:g}dB'.format)
 def test_spectrogram_ratio_histogram_offset_ports(offset_dB):
     """row 0 is spg[0]-spg[1] and row 1 is spg[1]-spg[0], so a level offset between
-    the ports puts the 2 rows at opposite signs of it"""
+    the ports puts the 2 rows at the offset with opposite signs"""
     da = ratio_histogram(two_ports_offset_by(offset_dB))
 
     bins = da.spectrogram_ratio_power_bin.values
@@ -724,9 +727,9 @@ def test_spectrogram_ratio_histogram_requires_two_ports(ports):
 
 
 def test_spectrogram_ratio_histogram_bin_units_are_ratios():
-    """the bin coordinate is a cross-port ratio, so its units are dB rather than the
-    dBm of the absolute spectrogram histogram, and neither the coordinate nor the
-    histogram has a noise bandwidth"""
+    """the bin coordinate is a cross-port ratio, so the `units` attr is dB rather than
+    the dBm of the absolute spectrogram histogram. Neither the coordinate nor the
+    histogram has a `noise_bandwidth` attr."""
     da = ratio_histogram(two_ports_offset_by(0.0))
 
     assert da.spectrogram_ratio_power_bin.attrs['units'] == 'dB'

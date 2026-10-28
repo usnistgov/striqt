@@ -1,6 +1,4 @@
-"""utilities on individual captures and the ports they span, shared across the sensor
-package.
-"""
+"""utilities on individual captures and the ports of a capture"""
 
 from __future__ import annotations as __
 
@@ -34,9 +32,14 @@ def get_capture_type(
 
 @sa.util.lru_cache()
 def split_capture_ports(capture: SC) -> list[SC]:
-    """split a multi-channel capture into a list of single-channel captures.
+    """split a multi-port capture into one single-port capture per entry of `port`.
 
-    A single-port capture (a scalar `port` field) is returned as the only element.
+    Each tuple-valued field is distributed by position. A capture with a scalar
+    `port` is returned as the only element.
+
+    Raises:
+        ValueError: if a tuple-valued field has a length other than the number of
+            ports
     """
 
     if isinstance(capture.port, numbers.Number):
@@ -66,7 +69,7 @@ def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC |
     # a list with 1 capture per port
     c1_split = split_capture_ports(c1)
 
-    # a new capture has no predecessor to pair with
+    # a new capture has no predecessor
     if c2 is None or is_new:
         c2_split = len(c1_split) * [None]
     else:
@@ -114,13 +117,15 @@ def get_unique_ports(
 def concat_group_sizes(
     captures: tuple[structs.SensorCapture, ...], *, min_size: int = 1
 ) -> list[int]:
-    """return the minimum sizes of groups of captures that can be concatenated.
+    """return the sizes of capture groups that each include every distinct capture.
 
-    Some analysis results have shapes that depend on (sample_rate,
-    analysis_bandwidth, duration).
+    The groups are consecutive runs of `captures`, which compare by the
+    `SensorCapture` fields alone. A group closes once the
+    group has at least `min_size` captures and both the group and the remaining
+    captures include every distinct capture. The last group takes the remainder.
 
     Returns:
-        The list l of sizes of each group such that sum(l) == len(captures)
+        the group sizes in order, summing to ``len(captures)``
     """
 
     class C(structs.SensorCapture, frozen=True, forbid_unknown_fields=False):

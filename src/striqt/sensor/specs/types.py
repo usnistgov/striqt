@@ -31,17 +31,22 @@ ArrayBackend = Annotated[
 ]
 BackendSampleRate = Annotated[float, Meta('Source sample rate', 'S/s', gt=0)]
 ChannelBandwidth = Annotated[
-    float, Meta('nominal 5G NR channel bandwidth (3GPP TS 38.104)', 'Hz', gt=0)
+    float, Meta('nominal 5G NR channel bandwidth (3GPP TS 38.104 §5.3)', 'Hz', gt=0)
 ]
 ChannelGuardBandwidths = Annotated[
     tuple[float, float],
-    Meta('guard bandwidths trimmed from the [low, high] channel edges', 'Hz'),
+    Meta('guard bandwidths excluded at the (low, high) edges of the channel', 'Hz'),
 ]
 SSBFrequencyOffset = Annotated[
     float, Meta('offset of the SSB center from the channel center frequency', 'Hz')
 ]
 MinSampleRate = Annotated[
-    float, Meta('lower bound on the sample rate derived for the channel', 'S/s', gt=0)
+    float,
+    Meta(
+        'lower bound on the sample rate derived for the channel; None applies no bound',
+        'S/s',
+        gt=0,
+    ),
 ]
 MasterClockRate = Annotated[
     float, Meta('Base sample rate used inside the source', 'Hz', gt=0)

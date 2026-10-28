@@ -1,12 +1,12 @@
 """striqt.sensor sweeps end to end over the synthetic sources: the CLI on the YAML files
 under sweeps/, and in-memory sweeps checked against the generators the sources call.
 
-The PSD oracle is the window's own spectrum: a unit tone at fine bin k0 puts
+The PSD oracle is the spectrum of the window: a unit tone at fine bin k0 puts
 ``|W(k - k0)|**2 / (nfft * sum(w**2))`` of its power in fine bin k (Parseval), and a
 reported bin integrates the fine bins it spans. For a bin-centered tone with no
-integration this is the ``-10*log10(enbw_bins)`` of tests/analysis; with quick.yaml's
-24-bin integration it is the in-block fraction of the kaiser window, about -0.002 dB.
-The remaining -33 dB spills into the neighboring block.
+integration this is the ``-10*log10(enbw_bins)`` of tests/analysis. With the 24-bin
+integration of quick.yaml the oracle is the in-block fraction of the kaiser window,
+about -0.002 dB, and the remaining -33 dB spills into the neighboring block.
 """
 
 from __future__ import annotations
@@ -52,12 +52,13 @@ ports_of = ss.specs.captures.ensure_tuple
 
 
 def tone_bin_powers(window, nfft, nzero, tone_bin, bin_centers, half_width):
-    """the fraction of a unit tone's power that each reported PSD bin receives.
+    """return the fraction of the power of a unit tone that each reported PSD bin
+    receives.
 
-    `tone_bin`, `bin_centers`, and `half_width` are in units of fine (nfft) bins; a
-    reported bin integrates the fine bins within `half_width` of its center. The
-    window is `nfft - nzero` samples long and zero-padded to `nfft`, as
-    `sw.spectrogram` does for window_fill < 1.
+    `tone_bin`, `bin_centers`, and `half_width` are in units of fine (nfft) bins. A
+    reported bin integrates the fine bins within `half_width` of the bin center. The
+    window is ``nfft - nzero`` samples long and zero-padded to `nfft`, as
+    `sw.spectrogram` does for ``window_fill < 1``.
     """
     w = np.zeros(nfft)
     w[: nfft - nzero] = np.asarray(sw.get_window(window, nfft - nzero), dtype='float64')
@@ -71,7 +72,7 @@ def tone_bin_powers(window, nfft, nzero, tone_bin, bin_centers, half_width):
 
 
 def exponential_mean_bound(windows, count, p=1e-3):
-    """x such that the mean of `windows` unit exponentials exceeds x in any of
+    """return x such that the mean of `windows` unit exponentials exceeds x in any of
     `count` bins with probability below `p`, from the Chernoff bound
     ``P(mean > x) <= (x*exp(1-x))**windows``"""
     lo, hi = 1.0, 100.0
@@ -91,8 +92,8 @@ def window_count(attrs, capture) -> int:
 
 
 def check_tone_psd(psd, freqs, attrs, capture, frequency_offset, snr, err_msg=''):
-    """assert the mean PSD of one port contains a unit tone at `frequency_offset` at the
-    modeled level, and nothing else above the noise and roundoff floors"""
+    """assert that the mean PSD of one port has a unit tone at `frequency_offset` (Hz)
+    at the modeled level and nothing else above the noise and roundoff floors"""
     res = attrs['frequency_resolution']
     nfft = round(capture.sample_rate / res)
     nzero = round((1 - Fraction(str(attrs['window_fill']))) * nfft)
@@ -141,15 +142,15 @@ def check_tone_psd(psd, freqs, attrs, capture, frequency_offset, snr, err_msg=''
 
 
 def mean_psd(ds, row):
-    """the 'mean' PSD of one row and its frequency axis, without the NaN padding
-    that concatenating captures of different bandwidths adds"""
+    """return the ``'mean'`` PSD of one row and the frequency axis, without the NaN
+    padding added by concatenating captures of different bandwidths"""
     psd = ds.power_spectral_density.sel(time_statistic='mean').isel(capture=row)
     psd = psd.dropna('baseband_frequency')
     return psd.values.astype('float64'), psd.baseband_frequency.values
 
 
 def check_site(ds):
-    # sites/global.yaml and sites/radio02.yaml keyed on the extension module's RADIO_ID
+    # sites/global.yaml and sites/radio02.yaml keyed on the RADIO_ID of extensions.py
     assert set(ds.source_id.values) == {RADIO_ID}
     assert set(ds.site_name.values) == {'WAPA-north'}
     assert set(ds.radio_name.values) == {'radio02'}
@@ -241,8 +242,8 @@ def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
 
 
 def test_check_sweep_formats_the_default_sink_path(write_yaml, monkeypatch, capsys):
-    """a spec with no `sink:` block takes the `Sink.path` default, whose format
-    fields must all be ones that `get_path_fields` supplies"""
+    """a spec with no `sink:` block takes the `Sink.path` default. Every format field
+    of that default is supplied by `get_path_fields`."""
     path = write_yaml(
         'no-sink-block.yaml',
         """
@@ -281,9 +282,9 @@ def test_check_sweep_formats_the_default_sink_path(write_yaml, monkeypatch, caps
 def test_check_sweep_lists_the_looped_field_over_its_adjustment(
     write_yaml, monkeypatch, capsys
 ):
-    """the coordinates block follows `loop_captures`: a field that is both looped and
-    adjusted lists the loop's values in loop order, while an adjusted field that no
-    loop touches lists the adjusted value"""
+    """the coordinates block follows `loop_captures`. A field that is both looped and
+    adjusted lists the loop values in loop order. An adjusted field outside every loop
+    lists the adjusted value."""
     path = write_yaml(
         'looped-and-adjusted.yaml',
         """
@@ -344,8 +345,8 @@ CELLULAR_SWEEPS = {
 
 
 def derived_sample_rates(spec) -> list[float]:
-    """the sample rate of each row of the output, one per port of each capture, from
-    the channel each capture names: the smallest multiple of 896 subcarriers at or
+    """return the sample rate of each output row, one per port of each capture, from
+    the channel named by each capture: the smallest multiple of 896 subcarriers at or
     above the channel bandwidth plus the 250 kHz transition band"""
     rates = []
     for capture in spec.captures:
@@ -364,9 +365,10 @@ def derived_sample_rates(spec) -> list[float]:
 def test_check_sweep_budgets_the_derived_cellular_analysis(
     name, fake_soapy, monkeypatch, capsys
 ):
-    """check-sweep opens a cellular spec through its runner. The printed sink path is
-    formatted, and the tolerance table lists the measurements of the derived `Sweep`
-    analysis rather than the fields of the document's `analysis:` block."""
+    """``check-sweep`` opens a cellular spec through the runner of the spec. The printed
+    sink path is formatted, and the tolerance table lists the measurements of the
+    derived `Sweep` analysis rather than the fields of the `analysis:` block of the
+    document."""
     path = CELLULAR_SWEEPS[name]
     # open_resources chdirs into the spec directory and does not change back
     monkeypatch.chdir(os.getcwd())
@@ -401,10 +403,10 @@ def test_check_sweep_budgets_the_derived_cellular_analysis(
 
 
 def test_cli_run_cellular(fake_soapy, tmp_path, monkeypatch):
-    """the fake-soapy cellular sweep writes one store whose rows carry the sample
-    rate and analysis bandwidth derived from each capture's channel, the derived
-    measurements, the document's `cell_channels` as an attr, and attrs that rebuild
-    the document"""
+    """the fake-soapy cellular sweep writes one store. Each row has the sample rate and
+    analysis bandwidth derived from the channel of the capture. The store has the
+    derived measurements, the `cell_channels` of the document as an attr, and attrs
+    that rebuild the document."""
     path = FAKE_SOAPY_CELLULAR_SPEC
     # open_resources chdirs into the spec directory and does not change back
     monkeypatch.chdir(os.getcwd())
@@ -447,8 +449,8 @@ FILTER_ONLY_IMPULSE_TIME = (
     IMPULSE_BIN * round(FILTER_ONLY_FS * DETECTOR_PERIOD) + 100
 ) / FILTER_ONLY_FS
 
-# -1e6 and 1.6e6 Hz sit on the 8 kHz PSD grid and on the 1 kHz grid of the
-# resampler's 6250-point FFT at 6.25 MS/s, so the tone passes without COLA ripple
+# -1e6 and 1.6e6 Hz are on the 8 kHz PSD grid and on the 1 kHz grid of the
+# 6250-point resampler FFT at 6.25 MS/s, so the tone passes without COLA ripple
 FIDELITY_CAPTURES = {
     'single_tone': (
         preset_capture('single_tone', frequency_offset=-1e6, snr=None),
@@ -485,9 +487,9 @@ def check_single_tone(ds, capture, subtests):
 
 
 def check_noise(ds, capture, subtests):
-    """only the noise power survives resampling: the PSD is flat at
-    noise_psd * noise_bandwidth per bin, and its mean over ports, windows, and bins
-    averages that many exponential variates (hann bins are correlated over enbw)"""
+    """assert that the PSD is flat at ``noise_psd * noise_bandwidth`` per bin. Only the
+    noise power survives resampling. The mean over ports, windows, and bins averages
+    that many exponential variates, with hann bins correlated over the ENBW."""
     attrs = ds.power_spectral_density.attrs
     nfft = round(capture.sample_rate / attrs['frequency_resolution'])
     mean_dB = ds.power_spectral_density.sel(time_statistic='mean')
@@ -507,8 +509,9 @@ def check_noise(ds, capture, subtests):
 
 
 def sawtooth_rms_model_dB(capture, bins):
-    """rms power of the ramp ``amplitude * t / period`` over detector bin `i` of N
-    samples: the mean over n of ``((i*N + n) / (period*fs))**2`` in closed form"""
+    """return the rms power (dB) of the ramp ``amplitude * t / period`` over each
+    detector bin `i` in `bins`, each N samples long: the closed-form mean over n of
+    ``((i*N + n) / (period*fs))**2``"""
     N = round(capture.sample_rate * DETECTOR_PERIOD)
     i = np.asarray(bins)
     mean_sq = i**2 * N**2 + i * N * (N - 1) + (N - 1) * (2 * N - 1) / 6
@@ -519,9 +522,10 @@ def sawtooth_rms_model_dB(capture, bins):
 
 
 def check_sawtooth(ds, capture, subtests):
-    """a single ramp over the capture. The source pre-roll ends at full scale, so the
-    ramp start is a step whose FIR ringing spans FILTER_SIZE//2 samples at each end;
-    a linear ramp passes a symmetric unit-gain filter unchanged elsewhere."""
+    """assert that the rms detector follows a single ramp over the capture. The source
+    pre-roll ends at full scale, and the ramp start is a step with FIR ringing over
+    ``FILTER_SIZE//2`` samples at each end. A linear ramp passes a symmetric unit-gain
+    filter unchanged elsewhere."""
     tol = capture_tolerances(capture, SOURCE, ANALYSIS)['channel_power_time_series']
     pad = FILTER_SIZE // 2
     with subtests.test('rms detector follows the ramp'):
@@ -540,8 +544,8 @@ def check_dirac_delta(ds, capture, subtests):
     peak = detector(ds, 'peak')
     with subtests.test('peak detector bin'):
         assert np.argmax(peak, axis=1).tolist() == [IMPULSE_BIN, IMPULSE_BIN]
-    # the FIR's central tap is bw/fs (a symmetric transition around bw/2), and the
-    # resampler's own passband can only reduce the peak further
+    # the central FIR tap is bw/fs (a symmetric transition around bw/2), and the
+    # resampler passband can only reduce the peak further
     filter_peak_dB = 20 * np.log10(
         amplitude * capture.analysis_bandwidth / fs_sdr(capture)
     )
@@ -630,10 +634,9 @@ CAPTURE_BANDWIDTH_OUTPUTS = ss.specs.BundledAnalysis.from_dict({
 def test_mixed_analysis_bandwidth_store_resolves_bandwidth_per_capture(
     tmp_path, monkeypatch
 ):
-    """channel power and IQ outputs written from captures at two analysis bandwidths
-    carry no `noise_bandwidth` attr, and `striqt.figures` resolves the bandwidth of
-    each capture from the coordinates: the finite `analysis_bandwidth`, else the
-    `sample_rate`"""
+    """channel power and IQ outputs written from captures at 2 analysis bandwidths have
+    no `noise_bandwidth` attr. `striqt.figures` resolves the bandwidth of each capture
+    from the coordinates: the finite `analysis_bandwidth`, else the `sample_rate`."""
     from striqt.figures import util as figures_util
 
     # open_resources chdirs into the spec directory and does not change back

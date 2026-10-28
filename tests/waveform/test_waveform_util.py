@@ -14,7 +14,7 @@ from striqt.waveform.lib import util
 
 
 class _Shelf(UserDict):
-    """an in-memory shelf that raises from whichever operations a test names"""
+    """an in-memory shelf that raises from the operations named in `faults`"""
 
     def __init__(self, *faults: str):
         self.faults = set(faults)
@@ -23,8 +23,9 @@ class _Shelf(UserDict):
 
     def _check(self, op: str):
         if op in self.faults:
-            # what the macOS dbm backend raises once its file is corrupt, and a
-            # ValueError subclass, so a caller mistakes it for a bad argument
+            # what the macOS dbm backend raises once the file is corrupt.
+            # UnicodeDecodeError is a ValueError subclass, so a caller mistakes the
+            # fault for a bad argument
             raise UnicodeDecodeError('utf-8', b'\x80', 0, 1, 'invalid start byte')
 
     def keys(self):
@@ -42,10 +43,11 @@ class _Shelf(UserDict):
 
 @pytest.fixture
 def shelf(monkeypatch, tmp_path):
-    """install a fresh shelf whose files are in `tmp_path`, never the real cache.
+    """install a fresh shelf with files under `tmp_path`, never the real cache.
 
-    `_discard_cache_shelf` unlinks what `_cache_shelf_path` names, so a test that
-    reaches it would delete the developer's cache without this redirection.
+    `_discard_cache_shelf` unlinks the file that `_cache_shelf_path` names, so without
+    this redirection a test that reaches `_discard_cache_shelf` would delete the cache
+    of the developer.
     """
     fake = _Shelf()
     monkeypatch.setattr(util, '_cache_shelf_path', lambda: str(tmp_path / 'calls.db'))
@@ -95,8 +97,8 @@ def test_an_unreadable_shelf_falls_back_to_computing(shelf, tmp_path):
     with pytest.warns(UserWarning, match='deleted the unusable disk cache'):
         assert square(4) == 16
 
-    # the file contains only recomputable results, so it is deleted rather than
-    # failing again
+    # the file contains only recomputable results, so the file is deleted rather
+    # than failing again
     assert not corrupt.exists()
     assert util._cache_shelf_disabled
     # later calls skip the shelf entirely instead of warning once per call
@@ -129,9 +131,9 @@ def test_a_failing_open_falls_back_to_computing(monkeypatch, shelf):
 
 
 def test_the_wrapped_functions_own_error_propagates_unchanged(shelf):
-    """`get_window` raises a bare ValueError for a bad window name, which callers
-    label as a specification error, so a cache fault must never arrive as one of
-    those and vice versa"""
+    """`get_window` raises a bare `ValueError` for a bad window name, and callers
+    label that error a specification error. A cache fault must not arrive as a
+    `ValueError`, and a `ValueError` must not arrive as a cache fault."""
 
     @util.persistent_cache()
     def get_window(name):
@@ -165,8 +167,9 @@ def test_lazy_import_binds_a_submodule_onto_its_imported_parent(
 def test_lazy_import_of_dask_array_leaves_the_dask_attribute_resolvable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """array_api_compat 1.11 tests `isinstance(x, dask.array.Array)` after a bare
-    `import dask.array`, which returns the lazy entry without binding it"""
+    """array_api_compat 1.11 tests ``isinstance(x, dask.array.Array)`` after a bare
+    ``import dask.array``. That import returns the lazy entry without binding the
+    `array` attribute."""
     dask = pytest.importorskip('dask')
     monkeypatch.delitem(sys.modules, 'dask.array', raising=False)
     monkeypatch.delattr(dask, 'array', raising=False)

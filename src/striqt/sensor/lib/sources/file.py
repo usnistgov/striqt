@@ -207,7 +207,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
 
 
 class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
-    """a source of IQ samples from iq_waveform variables in a zarr store"""
+    """a source of IQ samples from the `iq_waveform` variable of a zarr store"""
 
     _waveform: 'xr.DataArray'
     _capture_info: specs.FileAcquisitionInfo

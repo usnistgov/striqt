@@ -1,10 +1,4 @@
-"""OFDM frame-model base class shared by the standard-specific PHY models.
-
-`PhyOFDM` turns a sequence of cyclic prefix sizes into the sample indices of the
-cyclic prefixes and symbols in one contiguous block; the subclasses in `phy_3gpp`
-and `phy_802_16` supply the sizes and the index tensors for correlation.
-`_index_or_all` validates the symbol/slot selection arguments they share.
-"""
+"""OFDM frame-model base class shared by the standard-specific PHY models."""
 
 from __future__ import annotations as __
 
@@ -71,7 +65,7 @@ class PhyOFDM:
         if contiguous_size is not None:
             self.contiguous_size = contiguous_size
         else:
-            # the default contiguous block is the symbols and their prefixes with no padding
+            # the default contiguous block is the symbols with cyclic prefixes and no padding
             self.contiguous_size = int(np.sum(cp_sizes) + len(cp_sizes) * nfft)
 
         # build a (start_idx, size) pair for each CP

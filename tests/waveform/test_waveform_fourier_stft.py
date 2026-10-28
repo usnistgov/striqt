@@ -48,8 +48,8 @@ class TestStft:
     @given(x=noise_waveforms(min_size=256, max_size=512), params=stft_parameters())
     def test_output_shape(self, x, params):
         """the window count follows the segment step, the bin count is nperseg, the
-        dtype is the input's, and the frequency axis is fftfreq(nperseg, fs)
-        (min_size=256 guarantees len(x) >= max(nperseg))"""
+        dtype is that of the input, and the frequency axis is fftfreq(nperseg, fs).
+        ``min_size=256`` guarantees ``len(x) >= max(nperseg)``."""
         freqs, times, X = stft(x, truncate=True, **params)
 
         step = params['nperseg'] - params['noverlap']
@@ -326,10 +326,12 @@ class TestStftFrequencyEditing:
 
 # %% numpy vs cupy
 class TestNumpyCupyCrossComparison:
-    """Tolerances come from `cross_backend_sigma`, parameterized by the FFT sizes and
-    elementwise operations each function performs. Elementwise checks use an absolute
-    tolerance anchored on the output rms, because the outputs are noise-like and a
-    relative tolerance is meaningless in their smallest bins.
+    """tolerances come from `cross_backend_sigma`, parameterized by the FFT sizes and
+    elementwise operations each function performs.
+
+    Elementwise checks use an absolute tolerance anchored on the output rms. The
+    outputs are noise-like, and a relative tolerance is meaningless in the smallest
+    bins.
     """
 
     NFFT = 64

@@ -27,10 +27,9 @@ def is_decade(x, **kwargs):
 
 @lru_cache()
 def _log_tick_range(vlo, vhi, count, subs=(1.0,)):
-    """use _ticker.LogLocator to generate ticks confined to the specified range.
+    """return up to `count` tick values in ``[vlo, vhi)`` on decades scaled by `subs`.
 
-    The ticks fall on rounder numbers than `np.logspace` returns. They are not
-    necessarily evenly spaced.
+    The ticks are those of `matplotlib.ticker.LogLocator`, and are not evenly spaced.
     """
     locator = _ticker.LogLocator(base=10.0, subs=subs, numticks=count)
     ticks = locator.tick_values(vlo, vhi)
@@ -39,10 +38,9 @@ def _log_tick_range(vlo, vhi, count, subs=(1.0,)):
 
 @lru_cache()
 def _linear_tick_range(vlo, vhi, count, steps=(1.0,)):
-    """use _ticker.MaxNLocator to generate ticks in the specified range.
+    """return up to `count` tick values in ``[vlo, vhi)`` on round multiples of `steps`.
 
-    The ticks fall on rounder numbers than `np.linspace` returns. They are not
-    necessarily evenly spaced.
+    The ticks are those of `matplotlib.ticker.MaxNLocator`.
     """
     locator = _ticker.MaxNLocator(nbins=count, steps=steps)
     ticks = locator.tick_values(vlo, vhi)
@@ -51,13 +49,17 @@ def _linear_tick_range(vlo, vhi, count, steps=(1.0,)):
 
 @lru_cache()
 def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.ndarray:
-    """prune a sequence of tick marks to `count`, removing the most closely spaced
-    first.
+    """remove the most closely spaced ticks from `ticks` until `count` remain.
 
-    `prefer` lists tick marks to keep, in order of preference.
+    Args:
+        ticks: the candidate tick values
+        count: the number of ticks to keep
+        prefer: tick values exempt from removal, in order of preference; only the
+            first `count` entries are exempt
 
     Returns:
-        `np.array` of shape `(count,)`
+        the remaining ticks in the order of `ticks`, as a 1-D array of `count`
+        values, or more when every remaining tick is exempt
     """
 
     x = np.array(ticks).copy()
@@ -79,8 +81,12 @@ def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.ndarra
 
 
 class EngFormatter(_ticker.EngFormatter):
-    """format ticks as `mpl.ticker.EngFormatter` does, with `unitInTick=False`
-    placing one unit suffix on the axis label instead of in each tick"""
+    """a `matplotlib.ticker.EngFormatter` with the option of one unit prefix per axis.
+
+    With ``unitInTick=False``, each tick is a mantissa at one shared order of
+    magnitude, and `get_axis_unit_suffix` returns the prefixed unit for the axis
+    label.
+    """
 
     _usetex: bool
     _useMathText: bool
@@ -301,21 +307,14 @@ class GammaLogitFormatter(_ticker.LogitFormatter):
 
 
 class GammaQQScale(_scale.FuncScale):
-    """A transformed scale that linearizes Gamma-distributed survival functions when the
-    independent axis is log-scaled (e.g., dB).
+    """an axis scale that linearizes the Gamma survival function of power in dB.
 
-    Suggested usage:
+    `k` is the Gamma shape parameter, which is the number of averaged power samples
+    in a power measurement.
 
-    ```
-        from iqwaveform import figures
-
-        plot(10*np.log10(bins), sf)
-
-        ax.set_scale('gamma-ccdf', k=10)
-
-    ```
-    In power measurements, the shape parameter `k` is the number of averaged power samples.
-
+    Examples:
+        >>> ax.plot(10 * np.log10(bins), sf)
+        >>> ax.set_yscale('gamma-qq', k=10)
     """
 
     name = 'gamma-qq'
@@ -369,8 +368,10 @@ _scale.register_scale(GammaQQScale)
 
 
 def contiguous_segments(df, index_level, threshold=7, relative=True):
-    """split `df` into DataFrames whose index values at level `index_level` have
-    no step greater than `threshold` times the median step.
+    """split `df` into DataFrames at each gap in the index level `index_level`.
+
+    A gap is a step between consecutive index values greater than `threshold`,
+    scaled by the median step when `relative` is True.
     """
     delta = pd.Series(df.index.get_level_values(index_level)).diff()
     if relative:
@@ -388,12 +389,16 @@ def _has_tick_label_collision(ax, which: str, spacing_threshold=10):
 
     Args:
         ax: the matplotlib axes that owns the tick labels
-
-        which: "x" or "y"
+        which: ``'x'`` or ``'y'``
+        spacing_threshold: the minimum gap between adjacent label boxes, in display
+            pixels
 
     Returns:
-        True when the smallest gap between adjacent tick label boxes, in display
-        pixels, is below `spacing_threshold`
+        True when the smallest gap between adjacent tick label boxes is below
+        `spacing_threshold`
+
+    Raises:
+        ValueError: if `which` is neither ``'x'`` nor ``'y'``
     """
     fig = ax.get_figure()
 
@@ -456,8 +461,10 @@ def rotate_ticklabels_on_collision(ax, which: str, angles: list, spacing_thresho
 
 
 def xaxis_concise_dates(fig, ax, adjacent_offset: bool = True):
-    """apply concise date formatting to the x-axis, with the date offset prepended
-    to the first tick label when `adjacent_offset` is True.
+    """format the x axis of `ax` with `matplotlib.dates.ConciseDateFormatter`.
+
+    With `adjacent_offset` True, the tick labels are drawn unrotated and the date
+    offset is prepended to the first tick label. The figure is redrawn.
     """
 
     from matplotlib import dates, transforms

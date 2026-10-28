@@ -4,8 +4,7 @@ Each dataset has 3 captures with a calibrated `system_noise` (dBm/Hz). The power
 histograms are the dB density of a Gamma-distributed bin power, with the mode of each
 capture at the predicted noise level plus `HISTOGRAM_OFFSET_DB`. The third capture has
 a higher noise figure and a mode 5 dB above the prediction, as with a signal present.
-Fractions below `MIN_FRACTION` are zero, and `occupied_bins` returns the support of a
-histogram. Not a conftest. The figures test modules import it by bare name.
+Fractions below `MIN_FRACTION` are zero.
 """
 
 from __future__ import annotations
@@ -41,7 +40,8 @@ def predicted_levels_dBm(
 def capture_bandwidth() -> np.ndarray:
     """return the noise bandwidth (Hz) of each capture for a dBm output without an attr.
 
-    The analysis bandwidth, or the sample rate where the analysis bandwidth is infinite.
+    The bandwidth is the analysis bandwidth, or the sample rate where the analysis
+    bandwidth is infinite.
     """
     return np.where(np.isfinite(ANALYSIS_BANDWIDTH), ANALYSIS_BANDWIDTH, SAMPLE_RATE)
 

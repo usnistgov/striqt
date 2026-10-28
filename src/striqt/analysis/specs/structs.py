@@ -35,9 +35,9 @@ class SpecBase(
     """the base of every spec struct.
 
     An instance is a frozen, keyword-only `msgspec.Struct` that rejects unknown
-    fields. Construction freezes tuple, dict, and list field values. `to_dict` and
-    `from_dict` round-trip an instance through builtin types with the encoding hooks
-    for the extra field types, and `validate` is that round trip.
+    fields. Construction converts list and dict field values to tuple and
+    `frozendict`. An instance round-trips through `to_dict` and `from_dict`
+    unchanged.
     """
 
     def replace(self, **attrs) -> Self:
@@ -54,7 +54,17 @@ class SpecBase(
         return new.validate()
 
     def to_dict(self, unfreeze: bool = False, allow_tuple_keys: bool = True) -> dict:
-        """return a dictinary representation of `self`"""
+        """return the field values of `self` as a dict of builtin values.
+
+        Args:
+            unfreeze: True converts nested tuple and `frozendict` values to list and
+                dict
+            allow_tuple_keys: False renders tuple dict keys as JSON array strings
+
+        Returns:
+            a dict keyed by field name; `fractions.Fraction` values are strings and
+            `frozendict` values are dicts
+        """
         if allow_tuple_keys:
             enc_hook = helpers._enc_hook
         else:
@@ -71,6 +81,16 @@ class SpecBase(
 
     @classmethod
     def from_dict(cls: type[_T], d: dict | helpers.frozendict) -> _T:
+        """return an instance of `cls` converted from the field values in `d`.
+
+        Args:
+            d: field values keyed by name; a float for a `fractions.Fraction` field
+                converts to the fraction of its decimal representation
+
+        Raises:
+            msgspec.ValidationError: when a required field is missing, a key is not a
+                field, or a value does not convert to the annotated type
+        """
         return helpers.convert_dict(d, type=cls)
 
     @classmethod
@@ -78,6 +98,12 @@ class SpecBase(
         return helpers.convert_spec(other, type=cls)
 
     def validate(self) -> Self:
+        """return an equal instance rebuilt through `to_dict` and `from_dict`.
+
+        Raises:
+            msgspec.ValidationError: when a field value does not satisfy the annotated
+                type or constraints
+        """
         return _validate(self)
 
     def __post_init__(self):
@@ -113,12 +139,9 @@ class Capture(SpecBase, kw_only=True, frozen=True):
 
 
 class AnalysisCapture(Capture, kw_only=True, frozen=True):
-    """the projection of a capture onto the fields that measurements may read.
+    """the projection of a capture onto the fields that a measurement may read.
 
-    Measurement validators and coordinate factories receive this projection of a
-    sensor capture. Captures that differ only in fields outside this projection
-    share one validation cache entry. A measurement validator cannot read a capture
-    field that this class does not declare.
+    Two captures with equal values in these fields project to equal instances.
     """
 
     center_frequency: Union[types.CenterFrequency, None] = None
@@ -136,55 +159,54 @@ class FilteredCapture(Capture, kw_only=True, frozen=True):
 
 
 class Analysis(SpecBase, kw_only=True, frozen=True):
-    """
-    Returns:
-        Analysis result of type `(xarray.DataArray if as_xarray else type(iq))`
+    """the base of every measurement spec.
 
-    Args:
-        iq (numpy.ndarray, cupy.ndarray, or AcquiredIQ): the M-channel input waveform
-            of shape (M,N), or the acquisition from which the registry selects one
-        capture:
-        as_xarray (bool): True to return xarray.DataArray or False to match type(iq)
+    The fields of a subclass are the keyword arguments of one measurement.
     """
 
 
 class ErrorBound(SpecBase, kw_only=True, frozen=True):
-    """an error bound: the rms over all elements and the peak at any one element"""
+    """an error bound on the elements of one output.
+
+    `rms` bounds the error over all elements and `peak` the error at any one
+    element, both in the units of the `Tolerance` field.
+    """
 
     rms: float
     peak: float
 
 
 class Tolerance(SpecBase, kw_only=True, frozen=True):
-    """budget the roundoff error of one measurement output.
+    """the roundoff error budget of one measurement output.
 
-    A tolerance function derives this from a (capture, spec) pair alone, so `on_peak`
-    holds at an element at full scale and `off_peak_dBc` is relative to the output's
-    own peak. Neither can depend on the values produced. The peak is the
-    matched-filter bin of the matched input, e.g., a tone's FFT bin or an impulse's
-    detector sample. `off_peak_dBc` governs the other bins, and elements deeper than
-    `off_peak_dBc.peak` are not resolved by the budget.
+    The budget depends on the capture and the spec alone, not on the output
+    values. `on_peak` bounds the error of the elements at the peak of the output.
+    `off_peak_dBc` bounds the error of the other elements as a function of the
+    level of each below the peak. Elements more than `off_peak_dBc.peak` below the
+    peak are not bounded. The peak is the matched-filter bin of the matched input,
+    e.g., the FFT bin at the frequency of a tone or the detector sample at the time
+    of an impulse.
     """
 
     units: typing.Annotated[
         str, helpers.Meta("units of `on_peak`: 'dB', or the linear units of the output")
     ]
     rtol: typing.Annotated[
-        float, helpers.Meta('relative tolerance on the output value')
+        float, helpers.Meta('relative error bound on each output value, as a ratio')
     ]
     on_peak: typing.Annotated[
         ErrorBound,
         helpers.Meta(
-            'absolute error, in `units`, of elements at the peak level of the output: '
-            'its rms over them and its worst case at any one'
+            'absolute error bound, in `units`, on the elements at the peak of the '
+            'output'
         ),
     ]
     off_peak_dBc: typing.Annotated[
         Union[ErrorBound, None],
         helpers.Meta(
-            'level below the peak of the output, as a negative value, at which the '
-            'rms (and the worst-case) amplitude error equals the amplitude of the '
-            'element itself',
+            'levels below the output peak, as negative values, at which the rms and '
+            'the worst-case amplitude errors equal the amplitude of the element, or '
+            'None to apply `on_peak` to every element',
             'dBc',
         ),
     ] = None
@@ -205,12 +227,13 @@ class FrequencyAnalysisSpecBase(
 ):
     """the STFT settings shared by the spectrum measurements.
 
-    `frequency_resolution` sets the FFT size at the capture sample rate.
-    `fractional_overlap` and `window_fill` set the hop and the zero padding of each
-    window as fractions of that size. `integration_bandwidth` sums adjacent bins
-    after the FFT and must be a multiple of `frequency_resolution`. `trim_stopband`
-    cuts the frequency axis to the `analysis_bandwidth` of the capture when that
-    bandwidth is finite.
+    The FFT size is the capture `sample_rate` divided by `frequency_resolution`,
+    and the quotient must be a whole number. `fractional_overlap` and `window_fill`
+    are the hop and the zero padding of each window as fractions of that size.
+    `integration_bandwidth` is the width of the adjacent bins summed after the FFT,
+    a multiple of `frequency_resolution`, or None for no summing. `trim_stopband`
+    True limits the frequency axis to the `analysis_bandwidth` of the capture when
+    that bandwidth is finite.
     """
 
     window: types.WindowType
@@ -417,10 +440,8 @@ class SpectrogramHistogramRatio(
 class BuiltinAnalyses(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):
     """the ``analysis:`` block of a sweep: one optional field per registered measurement.
 
-    Each field is named for a measurement. A field set to a spec enables the
-    measurement with those parameters, and ``None`` leaves the measurement out of the
-    sweep. `to_dict` omits the ``None`` fields. The dict and the saved zarr attrs name
-    only the enabled measurements.
+    A field set to a spec enables the measurement with those parameters, and
+    ``None`` leaves the measurement out. `to_dict` omits the ``None`` fields.
     """
 
     channel_power_time_series: Optional[ChannelPowerTimeSeries] = None
@@ -441,13 +462,13 @@ class BuiltinAnalyses(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=Tr
 
 
 class BuiltinTriggers(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):
-    """the struct form of a source's ``signal_trigger:``, one optional field per trigger.
+    """the struct form of the ``signal_trigger:`` field of a source.
 
-    Exactly one field is set. The set field names the trigger, and the value is the
-    spec the trigger runs with. A source with this form aligns captures to a
-    measurement that the sweep's `BuiltinAnalyses` need not enable. The string form of
-    ``signal_trigger`` names a registered trigger and runs with the spec of that
-    measurement in the sweep's analysis.
+    One optional field per trigger, and exactly one is set. The set field names the
+    trigger, and the value is the spec of the trigger measurement. With this form,
+    the ``analysis:`` block need not enable the trigger measurement. The string form
+    of ``signal_trigger`` names a registered trigger and takes the spec from the
+    ``analysis:`` block.
     """
 
     cellular_5g_pss_sync: Optional[Cellular5GNPSSSync] = None

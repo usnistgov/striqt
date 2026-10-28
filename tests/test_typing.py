@@ -1,12 +1,12 @@
-"""what the type checker sees at striqt's keyword-unpacking sites.
+"""what the type checker sees at the keyword-unpacking sites of striqt.
 
 Generic wrappers that never run at test time give the static types of measurement
 signatures, coordinate factories, `Controller` construction and `arm`, the cache and
 `retry` decorators, and the `Unpack[TypedDict]` forwarders. A broken Protocol or a
 lost `ParamSpec` is silent at run time. Each probe under `tests/ty_probes/` is
-ordinary typed code that must check clean: an accepted call asserts its result with
-`assert_type`, and a rejected call is marked `# ty: ignore[<rule>]`, which ty reports
-as unused if the rejection ever stops. The probe over the registered measurements is
+ordinary typed code that must check clean: an accepted call asserts the result with
+`assert_type`, and a rejected call is marked ``# ty: ignore[<rule>]``. ty reports the
+ignore as unused if the rejection stops. The probe over the registered measurements is
 generated from `sa.registry`.
 """
 
@@ -72,8 +72,8 @@ def test_unknown_keyword_through_unpack_is_flagged() -> None:
 def measurement_call(
     func: str, required: list[str], *extra: str, iq: str = 'iq'
 ) -> str:
-    """a call of `func` on the waveform expression `iq` with every `required` field
-    satisfied by `anything()`, unless the field is named again in `extra`"""
+    """return the source of a call of `func` on `iq` with every `required` field set
+    to ``anything()`` unless `extra` names the field."""
     kws = [f'{name}=anything()' for name in required if not _named(name, extra)]
     return f'{func}({iq}, cap, {", ".join([*kws, *extra])})'
 
@@ -83,10 +83,13 @@ def _named(name: str, extra: tuple[str, ...]) -> bool:
 
 
 def registry_probe() -> str:
-    """a probe calling every registered measurement: valid calls on an array and on
-    an `AcquiredIQ` must return the `as_xarray` types, an unknown keyword must be
-    rejected, and each spec field must reject an `object()`, which proves that the
-    field is a known, typed parameter"""
+    """return the source of a probe calling every registered measurement.
+
+    Valid calls on an array and on an `AcquiredIQ` must return the `as_xarray` types,
+    an unknown keyword must be rejected, and each spec field must reject an
+    ``object()``. The rejection of ``object()`` shows that the field is a known, typed
+    parameter.
+    """
     modules = sorted({info.func.__module__ for info in sa.registry.values()})
     lines = [
         'from typing import Any',

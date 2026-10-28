@@ -28,10 +28,10 @@ if TYPE_CHECKING:
 
 
 class lookup:
-    """asynchronous lookup of controller objects, connection status, or source ID.
+    """lookup of the controller, source ID, and readiness of a source spec.
 
-    A source instantiation must be in progress or begin within `timeout` seconds.
-    Otherwise, `TimeoutError` is raised.
+    Each lookup blocks until a controller is registered for the spec. `TimeoutError`
+    is raised when none is registered within `timeout` seconds.
     """
 
     _obj: dict[specs.Source, 'PendingSlot'] = defaultdict(Event)
@@ -41,11 +41,10 @@ class lookup:
 
     @classmethod
     def _get(cls, spec: specs.Source) -> PendingController:
-        """return the controller, pending event or stored exception for `spec`.
+        """return the controller, pending event, or stored exception for `spec`.
 
-        The registry references controllers weakly. The slot of a controller that
-        nothing else references reverts to a pending event once the controller is
-        collected, and a dead reference found before then is cleared by this call.
+        The registry references controllers weakly. A dead reference is cleared. The
+        pending event that replaces the reference is returned.
         """
         obj = cls._obj[spec]
         if isinstance(obj, weakref.ref):
@@ -82,9 +81,9 @@ class lookup:
         elif isinstance(obj, Controller):
             return obj
         else:
-            # a canceled open may never register a controller at all. Report the
-            # cancellation rather than a timeout. ExceptionStack makes an interrupt
-            # yield to the error that caused it; a timeout would mask that error
+            # a canceled open may never register a controller. A TimeoutError here
+            # would mask the error that ExceptionStack raises in place of the
+            # interrupt, so the interrupt propagates first
             util.propagate_thread_interrupts()
             raise TimeoutError('no controller instance initializing given spec')
 
@@ -140,11 +139,8 @@ class lookup:
     def _register(cls, spec: specs.Source, controller: Controller) -> None:
         """register `controller` in the slot of `spec` and wake the waiters on the slot.
 
-        An open controller already in the slot is closed first, with a warning.
-
-        Args:
-            spec: the registry key
-            controller: the instance that `instance` returns for `spec`
+        An open controller already in the slot is closed first, with a WARNING on
+        the ``source`` logger.
         """
         with cls._lock:
             obj = cls._get(spec)
@@ -423,12 +419,11 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         self._capture = self.backend.arm(spec) or spec
 
     def is_open(self, wait: bool = True) -> bool:
-        """return whether this instance holds an open backend.
+        """return whether the backend of this instance is open.
 
         Args:
-            wait: when True, block up to the controller timeout for an open that is
-                still in progress; when False, report the state at the time of
-                the call
+            wait: if True, block up to the controller timeout for an open in
+                progress; if False, report the state at the time of the call
 
         Returns:
             False once `close` has run on this instance, even if another controller
@@ -480,19 +475,20 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     def discard_iq(self) -> None:
         """drop the acquisition that `reuse_iq` would serve to the next matching capture.
 
-        The next `acquire` reads the source even if the armed capture is unchanged.
-        Call this when the signal has changed in a way the capture spec does not
-        describe, such as a switched noise diode.
+        The next `acquire` reads the source even when the armed capture is unchanged.
         """
         self._prev_iq = None
 
     def set_calibration_formatter(
         self, format_path: specs.paths.PathFormatter | None = None
     ):
-        """set the formatter to use to expand calibration file formatting fields.
+        """set the formatter that expands the path fields of `source.calibration`.
 
-        A formatter is required when the source spec defines `calibration` with
-        format fields like ``{name}``.
+        None clears the formatter. A formatter is required when the calibration path
+        has fields such as ``{name}``.
+
+        Raises:
+            TypeError: if `format_path` is not a `PathFormatter` or None
         """
         if format_path is None or isinstance(format_path, specs.paths.PathFormatter):
             self._config.format_path = format_path

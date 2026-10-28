@@ -15,26 +15,28 @@ if TYPE_CHECKING:
 
 @dataclasses.dataclass(frozen=True)
 class Schema(Generic[SS, SP, SC, SA, PS, PC]):
-    """the spec types of a sensor binding.
-
-    `action` is the action spec type that `bind_sensor` subclasses. The
-    `ActionRunner` registered for that type runs the bound spec. `analysis` is the
-    `AnalysisGroup` subclass that the ``analysis:`` block of the bound `Sweep` is
-    decoded against, and the type of the analysis that the other actions generate.
-    """
+    """the spec types of a sensor binding."""
 
     source: type[SS]
+    """the `Source` subclass of the binding"""
     capture: type[SC]
+    """the `SensorCapture` subclass of the binding"""
     peripherals: type[SP]
+    """the `Peripherals` subclass of the binding"""
 
-    # unused at runtime; these carry the parameter types for the type checker
     init_like: Callable[PS, Any]
+    """a callable with the keyword signature of `source`; read only by the type
+    checker"""
     arm_like: Callable[PC, Any]
+    """a callable with the keyword signature of `capture`; read only by the type
+    checker"""
 
     action: type[structs.ActionSpec[SS, SP, SA]] = structs.Sweep
+    """the action spec type that `bind_sensor` subclasses"""
     analysis: type[SA] = dataclasses.field(
         default=cast('type[SA]', sa.specs.BuiltinAnalyses)
     )
+    """the `AnalysisGroup` subclass of the ``analysis:`` block of a bound `Sweep`"""
 
     def __post_init__(self):
         assert issubclass(self.source, structs.Source)
@@ -48,8 +50,7 @@ class Schema(Generic[SS, SP, SC, SA, PS, PC]):
 class AcquiredIQ(sa.AcquiredIQ):
     """an acquisition from a sensor source with the metadata and conditioning of the capture.
 
-    `preprocess` conditions `x` through the sensor signal path and memoizes each
-    stage. `x` must not change after the first call to `preprocess`.
+    `x` must not change after the first access of `preprocess`.
     """
 
     info: structs.AcquisitionInfo
@@ -59,21 +60,20 @@ class AcquiredIQ(sa.AcquiredIQ):
     format_path: paths.PathFormatter | None = None
     voltage_scale: sw.typing.Array | float = 1
 
-    # whether to evaluate the complex conjugate of each port
     conjugate: tuple[bool, ...] | Literal[False] = False
+    """one flag per port, True to conjugate the IQ of the port; False conjugates none"""
     signal_trigger: sa.Trigger | None = None
     """the trigger that `preprocess` runs for alignment; None selects
     `info.signal_trigger`"""
     overwrite_x: bool = False
-    """True to let the resampling stage consume `x` in place"""
+    """True permits the resampling stage to overwrite `x`"""
 
     @util.cached_property
     def preprocess(self) -> corrections.Preprocessor:
-        """the sensor `Preprocessor` of this acquisition, one per instance.
+        """return the `Preprocessor` that conditions `x` through the sensor signal path.
 
-        A `dataclasses.replace` copy, including the copy that a controller returns
-        for a reused acquisition, starts with a `Preprocessor` of its own and every
-        stage empty.
+        One `Preprocessor` is created per instance. A `dataclasses.replace` copy
+        starts with a `Preprocessor` of its own and every stage empty.
         """
         from ..lib.compute import corrections
 

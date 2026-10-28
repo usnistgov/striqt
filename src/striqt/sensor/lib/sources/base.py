@@ -88,8 +88,9 @@ class VirtualSource(SourceBackend[SS, SC]):
     """a source that reads samples from `get_waveform` on a synthetic time base.
 
     The time base is 0 at the first `arm`, and `_sync_time_ns` is the time of
-    corrected sample 0 of the armed capture. A re-arm continues the stream: the first
-    sample read after `arm` is stamped where the samples read before the re-arm ended.
+    corrected sample 0 of the armed capture. A re-arm continues the time base: the
+    first sample read after `arm` is stamped at the end time of the samples read
+    before the re-arm.
     """
 
     setup_spec: SS
@@ -106,7 +107,7 @@ class VirtualSource(SourceBackend[SS, SC]):
     def reset_sample_counter(self, value: int = 0) -> None:
         """restart the sample counter at `value`.
 
-        The next read is stamped where the samples read so far ended.
+        The next read is stamped at the end time of the samples read so far.
         """
         self._sync_time_source()
         self._samples_elapsed = value
@@ -120,16 +121,25 @@ class VirtualSource(SourceBackend[SS, SC]):
         xp: ModuleType,
         dtype: DTypeLike = 'complex64',
     ) -> Array:
-        """return `count` samples of `port` starting at absolute sample `start_index`.
+        """return `count` samples of `port` starting at source sample `start_index`.
 
-        Indices are at the source sample rate and are referenced to the corrected
-        capture: index 0 is the first sample of the conditioned capture, and
-        negative indices are the leading-overlap pre-roll that the conditioning trims. A
-        source with no samples there (a file) fills those samples with zeros. The
-        base class raises `NotImplementedError`.
+        Index 0 is the first sample of the corrected capture, and negative indices
+        are the lead-overlap pre-roll that conditioning trims. A source with no
+        samples before index 0 fills the pre-roll with zeros.
+
+        Args:
+            count: the number of samples, at the source sample rate
+            start_index: the source-rate index of the first sample; negative in the
+                pre-roll
+            port: the port number of the armed capture
+            xp: the array namespace of the result
+            dtype: the dtype of the result
 
         Returns:
             a 1-D array of `count` samples in the `xp` namespace with dtype `dtype`
+
+        Raises:
+            NotImplementedError: in the base class
         """
         raise NotImplementedError
 
@@ -137,8 +147,8 @@ class VirtualSource(SourceBackend[SS, SC]):
         self.reset_sample_counter()
 
     def arm(self, capture: SC) -> None:
-        # the elapsed samples convert to time at the rate of the capture that produced
-        # them. The reset therefore precedes the change of `_capture`.
+        # the elapsed samples convert to time at the source rate of the capture that
+        # produced the samples, so the reset precedes the change of `_capture`
         self.reset_sample_counter()
         self._capture = capture
 
@@ -186,18 +196,17 @@ class VirtualSource(SourceBackend[SS, SC]):
     def _sample_time_ns(self, index: int) -> int:
         """return the time (in ns) of source sample `index` after the time origin.
 
-        Index 0 is the first sample of the corrected waveform at the capture sample
-        rate. The result is negative for the leading-overlap pre-roll and is rounded
-        to 1 ns.
+        Index 0 is the first sample of the corrected waveform. The result is negative
+        in the lead-overlap pre-roll and is rounded to 1 ns.
         """
         fs = float(self.get_resampler(self._capture)['fs_sdr'])
         return round(index * 1_000_000_000 / fs)
 
     def _sync_time_source(self) -> None:
-        """record the time (in ns) at which the samples read since the last reset end.
+        """record the end time (in ns) of the samples read since the last reset.
 
-        The end time is evaluated at the source sample rate of the armed capture.
-        Nothing changes when no samples were read since the last reset.
+        The next `read` stamps its first sample at this end time. Nothing changes
+        when no capture is armed or no samples were read since the last reset.
         """
         capture = getattr(self, '_capture', None)
         if capture is None or self._samples_elapsed == 0:

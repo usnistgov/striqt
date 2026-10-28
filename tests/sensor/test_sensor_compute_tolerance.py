@@ -1,6 +1,6 @@
-"""striqt.sensor.lib.compute.tolerance: the correction stage's roundoff budget, its
-composition into each measurement's registered tolerance, and the sweep-level
-reductions that check-sweep prints"""
+"""striqt.sensor.lib.compute.tolerance: the roundoff budget of the correction stage,
+the composition of that budget into the registered tolerance of each measurement,
+and the sweep-level reductions printed by ``check-sweep``"""
 
 from __future__ import annotations
 
@@ -38,8 +38,9 @@ PRESETS = {
     ids=['whole_convolution', '25k_samples', '400k_samples'],
 )
 def test_oaconvolve_nfft_matches_scipy_block_choice(signal_size):
-    """the Lambert W port reproduces the block length scipy picks, after the fast-size
-    rounding that fftconvolve applies to a block `_calc_oa_lens` leaves at s1 + s2 - 1"""
+    """the Lambert W port reproduces the block length chosen by scipy, after the
+    fast-size rounding that `fftconvolve` applies to a block that `_calc_oa_lens`
+    leaves at s1 + s2 - 1"""
     from scipy.signal import _signaltools
 
     block, _, _, _ = _signaltools._calc_oa_lens(signal_size, corrections.FILTER_SIZE)
@@ -106,9 +107,10 @@ def test_sweep_tolerances_follow_the_looped_captures():
 
 
 def test_sweep_tolerances_use_the_looped_value_over_an_adjustment():
-    """`loop_captures` applies the loop point last, so a looped field keeps its loop
-    value over an `adjust_captures` entry and the budget is that of the looped capture.
-    `lo_shift='none'` skips the shift stage, so its budget differs from a shifted one."""
+    """`loop_captures` applies the loop point last. A looped field keeps the loop value
+    over an `adjust_captures` entry, and the budget is that of the looped capture.
+    ``lo_shift='none'`` skips the shift stage, and the budget differs from that of a
+    shifted capture."""
     loops = (ss.specs.List(field='lo_shift', values=('none', 'left')),)
     sweep = preset_sweep(
         'single_tone',

@@ -21,47 +21,40 @@ if typing.TYPE_CHECKING:
 
 # %% STFT sizing and the shared spectrogram cache
 class SpectrogramSizing(NamedTuple):
-    """the STFT sizing of one capture under a spectrogram spec.
-
-    Instances come from `validated_spectrogram_sizing`. `nfft`, `noverlap`, `nzero`,
-    and `hop_size` are in samples and `hop_period` in s; `frequency_bin_averaging` and
-    `time_bin_averaging` are the bins summed per `integration_bandwidth` and the
-    windows averaged per `time_aperture`, each `None` when the field is unset.
-    `noise_bandwidth` (in Hz) is the bandwidth B in the mean power ``N0 * B`` of one
-    output bin for white noise with power spectral density N0: `frequency_resolution`,
-    or `integration_bandwidth` when bins are summed. `resolution_bandwidth` (in Hz) is
-    the equivalent noise bandwidth of the zero-padded analysis window. A CW tone has
-    ``frequency_resolution / resolution_bandwidth`` of the tone power in one
-    unintegrated bin.
-    """
+    """the STFT sizing of one capture under a spectrogram spec."""
 
     nfft: int
+    """samples per FFT window, including the zero padding"""
     noverlap: int
+    """samples shared by consecutive windows"""
     nzero: int
+    """zero-padded samples in each window"""
     hop_size: int
+    """samples between consecutive window starts"""
     hop_period: float
+    """time (in s) between consecutive window starts"""
     frequency_bin_averaging: Optional[int]
+    """bins summed per `integration_bandwidth`, or None when that field is unset"""
     time_bin_averaging: Optional[int]
+    """windows averaged per `time_aperture`, or None when that field is unset"""
     noise_bandwidth: float
+    """bandwidth B (in Hz) in the mean power ``N0 * B`` of one output bin for white
+    noise with power spectral density N0: `frequency_resolution`, or
+    `integration_bandwidth` when bins are summed"""
     resolution_bandwidth: float
+    """equivalent noise bandwidth (in Hz) of the zero-padded analysis window"""
 
 
 @specs.helpers.lru_cache_on_converted(specs.Capture, specs.Spectrogram)
 def validated_spectrogram_sizing(
     capture: specs.Capture, spec: specs.Spectrogram
 ) -> SpectrogramSizing:
-    """check that `spec` divides `capture` evenly, returning the derived STFT sizing.
+    """return the STFT sizing of `capture` under `spec`.
 
-    Callers may pass any `FrequencyAnalysisSpecBase`. Both arguments are projected
-    onto the fields that determine the sizing, so the cache entry is shared across
-    captures and spectrogram-derived measurements that differ only in fields the
-    sizing does not read. The capture projection is the base `Capture`, not
-    `AnalysisCapture`. Nothing here reads `center_frequency`, so one entry covers a
-    whole frequency sweep.
-
-    The window that `sw.spectrogram` builds for complex64 IQ is designed here, so a bad
-    window name or parameter fails before acquisition and the disk-cached design
-    search is paid once.
+    Any `FrequencyAnalysisSpecBase` is accepted as `spec`. The result is cached on
+    the fields of `capture` and `spec` that set the sizing. `center_frequency` is not
+    read. The `window` design that `sw.spectrogram` uses for complex64 IQ is
+    evaluated, which fills the disk-backed window cache.
 
     Raises:
         ValueError: if `sample_rate` is not a whole multiple of `frequency_resolution`,
@@ -161,9 +154,8 @@ def validated_spectrogram_sizing(
             f'hop_period: {hop_period}, STFT windows: {window_count})'
         )
 
-    # the design that `sw.spectrogram` builds for complex64 IQ, so a bad window
-    # name or parameter fails here and the disk-cached search is paid before
-    # acquisition
+    # the result is discarded. The call rejects a bad window before acquisition and
+    # fills the disk-backed design cache for `sw.spectrogram`.
     sw.get_window(
         spec.window,
         nfft - nzero,
@@ -178,9 +170,9 @@ def validated_spectrogram_sizing(
     else:
         noise_bandwidth = spec.integration_bandwidth
 
-    # the window has unit mean power over the padded length, so the mean noise power
-    # in a bin is N0 * frequency_resolution for every window shape. The window shape
-    # sets the ENBW over the nonzero samples, which scales the power of a tone.
+    # the window is normalized to unit mean power over the padded length. The mean
+    # noise power in a bin is then N0 * frequency_resolution for every window shape.
+    # The ENBW over the nonzero samples sets the power of a tone.
     nwindow = nfft - nzero
     enbw_bins = float(sw.equivalent_noise_bandwidth(spec.window, nwindow))
     resolution_bandwidth = enbw_bins * capture.sample_rate / nwindow
@@ -257,7 +249,6 @@ def _cached_spectrogram(
 
     # truncate to the analysis bandwidth
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
-        # python arithmetic here keeps the bounds consistent with the axis coordinates
         spg = sw.fourier.truncate_freqs(
             spg,
             sizing.nfft,
@@ -290,13 +281,11 @@ def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.nda
     sizing = validated_spectrogram_sizing(capture, spec)
     nfft = sizing.nfft
 
-    # the striqt.waveform.fourier fftfreq is exact, so spectra with different
-    # sampling parameters merge without rounding mismatches in their frequency
-    # coordinates
+    # sw.fftfreq is exact. Spectra with different sampling parameters then merge
+    # without rounding mismatches in the frequency coordinates.
     freqs = sw.fftfreq(nfft, capture.sample_rate)
 
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
-        # python arithmetic here keeps numpy and cupy results identical
         freqs = sw.fourier.truncate_freqs(
             freqs, nfft, capture.sample_rate, capture.analysis_bandwidth, axis=0
         )
@@ -304,7 +293,6 @@ def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.nda
     if spec.integration_bandwidth is not None:
         freqs = sw.binned_mean(freqs, sizing.frequency_bin_averaging, fft=True)
 
-    # convert to float64 last, rounding to a still-large number of digits
     return freqs.astype('float64').round(16)
 
 
@@ -336,18 +324,16 @@ def spectrogram_level_tolerance(
 ) -> specs.Tolerance:
     """bound the error (in dB) of a dB spectrogram evaluated by `evaluate_spectrogram`.
 
-    Any `FrequencyAnalysisSpecBase` may be passed as `spec`, as for
-    `validated_spectrogram_sizing`.
+    Any `FrequencyAnalysisSpecBase` is accepted as `spec`.
 
     Args:
         array_backend: selects the FFT roundoff model of `sw.fourier.fft_tolerance_rms`
         input_error: relative rms error of the IQ amplitude (linear, unitless)
-        dtype: the storage dtype the measurement hands to `evaluate_spectrogram`
-        limit_digits: the decimal rounding the measurement hands to
-            `evaluate_spectrogram`; `None` for none
-        statistic_count: number of windows a derived measurement averages afterward
-            (the PSD's mean statistic); 1 for a measurement that keeps or selects
-            windows
+        dtype: the storage dtype of the output
+        limit_digits: the number of decimals kept in the output; None keeps all
+        statistic_count: number of windows averaged after the spectrogram (the
+            ``'mean'`` statistic of `power_spectral_density`); 1 when windows are
+            kept or selected
 
     Returns:
         the `specs.Tolerance` in dB over every output element (frequency bin by
@@ -426,9 +412,8 @@ def spectrogram_tolerance(
 def spectrogram(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """evaluate a power spectrogram of the IQ by STFT.
 
-    The input is the resampled IQ before the `analysis_bandwidth` low-pass filter and
-    any trigger alignment. The output array namespace (numpy or cupy) follows the
-    input. Per
+    The input is the IQ before the `analysis_bandwidth` filter and after trigger
+    alignment. The output array namespace (numpy or cupy) follows the input. Per
     capture, the output has dimensions
     ``(spectrogram_time, spectrogram_baseband_frequency)``. `spectrogram_time` in s
     runs from the start of the capture at the STFT hop, which `fractional_overlap`
@@ -436,14 +421,12 @@ def spectrogram(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     FFT grid at `frequency_resolution`, truncated to the `analysis_bandwidth` about
     DC when `trim_stopband` is set and the bandwidth is finite. Values are power in
     dBm per noise bandwidth, which is `frequency_resolution` or, when set,
-    `integration_bandwidth` (adjacent bins summed). The `noise_bandwidth` attr is that
-    bandwidth in Hz, and `long_name` names the bandwidth. White noise with power spectral
-    density N0 has a mean of ``N0 * noise_bandwidth`` in every bin for every `window`.
-    A CW tone has ``frequency_resolution / resolution_bandwidth`` of the tone power in
-    one bin, where the `resolution_bandwidth` attr is the equivalent noise bandwidth (in
-    Hz) of the zero-padded window. `time_aperture` averages consecutive windows, and
-    `lo_bandstop` sets the bins within that bandwidth of DC to ``nan``. Values are
-    rounded to 2 decimals and stored as float16.
+    `integration_bandwidth`. The `noise_bandwidth` attr is that bandwidth in Hz.
+    `long_name` names the bandwidth. White noise with power spectral density N0 has a
+    mean of ``N0 * noise_bandwidth`` in every bin for every `window`. A CW tone has
+    ``frequency_resolution / resolution_bandwidth`` of the tone power in one bin,
+    where the `resolution_bandwidth` attr is the equivalent noise bandwidth (in Hz)
+    of the zero-padded window. Values are rounded to 2 decimals and stored as float16.
 
     Args:
     {args}
@@ -477,11 +460,11 @@ def baseband_frequency(capture: specs.Capture, spec: specs.Spectrogram) -> np.nd
 def validated_psd_sizing(
     capture: specs.Capture, spec: specs.PowerSpectralDensity
 ) -> SpectrogramSizing:
-    """check the STFT sizing and the `time_statistic` names, returning the sizing.
+    """return the STFT sizing of `capture` under `spec`.
 
     Raises:
-        ValueError: for the conditions of `validated_spectrogram_sizing`, or a
-            `time_statistic` entry that is not a supported statistic
+        ValueError: for the conditions of `validated_spectrogram_sizing`, or if a
+            `time_statistic` entry is not a supported statistic
     """
     sizing = validated_spectrogram_sizing(capture, spec)
     shared.check_statistics('time_statistic', spec.time_statistic)
@@ -518,15 +501,22 @@ def power_spectral_density_tolerance(
 def power_spectral_density(
     x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
-    """estimate the power spectral density by the Welch method.
+    """estimate the power spectral density from time statistics of the spectrogram.
 
-    Each `time_statistic` reduces the `spectrogram` output with the same STFT fields
-    (in linear power, unrounded) over the STFT windows at each frequency bin; 'mean' is
-    the Welch estimate (P. D. Welch, IEEE Trans. Audio Electroacoust. 15(2), 1967)
-    and a float in ``[0, 1]`` is a quantile. Per capture, the output has dimensions
-    ``(time_statistic, baseband_frequency)`` in dBm per noise bandwidth, as recorded
-    in the `noise_bandwidth` attr (in Hz), stored as float32. A power spectral density
-    in dBm/Hz is the output minus ``10 * log10(noise_bandwidth)``.
+    The input is the IQ before the `analysis_bandwidth` filter and after trigger
+    alignment. Each `time_statistic` reduces the `spectrogram` output with the same
+    STFT fields (linear power, unrounded) over the STFT windows at each frequency
+    bin. ``'mean'`` is the Welch estimate (Welch, 1967). A float in ``[0, 1]`` is a
+    quantile. Per capture, the output has dimensions
+    ``(time_statistic, baseband_frequency)`` in dBm per noise bandwidth as float32.
+    The `noise_bandwidth` attr is that bandwidth in Hz. A power spectral density in
+    dBm/Hz is the output minus ``10 * log10(noise_bandwidth)``.
+
+    References:
+        P. D. Welch, "The use of fast Fourier transform for the estimation of power
+        spectra: A method based on time averaging over short, modified
+        periodograms," IEEE Trans. Audio Electroacoust., vol. 15, no. 2,
+        pp. 70-73, 1967. doi:10.1109/TAU.1967.1161901
 
     Args:
     {args}
@@ -562,7 +552,7 @@ def power_spectral_density(
         xp
         .quantile(spg, q, axis=axis)
         .swapaxes(0, axis)  # quantile moves the statistic axis to axis 0
-        .astype(working_dtype)  #
+        .astype(working_dtype)
     )
 
     # everything else
@@ -595,9 +585,10 @@ def spectrogram_power_bin(
     """return the `spectrogram_power_bin` coordinate values and attrs.
 
     Returns:
-        the bin centers of `power.make_power_bins` (with ``-inf`` and ``inf`` catch-all
-        bins), and the attrs of `shared.bandwidth_attrs` for the spectrogram:
-        ``'units'`` of dBm, `noise_bandwidth`, and `resolution_bandwidth` in Hz
+        the bin centers of `power.make_power_bins` in dBm, with ``-inf`` and ``inf``
+        catch-all bins, and the attrs of `shared.bandwidth_attrs` for the
+        spectrogram: ``'units'`` of dBm, `long_name`, and `noise_bandwidth` and
+        `resolution_bandwidth` in Hz
     """
     bins = power.make_power_bins(
         power_low=spec.power_low,
@@ -631,9 +622,10 @@ def spectrogram_histogram(
 ) -> Measurement:
     """evaluate the fraction of spectrogram pixels that fall in each power bin.
 
-    The pixels are those of the `spectrogram` output with the same STFT fields
-    (float32, unrounded), flattened over time and frequency. Per capture, the output
-    has the dimension ``(spectrogram_power_bin,)`` and sums to 1.
+    The input is the IQ before the `analysis_bandwidth` filter and after trigger
+    alignment. The pixels are those of the `spectrogram` output with the same STFT
+    fields (float32, unrounded), flattened over time and frequency. Per capture, the
+    output has the dimension ``(spectrogram_power_bin,)`` as float32 and sums to 1.
     `spectrogram_power_bin` is the bin centers in dBm per noise bandwidth. The
     ``-inf`` and ``inf`` entries collect the pixels more than half a bin below
     `power_low` or above `power_high`. The `noise_bandwidth` attr (in Hz) is set on
@@ -709,16 +701,20 @@ def spectrogram_ratio_power_bin(
 def spectrogram_ratio_histogram(
     x: Array, capture: specs.Capture, **kwargs: Any
 ) -> Measurement:
-    """evaluate a histogram of the spectrogram power ratio between two channels.
+    """evaluate a histogram of the spectrogram power ratio between 2 ports.
 
-    The spectrograms are the `spectrogram` output with the same STFT fields (float32,
-    unrounded), and the ratio is the pixel-by-pixel difference of the two spectrograms
-    in dB. The capture must have exactly 2 channels; otherwise `ValueError` is raised.
-    Per capture, the output has the dimension ``(spectrogram_ratio_power_bin,)`` with
-    bin centers in dB. The first output channel is the ratio of the first input
-    channel to the second, and the second output channel is the negative of the first.
-    Normalization and the catch-all bins follow `spectrogram_histogram`. Neither the
-    output nor the bin coordinate has a `noise_bandwidth` attr.
+    The input is the IQ before the `analysis_bandwidth` filter and after trigger
+    alignment. The spectrograms are the `spectrogram` output with the same STFT
+    fields (float32, unrounded). The ratio is the pixel-by-pixel difference of the
+    two spectrograms in dB. Per capture, the output has the dimension
+    ``(spectrogram_ratio_power_bin,)`` as float32, with bin centers in dB. The first
+    output port is the ratio of the first input port to the second. The second
+    output port is the negative of the first. Normalization and the catch-all bins
+    follow `spectrogram_histogram`. Neither the output nor the bin coordinate has a
+    `noise_bandwidth` attr.
+
+    Raises:
+        ValueError: if the capture has a port count other than 2
 
     Args:
     {args}

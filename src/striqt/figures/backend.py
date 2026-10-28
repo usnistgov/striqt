@@ -28,7 +28,17 @@ TerminalGraphics = typing.Literal['sixel', 'kitcat', 'kitty']
 
 
 def select_mpl_backend(style: str | None, interactive: TerminalGraphics | None) -> None:
-    """select a matplotlib backend and apply the terminal style when `interactive` is set"""
+    """select a matplotlib backend, with the terminal style when `interactive` is set.
+
+    Args:
+        style: a matplotlib style name applied with the terminal style, or None
+        interactive: ``'sixel'``, ``'kitcat'``, or ``'kitty'`` selects a terminal
+            graphics backend; None selects ``'agg'``
+
+    Raises:
+        ValueError: if `interactive` is none of None, ``'sixel'``, ``'kitcat'``, or
+            ``'kitty'``
+    """
 
     from matplotlib import pyplot as plt
     import matplotlib as mpl
@@ -373,7 +383,11 @@ class PlotBackend:
     ) -> None:
         """set the x limits of each facet of `grid` to (`low`, `high`).
 
-        A DataArray `low` is selected per facet by `_facet_values`.
+        Args:
+            grid: the facet grid to limit
+            low: the lower limit, or a DataArray with one value per facet selected
+                on the facet coordinates; None leaves the lower limit unchanged
+            high: the upper limit; None leaves the upper limit unchanged
         """
         if isinstance(low, xr.DataArray):
             lows = _facet_values(low, grid)
@@ -389,12 +403,23 @@ class PlotBackend:
         grid: 'xarray.plot.FacetGrid',
         where: typing.Literal['x'] | typing.Literal['y'] | typing.Literal['colorbar'],
     ):
-        """draw the system noise level of `var_name` on each facet of `grid`.
+        """draw the system noise level (in dBm) of `var_name` on each facet of `grid`.
 
-        `where` names the axis of the power values. ``'x'`` draws a horizontal line at
-        the level for power on the y axis. ``'y'`` draws a vertical line for power on
-        the x axis, as in a histogram. ``'colorbar'`` adds a tick to the colorbar of a
-        heatmap.
+        Nothing is drawn when `data` has no `system_noise` variable or `var_name` has
+        no noise bandwidth.
+
+        Args:
+            data: the dataset with the `system_noise` variable (dBm/Hz) and `var_name`
+            var_name: the data variable or power-bin coordinate that sets the noise
+                bandwidth
+            grid: the facet grid to draw on
+            where: ``'x'`` draws a horizontal line for power on the y axis, ``'y'`` a
+                vertical line for power on the x axis, and ``'colorbar'`` a tick on
+                the colorbar of a heatmap
+
+        Raises:
+            TypeError: if `where` is ``'colorbar'`` and `grid` has no colorbar, or if
+                `where` is none of the 3 values
         """
         noise = util.get_system_noise(data, var_name)
 
@@ -443,11 +468,10 @@ def _facet_values(
 ) -> list[float | None]:
     """return one value of `values` per facet of `grid`, in `grid.axs.flat` order.
 
-    Each facet selects `values` by the `grid.name_dicts` entry of the facet on the
-    coordinates of `values`. The minimum over the selection is returned when several captures share
-    a facet. The result is None for a facet without a name, which is an unused axis
-    of a wrapped grid. Without `name_dicts`, the values are returned in order, one
-    per facet.
+    The value of a facet is the minimum of `values` selected by the `grid.name_dicts`
+    entry of the facet. A facet without a name, which is an unused axis of a wrapped
+    grid, gets None. Without `name_dicts`, `values` are returned in order, one per
+    facet, with None for each remaining axis.
     """
     name_dicts = getattr(grid, 'name_dicts', None)
     if name_dicts is None:

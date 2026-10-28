@@ -3,8 +3,8 @@ tolerance walks over an analysis group, and the contract every registered measur
 follows (dtype, dims, coords, and attrs reach the DataArray; the raw path returns the
 same values).
 
-The hook tests build their own `AnalysisRegistry`, since mutating the live registry
-would leak a measurement into every other test module.
+The hook tests build a private `AnalysisRegistry`. A measurement registered with the
+live registry would leak into every other test module.
 """
 
 # ruff: noqa: UP045  msgspec resolves the ToyGroup annotations at runtime on py3.9
@@ -49,7 +49,12 @@ class ToyGroup(sa.specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=
 
 
 def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=None):
-    """a registry with one measurement that records its (capture, spec) calls"""
+    """return a registry with one measurement of `spec_type`, and the wrapped
+    measurement.
+
+    When `calls` is a list, each run of the measurement body appends
+    ``('body', capture, kwargs)``.
+    """
     registry = register.AnalysisRegistry()
 
     @registry.measurement(
@@ -91,8 +96,8 @@ class RecordingIQ(sa.AcquiredIQ):
 
 
 def build_preference_registry(**preferences: bool):
-    """a registry with one measurement registered with `preferences` that records the
-    array handed to its body"""
+    """return a registry with one `ToySpec` measurement registered with `preferences`,
+    the wrapped measurement, and the list of arrays passed to the body."""
     registry = register.AnalysisRegistry()
     received = []
 
@@ -242,7 +247,8 @@ def test_validate_defaults_to_none_and_the_measurement_still_runs():
 
 
 def build_group_registry(*validators, tolerances=(None, None)):
-    """a registry of 2 measurements, each with the given validator and tolerance"""
+    """return a registry of 2 measurements, `ToySpec` and `OtherToySpec`, with the
+    validator and tolerance given for each."""
     registry = register.AnalysisRegistry()
     toy_validate, other_validate = validators
     toy_tolerance, other_tolerance = tolerances
@@ -317,8 +323,8 @@ def test_registry_validate_passes_the_projected_capture():
 
 
 def test_registry_validate_is_cached_on_the_projected_capture():
-    """the sensor walker relies on the cache to keep a long sweep off the critical
-    path"""
+    """repeated calls with an equal projected capture run the validator once. A sweep
+    validates every capture before acquisition."""
     seen = []
     registry = build_group_registry(lambda capture, spec: seen.append(spec), None)
     group = ToyGroup(toy=ToySpec())
@@ -331,8 +337,8 @@ def test_registry_validate_is_cached_on_the_projected_capture():
 
 
 def test_validator_errors_are_msgspec_validation_errors():
-    """the sweep decode path reports these, so they must survive msgspec's own
-    error handling and be catchable as a decode failure"""
+    """the sweep decode path reports validator errors as decode failures, so a
+    `SpecValidationError` is a `msgspec.ValidationError`"""
     registry = build_group_registry(
         lambda capture, spec: (_ for _ in ()).throw(ValueError('nope')), None
     )
@@ -436,15 +442,20 @@ OTHERS = [info for info in VALIDATED if 'sss' not in info.name]
 
 
 def test_every_validated_measurement_has_a_strategy():
-    """the guarantee below is only as broad as the domains it draws from"""
+    """the property test below covers only the measurements with a domain in
+    `VALIDATOR_DOMAINS`"""
     assert set(VALIDATOR_DOMAINS) == set(VALIDATED_IDS)
 
 
 def check_accepted_pair_runs(info, data):
-    """`Sweep.__post_init__` runs these validators on every capture before anything
-    is acquired, so a pair they accept must not fail on shape or scalar arithmetic
-    once IQ arrives. Pairs they reject are out of scope here; the spot checks below
-    cover those."""
+    """draw a (capture, spec) pair for `info` and fail if the validator accepts the
+    pair but the measurement raises on white noise.
+
+    `Sweep.__post_init__` runs the validators on every capture before acquisition, so
+    an accepted pair must not fail on shape or scalar arithmetic once IQ arrives. A
+    rejected pair returns without a check. The `REJECTED` table below covers
+    rejection.
+    """
     capture, spec = data.draw(VALIDATOR_DOMAINS[info.name], label=info.name)
     group = sa.specs.BuiltinAnalyses(**{info.name: spec})
     try:
@@ -476,9 +487,9 @@ SPG = {'window': 'boxcar', 'frequency_resolution': FS / NFFT}
 
 # (capture, spec, the spec or capture field the message must name). Every registered
 # validator raises a bare ValueError, so `registry.validate` has one mechanism to
-# exercise here: `validation_path` wrapping it at the measurement key. One row names
-# a capture field and one a spec field; the per-measurement rejection tables are in
-# the test_analysis_measurements_* modules.
+# exercise here: `validation_path` wrapping the error at the measurement key. One row
+# names a capture field and one a spec field. The per-measurement rejection tables are
+# in the test_analysis_measurements_* modules.
 REJECTED = {
     'spectrogram_shorter_than_nfft': (
         capture_of(NFFT - 1, FS),
@@ -496,7 +507,7 @@ REJECTED = {
 @pytest.mark.parametrize('case', list(REJECTED), ids=list(REJECTED))
 def test_validator_rejects_at_the_analysis_path_naming_the_field(case):
     """a pair the registered validator rejects is reported at the measurement key
-    under `$.analysis`, worded in terms of the spec or capture field at fault"""
+    under `$.analysis`, and the message names the spec or capture field at fault"""
     capture, spec, field = REJECTED[case]
     name = sa.registry[type(spec)].name
     group = sa.specs.BuiltinAnalyses(**{name: spec})
@@ -552,7 +563,8 @@ SPEC_IDS = [type(spec).__name__ for spec in CONTRACT_SPECS]
 
 
 def measure(spec, as_xarray):
-    """run the measurement registered for `type(spec)` the way the registry calls it"""
+    """run the measurement registered for `type(spec)` on a unit tone over
+    `CONTRACT_CAPTURE` and return the registration with the result."""
     info = sa.registry[type(spec)]
     ports = 2 if isinstance(spec, sa.specs.SpectrogramHistogramRatio) else 1
     iq = sa.testing.tone(
@@ -584,8 +596,8 @@ def test_measurement_dtype_and_dims(spec):
 
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_measurement_attrs(spec):
-    """the registered attrs and every spec field reach the DataArray, which is what
-    names them in a saved zarr store"""
+    """the registered attrs and every spec field reach the DataArray attrs. A saved
+    zarr store identifies a measurement through those attrs."""
     info, da = measure(spec, as_xarray=True)
 
     for name, value in info.attrs.items():
@@ -603,9 +615,9 @@ ABSOLUTE_POWER_UNITS = ('dBm', '√mW')
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
     """every output and power-bin coordinate in absolute power units has a
-    `noise_bandwidth` in Hz and a `long_name` that names the bandwidth, except the
-    outputs whose bandwidth is the per-capture `analysis_bandwidth`, which set
-    neither; ratios in dB have neither"""
+    `noise_bandwidth` (Hz) and a `long_name` that names the bandwidth. The outputs
+    with the per-capture `analysis_bandwidth` as noise bandwidth set neither. Ratios
+    in dB set neither."""
     info, da = measure(spec, as_xarray=True)
 
     def check(attrs, what):
@@ -643,14 +655,14 @@ def test_measurement_without_xarray(spec):
     assert np.array_equal(data.astype(da.dtype), da.values, equal_nan=True)
 
 
-# the only measurement that validates nothing: iq_waveform clamps its start/stop
-# bounds into the capture by design rather than rejecting them
+# the only measurement without a validator: iq_waveform clamps the start/stop bounds
+# into the capture rather than rejecting an out-of-range bound
 NO_VALIDATOR = {'iq_waveform'}
 
 
 def test_every_measurement_has_a_validator():
-    """a measurement without a validator silently skips pre-sweep validation, so a
-    new one must either register `validate=` or be named here"""
+    """a measurement without a validator skips pre-sweep validation, so a new
+    measurement must register `validate=` or be listed in `NO_VALIDATOR`"""
     missing = {
         info.name for info in sa.registry.values() if info.validate is None
     } - NO_VALIDATOR
@@ -667,12 +679,12 @@ CONTRACT_TOLERANCE_IDS = [type(spec).__name__ for spec in CONTRACT_TOLERANCE_SPE
 
 @pytest.mark.parametrize('spec', CONTRACT_TOLERANCE_SPECS, ids=CONTRACT_TOLERANCE_IDS)
 def test_registered_tolerance_is_a_dB_budget_that_grows_with_input_error(spec):
-    """the registered budget bounds a level in dB with a peak at or above its rms.
+    """the registered budget bounds a level in dB with a peak at or above the rms.
     An amplitude error in the IQ widens both."""
     exact = registered_tolerance(CONTRACT_CAPTURE, spec, input_error=0.0)
     assert isinstance(exact, sa.specs.Tolerance)
     assert exact.units == 'dB'
-    # iq_waveform copies its input, so its exact-input bound is 0
+    # iq_waveform copies the input, so the exact-input bound of iq_waveform is 0
     assert exact.on_peak.peak >= exact.on_peak.rms >= 0
 
     perturbed = registered_tolerance(CONTRACT_CAPTURE, spec, input_error=1e-4)
@@ -714,7 +726,9 @@ def test_check_group_fields_rejects_a_field_that_is_not_optional():
 
 
 def test_registry_and_any_analysis_agree():
-    """the import-time guard in striqt.analysis.measurements, asserted by name"""
+    """the import-time guard of `striqt.analysis.measurements`: every registered
+    measurement is a `BuiltinAnalyses` field of the same name, and no other field
+    exists"""
     expected = {info.name: spec_type for spec_type, info in sa.registry.items()}
     register.check_group_fields(sa.specs.BuiltinAnalyses, expected)
     assert set(sa.specs.BuiltinAnalyses.__struct_fields__) == set(expected)
@@ -735,7 +749,8 @@ def test_trigger_registry_and_any_signal_trigger_agree():
 
 
 def build_counting_cache():
-    """a KwArgCache keyed on `nfft` around a function that counts its calls"""
+    """return a `KwArgCache` keyed on `nfft`, the wrapped function, and the list of
+    ``(id(iq), nfft)`` calls the function records."""
     cache = register.KwArgCache(['nfft'])
     calls = []
 
@@ -830,8 +845,8 @@ def test_check_group_registered_rejects_a_field_named_unlike_the_measurement():
 
 @pytest.mark.parametrize('check', GROUP_CHECKS.values(), ids=list(GROUP_CHECKS))
 def test_group_checks_reject_a_group_without_omit_defaults(check):
-    """`to_dict` and the saved attrs name only the enabled measurements, which needs
-    ``omit_defaults=True`` on the group"""
+    """`to_dict` and the saved attrs name only the enabled measurements, and only a
+    group with ``omit_defaults=True`` omits the disabled ones"""
 
     class Kept(sa.specs.AnalysisGroup, frozen=True, kw_only=True):
         toy: Optional[ToySpec] = None

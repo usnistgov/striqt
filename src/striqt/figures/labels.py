@@ -139,9 +139,10 @@ def _get_fig_center_y(fig: 'matplotlib.figure.Figure') -> float:
 
 
 def _units_with_bandwidth(attrs: typing.Mapping[str, typing.Any]) -> str | None:
-    """return `units` with the `noise_bandwidth` of `attrs` appended, as in ``dBm/360 kHz``.
+    """return `units` of `attrs` with `noise_bandwidth` appended, as in ``dBm/360 kHz``.
 
-    A `units` value that already contains a slash is returned as written.
+    The `units` value is returned as written when `attrs` has no `noise_bandwidth`
+    or `units` already contains a slash. None when `attrs` has no `units`.
     """
     units = attrs.get('units', None)
     bandwidth = attrs.get('noise_bandwidth', None)
@@ -162,22 +163,20 @@ def label_axis(
 ):
     """label an axis with the `standard_name` and `units` attrs of `ax_data`.
 
-    With `coord_name`, the units are those of the coordinate `coord_name` of
-    `ax_data`; otherwise those of `ax_data.attrs`. The `noise_bandwidth` attr is
-    appended to the units as in ``dBm/360 kHz``. The label text is the `long_name`
-    attr, or the `standard_name` attr when `short` is True or `long_name` is absent,
-    or the name of `ax_data` without either. With units, each target axis gets an
-    engineering tick formatter, and the label gets a unit suffix chosen from the
-    finite values of `ax_data`. No label is set when `ax_data` has units and no
-    finite value.
+    The label text is the `long_name` attr of `ax_data`, or the `standard_name` attr
+    when `short` is True or `long_name` is absent, or the name of `ax_data` without
+    either. The `noise_bandwidth` attr is appended to the units as in
+    ``dBm/360 kHz``. With units, each target axis gets an engineering tick
+    formatter, and the label gets a unit suffix scaled to the finite values of
+    `ax_data`. No label is set when `ax_data` has units and no finite value.
 
     Args:
         which_axis: ``'x'``, ``'y'``, or ``'colorbar'``; the colorbar axis is the
             first colorbar of the figure
-        ax_data: the array whose attrs name the quantity and whose finite values
+        ax_data: the array with the attrs that name the quantity; the finite values
             select the unit scaling
         coord_name: a coordinate of `ax_data` that supplies the units, or None for
-            `ax_data` itself
+            the attrs of `ax_data`
         tick_units: True places the unit in each tick label and False in the axis
             label; ``'auto'`` is True for a unit of 1 or 2 characters
         short: True labels with `standard_name` instead of `long_name`
@@ -298,18 +297,17 @@ def label_legend(
 ) -> 'matplotlib.legend.Legend':
     """add a legend labeled with the `standard_name` and `units` attrs of `data`.
 
-    With `coord_name`, the attrs and the entry values are those of the coordinate
-    `coord_name` of `data`; otherwise those of `data`. Each entry is a value in
-    engineering notation with the unit when `units` is set, else ``str(value)``. The
-    legend title is `standard_name`, with ``(units)`` appended when `tick_units` is
-    False.
+    Each entry is a value in engineering notation with the unit when `units` is set,
+    else ``str(value)``. The legend title is the `standard_name` attr, or none
+    without that attr.
 
     Args:
-        data: the array or dataset whose attrs and values label the legend
-        coord_name: a coordinate of `data`, or None for `data` itself
-        tick_units: True puts the unit in each entry only; False also appends the
-            unit to the title
-        ax: the axes to add the legend to; None uses the current axes
+        data: the array or dataset with the attrs and values that label the legend
+        coord_name: a coordinate of `data` that supplies the attrs and values, or
+            None for `data` itself
+        tick_units: True puts the unit in each entry only; False also appends
+            ``(units)`` to the title
+        ax: the axes that receives the legend; None uses the current axes
 
     Returns:
         the `matplotlib.legend.Legend` added to `ax`

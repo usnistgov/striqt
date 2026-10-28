@@ -1,6 +1,6 @@
-"""striqt.waveform.lib.fourier.filters: the COLA overlap design, FIR low-pass designs
-and their STFT-domain response, the overlap-add bandpass filter on tones, and
-overlap-add convolution, on numpy and cupy.
+"""striqt.waveform.lib.fourier.filters: the COLA overlap design, the FIR low-pass
+designs and the STFT-domain response of each, the overlap-add bandpass filter on tones,
+and overlap-add convolution, on numpy and cupy.
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ class TestFilterDesign:
         assert_array_equal(H, 1)
 
     def test_fir_lowpass_fft_transition_is_cut_at_nyquist(self):
-        """a transition band that would run past nyquist ends there instead"""
+        """a transition band that runs past Nyquist ends at Nyquist"""
         size = 256
         H = _fir_lowpass_fft(size, 1.0, cutoff=0.4, transition=0.3)
         freqs = fftfreq(size, 1.0)
@@ -165,8 +165,8 @@ class TestOafilter:
     def test_rejects_out_of_band_tone(self):
         y = self._oafilter(self._tone(0.4e6))
         yi = interior(y, self.NFFT)
-        # the residual is the hamming sidelobe leakage (-53 dB); the window's
-        # -22 dB edge pedestal leaves the ringing concentrated at the segment edges
+        # the residual is the hamming sidelobe leakage (-53 dB). The -22 dB edge
+        # pedestal of the window leaves the ringing concentrated at the segment edges
         assert level_error_dB(rms(yi)) < -40
         assert level_error_dB(yi).max() < -25
 
@@ -180,8 +180,8 @@ class TestOafilter:
 
 # %% numpy vs cupy
 class TestNumpyCupyCrossComparison:
-    """Tolerances come from `cross_backend_sigma`, parameterized by the FFT sizes and
-    elementwise operations each function performs.
+    """tolerances come from `cross_backend_sigma`, parameterized by the FFT sizes and
+    elementwise operations each function performs
     """
 
     def test_design_fir_lpf_on_cupy(self, cupy_available):
@@ -194,8 +194,8 @@ class TestNumpyCupyCrossComparison:
     def test_oaconvolve(self, cupy_available, x):
         kernel = np.array([0.25, 0.5, 0.25], dtype=x.dtype)
         y_np, y_cp = numpy_and_cupy(cupy_available, oaconvolve, x, kernel, mode='same')
-        # overlap-add blocks are at most len(x) long; anchoring to the input rms
-        # accounts for the kernel's gain
+        # overlap-add blocks are at most len(x) long. Anchoring to the input rms
+        # accounts for the gain of the kernel
         sigma = cross_backend_sigma(x.dtype, [len(x), len(x)], n_elementwise=1)
         assert_close(y_cp, y_np, sigma=sigma, scale=rms(x))
 

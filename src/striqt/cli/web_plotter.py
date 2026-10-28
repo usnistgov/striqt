@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """serve a live browser display of sweep results.
 
-FastAPI and uvicorn serve the page and stream updates over a websocket; Plotly.js
-renders them client-side through WebGL. Run ``web-plotter path/to/spec.yaml`` and
-open http://localhost:8000.
+FastAPI and uvicorn serve the page and stream updates over a websocket. Plotly.js
+renders the updates in the browser through WebGL. The page is at
+http://localhost:8000 for ``web-plotter path/to/spec.yaml``.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ _json_decoder = msgspec.json.Decoder()
 
 
 def _to_numpy(arr: Any) -> np.ndarray:
-    """return `arr` as a numpy array, transferring cupy arrays to the CPU."""
+    """return `arr` as a numpy array, with a cupy array transferred to the CPU"""
     if hasattr(arr, 'get'):
         return arr.get()
     return np.asarray(arr)
@@ -112,11 +112,10 @@ class AppState(TypedDict):
 
 
 class WebPlotBackend:
-    """
-    A plot backend that generates Plotly.js-compatible JSON for WebGL rendering.
+    """a `striqt.figures.backend.PlotBackend` for Plotly trace and layout dicts.
 
-    The methods follow `striqt.figures.backend.PlotBackend` and return Plotly trace
-    and layout dicts instead of matplotlib figures.
+    The results of each `heatmap` and `line` call accumulate until `get_plot_data`.
+    The color and y-axis limits only widen across calls.
     """
 
     def __init__(
@@ -182,20 +181,24 @@ class WebPlotBackend:
         vstep: Optional[float] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """
-        Create a heatmap trace for Plotly.
+        """add a heatmap of `data` to the pending results.
 
-        All subplots (e.g., multiple RX ports) share the same colorbar scale.
+        Every subplot (one per value of the column dimension) shares one colorbar
+        scale. A `vmin` or `vmax` of None is the minimum or maximum of `data`,
+        widened by the values of earlier calls.
 
         Args:
-            data: The data array to plot
-            x: Name of the x coordinate
-            y: Name of the y coordinate
-            cmap: Matplotlib colormap name
-            vmin: Minimum value for color scale
-            vmax: Maximum value for color scale
-            vstep: spacing of the quantized color levels; None selects a
-                   continuous gradient
+            data: the 2-D array to plot, with coordinates `x` and `y`
+            x: the name of the x coordinate
+            y: the name of the y coordinate
+            cmap: a matplotlib colormap name
+            vmin: the lower color limit, or None to infer
+            vmax: the upper color limit, or None to infer
+            vstep: the spacing of quantized color levels; None selects a continuous
+                gradient
+
+        Returns:
+            a dict with keys ``type``, ``traces``, ``layout``, and ``variable``
         """
         traces = []
         col_dim = self._get_col_dim(data)
@@ -292,7 +295,6 @@ class WebPlotBackend:
 
         # Plotly heatmap expects z with shape (len(y), len(x))
         if z_data.shape != (len(y_data), len(x_data)):
-            # transpose when the axes are swapped
             if z_data.shape == (len(x_data), len(y_data)):
                 z_data = z_data.T
 
@@ -300,8 +302,8 @@ class WebPlotBackend:
         if np.issubdtype(z_data.dtype, np.floating):
             z_data = np.where(np.isinf(z_data), np.nan, z_data)
 
-        # numpy arrays are passed as is; Plotly's to_json() encodes them as base64
-        # typed arrays
+        # numpy arrays are passed as is. Figure.to_json() encodes a numpy array as a
+        # base64 typed array
         trace: Dict[str, Any] = {
             'type': 'heatmap',
             'x': x_data,
@@ -379,8 +381,13 @@ class WebPlotBackend:
         ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        """
-        Create line plot traces for Plotly using `scattergl`.
+        """add ``scattergl`` lines of `data` to the pending results.
+
+        The y-axis limits are `ylim` where given and the finite extent of `data`
+        otherwise, widened by the values of earlier calls.
+
+        Returns:
+            a dict with keys ``type``, ``traces``, ``layout``, and ``variable``
         """
         traces = []
         col_dim = self._get_col_dim(data)
@@ -519,7 +526,7 @@ class WebPlotBackend:
                 hue_values = np.unique(hue_values)
 
             for hue_idx, hue_val in enumerate(hue_values):
-                # a non-dimension coordinate cannot be selected on, so the whole
+                # `sel` does not accept a non-dimension coordinate, so the whole
                 # array is plotted
                 y_data = _to_numpy(data.values).squeeze()
 
@@ -706,11 +713,9 @@ class WebPlotBackend:
         return layout
 
     def _coord_kws(self, **kwargs) -> Dict[str, Any]:
-        """
-        Return coordinate/layout kwargs for plotting.
+        """return `kwargs` with the `col`, `row`, and `col_wrap` of `opts` added.
 
-        The signature follows `PlotBackend._coord_kws` for the
-        `striqt.figures.data_vars` functions.
+        `col` is ``'_view'`` when `opts` sets neither `col` nor `row`.
         """
         col = self.opts.col
         if col is None and self.opts.row is None:
@@ -728,9 +733,7 @@ class WebPlotBackend:
         grid: Dict[str, Any],
         xticklabelunits: Union[bool, Literal['auto']] = 'auto',
     ) -> None:
-        """
-        accept the `PlotBackend.finish` call from the `striqt.figures.data_vars`
-        functions without side effects.
+        """accept the `PlotBackend.finish` call without effect.
 
         The traces are collected by `heatmap` and `line`.
         """
@@ -743,11 +746,11 @@ class WebPlotBackend:
         grid: Dict[str, Any],
         where: Literal['x', 'y', 'colorbar'],
     ) -> None:
-        """
-        Add noise level markers to the most recent plot as Plotly layout shapes.
+        """mark the system noise level of `var_name` on the most recent plot.
 
-        The signature follows `PlotBackend.mark_noise_level` for the
-        `striqt.figures.data_vars` functions.
+        `where` of ``'x'`` draws a horizontal line at the level, ``'y'`` a vertical
+        line, and ``'colorbar'`` an annotation at the level on the colorbar. Nothing
+        is added when `data` has no system noise or no plot is pending.
         """
         from striqt.figures import util
 
@@ -862,20 +865,20 @@ def _to_json_serializable(
 
     Numeric arrays are returned as contiguous numpy arrays, with a cupy array
     transferred to the CPU. String, object, and datetime64 arrays are returned as
-    lists, and a timedelta64 array as seconds. In arrays, NaN is kept and Inf is
-    replaced with NaN unless `preserve_inf` is True. In lists and scalars, NaN and
-    Inf are returned as None, or Inf as ±1e38 when `preserve_inf` is True.
+    lists, and a timedelta64 array as seconds. In arrays, NaN is kept. In lists and
+    scalars, NaN is returned as None.
 
     Args:
-        preserve_inf: True keeps Inf, which a heatmap draws at the ends of the color
-            scale; False replaces Inf with NaN
+        arr: the array or scalar
+        preserve_inf: if True, Inf is kept in arrays and returned as ±1e38 in lists
+            and scalars; if False, Inf is NaN in arrays and None in lists and scalars
     """
     # Use large but finite values for Inf when preserving
     _INF_REPLACEMENT = 1e38
     _NEG_INF_REPLACEMENT = -1e38
 
     def _sanitize_value(v):
-        """convert NaN to None and Inf according to `preserve_inf`."""
+        """return `v` with NaN as None and Inf as `preserve_inf` selects"""
         if isinstance(v, float):
             if np.isnan(v):
                 return None
@@ -909,7 +912,6 @@ def _to_json_serializable(
         # datetime64 must use list format
         if np.issubdtype(arr.dtype, np.datetime64):
             return [str(x) for x in arr]
-        # timedelta64 is converted to seconds
         if np.issubdtype(arr.dtype, np.timedelta64):
             arr = (arr / np.timedelta64(1, 's')).astype(np.float64)
 
@@ -987,11 +989,12 @@ def _format_coord_label(coord: xr.DataArray) -> str:
 
 
 def _mpl_to_plotly_colorscale(cmap: str) -> Any:
-    """Convert matplotlib colormap name to Plotly colorscale.
+    """return the Plotly colorscale for the matplotlib colormap name `cmap`.
 
-    Returns a Plotly-compatible colorscale - either a string for built-in
-    colormaps or a list of [position, color] pairs for custom ones.
-    Colormaps that Plotly lacks are sampled from matplotlib at 256 points.
+    Returns:
+        the Plotly name of a colormap that Plotly defines, otherwise a list of 256
+        ``[position, 'rgb(r,g,b)']`` pairs sampled from matplotlib; ``'Viridis'``
+        for a name matplotlib does not define
     """
     import matplotlib.pyplot as plt
 
@@ -1034,19 +1037,18 @@ def _make_quantized_colorscale(
     vmax: float,
     vstep: float,
 ) -> List[List[Any]]:
-    """Create a quantized (stepped/banded) colorscale for Plotly.
+    """return a stepped Plotly colorscale with bands of `vstep` from `vmin` to `vmax`.
 
-    The color bands are discrete, as with matplotlib's `BoundaryNorm` over a
-    resampled colormap.
+    The bands follow the matplotlib `BoundaryNorm` over a resampled colormap.
 
     Args:
-        cmap: Matplotlib colormap name
-        vmin: Minimum value for color scale
-        vmax: Maximum value for color scale
-        vstep: Step size between color levels
+        cmap: a matplotlib colormap name; an undefined name selects viridis
+        vmin: the lower color limit
+        vmax: the upper color limit
+        vstep: the spacing of the color levels, in the units of the data
 
     Returns:
-        Plotly colorscale as list of [position, color] pairs with discrete bands
+        a list of ``[position, color]`` pairs with 2 entries per band
     """
     import matplotlib.pyplot as plt
 
@@ -1100,7 +1102,6 @@ def get_data_plots_registry():
 # FastAPI Application
 # ---------------------------------------------------------------------------
 
-# global state for the web server
 _app_state: AppState = {
     'delayed_dataset': None,
     'plotter': None,
@@ -1174,7 +1175,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         'spec_filename': _app_state['spec_filename'],
                     }).decode()
                 )
-                # push the current plot to the new client when data exists
                 if _app_state['delayed_dataset'] is not None:
                     await broadcast_plot_update()
             elif msg['type'] == 'select_variable':
@@ -1197,11 +1197,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 async def broadcast_plot_update():
-    """Broadcast plot data to all connected clients.
+    """send the current plot to every connected websocket.
 
-    Requests that arrive while a broadcast is in progress set `data_updated`
-    instead of queuing. One more broadcast follows when the current one
-    completes, so the display does not fall behind the acquisition rate.
+    A call during a broadcast in progress sets `data_updated` instead of queuing.
+    One more broadcast follows the current one.
     """
     if _app_state['broadcast_pending']:
         _app_state['data_updated'] = True
@@ -1214,7 +1213,6 @@ async def broadcast_plot_update():
     finally:
         _app_state['broadcast_pending'] = False
 
-        # data that arrived during the broadcast is sent in one more pass
         if _app_state['data_updated']:
             _app_state['data_updated'] = False
             # Use create_task to avoid recursion depth issues
@@ -1222,7 +1220,7 @@ async def broadcast_plot_update():
 
 
 async def _do_broadcast_if_needed():
-    """broadcast again when data arrived during the previous broadcast."""
+    """broadcast again when data arrived during the previous broadcast"""
     if (
         _app_state['delayed_dataset'] is not None
         and not _app_state['broadcast_pending']
@@ -1243,21 +1241,20 @@ def _prepare_plot_data_sync(
     variable: str,
     data_select: Dict[str, Any],
 ) -> tuple[list[Dict[str, Any]], CoordinatesData]:
-    """prepare plot traces and coordinates for one variable, for a worker thread.
+    """return the plot results and capture coordinates of `variable` in `result`.
 
-    The work blocks the event loop if run there: coordinate extraction,
-    materializing the delayed dataset (a GPU transfer on the TX2i), and the plot
-    function.
+    The call blocks on the materialization of the delayed dataset (a GPU transfer
+    on the TX2i).
 
     Args:
-        result: Delayed dataset from acquisition
-        plotter: WebPlotBackend instance for generating plot traces
-        variable: Name of the data variable to plot
-        data_select: Selection dict from PlotOptions.data.select, to be filtered
-            and passed to xarray.Dataset.sel()
+        result: the delayed dataset of the analyzed capture
+        plotter: the backend that produces the results; `reset` is called first
+        variable: the name of the data variable to plot
+        data_select: the `PlotOptions.data.select` selection; keys that are not
+            indexes of the dataset are dropped
 
     Returns:
-        Tuple of (plot_data, coordinates) ready for JSON serialization
+        the list of result dicts from `plotter`, and the `CoordinatesData`
     """
     from striqt.sensor.lib import compute
 
@@ -1272,14 +1269,14 @@ def _prepare_plot_data_sync(
     delayed = _select_delayed_variable(result, variable)
     ds = compute.from_delayed(delayed).set_xindex('port')
 
-    # keys that are not indexes of this dataset are dropped from the selection
+    # `select` may name indexes of other variables
     if data_select:
         valid_indexes = set(ds.indexes.keys())
         filtered_select = {k: v for k, v in data_select.items() if k in valid_indexes}
         if filtered_select:
             ds = ds.sel(filtered_select)
 
-    # the data_vars function calls plotter.heatmap or plotter.line, then plotter.finish
+    # plot_func draws through plotter.heatmap or plotter.line, which collect the results
     plot_func(ds, cast('sf.backend.PlotBackend', plotter))
 
     plot_data = plotter.get_plot_data()
@@ -1297,8 +1294,8 @@ def _serialize_plot_message(
 ) -> str:
     """return the ``plot_data`` message as JSON text.
 
-    Numpy arrays in the traces are encoded as base64 typed arrays, the form of
-    Plotly's `fig.to_json()`.
+    Numpy arrays in the traces are encoded as base64 typed arrays, as by
+    `Figure.to_json`.
     """
     serialized_plots = []
     for plot in plot_data:
@@ -1407,8 +1404,8 @@ def _get_field_origins(cls: type) -> Dict[str, type]:
     """return the class in the MRO of `cls` that first defines each msgspec field.
 
     Returns:
-        a dict from field name to the base-most class whose ``__struct_fields__``
-        names the field
+        a dict from field name to the base-most class with the field in
+        ``__struct_fields__``
     """
     import msgspec
 
@@ -1424,7 +1421,6 @@ def _get_field_origins(cls: type) -> Dict[str, type]:
     for klass in reversed(mro):
         struct_fields: Tuple[str, ...] = klass.__struct_fields__  # ty: ignore
         for field_name in struct_fields:
-            # the base-most class that defines the field wins
             if field_name not in field_origins:
                 field_origins[field_name] = klass
 
@@ -1465,7 +1461,7 @@ def _extract_extra_coords(
 
         formatted_value = _format_coord_value(value)
 
-        # AcquisitionInfo fields carry no units
+        # AcquisitionInfo fields have no units metadata
         unit = ''
 
         coord_dict = {
@@ -1591,9 +1587,10 @@ def _get_si_prefix_for_values(values: List[float], unit: str) -> tuple[int, str]
     """return the engineering power of 10 and SI prefix for the smallest nonzero value.
 
     Returns:
-        ``(power_of_10, prefix)``: ``(0, '')`` for a dB unit or when no value is
-        finite and nonzero; otherwise a multiple of 3 chosen from the smallest
-        absolute value and clamped to the known prefixes, with the prefix string
+        ``(power_of_10, prefix)``. The power is 0 and the prefix empty for a dB
+        `unit`, or when no value is finite and nonzero. Otherwise the power is the
+        multiple of 3 at or below the smallest absolute value, clamped to the known
+        prefixes.
     """
     from striqt.analysis.lib.dataarrays import _ENG_PREFIXES
     import math
@@ -1722,7 +1719,8 @@ def _spec_class_to_label(class_name: str) -> str:
 def update_dataset(result: 'ss.lib.compute.DelayedDataset'):
     """store the dataset and refresh the list of plottable variables.
 
-    Variable labels are built once by `run_server`, not here.
+    The selected variable falls back to the first plottable variable when the
+    current selection is not plottable.
     """
     _app_state['delayed_dataset'] = result
 

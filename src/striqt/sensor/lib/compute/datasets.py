@@ -42,11 +42,10 @@ class DelayedDataset:
 def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
     """return the materialized dataset of the capture in `dd`.
 
-    The dataset contains
-    - one `capture` entry per port of `dd.capture`
-    - coordinates for each field in the capture, and source-specific acquisition info
-    - attributes coontaining the full action specification and `dd.config.extra_attrs`
-    - one variable per analysis specification and per `dd.extra_data` entry
+    The dataset has one ``capture`` entry per port of `dd.capture`, a coordinate per
+    capture field and per acquisition info field, one variable per measurement and
+    per `dd.extra_data` entry, and the attrs ``dd.config.extra_attrs``. Timings log
+    at DEBUG on the ``analysis`` logger.
 
     Raises:
         ValueError: if the first axis of an `extra_data` array has a size other
@@ -119,9 +118,6 @@ def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
 
 def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset':
     """concatenate captured datasets into one along a time axis.
-
-    One use is to transform a contiguous sequence of spectrogram captures into a
-    single spectrogram.
 
     Preconditions:
     - all datasets share the same dimension and type.
@@ -207,19 +203,20 @@ def index_dataset(
     *,
     chunks: int | Literal['auto'] | None = None,
 ) -> 'xr.Dataset':
-    """Return a dataset with indexes applied across multiple axes.
+    """return `ds` with a multi-index over `index_coords`.
 
     Args:
         ds: the sensor dataset to index
-        index_coords:
-            A list of coordinate names to index, matching index entries from the sweep
-            `captures` specification, or 'sweep_start_time'. The set of specified
-            coordinates must uniquely specify exactly one capture from the captures list.
-        chunks:
-            If not None, the returned dataset is backed by dask arrays for
-            multiprocessing (see `xarray.Dataset.chunk`)
+        index_coords: capture field names, or ``'sweep_start_time'``; together the
+            coordinates must select exactly one capture
+        chunks: a chunk size or ``'auto'`` backs the result with dask arrays
+            (`xarray.Dataset.chunk`); None keeps the arrays of `ds`
+
     Returns:
-        An xr.Dataset containing the data and coordinates of `ds` with indexing applied.
+        the data and coordinates of `ds` with the multi-index set
+
+    Raises:
+        ValueError: if `index_coords` do not select exactly one capture
     """
 
     _check_coord_indexes(ds, index_coords)  # must be before ds.chunk(...)
@@ -237,16 +234,14 @@ def unstack_dataset(
     """Unstack a dataset from a flat list of captures into multiple dimensions.
 
     The dimensions are `['sweep_start_time', *extra_coord_dims, 'port']`.
-    `loop_vars` are read from the sweep loop specification in ``ds.attrs['loops']``.
 
     Args:
         ds: the sensor dataset to unstack
         dim_coords:
             A list of coordinate names to transform into dimensions, which must fulfill
             the conditions given for the `index_coords` parameter of `index_dataset`.
-        chunks:
-            If not None, the returned dataset is backed by dask arrays for
-            multiprocessing (see `xarray.Dataset.chunk`)
+        chunks: a chunk size or ``'auto'`` backs the result with dask arrays
+            (`xarray.Dataset.chunk`); None keeps the arrays of `ds`
 
     Returns:
         The unstacked dataset.
@@ -298,9 +293,8 @@ def _coords_template(
         else:
             return v
 
-    # templates for the capture and acquisition info type fields
-    # adjust_analysis is a dict and signal_trigger a Trigger object: neither is a
-    # coordinate
+    # templates for the capture and acquisition info type fields; adjust_analysis is
+    # a dict and signal_trigger a Trigger, and neither is a coordinate
     skipped = {'adjust_analysis', 'signal_trigger'}
     for spec_cls in (capture_cls, info_cls):
         for field in msgspec.structs.fields(spec_cls):

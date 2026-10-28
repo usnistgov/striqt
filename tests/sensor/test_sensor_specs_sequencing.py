@@ -1,8 +1,9 @@
 """striqt.sensor.specs.sequencing: sweep expansion and the capture descriptions derived
 from it.
 
-The site-shaped cases use the extension binding in sweeps/src/extensions.py and the
-override files in sweeps/sites*, mirroring the downstream sensor configuration.
+The site-shaped cases use the extension binding in ``sweeps/src/extensions.py`` and
+the override files in ``sweeps/sites*``. Those files have the shape of the downstream
+sensor configuration.
 """
 
 from __future__ import annotations
@@ -60,7 +61,8 @@ NAME_FROM_PORT = Remap(key='port', lookup={0: 'Omni'})
 
 
 def shiftable_capture(**kws):
-    """make_capture with the finite analysis_bandwidth that an lo_shift design needs"""
+    """return `make_capture` with the finite `analysis_bandwidth` that an `lo_shift`
+    design requires"""
     return make_capture(analysis_bandwidth=0.5e6, **kws)
 
 
@@ -146,8 +148,9 @@ def test_max_by_frequency_is_the_maximum(gains, data):
 
 @given(sweep=sweeps(), limit=st.none() | st.integers(min_value=0, max_value=12))
 def test_limit_keeps_a_prefix_and_origins_index_it(sweep, limit):
-    """the origins key the first occurrence of each distinct capture in the
-    expansion that `limit` keeps, and index its position there"""
+    """the origins are keyed by the first occurrence of each distinct capture in the
+    expansion that `limit` keeps, and `capture_index` is the position of that
+    occurrence"""
     full = S.loop_captures(sweep)
     assert isinstance(full, tuple)
     assert all(type(c) is CaptureCls for c in full)
@@ -218,8 +221,8 @@ def test_only_fields_filters_capture_loops_but_keeps_analysis_loops():
     ids=['every_loop', 'one_loop_kept'],
 )
 def test_a_bad_loop_point_names_its_position_in_the_declared_loops(only_fields):
-    """`only_fields` drops loops, so the reported index must count the loops the user
-    wrote rather than the ones that survived"""
+    """`only_fields` drops loops. The reported index counts the declared loops, not the
+    loops that survive the filter."""
     loops = (
         ss.specs.List(field='snr', values=(1.0,)),
         ss.specs.List(field='frequency_offset', values=(1.0,)),
@@ -250,14 +253,14 @@ def test_loops_without_captures_build_new_instances():
     'loops', [(), (ss.specs.Repeat(count=2),)], ids=['no_loops', 'repeat_only']
 )
 def test_no_captures_and_no_capture_field_loops_expand_to_nothing(loops):
-    """a repeat names no capture field, so it leaves nothing to build a capture from,
-    exactly as an empty `loops:` does"""
+    """a repeat names no capture field and leaves nothing from which to build a
+    capture, as an empty `loops:` does"""
     assert S.loop_captures(make_sweep(loops=loops)) == ()
 
 
 def test_loops_that_leave_a_required_field_unset_name_the_loop_point():
-    """without a `captures:` entry the loops must supply every required capture field,
-    so the loop point is the only place the failure can be reported"""
+    """without a `captures:` entry the loops supply every required capture field. The
+    loop point is the only place at which the failure can be reported."""
     loops = (ss.specs.List(field='snr', values=(1.0, 2.0)),)
 
     with pytest.raises(msgspec.ValidationError) as info:
@@ -332,10 +335,10 @@ def test_expansion_args_take_the_nyquist_filter_as_an_argument(
 
 
 def test_calibration_fixture_expansion(calibration_sweep):
-    """the runner's sweep expands the loop points of calibration.json over its one
-    capture, less the (sample_rate, analysis_bandwidth) pairs above Nyquist. Each of
-    the diode passes runs the captures of one port, and the passes together acquire
-    the plan twice."""
+    """the sweep of the runner expands the loop points of ``calibration.json`` over the
+    one capture, less the (sample_rate, analysis_bandwidth) pairs above Nyquist. Each
+    diode pass runs the captures of one port, and the passes together acquire the plan
+    twice."""
     points = {loop.field: loop.get_points() for loop in calibration_sweep.loops}
     rates = [float(v) for v in points.pop('sample_rate')]
     bandwidths = [float(v) for v in points.pop('analysis_bandwidth')]
@@ -467,9 +470,8 @@ def test_survey_loops_expand(site_survey_sweep):
 def test_capture_checks_are_enforced_when_the_sweep_is_constructed(
     site_survey_sweep, loops, match
 ):
-    """`validate_sweep` expands the loops from `Sweep.__post_init__`, so a
-    `Meta` bound that only `_expand_capture_loops_with_origins` re-checks fails at
-    construction"""
+    """`validate_sweep` expands the loops from `Sweep.__post_init__`. A `Meta` bound
+    that only `_expand_capture_loops_with_origins` re-checks fails at construction."""
     with pytest.raises(msgspec.ValidationError, match=match):
         site_survey_sweep.replace(loops=loops)
 
@@ -501,7 +503,7 @@ def test_remaps_see_loop_values_as_the_field_type(site_sweep, values):
 
 
 def test_origin_spec_index_cycles_over_the_capture_entries():
-    """captures are the innermost loop, so each loop point visits every entry"""
+    """captures are the innermost loop, and each loop point visits every entry"""
     captures = tuple(make_capture(port=p) for p in (0, 1))
     loops = (ss.specs.List(field='frequency_offset', values=(1e3, 2e3)),)
     origins = S.loop_capture_origins(make_sweep(captures=captures, loops=loops))
@@ -520,8 +522,8 @@ def test_origin_spec_index_is_none_without_a_capture_list():
 
 
 def test_origin_loop_points_coerce_capture_values_but_not_analysis_values():
-    """`_build_loop_points_dict` converts only `isin='capture'` points, so an analysis
-    point reaches the origin as the YAML wrote it"""
+    """`_build_loop_points_dict` converts only ``isin='capture'`` points. An analysis
+    point reaches the origin as written in the YAML."""
     loops = (
         ss.specs.List(field='frequency_offset', values=('1e5',)),
         ss.specs.List(field='window', isin='analysis', values=('hann',)),
@@ -536,15 +538,15 @@ def test_origin_loop_points_coerce_capture_values_but_not_analysis_values():
 
 
 def test_origin_loop_points_are_hashable(site_survey_sweep):
-    """the mapping hashes lazily, so an unfrozen loop point would surface late"""
+    """the mapping hashes lazily, and an unfrozen loop point would surface late"""
     origins = S.loop_capture_origins(site_survey_sweep, source_id=RADIO_ID)
     assert isinstance(hash(origins), int)
     assert all(isinstance(hash(o.loop_points), int) for o in origins.values())
 
 
 def test_origins_are_renumbered_after_the_nyquist_filter():
-    """`capture_index` is a position in the returned tuple, so dropping the 2e6 point
-    must not leave a gap"""
+    """`capture_index` is a position in the returned tuple, and dropping the 2e6 point
+    leaves no gap"""
     captures = (make_capture(sample_rate=1e6, duration=1e-3),)
     loops = (
         ss.specs.List(field='analysis_bandwidth', values=(0.5e6, 0.7e6, 2e6, math.inf)),
@@ -961,8 +963,9 @@ def test_adjust_analysis_replaces_matching_fields_everywhere(
 
 
 def test_adjust_analysis_keeps_the_group_type():
-    """the adjusted analysis is an instance of the input's group, not of
-    `BuiltinAnalyses`, so a binding over another group keeps decoding against it"""
+    """the adjusted analysis is an instance of the group of the input, not of
+    `BuiltinAnalyses`. A binding over another group keeps decoding against that
+    group."""
     analysis = QuickAnalyses.from_dict({'spectrogram': SPG.spectrogram.to_dict()})
     adjusted = S.adjust_analysis(analysis, frozendict({'frequency_resolution': 2e4}))
     assert type(adjusted) is QuickAnalyses

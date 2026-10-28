@@ -70,13 +70,27 @@ class Phy802_16(PhyOFDM):
         cp_ratio: float = 1 / 8,
         xp=None,
     ):
-        """
+        """derive the sample rate, symbol timing, and cyclic-prefix indices of a channel.
+
         Args:
-            channel_bandwidth: Channel bandwidth as defined by 802.16-2017
-            alt_sample_rate: sample rate (in S/s) of the recorded data, which overrides the 802.16-2017 value when specified.
-            frame_duration: frame duration (in s), one of the 802.16-2017 values. Defaults to 5e-3.
-            nfft: the fft size corresponding to the length of the useful portion of each symbol. Defaults to 2048.
-            cp_ratio: the size of the cyclic prefix as a fraction of nfft. Defaults to 1/8.
+            channel_bandwidth: the channel bandwidth (in Hz), at least 1.25 MHz and a
+                multiple of 125 kHz
+            alt_sample_rate: the sample rate (in S/s) of the waveform when it differs
+                from the IEEE 802.16-2017 value, as a whole multiple or divisor of
+                that value; None selects the standard rate
+            frame_duration: the frame duration (in s), one of `VALID_FRAME_DURATIONS`
+            nfft: the FFT size in samples at the standard rate, one of
+                `VALID_FFT_SIZES`
+            cp_ratio: the cyclic-prefix length as a fraction of `nfft`, one of
+                `VALID_CP_RATIOS`
+            xp: the array namespace of the index arrays; None selects numpy
+
+        Raises:
+            TypeError: if `channel_bandwidth` is not a number
+            ValueError: if `channel_bandwidth`, `frame_duration`, `nfft`, or `cp_ratio`
+                is outside the values above, or if `alt_sample_rate` is not a whole
+                multiple or divisor of the standard rate or is too small to keep a
+                whole cyclic prefix
         """
         if xp is None:
             xp = np
@@ -150,7 +164,20 @@ class Phy802_16(PhyOFDM):
     def index_cyclic_prefix(
         self, *, frames=(0,), symbols: tuple[int, ...] | typing.Literal['all'] = 'all'
     ) -> Array:
-        """build the index tensor for cyclic prefix correlation over the selected frames and symbols"""
+        """return the sample indices of the cyclic prefixes in the selected frames and symbols.
+
+        Args:
+            frames: the frame numbers, counted from the start of the waveform
+            symbols: the symbol numbers within each frame, or ``'all'``
+
+        Returns:
+            integer indices of shape ``(symbol, frame, prefix sample)`` in the array
+            namespace of `cp_sizes`
+
+        Raises:
+            ValueError: if `symbols` is neither ``'all'`` nor a sequence of indices
+                within one frame
+        """
         return _802_16_index_cyclic_prefix(self, frames=frames, symbols=symbols)
 
 
@@ -161,7 +188,7 @@ def _802_16_index_cyclic_prefix(
     frames=(0,),
     symbols: tuple[int, ...] | typing.Literal['all'] = 'all',
 ) -> Array:
-    """build the index tensor for cyclic prefix correlation over the selected frames and symbols"""
+    """return the cyclic-prefix sample indices of `phy` in the selected frames and symbols."""
 
     xp = array_namespace(phy.cp_sizes)
     frames = xp.array(frames)
@@ -170,7 +197,6 @@ def _802_16_index_cyclic_prefix(
         symbols, '"symbols" argument', size=phy.symbols_per_frame, xp=xp
     )
 
-    # build each grid axis separately
     grid = []
 
     # axis 0: symbol number in each frame

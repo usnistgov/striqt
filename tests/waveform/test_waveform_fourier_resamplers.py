@@ -57,10 +57,11 @@ COLA_DESIGN_CASES = [
 class TestColaResamplerDesign:
     @pytest.mark.parametrize('fs_base, fs_target, window, shift', COLA_DESIGN_CASES)
     def test_consistency(self, fs_base, fs_target, window, shift):
-        """The rates, FFT sizes, and passband of a design are mutually consistent.
+        """the rates, FFT sizes, and passband of a design are mutually consistent.
 
-        The grid omits `bw`, which only sets the passband width, and the shift
-        spellings False and 'none', which design the same centered passband as None.
+        The grid omits `bw` and the shift spellings False and 'none'. `bw` only sets
+        the passband width. False and 'none' design the same centered passband as
+        None.
         """
         bw = 10e6
         design = design_cola_resampler(
@@ -102,7 +103,7 @@ class TestColaResamplerDesign:
         assert upsample['fs_sdr'] == pytest.approx(10e6)
         assert upsample['nfft'] < upsample['nfft_out']
 
-        # 8209 is the first prime above the default min_fft_size, so it is the
+        # 8209 is the first prime above the default min_fft_size, so 8209 is the
         # smallest rational FFT size for this ratio and the one avoid_primes rejects
         prime = 8209
         fs_target = 125e6 * prime / (prime + 1)
@@ -256,8 +257,9 @@ class TestOaresample:
         scale=st.sampled_from([1.0, 2.0]),
     )
     def test_downsample_tone(self, f0_bins, shift_bins, scale):
-        """As sensor.lib.compute.corrections._oaresample: 2-D (channel, sample)
-        input on axis=1, a bin-grid frequency shift, and a voltage scale."""
+        """as `sensor.lib.compute.corrections._oaresample` calls `oaresample`: 2-D
+        (channel, sample) input on axis=1, a bin-grid frequency shift, and a voltage
+        scale"""
         up, down = self.NFFT // 2, self.NFFT
         fs_out = self.FS * up / down
         f0 = f0_bins * self.FS / self.NFFT
@@ -313,8 +315,8 @@ class TestOaresample:
 
 # %% numpy vs cupy
 class TestNumpyCupyCrossComparison:
-    """Tolerances come from `cross_backend_sigma`, parameterized by the FFT sizes and
-    elementwise operations each function performs.
+    """tolerances come from `cross_backend_sigma`, parameterized by the FFT sizes and
+    elementwise operations each function performs
     """
 
     @given(x=noise_waveforms(min_size=64, max_size=256, dtype=np.complex64))

@@ -1,5 +1,7 @@
-"""striqt.cli.sensor_sweep: the logging callbacks the sweep CLI registers. The record
-counts and levels are the contract; the message text is not."""
+"""striqt.cli.sensor_sweep: the logging callbacks of the sweep CLI
+
+The tests assert record counts and levels, not message text.
+"""
 
 from __future__ import annotations
 

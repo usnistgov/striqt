@@ -116,7 +116,7 @@ class TestBinnedMean:
     def test_strided_axis_reduction_needs_the_in_order_bound(self):
         """numpy sums a strided axis in order, so the error of a bin that straddles 2
         levels exceeds the contiguous-axis model and stays inside `accum_rtol`. The
-        tolerance functions pick the bound by the axis a measurement reduces."""
+        tolerance functions select the bound by the axis a measurement reduces."""
         n = 1_000_000
         x = np.full((2, n, 8), 3e-4, dtype=np.float32)
         x[:, : n // 2] = 1.0
@@ -151,8 +151,8 @@ class TestBinnedMean:
 
     @given(data=st.data())
     def test_fft_bins_center_on_the_middle_sample(self, xp, data):
-        """Property: with fft=True the sample at index n//2 is the center of the
-        middle bin, the bin count is odd, and no further symmetric pair fits."""
+        """with ``fft=True`` the sample at index n//2 is the center of the middle bin,
+        the bin count is odd, and no further symmetric pair of bins fits"""
         count = data.draw(st.integers(min_value=2, max_value=8))
         if count % 2:
             # even n with odd count is a known defect, tested separately

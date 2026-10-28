@@ -71,13 +71,13 @@ def test_lazy_import(subtests):
 
 def test_striqt_figures(subtests):
     types = module_types_in_fresh_interpreter(FIGURES_IMPORT_CHECK)
-    # the parent 'dask' package is reified because find_spec('dask.array')
-    # imports it; only the submodule stays lazy
+    # the parent 'dask' package is reified because find_spec('dask.array') imports
+    # the parent. Only the submodule stays lazy
     assert_lazy(
         subtests, types, ('scipy', 'xarray', 'pandas', 'matplotlib', 'dask.array')
     )
-    # these import matplotlib and pandas eagerly, so the check above holds only
-    # while the package does not import them
+    # these modules import matplotlib and pandas eagerly, so the check above holds
+    # only while striqt.figures does not import either
     assert_absent(
         subtests, types, ('striqt.figures.ticker', 'striqt.figures.notebook_env')
     )

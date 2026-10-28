@@ -66,9 +66,16 @@ def get_kernel(
 ) -> Callable[..., cupy.ndarray]:
     """return the fused kernel for `conversion`.
 
-    `abs` and `bounded` select among the ``lin_to_dB`` variants and are ignored for
-    the other conversions: the kernel takes ``(x, out, scale_ln)`` and, when
-    `bounded`, a trailing ``eps``; ``envtopow`` and ``dBtopow`` take ``(x, out)``.
+    Args:
+        conversion: the conversion evaluated by the kernel
+        abs: True selects the ``lin_to_dB`` variant that converts ``abs(x)``; ignored
+            for the other conversions
+        bounded: True selects the ``lin_to_dB`` variant with a trailing ``eps``
+            argument; ignored for the other conversions
+
+    Returns:
+        a kernel called as ``(x, out, scale_ln)`` or ``(x, out, scale_ln, eps)`` for
+        ``lin_to_dB``, and as ``(x, out)`` for ``envtopow`` and ``dBtopow``
     """
     if conversion == 'envtopow':
         return _envtopow

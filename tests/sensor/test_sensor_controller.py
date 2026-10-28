@@ -279,8 +279,8 @@ NOT_REUSABLE = REUSABLE.replace(frequency_offset=1e5)
     ids=['reused', 'new_filter', 'incompatible', 'disabled'],
 )
 def test_reuse_iq(reuse_iq, second_capture, shares_buffer, isolated_lookup):
-    """a reused acquisition is the first capture's buffer itself; otherwise the
-    second capture is acquired afresh from its own generator"""
+    """a reused acquisition is the buffer of the first capture. Otherwise the second
+    capture is acquired afresh from the generator of that capture."""
     with TONE.from_source_spec(SOURCE, reuse_iq=reuse_iq) as ctrl:
         ctrl._arm_spec(REUSABLE)
         first = ctrl.acquire()
@@ -354,8 +354,8 @@ def test_gapless_repeats_are_stamped_one_record_apart(fake_controller):
 
 
 def test_one_port_capture_after_a_two_port_capture_has_one_row(isolated_lookup):
-    """the receive buffers alternate between acquisitions, so the third
-    acquisition is offered the two-port buffer of the first"""
+    """the receive buffers alternate between acquisitions, and the third acquisition
+    is offered the two-port buffer of the first"""
     two_port = preset_capture('sawtooth', **SCALE_ONLY)
     one_port = two_port.replace(port=1, duration=0.5e-3)
     one_port_short = one_port.replace(duration=0.25e-3)
@@ -373,7 +373,7 @@ def test_one_port_capture_after_a_two_port_capture_has_one_row(isolated_lookup):
 
 
 class HalfReads(BINDINGS['sawtooth'].sensor.source_cls):
-    """returns at most half of each read request"""
+    """a source that returns at most half of each read request"""
 
     read_calls = 0
 
@@ -386,7 +386,7 @@ class HalfReads(BINDINGS['sawtooth'].sensor.source_cls):
 
 
 class OverReports(BINDINGS['sawtooth'].sensor.source_cls):
-    """reports 2 more samples than were requested"""
+    """a source that reports 2 more samples than were requested"""
 
     def read(self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'):
         received, time_ns = super().read(
@@ -451,7 +451,7 @@ def test_acquire_before_arming_is_an_error(isolated_lookup):
 
 
 def dBfs(x):
-    """the level of each port of `x` relative to full scale"""
+    """return the rms level (dBfs) of each port of `x`"""
     return 20 * np.log10(rms(to_numpy(x), axis=-1))
 
 
@@ -468,7 +468,7 @@ class TestControllerAcquire:
             read_sizes = [c[1] for c in device.calls_named('readStream')]
             assert read_sizes == [iq.x.shape[1], holdoff]
 
-            # the timestamp lies inside the acquisition window
+            # the timestamp is inside the acquisition window
             window_ns = round(sum(read_sizes) * 1e9 / MCR)
             assert stream.activate_time_ns <= iq.info.start_time.value
             assert iq.info.start_time.value <= stream.activate_time_ns + window_ns
@@ -483,7 +483,7 @@ class TestControllerAcquire:
             assert fake_soapy.devices[0].streams[0].channels == (0, 1)
 
         # -60 dBm through 50 dB of gain is -10 dBfs; port 0 would be noise only.
-        # The model's own noise floor biases the level 0.014 dB above the tone, so
+        # The noise floor of the model biases the level 0.014 dB above the tone, so
         # the bound is that mismatch and not the sample fluctuation
         assert iq.x.shape[0] == 1
         assert dBfs(iq.x)[0] == pytest.approx(-10.0, abs=0.05)

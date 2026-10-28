@@ -29,7 +29,7 @@ def clear_thread_interrupts():
 
 
 def raised(exc):
-    """`exc` with a traceback attached, as a caught exception has"""
+    """return `exc` with a traceback attached, as a caught exception has"""
     try:
         raise exc
     except BaseException as ex:  # noqa: BLE001
@@ -42,7 +42,11 @@ def raise_inside(context, exc):
 
 
 def run_in_thread(func):
-    """call `func` in a worker thread and return its result or raised exception"""
+    """call `func` in a worker thread.
+
+    Returns:
+        ``('ok', result)`` or ``('raised', exception)``
+    """
     outcome = []
 
     def target():

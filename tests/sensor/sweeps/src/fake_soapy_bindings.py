@@ -1,7 +1,7 @@
-"""a SoapySource binding for the fake SoapySDR module in tests/sensor/fake_soapy.py.
+"""a SoapySource binding for the fake SoapySDR module in ``tests/sensor/fake_soapy.py``.
 
-Loaded through the `extensions:` block of the fake_soapy*.yaml sweeps. The source
-spec mirrors the Airstack defaults except that it runs on numpy.
+The `extensions:` block of the ``fake_soapy*.yaml`` sweeps loads this module. The
+source spec has the Airstack defaults with `array_backend` set to numpy.
 """
 
 from __future__ import annotations

@@ -51,7 +51,8 @@ def delayed_results(sweep) -> list[compute.DelayedDataset]:
 
 @functools.lru_cache
 def two_port_run() -> list[compute.DelayedDataset]:
-    """2 captures (frequency_offset) x 2 ports; run once for the module"""
+    """return the delayed results of 2 captures (`frequency_offset`) x 2 ports, run once
+    per module"""
     return delayed_results(
         preset_sweep('single_tone', two_port_captures(), analysis=IQ_ONLY, loops=LOOPS)
     )
@@ -67,7 +68,8 @@ def spectrogram_run() -> list:
 
 
 def test_from_delayed_does_not_warn_on_an_adc_overload(caplog):
-    """the overload warning is the `log_overloads` callback's, not the packaging's"""
+    """`from_delayed` logs nothing for a negative headroom. The overload warning belongs
+    to the `log_overloads` callback."""
     air = ss.bindings.air7101b
     capture = soapy_capture(port=(0, 1), center_frequency=(1e9, 2e9), gain=0.0)
     sweep = air.sensor.sweep_spec_cls(source=air.schema.source(), captures=(capture,))
@@ -122,8 +124,8 @@ def test_from_delayed_rejects_extra_data_of_the_wrong_length():
 
 
 def test_from_delayed_leaves_the_signal_trigger_out_of_the_coordinates():
-    """the acquisition info holds the Trigger object that aligned the capture, which
-    is not a coordinate; the other info fields still are"""
+    """the `signal_trigger` field of the acquisition info is a `Trigger` object and not
+    a coordinate. The other info fields are coordinates."""
     trigger = sa.Trigger(
         'cellular_5g_pss_sync',
         sa.specs.Cellular5GNPSSSync(subcarrier_spacing=30e3),

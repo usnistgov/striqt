@@ -1,5 +1,5 @@
 """striqt.sensor.lib.actions.warmup: the warmup sweep derived from a sweep, the
-resources it runs over, and whether a sweep warms up at all
+resources of a warmup run, and whether a sweep warms up at all
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ WARMUP_PORTS = {
 @pytest.mark.parametrize('case', list(WARMUP_PORTS), ids=list(WARMUP_PORTS))
 def test_warmup_source_has_enough_rx_ports(case):
     """the warmup source has max(port) + 1 ports over every port a capture or a
-    port loop names. Port numbers index the receiver's ports from 0."""
+    port loop names. Port numbers index the ports of the receiver from 0."""
     captures, loops, num_rx_ports = WARMUP_PORTS[case]
     warm = warmup.derive_warmup_sweep(cupy_sweep(captures, loops=loops))
     assert isinstance(warm.source, ss.specs.NoSource)
@@ -72,14 +72,14 @@ def test_warmup_sweep_flattens_to_count_captures(count):
 
 
 def test_warmup_sweep_preserves_analysis_and_trigger_and_nulls_the_sink_path():
-    """the analysis and the source's trigger are copied. The sink is copied with
-    its path set to None."""
+    """the analysis and the trigger of the source are copied. The sink is copied with
+    `path` set to None."""
     source = CUPY.replace(signal_trigger='cellular_5g_pss_sync')
     sink = ss.specs.ZarrSink(path='somewhere.zarr', batched_write_count=3)
     analysis = ss.specs.BundledAnalysis.from_dict({
         **ANALYSIS.to_dict(),
-        # shared_spectrum picks SSB case C, which a capture with no center_frequency
-        # cannot otherwise resolve at 30 kHz
+        # shared_spectrum selects SSB case C; a capture with no center_frequency
+        # cannot otherwise resolve the case at 30 kHz
         'cellular_5g_pss_sync': {
             'subcarrier_spacing': 30e3,
             'sample_rate': 7.68e6,
@@ -101,7 +101,7 @@ def test_warmup_sweep_preserves_analysis_and_trigger_and_nulls_the_sink_path():
 
 
 def test_warmup_sweep_is_a_sweep_with_the_origin_capture_type():
-    """the warmup binding has the capture type of the sweep's binding, and the
+    """the warmup binding has the capture type of the binding of the sweep, and the
     warmup runs as a plain `Sweep`"""
     sweep = cupy_sweep((scale_only(),))
     warm = warmup.derive_warmup_sweep(sweep)
@@ -119,9 +119,9 @@ def test_one_warmup_binding_per_origin():
 
 
 def test_warmup_binding_and_sweep_keep_the_analysis_group(isolated_bindings):
-    """the warmup binding takes the group of the origin, so the copied analysis
-    decodes against the same fields. The origin is registered, which
-    `derive_warmup_sweep` requires to look the controller up by name"""
+    """the warmup binding has the analysis group of the origin, and the copied
+    analysis decodes against the same fields. `derive_warmup_sweep` requires a
+    registered origin to look the controller up by name."""
     assert warmup.warmup_binding(quick_binding()).schema.analysis is QuickAnalyses
 
     origin = ss.bindings.single_tone

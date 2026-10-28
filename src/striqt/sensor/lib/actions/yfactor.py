@@ -32,22 +32,21 @@ DIODE_FIELD = 'noise_diode_enabled'
 def calibration_analysis(
     spec: specs.ManualYFactorCalibration[Any, Any, Any, Any],
 ) -> specs.AnalysisGroup:
-    """return the analysis a Y-factor calibration runs on each capture.
+    """return the analysis that a Y-factor calibration runs on each capture.
 
     The analysis is `channel_power_time_series` with the ``rms`` and ``peak``
     detectors, as an instance of the analysis group of the binding of `spec`. The
-    detector period is `spec.calibration.detector_period`, or the one `duration`
-    that the captures and loops share when that is None.
+    detector period is `spec.calibration.detector_period`, or the one `duration` of
+    the captures and loops when `detector_period` is None.
 
     Raises:
-        SpecValidationError: at ``$.calibration.detector_period`` when
-            `detector_period` is None and the captures and loops have more than one
-            `duration`
+        SpecValidationError: if `detector_period` is None and the captures and loops
+            have more than one `duration`
     """
     period = spec.calibration.detector_period
 
     if period is None:
-        # a looped field overrides the captures' own values
+        # a `duration` loop overrides the `duration` of the captures
         duration_loops = [
             loop
             for loop in spec.loops
@@ -97,9 +96,10 @@ def compute_y_factor_corrections(
     `analysis_bandwidth` counts as the backend sample rate.
 
     Args:
-        dataset: the collected captures as `save_yfactor_corrections` indexes them
+        dataset: the collected captures, indexed by the calibration fields and the
+            diode state
         enr_dB: the excess noise ratio (dB) of the noise diode
-        Tref: the reference temperature (K) of the hot source and the noise figure
+        Tref: the reference temperature (K) of the ENR and the noise figure
 
     Returns:
         a dataset over the calibration fields with `noise_figure` (dB),
@@ -172,24 +172,31 @@ def save_yfactor_corrections(
     *,
     enr_dB: float,
 ) -> xr.Dataset:
-    """compute the Y-factor corrections from the collected captures and save them.
+    """save the Y-factor corrections computed from the collected captures to `path`.
 
-    `data` is one dataset per capture, as the sink collected them. Each of
-    `calibration_fields` becomes a dimension of the concatenated data. The
-    corrections of `compute_y_factor_corrections` at `enr_dB` are written to `path`
-    as netCDF with a ``calibration_fields`` attr and summarized per port on stdout.
+    Each of `calibration_fields` becomes a dimension of the concatenated captures.
+    The corrections of `compute_y_factor_corrections` at `enr_dB` are written to
+    `path` as netCDF with a ``calibration_fields`` attr, and a summary per port is
+    printed to stdout.
+
+    Args:
+        data: one dataset per capture
+        calibration_fields: the capture coordinates and data variables that index
+            the corrections
+        path: the netCDF output path; missing parent directories are created
+        enr_dB: the excess noise ratio (dB) of the noise diode
 
     Returns:
         the saved corrections
 
     Raises:
-        KeyError: if a calibration field is neither a capture coordinate nor a data
-            variable of the collected datasets
+        KeyError: if a calibration field is neither a coordinate nor a data variable
+            of the collected datasets
     """
     fields = list(calibration_fields)
 
-    # re-index by radio setting rather than capture; the diode state arrives as a
-    # data variable from the runner, the rest as capture coordinates
+    # re-index by radio setting rather than by capture; the diode state is a data
+    # variable from `extra_data`, and the other fields are capture coordinates
     capture_data = xr.concat(data, compute.CAPTURE_DIM).drop_vars(
         _DROP_FIELDS, errors='ignore'
     )
@@ -224,20 +231,19 @@ def _is_port_loop(loop: specs.LoopSpec) -> bool:
 def build_calibration_sweep(
     spec: specs.ManualYFactorCalibration[SS, SP, SC, SA],
 ) -> specs.Sweep[SS, SP, SC, SA]:
-    """return the `Sweep` that `open_resources` opens for a `ManualYFactorCalibration`.
+    """return the `Sweep` derived from a `ManualYFactorCalibration`.
 
-    The sweep is the spec's capture plan over every port, with the analysis of
-    `calibration_analysis`, IQ reuse across the `analysis_bandwidth` points of one
-    radio setting, `loop_only_nyquist`, and no warmup. The `sink` is the spec's
-    `Sink` converted to a `ZarrSink` with default store fields. The store fields
-    of `sink` are unused. The sweep is an instance of the
-    `sweep_cls` of the spec class, and the result is cached on `spec`.
+    The captures, loops, and `adjust_captures` of `spec` are copied. The analysis is
+    `calibration_analysis`, and the options set `reuse_iq`, `loop_only_nyquist`, and
+    `skip_warmup`. The sink is `spec.sink` converted to a `ZarrSink` with default
+    store fields. The result is an instance of the `sweep_cls` of the spec class and
+    is memoized by `spec`.
 
     Raises:
-        TypeError: if `spec` is not an instance of a bound action spec class
-        msgspec.ValidationError: if the captures and loops do not share one
-            `duration` and `calibration.detector_period` is None, or if the sweep
-            fails `validate_sweep`
+        TypeError: if the class of `spec` is not bound to a sensor
+        msgspec.ValidationError: if `calibration.detector_period` is None and the
+            captures and loops have more than one `duration`, or if the sweep fails
+            `validate_sweep`
     """
     sweep_cls = type(spec).sweep_cls
     if sweep_cls is None:
@@ -253,9 +259,9 @@ def build_calibration_sweep(
         loops=spec.loops,
         adjust_captures=spec.adjust_captures,
         analysis=calibration_analysis(spec),
-        # reuse_iq lets the analysis_bandwidth points of one radio setting share
-        # an acquisition. The runner discards it at each diode switch, which the
-        # capture spec does not describe (Controller.discard_iq).
+        # reuse_iq shares one acquisition across the analysis_bandwidth points of a
+        # radio setting; the runner calls Controller.discard_iq at each diode switch,
+        # since the diode state is not a capture field
         options=specs.SweepOptions(
             reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
         ),
@@ -287,7 +293,11 @@ def calibration_passes(
 def pass_sweep(
     sweep: specs.Sweep[SS, SP, SC, SA], port: Any
 ) -> specs.Sweep[SS, SP, SC, SA]:
-    """return `sweep` with the captures fixed to `port` and without a `port` loop."""
+    """return `sweep` without a `port` loop and with the captures at `port` only.
+
+    With a `port` loop, every capture is set to `port`. Without one, the captures at
+    other ports are dropped.
+    """
     loops = tuple(loop for loop in sweep.loops if not _is_port_loop(loop))
     if len(loops) < len(sweep.loops):
         captures = tuple(c.replace(port=port) for c in sweep.captures)
@@ -303,8 +313,8 @@ def calibration_fields(
     """return the capture fields that index the saved corrections.
 
     The implied loops of `spec.calibration` come first, then the loop fields of
-    `sweep` in order. The diode state follows `port`, or comes first when there is no
-    `port` loop. `sample_rate` is renamed to the acquisition's `backend_sample_rate`.
+    `sweep` in order. The diode state follows `port`, or comes first when `port` is
+    absent. `sample_rate` is replaced by `backend_sample_rate`.
     """
     fields = list(spec.calibration.implied_loops)
     fields += [loop.field for loop in sweep.loops if loop.field is not None]
@@ -319,7 +329,7 @@ def corrections_path(
     sweep: specs.Sweep[Any, Any, Any, Any],
     format_path: specs.paths.PathFormatter | None,
 ) -> Path:
-    """return `sweep.sink.path` with the ``{fields}`` templates formatted.
+    """return `sweep.sink.path` with the ``{field}`` templates formatted.
 
     Raises:
         ValueError: if `sweep.sink.path` is None
@@ -333,10 +343,12 @@ def corrections_path(
 
 
 def confirm_enr(enr: float) -> None:
-    """ask the operator to confirm the noise diode ENR `enr` (dB).
+    """block on a prompt until the operator confirms the noise diode ENR `enr` (dB).
+
+    The prompt repeats until the answer is ``y`` or ``n``.
 
     Raises:
-        RuntimeError: if the operator answers no
+        RuntimeError: if the operator answers ``n``
     """
     prompt = f'Confirm that the noise diode ENR is {enr} dB (y/n): '
     while True:
@@ -348,7 +360,7 @@ def confirm_enr(enr: float) -> None:
 
 
 def switch_diode(port: Any, diode_on: bool) -> None:
-    """prompt the operator to set the noise diode at `port` and wait for enter."""
+    """block on a prompt to switch the noise diode at `port` to `diode_on`."""
     what = f'noise diode at port {port}'
     if diode_on:
         sa.util.blocking_input(f'enable {what} and press enter: ')
@@ -358,12 +370,11 @@ def switch_diode(port: Any, diode_on: bool) -> None:
 
 @registry.runner(spec_type=specs.ManualYFactorCalibration)
 class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
-    """run a `ManualYFactorCalibration`.
+    """the runner of a `ManualYFactorCalibration`.
 
-    `sweep` is `build_calibration_sweep` of the spec, and the resources open for
-    that sweep. The captures of every pass collect in one `MemoryCacheSink`. After
-    the last pass, the corrections are computed from them and written to the spec's
-    `sink.path` as netCDF. A path of None writes nothing.
+    `sweep` is `build_calibration_sweep` of `spec`. The sink is a `MemoryCacheSink`
+    that collects the captures of every pass; after the last pass the corrections are
+    written to ``spec.sink.path`` as netCDF, or nowhere when the path is None.
     """
 
     spec: specs.ManualYFactorCalibration[SS, SP, SC, SA]
@@ -376,7 +387,9 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
         """the `Sweep` built by `build_calibration_sweep` from `spec`.
 
         Raises:
-            msgspec.ValidationError: if a field of `spec` is rejected
+            TypeError: if the class of `spec` is not bound to a sensor
+            msgspec.ValidationError: if `spec` fails the checks of
+                `build_calibration_sweep`
         """
         return build_calibration_sweep(self.spec)
 
@@ -391,16 +404,23 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
         yield_values: bool = True,
         loop: bool = False,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-        """run every pass, then compute and save the corrections.
+        """run the calibration passes over `resources`.
 
-        The yields are those of `iterate_captures` over each pass. Each pass begins
-        with a new acquisition (`Controller.discard_iq`). Within a pass, `reuse_iq`
-        applies. The corrections are saved only when the sink is a `MemoryCacheSink`
-        and the spec's `sink.path` is not None.
+        Each pass prompts the operator, discards any reused acquisition, and runs
+        `iterate_captures` over the captures at one port. Within a pass, `reuse_iq`
+        applies. After the last pass, the corrections are saved when the sink is a
+        `MemoryCacheSink` and ``spec.sink.path`` is not None. A None path logs at
+        INFO on the ``sink`` logger.
+
+        Yields:
+            the yields of `iterate_captures` for each pass in turn, as `always_yield`
+            and `yield_values` select
 
         Raises:
             ValueError: if `loop` is True
             RuntimeError: if the operator rejects the ENR confirmation
+            KeyError: if a calibration field is neither a coordinate nor a data
+                variable of the collected captures
         """
         if loop:
             raise ValueError('a calibration does not loop')
@@ -419,8 +439,8 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
 
         for port, diode_on in calibration_passes(self.spec):
             switch_diode(port, diode_on)
-            # the diode state is not a capture field, so the controller cannot see
-            # that the acquisition it would reuse is now stale
+            # the diode state is not a capture field, so reuse_iq would otherwise keep
+            # the acquisition from the previous diode state
             resources['source'].discard_iq()
             inner = Resources(resources, sweep_spec=sweeps[port])
             yield from core.iterate_captures(

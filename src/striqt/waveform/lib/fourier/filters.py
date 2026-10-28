@@ -1,7 +1,6 @@
 """FIR low-pass designs and the STFT overlap-add filters that apply a design.
 
-Window overlaps come from one constant-overlap-add (COLA) divisor table, which the
-resampler design shares.
+Window overlaps come from one constant-overlap-add (COLA) divisor table.
 """
 
 from __future__ import annotations as __
@@ -111,15 +110,23 @@ def _fir_lowpass_fft(
 ) -> Array:
     """return the zero-phase response of an FIR low-pass on the `size` bins of an STFT.
 
-    The taps are a `scipy.signal.firwin2` design with unit gain below `cutoff` (in Hz)
-    falling linearly to zero over `transition` (in Hz). A transition band that would
-    run past Nyquist ends at Nyquist. The result is the real amplitude response of
-    that linear-phase design on the bin grid of `stft` (ascending frequency).
-    Multiplying an STFT by the response filters each segment with no delay. A
-    `cutoff` at or above Nyquist gives all ones.
+    The taps are a `scipy.signal.firwin2` design. The result is the real amplitude
+    response of that linear-phase design on the ascending-frequency bin grid of
+    `stft`. Multiplying an STFT by the response filters each segment with no delay.
+
+    Args:
+        size: the number of taps and of bins
+        sample_rate: the sample rate (in S/s) of the filtered waveform
+        cutoff: the passband edge (in Hz); at or above Nyquist, the result is all
+            ones
+        transition: the width (in Hz) over which the gain falls linearly from 1 to
+            0; a transition band that runs past Nyquist ends at Nyquist
+        window: the `scipy.signal.firwin2` window of the design
+        xp: the array namespace of the result; None selects numpy
+        dtype: the dtype of the result
 
     Returns:
-        a 1-D array of `size` samples with dtype `dtype` in `xp` (numpy when None)
+        a 1-D array of `size` samples
     """
 
     if xp is None:
