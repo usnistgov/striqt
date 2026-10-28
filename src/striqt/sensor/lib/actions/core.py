@@ -26,14 +26,8 @@ from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
     """the contract between an action spec and the code that runs the spec.
 
-    A runner class is registered for one action spec type with `registry.runner`
-    and constructed from an instance of that type. Construction stores `spec` and
-    has no other effect. `open_resources` opens the source, the peripherals, and the
-    sink from `open_sink` for `sweep`. `iterate_sweep` calls `iterate` over those
-    resources, and `iterate` invokes the `on_analyzed` callbacks of
-    ``resources['callbacks']`` with the `DelayedDataset` of each capture. A bound
-    spec reads `sweep` at the end of `__post_init__`. Nothing is inherited from the
-    protocol.
+    An implementation is constructed from one action spec. Construction stores `spec`
+    and has no other effect.
     """
 
     spec: TA
@@ -42,19 +36,25 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
 
     @property
     def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
-        """the `Sweep` derived from `spec` that the resources open for.
+        """the `Sweep` derived from `spec`.
+
+        The source, peripherals, and sink are opened for this `Sweep`.
 
         Raises:
-            msgspec.ValidationError: for the field of `spec` that the derivation
-                rejects, located by the path of the field
+            msgspec.ValidationError: if a field of `spec` is rejected; the error path
+                names the field
         """
         ...
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        """return the sink for `sweep`, not yet entered.
+        """return the sink for `sweep`.
 
-        `open_resources` enters the returned sink. A ``sweep.sink.path`` of None
-        selects a sink that writes nothing.
+        The caller enters the returned sink. A ``sweep.sink.path`` of None selects a
+        sink that writes nothing.
+
+        Args:
+            format_path: the formatter of the ``{field}`` templates in the sink path,
+                or None to use the path as written
         """
         ...
 
@@ -66,13 +66,18 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
         yield_values: bool = True,
         loop: bool = False,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-        """run the action over `resources`, yielding what the sink's `append` returns.
+        """run the action over `resources`.
 
         Args:
-            resources: the open resources returned by `open_resources`
+            resources: the open resources; the implementation invokes the
+                `SweepCallbacks` under ``callbacks``
             always_yield: if True, yield `None` on steps that produce no result
             yield_values: if False, yield `None` instead of the sink result
             loop: if True, the action repeats from the beginning after the last capture
+
+        Yields:
+            what `sink.append` returned for each capture, or None as `always_yield`
+            and `yield_values` select
         """
         ...
 
@@ -87,17 +92,16 @@ def iterate_sweep(
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
     """run the action of ``resources['runner']`` over `resources`.
 
-    The runner was built by `open_resources` from the action spec. A `Sweep` runs
-    `iterate_captures`, whose docstring describes the yields.
-
     Args:
         resources: dictionary of open resources returned by `open_resources`
         always_yield: if True, yield `None` on steps that produce no result
         yield_values: if False, yield `None` instead of the sink result
         loop: if True, the action repeats from the beginning after the last capture
+        **replace: resources that replace the entries of `resources` for this run
 
-    Returns:
-        the iterator returned by the runner's `iterate`
+    Yields:
+        what `sink.append` returned for each capture, or None as `always_yield` and
+        `yield_values` select
     """
     runner = resources['runner']
     return runner.iterate(
@@ -139,12 +143,8 @@ def iterate_captures(
     fields of ``resources['action_spec']``. The attrs differ from the fields of
     ``resources['sweep_spec']`` when the runner derived the sweep from the spec.
 
-    The `on_analyzed` callback of ``resources['callbacks']`` runs in the calling
-    thread with the `DelayedDataset` of each capture, after the analysis of that
-    capture and before the dataset is submitted to `sink.append`. The `on_cached`
-    callback runs in the calling thread with `resources` and the arguments of the
-    `KwArgCache` callback each time a measurement fills a cache. An exception from
-    either ends the pipeline like an analysis error.
+    The `on_analyzed` and `on_cached` hooks of ``resources['callbacks']`` run in the
+    calling thread. An exception from a hook ends the pipeline like an analysis error.
 
     Args:
         resources: dictionary of open resources returned by `open_resources`

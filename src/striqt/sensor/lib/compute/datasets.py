@@ -41,12 +41,13 @@ class DelayedDataset:
 
 
 def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
-    """return the dataset of one capture, materializing the delayed arrays of `dd`.
+    """return the materialized dataset of the capture in `dd`.
 
-    The `capture` dimension has one entry per port of `dd.capture`. The coordinates
-    are the capture and acquisition fields and the analysis loop fields of the sweep.
-    The attrs are `dd.config.extra_attrs` without the coordinate names. Each
-    `dd.extra_data` entry is a variable along `capture`.
+    Returns:
+        a dataset with one `capture` entry per port of `dd.capture`; coordinates from
+        the capture, acquisition, and analysis-loop fields; attrs from
+        `dd.config.extra_attrs` less the coordinate names; and one variable along
+        `capture` per `dd.extra_data` entry
 
     Raises:
         ValueError: if the first axis of an `extra_data` array has a size other

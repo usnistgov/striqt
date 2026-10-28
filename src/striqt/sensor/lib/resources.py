@@ -39,34 +39,33 @@ if TYPE_CHECKING:
 
 @dataclasses.dataclass(frozen=True)
 class SweepCallbacks:
-    """the callbacks of one run, invoked by `open_resources` and `iterate_captures`.
+    """the hooks of one run of an action.
 
-    Each field is one callable or None. `on_source_opened` receives
-    ``(sweep, source_id)`` from a worker thread once the source is open and before the
-    first capture. `on_analyzed` receives the `DelayedDataset` of each capture in the
-    analysis thread, after the analysis of that capture and before the sink receives
-    the dataset. `on_cached` receives ``(resources, cache, capture, result,
-    **kwargs)`` in the analysis thread each time a measurement fills the `KwArgCache`
-    named `cache`, with the measurement keywords in `kwargs`. The analysis thread
-    waits for `on_analyzed` and `on_cached` to return. An exception from any callback
-    ends the run.
+    An exception from any hook ends the run.
     """
 
     on_source_opened: SourceOpenCallback | None = None
+    """hook run once with ``(sweep, source_id)`` in a worker thread after the source
+    opens and before the first capture"""
     on_analyzed: AnalyzedCallback | None = None
+    """hook run with the `DelayedDataset` of each capture, after the analysis of that
+    capture and before the sink receives the dataset. The analysis thread blocks until
+    the hook returns."""
     on_cached: CachedCallback | None = None
+    """hook run with ``(resources, cache, capture, result, **kwargs)`` each time a
+    measurement fills a `KwArgCache`. `kwargs` are the measurement keywords. The
+    analysis thread blocks until the hook returns."""
 
 
 if TYPE_CHECKING:
     # the Generic parameters are for type checking only on python < 3.10
 
     class Resources(typing_extensions.TypedDict, Generic[SS, SP, SC, SA, PS, PC]):
-        """the open resources an action runs over.
+        """the open resources over which an action runs.
 
-        `action_spec` is the spec the action runs, and `runner` is the action built
-        from it. `sweep_spec` is the `Sweep` the runner built, which the hardware is
-        open for. `callbacks` are the `SweepCallbacks` of the run; a missing key
-        means none.
+        `action_spec` is the spec the action runs. `runner` is the action built from
+        `action_spec`. `sweep_spec` is the `Sweep` for which the hardware is open.
+        `callbacks` are the `SweepCallbacks` of the run; a missing key means none.
         """
 
         source: controller.Controller[SS, SP, SC, SA, PS, PC]
@@ -85,7 +84,7 @@ if TYPE_CHECKING:
         Generic[SS, SP, SC, SA, PS, PC],
         total=False,
     ):
-        """Sensor resources needed to run a sweep"""
+        """`Resources` with every key optional."""
 
         source: controller.Controller[SS, SP, SC, SA, PS, PC]
         sink: SinkBase
@@ -101,7 +100,12 @@ if TYPE_CHECKING:
 else:
     # the Generic parameters are for type checking only on python < 3.10
     class Resources(typing_extensions.TypedDict):
-        """Sensor resources needed to run a sweep"""
+        """the open resources over which an action runs.
+
+        `action_spec` is the spec the action runs. `runner` is the action built from
+        `action_spec`. `sweep_spec` is the `Sweep` for which the hardware is open.
+        `callbacks` are the `SweepCallbacks` of the run; a missing key means none.
+        """
 
         source: controller.Controller
         sink: SinkBase
@@ -115,7 +119,7 @@ else:
         callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
     class AnyResources(typing_extensions.TypedDict, total=False):
-        """Sensor resources needed to run a sweep"""
+        """`Resources` with every key optional."""
 
         source: controller.Controller
         sink: SinkBase
@@ -209,7 +213,7 @@ def _open_devices(
 
 
 def _prepare_sweep(spec: specs.Sweep, callbacks: SweepCallbacks) -> None:
-    """after the source opens, enumerate the sweep and run the `on_source_opened` callback"""
+    """list the capture adjustments of `spec`, then run `callbacks.on_source_opened`"""
     source_id = controller.lookup.id(spec.source)
     specs.sequencing.list_capture_adjustments(spec, source_id=source_id)
 
@@ -238,9 +242,8 @@ def open_resources(
             directory and the ``{spec_path}`` path field; None leaves both unset
         test_only: if True, open `NoPeripherals` in place of the peripherals and
             skip the compute warmup
-        callbacks: the hooks of the run. `on_source_opened` runs from a worker thread
-            after the source opens; the rest are stored in ``resources['callbacks']``
-            for `iterate_sweep`. None registers no callbacks.
+        callbacks: the hooks of the run, stored under ``callbacks`` in the returned
+            resources; None for no hooks
 
     Raises:
         TypeError: if no action runner is registered for the type of `spec`

@@ -373,7 +373,11 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
 
     @property
     def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
-        """`build_calibration_sweep` of `spec`, raising what that raises."""
+        """the `Sweep` built by `build_calibration_sweep` from `spec`.
+
+        Raises:
+            msgspec.ValidationError: if a field of `spec` is rejected
+        """
         return build_calibration_sweep(self.spec)
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:

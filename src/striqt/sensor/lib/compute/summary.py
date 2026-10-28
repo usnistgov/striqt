@@ -1,8 +1,4 @@
-"""summaries of the acquisition and analysis of one capture for a front end to present.
-
-Nothing here logs. Each summary function returns a dataclass or a tuple of them, and
-the matching `describe_*` function renders one as the line that ``sensor-sweep`` logs.
-"""
+"""per-port summaries of one analyzed capture: overload state and spectrogram SNR."""
 
 from __future__ import annotations as __
 
@@ -19,38 +15,36 @@ from . import cal_lookups, datasets
 
 @dataclasses.dataclass(frozen=True)
 class PortOverload:
-    """the overload state of one port of a capture.
-
-    `capture` is the single-port capture of the port. `adc` is True when the ADC
-    headroom at the port is at or below 0 dB. `im3_victims` are the sorted center
-    frequencies (Hz) of the sweep captures at the port whose gain puts the third-order
-    products of this capture above the IF headroom, and are empty when the acquisition
-    reports no IF headroom.
-    """
+    """the overload state of one port of a capture."""
 
     capture: specs.SoapyCapture
+    """the single-port capture at the port"""
     adc: bool
+    """True when the ADC headroom at the port is at or below 0 dB"""
     im3_victims: tuple[float, ...]
+    """sorted center frequencies (Hz) of the sweep captures at the port where the
+    third-order products of this capture exceed the IF headroom. Empty when
+    `if_headroom` is absent from `extra_data`."""
 
 
 @dataclasses.dataclass(frozen=True)
 class SpectrogramSNR:
-    """the peak SNR (dB) of the spectrogram of one port.
-
-    `snr_dB` is the largest spectrogram bin of `capture` above the calibrated system
-    noise power ``k*T*B*F`` in the noise bandwidth of the spectrogram.
-    """
+    """the peak SNR of the spectrogram of one port."""
 
     capture: specs.SensorCapture
+    """the single-port capture"""
     snr_dB: float
+    """peak bin power of the spectrogram (dB) above the calibrated system noise power
+    ``k*T*B*F`` in the noise bandwidth of the spectrogram"""
 
 
 def overloads(dd: datasets.DelayedDataset) -> tuple[PortOverload, ...]:
     """return the overload state of each port of `dd.capture`.
 
-    `adc_headroom` and `if_headroom` (dB, one value per port) are read from
-    `dd.extra_data`. The IM3 victims of a port are found among the captures and loops
-    of `dd.config.sweep_spec`.
+    Args:
+        dd: the analyzed capture. `adc_headroom` and `if_headroom` (dB, one value per
+            port) are read from `extra_data`. The IM3 victim frequencies are found
+            among the captures and loops of `config.sweep_spec`.
 
     Returns:
         one entry per port in `split_capture_ports` order, or an empty tuple when
@@ -83,8 +77,8 @@ def _im3_victims(
     capture: specs.SoapyCapture,
     if_headroom: float,
 ) -> tuple[float, ...]:
-    """return the sorted center frequencies of the sweep captures at the port of
-    `capture` whose gain brings the third-order products of `capture` within
+    """return the sorted center frequencies (Hz) at the port of `capture` where a sweep
+    capture has gain high enough for the third-order products of `capture` to exceed
     `if_headroom` (dB)"""
     sweep_captures = cast('tuple[specs.SoapyCapture, ...]', sweep.captures)
     gains = specs.sequencing.max_by_frequency('gain', sweep_captures, sweep.loops)
@@ -100,7 +94,11 @@ def _im3_victims(
 
 
 def describe_overloads(ports: Sequence[PortOverload]) -> str | None:
-    """return the overload line for `ports`, or None when no port overloaded."""
+    """return a one-line description of the overloaded ports in `ports`.
+
+    Returns:
+        the description, or None when no port overloaded
+    """
     adc = []
     im3 = []
     for p in ports:
@@ -130,12 +128,16 @@ def spectrogram_snr(
     *,
     format_path: specs.paths.PathFormatter | None = None,
 ) -> tuple[SpectrogramSNR, ...] | None:
-    """return the peak SNR of each port of a spectrogram `result`.
+    """return the peak SNR of each port in the spectrogram `result`.
 
-    `result` is the ``(spectrogram, attrs)`` pair that the spectrogram cache stores:
-    linear power with the port on axis 0, and ``attrs['noise_bandwidth']`` (Hz). The
-    noise power of each port is `cal_lookups.lookup_system_noise_power` from
-    `sweep.source.calibration` for `capture`.
+    Args:
+        sweep: the sweep; `source.calibration` selects the noise figure and
+            `source.master_clock_rate` the calibration row
+        capture: the capture of the spectrogram
+        result: the cached ``(spectrogram, attrs)`` pair: linear power with the port
+            on axis 0, and ``attrs['noise_bandwidth']`` in Hz
+        format_path: the formatter of the ``{field}`` templates in the calibration
+            path, or None to use the path as written
 
     Returns:
         one entry per port with a finite SNR, in `split_capture_ports` order, or None
@@ -176,11 +178,12 @@ def describe_spectrogram_snr(
     source_id: specs.types.SourceID | None,
     adjust_spec: specs.structs.AdjustCapturesType | None = None,
 ) -> str:
-    """return the SNR line for `entry`: the rounded SNR and the fields of the capture.
+    """return the one-line description of `entry`.
 
-    The fields are `center_frequency`, `port`, and `gain` for a `SoapyCapture`, and
-    `port` otherwise, described through `describe_capture` with `source_id` and
-    `adjust_spec`.
+    Args:
+        source_id: the source id that selects the entries of `adjust_spec`
+        adjust_spec: the `adjust_captures` of the sweep; a field set by an adjustment
+            is described by the field that drives the adjustment
     """
     if isinstance(entry.capture, specs.SoapyCapture):
         fields = ('center_frequency', 'port', 'gain')

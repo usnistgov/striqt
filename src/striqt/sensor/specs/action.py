@@ -23,15 +23,13 @@ if TYPE_CHECKING:
 
 
 def validate_action(spec: structs.ActionSpec[Any, Any, Any]) -> None:
-    """construct the registered action runner of a bound action spec and read `sweep`.
+    """check that the action runner for `spec` derives a `Sweep` from `spec`.
 
-    The leaf spec classes call this at the end of `__post_init__`, after every field
-    is final. Nothing runs for an unbound spec (`sweep_cls` is None) or for a type
-    with no registered runner.
+    An unbound spec, or a spec type with no runner, passes without a check.
 
     Raises:
-        msgspec.ValidationError: whatever the runner's `sweep` derivation raises for
-            `spec`
+        msgspec.ValidationError: if a field of `spec` is rejected when the `Sweep` is
+            derived
     """
     if type(spec).sweep_cls is None:
         return
