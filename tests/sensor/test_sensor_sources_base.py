@@ -59,8 +59,8 @@ def _expected_sawtooth(start_index, count):
     )
 
 
-def _sample_period_ns(count):
-    return round(count * 1e9 / SAMPLE_RATE)
+def _sample_period_ns(count, rate=SAMPLE_RATE):
+    return round(count * 1e9 / rate)
 
 
 # %% VirtualSource.read
@@ -128,7 +128,8 @@ def test_arm_restarts_the_stream():
 )
 def test_rearm_continues_the_time_base_at_the_previous_rate(rearm_rate, resetup):
     """the re-armed stream is stamped where the previous one ended, with the samples
-    read converted at the rate of the capture that produced them"""
+    read converted at the rate of the capture that produced them, and the time origin
+    of the re-armed capture is one lead overlap at the new rate after that stamp"""
     source, capture = _sawtooth_source()
     _, first_ns = source.read(_buffers(COUNT), 0, COUNT)
 
@@ -139,6 +140,9 @@ def test_rearm_continues_the_time_base_at_the_previous_rate(rearm_rate, resetup)
     _, rearmed_ns = source.read(_buffers(COUNT), 0, COUNT)
 
     assert rearmed_ns - first_ns == _sample_period_ns(COUNT)
+    assert source._sync_time_ns - rearmed_ns == _sample_period_ns(
+        OVERLAPS[0], rate=rearm_rate
+    )
 
 
 def test_rows_follow_the_capture_port_order():
