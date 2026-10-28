@@ -46,7 +46,7 @@ Four packages under `src/striqt/`, stacked bottom-up: `striqt.waveform` → `str
 
 The architecture guide is in `doc/agents/`, written primarily for ingest by coding agents. Read the page for an area before changing code in that area:
 
-- `doc/agents/architecture.md`: package layout and the re-export shims, spec structs as the YAML/JSON/zarr schema, and the measurement registry (caches, `prefer_iq_source`, signal triggers, the `BuiltinAnalyses` group).
+- `doc/agents/architecture.md`: package layout and the re-export shims, spec structs as the YAML/JSON/zarr schema, and the measurement registry (caches, `select_waveform`, signal triggers, the `BuiltinAnalyses` group).
 - `doc/agents/waveform_numerics.md`: numpy/cupy dispatch, the Fourier package, STFT layout, resampling, the window and numba caches, and the OFDM and 5G NR synchronization models.
 - `doc/agents/sensor.md`: sensor bindings, actions and runners (sweep, Y-factor calibration, cellular sweep), extensions and the downstream project, sweep execution and the per-capture signal path, and logging and concurrency.
 

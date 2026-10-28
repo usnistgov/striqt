@@ -240,17 +240,27 @@ only by passing an instance through `iterate_sweep(res, sink=...)`. Paths ending
 
 ### The per-capture signal path
 
-`sensor/lib/compute/corrections.py:correct_iq` applies these steps in order:
+`sensor/lib/compute/corrections.py` runs lazily through `AcquiredIQ.select` on the
+sensor `AcquiredIQ` (`sensor/specs/dataclasses.py`). Each stage is computed on the
+first `select` call that needs the stage and memoized in the `CorrectionStages` field
+of the acquisition. That field is declared `init=False`, so every
+`dataclasses.replace`, including the controller's `reuse_iq` copy, starts with empty
+stages. The stages, in order:
 
 1. Resample to `sample_rate`: `_scale_only` when no resampling is needed, otherwise
-   `_resample`, or `_oaresample` when `STRIQT_USE_OARESAMPLE=1`.
+   `_resample`, or `_oaresample` when `STRIQT_USE_OARESAMPLE=1`. This is the only
+   stage that reads `x`, and the one that may consume `x` in place under
+   `overwrite_x`.
 2. Conjugate for a high-side LO. `STRIQT_IGNORE_HIGHSIDE_LO` disables the conjugation.
-3. FIR low-pass to `analysis_bandwidth` when finite.
+3. FIR low-pass to `analysis_bandwidth`. The filter runs only when a measurement
+   selects `prefer_filtered=True` on a finite bandwidth.
 4. Trim to `duration`.
-5. Run the `signal_trigger` and shift.
+5. Run the `signal_trigger` and shift. This stage runs for `prefer_aligned=True`
+   when a trigger is set. The trigger measurement receives the `AcquiredIQ` itself
+   and selects the waveform to evaluate; a trigger that selects aligned input raises.
 
-`compute/analyze.py:analyze` applies `correct_iq`, evaluates the measurements, and packs a
-`DelayedDataset`.
+`compute/analyze.py:analyze` installs the trigger and `overwrite_x` with
+`attach_corrections`, evaluates the measurements, and packs a `DelayedDataset`.
 
 ### Warmup
 

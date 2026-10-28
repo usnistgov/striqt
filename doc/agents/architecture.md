@@ -119,11 +119,20 @@ Three registry features matter when reading a measurement module.
   `_cached_spectrogram` in `measurements/spectrum.py`, and the PSS and SSS
   measurements share `ssb_iq_cache`. Caches are scoped by
   `registry.cache_context(capture)`, which the sensor wraps around each capture.
-- **`prefer_iq_source=`.** The IQ handed to a measurement is one of three stages of
-  `dataarrays.AcquiredIQ`: `pre_align` (resampled and filtered), `pre_filter`
-  (resampled only), or `aligned` (after trigger shifts). Sync detectors ask for
-  `pre_align`. Everything else defaults to `aligned`, falling back to `pre_align`
-  when no trigger ran.
+- **`select_waveform`.** A measurement body receives `iq` as the caller passed it,
+  an array or a `dataarrays.AcquiredIQ`, and begins with
+  `x = select_waveform(iq, prefer_filtered=..., prefer_aligned=...)`. An array is
+  returned as is. An `AcquiredIQ` answers through `AcquiredIQ.select`, which the
+  sensor subclass overrides to condition the raw waveform on the first call that
+  needs each stage. The two keywords are preferences: an infinite
+  `analysis_bandwidth` yields the unfiltered waveform, and a source without
+  `signal_trigger` yields the unaligned one. The spectrogram family and the
+  resource-grid histogram select `prefer_filtered=False` (they truncate in the
+  frequency domain). The sync detectors, the SSB correlations, and the cyclic
+  autocorrelation select `prefer_aligned=False`. The power measurements and
+  `iq_waveform` take the defaults. `KwArgCache` keys on the identity of the selected
+  array as well as the capture and kwargs, so measurements that share a cache must
+  select the same conditioning to share the intermediate.
 - **`registry.signal_trigger`** (`AlignmentSourceRegistry`). The decorator registers
   a measurement as a start-of-waveform detector. `Trigger` runs the measurement
   with `as_xarray=False`. The sensor uses the returned lags to align captures when a
