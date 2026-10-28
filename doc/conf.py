@@ -90,6 +90,7 @@ extensions = [
 
 exclude_patterns = [
     '_build',
+    'agents',
     'jupyter_execute',
     f'{project}/__about__.py',
     '**.ipynb_checkpoints',
