@@ -2,12 +2,10 @@
 
 from __future__ import annotations as __
 
-import logging
 from typing import Any, cast, Literal, overload, TYPE_CHECKING
 import warnings
 
 from ... import specs
-from .. import sources
 from . import corrections, datasets
 
 import striqt.analysis as sa
@@ -191,8 +189,8 @@ def prepare_compute(
             # numba.cuda must be imported before cupy on some versions/platforms
             # (https://github.com/numba/numba/issues/6131)
             np.__version__  # reify
-            import numba.cuda
-            import cupy  # type: ignore
+            import numba.cuda  # noqa: F401
+            import cupy  # type: ignore  # noqa: F401
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
             sw.arrays.configure_cupy()

@@ -6,7 +6,6 @@ msgspec resolves the field annotations at runtime. Field types are written as
 
 from __future__ import annotations as __
 
-import dataclasses
 import warnings
 from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
 
@@ -18,7 +17,6 @@ from striqt.analysis import Trigger
 # pd must be bound here for msgspec to resolve the 'pd.Timestamp' types in `types`
 from striqt.analysis.lib.util import pd  # noqa: F401
 from striqt.analysis.specs import BuiltinAnalyses, BuiltinTriggers, Capture, SpecBase
-from striqt.analysis.specs import frozendict
 
 # re-exported through striqt.sensor.specs as the annotation of any analysis bundle
 from striqt.analysis.specs import AnalysisGroup
@@ -31,8 +29,6 @@ from . import types
 if TYPE_CHECKING:
     _T = TypeVar('_T')
     from typing_extensions import Self as _Self
-
-    import SoapySDR  # type: ignore[import-not-found, unused-ignore]
 
 
 @sa.util.lru_cache()

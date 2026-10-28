@@ -5,7 +5,6 @@ import click
 import typing
 
 if typing.TYPE_CHECKING:
-    import dask.array
     import striqt.figures as sf
     import xarray as xr
 
@@ -115,7 +114,6 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
     import striqt.analysis as sa
     import striqt.figures as sf
     import xarray as xr
-    import dask.array
 
     dataset = sa.load(zarr_path)
 

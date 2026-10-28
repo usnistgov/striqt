@@ -1,4 +1,4 @@
-from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM  # noqa: F401
+from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM
 
 from . import cal_lookups, summary
 from .analyze import analyze, prepare_compute, get_trigger_from_spec

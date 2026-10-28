@@ -13,10 +13,8 @@ from contextlib import asynccontextmanager
 import functools
 from pathlib import Path
 import re
-import sys
 from typing import (
     Any,
-    ClassVar,
     Dict,
     List,
     Literal,
@@ -618,8 +616,6 @@ class WebPlotBackend:
         Subplots in the same row share the same y-axis range.
         Only the leftmost subplot in each row shows y-axis title and tick labels.
         """
-        import striqt.figures as sf
-
         layout: Dict[str, Any] = {
             'uirevision': 'constant',
             'showlegend': True,
@@ -1407,8 +1403,6 @@ def _get_field_origins(cls: type) -> Dict[str, type]:
         a dict from field name to the base-most class with the field in
         ``__struct_fields__``
     """
-    import msgspec
-
     field_origins: Dict[str, type] = {}
 
     # Walk MRO from base to derived (reversed)

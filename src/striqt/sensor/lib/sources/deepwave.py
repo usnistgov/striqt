@@ -1,6 +1,5 @@
 from __future__ import annotations as __
 
-import functools
 import typing
 
 from ... import specs

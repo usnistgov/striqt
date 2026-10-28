@@ -4,7 +4,6 @@ import typing
 
 import click
 
-from striqt.sensor.lib import resources
 from striqt.sensor.lib.compute import cal_lookups
 
 
@@ -27,7 +26,6 @@ def run(yaml_path: str):
     print(f'Opened a bound specification for {type(spec).__name__!r} bindings')
 
     print(f'Opening sensor resources...')
-    import sys
 
     # `run_spec` writes nothing. The paths printed below come from `spec`.
     run_spec = spec.replace(sink=spec.sink.replace(path=None))

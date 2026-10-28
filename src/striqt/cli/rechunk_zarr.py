@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import click
-import functools
 
 
 @click.command('plot signal analysis from .zarr or .zarr.zip files')
@@ -87,7 +86,7 @@ def choose_zarr_pipeline(support_zip: bool):
     if not support_zip:
         try:
             # compatibility: optional zarrs package
-            import zarrs  # type: ignore
+            import zarrs  # type: ignore  # noqa: F401
         except ImportError:
             pass
         else:
@@ -96,7 +95,7 @@ def choose_zarr_pipeline(support_zip: bool):
 
     try:
         # compatibility: zarr-python >= 3.3 package
-        from zarr.core import codec_pipeline
+        from zarr.core import codec_pipeline  # noqa: F401
     except ImportError:
         pass
     else:

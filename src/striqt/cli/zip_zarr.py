@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 import click
-import functools
 
 
 @click.command('archive a .zarr directory into a .zarr.zip file')

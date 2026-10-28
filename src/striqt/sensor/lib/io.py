@@ -328,7 +328,6 @@ def read_tdms_iq(
     array_backend: specs.types.ArrayBackend,
 ) -> tuple['np.ndarray', specs.FileCapture]:
     from ..bindings import tdms_file
-    from .sources.file import TDMSSource
 
     source_spec = tdms_file.schema.source(
         master_clock_rate=master_clock_rate, path=str(path)

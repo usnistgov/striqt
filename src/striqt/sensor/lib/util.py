@@ -13,7 +13,7 @@ from pathlib import Path
 
 import striqt.analysis as sa
 
-from striqt.waveform.lib.util import lazy_import
+from striqt.waveform.lib.util import lazy_import as lazy_import
 
 
 if TYPE_CHECKING:
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     _T = TypeVar('_T')
 
 else:
-    from functools import cached_property
+    from functools import cached_property as cached_property
 
     exceptiongroup = sa.util.lazy_import('exceptiongroup')
 

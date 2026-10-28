@@ -5,7 +5,7 @@ import dataclasses
 import functools
 import inspect
 import weakref
-from typing import Any, Callable, cast, ClassVar, Generic, Generator, TYPE_CHECKING
+from typing import Any, cast, ClassVar, Generic, Generator, TYPE_CHECKING
 from collections import defaultdict
 from threading import Event, RLock
 
@@ -14,7 +14,7 @@ import striqt.waveform as sw
 from striqt.analysis.lib.util import np
 
 from .sources import base, buffers
-from .typing import SS, SP, SC, SA, S, PC, PS, SourceBackend, TypeVar
+from .typing import SS, SP, SC, SA, PC, PS, SourceBackend, TypeVar
 from . import compute, util
 from .. import specs
 

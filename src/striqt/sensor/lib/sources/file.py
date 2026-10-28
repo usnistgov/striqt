@@ -2,7 +2,6 @@
 
 from __future__ import annotations as __
 
-import functools
 from pathlib import Path
 from typing import Any, Literal, overload, TYPE_CHECKING
 
@@ -13,7 +12,6 @@ import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
 from . import base, buffers
-from ..typing import PS, PC
 
 if TYPE_CHECKING:
     from types import ModuleType

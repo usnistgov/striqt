@@ -1,13 +1,12 @@
 from __future__ import annotations as __
 
 import contextlib
-import functools
 import time
 import typing
 
 from ... import specs
 from .. import util
-from ..typing import PS, PC, SourceBackend
+from ..typing import SourceBackend
 from . import base, buffers
 
 import striqt.analysis as sa

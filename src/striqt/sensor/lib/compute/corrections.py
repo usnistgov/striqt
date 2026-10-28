@@ -6,7 +6,7 @@ import os
 from typing import cast, TYPE_CHECKING
 import warnings
 
-from .. import sources, util
+from .. import util
 from ... import specs
 
 import striqt.analysis as sa

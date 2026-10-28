@@ -11,7 +11,7 @@ from __future__ import annotations as __
 import contextlib
 import itertools
 from collections.abc import Mapping
-from typing import Any, Generator, Protocol, TYPE_CHECKING
+from typing import Any, Generator, Protocol
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import pd, xr

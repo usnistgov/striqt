@@ -8,7 +8,6 @@ from __future__ import annotations as __
 
 import contextlib
 import dataclasses
-import functools
 import os
 import sys
 from typing import Any, Callable, cast, ContextManager, Generic, TYPE_CHECKING
@@ -260,7 +259,7 @@ def open_resources(
     """
 
     from .compute import prepare_compute
-    import numpy as np  # avoids import concurrency bugs on python < 3.15
+    import numpy as np  # noqa: F401  avoids import concurrency bugs on python < 3.15
 
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')

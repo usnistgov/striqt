@@ -1,6 +1,5 @@
 from __future__ import annotations as __
 
-import functools
 import time
 from typing import TYPE_CHECKING
 
@@ -15,7 +14,7 @@ if TYPE_CHECKING:
 
     from striqt.waveform.lib.typing import DTypeLike
 
-    from ..typing import Array, Self
+    from ..typing import Array
     import striqt.waveform as sw
 
 

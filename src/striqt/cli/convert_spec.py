@@ -25,7 +25,6 @@ def run(path, yaml: bool) -> 'Path':
     import striqt.sensor as ss
     import striqt.analysis as sa
     import msgspec
-    import sys
     from pathlib import Path
 
     if path.endswith('.yaml') or path.endswith('.yml'):

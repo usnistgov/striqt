@@ -13,15 +13,13 @@ from typing import Any, Generator, Iterable, Literal, TYPE_CHECKING
 import striqt.waveform as sw
 
 from striqt.waveform.lib.util import (
-    array_api_compat,
-    cp,
-    lazy_import,
-    lru_cache,
-    np,
-    pd,
-    qualified_name,
-    scipy,
-    xr,
+    array_api_compat as array_api_compat,
+    lazy_import as lazy_import,
+    lru_cache as lru_cache,
+    np as np,
+    pd as pd,
+    qualified_name as qualified_name,
+    xr as xr,
 )
 
 if TYPE_CHECKING:
@@ -31,14 +29,14 @@ if TYPE_CHECKING:
 
     cached_property = property
 else:
-    from functools import cached_property
+    from functools import cached_property as cached_property
 
 _compute_lock = threading.RLock()
 _logger_adapters = {}
 
 
 # additional logging levels
-from logging import INFO
+from logging import INFO as INFO
 
 PERFORMANCE_INFO = 15
 PERFORMANCE_DETAIL = 12

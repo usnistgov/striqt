@@ -134,6 +134,8 @@ exclude_also = [
 
 [tool.ruff.lint.extend-per-file-ignores]
 "**/__init__.py" = [ "F401", "F403", "E402"]
+# the lib/typing.py modules re-export aliases and TypedDicts under TYPE_CHECKING
+"**/typing.py" = ["F401"]
 # these modules only re-export from `.lib`, so every import is intentionally unused in place
 "src/striqt/waveform/{arrays,fourier,power_analysis,comms_5gnr,comms_lte,comms_802_16}.py" = ["F401"]
 "src/striqt/analysis/testing.py" = ["F401"]

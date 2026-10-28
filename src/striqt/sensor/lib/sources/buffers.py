@@ -1,10 +1,9 @@
 from __future__ import annotations as __
 
-import dataclasses
 import logging
 import types
 import typing
-from typing import Any, cast, TYPE_CHECKING
+from typing import cast, TYPE_CHECKING
 from math import ceil, isfinite
 
 import striqt.analysis as sa
@@ -125,7 +124,7 @@ def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.Module
     if array_backend == 'cupy':
         if sw.arrays.cp is None:
             # trigger the import error
-            import cupy  # type: ignore
+            import cupy  # type: ignore  # noqa: F401
 
             raise ImportError
         else:
