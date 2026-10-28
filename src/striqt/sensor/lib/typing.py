@@ -103,7 +103,24 @@ class SourceBackend(Protocol[_SS, SC]):
         timeout_sec: float | None,
         *,
         on_overflow: specs.types.OnOverflow = 'except',
-    ) -> tuple[int, int]: ...
+    ) -> tuple[int, int]:
+        """fill `count` samples of the armed capture into each buffer from `offset`.
+
+        The first read of a capture begins one lead overlap before the record.
+
+        Args:
+            buffers: one array per port of the armed capture, in capture port order
+            offset: the index in each buffer of the first sample written
+            count: the number of samples requested per port
+            timeout_sec: the wait for `count` samples, or None to wait indefinitely
+            on_overflow: ``'except'`` to raise on a stream overflow, ``'ignore'`` to
+                continue
+
+        Returns:
+            the number of samples written per port, and the time (in ns) of the
+            sample at ``buffers[i][offset]``
+        """
+        ...
 
     def prepare_retrigger(self):
         pass

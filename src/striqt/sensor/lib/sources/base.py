@@ -85,6 +85,13 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
 
 
 class VirtualSource(SourceBackend[SS, SC]):
+    """a source that reads samples from `get_waveform` on a synthetic time base.
+
+    The time base is 0 at the first `arm`, and `_sync_time_ns` is the time of
+    corrected sample 0 of the armed capture. A re-arm continues the stream: the first
+    sample read after `arm` is stamped where the samples read before the re-arm ended.
+    """
+
     setup_spec: SS
     _samples_elapsed = 0
     _sync_time_ns = 0
