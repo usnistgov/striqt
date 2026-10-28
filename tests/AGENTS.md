@@ -1,7 +1,8 @@
 # Testing
 
-The judgement calls (what to assert, when a test is redundant, how to record a defect) are in
-the `writing-tests` skill; this file is the map of the suite that the skill refers to.
+This file is the map of the test suite. The judgement calls (what to assert, when a test is
+redundant, how to record a defect) are in the `writing-tests` skill, which is not tracked in the
+repository.
 
 ## Where things are tested
 
