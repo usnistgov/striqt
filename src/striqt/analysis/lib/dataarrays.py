@@ -29,12 +29,13 @@ class AcquiredIQ:
     """an acquired IQ waveform `x` with the capture that describes the acquisition.
 
     `select` returns `x` for every preference. A subclass that conditions the
-    waveform (resampling, filtering, trigger alignment) overrides `select`, and a
-    measurement body reaches either through `select_waveform`.
+    waveform overrides `select`.
     """
 
     x: Array
+    """the acquired waveform with shape (port, sample)"""
     capture: specs.Capture | None
+    """the acquisition parameters of `x`, or None when not known"""
 
     def select(
         self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
@@ -48,8 +49,8 @@ class AcquiredIQ:
                 the acquisition runs one
 
         Returns:
-            shape (port, sample) array in the namespace of `x`; this class returns
-            `x` unchanged
+            the shape (port, sample) array in the namespace of `x`. The base class
+            returns `x` unchanged
         """
         return self.x
 

@@ -229,9 +229,8 @@ def acquire_corrected(
 ) -> Stages:
     """acquire `capture` from a fresh controller and attach the conditioning.
 
-    `binding` is a key of BINDINGS or a bound sensor (the file sources are not
-    synthetic and are passed directly); `array_backend` replaces that field of
-    `source` when given.
+    `binding` is a key of BINDINGS or a bound sensor. `array_backend` replaces that
+    field of `source` when given.
 
     `raw.x` is [lead overlap | round(duration*fs_sdr) | tail overlap] at fs_sdr;
     `corrected` is `raw` with `signal_trigger` and `overwrite_x` attached, and

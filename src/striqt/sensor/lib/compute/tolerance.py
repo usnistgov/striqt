@@ -84,25 +84,24 @@ def correction_error(
     array_backend: specs.types.ArrayBackend | None = None,
     filtered: bool = True,
 ) -> float:
-    """bound the rms amplitude error that the conditioning stages leave in the IQ of `capture`.
+    """bound the rms amplitude error of the conditioned IQ of `capture`.
 
-    The bound grows with the FFT sizes the correction runs, which follow from
+    The bound grows with the FFT sizes the conditioning runs, which follow from
     `capture.duration`, the ratio of `source.master_clock_rate` to
     `capture.sample_rate`, whether `capture.analysis_bandwidth` is finite, and the
     alignment overlap of the trigger in `analysis`. A capture that is neither
     resampled nor filtered is bounded by the roundoff of the voltage scaling alone.
 
     Args:
-        capture: the capture whose `duration`, `sample_rate`, and
-            `analysis_bandwidth` set the FFT sizes
-        source: the source whose `master_clock_rate` fixes the resampler design and
-            whose `array_backend` is the default backend
-        analysis: the measurements the sweep runs, whose `signal_trigger` sets the
-            alignment overlap; None budgets no trigger
-        filtered: False for the error of the waveform before the FIR low-pass, as
-            ``select(prefer_filtered=False)`` returns
-        array_backend: the backend whose FFT roundoff model applies, or None for
-            `source.array_backend`
+        capture: the capture with the `duration`, `sample_rate`, and
+            `analysis_bandwidth` that set the FFT sizes
+        source: the source with the `master_clock_rate` that fixes the resampler
+            design, and the default `array_backend`
+        analysis: the measurements the sweep runs, with the `signal_trigger` that
+            sets the alignment overlap; None budgets no trigger
+        filtered: False for the error of the waveform before the FIR low-pass
+        array_backend: the backend with the FFT roundoff model that applies, or
+            None for `source.array_backend`
 
     Returns:
         the rms error relative to the output rms (dimensionless and positive),

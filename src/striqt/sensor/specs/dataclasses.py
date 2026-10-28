@@ -42,39 +42,31 @@ class Schema(Generic[SS, SP, SC, SA, PS, PC]):
 
 @dataclasses.dataclass
 class CorrectionStages:
-    """the memoized conditioning stages of one acquisition.
-
-    `resampled` is the waveform at the capture sample rate with the lead and tail
-    overlaps, paired with the lead offset in samples. `unfiltered` and `filtered`
-    start at the lead offset and keep the tail. `outputs` is keyed by the
-    ``(filtered, aligned)`` pair after the preferences are reduced to what the
-    capture and trigger allow. `aligning` is set while the trigger runs.
-    """
+    """the memoized conditioning stages of one acquisition."""
 
     resampled: tuple[sw.typing.Array, int | None] | None = None
+    """the waveform at the capture sample rate with the lead and tail overlaps,
+    paired with the lead offset in samples"""
     unfiltered: sw.typing.Array | None = None
+    """the resampled waveform from the lead offset, with the tail overlap"""
     filtered: sw.typing.Array | None = None
+    """the low-passed waveform from the lead offset, with the tail overlap"""
     shifts: sw.typing.Array | None = None
+    """the per-port trigger shift in samples"""
     outputs: dict[tuple[bool, bool], sw.typing.Array] = dataclasses.field(
         default_factory=dict
     )
+    """the selected waveforms keyed by the effective ``(filtered, aligned)`` pair"""
     aligning: bool = False
+    """True while the trigger measurement runs"""
 
 
 @dataclasses.dataclass
 class AcquiredIQ(sa.AcquiredIQ):
     """an acquisition from a sensor source with the metadata and conditioning of the capture.
 
-    `select` conditions `x` through the sensor signal path: resample to
-    `capture.sample_rate`, conjugate the ports in `conjugate`, low-pass to
-    `capture.analysis_bandwidth`, trim to `capture.duration`, and shift by the lags of
-    the trigger. Each stage is computed on the first call that needs the stage and
-    kept in `stages`, so `x` must not change after the first call to `select`. With
-    `overwrite_x` set, the first stage may consume `x` in place.
-
-    `signal_trigger` takes precedence over `info.signal_trigger` when set. `stages`
-    is not an argument of the constructor: every instance, including each copy that
-    `dataclasses.replace` returns, starts with empty stages.
+    `select` conditions `x` through the sensor signal path and memoizes each stage
+    in `stages`. `x` must not change after the first call to `select`.
     """
 
     info: structs.AcquisitionInfo
@@ -87,15 +79,25 @@ class AcquiredIQ(sa.AcquiredIQ):
     # whether to evaluate the complex conjugate of each port
     conjugate: tuple[bool, ...] | Literal[False] = False
     signal_trigger: sa.Trigger | None = None
+    """the trigger that `select` runs for alignment; None selects
+    `info.signal_trigger`"""
     overwrite_x: bool = False
+    """True to let the resampling stage consume `x` in place"""
     stages: CorrectionStages = dataclasses.field(
         default_factory=CorrectionStages, init=False, compare=False, repr=False
     )
+    """the memoized conditioning stages; every instance, including each
+    `dataclasses.replace` copy, starts empty"""
 
     def select(
         self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
     ) -> sw.typing.Array:
         """return `x` conditioned as `prefer_filtered` and `prefer_aligned` allow.
+
+        The stages, in order: resample to `capture.sample_rate`, conjugate the ports
+        in `conjugate`, low-pass to `capture.analysis_bandwidth`, trim to
+        `capture.duration`, and shift by the trigger lags. Each stage runs on the
+        first call that needs the stage.
 
         Args:
             prefer_filtered: True for the waveform low-passed to
@@ -110,10 +112,10 @@ class AcquiredIQ(sa.AcquiredIQ):
             with the same effective conditioning return the same object.
 
         Raises:
-            TypeError: `capture` is not a `SensorCapture`
-            RuntimeError: the trigger measurement selected ``prefer_aligned=True``
-            ValueError: the acquisition is too short for the resampler or the trigger
-                shifts
+            TypeError: if `capture` is not a `SensorCapture`
+            RuntimeError: if the trigger measurement selected ``prefer_aligned=True``
+            ValueError: if the acquisition is too short for the resampler or the
+                trigger shifts
         """
         from ..lib.compute import corrections
 

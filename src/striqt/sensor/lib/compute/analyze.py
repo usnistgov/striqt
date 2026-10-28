@@ -105,13 +105,12 @@ def analyze(
 ) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
     """analyze an acquisition according to the sweep specification in `options`.
 
-    The returned `iq` of `attach_corrections` is handed to the measurements, so each
-    measurement conditions the waveform (resampling, the analysis filter, trigger
-    alignment) through `select_waveform` on first use. Acquisition data and metadata
-    are included in the returned results.
+    Each measurement selects the conditioning of `iq` through `select_waveform`. A
+    conditioning stage runs on the first selection that needs the stage. The
+    results include the acquisition data and metadata.
 
     Raises:
-        TypeError: `iq.capture` is not a `SensorCapture`
+        TypeError: if `iq.capture` is not a `SensorCapture`
     """
 
     if isinstance(iq.capture, specs.SensorCapture):

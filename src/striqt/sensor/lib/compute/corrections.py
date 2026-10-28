@@ -47,14 +47,17 @@ def attach_corrections(
     signal_trigger: sa.Trigger | None = None,
     overwrite_x: bool = False,
 ) -> specs.AcquiredIQ:
-    """return a copy of `iq` whose `select` conditions `x` with the given trigger.
+    """return a copy of `iq` with `signal_trigger` and `overwrite_x` set for `select`.
 
-    The copy starts with empty conditioning stages. A `signal_trigger` of None
-    selects `iq.info.signal_trigger`. With `overwrite_x`, the first stage of the
-    first `select` call may consume `iq.x` in place.
+    The copy starts with empty conditioning stages.
+
+    Args:
+        signal_trigger: the trigger that `select` runs for alignment; None selects
+            `iq.info.signal_trigger`
+        overwrite_x: True to let the resampling stage consume `iq.x` in place
 
     Raises:
-        TypeError: `iq.capture` is not a `SensorCapture`
+        TypeError: if `iq.capture` is not a `SensorCapture`
     """
     _sensor_capture(iq)
     return dataclasses.replace(
@@ -67,15 +70,14 @@ def select_corrected(
 ) -> Array:
     """return `iq.x` conditioned as the preferences allow, from the memoized stages.
 
-    `prefer_filtered` applies only when `needs_analysis_filter` is true, and
-    `prefer_aligned` only when a trigger is set, so the ``(filtered, aligned)`` key
-    of the memo is the effective conditioning. The returned array is the memo entry
-    itself: repeated calls with the same effective conditioning return one object.
+    `prefer_filtered` applies only when `needs_analysis_filter` is true.
+    `prefer_aligned` applies only when a trigger is set. Repeated calls with the
+    same effective conditioning return the same array object.
 
     Raises:
-        TypeError: `iq.capture` is not a `SensorCapture`
-        RuntimeError: `prefer_aligned` is set while the trigger is being evaluated
-        ValueError: the acquisition is too short for the resampler or the shifts
+        TypeError: if `iq.capture` is not a `SensorCapture`
+        RuntimeError: if `prefer_aligned` is set while the trigger is being evaluated
+        ValueError: if the acquisition is too short for the resampler or the shifts
     """
     capture = _sensor_capture(iq)
     stages = iq.stages
@@ -131,8 +133,8 @@ def _trigger_of(iq: specs.AcquiredIQ) -> sa.Trigger | None:
 def _resampled_stage(iq: specs.AcquiredIQ) -> tuple[Array, int | None]:
     """return `iq.x` scaled, resampled, and conjugated, with the lead offset in samples.
 
-    This is the only stage that reads `iq.x`, and the only one that modifies `iq.x`
-    when `iq.overwrite_x` is set.
+    No other stage reads `iq.x`. The stage modifies `iq.x` in place when
+    `iq.overwrite_x` is set.
     """
     stages = iq.stages
     if stages.resampled is not None:
@@ -170,7 +172,7 @@ def _resampled_stage(iq: specs.AcquiredIQ) -> tuple[Array, int | None]:
 
 
 def _unfiltered_stage(iq: specs.AcquiredIQ) -> Array:
-    """return the resampled waveform from the lead offset, keeping the tail overlap."""
+    """return the resampled waveform from the lead offset, with the tail overlap."""
     stages = iq.stages
     if stages.unfiltered is None:
         y, offs = _resampled_stage(iq)
@@ -181,11 +183,11 @@ def _unfiltered_stage(iq: specs.AcquiredIQ) -> Array:
 
 
 def _filtered_stage(iq: specs.AcquiredIQ) -> Array:
-    """return the low-passed waveform from the lead offset, keeping the tail overlap.
+    """return the low-passed waveform from the lead offset, with the tail overlap.
 
-    The FIR runs on the full resampled record so that the transient falls in the
-    lead overlap. When `needs_analysis_filter` is false, the unfiltered stage is
-    returned, as the same object.
+    The FIR runs on the full resampled record, and the transient falls in the lead
+    overlap. When `needs_analysis_filter` is false, the return value is the
+    unfiltered stage object.
     """
     stages = iq.stages
     if stages.filtered is not None:
@@ -220,8 +222,8 @@ def _filtered_stage(iq: specs.AcquiredIQ) -> Array:
 def _trigger_shifts(iq: specs.AcquiredIQ) -> Array:
     """return the per-port shift, in samples, from the trigger of `iq`.
 
-    The trigger is called with `iq`, so the trigger measurement selects the
-    conditioning of the waveform that the trigger evaluates.
+    The trigger is called with `iq` itself, and the trigger measurement selects the
+    waveform conditioning.
     """
     stages = iq.stages
     if stages.shifts is not None:
@@ -251,8 +253,9 @@ def get_correction_overlaps(
     """return the (lead, tail) acquisition overlap of `capture` in source-rate samples.
 
     The lead absorbs the transient of the analysis FIR, which `AcquiredIQ.select`
-    applies at `capture.sample_rate` after resampling; the tail absorbs that transient and the
-    largest lag of the trigger that `analysis` selects. The lead and tail together pad
+    applies at `capture.sample_rate` after resampling. The tail absorbs that
+    transient and the largest lag of the trigger that `analysis` selects. The lead
+    and tail together pad
     the record of `source_record_size` samples to a whole number of resampler FFTs.
 
     Args:
@@ -416,7 +419,7 @@ def validate_fir_band(capture: specs.SensorCapture) -> None:
 
 
 def validate_oaresample_shift(design: sw.ResamplerDesign) -> None:
-    """raise what `striqt.waveform.oaresample` rejects in the resampling stage of `AcquiredIQ.select` for `design`.
+    """raise what `striqt.waveform.oaresample` rejects for `design`.
 
     A zero ``lo_offset`` always passes.
 

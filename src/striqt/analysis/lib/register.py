@@ -40,13 +40,14 @@ else:
 
 
 class KwArgCache:
-    """a single-element cache of a measurement result keyed on the input array, capture, and keywords.
+    """a single-element cache of a measurement result keyed on input, capture, and keywords.
 
     The cache is disabled until entered as a context manager, and exiting clears the
     entry and the callback. `apply` wraps a measurement function so that a call with
     the same input array object, the same capture, and the same values of the
-    `fields` named at construction returns the cached result. The array is compared
-    by identity, and the cache keeps a reference to the array while the entry lives.
+    `fields` named at construction returns the cached result. The input is compared
+    by identity, and the cache keeps a reference to the input until the entry is
+    cleared.
     """
 
     _key: frozenset | None = None
@@ -304,10 +305,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         analysis group of the sensor binding declares an ``Optional[spec_type]``
         field of the same `name`. `specs.BuiltinAnalyses` is the default group.
 
-        The decorated function is called as ``func(iq, capture, **spec.to_dict())``
-        with the caller's `iq`, an array or an `AcquiredIQ`, unchanged, and returns
-        an array, or an ``(array, attrs)`` tuple, whose axes are `dims`. The body
-        selects the waveform conditioning through `select_waveform`.
+        The decorated function is called as ``func(iq, capture, **spec.to_dict())``.
+        `iq` is passed as the caller gave it, an array or an `AcquiredIQ`, and the
+        function selects the waveform through `select_waveform`. The function returns
+        an array, or an ``(array, attrs)`` tuple, with axes `dims`.
         The wrapper that replaces the function accepts ``(iq, capture,
         as_xarray=True, **kwargs)`` with the fields of `spec_type` as keywords. The
         `__signature__` of the wrapper and the ``{args}`` placeholder in the docstring
@@ -800,7 +801,7 @@ def _make_measurement_signature(spec_cls):
 
 def _make_measurement_docstring(spec_cls):
     extra_prepend = {
-        'iq': 'input waveform array, or an acquisition whose conditioning the measurement selects with `select_waveform`',
+        'iq': 'input waveform array, or an `AcquiredIQ` from which the measurement selects the conditioned waveform',
         'capture': 'acquisition specification',
         'as_xarray': "whether to return an xarray object (True), an array (False), or a delayed xarray object ('delayed')",
     }
