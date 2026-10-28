@@ -54,8 +54,8 @@ For each xfail I:
 3. Traced callers (`grep` over `src/` and `tests/sensor/sweeps/`) to decide
    whether the production path reaches the defect. "Production path" means
    `sensor-sweep` → `read_yaml_spec` → `open_resources` → `iterate_sweep` →
-   `AcquiredIQ.select` → registered measurements. The `site*.yaml` sweeps and
-   `tests/sensor/sweeps/src/extensions.py` stand in for the downstream
+   registry wrapper → `AcquiredIQ.preprocess` → measurement body. The `site*.yaml`
+   sweeps and `tests/sensor/sweeps/src/extensions.py` stand in for the downstream
    aggregate-directivity-acquisition (ADA) project, whose environment does not
    install here.
 4. Where cheap, reproduced the defect end to end in the `test39` environment

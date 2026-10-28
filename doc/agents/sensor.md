@@ -263,24 +263,27 @@ ended, and the origin of the new capture is one new-rate lead overlap later.
 
 ### The per-capture signal path
 
-`sensor/lib/compute/corrections.py` runs lazily through `AcquiredIQ.select` on the
-sensor `AcquiredIQ` (`sensor/specs/dataclasses.py`). Each stage is computed on the
-first `select` call that needs the stage and memoized in the `CorrectionStages` field
-of the acquisition. That field is declared `init=False`, so every
-`dataclasses.replace`, including the controller's `reuse_iq` copy, starts with empty
-stages. The stages, in order:
+The conditioning runs in `sensor/lib/compute/corrections.py:Preprocessor`, reached
+through `AcquiredIQ.preprocess` on the sensor `AcquiredIQ`
+(`sensor/specs/dataclasses.py`). Each stage runs on the first call that needs the
+stage and is memoized on the `Preprocessor`, one per acquisition. The preprocessor
+holds the acquisition through a weak reference. A `dataclasses.replace` copy,
+including the controller's `reuse_iq` copy, starts with a fresh preprocessor. The
+stages, in order:
 
 1. Resample to `sample_rate`: `_scale_only` when no resampling is needed, otherwise
    `_resample`, or `_oaresample` when `STRIQT_USE_OARESAMPLE=1`. This is the only
    stage that reads `x`, and the one that may consume `x` in place under
    `overwrite_x`.
 2. Conjugate for a high-side LO. `STRIQT_IGNORE_HIGHSIDE_LO` disables the conjugation.
-3. FIR low-pass to `analysis_bandwidth`. The filter runs only when a measurement
-   selects `prefer_filtered=True` on a finite bandwidth.
+3. FIR low-pass to `analysis_bandwidth`. The filter runs only for a measurement
+   registered `prefer_filtered=True` on a finite bandwidth.
 4. Trim to `duration`.
-5. Run the `signal_trigger` and shift. This stage runs for `prefer_aligned=True`
-   when a trigger is set. The trigger measurement receives the `AcquiredIQ` itself
-   and selects the waveform to evaluate; a trigger that selects aligned input raises.
+5. Run the `signal_trigger` and shift. This stage runs for a measurement registered
+   `prefer_aligned=True` when a trigger is set. The trigger measurement receives the
+   `AcquiredIQ`, and the registry selects the input of the trigger with the
+   preferences registered on the trigger. A trigger registered `prefer_aligned=True`
+   is rejected at import.
 
 `compute/analyze.py:analyze` installs the trigger and `overwrite_x` with
 `attach_corrections`, evaluates the measurements, and packs a `DelayedDataset`.
