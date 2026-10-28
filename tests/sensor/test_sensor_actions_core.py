@@ -169,10 +169,8 @@ def test_on_analyzed_sees_each_capture_in_order_before_the_sink():
     i is submitted one step later, concurrently with the callback of i + 1"""
     sweep = tone_sweep(OFFSETS)
     events = []
-    callbacks = ss.SweepCallbacks(
-        on_analyzed=lambda dd: events.append(('callback', dd.capture))
-    )
-    with ss.open_resources(sweep, None, callbacks=callbacks) as res:
+    on_analyzed = lambda dd: events.append(('callback', dd.capture))
+    with ss.open_resources(sweep, None, on_analyzed=on_analyzed) as res:
         sink = RecordingSink(sweep, events)
         results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
 
@@ -186,7 +184,9 @@ def test_on_analyzed_sees_each_capture_in_order_before_the_sink():
 def test_iterate_sweep_replaces_the_callbacks_for_one_run():
     sweep = tone_sweep(OFFSETS)
     seen = []
-    callbacks = ss.SweepCallbacks(on_analyzed=lambda dd: seen.append(dd.capture))
+    callbacks = ss.lib.resources.SweepCallbacks(
+        on_analyzed=lambda dd: seen.append(dd.capture)
+    )
     with ss.open_resources(sweep, None) as res:
         sink = ss.sinks.NoSink(sweep)
         list(ss.iterate_sweep(res, sink=sink, callbacks=callbacks))
@@ -201,9 +201,8 @@ def test_an_on_analyzed_exception_ends_the_pipeline():
     def fail(dd):
         raise RuntimeError('callback failed')
 
-    callbacks = ss.SweepCallbacks(on_analyzed=fail)
     with (
-        ss.open_resources(sweep, None, callbacks=callbacks) as res,
+        ss.open_resources(sweep, None, on_analyzed=fail) as res,
         pytest.raises(RuntimeError, match='callback failed'),
     ):
         list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
@@ -295,8 +294,7 @@ def test_on_cached_fires_once_per_capture_when_the_spectrogram_cache_fills():
     def on_cached(resources, cache, capture, result, **kwargs):
         calls.append((resources, cache.name, capture, result))
 
-    callbacks = ss.SweepCallbacks(on_cached=on_cached)
-    with ss.open_resources(sweep, None, callbacks=callbacks) as res:
+    with ss.open_resources(sweep, None, on_sink_cached=on_cached) as res:
         sink = ss.sinks.NoSink(sweep)
         results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
 

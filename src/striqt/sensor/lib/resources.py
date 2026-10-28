@@ -51,7 +51,7 @@ class SweepCallbacks:
     """hook run with the `DelayedDataset` of each capture, after the analysis of that
     capture and before the sink receives the dataset. The analysis thread blocks until
     the hook returns."""
-    on_cached: CachedCallback | None = None
+    on_sink_cached: CachedCallback | None = None
     """hook run with ``(resources, cache, capture, result, **kwargs)`` each time a
     measurement fills a `KwArgCache`. `kwargs` are the measurement keywords. The
     analysis thread blocks until the hook returns."""
@@ -227,7 +227,9 @@ def open_resources(
     spec_path: str | Path | None = None,
     *,
     test_only: bool = False,
-    callbacks: SweepCallbacks | None = None,
+    on_source_opened: SourceOpenCallback | None = None,
+    on_analyzed: AnalyzedCallback | None = None,
+    on_sink_cached: CachedCallback | None = None,
 ) -> ConnectionManager[SS, SP, SC, SA, PS, PC]:
     """open the sensor hardware and software contexts needed to run `spec`.
 
@@ -236,14 +238,22 @@ def open_resources(
     for the runner's `sweep`. The resources of the returned `ConnectionManager` are
     open and ready for `iterate_sweep`.
 
+    `on_source_opened` runs once with ``(sweep, source_id)`` in a worker thread after
+    the source opens and before the first capture. `on_analyzed` runs in the analysis
+    thread with the `DelayedDataset` of each capture before the sink receives the
+    dataset. `on_sink_cached` runs in the analysis thread each time a measurement
+    fills a `KwArgCache`, with `resources` followed by the arguments of the cache
+    callback. An exception from a hook ends the run.
+
     Args:
         spec: the action spec to open resources for
         spec_path: the path of the file `spec` was read from, which sets the working
             directory and the ``{spec_path}`` path field; None leaves both unset
         test_only: if True, open `NoPeripherals` in place of the peripherals and
             skip the compute warmup
-        callbacks: the hooks of the run, stored under ``callbacks`` in the returned
-            resources; None for no hooks
+        on_source_opened: hook run after the source opens
+        on_analyzed: hook run after each capture is analyzed
+        on_sink_cached: hook run when a measurement cache fills
 
     Raises:
         TypeError: if no action runner is registered for the type of `spec`
@@ -262,8 +272,11 @@ def open_resources(
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
-    if callbacks is None:
-        callbacks = SweepCallbacks()
+    callbacks = SweepCallbacks(
+        on_source_opened=on_source_opened,
+        on_analyzed=on_analyzed,
+        on_sink_cached=on_sink_cached,
+    )
 
     runner = actions.registry.lookup(spec)(spec)
     sweep = runner.sweep

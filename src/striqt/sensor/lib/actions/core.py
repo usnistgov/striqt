@@ -142,7 +142,7 @@ def iterate_captures(
     fields of ``resources['action_spec']``. The attrs differ from the fields of
     ``resources['sweep_spec']`` when the runner derived the sweep from the spec.
 
-    The `on_analyzed` and `on_cached` hooks of ``resources['callbacks']`` run in the
+    The `on_analyzed` and `on_sink_cached` hooks of ``resources['callbacks']`` run in the
     calling thread. An exception from a hook ends the pipeline like an analysis error.
 
     Args:
@@ -166,15 +166,15 @@ def iterate_captures(
 
     callbacks = resources.get('callbacks')
     on_analyzed = None if callbacks is None else callbacks.on_analyzed
-    on_cached = None if callbacks is None else callbacks.on_cached
+    on_sink_cached = None if callbacks is None else callbacks.on_sink_cached
 
-    if on_cached is None:
+    if on_sink_cached is None:
         cache_callback = None
     else:
 
         def cache_callback(cache: Any, capture: SC, result: Any, **kws: Any) -> None:
-            assert on_cached is not None
-            on_cached(resources, cache, capture, result, **kws)
+            assert on_sink_cached is not None
+            on_sink_cached(resources, cache, capture, result, **kws)
 
     spec = resources['sweep_spec']
 
