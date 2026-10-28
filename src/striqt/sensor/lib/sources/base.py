@@ -106,7 +106,7 @@ class VirtualSource(SourceBackend[SS, SC]):
     def reset_sample_counter(self, value: int = 0) -> None:
         """restart the sample counter at `value`.
 
-        The next read is stamped at the time where the samples read so far ended.
+        The next read is stamped where the samples read so far ended.
         """
         self._sync_time_source()
         self._samples_elapsed = value
