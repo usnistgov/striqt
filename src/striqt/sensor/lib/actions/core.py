@@ -24,15 +24,14 @@ from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
 
 class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
-    """the contract between an action spec and the code that runs the spec.
-
-    An implementation is constructed from one action spec. Construction stores `spec`
-    and has no other effect.
-    """
+    """the contract between an action spec and the code that runs the spec."""
 
     spec: TA
+    """the action spec given at construction"""
 
-    def __init__(self, spec: TA) -> None: ...
+    def __init__(self, spec: TA) -> None:
+        """store `spec`; nothing is opened or derived."""
+        ...
 
     @property
     def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
@@ -68,9 +67,10 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
         """run the action over `resources`.
 
+        An implementation runs `iterate_captures` over `resources`.
+
         Args:
-            resources: the open resources; the implementation invokes the
-                `SweepCallbacks` under ``callbacks``
+            resources: the open resources
             always_yield: if True, yield `None` on steps that produce no result
             yield_values: if False, yield `None` instead of the sink result
             loop: if True, the action repeats from the beginning after the last capture
@@ -90,7 +90,7 @@ def iterate_sweep(
     loop: bool = False,
     **replace: Unpack[AnyResources[SS, SP, SC, SA, PS, PC]],
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-    """run the action of ``resources['runner']`` over `resources`.
+    """run the action in `resources` using `iterate_captures`.
 
     Args:
         resources: dictionary of open resources returned by `open_resources`
@@ -100,8 +100,7 @@ def iterate_sweep(
         **replace: resources that replace the entries of `resources` for this run
 
     Yields:
-        what `sink.append` returned for each capture, or None as `always_yield` and
-        `yield_values` select
+        the return value from each append to the sink, or None
     """
     runner = resources['runner']
     return runner.iterate(

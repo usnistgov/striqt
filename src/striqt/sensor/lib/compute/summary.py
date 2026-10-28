@@ -42,9 +42,9 @@ def overloads(dd: datasets.DelayedDataset) -> tuple[PortOverload, ...]:
     """return the overload state of each port of `dd.capture`.
 
     Args:
-        dd: the analyzed capture. `adc_headroom` and `if_headroom` (dB, one value per
-            port) are read from `extra_data`. The IM3 victim frequencies are found
-            among the captures and loops of `config.sweep_spec`.
+        dd: the analyzed capture; `adc_headroom` and `if_headroom` (dB, one value per
+            port) in `extra_data` determine `adc` and `im3_victims`, and the center
+            frequencies of `config.sweep_spec` are the candidate IM3 victims
 
     Returns:
         one entry per port in `split_capture_ports` order, or an empty tuple when

@@ -38,9 +38,10 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
 def log_overloads(dd: 'ss.lib.compute.DelayedDataset') -> None:
     """warn on the ``analysis`` logger when a port of the capture overloaded.
 
+    A WARNING is logged when `overloads` finds an overloaded port.
+
     Args:
-        dd: the analyzed capture; `adc_headroom` and `if_headroom` are read from
-            `extra_data` when present
+        dd: the analyzed capture
     """
     import striqt.analysis as sa
     from striqt.sensor.lib.compute import summary
@@ -59,11 +60,13 @@ def log_spectrogram_snr(
 ) -> None:
     """log the peak SNR of each port at INFO on the ``analysis`` logger.
 
+    One line per port is logged when `cache` is the spectrogram cache and the sweep
+    has a calibration.
+
     Args:
-        resources: the open resources; the calibration path, `format_path`, and the
-            source id are read
-        cache: the filled measurement cache; only a spectrogram cache is logged
-        capture: the capture analyzed when the cache filled
+        resources: the open resources of the run
+        cache: the filled measurement cache
+        capture: the capture under analysis
         result: the cached ``(spectrogram, attrs)`` pair
         **kwargs: the measurement keywords, unused
     """
