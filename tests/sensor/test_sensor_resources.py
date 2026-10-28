@@ -130,12 +130,19 @@ def test_log_path_records_a_json_array_at_the_log_level(tmp_path):
     assert 'below the log level' not in by_message
 
 
-# %% on_source_opened
+# %% callbacks
 
 
 def test_on_source_opened_is_called_once_with_the_spec_and_id():
     calls = []
     sweep = tone_sweep(OFFSETS)
-    with ss.open_resources(sweep, None, on_source_opened=lambda *a: calls.append(a)):
+    on_opened = lambda *a: calls.append(a)
+    with ss.open_resources(sweep, None, on_source_opened=on_opened) as res:
         source_id = ss.lib.controller.lookup.id(sweep.source)
+        assert res['callbacks'].on_source_opened is on_opened
     assert calls == [(sweep, source_id)]
+
+
+def test_resources_carry_empty_callbacks_by_default():
+    with ss.open_resources(tone_sweep(OFFSETS), None) as res:
+        assert res['callbacks'] == ss.lib.resources.SweepCallbacks()

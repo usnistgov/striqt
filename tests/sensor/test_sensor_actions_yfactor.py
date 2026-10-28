@@ -165,7 +165,7 @@ def test_calibration_analysis_is_the_group_of_the_binding():
 
 
 def test_default_detector_period_needs_one_duration():
-    """the bound spec's constructor runs the runner's `validate`, which raises the
+    """the bound spec's constructor reads the runner's `sweep`, which raises the
     `detector_period` error"""
     with pytest.raises(msgspec.ValidationError, match=r'calibration\.detector_period'):
         make_calibration_sweep(loops=(DURATION_LOOP,))

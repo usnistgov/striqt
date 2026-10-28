@@ -1,4 +1,5 @@
-"""the docstring gate: no pronouns for code and no `.lib` paths in public docstrings"""
+"""the docstring gate: no personal pronouns or "whose", and no `.lib` paths in public
+docstrings"""
 
 import ast
 import pathlib
@@ -10,7 +11,8 @@ import pytest
 SRC = pathlib.Path(__file__).parent.parent / 'src' / 'striqt'
 BASELINE = pathlib.Path(__file__).parent / 'docstring-baseline.txt'
 
-PRONOUN = re.compile(r'\b[Ii]ts?\b')
+# "I" and "us" are not scanned: "I/Q" and the microsecond abbreviation
+PRONOUN = re.compile(r'\b(we|our|you|your|they|their|them|whose)\b', re.IGNORECASE)
 LIB_PATH = re.compile(r'\bstriqt\.\w+\.lib\b')
 
 
@@ -54,7 +56,7 @@ def scan() -> dict[str, str]:
         for qualname, doc in iter_docstrings(path):
             rules = []
             if PRONOUN.search(prose_of(doc)):
-                rules.append('pronoun for code ("it"/"its")')
+                rules.append('personal pronoun or "whose"')
             if public and LIB_PATH.search(doc):
                 rules.append('striqt.<pkg>.lib path in a public docstring')
             if rules:

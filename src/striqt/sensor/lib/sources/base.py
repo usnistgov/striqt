@@ -87,16 +87,17 @@ class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):
 class VirtualSource(SourceBackend[SS, SC]):
     setup_spec: SS
     _samples_elapsed = 0
+    _sync_time_ns = 0
     _overlaps: tuple[int, int] = (0, 0)
     _capture: SC
 
     def __init__(self, spec: SS):
         self.setup_spec = spec
 
-    def reset_sample_counter(self, value=0):
+    def reset_sample_counter(self, value: int = 0) -> None:
+        """advance the time base by the elapsed samples and restart at `value`."""
         self._sync_time_source()
         self._samples_elapsed = value
-        self._sample_start_index = value
 
     def get_waveform(
         self,
@@ -123,22 +124,24 @@ class VirtualSource(SourceBackend[SS, SC]):
     def setup(self, rx_ports: tuple[int, ...] | None = None):
         self.reset_sample_counter()
 
-    def arm(self, capture: SC):
-        self._capture = capture
+    def arm(self, capture: SC) -> None:
+        # the elapsed samples convert to time at the rate of the capture that produced
+        # them. The reset therefore precedes the change of `_capture`.
         self.reset_sample_counter()
+        self._capture = capture
 
     def trigger(self, overlaps=(0, 0)):
         self._overlaps = overlaps
 
     def read(
         self,
-        buffers,
-        offset,
-        count,
-        timeout_sec=None,
+        buffers: list[Array],
+        offset: int,
+        count: int,
+        timeout_sec: float | None = None,
         *,
         on_overflow: specs.types.OnOverflow = 'except',
-    ):
+    ) -> tuple[int, int]:
         assert self._capture is not None
 
         if not isinstance(self._capture.port, tuple):
@@ -154,18 +157,33 @@ class VirtualSource(SourceBackend[SS, SC]):
             )
             buf[offset : (offset + count)] = values
 
-        fs = float(self.get_resampler(self._capture)['fs_sdr'])
-        sample_period_ns = 1_000_000_000 / fs
-        timestamp_ns = self._sync_time_ns + round(
-            self._samples_elapsed * sample_period_ns
-        )
+        timestamp_ns = self._sync_time_ns + self._sample_time_ns(start_index)
 
         self._samples_elapsed += count
 
-        return count, round(timestamp_ns)
+        return count, timestamp_ns
 
-    def _sync_time_source(self):
-        self._sync_time_ns = round(1_000_000_000 * self._samples_elapsed)
+    def _sample_time_ns(self, index: int) -> int:
+        """return the time (in ns) of source sample `index` after the time origin.
+
+        Index 0 is the first sample of the corrected waveform at the capture sample
+        rate. The result is negative for the leading-overlap pre-roll and is rounded
+        to 1 ns.
+        """
+        fs = float(self.get_resampler(self._capture)['fs_sdr'])
+        return round(index * 1_000_000_000 / fs)
+
+    def _sync_time_source(self) -> None:
+        """advance the synthetic time base (in ns) by the duration of the samples read.
+
+        The duration is evaluated at the source sample rate of the armed capture.
+        Before the first `arm`, the time base is 0.
+        """
+        capture = getattr(self, '_capture', None)
+        if capture is None:
+            return
+        fs = float(self.get_resampler(capture)['fs_sdr'])
+        self._sync_time_ns += round(self._samples_elapsed * 1_000_000_000 / fs)
 
     def get_resampler(self, capture) -> 'sw.ResamplerDesign':
         from ..compute import design_resampler

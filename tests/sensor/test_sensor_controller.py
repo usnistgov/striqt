@@ -18,7 +18,9 @@ from synthetic_sources import (
     BINDINGS,
     RESAMPLE_FILTER,
     SCALE_ONLY,
+    acquire_corrected,
     expected_raw,
+    filtered,
     preset_capture,
 )
 
@@ -224,6 +226,29 @@ def test_acquire_metadata_defaults(isolated_lookup, subtests):
             assert iq.capture == capture and iq.source_spec == SOURCE
 
 
+# 6250 source samples of the resample_filter preset, of which the lead overlap of
+# 3125 is half, so the lead is not a whole number of strobe periods
+STROBE = 1e-3
+
+
+@pytest.mark.parametrize('trigger_strobe', [None, STROBE], ids=['no_strobe', 'strobe'])
+@pytest.mark.parametrize('time', [0.0, STROBE], ids=['t0', 't_strobe'])
+def test_corrected_output_starts_on_the_strobe_grid(
+    trigger_strobe, time, isolated_lookup
+):
+    """an impulse at source time 0 or one strobe period later is on the same
+    corrected sample with and without a strobe: the strobe grid of a virtual source
+    is referenced to corrected sample 0"""
+    source = SOURCE.replace(trigger_strobe=trigger_strobe)
+    capture = preset_capture('dirac_delta', **RESAMPLE_FILTER, time=time)
+
+    stages = acquire_corrected('dirac_delta', capture, source=source)
+
+    assert stages.overlaps[0] % round(STROBE * stages.resampler['fs_sdr']) != 0
+    peaks = np.argmax(np.abs(to_numpy(filtered(stages.corrected))), axis=1)
+    assert list(peaks) == [round(time * capture.sample_rate)] * 2
+
+
 @pytest.mark.namespaces('cupy')
 def test_acquire_on_cupy_returns_device_arrays(xp, isolated_lookup):
     source = SOURCE.replace(array_backend='cupy')
@@ -305,6 +330,24 @@ def test_reuse_iq_clears_the_soapy_start_time(fake_controller):
     assert first.info.start_time is not None
     assert second.info.start_time is None
     assert second.x is first.x
+
+
+def test_gapless_repeats_are_stamped_one_record_apart(fake_controller):
+    """the start time of a gapless repeat follows the previous start by one record,
+    although the carried-over samples begin one lead overlap before that"""
+    capture = soapy_capture(port=(0, 1), gain=(0, 0), sample_rate=MCR / 2)
+    with fake_controller(gapless=True, time_sync_at='open', receive_retries=0) as ctrl:
+        ctrl._arm_spec(capture)
+        first = ctrl.acquire()
+        ctrl._arm_spec(capture)
+        second = ctrl.acquire()
+        design = ctrl.get_resampler()
+        lead, _ = ss.lib.compute.get_correction_overlaps(capture, ctrl.source_spec)
+
+    assert lead > 0, 'the capture must have a lead overlap to be discriminating'
+    record = ss.lib.compute.source_record_size(capture, design)
+    elapsed = second.info.start_time - first.info.start_time
+    assert elapsed / np.timedelta64(1, 'ns') == round(1e9 * record / design['fs_sdr'])
 
 
 # %% read_iq: buffer reuse across captures, chunked reads and validation

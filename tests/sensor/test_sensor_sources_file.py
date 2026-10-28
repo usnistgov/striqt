@@ -42,6 +42,10 @@ READ_DURATION = 0.5e-3
 READ_SAMPLES = round(READ_DURATION * FS)
 TONE_FREQUENCIES = (-1e6, 2e6)
 
+# 7680 samples at FS, longer than the lead overlap of READ_FILTER_ONLY (4352), and a
+# divisor of the whole second that START_TIME falls on
+STROBE = 0.5e-3
+
 READ_SCALE_ONLY = {**SCALE_ONLY, 'duration': READ_DURATION}
 READ_FILTER_ONLY = {**READ_SCALE_ONLY, 'analysis_bandwidth': 5e6}
 
@@ -164,18 +168,20 @@ def test_zarr_get_waveform_dtype(zarr_iq_file, dtype, expected):
     assert_close(waveform[0], zarr_rows(zarr_iq_file, 0)[0, :8])
 
 
-def test_zarr_read_timestamps(zarr_iq_file):
-    """the first chunk is stamped with the store's start_time; later chunks return 0
-    (current behavior, not a contract: Controller.read_iq only keeps the first)"""
+@pytest.mark.parametrize('lead', [0, 512], ids=['no_lead', 'lead'])
+def test_zarr_read_timestamps(zarr_iq_file, lead):
+    """the first chunk is stamped with the store's start_time less the lead overlap
+    pre-roll that precedes file index 0; later chunks return 0 (current behavior, not
+    a contract: Controller.read_iq only keeps the first)"""
     source = ss.lib.sources.ZarrIQSource(zarr_spec(zarr_iq_file, capture_index=0))
     source.setup()
     source.arm(file_capture())
-    source.trigger((0, 0))
+    source.trigger((lead, 0))
     bufs = [np.empty(16, dtype='complex64') for _ in range(2)]
 
     count, first_ns = source.read(bufs, 0, 8)
     assert count == 8
-    assert first_ns == int(START_TIME.astype('int64'))
+    assert first_ns == int(START_TIME.astype('int64')) - round(lead * 1e9 / FS)
     _, later_ns = source.read(bufs, 8, 8)
     assert later_ns == 0
 
@@ -197,6 +203,20 @@ def test_zarr_acquire_layout(zarr_iq_file):
     lead, tail = ss.lib.compute.get_correction_overlaps(capture, spec, None)
     raw = acquire_corrected(ss.bindings.zarr_iq, capture, source=spec).raw
     assert raw.x.shape == (2, lead + READ_SAMPLES + tail)
+    assert_preroll_then_file(raw.x, lead, zarr_rows(zarr_iq_file, 1))
+
+
+def test_zarr_acquire_layout_with_a_trigger_strobe(zarr_iq_file):
+    """the strobe grid is referenced to the store's start_time at file index 0, so
+    with a lead overlap shorter than the strobe period the first grid edge after the
+    pre-roll is file index 0, which stays at corrected sample 0"""
+    spec = zarr_spec(zarr_iq_file, capture_index=1).replace(trigger_strobe=STROBE)
+    capture = file_capture(**READ_FILTER_ONLY)
+    lead, _ = ss.lib.compute.get_correction_overlaps(capture, spec, None)
+    assert 0 < lead < round(STROBE * FS)
+
+    raw = acquire_corrected(ss.bindings.zarr_iq, capture, source=spec).raw
+
     assert_preroll_then_file(raw.x, lead, zarr_rows(zarr_iq_file, 1))
 
 

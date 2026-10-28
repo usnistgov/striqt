@@ -2,7 +2,7 @@
 
 Every xfail in this repo is `strict=True` and is written against the behavior
 the code was *meant* to have, so the list doubles as the known-defect registry
-(see CLAUDE.md, "Known gaps are recorded as strict xfails"). This document
+(see AGENTS.md, "Known gaps are recorded as strict xfails"). This document
 records, for each open one, why the failing test is believed to describe a real
 defect rather than a wrong expectation, and how much it matters to the way the
 library is actually used.
@@ -267,7 +267,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
   `comms.correlate_cyclic_shift` flattens the (symbol, slot, frame, cp) meshgrid built
   by `_get_3gpp_index_cyclic_prefix` (`comms/phy_3gpp.py:78`), which is not monotonic, so the kernels disagree whenever a
   valid index follows an invalid one (IQ shorter than the requested frames).
-- **Why the test is right.** The two backends must agree (CLAUDE.md,
+- **Why the test is right.** The two backends must agree (AGENTS.md,
   lockstep requirement). The test could not be run here (cupy skips); the
   mechanism was checked by replaying both loops in plain Python. Needs a
   Jetson run to confirm the strict marker.

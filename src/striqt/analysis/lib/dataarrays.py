@@ -389,10 +389,21 @@ class DelayedDataArray(collections.UserDict):
 
 
 class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
+    """the result type and registry for one evaluation of an analysis group.
+
+    `as_xarray` selects the result type of `analyze_by_spec`: ``True`` for an
+    `xarray.Dataset`, ``'delayed'`` for `DelayedDataArray` results, or ``False``
+    for the bare arrays in the array namespace of the input. `block_each` applies
+    to ``True`` and ``'delayed'`` and materializes each result to numpy as soon as
+    the measurement returns. `expand_dims` names the leading dimension of each
+    `xarray.DataArray` when `as_xarray` is ``True``. That dimension indexes the
+    port axis of the input.
+    """
+
     as_xarray: TAR
     registry: register.AnalysisRegistry
     block_each: bool = True
-    expand_dims: typing.Sequence[str] = ()
+    expand_dims: typing.Sequence[str] = (PORT_DIM,)
 
     def __post_init__(self):
         if self.as_xarray not in (True, False, 'delayed'):
@@ -415,9 +426,21 @@ def evaluate_by_spec(
 ) -> 'dict[str, DelayedDataArray] | dict[str, Array]':
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
-    `spec` is an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
-    fields of `spec` are skipped. `iq` is handed to each measurement unchanged; the
-    measurement body selects the conditioning through `select_waveform`.
+    Args:
+        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. Each
+            measurement body selects the conditioning through `select_waveform`
+        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
+            fields of `spec` are skipped
+        capture: the acquisition parameters of `iq`
+        options: `options.as_xarray` selects the result type. ``True`` or
+            ``'delayed'`` return a `DelayedDataArray` per measurement, materialized
+            to numpy when `options.block_each` is set. ``False`` returns the bare
+            array of each measurement in the array namespace of `iq`, without the
+            measurement attrs. `options.block_each` applies only to ``True`` and
+            ``'delayed'``
+
+    Returns:
+        a dict keyed by measurement name, in the field order of `spec`
 
     Raises:
         TypeError: if `spec` is not an `AnalysisGroup`
@@ -447,26 +470,20 @@ def evaluate_by_spec(
                 continue
             ret = meas.func(iq=iq, capture=capture, as_xarray=as_xarray, **func_kws)
 
-            if options.block_each:
+            if not as_xarray:
+                results[name] = ret[0]
+            elif options.block_each:
                 results[name] = ret.compute()
             else:
                 results[name] = ret
 
-    if as_xarray == 'delayed' and options.block_each:
+    if not as_xarray or options.block_each:
         return results
 
     for name in list(results.keys()):
         res = results[name]
-
-        if not options.block_each:
-            assert isinstance(res, DelayedDataArray)
-            res = res.compute()
-
-        if as_xarray == 'delayed':
-            results[name] = res
-        else:
-            assert isinstance(res, DelayedDataArray)
-            results[name] = res.to_xarray()  # ty: ignore
+        assert isinstance(res, DelayedDataArray)
+        results[name] = res.compute()
 
     if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.free_cupy_mempool()
@@ -499,7 +516,7 @@ def analyze_by_spec(
     iq: Array | AcquiredIQ,
     spec: specs.AnalysisGroup,
     capture: specs.Capture,
-    options: EvaluationOptions[typing.Literal[True]],
+    options: EvaluationOptions[typing.Literal[True]] | None = None,
 ) -> 'xr.Dataset': ...
 
 
@@ -525,9 +542,34 @@ def analyze_by_spec(
     iq: Array | AcquiredIQ,
     spec: specs.AnalysisGroup,
     capture: specs.Capture,
-    options: EvaluationOptions,
+    options: EvaluationOptions | None = None,
 ) -> Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]:
-    """evaluate a set of different channel analyses on the iq waveform as specified by spec"""
+    """evaluate the enabled measurements of `spec` on the IQ waveform.
+
+    Args:
+        iq: the waveform with shape (ports, samples), or an `AcquiredIQ`. Each
+            measurement body selects the conditioning through `select_waveform`
+        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`. The ``None``
+            fields of `spec` are skipped
+        capture: the acquisition parameters of `iq`
+        options: `options.as_xarray` selects the return type. ``None`` evaluates
+            with the live registry and `as_xarray` of ``True``
+
+    Returns:
+        by `options.as_xarray`:
+
+        - ``True``: an `xarray.Dataset` of the measurements, with the `capture`
+          fields as attrs and `options.expand_dims` as the leading dimension
+        - ``'delayed'``: a dict of `DelayedDataArray` keyed by measurement name
+        - ``False``: a dict of bare arrays keyed by measurement name, in the array
+          namespace of `iq`
+
+    Raises:
+        TypeError: if `spec` is not an `AnalysisGroup`
+    """
+
+    if options is None:
+        options = EvaluationOptions(as_xarray=True, registry=register.registry)
 
     results = evaluate_by_spec(iq, spec, capture, options)
 
