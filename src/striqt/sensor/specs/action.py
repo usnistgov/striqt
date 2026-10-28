@@ -23,14 +23,15 @@ if TYPE_CHECKING:
 
 
 def validate_action(spec: structs.ActionSpec[Any, Any, Any]) -> None:
-    """run the registered action runner's `validate` on a bound action spec.
+    """construct the registered action runner of a bound action spec and read `sweep`.
 
     The leaf spec classes call this at the end of `__post_init__`, after every field
     is final. Nothing runs for an unbound spec (`sweep_cls` is None) or for a type
     with no registered runner.
 
     Raises:
-        msgspec.ValidationError: whatever the runner's `validate` raises for `spec`
+        msgspec.ValidationError: whatever the runner's `sweep` derivation raises for
+            `spec`
     """
     if type(spec).sweep_cls is None:
         return
@@ -39,10 +40,10 @@ def validate_action(spec: structs.ActionSpec[Any, Any, Any]) -> None:
     except ImportError:
         return
     try:
-        runner = registry.lookup(spec)
+        runner_cls = registry.lookup(spec)
     except TypeError:
         return
-    runner.validate(spec)
+    _ = runner_cls(spec).sweep
 
 
 def analysis_group_type(

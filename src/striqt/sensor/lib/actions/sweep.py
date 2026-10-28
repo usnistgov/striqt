@@ -10,7 +10,7 @@ from striqt.analysis.lib.util import xr
 from ... import specs
 from .. import compute
 from ..resources import Resources
-from ..sinks import NoSink, SinkBase, ZarrCaptureSink
+from ..sinks import SinkBase, open_capture_sink
 from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
@@ -21,25 +21,21 @@ class SweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
     """run the captures of a `Sweep` through `iterate_captures`.
 
     `spec` and `sweep` are the same object. ``resources['sweep_spec']`` and the
-    `on_source_opened` callback of `open_resources` receive the spec unchanged. The
+    `on_source_opened` callbacks of `open_resources` receive the spec unchanged. The
     output is a `ZarrCaptureSink` at `sink.path`. A path of None writes nothing.
     """
 
     spec: specs.Sweep[SS, SP, SC, SA]
-    sweep: specs.Sweep[SS, SP, SC, SA]
 
     def __init__(self, spec: specs.Sweep[SS, SP, SC, SA]) -> None:
         self.spec = spec
-        self.sweep = spec
 
-    @classmethod
-    def validate(cls, spec: specs.Sweep[SS, SP, SC, SA]) -> None:
-        """accept every `Sweep` without checks."""
+    @property
+    def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
+        return self.spec
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        if self.sweep.sink.path is None:
-            return NoSink(self.sweep)
-        return ZarrCaptureSink(self.sweep, format_path)
+        return open_capture_sink(self.sweep, format_path)
 
     def iterate(
         self,

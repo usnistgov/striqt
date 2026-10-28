@@ -21,7 +21,7 @@ from striqt.analysis.specs.helpers import SpecValidationError, spec_subset
 from ... import specs
 from .. import compute
 from ..resources import Resources
-from ..sinks import NoSink, SinkBase, ZarrCaptureSink
+from ..sinks import SinkBase, open_capture_sink
 from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
@@ -423,21 +423,17 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
     """
 
     spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]
-    sweep: specs.Sweep[SS, SP, SC, SA]
 
     def __init__(self, spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]) -> None:
         self.spec = spec
-        self.sweep = build_cellular_sweep(spec)
 
-    @classmethod
-    def validate(cls, spec: specs.Cellular5GNRSweep[SS, SP, SC, SA]) -> None:
-        """build the sweep of `spec`, raising what `build_cellular_sweep` raises."""
-        build_cellular_sweep(spec)
+    @property
+    def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
+        """`build_cellular_sweep` of `spec`, raising what that raises."""
+        return build_cellular_sweep(self.spec)
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        if self.sweep.sink.path is None:
-            return NoSink(self.sweep)
-        return ZarrCaptureSink(self.sweep, format_path)
+        return open_capture_sink(self.sweep, format_path)
 
     def iterate(
         self,

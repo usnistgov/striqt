@@ -30,23 +30,23 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
     """the contract between an action spec and the code that runs the spec.
 
     A runner class is registered for one action spec type with `registry.runner`
-    and constructed from an instance of that type. `open_resources` opens the
-    source, the peripherals, and the sink from `open_sink` for `sweep`.
-    `iterate_sweep` calls `iterate` over those resources. A bound spec calls
-    `validate` at the end of `__post_init__`. Nothing is inherited from the protocol.
+    and constructed from an instance of that type. Construction stores `spec` and
+    has no other effect. `open_resources` opens the source, the peripherals, and the
+    sink from `open_sink` for `sweep`. `iterate_sweep` calls `iterate` over those
+    resources. A bound spec reads `sweep` at the end of `__post_init__`. Nothing is
+    inherited from the protocol.
     """
 
     spec: TA
-    sweep: specs.Sweep[SS, SP, SC, SA]
 
     def __init__(self, spec: TA) -> None: ...
 
-    @classmethod
-    def validate(cls, spec: TA) -> None:
-        """raise if `spec` cannot be converted to the `Sweep` this runner runs.
+    @property
+    def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
+        """the `Sweep` derived from `spec` that the resources open for.
 
         Raises:
-            msgspec.ValidationError: for the field of `spec` that the conversion
+            msgspec.ValidationError: for the field of `spec` that the derivation
                 rejects, located by the path of the field
         """
         ...
