@@ -68,11 +68,10 @@ exposes:
   cannot be converted. A bound spec reads `sweep` at the end of `__post_init__`
   through `specs.action.validate_action`, so a bound spec that constructs is one that
   the runner can run. `SweepRunner.sweep` is the spec itself.
-- `open_sink(format_path)`: returns the sink that `open_resources` enters.
-  `sinks.open_capture_sink` selects `NoSink` for a `sink.path` of None and
-  `ZarrCaptureSink` otherwise.
-- `iterate(resources)`: runs the action and invokes the `on_analyzed` callbacks of
-  `resources['callbacks']`.
+- `open_sink(format_path)`: returns the sink that `open_resources` enters. A
+  `sink.path` of None writes nothing.
+- `iterate(resources)`: runs the action and invokes the `on_analyzed` and `on_cached`
+  callbacks of `resources['callbacks']`.
 
 Nothing is inherited between runners. Each runner calls `iterate_captures`, the pipeline
 described under Sweep execution below, with the per-capture `extra_data=`
@@ -200,16 +199,27 @@ spec and opens the source, peripherals, and sink for `runner.sweep`. The returne
 `Resources` dict has the keys `action_spec` (the spec passed in), `sweep_spec` (the
 built sweep), `runner`, and `callbacks`.
 
-`striqt.sensor.SweepCallbacks` (`lib/callbacks.py`, a frozen dataclass) carries the
-hooks a front end registers for one run, each a tuple of callables invoked in order:
-`on_source_opened(sweep, source_id)` runs from a worker thread after the source opens,
-and `on_analyzed(dd)` receives the `DelayedDataset` of each capture in the analysis
-thread, after `compute.analyze` and before the dataset is submitted to `sink.append`.
-A callback exception ends the run like an analysis error. No callbacks are registered
-by default: `sensor-sweep` registers `confirm_labels` and
-`striqt.sensor.callbacks.log_overloads` (the ADC/IF overload warnings, which
-`from_delayed` does not emit), and `web-plotter` registers its broadcast callback beside
-`log_overloads`. `iterate_sweep(res, callbacks=...)` replaces the set for one run.
+`striqt.sensor.SweepCallbacks` (`lib/resources.py`, a frozen dataclass) carries the
+hooks a front end registers for one run, each one callable or None:
+`on_source_opened(sweep, source_id)` runs from a worker thread after the source opens;
+`on_analyzed(dd)` receives the `DelayedDataset` of each capture in the analysis thread,
+after `compute.analyze` and before the dataset is submitted to `sink.append`;
+`on_cached(resources, cache, capture, result, **kwargs)` runs in the analysis thread
+each time a measurement fills a `KwArgCache` (the pipeline forwards the cache's own
+callback arguments and prepends `resources`, since the SNR line needs the calibration,
+`format_path`, and `source_id`). A front end that wants two behaviors on one event
+writes one function. A callback exception ends the run like an analysis error. No
+callbacks are registered by default. `iterate_sweep(res, callbacks=...)` replaces the
+set for one run.
+
+`lib/compute/summary.py` returns structured data and never logs: `overloads(dd)` gives
+one `PortOverload` per port (`adc`, `im3_victims`) and `spectrogram_snr(sweep, capture,
+result)` one `SpectrogramSNR` per port with a finite SNR, None without a calibration;
+the `describe_*` functions render each as one line. The logging callbacks are CLI code:
+`cli/sensor_sweep.py:log_overloads` (`on_analyzed`) and `log_spectrogram_snr`
+(`on_cached`, gated on `'spectrogram' in cache.name`), which `sensor-sweep` registers
+beside `confirm_labels` and `web-plotter` imports and calls from its own callbacks.
+`from_delayed` emits none of these messages.
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in
 `actions/core.py:iterate_captures`, the three-stage software pipeline in threads
