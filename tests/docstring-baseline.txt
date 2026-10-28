@@ -65,4 +65,3 @@ src/striqt/waveform/lib/power/convert.py::<module>
 src/striqt/waveform/lib/power/detect.py::<module>
 src/striqt/waveform/lib/power/detect.py::iq_to_cyclic_power
 src/striqt/waveform/lib/power/detect.py::stat_rtol
-src/striqt/waveform/lib/util.py::lazy_import

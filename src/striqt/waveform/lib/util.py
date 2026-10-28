@@ -13,16 +13,20 @@ from typing import Any, Callable, TYPE_CHECKING, cast
 _lazy_import_locks = collections.defaultdict(threading.RLock)
 
 
-def lazy_import(module_name: str, package=None):
-    """return a module object whose import runs on first attribute access.
+def lazy_import(module_name: str, package: str | None = None) -> ModuleType:
+    """return a module object that imports on first attribute access.
 
     The returned object is registered in ``sys.modules`` under `module_name`. A
-    module that is already imported is returned as is.
+    dotted `module_name` is also bound as an attribute of its parent package, as
+    ``import a.b`` does.
 
     Args:
         module_name: the absolute module name, or a relative name with `package`
         package: the anchor package of a relative `module_name`, as for
             `importlib.util.find_spec`
+
+    Returns:
+        the lazy module, or the module already in ``sys.modules``
 
     Raises:
         ImportError: if no module spec is found for `module_name`
@@ -46,6 +50,13 @@ def lazy_import(module_name: str, package=None):
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
         spec.loader_state['lock'] = _lazy_import_locks[module_name]
+
+        # the import system binds a submodule onto its parent package; find_spec
+        # plus module_from_spec does not, and later `import a.b` statements return
+        # the sys.modules entry without binding it either
+        parent, _, child = module_name.rpartition('.')
+        if parent and parent in sys.modules:
+            setattr(sys.modules[parent], child, module)
 
     return module
 
