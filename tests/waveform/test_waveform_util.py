@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import pathlib
 import sys
 import threading
 from collections import UserDict
@@ -54,6 +55,53 @@ def shelf(monkeypatch, tmp_path):
     monkeypatch.setattr(util, '_cache_shelf_disabled', False)
     monkeypatch.setattr(util, '_get_cache_shelf', lambda: (fake, threading.Lock()))
     return fake
+
+
+# %% cache_dir
+
+
+def test_cache_dir_follows_the_environment_override(monkeypatch, tmp_path):
+    monkeypatch.setenv('STRIQT_CACHE_DIR', str(tmp_path / 'caches'))
+
+    assert util.cache_dir() == tmp_path / 'caches'
+    assert (tmp_path / 'caches').is_dir()
+
+
+def test_cache_dir_defaults_to_the_platformdirs_user_cache(monkeypatch):
+    import platformdirs
+
+    monkeypatch.setenv('STRIQT_CACHE_DIR', '')
+
+    assert str(util.cache_dir()) == platformdirs.user_cache_dir('striqt')
+
+
+def test_shelf_path_is_per_python_version_under_cache_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv('STRIQT_CACHE_DIR', str(tmp_path))
+
+    path = util._cache_shelf_path()
+
+    assert isinstance(path, str)  # python 3.9 shelve rejects Path
+    assert path == str(
+        tmp_path / f'calls-py{sys.version_info.major}.{sys.version_info.minor}.db'
+    )
+
+
+def test_the_session_isolates_the_disk_caches_in_a_temporary_directory():
+    """the conftest sets ``STRIQT_CACHE_DIR`` before collection, when the strategy
+    modules validate sweeps and design windows, so the shelf of the developer stays
+    untouched even by code that bypasses the in-memory shelf"""
+    import os
+    import tempfile
+
+    import platformdirs
+
+    cache_dir = util.cache_dir()
+
+    assert str(cache_dir) == os.environ['STRIQT_CACHE_DIR']
+    assert cache_dir != pathlib.Path(platformdirs.user_cache_dir('striqt'))
+    assert cache_dir.resolve().is_relative_to(
+        pathlib.Path(tempfile.gettempdir()).resolve()
+    )
 
 
 # %% persistent_cache

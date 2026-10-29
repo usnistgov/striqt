@@ -27,10 +27,14 @@ repository.
   `tests/figures/` against the synthetic 3-capture datasets of `figures_datasets.py`
   (`make_dataset`, `predicted_levels_dBm`, `occupied_bins`), with the expected levels and
   bin supports from the dataset construction; the one plotting test runs headless through
-  `MPLBACKEND=agg`, set in the root conftest before any third-party import. The same lines
-  set `MPLCONFIGDIR` to `platformdirs.user_cache_dir('striqt')/matplotlib`, beside the numba
-  cache, because a sandbox that cannot write `~/.matplotlib` rebuilds the matplotlib font
-  cache on every run (12 s per process) when the default config dir is used.
+  `MPLBACKEND=agg`, set in the root conftest before any third-party import. The same block
+  sets `STRIQT_CACHE_DIR` to a directory of the session (removed at exit), keeps
+  `NUMBA_CACHE_DIR` in the user cache so compiled kernels persist, and sets `MPLCONFIGDIR`
+  to `platformdirs.user_cache_dir('striqt')/matplotlib` because a sandbox that cannot write
+  `~/.matplotlib` rebuilds the matplotlib font cache on every run (12 s per process). The
+  block also replaces the `persistent_cache` shelf with an in-memory dict at import time,
+  not in a fixture: `site_strategies.py` reads a site YAML at import, which validates the
+  sweep and designs windows during collection, before any fixture runs.
 - **The type checker's view** of the keyword-unpacking signatures is pinned by
   `tests/test_typing.py` and the probes under `tests/ty_probes/` (see Typing); import-time
   side effects by `tests/test_imports.py`; the docstring prose gate (no personal pronoun
@@ -46,7 +50,7 @@ The suite is flat and every helper is imported by bare name, so a second definit
 same thing is invisible until the two drift. Look here before writing setup:
 
 - `tests/conftest.py`: fixtures (`xp`, `cupy_available`, `real_soapy`, `armed_tone_controller`,
-  the autouse `restore_logging_state` and `isolated_persistent_cache`, and
+  the autouse `restore_logging_state`, and
   `isolated_bindings`/`isolated_analysis_registry` for a test that binds a sensor or
   registers a measurement with the live registries), the array and scalar
   hypothesis primitives (`float_arrays`, `iq_waveforms`, `scalars`, `bounded_ints`,

@@ -4,15 +4,14 @@ from __future__ import annotations as __
 
 import hashlib
 import os
-import pathlib
 
 # must be set before numba is first imported; cp_cpu_jit.py and cp_cuda_jit.py import
 # this module before numba
 if not os.environ.get('NUMBA_CACHE_DIR'):
     try:
-        from platformdirs import user_cache_dir
+        from .util import cache_dir
 
-        _dir = pathlib.Path(user_cache_dir('striqt')) / 'numba'
+        _dir = cache_dir() / 'numba'
         _dir.mkdir(parents=True, exist_ok=True)
         os.environ['NUMBA_CACHE_DIR'] = str(_dir)
     except OSError:

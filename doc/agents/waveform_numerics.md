@@ -17,8 +17,9 @@ float. Paths below are relative to `src/striqt/waveform/` unless qualified.
 - `comms.correlate_cyclic_shift` dispatches the same way, between
   `lib/comms/cp_cpu_jit.py` (numba `njit`) and `lib/comms/cp_cuda_jit.py`
   (`numba.cuda.jit`).
-- `lib/jit.py` sets `NUMBA_CACHE_DIR` to the platformdirs cache directory when the
-  variable is unset, and stamps numba caches by content hash so that a reinstall
+- `lib/jit.py` sets `NUMBA_CACHE_DIR` to the `numba` subdirectory of
+  `lib/util.py` `cache_dir()` (`STRIQT_CACHE_DIR`, else the platformdirs user cache
+  directory) when the variable is unset, and stamps numba caches by content hash so that a reinstall
   does not invalidate the caches. The two kernel modules import `lib/jit.py` before
   numba so that the setting takes effect.
 - coverage.py excludes the jitted and fused bodies through `exclude_also` in the
@@ -76,18 +77,21 @@ shim is `striqt.waveform.fourier`.
 - `lib/util.py` provides `lru_cache`, a wrapper over `functools.lru_cache` that
   records each wrapped function in `_caches`. `clear_caches()` clears every
   recorded cache.
-- `lib/util.py` also provides `persistent_cache`, a `shelve` file under the
-  platformdirs cache directory. The window design searches (`get_window`,
+- `lib/util.py` also provides `persistent_cache`, a `shelve` file named per Python
+  version under `cache_dir()`: `STRIQT_CACHE_DIR` when set, else the platformdirs
+  cache directory. The window design searches (`get_window`,
   `find_window_param_from_enbw`) use the shelf so that a design survives across
-  processes.
+  processes. Two processes that share the file corrupt it on macOS Python 3.9
+  (dbm.ndbm), so concurrent scripts set distinct `STRIQT_CACHE_DIR` values.
 - `persistent_cache` sits under `lru_cache` in `windows.py` but is not itself LRU.
   The access order is rebuilt from the shelf keys on every call, so the entry
   evicted past `maxsize` is whichever key the dbm backend iterates first.
-- The test suite replaces the shelf with an in-memory dict through the
-  session-scoped `isolated_persistent_cache` fixture in `tests/conftest.py`. The
-  macOS dbm backend corrupts under eviction and under concurrent writes from 2
-  processes, and a corrupted shelf fails every later `get_window` call on the
-  machine.
+- The test suite replaces the shelf with an in-memory dict at import of
+  `tests/conftest.py`, not in a fixture, because the strategy modules validate sweeps
+  and design windows during collection; the conftest also points `STRIQT_CACHE_DIR`
+  at a directory of the session. The macOS dbm backend corrupts under eviction and
+  under concurrent writes from 2 processes, and a corrupted shelf fails every later
+  `get_window` call on the machine.
 
 ## OFDM and cellular
 
