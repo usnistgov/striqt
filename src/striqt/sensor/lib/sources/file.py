@@ -10,7 +10,7 @@ import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
 from ... import specs
-from . import base, buffers
+from . import base
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -129,7 +129,9 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
             spec.path,
             format=spec.file_format,
             dtype='complex64',
-            xp=buffers.get_array_namespace(spec.array_backend),
+            # the receive buffer is host memory on every backend, and `cast_iq`
+            # moves the acquisition to the device as for a radio
+            xp=np,
             loop=spec.loop,
             backend_sample_rate=spec.master_clock_rate,
             **({} if spec.key is None else {'key': spec.key}),
