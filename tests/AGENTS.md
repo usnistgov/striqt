@@ -136,18 +136,18 @@ Run both interpreters (pytest and hypothesis versions differ) and pass `tests` e
 because pytest 8 on py39 ignores `[tool.pytest]`:
 
 ```sh
-pixi run -e test39 ruff format src tests && pixi run -e test39 ruff check tests
+pixi run -e test39 ruff format src tests && pixi run -e test39 ruff check src tests
 pixi run -e test39 pytest -q -p no:cacheprovider tests -rxX
 pixi run -e test314 pytest -q -p no:cacheprovider tests -rxX
 grep -rn "mark.xfail" tests --include='*.py' | wc -l   # reconcile with the ledger
 pixi run -e test314 ty check src                        # must stay clean
 ```
 
-Lint `tests`, not `src tests` (see the ruff note under Typing). Account for every count
-delta: `passed` moves only by the arithmetic of folds, `xfailed` only by markers added or
-retired, and an equal drop in `passed` and `skipped` is the fingerprint of an
-`xp`-parametrized test disappearing. Keep new tests under about 0.3 s by shrinking the
-compute; the whole suite runs in under a minute per interpreter. If `pixi run` fails on a
+Account for every count delta: `passed` moves only by the arithmetic of folds, `xfailed`
+only by markers added or retired, and an equal drop in `passed` and `skipped` is the
+fingerprint of an `xp`-parametrized test disappearing. Keep new tests under about 0.3 s by
+shrinking the compute; the whole suite runs in under a minute per interpreter. If `pixi
+run` fails on a
 network fetch, `--frozen` skips the reinstall; as a last resort
 `PYTHONPATH="$PWD/src" ./.pixi/envs/<env>/bin/python -m pytest tests` runs without the
 editable install but does not exercise the console entry points.
