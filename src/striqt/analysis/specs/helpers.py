@@ -144,13 +144,13 @@ class frozendict(Mapping[_K, _V]):
     def __ior__(self, other: Any) -> frozendict[_K, _V]:
         raise TypeError(f"'{self.__class__.__name__}' object is frozen")
 
-    def items(self) -> ItemsView[_K, _V]:  # noqa: D102
+    def items(self) -> ItemsView[_K, _V]:
         return self._dict.items()
 
-    def keys(self) -> KeysView[_K]:  # noqa: D102
+    def keys(self) -> KeysView[_K]:
         return self._dict.keys()
 
-    def values(self) -> ValuesView[_V]:  # noqa: D102
+    def values(self) -> ValuesView[_V]:
         return self._dict.values()
 
     def update(self, other: dict[_K, _V], /):

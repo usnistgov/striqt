@@ -32,7 +32,7 @@ def raised(exc):
     """return `exc` with a traceback attached, as a caught exception has"""
     try:
         raise exc
-    except BaseException as ex:  # noqa: BLE001
+    except BaseException as ex:
         return ex
 
 
@@ -52,7 +52,7 @@ def run_in_thread(func):
     def target():
         try:
             outcome.append(('ok', func()))
-        except BaseException as ex:  # noqa: BLE001
+        except BaseException as ex:
             outcome.append(('raised', ex))
 
     thread = threading.Thread(target=target)

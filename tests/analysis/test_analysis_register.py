@@ -7,8 +7,6 @@ The hook tests build a private `AnalysisRegistry`. A measurement registered with
 live registry would leak into every other test module.
 """
 
-# ruff: noqa: UP045  msgspec resolves the ToyGroup annotations at runtime on py3.9
-
 from __future__ import annotations
 
 import weakref

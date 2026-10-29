@@ -3,8 +3,6 @@ resolved into radio settings and analysis adjustments, the generated analysis, a
 the runner that builds and runs the plain `Sweep`
 """
 
-# ruff: noqa: UP045  msgspec resolves the toy struct annotations at runtime on py3.9
-
 from __future__ import annotations
 
 import copy

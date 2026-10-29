@@ -132,7 +132,22 @@ exclude_also = [
     "^\\s*@cupy\\.fuse\\b",
 ]
 
+[tool.ruff.lint]
+ignore = [
+    "BLE001",  # catching Exception is the cleanup and logging idiom in sinks, util, and doc
+    "FURB189", # the measurement and action registries subclass dict
+    "PLC0105", # TypeVar names are the 2-3 letter codes (PS, PC, SS, ...) in AGENTS.md
+    "PLC0414", # `import x as x` is the explicit re-export idiom that ty and pyright honor
+    "RUF027",  # `{port}`-style format templates in plot specs are not f-strings
+    "TRY004",  # exception types are API; ValueError on bad input stays
+]
+
+[tool.ruff.lint.pyupgrade]
+# msgspec evaluates Union/Optional in spec structs at runtime on py3.9
+keep-runtime-typing = true
+
 [tool.ruff.lint.extend-per-file-ignores]
+"tests/**" = ["RUF069"]  # exact float equality on attrs copied from literals is the assertion
 "**/__init__.py" = [ "F401", "F403", "E402"]
 # the lib/typing.py modules re-export aliases and TypedDicts under TYPE_CHECKING
 "**/typing.py" = ["F401"]

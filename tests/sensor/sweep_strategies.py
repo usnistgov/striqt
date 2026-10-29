@@ -1,6 +1,5 @@
 """strategies and factories for the sweep and capture spec tests."""
 
-# ruff: noqa: UP045  msgspec resolves the QuickAnalyses annotations at runtime on py3.9
 from __future__ import annotations
 
 import dataclasses

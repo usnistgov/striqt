@@ -1,6 +1,5 @@
 """striqt.sensor.lib.bindings: the tagged sweep union and binding registration"""
 
-# ruff: noqa: UP045  msgspec resolves the analysis group annotations at runtime on py3.9
 from __future__ import annotations
 
 import dataclasses

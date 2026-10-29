@@ -206,9 +206,9 @@ class DepthProbe(msgspec.Struct):
     b: Annotated[list[int], Meta('b')]
     c: tuple[int, ...]
     d: set[int]
-    e: Optional[dict[str, Any]]  # noqa: UP045
+    e: Optional[dict[str, Any]]
     f: tuple[str, float]
-    g: Union[int, list[list[int]]]  # noqa: UP007
+    g: Union[int, list[list[int]]]
     hh: int
     i: fractions.Fraction
 

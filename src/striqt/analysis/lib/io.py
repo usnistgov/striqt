@@ -440,7 +440,7 @@ class MATNewFileStream(_FileStreamBase):
             'xp': xp,
         }
 
-        import h5py  # noqa # type: ignore
+        import h5py  # type: ignore
 
         self._fd = h5py.File(path, 'r')
         self._loop = loop
