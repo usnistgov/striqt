@@ -539,10 +539,12 @@ class NPYFileStream(_FileStreamBase):
         backend_sample_rate: float,
         skip_samples=0,
         dtype='complex64',
+        loop=False,
         xp=np,
         **meta,
     ):
         self._data = xp.asarray(np.atleast_2d(np.load(path))).astype(dtype)
+        self._loop = loop
 
         self.meta = meta
 
@@ -575,10 +577,12 @@ class NPYFileStream(_FileStreamBase):
             try:
                 ref = self._refs.pop(0)
             except IndexError:
-                if count is not None:
-                    raise ValueError('too few samples in the file')
-                else:
+                if count is None:
                     break
+                elif self._loop:
+                    ref = self._data
+                else:
+                    raise ValueError('too few samples in the file')
 
             if not hasattr(ref, 'shape') or ref.ndim < 2:
                 continue

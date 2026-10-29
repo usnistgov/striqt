@@ -33,9 +33,9 @@ repository.
   cache on every run (12 s per process) when the default config dir is used.
 - **The type checker's view** of the keyword-unpacking signatures is pinned by
   `tests/test_typing.py` and the probes under `tests/ty_probes/` (see Typing); import-time
-  side effects by `tests/test_imports.py`; the docstring prose gate (no "it"/"its" for code,
-  no `striqt.<pkg>.lib` path in a public docstring) by `tests/test_docstrings.py`, whose
-  pre-existing hits are listed in `tests/docstring-baseline.txt` and only ever removed.
+  side effects by `tests/test_imports.py`; the docstring prose gate (no personal pronoun
+  or "whose", no `striqt.<pkg>.lib` path in a public docstring) by
+  `tests/test_docstrings.py`, which has no baseline.
 - The downstream project's patterns are reproduced by `tests/sensor/sweeps/src/extensions.py`
   and the `site*` sweep directories; the papers the cyclic-power and sync tests derive their
   expectations from are under `_training_material/papers/` (untracked; locate with a search).

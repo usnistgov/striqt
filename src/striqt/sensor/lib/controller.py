@@ -36,7 +36,7 @@ class lookup:
     """
 
     _obj: ClassVar[dict[specs.Source, PendingSlot]] = defaultdict(Event)
-    _id: ClassVar[dict[specs.Source, Event | str]] = defaultdict(Event)
+    _id: ClassVar[dict[specs.Source, Event | str | BaseException]] = defaultdict(Event)
     _ready: ClassVar[dict[specs.Source, Event | bool]] = defaultdict(Event)
     _lock = RLock()
 
@@ -93,7 +93,7 @@ class lookup:
         """lookup a source ID from a source specification."""
         cls.instance(spec, timeout)
 
-        obj: Event | str = cls._id[spec]
+        obj: Event | str | BaseException = cls._id[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
@@ -107,7 +107,7 @@ class lookup:
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
         elif isinstance(obj, Event):
-            raise TypeError
+            raise RuntimeError('the source closed before it reported a source id')
         elif isinstance(obj, str):
             return obj
 
@@ -132,9 +132,13 @@ class lookup:
     @classmethod
     def _clear(cls, spec: specs.Source) -> None:
         with cls._lock:
-            cls._obj[spec] = Event()
-            cls._ready[spec] = Event()
-            cls._id[spec] = Event()
+            for table in (cls._obj, cls._ready, cls._id):
+                # a waiter holds the event it found in the slot. Replacing the event
+                # without setting it leaves the waiter blocked
+                old = table.get(spec)
+                if isinstance(old, Event):
+                    old.set()
+                table[spec] = Event()
 
     @classmethod
     def _register(cls, spec: specs.Source, controller: Controller) -> None:
@@ -186,6 +190,10 @@ class lookup:
     @classmethod
     def _raise(cls, spec: specs.Source, exc: BaseException):
         cls._obj[spec] = exc
+        pending = cls._id[spec]
+        cls._id[spec] = exc
+        if isinstance(pending, Event):
+            pending.set()
         cls._set_ready(spec, False)
         raise exc
 

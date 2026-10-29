@@ -6,10 +6,7 @@ import pathlib
 import re
 from collections.abc import Iterator
 
-import pytest
-
 SRC = pathlib.Path(__file__).parent.parent / 'src' / 'striqt'
-BASELINE = pathlib.Path(__file__).parent / 'docstring-baseline.txt'
 
 # "I" and "us" are not scanned: "I/Q" and the microsecond abbreviation
 PRONOUN = re.compile(r'\b(we|our|you|your|they|their|them|whose)\b', re.IGNORECASE)
@@ -64,28 +61,7 @@ def scan() -> dict[str, str]:
     return hits
 
 
-def read_baseline() -> set[str]:
-    return {
-        line.strip()
-        for line in BASELINE.read_text().splitlines()
-        if line.strip() and not line.startswith('#')
-    }
-
-
-@pytest.fixture(scope='module')
-def hits() -> dict[str, str]:
-    return scan()
-
-
-def test_no_new_docstring_hits(hits: dict[str, str]) -> None:
-    new = {k: v for k, v in hits.items() if k not in read_baseline()}
-    lines = [f'{k}: {v}' for k, v in sorted(new.items())]
-    assert not new, 'docstrings that break a prose rule:\n' + '\n'.join(lines)
-
-
-def test_docstring_baseline_is_current(hits: dict[str, str]) -> None:
-    stale = sorted(read_baseline() - set(hits))
-    assert not stale, (
-        f'remove these entries from {BASELINE.name}, which no longer hit:\n'
-        + '\n'.join(stale)
-    )
+def test_docstrings_are_clean() -> None:
+    hits = scan()
+    lines = [f'{k}: {v}' for k, v in sorted(hits.items())]
+    assert not hits, 'docstrings that break a prose rule:\n' + '\n'.join(lines)
