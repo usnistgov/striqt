@@ -24,8 +24,7 @@ if not os.environ.get('MPLCONFIGDIR'):
 import msgspec
 import numpy as np
 import pytest
-from hypothesis import HealthCheck, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, settings, strategies as st
 from hypothesis.extra.numpy import array_shapes, arrays
 
 np.seterr(divide='ignore')

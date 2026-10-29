@@ -5,9 +5,7 @@ import typing
 
 import numpy as np
 import pandas as pd
-from matplotlib import axis as _axis
-from matplotlib import scale as _scale
-from matplotlib import ticker as _ticker
+from matplotlib import axis as _axis, scale as _scale, ticker as _ticker
 
 import striqt.waveform as sw
 
@@ -462,10 +460,8 @@ def xaxis_concise_dates(fig, ax, adjacent_offset: bool = True):
     offset is prepended to the first tick label. The figure is redrawn.
     """
 
-    from matplotlib import dates, transforms
-
     # lazy_import does not work for matplotlib submodules
-    from matplotlib import pyplot as plt
+    from matplotlib import dates, pyplot as plt, transforms
 
     formatter = dates.ConciseDateFormatter(dates.AutoDateLocator(), show_offset=True)
 

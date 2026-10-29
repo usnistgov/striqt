@@ -10,8 +10,7 @@ from . import util
 if _typing.TYPE_CHECKING:
     from pathlib import Path as _Path
 
-    from xarray import DataArray as _DA
-    from xarray import Dataset as _DS
+    from xarray import DataArray as _DA, Dataset as _DS
     from xarray.core.types import ScaleOptions as _ScaleOptions
 
     from .backend import PlotBackend as _PlotBackend

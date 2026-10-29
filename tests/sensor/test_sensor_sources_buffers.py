@@ -9,8 +9,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from numeric_checks import assert_close
 from soapy_factories import MCR, soapy_capture, source_spec
 from sweep_strategies import SOURCE

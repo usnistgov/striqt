@@ -8,8 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from conftest import gaussian_iq, iq_waveforms
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from numeric_checks import RTOL_FLOAT64, assert_close, interior, numpy_and_cupy
 from numpy.testing import assert_allclose, assert_array_equal
 from waveform_strategies import cross_backend_sigma, noise_waveforms, stft_parameters

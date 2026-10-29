@@ -12,8 +12,7 @@ import time
 import exceptiongroup
 import pytest
 import yaml
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 
 import striqt.analysis as sa
 from striqt.sensor.lib import util

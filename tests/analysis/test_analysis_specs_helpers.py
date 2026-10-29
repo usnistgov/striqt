@@ -19,8 +19,7 @@ from analysis_strategies import (
     scalars,
     tuplify,
 )
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from msgspec import inspect as mi
 
 import striqt.analysis as sa

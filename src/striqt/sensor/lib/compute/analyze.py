@@ -203,8 +203,7 @@ def prepare_compute(
         message='Mean of empty slice.*',
     )
 
-    from ..actions import sweep as sweep_action
-    from ..actions import warmup
+    from ..actions import sweep as sweep_action, warmup
 
     if skip_warmup:
         warm = None

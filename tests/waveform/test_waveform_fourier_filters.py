@@ -7,8 +7,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from numeric_checks import (
     FIR_LEAKAGE,
     FLOAT_DTYPES,

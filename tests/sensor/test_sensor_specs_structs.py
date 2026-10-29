@@ -9,8 +9,7 @@ import re
 import msgspec
 import pytest
 from conftest import construct_both, raises_on_both_paths
-from hypothesis import assume, given
-from hypothesis import strategies as st
+from hypothesis import assume, given, strategies as st
 from site_strategies import SiteCaptureCls, make_site_capture_kws
 from sweep_strategies import (
     RESOLUTION_MSG,

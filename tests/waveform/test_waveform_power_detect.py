@@ -13,8 +13,7 @@ from conftest import (
     as_xp,
     iq_waveforms,
 )
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from hypothesis.extra.numpy import arrays
 from numeric_checks import (
     assert_close,

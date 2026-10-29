@@ -14,23 +14,11 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 import striqt.waveform as sw
 from striqt.waveform.lib.util import (
     array_api_compat as array_api_compat,
-)
-from striqt.waveform.lib.util import (
     lazy_import as lazy_import,
-)
-from striqt.waveform.lib.util import (
     lru_cache as lru_cache,
-)
-from striqt.waveform.lib.util import (
     np as np,
-)
-from striqt.waveform.lib.util import (
     pd as pd,
-)
-from striqt.waveform.lib.util import (
     qualified_name as qualified_name,
-)
-from striqt.waveform.lib.util import (
     xr as xr,
 )
 

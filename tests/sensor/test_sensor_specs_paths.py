@@ -12,8 +12,7 @@ from pathlib import Path
 
 import pytest
 from conftest import SITE_SPEC
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from site_strategies import OTHER_ID, RADIO_ID
 from sweep_strategies import SOURCE, ActionCls, make_sweep
 

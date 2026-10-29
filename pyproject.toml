@@ -143,6 +143,10 @@ ignore = [
     "TRY004",  # exception types are API; ValueError on bad input stays
 ]
 
+[tool.ruff.lint.isort]
+# keep `from m import a as a, b as b` re-exports in one statement
+combine-as-imports = true
+
 [tool.ruff.lint.pyupgrade]
 # msgspec evaluates Union/Optional in spec structs at runtime on py3.9
 keep-runtime-typing = true

@@ -8,8 +8,7 @@ import functools
 
 import numpy as np
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from numeric_checks import (
     ATOL,
     FLOAT_DTYPES,
