@@ -1,7 +1,7 @@
 """Elementwise conversions between linear and dB scales for array-like inputs
-(numbers, arrays, and pandas or xarray objects wrapping them), evaluated through
-numexpr on numpy and fused kernels on cupy, with the roundoff models that bound
-their results on both backends."""
+(numbers, arrays, and pandas or xarray objects that wrap an array), evaluated
+through numexpr on numpy and fused kernels on cupy, with the roundoff models that
+bound the results on both backends."""
 
 from __future__ import annotations as __
 

@@ -60,8 +60,8 @@ def fft_roundoff_rms(
         dtype: the working dtype; a complex dtype counts as the dtype of one component
         nffts: the size of each FFT pass in the computation
         n_elementwise: the number of elementwise roundings in the computation
-        array_backend: ``'numpy'`` or ``'cupy'``, the backend whose FFT constant
-            applies. The named backend need not be installed
+        array_backend: ``'numpy'`` or ``'cupy'``; selects the FFT roundoff constant
+            of that backend, which need not be installed
 
     Returns:
         a dimensionless fraction of the output rms, proportional to the unit

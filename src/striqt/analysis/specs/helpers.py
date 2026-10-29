@@ -1,4 +1,5 @@
-"""helper functions for specification data structures and their aliases"""
+"""frozen containers, field subsets, conversion caches, and schema hooks for the
+specification structs."""
 
 from __future__ import annotations as __
 
