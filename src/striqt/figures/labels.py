@@ -342,6 +342,8 @@ def label_selection(
     ax: matplotlib.axes.Axes,
     attrs=True,
 ):
+    import matplotlib.pyplot as plt
+
     from . import ticker
 
     _monkeypatch_xarray_unit_labels()

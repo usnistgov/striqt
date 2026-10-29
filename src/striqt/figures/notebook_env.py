@@ -95,14 +95,14 @@ def set_matplotlib_formats(formats, *args, **kws):
         label = title_to_label(guess_title(fig))
         caption_text = _captions.get(id(fig), '')
 
-        ret = pltt._print_figure(fig, fmt=fmt, *a, **k)
+        ret = pltt._print_figure(fig, *a, fmt=fmt, **k)
 
         markup = f'<tt>{label}.{fmt}:</tt>{"<br>" + caption_text if caption_text else " (no caption data)"}'
         display(HTML(markup))
 
         return ret
 
-    pltt.print_figure, pltt._print_figure = wrapper, pylabtools.pltt  # type: ignore
+    pltt.print_figure, pltt._print_figure = wrapper, pltt.print_figure  # type: ignore
 
 
 def set_caption(*args):
@@ -114,8 +114,6 @@ def set_caption(*args):
     Raises:
         ValueError: if called with neither 1 nor 2 positional arguments
     """
-    global _captions
-
     if len(args) == 1:
         fig, text = plt.gcf(), args[0]
     elif len(args) == 2:

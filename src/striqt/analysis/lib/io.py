@@ -665,7 +665,8 @@ class TDMSFileStream(_FileStreamBase):
 
         self._position = (self._position or 0) + count
 
-        iq = (iq * float_dtype(scale)).view(self.dtype)  # type: ignore
+        float_dtype = np.finfo(np.dtype(self.dtype)).dtype
+        iq = (iq * float_dtype.type(scale)).view(self.dtype)
 
         return iq[np.newaxis, :].copy()
 
