@@ -780,6 +780,10 @@ def _get_resample_overlap(
 @sa.util.lru_cache()
 def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
     if array_backend == 'cupy':
+        # numba.cuda must be imported before cupy, and cupy before any cupyx module
+        # (numba issue 6131)
+        import numba.cuda  # noqa: F401, I001
+        import cupy  # noqa: F401  # ty: ignore[unresolved-import]
         from cupyx.scipy import fft  # type: ignore
     elif array_backend == 'numpy':
         from scipy import fft
