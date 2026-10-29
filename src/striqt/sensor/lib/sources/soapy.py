@@ -360,11 +360,11 @@ class RxStream:
             min_gain = info.full_gain_range.minimum
             device.setGain(SoapySDR.SOAPY_SDR_RX, port, min_gain)
 
-        yield
-
-        # restore the initial gains
-        for port, gain in start_gains.items():
-            device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
+        try:
+            yield
+        finally:
+            for port, gain in start_gains.items():
+                device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
 
     def close(self, device: SoapySDR.Device):
         print('close stream')

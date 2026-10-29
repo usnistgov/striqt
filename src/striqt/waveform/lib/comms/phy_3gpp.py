@@ -174,19 +174,16 @@ def _get_3gpp_index_cyclic_prefix(
         symbols, '"symbols" argument', size=phy.FFT_PER_SLOT, xp=xp
     )
 
-    grid = []
-
-    # axis 0: symbol number within each slot
-    grid.append(phy.cp_start_idx[symbol_inds])
-
-    # axis 1: slot number
-    grid.append(phy.contiguous_size * slot_inds)
-
-    # axis 2: frame number
-    grid.append(frames * frame_size)
-
-    # axis 3: cp index
-    grid.append(xp.ogrid[0 : phy.cp_sizes[1]])
+    grid = [
+        # axis 0: symbol number within each slot
+        phy.cp_start_idx[symbol_inds],
+        # axis 1: slot number
+        phy.contiguous_size * slot_inds,
+        # axis 2: frame number
+        frames * frame_size,
+        # axis 3: cp index
+        xp.ogrid[0 : phy.cp_sizes[1]],
+    ]
 
     # pad the axis dimensions so they can be broadcast together
     inds, *offsets = xp.meshgrid(*grid, indexing='ij', copy=False)
@@ -215,7 +212,7 @@ class Phy3GPP(PhyOFDM):
     # a slot is 15 symbol periods of samples: 14 FFTs and 1 period of cyclic prefixes
     FFT_PER_SLOT = 14
 
-    FFT_SIZE_TO_SUBCARRIERS = {
+    FFT_SIZE_TO_SUBCARRIERS: typing.ClassVar[dict[int, int]] = {
         128: 73,
         256: 181,
         512: 301,
@@ -225,7 +222,7 @@ class Phy3GPP(PhyOFDM):
     }
 
     # "default" sample rates from LTE
-    BW_TO_SAMPLE_RATE = {
+    BW_TO_SAMPLE_RATE: typing.ClassVar[dict[float, float]] = {
         1.4e6: 1.92e6,
         3e6: 3.84e6,
         5e6: 7.68e6,
@@ -246,10 +243,14 @@ class Phy3GPP(PhyOFDM):
     # minimum number of contiguous symbols in a sequence.
     LTE_MIN_CP_SIZES = (10, 9, 9, 9, 9, 9, 9, 10, 9, 9, 9, 9, 9, 9)
 
-    SCS_TO_SLOTS_PER_FRAME = {15e3: 10, 30e3: 20, 60e3: 40}
+    SCS_TO_SLOTS_PER_FRAME: typing.ClassVar[dict[float, int]] = {
+        15e3: 10,
+        30e3: 20,
+        60e3: 40,
+    }
 
     # FR1 only; the FR2 spacings (120 kHz and above) are not modeled
-    SUBCARRIER_SPACINGS = {15e3, 30e3, 60e3}
+    SUBCARRIER_SPACINGS: typing.ClassVar[set[float]] = {15e3, 30e3, 60e3}
 
     def __init__(
         self,

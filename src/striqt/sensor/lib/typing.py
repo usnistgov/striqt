@@ -12,7 +12,6 @@ from typing import (
     Generic,
     Protocol,
     TypedDict,
-    TypeVar,
     runtime_checkable,
 )
 

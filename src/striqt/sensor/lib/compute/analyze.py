@@ -188,7 +188,7 @@ def prepare_compute(
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
             # numba.cuda must be imported before cupy on some versions/platforms
             # (https://github.com/numba/numba/issues/6131)
-            np.__version__  # reify
+            np.__version__  # noqa: B018  reifies the lazy import
             # isort: off
             import numba.cuda  # noqa: F401
             import cupy  # type: ignore  # noqa: F401

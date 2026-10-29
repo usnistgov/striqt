@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from collections.abc import Generator, Iterable
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 import striqt.waveform as sw
 from striqt.waveform.lib.util import (
@@ -57,16 +57,16 @@ PERFORMANCE_DETAIL = 12
 class StriqtLogger(logging.LoggerAdapter):
     _screen_handler: logging.StreamHandler
 
-    EXTRA_DEFAULTS = {
+    EXTRA_DEFAULTS: ClassVar[dict[str, Any]] = {
         'capture_index': 0,
         'capture_progress': 'control',
         'capture_count': 'unknown',
         'capture': None,
     }
 
-    def __init__(self, name_suffix: str, extra: dict[str, Any] = {}) -> None:
+    def __init__(self, name_suffix: str, extra: dict[str, Any] | None = None) -> None:
         _logger = logging.getLogger(f'striqt.{name_suffix}')
-        super().__init__(_logger, self.EXTRA_DEFAULTS | extra)
+        super().__init__(_logger, self.EXTRA_DEFAULTS | (extra or {}))
         _logger_adapters[name_suffix] = self
 
 
@@ -187,9 +187,11 @@ def compute_lock(array=None):
     get_lock = array is None or is_cupy
     if get_lock:
         _compute_lock.acquire()
-    yield
-    if get_lock:
-        _compute_lock.release()
+    try:
+        yield
+    finally:
+        if get_lock:
+            _compute_lock.release()
 
 
 @contextlib.contextmanager
@@ -213,8 +215,8 @@ def hold_logger_outputs():
     try:
         yield
     finally:
-        for name in streams:
-            _logger_adapters[name]._screen_handler.stream = streams[name]
+        for name, stream in streams.items():
+            _logger_adapters[name]._screen_handler.stream = stream
 
 
 _input_lock = threading.RLock()

@@ -174,7 +174,11 @@ def describe_msgspec_fields(obj: type[msgspec.Struct]):
 
 
 def struct_args_docstring(
-    obj, indent_spaces: int = 4, extra_prepend={}, extra_append={}, extra_types={}
+    obj,
+    indent_spaces: int = 4,
+    extra_prepend: dict[str, str] | None = None,
+    extra_append: dict[str, str] | None = None,
+    extra_types: dict[str, str] | None = None,
 ) -> str:
     """return the ``Args:`` entries of a Google-style docstring for the fields of `obj`.
 
@@ -193,8 +197,8 @@ def struct_args_docstring(
         obj = type(obj)
         return struct_args_docstring(**locals())
     descriptions, types = describe_msgspec_fields(obj)
-    descriptions = extra_prepend | descriptions | extra_append
-    types = types | extra_types
+    descriptions = (extra_prepend or {}) | descriptions | (extra_append or {})
+    types = types | (extra_types or {})
 
     if not descriptions and not types:
         return ''

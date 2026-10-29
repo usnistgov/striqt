@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing
+from pathlib import Path
 
 import click
 
@@ -74,7 +75,7 @@ def run(
             )
         opts = sf.specs.PlotOptions.from_dict(plot_hint)
     else:
-        yaml_text = open(yaml_path, 'rb').read()
+        yaml_text = Path(yaml_path).read_bytes()
         opts = msgspec.yaml.decode(yaml_text, type=sf.specs.PlotOptions, strict=False)
 
     import os

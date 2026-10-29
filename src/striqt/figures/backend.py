@@ -111,11 +111,14 @@ def plot_cyclic_channel_power(
     ax=None,
     colors=None,
     steps=True,
-    plot_kws: dict[str, typing.Any] = {},
+    plot_kws: dict[str, typing.Any] | None = None,
 ):
     import matplotlib.pyplot as plt
 
     from . import labels
+
+    if plot_kws is None:
+        plot_kws = {}
 
     if ax is None:
         _, ax = plt.subplots()
@@ -209,7 +212,7 @@ class PlotBackend:
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    @functools.lru_cache
+    @functools.lru_cache  # noqa: B019
     def _coord_kws(self, **kwargs: Unpack[_DimKws]) -> _LayoutKwArgs:
         if self.opts.col is None and self.opts.row is None:
             col = '_view'

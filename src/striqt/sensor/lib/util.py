@@ -10,7 +10,7 @@ import threading
 import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import striqt.analysis as sa
 from striqt.waveform.lib.util import lazy_import as lazy_import
@@ -393,7 +393,7 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
 
 
 class _JSONFormatter(logging.Formatter):
-    _last = []
+    _last: ClassVar[list] = []
 
     def __init__(self):
         super().__init__(style='{')

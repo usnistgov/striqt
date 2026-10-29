@@ -195,7 +195,7 @@ class TDMSSource(Source, frozen=True, kw_only=True):
 class ZarrIQSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
-    select: types.ZarrSelect = {}
+    select: types.ZarrSelect = msgspec.field(default_factory=dict)
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 

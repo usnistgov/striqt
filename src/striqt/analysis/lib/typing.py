@@ -6,10 +6,11 @@ from typing import (
     Any,
     Literal,
     Optional,
-    TypeVar,
     Union,
     overload,
 )
+
+from typing_extensions import TypeVar
 
 # %% dataarrays.py
 AnalysisReturnFlag = Literal[True, False, 'delayed']
@@ -27,7 +28,6 @@ if TYPE_CHECKING:
         Self,
         TypeAlias,
         TypedDict,
-        TypeVar,
     )
 
     from striqt.waveform.lib.typing import Array, ArrayBackend

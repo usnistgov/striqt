@@ -123,7 +123,7 @@ class frozendict(Mapping[_K, _V]):
         for key, value in self.items():
             try:
                 h ^= hash((key, value))
-            except:
+            except TypeError:
                 raise TypeError(f'unhashable frozendict entry {(key, value)!r}')
         self._hash = h
 

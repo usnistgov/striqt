@@ -190,7 +190,7 @@ def _results_as_arrays(
     return array
 
 
-def _empty_stub(dims, dtype, attrs={}):
+def _empty_stub(dims, dtype, attrs: dict[str, typing.Any] | None = None):
     x = np.empty(len(dims) * (1,), dtype=dtype)
     return xr.DataArray(x, dims=dims, attrs=attrs)
 

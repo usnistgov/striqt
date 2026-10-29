@@ -26,7 +26,7 @@ MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 
 # bypass for the conjugate correction for downconversion based on high-side LO
-IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', 0))
+IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', '0'))
 if IGNORE_HIGHSIDE_LO:
     warnings.warn(
         'bypassing corrections for highside-LO downconversion '
@@ -34,7 +34,7 @@ if IGNORE_HIGHSIDE_LO:
     )
 
 # experimental: resample and low-pass in one STFT pass instead of _resample and the FIR
-USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', 0))
+USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', '0'))
 if USE_OARESAMPLE:
     warnings.warn('experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)')
 

@@ -35,9 +35,9 @@ class lookup:
     is raised when none is registered within `timeout` seconds.
     """
 
-    _obj: dict[specs.Source, PendingSlot] = defaultdict(Event)
-    _id: dict[specs.Source, Event | str] = defaultdict(Event)
-    _ready: dict[specs.Source, Event | bool] = defaultdict(Event)
+    _obj: ClassVar[dict[specs.Source, PendingSlot]] = defaultdict(Event)
+    _id: ClassVar[dict[specs.Source, Event | str]] = defaultdict(Event)
+    _ready: ClassVar[dict[specs.Source, Event | bool]] = defaultdict(Event)
     _lock = RLock()
 
     @classmethod
@@ -231,7 +231,7 @@ def bind_controller(
     class cls(Controller, sensor=binding, schema=schema):
         # wrapper shims for customized docstrings
         def __init__(self, *args: PS.args, **kwargs: PS.kwargs):
-            return super().__init__(*args, **kwargs)
+            super().__init__(*args, **kwargs)
 
         def arm(self, *args: PC.args, **kwargs: PC.kwargs) -> SC | None:
             return super().arm(*args, **kwargs)
@@ -395,12 +395,11 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             raise RuntimeError('open the radio before arming')
 
         cal = self.source_spec.calibration
-        if cal and specs.paths.get_format_fields(cal):
-            if not self._config.format_path:
-                raise TypeError(
-                    'calibration is specified with path formatter fields - '
-                    'set a formatter with set_path_formatter before arming'
-                )
+        if cal and specs.paths.get_format_fields(cal) and not self._config.format_path:
+            raise TypeError(
+                'calibration is specified with path formatter fields - '
+                'set a formatter with set_path_formatter before arming'
+            )
 
         if self._capture is not None:
             mcr = self.source_spec.master_clock_rate
@@ -628,7 +627,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     def acquire(self, overlaps: tuple[int, int] | None = None) -> specs.AcquiredIQ:
         """acquire IQ samples needed for the armed capture."""
 
-        self.capture_spec  # raises AttributeError when no capture is armed
+        self.capture_spec  # noqa: B018  raises AttributeError when no capture is armed
         signal_trigger = None
 
         if isinstance(overlaps, tuple):

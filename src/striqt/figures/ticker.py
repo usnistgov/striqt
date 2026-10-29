@@ -183,7 +183,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
     axis: _axis.Axis
 
     # avoid removing these quantiles when selecting ticks
-    PREFER_TICKS = [
+    PREFER_TICKS: typing.ClassVar[list[float]] = [
         0.5,
         0.9,
         0.1,
@@ -290,17 +290,17 @@ class GammaLogitFormatter(_ticker.LogitFormatter):
                 s = str(x)
         elif x < 0.1 and is_decade(x, rtol=1e-5):
             exponent = round(np.log10(x))
-            s = '10^{%d}' % exponent
+            s = '10^{%d}' % exponent  # noqa: UP031
         elif x > 0.9 and is_decade(1 - x, rtol=1e-5):
             exponent = round(np.log10(1 - x))
-            s = self._one_minus('10^{%d}' % exponent)  # type: ignore
+            s = self._one_minus('10^{%d}' % exponent)  # type: ignore  # noqa: UP031
         elif x < 0.05:
             s = self._format_value(x, self.locs)  # type: ignore
         elif x > 0.98:
             s = self._one_minus(self._format_value(1 - x, 1 - self.locs))  # type: ignore
         else:
             s = self._format_value(x, self.locs, sci_notation=False)  # type: ignore
-        return r'$\mathdefault{%s}$' % s
+        return r'$\mathdefault{%s}$' % s  # noqa: UP031
 
 
 class GammaQQScale(_scale.FuncScale):

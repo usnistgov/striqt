@@ -84,7 +84,7 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
     else:
         try:
             xp = array_namespace(x)
-        except:
+        except TypeError:
             # array_namespace does not recognize dask arrays
             xp = np
 
@@ -378,7 +378,7 @@ def axis_to_blocks(y: Array, size: int, truncate=False, axis=0) -> Array:
 
         slices = len(y.shape) * [slice(None, None)]
         slices[axis] = slice(None, size * (ax_size // size))
-        y = y.__getitem__(tuple(slices))
+        y = y[tuple(slices)]
 
     if axis == -1:
         shape_after = ()

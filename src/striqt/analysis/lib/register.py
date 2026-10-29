@@ -157,7 +157,7 @@ class CoordInfo(NamedTuple):
     func: CoordFunc
     dtype: DTypeLike
     dims: tuple[str, ...] = ()
-    attrs: dict = {}
+    attrs: dict = {}  # noqa: RUF012
 
 
 class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
@@ -167,7 +167,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
         *,
         name: str | None = None,
         dims: tuple[str, ...] | None = None,
-        attrs: dict = {},
+        attrs: dict | None = None,
     ) -> CoordFuncWrapper[TC, TM, R]:
         """register the decorated function as the coordinate factory named `name`.
 
@@ -218,7 +218,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
                 dims = (name,)
 
             self[func] = CoordInfo(
-                name=name, func=func, dims=dims, dtype=dtype, attrs=attrs
+                name=name, func=func, dims=dims, dtype=dtype, attrs=attrs or {}
             )
 
             return func
@@ -369,12 +369,12 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         name: str | None = None,
         dims: tuple[str, ...] | str | None = None,
         coord_factories: Iterable[CoordFunc] | CoordFunc | None = None,
-        depends: Iterable[Callable] | Callable = [],
+        depends: Iterable[Callable] | Callable = (),
         caches: Iterable[KwArgCache] | KwArgCache | None = None,
         store_compressed: bool = True,
         prefer_filtered: bool = True,
         prefer_aligned: bool = True,
-        attrs: dict[str, Any] = {},
+        attrs: dict[str, Any] | None = None,
         validate: AnalysisValidator | None = None,
         tolerance: AnalysisTolerance | None = None,
     ) -> AnalysisFuncWrapper[P]:
@@ -446,7 +446,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             'name': name,
             'cache': caches,
             'dtype': dtype,
-            'attrs': attrs,
+            'attrs': attrs or {},
             'store_compressed': store_compressed,
             'prefer_filtered': prefer_filtered,
             'prefer_aligned': prefer_aligned,

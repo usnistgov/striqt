@@ -26,7 +26,8 @@ from numba.core.caching import _SourceFileBackedLocatorMixin as _Locator
 
 def _stamp_by_content(self) -> tuple[str, int] | tuple[float, int]:
     try:
-        data = open(self._py_file, 'rb').read()
+        with open(self._py_file, 'rb') as fd:
+            data = fd.read()
         return (hashlib.sha1(data).hexdigest(), len(data))
     except OSError:
         st = os.stat(self._py_file)

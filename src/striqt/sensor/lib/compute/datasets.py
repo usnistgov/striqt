@@ -198,7 +198,7 @@ def get_looped_coords(ds: xr.Dataset, include_repeats=False) -> list[str]:
 
 def index_dataset(
     ds: xr.Dataset,
-    index_coords: list[str] = ['start_time', 'port'],
+    index_coords: Sequence[str] = ('start_time', 'port'),
     *,
     chunks: int | Literal['auto'] | None = None,
 ) -> xr.Dataset:
@@ -218,6 +218,7 @@ def index_dataset(
         ValueError: if `index_coords` do not select exactly one capture
     """
 
+    index_coords = list(index_coords)
     _check_coord_indexes(ds, index_coords)  # must be before ds.chunk(...)
     if chunks is not None:
         ds = ds.chunk(chunks)
@@ -226,7 +227,7 @@ def index_dataset(
 
 def unstack_dataset(
     ds: xr.Dataset,
-    dim_coords: list[str] = ['start_time', 'port'],
+    dim_coords: Sequence[str] = ('start_time', 'port'),
     *,
     chunks: int | Literal['auto'] | None = None,
 ) -> xr.Dataset:
@@ -245,6 +246,7 @@ def unstack_dataset(
     Returns:
         The unstacked dataset.
     """
+    dim_coords = list(dim_coords)
     idx_ds = index_dataset(ds, dim_coords, chunks=chunks)
     unstacked = idx_ds.unstack()
 

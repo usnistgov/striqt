@@ -23,7 +23,7 @@ class ReceiveBuffers(typing.Generic[SC]):
 
     carryover_samples: np.ndarray | None
     start_time_ns: int | None
-    buffers: list = [None, None]
+    buffers: list
     _hold_buffer_swap = False
 
     def __init__(self, controller: Controller):
@@ -321,7 +321,6 @@ def cast_iq(spec: specs.Source, buffer: Array, acquired_count: int) -> Array:
 def get_dtype_scale(transport_dtype: specs.types.TransportDType) -> float:
     """compute the scaling factor to convert the transport dtype to full scale"""
 
-    transport_dtype = transport_dtype
     if transport_dtype == 'int16':
         return 1.0 / float(np.iinfo(transport_dtype).max)
     else:

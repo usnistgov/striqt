@@ -287,9 +287,11 @@ class WebPlotBackend:
             z_data = z_data.reshape(1, -1)
 
         # Plotly heatmap expects z with shape (len(y), len(x))
-        if z_data.shape != (len(y_data), len(x_data)):
-            if z_data.shape == (len(x_data), len(y_data)):
-                z_data = z_data.T
+        if z_data.shape != (len(y_data), len(x_data)) and z_data.shape == (
+            len(x_data),
+            len(y_data),
+        ):
+            z_data = z_data.T
 
         # inf is replaced with NaN, which Plotly draws as a gap
         if np.issubdtype(z_data.dtype, np.floating):
@@ -1109,7 +1111,7 @@ _app_state: AppState = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI app startup/shutdown."""
-    yield
+    yield  # noqa: RUF075
     # Cleanup on shutdown
     _app_state['websockets'].clear()
 
@@ -1349,7 +1351,7 @@ async def _do_broadcast():
                 for ws in _app_state['websockets']:
                     try:
                         await ws.send_text(error_message)
-                    except Exception:
+                    except Exception:  # noqa: S110
                         pass
                 return
 
@@ -1384,7 +1386,7 @@ async def _do_broadcast():
             for ws in _app_state['websockets']:
                 try:
                     await ws.send_text(error_message)
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
 
 

@@ -104,7 +104,7 @@ class Zipper:
 
         stopwatch = sa.util.stopwatch(f'zip {self.temp_dir!r}', 'sink')
 
-        stream = open(self.zip_path, 'wb', self.BUFFER_SIZE)
+        stream = open(self.zip_path, 'wb', self.BUFFER_SIZE)  # noqa: SIM115
         zf = zipfile.ZipFile(
             stream, 'w', compression=zipfile.ZIP_STORED, allowZip64=True
         )

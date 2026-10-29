@@ -156,13 +156,13 @@ def _get_cache_shelf():
     cache_lock = Lock()
 
     try:
-        shelf = shelve.open(filename, writeback=True)
+        shelf = shelve.open(filename, writeback=True)  # noqa: SIM115
     except dbm.error:
         # Cache file was created with a different dbm backend (e.g., different
         # Python version). Delete and recreate.
         for path in glob.glob(f'{filename}*'):
             Path(path).unlink(missing_ok=True)
-        shelf = shelve.open(filename, writeback=True)
+        shelf = shelve.open(filename, writeback=True)  # noqa: SIM115
 
     # sync is forced on each operation already
     shelf.__del__ = lambda: None  # ty: ignore[invalid-assignment]

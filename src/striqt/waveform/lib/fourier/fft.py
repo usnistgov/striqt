@@ -233,25 +233,25 @@ def _cupy_fftn_helper(
     from cupy.fft import _fft  # type: ignore
 
     if n is not None:
-        raise Exception('implement n here')
+        raise NotImplementedError('implement n here')
 
     kws = {'overwrite_x': overwrite_x, 'plan': plan, 'order': 'C'}
     args = (None,), (axis,), None, direction
 
     # `out=` is honored only by the private `_fft._fftn`, not the public `cupy.fft` API
     if out is None:
-        return _fft._fftn(x, out=out, *args, **kws)
+        return _fft._fftn(x, *args, out=out, **kws)
     else:
         out = out.reshape(x.shape)
 
     if MAX_CUPY_FFT_SAMPLES is None:
-        return _fft._fftn(x, out=out, *args, **kws)
+        return _fft._fftn(x, *args, out=out, **kws)
 
     x_views = grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
     out_views = grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
 
     for x_view, out_view in zip(x_views, out_views):
-        out_view[:] = _fft._fftn(x_view, out=out_view, *args, **kws)
+        out_view[:] = _fft._fftn(x_view, *args, out=out_view, **kws)
 
     return out
 

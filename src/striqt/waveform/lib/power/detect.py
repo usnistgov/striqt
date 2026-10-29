@@ -285,10 +285,10 @@ def iq_to_cyclic_power(
 
     ret = {}
 
-    for detector, x in power.items():
+    for detector, pw in power.items():
         ret[detector] = {}
         for cycle_stat, func in cycle_stat_ufunc.items():
-            ret[detector][cycle_stat] = func(x, axis=axis)
+            ret[detector][cycle_stat] = func(pw, axis=axis)
 
     return ret
 
