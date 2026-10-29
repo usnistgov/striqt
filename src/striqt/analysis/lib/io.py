@@ -543,7 +543,7 @@ class NPYFileStream(_FileStreamBase):
         xp=np,
         **meta,
     ):
-        self._data = xp.asarray(np.atleast_2d(np.load(path))).astype(dtype)
+        self._data = xp.asarray(np.atleast_2d(np.load(path))).astype(dtype, copy=False)
         self._loop = loop
 
         self.meta = meta
