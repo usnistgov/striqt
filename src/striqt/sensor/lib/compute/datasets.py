@@ -75,7 +75,7 @@ def from_delayed(dd: DelayedDataset) -> xr.Dataset:
 
     # don't duplicate coords as attrs
     if coords is not None:
-        for name in coords.keys():
+        for name in coords:
             analysis.attrs.pop(name, None)
 
     analysis.attrs.update(dd.config.extra_attrs)

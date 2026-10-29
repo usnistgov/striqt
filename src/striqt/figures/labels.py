@@ -204,7 +204,7 @@ def label_axis(
         fig = plt.gcf()
         do_suplabel = False
     else:
-        do_suplabel = False if which_axis == 'colorbar' else True
+        do_suplabel = which_axis != 'colorbar'
 
     if ax is not None:
         pass
@@ -325,9 +325,8 @@ def label_legend(
     units = obj.attrs.get('units', None)
     values = obj.data
 
-    if standard_name is not None:
-        if units is not None and not tick_units:
-            standard_name = f'{standard_name} ({units})'
+    if standard_name is not None and units is not None and not tick_units:
+        standard_name = f'{standard_name} ({units})'
     if units is not None:
         # the formatter ignores tick_units and places the unit in every entry
         formatter = ticker.EngFormatter(unit=units, unitInTick=True)

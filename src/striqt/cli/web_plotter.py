@@ -16,12 +16,8 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    List,
     Literal,
     Optional,
-    Set,
-    Tuple,
     TypedDict,
     Union,
     cast,
@@ -61,7 +57,7 @@ class CoordinateDict(TypedDict):
     """A single coordinate entry with name, values, and unit."""
 
     name: str
-    values: List[str]
+    values: list[str]
     unit: str
 
 
@@ -83,8 +79,8 @@ class CoordinatesData(TypedDict, total=False):
     """
 
     num_ports: int
-    groups: Dict[str, List[CoordinateDict]]
-    extra_coords: Dict[str, List[ExtraCoordDict]]
+    groups: dict[str, list[CoordinateDict]]
+    extra_coords: dict[str, list[ExtraCoordDict]]
 
 
 class AppState(TypedDict):
@@ -93,13 +89,13 @@ class AppState(TypedDict):
     delayed_dataset: Optional[ss.lib.compute.DelayedDataset]
     plotter: Optional[WebPlotBackend]
     selected_variable: str
-    available_variables: List[str]
-    variable_labels: Dict[str, str]
-    websockets: Set[WebSocket]
+    available_variables: list[str]
+    variable_labels: dict[str, str]
+    websockets: set[WebSocket]
     broadcast_pending: bool
     data_updated: bool
     plot_opts: Optional[sf.specs.PlotOptions]
-    data_select: Dict[str, Any]
+    data_select: dict[str, Any]
     spec_filename: str
 
 
@@ -120,8 +116,8 @@ class WebPlotBackend:
         opts: sf.specs.SharedPlotOptions,
     ):
         self.opts = opts
-        self._pending_traces: List[Dict[str, Any]] = []
-        self._layout: Dict[str, Any] = {}
+        self._pending_traces: list[dict[str, Any]] = []
+        self._layout: dict[str, Any] = {}
         self._remembered_vmin: Optional[float] = None
         self._remembered_vmax: Optional[float] = None
         self._remembered_ymin: Optional[float] = None
@@ -177,7 +173,7 @@ class WebPlotBackend:
         vmax: Optional[float] = None,
         vstep: Optional[float] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """add a heatmap of `data` to the pending results.
 
         Every subplot (one per value of the column dimension) shares one colorbar
@@ -267,7 +263,7 @@ class WebPlotBackend:
         vmax: Optional[float],
         subplot_idx: Optional[int] = None,
         show_colorbar: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a single heatmap trace.
 
         Args:
@@ -301,7 +297,7 @@ class WebPlotBackend:
 
         # numpy arrays are passed as is. Figure.to_json() encodes a numpy array as a
         # base64 typed array
-        trace: Dict[str, Any] = {
+        trace: dict[str, Any] = {
             'type': 'heatmap',
             'x': x_data,
             'y': y_data,
@@ -328,9 +324,9 @@ class WebPlotBackend:
 
     def _make_heatmap_layout(
         self, data: xr.DataArray, x: str, y: str, n_subplots: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create layout for heatmap with optional subplots."""
-        layout: Dict[str, Any] = {
+        layout: dict[str, Any] = {
             'uirevision': 'constant',  # Preserve zoom/pan on updates
         }
 
@@ -377,7 +373,7 @@ class WebPlotBackend:
         yscale: Literal['linear', 'log'] = 'linear',
         ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """add ``scattergl`` lines of `data` to the pending results.
 
         The y-axis limits are `ylim` where given and the finite extent of `data`
@@ -445,7 +441,7 @@ class WebPlotBackend:
         x: str,
         hue: Optional[str],
         subplot_idx: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Create line traces, optionally split by hue dimension."""
         traces = []
         x_data = np.asarray(data[x].values).flatten()
@@ -494,7 +490,7 @@ class WebPlotBackend:
                 color = plotly_colors[hue_idx % len(plotly_colors)]
                 hue_name = f'{hue}={hue_val}'
 
-                trace: Dict[str, Any] = {
+                trace: dict[str, Any] = {
                     'type': 'scattergl',  # WebGL-accelerated scatter
                     'mode': mode,
                     'x': _to_json_serializable(x_data),
@@ -543,7 +539,7 @@ class WebPlotBackend:
                 color = plotly_colors[hue_idx % len(plotly_colors)]
                 hue_name = f'{hue}={hue_val}'
 
-                trace: Dict[str, Any] = {
+                trace: dict[str, Any] = {
                     'type': 'scattergl',
                     'mode': mode,
                     'x': _to_json_serializable(x_data),
@@ -609,13 +605,13 @@ class WebPlotBackend:
         n_subplots: int,
         *,
         ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create layout for line plot with optional subplots.
 
         Subplots in the same row share the same y-axis range.
         Only the leftmost subplot in each row shows y-axis title and tick labels.
         """
-        layout: Dict[str, Any] = {
+        layout: dict[str, Any] = {
             'uirevision': 'constant',
             'showlegend': True,
             'legend': {'orientation': 'h', 'y': -0.15},
@@ -673,7 +669,7 @@ class WebPlotBackend:
                 sanitized_y_range = [
                     None if (v is not None and np.isinf(v)) else v for v in y_range
                 ]
-                y_axis_config: Dict[str, Any] = {
+                y_axis_config: dict[str, Any] = {
                     'domain': y_domain,
                     'type': yscale,
                     'range': sanitized_y_range,
@@ -707,7 +703,7 @@ class WebPlotBackend:
 
         return layout
 
-    def _coord_kws(self, **kwargs) -> Dict[str, Any]:
+    def _coord_kws(self, **kwargs) -> dict[str, Any]:
         """return `kwargs` with the `col`, `row`, and `col_wrap` of `opts` added.
 
         `col` is ``'_view'`` when `opts` sets neither `col` nor `row`.
@@ -725,7 +721,7 @@ class WebPlotBackend:
 
     def finish(
         self,
-        grid: Dict[str, Any],
+        grid: dict[str, Any],
         xticklabelunits: Union[bool, Literal['auto']] = 'auto',
     ) -> None:
         """accept the `PlotBackend.finish` call without effect.
@@ -737,7 +733,7 @@ class WebPlotBackend:
         self,
         data: xr.Dataset,
         var_name: str,
-        grid: Dict[str, Any],
+        grid: dict[str, Any],
         where: Literal['x', 'y', 'colorbar'],
     ) -> None:
         """mark the system noise level of `var_name` on the most recent plot.
@@ -840,7 +836,7 @@ class WebPlotBackend:
 
         plot_data['layout'] = layout
 
-    def get_plot_data(self) -> List[Dict[str, Any]]:
+    def get_plot_data(self) -> list[dict[str, Any]]:
         """Return all pending plot data and clear the buffer."""
         data = self._pending_traces.copy()
         self._pending_traces.clear()
@@ -1015,7 +1011,7 @@ def _mpl_to_plotly_colorscale(cmap: str) -> Any:
         return 'Viridis'
 
     n_colors = 256
-    colorscale: List[List[Any]] = []
+    colorscale: list[list[Any]] = []
     for i in range(n_colors):
         pos = i / (n_colors - 1)
         rgba = mpl_cmap(pos)
@@ -1030,7 +1026,7 @@ def _make_quantized_colorscale(
     vmin: float,
     vmax: float,
     vstep: float,
-) -> List[List[Any]]:
+) -> list[list[Any]]:
     """return a stepped Plotly colorscale with bands of `vstep` from `vmin` to `vmax`.
 
     The bands follow the matplotlib `BoundaryNorm` over a resampled colormap.
@@ -1061,7 +1057,7 @@ def _make_quantized_colorscale(
 
     # each band takes 2 entries of the same color, so the colorscale is flat
     # within a band
-    colorscale: List[List[Any]] = []
+    colorscale: list[list[Any]] = []
     for i in range(n_levels):
         pos_start = i / n_levels
         pos_end = (i + 1) / n_levels
@@ -1232,8 +1228,8 @@ def _prepare_plot_data_sync(
     result: ss.lib.compute.DelayedDataset,
     plotter: WebPlotBackend,
     variable: str,
-    data_select: Dict[str, Any],
-) -> tuple[list[Dict[str, Any]], CoordinatesData]:
+    data_select: dict[str, Any],
+) -> tuple[list[dict[str, Any]], CoordinatesData]:
     """return the plot results and capture coordinates of `variable` in `result`.
 
     The call blocks on the materialization of the delayed dataset (a GPU transfer
@@ -1278,10 +1274,10 @@ def _prepare_plot_data_sync(
 
 
 def _serialize_plot_message(
-    plot_data: List[Dict[str, Any]],
+    plot_data: list[dict[str, Any]],
     coordinates: CoordinatesData,
-    available_variables: List[str],
-    variable_labels: Dict[str, str],
+    available_variables: list[str],
+    variable_labels: dict[str, str],
     selected_variable: str,
     spec_filename: str,
 ) -> str:
@@ -1393,14 +1389,14 @@ async def _do_broadcast():
 
 
 @functools.cache
-def _get_field_origins(cls: type) -> Dict[str, type]:
+def _get_field_origins(cls: type) -> dict[str, type]:
     """return the class in the MRO of `cls` that first defines each msgspec field.
 
     Returns:
         a dict from field name to the base-most class with the field in
         ``__struct_fields__``
     """
-    field_origins: Dict[str, type] = {}
+    field_origins: dict[str, type] = {}
 
     # Walk MRO from base to derived (reversed)
     mro = [
@@ -1410,7 +1406,7 @@ def _get_field_origins(cls: type) -> Dict[str, type]:
     ]
 
     for klass in reversed(mro):
-        struct_fields: Tuple[str, ...] = klass.__struct_fields__  # ty: ignore
+        struct_fields: tuple[str, ...] = klass.__struct_fields__  # ty: ignore
         for field_name in struct_fields:
             if field_name not in field_origins:
                 field_origins[field_name] = klass
@@ -1420,7 +1416,7 @@ def _get_field_origins(cls: type) -> Dict[str, type]:
 
 def _extract_extra_coords(
     result: ss.lib.compute.DelayedDataset,
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> dict[str, list[dict[str, Any]]]:
     """Extract extra_coords (AcquisitionInfo) fields from dataset, grouped by defining class.
 
     Skips the 'signal_trigger' field if present.
@@ -1440,7 +1436,7 @@ def _extract_extra_coords(
 
     field_origins = _get_field_origins(type(extra_coords))
 
-    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     for field_name, defining_class in field_origins.items():
         if field_name == 'signal_trigger':
@@ -1499,7 +1495,7 @@ def _extract_capture_coordinates(
 
     field_origins = _get_field_origins(type(result.capture))
 
-    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     for field_name, defining_class in field_origins.items():
         if field_name not in capture_coords:
@@ -1575,7 +1571,7 @@ def _extract_capture_coordinates(
     )
 
 
-def _get_si_prefix_for_values(values: List[float], unit: str) -> tuple[int, str]:
+def _get_si_prefix_for_values(values: list[float], unit: str) -> tuple[int, str]:
     """return the engineering power of 10 and SI prefix for the smallest nonzero value.
 
     Returns:
@@ -1643,7 +1639,7 @@ def _format_coord_value(value: Any) -> str:
 def _build_variable_labels_from_registry(
     analysis_spec: sa.specs.AnalysisGroup,
     registry: sa.lib.register.AnalysisRegistry,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """return a label for each enabled field of `analysis_spec`, keyed by field name.
 
     The label of a field with a `registry` entry is derived from the name of the
@@ -1654,10 +1650,10 @@ def _build_variable_labels_from_registry(
         a dict from variable name to label, such as ``'spectrogram_histogram'`` to
         ``'Spectrogram Histogram'``
     """
-    labels: Dict[str, str] = {}
+    labels: dict[str, str] = {}
 
     # Build a reverse lookup: variable name -> spec class name
-    name_to_class: Dict[str, str] = {}
+    name_to_class: dict[str, str] = {}
     for spec_type, info in registry.items():
         name_to_class[info.name] = spec_type.__name__
 
@@ -1718,7 +1714,7 @@ def update_dataset(result: ss.lib.compute.DelayedDataset):
     _app_state['delayed_dataset'] = result
 
     data_plots = get_data_plots_registry()
-    available = [n for n in result.delayed.keys() if n in data_plots]
+    available = [n for n in result.delayed if n in data_plots]
 
     _app_state['available_variables'] = available
 
@@ -1749,7 +1745,7 @@ def run_server(
     # Store the spec filename for display in the web UI header
     _app_state['spec_filename'] = Path(path).name
 
-    if path.endswith('.yaml') or path.endswith('.yml'):
+    if path.endswith(('.yaml', '.yml')):
         spec = ss.read_yaml_spec(path)
     elif path.endswith('.json'):
         spec = ss.read_json_spec(path)

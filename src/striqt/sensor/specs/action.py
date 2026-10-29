@@ -10,7 +10,7 @@ from __future__ import annotations as __
 import contextlib
 import math
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from typing import TYPE_CHECKING, Any, Callable
 
 import striqt.analysis as sa
@@ -300,7 +300,7 @@ def _located_in_sweep(
     loops: tuple[structs.LoopSpec, ...],
     capture: structs.SensorCapture,
     origin: sequencing.CaptureOrigin,
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     """re-raise a validation failure at the entry and loop points that made `capture`.
 
     Only `SpecValidationError` is intercepted; any other exception propagates as is.

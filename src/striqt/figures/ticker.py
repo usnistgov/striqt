@@ -47,7 +47,7 @@ def _linear_tick_range(vlo, vhi, count, steps=(1.0,)):
 
 
 @lru_cache()
-def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.ndarray:
+def _prune_ticks(ticks: tuple, count: int, prefer: tuple = ()) -> np.ndarray:
     """remove the most closely spaced ticks from `ticks` until `count` remain.
 
     Args:

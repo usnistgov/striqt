@@ -46,7 +46,7 @@ def split_capture_ports(capture: SC) -> list[SC]:
     else:
         assert isinstance(capture.port, tuple)
 
-    remaps = [dict() for i in range(len(capture.port))]
+    remaps = [{} for i in range(len(capture.port))]
 
     for field in capture.__struct_fields__:
         values = getattr(capture, field)

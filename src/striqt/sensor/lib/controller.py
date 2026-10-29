@@ -91,7 +91,7 @@ class lookup:
     @classmethod
     def id(cls, spec: specs.Source, timeout=0.5) -> str:
         """lookup a source ID from a source specification."""
-        controller = cls.instance(spec, timeout)
+        cls.instance(spec, timeout)
 
         obj: Event | str = cls._id[spec]
         if isinstance(obj, BaseException):

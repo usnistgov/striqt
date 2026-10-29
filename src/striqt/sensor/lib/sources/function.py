@@ -45,14 +45,14 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
             a dict with keys ``duration``, ``sample_rate`` (in S/s), ``start_index``,
             ``count``, ``xp``, and ``dtype`` (the `transport_dtype` of the source)
         """
-        return dict(
-            duration=None,
-            sample_rate=self.get_resampler(self._capture)['fs_sdr'],
-            start_index=start_index,
-            count=count,
-            xp=xp,
-            dtype=self.setup_spec.transport_dtype,
-        )
+        return {
+            'duration': None,
+            'sample_rate': self.get_resampler(self._capture)['fs_sdr'],
+            'start_index': start_index,
+            'count': count,
+            'xp': xp,
+            'dtype': self.setup_spec.transport_dtype,
+        }
 
     def _port_position(self, port: int) -> tuple[int, int]:
         """return the row index of `port` in the armed capture and the port count.

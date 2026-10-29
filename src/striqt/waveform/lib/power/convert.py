@@ -69,7 +69,7 @@ def unit_wave_to_dB(s: str):
 
 
 def unit_wave_to_linear(s: str):
-    for db_unit, lin_unit in _DB_UNIT_MAPPING.items():
+    for lin_unit in _DB_UNIT_MAPPING.values():
         s, _ = re.subn('^√' + lin_unit, lin_unit, s, count=1)
     return s
 

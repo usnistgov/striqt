@@ -203,7 +203,7 @@ def struct_args_docstring(
     base_indent = ' ' * indent_spaces
 
     # both dicts have the field names as keys; only the `extra_*` names can differ
-    for field_name in descriptions.keys():
+    for field_name in descriptions:
         type_str = types.get(field_name, 'Any')
         desc = descriptions.get(field_name, '')
 

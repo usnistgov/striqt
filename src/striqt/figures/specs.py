@@ -62,7 +62,7 @@ class PlotOptions(
                 ex.args = (f'.variables[{name!r}]: function ' + ex.args[0],) + ex.args[
                     1:
                 ]
-                raise ex
+                raise
 
         for n in self.data.groupby_dims:
             if n in (self.plotter.row, self.plotter.col):

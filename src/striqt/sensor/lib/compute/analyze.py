@@ -68,7 +68,7 @@ def _get_signal_trigger_name(setup: specs.Source) -> str | None:
             raise ValueError(
                 'specify exactly one trigger for an explicit signal_trigger'
             )
-        return list(meas.keys())[0]
+        return next(iter(meas.keys()))
     elif isinstance(setup.signal_trigger, str):
         return setup.signal_trigger
     else:

@@ -290,7 +290,7 @@ def build_dataarray(
             da.data = data
         else:
             da.data[:] = data
-    except ValueError as ex:
+    except ValueError:
         exc = ValueError(
             f'{delayed.info.name} measurement data has unexpected '
             f'shape {data.shape} -- expected {da.data.shape}'
@@ -498,7 +498,7 @@ def evaluate_by_spec(
     if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.configure_cupy()
 
-    for name in spec_dict.keys():
+    for name in spec_dict:
         meas = options.registry[type(getattr(spec, name))]
 
         with util.stopwatch(name, 'analysis'):

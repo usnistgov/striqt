@@ -126,7 +126,7 @@ def load_data(zarr_path: str, opts: sf.specs.PlotOptions, index=True) -> xr.Data
     if not isinstance(dataset, xr.Dataset):
         raise TypeError(f'file contents are {type(dataset).__name__!r} a dataset')
 
-    for func_name in opts.variables.keys():
+    for func_name in opts.variables:
         if func_name not in dataset.data_vars:
             raise KeyError(
                 f'yaml specifies a {func_name!r} plot, but no such variable is in the dataset'
@@ -192,11 +192,11 @@ def worker_init(
         plotter_options = opts.plotter.replace(
             filename_fmt=f'{p.stem} {name}={{{name}}}{p.suffix}'
         )
-        opts_dict = dict(
-            data=opts.data,
-            variables=sa.specs.helpers.unfreeze(opts.variables),
-            plotter=plotter_options,
-        )
+        opts_dict = {
+            'data': opts.data,
+            'variables': sa.specs.helpers.unfreeze(opts.variables),
+            'plotter': plotter_options,
+        }
         opts = opts.from_dict(sa.specs.helpers.freeze(opts_dict, 10))
 
     global worker_ctx

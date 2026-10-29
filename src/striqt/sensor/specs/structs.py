@@ -195,7 +195,7 @@ class TDMSSource(Source, frozen=True, kw_only=True):
 class ZarrIQSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
-    select: types.ZarrSelect = dict()
+    select: types.ZarrSelect = {}
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 
@@ -402,7 +402,7 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
 
         # convert any stringified json array keys into tuples
         lookup = dict(self.lookup)
-        for k in self.lookup.keys():
+        for k in self.lookup:
             if not isinstance(k, tuple):
                 new_key = msgspec.json.decode(k, type=tuple)
                 lookup[new_key] = lookup.pop(k)

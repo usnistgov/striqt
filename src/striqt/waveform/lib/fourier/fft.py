@@ -235,7 +235,7 @@ def _cupy_fftn_helper(
     if n is not None:
         raise Exception('implement n here')
 
-    kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
+    kws = {'overwrite_x': overwrite_x, 'plan': plan, 'order': 'C'}
     args = (None,), (axis,), None, direction
 
     # `out=` is honored only by the private `_fft._fftn`, not the public `cupy.fft` API

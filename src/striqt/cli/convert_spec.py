@@ -30,7 +30,7 @@ def run(path, yaml: bool) -> 'Path':
     import striqt.analysis as sa
     import striqt.sensor as ss
 
-    if path.endswith('.yaml') or path.endswith('.yml'):
+    if path.endswith(('.yaml', '.yml')):
         spec = ss.read_yaml_spec(path)
     elif path.endswith('.json'):
         spec = ss.read_json_spec(path)

@@ -213,7 +213,7 @@ def hold_logger_outputs():
     try:
         yield
     finally:
-        for name in streams.keys():
+        for name in streams:
             _logger_adapters[name]._screen_handler.stream = streams[name]
 
 

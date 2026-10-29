@@ -139,6 +139,7 @@ ignore = [
     "PLC0105", # TypeVar names are the 2-3 letter codes (PS, PC, SS, ...) in AGENTS.md
     "PLC0414", # `import x as x` is the explicit re-export idiom that ty and pyright honor
     "RUF027",  # `{port}`-style format templates in plot specs are not f-strings
+    "RUF038",  # `Literal[True, False, ...]` stays: rewriting bool Literals has broken msgspec decoding
     "TRY004",  # exception types are API; ValueError on bad input stays
 ]
 

@@ -13,7 +13,7 @@ from .structs import *
 for k in list(locals().keys()):
     if k in ('pd', 'msgspec'):
         continue
-    if not k[0].upper() == k[0]:
+    if k[0].upper() != k[0]:
         locals().pop(k)
 del k
 

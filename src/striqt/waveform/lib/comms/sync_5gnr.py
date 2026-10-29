@@ -721,7 +721,7 @@ def correlate_sync_sequence(
         round(params.sample_rate / params.subcarrier_spacing) + 2 * params.min_cp_size
     )
 
-    R_shape = list(max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape))
+    R_shape = [max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape)]
     R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
     R = xp.empty(tuple(R_shape), dtype='complex64')
 

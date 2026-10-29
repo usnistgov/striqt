@@ -47,7 +47,7 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
 
         fd = TdmsFile.read(spec.path)
         header_fd, iq_fd = fd.groups()
-        self._handle = dict(header_fd=header_fd, iq_fd=iq_fd)
+        self._handle = {'header_fd': header_fd, 'iq_fd': iq_fd}
 
         self._file_info = specs.FileAcquisitionInfo(
             backend_sample_rate=header_fd['IQ_samples_per_second'][0],

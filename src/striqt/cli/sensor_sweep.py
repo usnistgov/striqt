@@ -99,7 +99,7 @@ def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None
     if isinstance(path, Path):
         path = str(path)
 
-    if path.endswith('.yaml') or path.endswith('.yml'):
+    if path.endswith(('.yaml', '.yml')):
         spec = ss.read_yaml_spec(path, output_path=output_path)
     elif path.endswith('.json'):
         spec = ss.read_json_spec(path, output_path=output_path)

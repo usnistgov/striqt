@@ -12,7 +12,7 @@ import itertools
 import math
 from collections import ChainMap, defaultdict
 from collections.abc import Hashable, Iterable, Mapping
-from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional, cast
 
 import msgspec
 
@@ -409,7 +409,7 @@ def _build_loop_points_dict(
     extra = available - set(field_types)
     if len(extra) > 0:
         raise SpecValidationError(
-            f'Object contains unknown field `{sorted(extra)[0]}` for capture type '
+            f'Object contains unknown field `{min(extra)}` for capture type '
             f'`{sa.util.qualified_name(capture_cls)}`',
             ('.loops',),
         )
@@ -741,7 +741,7 @@ def _convert_label_lookup_keys(
             elif len(v.key) == 1:
                 key_type = lookup_types[v.key[0]]
             elif all(kc in lookup_types for kc in v.key):
-                key_type = Tuple[tuple(lookup_types[kc] for kc in v.key)]
+                key_type = tuple[tuple(lookup_types[kc] for kc in v.key)]
             else:
                 # prune refs with invalid lookups
                 continue

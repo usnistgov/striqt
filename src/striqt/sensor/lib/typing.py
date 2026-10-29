@@ -143,7 +143,7 @@ class SourceBackend(Protocol[_SS, SC]):
 
 
 if typing.TYPE_CHECKING:
-    from striqt.analysis.lib.typing import TAR, Array, FileStream, ZarrStore
+    from striqt.analysis.lib.typing import Array, FileStream, ZarrStore
     from striqt.waveform.fourier import ResamplerDesign
 
     PassThroughWrapper: TypeAlias = typing.Callable[[Callable[P, R]], Callable[P, R]]

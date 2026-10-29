@@ -10,8 +10,9 @@ import contextlib
 import dataclasses
 import os
 import sys
+from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, ContextManager, Generic, cast
+from typing import TYPE_CHECKING, Any, Callable, Generic, cast
 
 import typing_extensions
 
@@ -71,7 +72,7 @@ if TYPE_CHECKING:
         source: controller.Controller[SS, SP, SC, SA, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
-        except_context: typing_extensions.NotRequired[ContextManager]
+        except_context: typing_extensions.NotRequired[AbstractContextManager]
         action_spec: specs.ActionSpec[Any, SP, SA]
         sweep_spec: specs.Sweep[SS, SP, SC, SA]
         runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC]
@@ -89,7 +90,7 @@ if TYPE_CHECKING:
         source: controller.Controller[SS, SP, SC, SA, PS, PC]
         sink: SinkBase
         peripherals: Peripherals[SP, SC]
-        except_context: typing_extensions.NotRequired[ContextManager]
+        except_context: typing_extensions.NotRequired[AbstractContextManager]
         action_spec: specs.ActionSpec[Any, SP, SA]
         sweep_spec: specs.Sweep[SS, SP, SC, SA]
         runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC]
@@ -110,7 +111,7 @@ else:
         source: controller.Controller
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
-        except_context: typing_extensions.NotRequired[ContextManager]
+        except_context: typing_extensions.NotRequired[AbstractContextManager]
         action_spec: specs.ActionSpec
         sweep_spec: specs.Sweep
         runner: ActionRunner
@@ -124,7 +125,7 @@ else:
         source: controller.Controller
         sink: SinkBase
         peripherals: typing_extensions.NotRequired[Peripherals]
-        except_context: typing_extensions.NotRequired[ContextManager]
+        except_context: typing_extensions.NotRequired[AbstractContextManager]
         action_spec: specs.ActionSpec
         sweep_spec: specs.Sweep
         runner: ActionRunner

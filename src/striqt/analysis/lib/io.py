@@ -57,7 +57,7 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
         if 'simplecache' in target:
             p = Path.home() / '.cache' / 'fsspec'
             p.mkdir(parents=True, exist_ok=True)
-            kws = dict(cache_storage=str(p))
+            kws = {'cache_storage': str(p)}
         else:
             kws = {}
         fs, _ = fsspec.url_to_fs(target, asynchronous=True, **kws)
@@ -94,7 +94,7 @@ def dump(
 
     from .register import registry
 
-    for name in dict(data.coords).keys():
+    for name in dict(data.coords):
         if data[name].size == 0:
             continue
 
@@ -835,7 +835,7 @@ def _build_encodings_zarr_v2(
     encodings = defaultdict(dict)
     info_map = {info.name: info for info in registry.values()}
 
-    for name in data.data_vars.keys():
+    for name in data.data_vars:
         meas_info = info_map.get(name, None)
         if meas_info is None or not meas_info.store_compressed:
             encodings[name]['compressor'] = None

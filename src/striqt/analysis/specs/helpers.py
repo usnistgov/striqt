@@ -8,6 +8,7 @@ import fractions
 import functools
 from collections.abc import (
     Collection,
+    Generator,
     ItemsView,
     Iterable,
     Iterator,
@@ -211,7 +212,7 @@ class SpecValidationError(msgspec.ValidationError):
 
 
 @contextlib.contextmanager
-def validation_path(*parts: str) -> Iterator[None]:
+def validation_path(*parts: str) -> Generator[None, None, None]:
     """prepend `parts` to the field path of a validation failure raised in the block.
 
     Yields:

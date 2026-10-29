@@ -193,7 +193,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
         def wrapper(func: CoordFunc[TC, TM, R]) -> CoordFunc[TC, TM, R]:
             if isinstance(kws['dims'], str):
-                dims = tuple((kws['dims'],))
+                dims = (kws['dims'],)
             else:
                 dims = kws['dims']
 
@@ -442,21 +442,21 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         if isinstance(dims, str):
             dims = (dims,)
 
-        info_kws: dict[str, Any] = dict(
-            name=name,
-            cache=caches,
-            dtype=dtype,
-            attrs=attrs,
-            store_compressed=store_compressed,
-            prefer_filtered=prefer_filtered,
-            prefer_aligned=prefer_aligned,
-            dims=dims,
-            validate=validate,
-            tolerance=tolerance,
-        )
+        info_kws: dict[str, Any] = {
+            'name': name,
+            'cache': caches,
+            'dtype': dtype,
+            'attrs': attrs,
+            'store_compressed': store_compressed,
+            'prefer_filtered': prefer_filtered,
+            'prefer_aligned': prefer_aligned,
+            'dims': dims,
+            'validate': validate,
+            'tolerance': tolerance,
+        }
 
         if coord_factories is None:
-            info_kws['coord_factories'] = tuple()
+            info_kws['coord_factories'] = ()
         elif callable(coord_factories):
             info_kws['coord_factories'] = (coord_factories,)
         else:

@@ -7,7 +7,7 @@ from . import doc, helpers, types
 from .helpers import frozendict
 from .types import Meta
 
-for name, obj in dict(locals()).items():
+for obj in dict(locals()).values():
     if getattr(obj, '__module__', '').startswith(__name__):
         obj.__module__ = __name__
 del obj
