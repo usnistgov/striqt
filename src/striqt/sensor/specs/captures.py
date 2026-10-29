@@ -2,16 +2,15 @@
 
 from __future__ import annotations as __
 
-from collections import Counter
 import numbers
-from typing import cast, get_args, TYPE_CHECKING
+from collections import Counter
+from typing import TYPE_CHECKING, cast, get_args
 
 import msgspec
 
 import striqt.analysis as sa
 
 from . import structs
-
 
 if TYPE_CHECKING:
     from ..lib.typing import SC, TypeVar

@@ -3,14 +3,13 @@
 from __future__ import annotations as __
 
 from pathlib import Path
-from typing import Any, Literal, overload, TYPE_CHECKING
-
-from ... import specs
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
+from ... import specs
 from . import base, buffers
 
 if TYPE_CHECKING:
@@ -92,10 +91,10 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
 
     def package_iq(
         self,
-        iq: 'specs.AcquiredIQ',
+        iq: specs.AcquiredIQ,
         samples: Array,
         time_ns: int | None,
-    ) -> 'specs.AcquiredIQ':
+    ) -> specs.AcquiredIQ:
         iq.info = self._file_info
         return iq
 
@@ -124,7 +123,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
         meta = spec.file_metadata or {}
 
         if not Path(spec.path).exists():
-            raise IOError(f'file {str(spec.path)!r} does not exist')
+            raise OSError(f'file {str(spec.path)!r} does not exist')
 
         self._file_stream = sa.io.open_bare_iq(
             spec.path,
@@ -187,10 +186,10 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
 
     def package_iq(
         self,
-        iq: 'specs.AcquiredIQ',
+        iq: specs.AcquiredIQ,
         samples: Array,
         time_ns: int | None,
-    ) -> 'specs.AcquiredIQ':
+    ) -> specs.AcquiredIQ:
         iq.info = self._file_info
         return iq
 
@@ -207,7 +206,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
 class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     """a source of IQ samples from the `iq_waveform` variable of a zarr store"""
 
-    _waveform: 'xr.DataArray'
+    _waveform: xr.DataArray
     _capture_info: specs.FileAcquisitionInfo
 
     def __init__(self, spec):
@@ -309,10 +308,10 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
     def package_iq(
         self,
-        iq: 'specs.AcquiredIQ',
+        iq: specs.AcquiredIQ,
         samples: Array,
         time_ns: int | None,
-    ) -> 'specs.AcquiredIQ':
+    ) -> specs.AcquiredIQ:
         iq.info = self._capture_info
         return iq
 

@@ -2,15 +2,14 @@
 
 from __future__ import annotations as __
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from striqt.analysis import testing
 
 from ... import specs
 from .. import util
-from . import base
-
 from ..typing import TypeVar
+from . import base
 
 if TYPE_CHECKING:
     from types import ModuleType

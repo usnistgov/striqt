@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from __future__ import annotations
+
 import click
 
 
@@ -24,18 +25,16 @@ def cli(zarr_input: str, zarr_output: str | None, chunk_size, compression):
 
 
 def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
-    import striqt.analysis as sa
     from pathlib import Path
+
+    import striqt.analysis as sa
 
     path_in = Path(zarr_input)
 
     # if path_in.name.endswith('.zarr'):
-    if zarr_input.endswith('.zip'):
-        support_zip = True
-    elif zarr_output is not None and zarr_output.endswith('.zip'):
-        support_zip = True
-    else:
-        support_zip = False
+    support_zip = zarr_input.endswith('.zip') or (
+        zarr_output is not None and zarr_output.endswith('.zip')
+    )
 
     choose_zarr_pipeline(support_zip)
 
@@ -56,7 +55,7 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
         )
 
     store = sa.open_store(path_out, mode='w')
-    print(f'rechunking input into {str(path_out)}')
+    print(f'rechunking input into {path_out!s}')
 
     if compression > 1:
         try:

@@ -4,15 +4,14 @@ import math
 import typing
 
 import numpy as np
-
-import striqt.waveform as sw
-
-from ..waveform.lib.util import lru_cache
-
 import pandas as pd
 from matplotlib import axis as _axis
 from matplotlib import scale as _scale
 from matplotlib import ticker as _ticker
+
+import striqt.waveform as sw
+
+from ..waveform.lib.util import lru_cache
 
 
 def round_places(x, digits):
@@ -104,8 +103,6 @@ class EngFormatter(_ticker.EngFormatter):
     ):
         self.unitInTick = unitInTick
 
-        if sep is not None:
-            pass
         if unit is None or (len(unit) == 1 and not unit.isalnum()):
             sep = ''
         else:
@@ -260,7 +257,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
             minpos = 1e-12  # arbitrary floor well below any plotted probability
 
         ret = (
-            minpos if vmin <= minpos else vmin,
+            max(minpos, vmin),
             1.0 - minpos if vmax >= 1 - minpos else vmax,
         )
 
@@ -407,7 +404,7 @@ def _has_tick_label_collision(ax, which: str, spacing_threshold=10):
     elif which == 'y':
         the_ax = ax.yaxis
     else:
-        raise ValueError(f'"which" must be "x" or "y", but got "{repr(which)}"')
+        raise ValueError(f'"which" must be "x" or "y", but got "{which!r}"')
 
     boxen = [
         t.get_tightbbox(fig.canvas.get_renderer()) for t in the_ax.get_ticklabels()
@@ -440,9 +437,7 @@ def rotate_ticklabels_on_collision(ax, which: str, angles: list, spacing_thresho
     elif which == 'y':
         the_ax = ax.yaxis
     else:
-        raise ValueError(
-            f'"which" argument must be "x" or "y", but got "{repr(which)}"'
-        )
+        raise ValueError(f'"which" argument must be "x" or "y", but got "{which!r}"')
 
     set_rotation(the_ax, angles[0])
     if len(angles) == 1:

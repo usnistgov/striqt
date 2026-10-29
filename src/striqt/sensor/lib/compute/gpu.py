@@ -3,8 +3,10 @@
 from __future__ import annotations as __
 
 import math
-from ... import specs
+
 import striqt.analysis as sa
+
+from ... import specs
 
 
 def sweep_touches_gpu(sweep: specs.Sweep) -> bool:

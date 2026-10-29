@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 import dataclasses
-from typing import Any, Callable, cast, Generic, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, Generic, Literal, cast
 
-from . import structs, paths
-from ..lib import util
-from ..lib.typing import SS, SC, SP, SA, PS, PC
-
-import striqt.waveform as sw
 import striqt.analysis as sa
+import striqt.waveform as sw
+
+from ..lib import util
+from ..lib.typing import PC, PS, SA, SC, SP, SS
+from . import paths, structs
 
 if TYPE_CHECKING:
     from ..lib.compute import corrections

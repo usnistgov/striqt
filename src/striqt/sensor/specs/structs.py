@@ -7,7 +7,7 @@ msgspec resolves the field annotations at runtime. Field types are written as
 from __future__ import annotations as __
 
 import warnings
-from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional, Union, cast
 
 import msgspec
 
@@ -16,15 +16,19 @@ from striqt.analysis import Trigger
 
 # pd must be bound here for msgspec to resolve the 'pd.Timestamp' types in `types`
 from striqt.analysis.lib.util import pd  # noqa: F401
-from striqt.analysis.specs import BuiltinAnalyses, BuiltinTriggers, Capture, SpecBase
 
 # re-exported through striqt.sensor.specs as the annotation of any analysis bundle
-from striqt.analysis.specs import AnalysisGroup
+from striqt.analysis.specs import (
+    AnalysisGroup,
+    BuiltinAnalyses,
+    BuiltinTriggers,
+    Capture,
+    SpecBase,
+)
 from striqt.analysis.specs.helpers import SpecValidationError, subset_of
 
-from ..lib.typing import TypeVar, SS, SP, SC, SA
+from ..lib.typing import SA, SC, SP, SS, TypeVar
 from . import types
-
 
 if TYPE_CHECKING:
     _T = TypeVar('_T')
@@ -283,6 +287,7 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
 
     def get_points(self) -> list[float]:
         from math import ceil
+
         import numpy as np
 
         span = self.stop - self.start

@@ -10,15 +10,15 @@ from __future__ import annotations as __
 
 import contextlib
 import itertools
-from collections.abc import Mapping
-from typing import Any, Generator, Protocol
+from collections.abc import Generator, Mapping
+from typing import Any, Protocol
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import pd, xr
 
-from .. import compute, util
 from ... import specs
-from ..resources import Resources, AnyResources
+from .. import compute, util
+from ..resources import AnyResources, Resources
 from ..sinks import SinkBase
 from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
@@ -124,8 +124,8 @@ def iterate_captures(
     loop: bool = False,
     extra_data: Mapping[str, Any] | None = None,
     indexer: AcquisitionIndexer | None = None,
-    **replace: 'Unpack[AnyResources[SS, SP, SC, SA, PS, PC]]',
-) -> Generator['xr.Dataset|compute.DelayedDataset|None']:
+    **replace: Unpack[AnyResources[SS, SP, SC, SA, PS, PC]],
+) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
     """run the captures of ``resources['sweep_spec']`` through the acquire, analyze, and
     sink pipeline.
 
@@ -313,7 +313,7 @@ class AcquisitionIndexer:
         self.capture_count = captures_per_sweep
         self.sweep_index: int = 0
         self.capture_index: int = 0
-        self.sweep_start_time: 'pd.Timestamp|None' = None
+        self.sweep_start_time: pd.Timestamp | None = None
 
     def apply(self, info: specs.AcquisitionInfo) -> specs.AcquisitionInfo:
         """return a copy of `info` with `sweep_index` and `capture_index` set.

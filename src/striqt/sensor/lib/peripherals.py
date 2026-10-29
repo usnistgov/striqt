@@ -1,8 +1,10 @@
 from __future__ import annotations as __
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
+
 from .. import specs
-from .typing import Peripherals, SP, SC
+from .typing import SC, SP, Peripherals
 
 
 class PeripheralsBase(Peripherals[SP, SC]):

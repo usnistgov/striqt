@@ -10,20 +10,22 @@ import contextlib
 import dataclasses
 import os
 import sys
-from typing import Any, Callable, cast, ContextManager, Generic, TYPE_CHECKING
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, ContextManager, Generic, cast
 
 import typing_extensions
 
+import striqt.analysis as sa
+
+from .. import specs
 from . import bindings, controller, io, util
 from .peripherals import NoPeripherals
 from .sinks import SinkBase
-from .typing import Peripherals, SS, SP, SC, SA, PS, PC
-from .. import specs
-
-import striqt.analysis as sa
+from .typing import PC, PS, SA, SC, SP, SS, Peripherals
 
 if TYPE_CHECKING:
+    import xarray as xr
+
     from .actions.core import ActionRunner
     from .typing import (
         AnalyzedCallback,
@@ -33,7 +35,6 @@ if TYPE_CHECKING:
         R,
         SourceOpenCallback,
     )
-    import xarray as xr
 
 
 @dataclasses.dataclass(frozen=True)
@@ -74,7 +75,7 @@ if TYPE_CHECKING:
         action_spec: specs.ActionSpec[Any, SP, SA]
         sweep_spec: specs.Sweep[SS, SP, SC, SA]
         runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC]
-        calibration: 'xr.Dataset|None'
+        calibration: xr.Dataset | None
         format_path: specs.paths.PathFormatter | None
         callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
@@ -92,7 +93,7 @@ if TYPE_CHECKING:
         action_spec: specs.ActionSpec[Any, SP, SA]
         sweep_spec: specs.Sweep[SS, SP, SC, SA]
         runner: ActionRunner[Any, SS, SP, SC, SA, PS, PC]
-        calibration: 'xr.Dataset|None'
+        calibration: xr.Dataset | None
         format_path: specs.paths.PathFormatter | None
         callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
@@ -113,7 +114,7 @@ else:
         action_spec: specs.ActionSpec
         sweep_spec: specs.Sweep
         runner: ActionRunner
-        calibration: 'xr.Dataset|None'
+        calibration: xr.Dataset | None
         format_path: specs.paths.PathFormatter | None
         callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
@@ -127,7 +128,7 @@ else:
         action_spec: specs.ActionSpec
         sweep_spec: specs.Sweep
         runner: ActionRunner
-        calibration: 'xr.Dataset|None'
+        calibration: xr.Dataset | None
         format_path: specs.paths.PathFormatter | None
         callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
@@ -258,8 +259,9 @@ def open_resources(
             raises that exception
     """
 
-    from .compute import prepare_compute
     import numpy as np  # noqa: F401  avoids import concurrency bugs on python < 3.15
+
+    from .compute import prepare_compute
 
     logger = sa.util.get_logger('sweep')
     logger.log(sa.util.INFO, 'opening sensor resources')

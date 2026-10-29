@@ -1,21 +1,22 @@
 from __future__ import annotations as __
-from abc import abstractmethod
 
 import dataclasses
 import functools
 import typing
-from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
+from abc import abstractmethod
+from collections.abc import Sequence
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Generic,
     Protocol,
-    Sequence,
     TypedDict,
     TypeVar,
-    TYPE_CHECKING,
     runtime_checkable,
 )
+
+from typing_extensions import ParamSpec, Self, TypeAlias, TypeVar, Unpack
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -44,7 +45,6 @@ TR = TypeVar('TR', bound='ActionRunner[Any, Any, Any, Any, Any, Any, Any]')
 # %% compute.py
 from striqt.analysis.lib.typing import TAR
 
-
 _SC = TypeVar('_SC', bound='specs.SensorCapture', contravariant=True)
 _SP = TypeVar('_SP', bound='specs.Peripherals', covariant=True)
 
@@ -53,13 +53,13 @@ _SP = TypeVar('_SP', bound='specs.Peripherals', covariant=True)
 @runtime_checkable
 class Peripherals(Protocol[_SP, _SC]):
     @abstractmethod
-    def __init__(self, spec: 'specs.Sweep[Any, _SP, _SC, Any]'): ...
+    def __init__(self, spec: specs.Sweep[Any, _SP, _SC, Any]): ...
 
     def open(self): ...
 
     def close(self): ...
 
-    def setup(self, captures: 'Sequence[_SC]', loops: 'Sequence[specs.LoopSpec]'): ...
+    def setup(self, captures: Sequence[_SC], loops: Sequence[specs.LoopSpec]): ...
 
     def arm(self, capture: _SC): ...
 
@@ -131,10 +131,10 @@ class SourceBackend(Protocol[_SS, SC]):
 
     def package_iq(
         self,
-        iq: 'specs.AcquiredIQ',
+        iq: specs.AcquiredIQ,
         samples: Array,
         time_ns: int | None,
-    ) -> 'specs.AcquiredIQ':
+    ) -> specs.AcquiredIQ:
         return iq
 
     @abstractmethod
@@ -143,7 +143,7 @@ class SourceBackend(Protocol[_SS, SC]):
 
 
 if typing.TYPE_CHECKING:
-    from striqt.analysis.lib.typing import Array, FileStream, TAR, ZarrStore
+    from striqt.analysis.lib.typing import TAR, Array, FileStream, ZarrStore
     from striqt.waveform.fourier import ResamplerDesign
 
     PassThroughWrapper: TypeAlias = typing.Callable[[Callable[P, R]], Callable[P, R]]

@@ -1,6 +1,7 @@
-import click
 import json
 import typing
+
+import click
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
@@ -22,10 +23,12 @@ def cli(path, yaml: bool):
 
 
 def run(path, yaml: bool) -> 'Path':
-    import striqt.sensor as ss
-    import striqt.analysis as sa
-    import msgspec
     from pathlib import Path
+
+    import msgspec
+
+    import striqt.analysis as sa
+    import striqt.sensor as ss
 
     if path.endswith('.yaml') or path.endswith('.yml'):
         spec = ss.read_yaml_spec(path)

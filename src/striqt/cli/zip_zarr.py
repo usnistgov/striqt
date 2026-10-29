@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from __future__ import annotations
+
 import click
 
 
@@ -20,6 +21,7 @@ def zip_zarr(
     zarr_input: str, zarr_output: str | None, remove: bool = False, force: bool = False
 ):
     from pathlib import Path
+
     import striqt.analysis as sa
     from striqt.sensor.lib.sinks import Zipper
 

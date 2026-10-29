@@ -9,11 +9,12 @@ http://localhost:8000 for ``web-plotter path/to/spec.yaml``.
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 import functools
-from pathlib import Path
 import re
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
     List,
@@ -22,7 +23,6 @@ from typing import (
     Set,
     Tuple,
     TypedDict,
-    TYPE_CHECKING,
     Union,
     cast,
 )
@@ -35,11 +35,10 @@ import xarray as xr
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-
 if TYPE_CHECKING:
-    import striqt.sensor as ss
-    import striqt.figures as sf
     import striqt.analysis as sa
+    import striqt.figures as sf
+    import striqt.sensor as ss
 
 
 _json_encoder = msgspec.json.Encoder()
@@ -91,15 +90,15 @@ class CoordinatesData(TypedDict, total=False):
 class AppState(TypedDict):
     """Type definition for the global application state."""
 
-    delayed_dataset: Optional['ss.lib.compute.DelayedDataset']
-    plotter: Optional['WebPlotBackend']
+    delayed_dataset: Optional[ss.lib.compute.DelayedDataset]
+    plotter: Optional[WebPlotBackend]
     selected_variable: str
     available_variables: List[str]
     variable_labels: Dict[str, str]
     websockets: Set[WebSocket]
     broadcast_pending: bool
     data_updated: bool
-    plot_opts: Optional['sf.specs.PlotOptions']
+    plot_opts: Optional[sf.specs.PlotOptions]
     data_select: Dict[str, Any]
     spec_filename: str
 
@@ -118,7 +117,7 @@ class WebPlotBackend:
 
     def __init__(
         self,
-        opts: 'sf.specs.SharedPlotOptions',
+        opts: sf.specs.SharedPlotOptions,
     ):
         self.opts = opts
         self._pending_traces: List[Dict[str, Any]] = []
@@ -733,7 +732,6 @@ class WebPlotBackend:
 
         The traces are collected by `heatmap` and `line`.
         """
-        pass
 
     def mark_noise_level(
         self,
@@ -933,7 +931,7 @@ def _format_label(data: xr.DataArray) -> str:
     return data.attrs.get('long_name', data.attrs['standard_name'])
 
 
-def _format_subplots(data, opts: 'sf.specs.SharedPlotOptions'):
+def _format_subplots(data, opts: sf.specs.SharedPlotOptions):
     import striqt.figures as sf
 
     col_titles = sf.labels.label_by_coord(
@@ -1054,8 +1052,7 @@ def _make_quantized_colorscale(
     levels = sf.util.quantized_value_range(None, vmin, vmax, vstep)  # type: ignore[arg-type]
     n_levels = len(levels) - 1
 
-    if n_levels < 1:
-        n_levels = 1
+    n_levels = max(n_levels, 1)
 
     try:
         mpl_cmap = plt.get_cmap(cmap).resampled(n_levels)
@@ -1224,7 +1221,7 @@ async def _do_broadcast_if_needed():
         await broadcast_plot_update()
 
 
-def _select_delayed_variable(result: 'ss.lib.compute.DelayedDataset', name: str):
+def _select_delayed_variable(result: ss.lib.compute.DelayedDataset, name: str):
     import dataclasses
 
     delayed_var = result.delayed[name]
@@ -1232,7 +1229,7 @@ def _select_delayed_variable(result: 'ss.lib.compute.DelayedDataset', name: str)
 
 
 def _prepare_plot_data_sync(
-    result: 'ss.lib.compute.DelayedDataset',
+    result: ss.lib.compute.DelayedDataset,
     plotter: WebPlotBackend,
     variable: str,
     data_select: Dict[str, Any],
@@ -1386,7 +1383,7 @@ async def _do_broadcast():
 
             error_message = _json_encoder.encode({
                 'type': 'error',
-                'message': f"Error plotting '{variable}': {str(e)}",
+                'message': f"Error plotting '{variable}': {e!s}",
             }).decode()
             for ws in _app_state['websockets']:
                 try:
@@ -1422,7 +1419,7 @@ def _get_field_origins(cls: type) -> Dict[str, type]:
 
 
 def _extract_extra_coords(
-    result: 'ss.lib.compute.DelayedDataset',
+    result: ss.lib.compute.DelayedDataset,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Extract extra_coords (AcquisitionInfo) fields from dataset, grouped by defining class.
 
@@ -1471,7 +1468,7 @@ def _extract_extra_coords(
 
 
 def _extract_capture_coordinates(
-    result: 'ss.lib.compute.DelayedDataset',
+    result: ss.lib.compute.DelayedDataset,
 ) -> CoordinatesData:
     """Extract capture coordinates from dataset, grouped by defining class.
 
@@ -1487,6 +1484,7 @@ def _extract_capture_coordinates(
         Each coordinate dict has 'name', 'values' (list), and 'unit' keys.
     """
     from collections import defaultdict
+
     import striqt.sensor as ss
 
     capture_coords = ss.lib.compute.datasets.build_capture_coords(
@@ -1586,8 +1584,9 @@ def _get_si_prefix_for_values(values: List[float], unit: str) -> tuple[int, str]
         multiple of 3 at or below the smallest absolute value, clamped to the known
         prefixes.
     """
-    from striqt.analysis.lib.dataarrays import _ENG_PREFIXES
     import math
+
+    from striqt.analysis.lib.dataarrays import _ENG_PREFIXES
 
     # dB units don't get SI prefixes
     if unit.lower().startswith('db'):
@@ -1642,8 +1641,8 @@ def _format_coord_value(value: Any) -> str:
 
 
 def _build_variable_labels_from_registry(
-    analysis_spec: 'sa.specs.AnalysisGroup',
-    registry: 'sa.lib.register.AnalysisRegistry',
+    analysis_spec: sa.specs.AnalysisGroup,
+    registry: sa.lib.register.AnalysisRegistry,
 ) -> Dict[str, str]:
     """return a label for each enabled field of `analysis_spec`, keyed by field name.
 
@@ -1710,7 +1709,7 @@ def _spec_class_to_label(class_name: str) -> str:
     return result
 
 
-def update_dataset(result: 'ss.lib.compute.DelayedDataset'):
+def update_dataset(result: ss.lib.compute.DelayedDataset):
     """store the dataset and refresh the list of plottable variables.
 
     The selected variable falls back to the first plottable variable when the
@@ -1739,11 +1738,13 @@ def run_server(
     port: int = 8000,
 ):
     """Run the web server with data acquisition loop."""
-    import striqt.analysis as sa
-    import striqt.sensor as ss
-    import striqt.figures as sf
-    import uvicorn
     import threading
+
+    import uvicorn
+
+    import striqt.analysis as sa
+    import striqt.figures as sf
+    import striqt.sensor as ss
 
     # Store the spec filename for display in the web UI header
     _app_state['spec_filename'] = Path(path).name
@@ -1796,7 +1797,7 @@ def run_server(
     def acquisition_loop():
         """Run data acquisition in a separate thread."""
 
-        def on_data(result: 'ss.lib.compute.DelayedDataset') -> None:
+        def on_data(result: ss.lib.compute.DelayedDataset) -> None:
             """Callback when new data arrives."""
             update_dataset(result)
 

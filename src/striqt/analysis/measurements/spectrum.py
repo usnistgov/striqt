@@ -2,16 +2,15 @@ from __future__ import annotations as __
 
 import math
 import typing
-from typing import Any, Literal, NamedTuple, Optional, Union
+from typing import Any, Literal, NamedTuple, Optional
+
+import striqt.waveform as sw
 
 from .. import specs
-
 from ..lib import dataarrays, register
 from ..lib.util import np
 from . import power, shared
-from .shared import registry, hint_keywords
-
-import striqt.waveform as sw
+from .shared import hint_keywords, registry
 
 if typing.TYPE_CHECKING:
     from typing_extensions import Unpack
@@ -195,7 +194,7 @@ def evaluate_spectrogram(
     capture: specs.Capture,
     spec: specs.Spectrogram,
     *,
-    dtype: Union[Literal['float16'], Literal['float32']] = 'float32',
+    dtype: Literal['float16', 'float32'] = 'float32',
     limit_digits: Optional[int] = None,
     dB=True,
 ) -> tuple[Array, dict]:

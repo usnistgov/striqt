@@ -3,12 +3,11 @@ from __future__ import annotations as __
 import collections
 import functools
 import importlib.util
-from pathlib import Path
 import sys
 import threading
+from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, TYPE_CHECKING, cast
-
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 _lazy_import_locks = collections.defaultdict(threading.RLock)
 
@@ -95,7 +94,7 @@ _caches = {}
 @functools.wraps(functools.lru_cache)
 def lru_cache(
     maxsize: int | None = 128, typed: bool = False
-) -> 'Callable[[Callable[P, R]], LRUWrapped[P, R]]':
+) -> Callable[[Callable[P, R]], LRUWrapped[P, R]]:
     # the type hint matches the wrapped function, which is assumed to take only
     # hashable arguments
     func = functools.lru_cache(maxsize, typed)

@@ -1,7 +1,11 @@
+# structs has no __all__, so the star import also binds its `helpers` and `types`
+# imports; ty resolves the explicit module imports below only when they come after it
 from .structs import *
-from . import doc, types, helpers
-from .types import Meta
+
+# isort: split
+from . import doc, helpers, types
 from .helpers import frozendict
+from .types import Meta
 
 for name, obj in dict(locals()).items():
     if getattr(obj, '__module__', '').startswith(__name__):

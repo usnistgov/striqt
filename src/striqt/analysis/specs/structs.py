@@ -3,18 +3,17 @@
 from __future__ import annotations as __
 
 import fractions
-from math import inf
 import typing
+from math import inf
 from typing import Optional, Union
 
 import msgspec
 from typing_extensions import Self
 
-from . import helpers, types
 import striqt.waveform as sw
 
+from . import helpers, types
 
-_T = typing.TypeVar('_T')
 _TS = typing.TypeVar('_TS', bound='SpecBase')
 
 # msgspec.structs.replace only calls __post_init__ from 0.21, and 0.21
@@ -80,7 +79,7 @@ class SpecBase(
         return map
 
     @classmethod
-    def from_dict(cls: type[_T], d: dict | helpers.frozendict) -> _T:
+    def from_dict(cls, d: dict | helpers.frozendict) -> Self:
         """return an instance of `cls` converted from the field values in `d`.
 
         Args:
@@ -94,7 +93,7 @@ class SpecBase(
         return helpers.convert_dict(d, type=cls)
 
     @classmethod
-    def from_spec(cls: type[_T], other: SpecBase) -> _T:
+    def from_spec(cls, other: SpecBase) -> Self:
         return helpers.convert_spec(other, type=cls)
 
     def validate(self) -> Self:
@@ -214,8 +213,6 @@ class Tolerance(SpecBase, kw_only=True, frozen=True):
 
 class AnalysisGroup(SpecBase, kw_only=True, frozen=True):
     """base class for a defining set of Analysis specs"""
-
-    pass
 
 
 # %% Spectral analysis

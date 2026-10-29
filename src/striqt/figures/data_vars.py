@@ -1,10 +1,11 @@
 from __future__ import annotations as __
 
 import typing as _typing
-import striqt.waveform as _sw
-import striqt.analysis as sa
-from . import util
 
+import striqt.analysis as sa
+import striqt.waveform as _sw
+
+from . import util
 
 if _typing.TYPE_CHECKING:
     from pathlib import Path as _Path
@@ -12,11 +13,12 @@ if _typing.TYPE_CHECKING:
     from xarray import DataArray as _DA
     from xarray import Dataset as _DS
     from xarray.core.types import ScaleOptions as _ScaleOptions
+
     from .backend import PlotBackend as _PlotBackend
 
     class _DataVariablePlotter(_typing.Protocol):
         def __call__(
-            self, data: '_DS', plotter: _PlotBackend, /, *args, **kwargs
+            self, data: _DS, plotter: _PlotBackend, /, *args, **kwargs
         ) -> _typing.Any: ...
 
         __name__: str
@@ -36,7 +38,7 @@ def _coord_names(spec_type: type[sa.specs.Analysis]) -> tuple[str, ...]:
     return tuple(sa.registry.coordinates[f].name for f in factories)
 
 
-def _register_data_var_plot(func: '_TVP') -> '_TVP':
+def _register_data_var_plot(func: _TVP) -> _TVP:
     name = func.__name__
     func = sa.util.stopwatch(name, 'analysis', logger_level=sa.util.PERFORMANCE_INFO)(
         func
@@ -47,8 +49,8 @@ def _register_data_var_plot(func: '_TVP') -> '_TVP':
 
 @_register_data_var_plot
 def cellular_cyclic_autocorrelation(
-    data: '_DS',
-    plotter: '_PlotBackend',
+    data: _DS,
+    plotter: _PlotBackend,
     *,
     hue: str = 'link_direction',
     dB: bool = False,
@@ -73,8 +75,8 @@ def cellular_cyclic_autocorrelation(
 
 @_register_data_var_plot
 def cellular_5g_pss_correlation(
-    data: '_DS',
-    plotter: '_PlotBackend',
+    data: _DS,
+    plotter: _PlotBackend,
     *,
     hue: str = 'cellular_ssb_beam_index',
     dB: bool = True,
@@ -102,7 +104,7 @@ def cellular_5g_pss_correlation(
 
 
 @_register_data_var_plot
-def cellular_5g_ssb_spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line=True):
+def cellular_5g_ssb_spectrogram(data: _DS, plotter: _PlotBackend, noise_line=True):
     name = sa.measurements.cellular_5g_ssb_spectrogram.__name__
     x = 'cellular_ssb_symbol_index'
     y = 'cellular_ssb_baseband_frequency'
@@ -116,12 +118,12 @@ def cellular_5g_ssb_spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line
 
 @_register_data_var_plot
 def cellular_resource_power_histogram(
-    data: '_DS',
-    plotter: '_PlotBackend',
+    data: _DS,
+    plotter: _PlotBackend,
     *,
     hue='link_direction',
     noise_line=True,
-    yscale: '_ScaleOptions' = 'linear',
+    yscale: _ScaleOptions = 'linear',
 ):
     name = sa.measurements.cellular_resource_power_histogram.__name__
     x = 'cellular_resource_power_bin'
@@ -135,11 +137,11 @@ def cellular_resource_power_histogram(
 
 @_register_data_var_plot
 def channel_power_histogram(
-    data: '_DS',
-    plotter: '_PlotBackend',
+    data: _DS,
+    plotter: _PlotBackend,
     hue='power_detector',
     noise_line=True,
-    yscale: '_ScaleOptions' = 'linear',
+    yscale: _ScaleOptions = 'linear',
 ):
     name = sa.measurements.channel_power_histogram.__name__
     x = 'channel_power_bin'
@@ -154,8 +156,8 @@ def channel_power_histogram(
 
 @_register_data_var_plot
 def channel_power_time_series(
-    data: '_DS',
-    plotter: '_PlotBackend',
+    data: _DS,
+    plotter: _PlotBackend,
     *,
     hue='power_detector',
     noise_line=True,
@@ -168,10 +170,11 @@ def channel_power_time_series(
 
 
 @_register_data_var_plot
-def cyclic_channel_power(data: '_DS', plotter: '_PlotBackend', *, noise_line=True):
+def cyclic_channel_power(data: _DS, plotter: _PlotBackend, *, noise_line=True):
     # PlotBackend has no method for this layout, so the FacetGrid is built here
 
     from xarray.plot import FacetGrid
+
     from . import backend
 
     name = sa.measurements.cyclic_channel_power.__name__
@@ -191,8 +194,8 @@ def cyclic_channel_power(data: '_DS', plotter: '_PlotBackend', *, noise_line=Tru
 
 @_register_data_var_plot
 def power_spectral_density(
-    data: '_DS',
-    plotter: '_PlotBackend',
+    data: _DS,
+    plotter: _PlotBackend,
     *,
     hue: str = 'time_statistic',
     noise_line: bool = True,
@@ -211,7 +214,7 @@ def power_spectral_density(
 
 
 @_register_data_var_plot
-def spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line: bool = True) -> None:
+def spectrogram(data: _DS, plotter: _PlotBackend, noise_line: bool = True) -> None:
     name = sa.measurements.spectrogram.__name__
     x, y = _coord_names(sa.specs.Spectrogram)
     sub = data[name].dropna(y)
@@ -224,10 +227,10 @@ def spectrogram(data: '_DS', plotter: '_PlotBackend', noise_line: bool = True) -
 
 @_register_data_var_plot
 def spectrogram_histogram(
-    data: '_DS',
-    plotter: '_PlotBackend',
+    data: _DS,
+    plotter: _PlotBackend,
     *,
-    yscale: '_ScaleOptions' = 'linear',
+    yscale: _ScaleOptions = 'linear',
     noise_line=True,
 ):
     name = sa.measurements.spectrogram_histogram.__name__
@@ -242,7 +245,7 @@ def spectrogram_histogram(
 
 @_register_data_var_plot
 def spectrogram_ratio_histogram(
-    data: '_DS', plotter: '_PlotBackend', *, yscale: '_ScaleOptions' = 'linear'
+    data: _DS, plotter: _PlotBackend, *, yscale: _ScaleOptions = 'linear'
 ):
     name = sa.measurements.spectrogram_ratio_histogram.__name__
     x = 'spectrogram_ratio_power_bin'

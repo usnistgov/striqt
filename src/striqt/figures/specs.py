@@ -1,6 +1,7 @@
 from __future__ import annotations as __
 
 import msgspec
+
 import striqt.sensor as ss
 
 
@@ -45,8 +46,9 @@ class PlotOptions(
     plotter: SharedPlotOptions
 
     def __post_init__(self):
-        from .data_vars import _data_plots
         import inspect
+
+        from .data_vars import _data_plots
 
         for name, kwargs in self.variables.items():
             if name not in _data_plots:

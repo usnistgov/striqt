@@ -7,12 +7,11 @@ import typing
 import striqt.analysis as sa
 from striqt.analysis.lib.util import np, xr
 
-
 if typing.TYPE_CHECKING:
-    import matplotlib.axes
-    import matplotlib.legend
-    import matplotlib.figure
     import dask.array as dask_array
+    import matplotlib.axes
+    import matplotlib.figure
+    import matplotlib.legend
 else:
     dask_array = sa.util.lazy_import('dask.array')
 
@@ -44,7 +43,7 @@ def label_by_coord(
 def summarize_metadata(
     source: xr.Dataset,
     capture_type: type[sa.specs.Capture],
-    array: 'xr.DataArray|None' = None,
+    array: xr.DataArray | None = None,
     *,
     as_str: bool = False,
 ):
@@ -107,7 +106,7 @@ def _coords_to_dicts(
     return result
 
 
-def _get_fig_center_x(fig: 'matplotlib.figure.Figure') -> float:
+def _get_fig_center_x(fig: matplotlib.figure.Figure) -> float:
     left = math.inf
     right = -math.inf
 
@@ -116,24 +115,20 @@ def _get_fig_center_x(fig: 'matplotlib.figure.Figure') -> float:
             continue
 
         pos = ax.get_position()
-        if pos.x0 < left:
-            left = pos.x0
-        if pos.x1 > right:
-            right = pos.x1
+        left = min(left, pos.x0)
+        right = max(right, pos.x1)
 
     return (left + right) / 2
 
 
-def _get_fig_center_y(fig: 'matplotlib.figure.Figure') -> float:
+def _get_fig_center_y(fig: matplotlib.figure.Figure) -> float:
     bot = math.inf
     top = -math.inf
 
     for ax in fig.get_axes():
         pos = ax.get_position()
-        if pos.y0 < bot:
-            bot = pos.y0
-        if pos.y1 > top:
-            top = pos.y1
+        bot = min(bot, pos.y0)
+        top = max(top, pos.y1)
 
     return (top + bot) / 2
 
@@ -155,11 +150,11 @@ def label_axis(
     which_axis: typing.Literal['x', 'y', 'colorbar'],
     ax_data: typing.Union[xr.DataArray, xr.Dataset],
     *,
-    coord_name: typing.Optional['xr.Coordinates'] = None,
+    coord_name: typing.Optional[xr.Coordinates] = None,
     tick_units: bool | typing.Literal['auto'] = 'auto',
     short=False,
-    ax: typing.Optional['matplotlib.axes.Axes' | list['matplotlib.axes.Axes']] = None,
-    fig: typing.Optional['matplotlib.figure.Figure'] = None,
+    ax: typing.Optional[matplotlib.axes.Axes | list[matplotlib.axes.Axes]] = None,
+    fig: typing.Optional[matplotlib.figure.Figure] = None,
 ):
     """label an axis with the `standard_name` and `units` attrs of `ax_data`.
 
@@ -190,8 +185,9 @@ def label_axis(
             requested and the figure has none, or if there are no axes to label
     """
 
-    from . import ticker
     import matplotlib.pyplot as plt
+
+    from . import ticker
 
     _monkeypatch_xarray_unit_labels()
 
@@ -293,8 +289,8 @@ def label_legend(
     *,
     coord_name: str | None = None,
     tick_units=True,
-    ax: typing.Optional['matplotlib.axes.Axes'] = None,
-) -> 'matplotlib.legend.Legend':
+    ax: typing.Optional[matplotlib.axes.Axes] = None,
+) -> matplotlib.legend.Legend:
     """add a legend labeled with the `standard_name` and `units` attrs of `data`.
 
     Each entry is a value in engineering notation with the unit when `units` is set,
@@ -312,8 +308,9 @@ def label_legend(
     Returns:
         the `matplotlib.legend.Legend` added to `ax`
     """
-    from . import ticker
     import matplotlib.pyplot as plt
+
+    from . import ticker
 
     _monkeypatch_xarray_unit_labels()
 
@@ -343,7 +340,7 @@ def label_legend(
 
 def label_selection(
     sel: typing.Union[xr.DataArray, xr.Dataset],
-    ax: 'matplotlib.axes.Axes',
+    ax: matplotlib.axes.Axes,
     attrs=True,
 ):
     from . import ticker
@@ -354,9 +351,11 @@ def label_selection(
         ax = plt.gca()
     coord_names = {}
     for name, coord in sel.coords.items():
-        if name == sa.dataarrays.CAPTURE_DIM:
-            continue
-        elif name in sel.indexes or coord.data.size == 0:
+        if (
+            name == sa.dataarrays.CAPTURE_DIM
+            or name in sel.indexes
+            or coord.data.size == 0
+        ):
             continue
 
         units = coord.attrs.get('units', None)

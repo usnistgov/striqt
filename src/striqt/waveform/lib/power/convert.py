@@ -9,12 +9,12 @@ import math
 import re
 import typing
 import warnings
+from collections.abc import Sequence
 from numbers import Number
 from types import ModuleType
-from typing import Any, Literal, Optional, Sequence
-from .. import util
-from ..util import np, pd, xr
+from typing import Any, Literal, Optional
 
+from .. import util
 from ..arrays import (
     ROUNDOFF_SAFETY,
     array_namespace,
@@ -23,13 +23,14 @@ from ..arrays import (
     tiny_like,
     unit_roundoff,
 )
+from ..util import np, pd, xr
 
 if typing.TYPE_CHECKING:
-    import numexpr as ne
-
     from typing import TypeVar, Union
 
-    from ..typing import ArrayLike, Array, _ALN, Dims, DTypeLike
+    import numexpr as ne
+
+    from ..typing import _ALN, Array, ArrayLike, Dims, DTypeLike
 
     _ALD = TypeVar('_ALD', bound=Union[ArrayLike, xr.Dataset])
 
@@ -302,7 +303,7 @@ def powtodB(
     abs: bool = True,
     bounded: bool = False,
     overwrite_x: bool = False,
-    min_dtype: 'DTypeLike' = 'float32',
+    min_dtype: DTypeLike = 'float32',
 ) -> _ALN:
     """compute ``10*log10(abs(x))``, or ``10*log10(x)`` when `abs` is False.
 
@@ -342,7 +343,7 @@ def powtodB(
 
 
 def dBtopow(
-    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
+    x: _ALN, *, overwrite_x: bool = False, min_dtype: DTypeLike = 'float32'
 ) -> _ALN:
     """compute ``10**(x/10)``.
 
@@ -390,7 +391,7 @@ def dBtopow(
 
 
 def envtopow(
-    x: _ALN, *, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
+    x: _ALN, *, overwrite_x: bool = False, min_dtype: DTypeLike = 'float32'
 ) -> _ALN:
     """compute ``abs(x)**2``.
 
@@ -445,7 +446,7 @@ def envtodB(
     abs: bool = True,
     bounded: bool = False,
     overwrite_x: bool = False,
-    min_dtype: 'DTypeLike' = 'float32',
+    min_dtype: DTypeLike = 'float32',
 ) -> _ALN:
     """compute ``20*log10(abs(x))``, or ``20*log10(x)`` when `abs` is False.
 
@@ -487,9 +488,9 @@ def envtodB(
 
 def dBlinmean(
     x_dB: _ALD,
-    axis: 'Dims|int|Sequence[int]|None' = None,
+    axis: Dims | int | Sequence[int] | None = None,
     overwrite_x: bool = False,
-    min_dtype: 'DTypeLike' = 'float32',
+    min_dtype: DTypeLike = 'float32',
 ) -> _ALD:
     """evaluate the mean in linear power space given power in dB.
 
@@ -508,9 +509,9 @@ def dBlinmean(
 
 def dBlinsum(
     x_dB: _ALD,
-    axis: 'Dims|int|Sequence[int]|None' = None,
+    axis: Dims | int | Sequence[int] | None = None,
     overwrite_x: bool = False,
-    min_dtype: 'DTypeLike' = 'float32',
+    min_dtype: DTypeLike = 'float32',
 ) -> _ALD:
     """evaluate the sum in linear power space given power in dB.
 
@@ -540,8 +541,8 @@ def _infer_contained_array(x: Any) -> Array:
 
 
 def _arraylike_with_buffer(
-    x: ArrayLike | Number, overwrite_x: bool = False, min_dtype: 'DTypeLike' = 'float32'
-) -> 'tuple[Array, Array, ModuleType]':
+    x: ArrayLike | Number, overwrite_x: bool = False, min_dtype: DTypeLike = 'float32'
+) -> tuple[Array, Array, ModuleType]:
     """resolve an array-like input to an array, an output buffer, and the namespace.
 
     Args:

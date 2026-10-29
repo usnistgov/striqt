@@ -8,23 +8,22 @@ produced the capture.
 
 from __future__ import annotations as __
 
-from collections import defaultdict, ChainMap
-from collections.abc import Hashable, Iterable, Mapping
 import itertools
 import math
-from typing import Any, cast, NamedTuple, Optional, Tuple, TYPE_CHECKING
+from collections import ChainMap, defaultdict
+from collections.abc import Hashable, Iterable, Mapping
+from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Tuple, cast
 
 import msgspec
 
 import striqt.analysis as sa
 from striqt.analysis.specs.helpers import (
+    SpecValidationError,
     _dec_hook,
     frozendict,
-    SpecValidationError,
 )
 
 from . import captures, structs, types
-
 
 if TYPE_CHECKING:
     from ..lib.typing import SC, TypeAlias
@@ -597,9 +596,7 @@ def adjust_captures(
 
                 if default != msgspec.UNSET:
                     return default
-                elif not lookup_spec.required:
-                    return msgspec.UNSET
-                elif required:
+                elif not lookup_spec.required or required:
                     return msgspec.UNSET
                 else:
                     raise SpecValidationError(
@@ -774,7 +771,7 @@ def _convert_label_lookup_keys(
 
     depth = sa.specs.helpers.inspect_freeze_depths(type(sweep))['adjust_captures']
     fixed = msgspec.convert(result, structs.AdjustCapturesType, strict=False)
-    return sa.specs.helpers.freeze(fixed, depth)  # type: ignore
+    return sa.specs.helpers.freeze(fixed, depth)  # ty: ignore[invalid-return-type]
 
 
 @sa.util.lru_cache()

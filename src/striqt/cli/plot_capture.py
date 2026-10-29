@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 
 from __future__ import annotations
-import click
+
 import typing
 
+import click
+
 if typing.TYPE_CHECKING:
-    import striqt.figures as sf
     import xarray as xr
+
+    import striqt.figures as sf
 
     class WorkerData(typing.TypedDict):
         data: xr.Dataset
@@ -54,8 +57,10 @@ def run(
     interactive: sf.backend.TerminalGraphics | None = None,
     no_save=False,
 ):
-    import msgspec
     import multiprocessing
+
+    import msgspec
+
     from striqt import figures as sf
 
     if yaml_path is None:
@@ -72,8 +77,8 @@ def run(
         yaml_text = open(yaml_path, 'rb').read()
         opts = msgspec.yaml.decode(yaml_text, type=sf.specs.PlotOptions, strict=False)
 
-    from concurrent import futures
     import os
+    from concurrent import futures
 
     if hasattr(os, 'process_cpu_count'):
         ncores = os.process_cpu_count() or 1
@@ -110,10 +115,11 @@ def run(
         pass
 
 
-def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.Dataset':
+def load_data(zarr_path: str, opts: sf.specs.PlotOptions, index=True) -> xr.Dataset:
+    import xarray as xr
+
     import striqt.analysis as sa
     import striqt.figures as sf
-    import xarray as xr
 
     dataset = sa.load(zarr_path)
 
@@ -146,7 +152,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
 
 def worker_init(
     zarr_path,
-    opts: 'sf.specs.PlotOptions',
+    opts: sf.specs.PlotOptions,
     interactive: sf.backend.TerminalGraphics | None,
     no_save: bool,
     lock,
@@ -154,8 +160,8 @@ def worker_init(
     from pathlib import Path
     from warnings import filterwarnings
 
-    import striqt.figures as sf
     import striqt.analysis as sa
+    import striqt.figures as sf
     import striqt.sensor as ss
 
     sf.backend.select_mpl_backend(opts.plotter.style, interactive)

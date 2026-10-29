@@ -5,15 +5,14 @@ from fractions import Fraction
 from math import ceil
 from typing import Any, Literal
 
-from .. import specs
+import striqt.waveform as sw
 
+from .. import specs
 from ..lib import register, util
 from ..lib.dataarrays import CAPTURE_DIM
 from ..lib.util import np, pd
 from . import power, shared, spectrum
-from .shared import registry, hint_keywords
-
-import striqt.waveform as sw
+from .shared import hint_keywords, registry
 
 if typing.TYPE_CHECKING:
     from typing_extensions import Unpack
@@ -255,10 +254,10 @@ _pss_correlator_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
 
 @_pss_correlator_cache.apply
 def correlate_5g_pss(
-    iq: 'Array',
+    iq: Array,
     capture: specs.Capture,
     spec: specs.Cellular5GNRPSSCorrelator,
-) -> 'Array':
+) -> Array:
     xp = sw.array_namespace(iq)
 
     ssb_iq = get_5g_ssb_iq(iq, capture=capture, spec=spec)
@@ -392,10 +391,10 @@ _sss_correlator_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
 
 @_sss_correlator_cache.apply
 def correlate_5g_sss(
-    iq: 'Array',
+    iq: Array,
     capture: specs.Capture,
     spec: specs.Cellular5GNRSSSCorrelator,
-) -> 'Array':
+) -> Array:
     xp = sw.array_namespace(iq)
 
     ssb_iq = get_5g_ssb_iq(iq, capture=capture, spec=spec)
@@ -873,7 +872,7 @@ def tdd_config_from_str(
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_sample_lag(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
-) -> 'pd.Index':
+) -> pd.Index:
     max_len = _get_max_corr_size(capture, subcarrier_spacings=spec.subcarrier_spacings)
     name = cyclic_sample_lag.__name__
     return pd.RangeIndex(0, max_len, name=name) / capture.sample_rate
@@ -1190,7 +1189,7 @@ def apply_mask(
     flex_as=None,
     normal_cp=True,
     xp=np,
-) -> 'Array':
+) -> Array:
     """split a spectrogram into TDD link directions, masking the rest with NaN.
 
     The guard bands are NaN-filled in `spectrogram` in place. The returned array has
@@ -1271,7 +1270,7 @@ def build_tdd_link_symbol_masks(
     normal_cp=True,
     flex_as=None,
     xp=np,
-) -> 'Array':
+) -> Array:
     """build per-symbol masks that keep one TDD link direction and NaN the others.
 
     Args:

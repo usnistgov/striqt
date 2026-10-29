@@ -18,6 +18,7 @@ def cli() -> None:
     """
     import striqt.waveform.lib.jit  # noqa: F401  triggers NUMBA_CACHE_DIR setup + stamp patch
 
+    # isort: split
     from striqt.waveform.lib.comms.cp_cpu_jit import _corr_at_indices
 
     nfft, ncp = 64, 16

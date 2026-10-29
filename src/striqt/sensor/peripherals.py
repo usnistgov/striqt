@@ -1,5 +1,4 @@
-from .lib.peripherals import PeripheralsBase, NoPeripherals
-
+from .lib.peripherals import NoPeripherals, PeripheralsBase
 
 for obj in list(locals().values()):
     if getattr(obj, '__module__', '').startswith(__name__):

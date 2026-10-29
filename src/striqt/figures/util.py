@@ -2,13 +2,14 @@ from __future__ import annotations as __
 
 import ast
 import math
-import striqt.analysis as sa
-import striqt.waveform as sw
-import striqt.sensor as ss
 import typing
 
-from . import specs
+import striqt.analysis as sa
+import striqt.sensor as ss
+import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
+
+from . import specs
 
 if typing.TYPE_CHECKING:
     _T = typing.TypeVar('_T', bound=xr.Dataset)
@@ -16,7 +17,7 @@ if typing.TYPE_CHECKING:
 get_format_fields = ss.specs.paths.get_format_fields
 
 
-def _owner_noise_bandwidth(data: 'xr.Dataset', coord_name: str) -> float | None:
+def _owner_noise_bandwidth(data: xr.Dataset, coord_name: str) -> float | None:
     """return the `noise_bandwidth` attr (Hz) of a variable spanning `coord_name`.
 
     None when `coord_name` is a data variable or a scalar, or when no data variable on
@@ -32,7 +33,7 @@ def _owner_noise_bandwidth(data: 'xr.Dataset', coord_name: str) -> float | None:
     return None
 
 
-def noise_bandwidth(data: 'xr.Dataset', var_name: str) -> 'xr.DataArray | float | None':
+def noise_bandwidth(data: xr.Dataset, var_name: str) -> xr.DataArray | float | None:
     """return the noise bandwidth (in Hz) of a data variable or power-bin coordinate.
 
     The first matching rule applies:
@@ -71,18 +72,18 @@ def noise_bandwidth(data: 'xr.Dataset', var_name: str) -> 'xr.DataArray | float 
 
 @typing.overload
 def get_system_noise(
-    data: 'xr.Dataset', var_name: str, margin: float
+    data: xr.Dataset, var_name: str, margin: float
 ) -> float | None: ...
 
 
 @typing.overload
 def get_system_noise(
-    data: 'xr.Dataset', var_name: str, margin: None = None
+    data: xr.Dataset, var_name: str, margin: None = None
 ) -> xr.DataArray | None: ...
 
 
 def get_system_noise(
-    data: 'xr.Dataset', var_name: str, margin: float | None = None
+    data: xr.Dataset, var_name: str, margin: float | None = None
 ) -> xr.DataArray | float | None:
     """return the calibrated system noise (in dBm) in the noise bandwidth of `var_name`.
 
@@ -125,14 +126,12 @@ def get_system_noise(
         return float(noise.min() - margin)
 
 
-def system_noise_floor(
-    data: 'xr.Dataset', var_name: str, margin: float
-) -> float | None:
+def system_noise_floor(data: xr.Dataset, var_name: str, margin: float) -> float | None:
     """return the minimum over captures of `get_system_noise` minus `margin` (in dB), or None"""
     return get_system_noise(data, var_name, margin)
 
 
-def check_noise_floor(data: 'xr.Dataset', var_name: str) -> 'xr.Dataset':
+def check_noise_floor(data: xr.Dataset, var_name: str) -> xr.Dataset:
     """compare the mode of each power histogram with the calibrated system noise.
 
     The mode of a histogram of the dB values of a Gamma-distributed bin power equals
@@ -199,12 +198,12 @@ def literal_eval(s) -> typing.Any:
 
 
 def histogram_bin_limits(
-    data: 'xr.Dataset',
+    data: xr.Dataset,
     var_name: str,
     bin_dim: str,
     pad_low: float = 12,
     pad_hi: float = 3,
-) -> 'tuple[xr.DataArray | None, float]':
+) -> tuple[xr.DataArray | None, float]:
     """return the plot limits (in dBm) of a power histogram.
 
     Args:
@@ -227,8 +226,8 @@ def histogram_bin_limits(
 
 
 def select_histogram_bins(
-    data: 'xr.Dataset', var_name, bin_dim, pad_low: float = 12, pad_hi: float = 3
-) -> 'xr.DataArray':
+    data: xr.Dataset, var_name, bin_dim, pad_low: float = 12, pad_hi: float = 3
+) -> xr.DataArray:
     """return the histogram `var_name` trimmed to the bins within `histogram_bin_limits`"""
     low, high = histogram_bin_limits(data, var_name, bin_dim, pad_low, pad_hi)
     xmin = None if low is None else float(low.min())
@@ -253,21 +252,21 @@ def quantized_value_range(data: xr.DataArray, vmin, vmax, vstep):
     return levels
 
 
-def get_groupby_fields(ds: 'xr.Dataset', opts: specs.PlotOptions) -> list[str]:
+def get_groupby_fields(ds: xr.Dataset, opts: specs.PlotOptions) -> list[str]:
     """guess a list of fields that produce groups compatible with the plot options"""
     loops = ss.lib.compute.get_looped_coords(ds)
     fields = get_format_fields(opts.plotter.filename_fmt, exclude=('name',))
     return sa.util.ordered_set_union(opts.data.groupby_dims, fields, loops)
 
 
-def guess_index_coords(ds: 'xr.Dataset', opts: specs.PlotOptions) -> list[str | None]:
+def guess_index_coords(ds: xr.Dataset, opts: specs.PlotOptions) -> list[str | None]:
     idx_coords = get_groupby_fields(ds, opts) + [opts.plotter.col]
     if opts.plotter.row:
         idx_coords = idx_coords + [opts.plotter.row]
     return idx_coords
 
 
-def query_match_at_index(ds: '_T', dim: str, var_name: str, index: int) -> '_T':
+def query_match_at_index(ds: _T, dim: str, var_name: str, index: int) -> _T:
     return ds.query({dim: f'{var_name} == {var_name}[{index}]'})  # .squeeze(var_name)
 
 

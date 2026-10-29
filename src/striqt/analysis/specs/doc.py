@@ -1,8 +1,10 @@
 from __future__ import annotations as __
+
 import functools
-import msgspec
-import typing
 import types
+import typing
+
+import msgspec
 
 
 def format_type_hint(hint) -> str:

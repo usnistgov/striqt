@@ -7,9 +7,9 @@ follow the cell search cases of TS 38.213 §4.1.
 from __future__ import annotations as __
 
 import dataclasses
+import typing
 from fractions import Fraction
 from math import ceil, isclose
-import typing
 
 from .. import arrays, fourier, power, util
 from ..arrays import array_namespace, is_cupy_array, isroundmod, pad_along_axis

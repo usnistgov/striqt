@@ -1,8 +1,10 @@
+from .. import specs
+from ..lib import register
 from .cellular import (
     cellular_5g_pss_correlation,
     cellular_5g_pss_sync,
-    cellular_5g_sss_correlation,
     cellular_5g_ssb_spectrogram,
+    cellular_5g_sss_correlation,
     cellular_cyclic_autocorrelation,
     cellular_resource_power_histogram,
 )
@@ -11,16 +13,14 @@ from .power import (
     channel_power_time_series,
     cyclic_channel_power,
 )
-from .waveforms import iq_waveform
+from .shared import registry
 from .spectrum import (
     power_spectral_density,
     spectrogram,
     spectrogram_histogram,
     spectrogram_ratio_histogram,
 )
-from .shared import registry
-from .. import specs
-from ..lib import register
+from .waveforms import iq_waveform
 
 # every registered measurement and trigger must have a field on BuiltinAnalyses or
 # BuiltinTriggers

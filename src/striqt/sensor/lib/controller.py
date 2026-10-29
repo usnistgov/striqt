@@ -5,18 +5,19 @@ import dataclasses
 import functools
 import inspect
 import weakref
-from typing import Any, cast, ClassVar, Generic, Generator, TYPE_CHECKING
 from collections import defaultdict
+from collections.abc import Generator
 from threading import Event, RLock
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, cast
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.util import np
 
-from .sources import base, buffers
-from .typing import SS, SP, SC, SA, PC, PS, SourceBackend, TypeVar
-from . import compute, util
 from .. import specs
+from . import compute, util
+from .sources import base, buffers
+from .typing import PC, PS, SA, SC, SP, SS, SourceBackend, TypeVar
 
 if TYPE_CHECKING:
     from .typing import Array, Self, TypeAlias
@@ -34,7 +35,7 @@ class lookup:
     is raised when none is registered within `timeout` seconds.
     """
 
-    _obj: dict[specs.Source, 'PendingSlot'] = defaultdict(Event)
+    _obj: dict[specs.Source, PendingSlot] = defaultdict(Event)
     _id: dict[specs.Source, Event | str] = defaultdict(Event)
     _ready: dict[specs.Source, Event | bool] = defaultdict(Event)
     _lock = RLock()
@@ -224,7 +225,7 @@ class ControllerConfig:
 
 
 def bind_controller(
-    binding: 'bindings.SensorBinding[SS, SP, SC]',
+    binding: bindings.SensorBinding[SS, SP, SC],
     schema: specs.Schema[SS, SP, SC, SA, PS, PC],
 ) -> type[Controller[SS, SP, SC, SA, PS, PC]]:
     class cls(Controller, sensor=binding, schema=schema):
@@ -255,8 +256,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     _closed: bool = False
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
-    schema: ClassVar['specs.Schema[Any, Any, Any, Any, Any, Any]']
-    sensor: ClassVar['bindings.SensorBinding[Any, Any, Any]']
+    schema: ClassVar[specs.Schema[Any, Any, Any, Any, Any, Any]]
+    sensor: ClassVar[bindings.SensorBinding[Any, Any, Any]]
 
     @sa.util.stopwatch(
         'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
@@ -276,7 +277,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     def __init_subclass__(
         cls,
         *,
-        sensor: 'bindings.SensorBinding[SS, SP, SC]',
+        sensor: bindings.SensorBinding[SS, SP, SC],
         schema: specs.Schema[SS, SP, SC, SA, PS, PC],
     ):
         """customize documentation on subclassing"""
@@ -320,7 +321,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         cls.arm.__signature__ = sig  # ty: ignore[unresolved-attribute]
         return cls
 
-    def _setup(self, spec: SS, config: ControllerConfig) -> 'Self':
+    def _setup(self, spec: SS, config: ControllerConfig) -> Self:
         self._config = config
         self.__setup__ = spec
         self._capture = None
@@ -509,7 +510,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             raise ConnectionError('backend is closed')
         return self.backend.get_info()
 
-    def read_iq(self, overlaps: tuple[int, int] = (0, 0)) -> 'tuple[Array, int|None]':
+    def read_iq(self, overlaps: tuple[int, int] = (0, 0)) -> tuple[Array, int | None]:
         """read IQ for the armed capture"""
         assert self._capture is not None, 'source must be armed to read IQ'
 

@@ -3,17 +3,17 @@
 # figure titles and captions are written into the image 'Title' metadata for export
 # to pdf or html
 from __future__ import annotations
+
 import datetime
 import functools
 
-
+import matplotlib.dates as mpldates
+import matplotlib.pyplot as plt
+import matplotlib.units as mplunits
+import numpy as np
 from IPython.display import HTML, display
 from matplotlib.backends.backend_svg import FigureCanvasSVG
-import matplotlib.pyplot as plt
-import matplotlib.dates as mpldates
-import matplotlib.units as mplunits
 from matplotlib_inline import backend_inline
-import numpy as np
 
 _captions = {}
 
@@ -28,8 +28,7 @@ def print_svg(self, *a, **k):
             title_ = ax.get_title()
             if title_:
                 return title_
-        else:
-            return 'untitled'
+        return 'untitled'
 
     def title_to_label(title_):
         """replace 1 or more non-alphanumeric characters with '-'"""
@@ -81,8 +80,7 @@ def set_matplotlib_formats(formats, *args, **kws):
             title_ = ax.get_title()
             if title_:
                 return title_
-        else:
-            return 'untitled'
+        return 'untitled'
 
     def title_to_label(title_):
         """replace 1 or more non-alphanumeric characters with '-'"""

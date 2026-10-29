@@ -8,13 +8,13 @@ from __future__ import annotations as __
 import itertools as itertools
 import os
 from pathlib import Path
-from typing import Any, cast, Generic, TYPE_CHECKING
-
-from . import compute, controller, io, util
-from .. import specs as specs
+from typing import TYPE_CHECKING, Any, Generic, cast
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import xr
+
+from .. import specs as specs
+from . import compute, controller, io, util
 
 if TYPE_CHECKING:
     import shutil
@@ -54,7 +54,7 @@ class Zipper:
             self.zip_path = Path(zip_path)
 
         if self.zip_path.exists() and not force:
-            raise IOError(f'file "{self.zip_path!s}" already exists')
+            raise OSError(f'file "{self.zip_path!s}" already exists')
         elif force:
             logger = sa.util.get_logger('sink')
             logger.warning(f'will overwrite existing "{self.zip_path!s}"')
@@ -87,7 +87,7 @@ class Zipper:
         input_dir = Path(input_dir)
 
         if not input_dir.exists():
-            raise IOError(f'no such directory {str(input_dir)}')
+            raise OSError(f'no such directory {input_dir!s}')
 
         if out_file is None:
             out_file = input_dir.parent / (input_dir.name + '.zip')
@@ -149,10 +149,10 @@ class SinkBase(Generic[specs.SC]):
         self.store = None
         self.force = force
         self._future = None
-        self._pending_data: list['xr.Dataset'] = []
+        self._pending_data: list[xr.Dataset] = []
         self._executor = ThreadPoolExecutor(1)
 
-    def pop(self) -> list['xr.Dataset']:
+    def pop(self) -> list[xr.Dataset]:
         result = self._pending_data
         self._pending_data = []
         self.captures_elapsed += len(result)
@@ -177,8 +177,8 @@ class SinkBase(Generic[specs.SC]):
             self._executor.__exit__(*exc_info)
 
     def append(
-        self, capture_result: 'compute.DelayedDataset'
-    ) -> 'xr.Dataset|compute.DelayedDataset':
+        self, capture_result: compute.DelayedDataset
+    ) -> xr.Dataset | compute.DelayedDataset:
         from . import compute
 
         if capture_result is None:
@@ -213,7 +213,7 @@ class NoSink(SinkBase):
         with util.log_capture_context(
             'sink', capture_index=count - 1, capture_count=count
         ):
-            sa.util.get_logger('sink').info(f'done')
+            sa.util.get_logger('sink').info('done')
 
     def append(self, capture_result) -> compute.DelayedDataset:
         self.captures_elapsed += 1
@@ -296,13 +296,13 @@ class ZarrSinkBase(SinkBase):
             path = self.get_root_path()
 
         if path is not None and Path(path).exists():
-            sa.util.get_logger('sink').info(f'wrote "{str(path)}"')
+            sa.util.get_logger('sink').info(f'wrote "{path!s}"')
         else:
-            sa.util.get_logger('sink').info(f'no data was written')
+            sa.util.get_logger('sink').info('no data was written')
 
     def get_root_path(self) -> str:
         if self.store is None:
-            raise IOError('store is not open')
+            raise OSError('store is not open')
 
         if hasattr(self.store, 'path'):
             return self.store.path

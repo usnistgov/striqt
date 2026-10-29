@@ -1,19 +1,20 @@
 from __future__ import annotations as __
 
 import dataclasses
-from math import ceil, gcd, isfinite
 import os
-from typing import cast, TYPE_CHECKING
 import warnings
-
-from .. import util
-from ... import specs
+from math import ceil, gcd, isfinite
+from typing import TYPE_CHECKING, cast
 
 import striqt.analysis as sa
 from striqt.analysis.lib.dataarrays import format_units
 
+from ... import specs
+from .. import util
+
 if TYPE_CHECKING:
     import striqt.waveform as sw
+
     from ..typing import Array, ResamplerKws, Unpack
 
 else:
@@ -779,9 +780,9 @@ def _get_resample_overlap(
 @sa.util.lru_cache()
 def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
     if array_backend == 'cupy':
-        import cupyx.scipy.fft as fft  # type: ignore
+        from cupyx.scipy import fft  # type: ignore
     elif array_backend == 'numpy':
-        import scipy.fft as fft
+        from scipy import fft
     else:
         raise TypeError(f'invalid array_backend {array_backend}')
 

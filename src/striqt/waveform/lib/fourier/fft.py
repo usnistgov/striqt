@@ -363,9 +363,9 @@ def slice_freqs(
     start = ic - count // 2
     stop = start + count
     if start < 0:
-        raise ValueError(f'offset - bandwidth/2 < fs/2')
+        raise ValueError('offset - bandwidth/2 < fs/2')
     if stop > nfft:
-        raise ValueError(f'offset + bandwidth/2 > fs/2')
+        raise ValueError('offset + bandwidth/2 > fs/2')
 
     return slice(start, stop)
 

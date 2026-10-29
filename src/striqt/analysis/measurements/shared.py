@@ -10,7 +10,7 @@ from ..lib.register import registry  # noqa: F401
 from ..lib.util import np
 
 if TYPE_CHECKING:
-    from typing import Sequence
+    from collections.abc import Sequence
 
     from striqt.waveform.lib.typing import DTypeLike
 

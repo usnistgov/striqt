@@ -2,17 +2,17 @@
 
 from __future__ import annotations as __
 
-from typing import Any, cast, Literal, overload, TYPE_CHECKING
 import warnings
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
-from ... import specs
-from . import corrections, datasets
+import msgspec
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
-import msgspec
+from ... import specs
+from . import corrections, datasets
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -79,7 +79,7 @@ def _get_signal_trigger_name(setup: specs.Source) -> str | None:
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[True]],
-) -> 'xr.Dataset': ...
+) -> xr.Dataset: ...
 
 
 @overload
@@ -93,14 +93,14 @@ def analyze(
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[False]],
-) -> 'dict[str, Array]': ...
+) -> dict[str, Array]: ...
 
 
 @sa.util.stopwatch('', 'analysis')
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
-) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
+) -> dict[str, Array] | xr.Dataset | datasets.DelayedDataset:
     """run the analysis of ``options.sweep_spec`` on `iq`.
 
     The analysis is ``options.sweep_spec.analysis`` adjusted by
@@ -189,8 +189,10 @@ def prepare_compute(
             # numba.cuda must be imported before cupy on some versions/platforms
             # (https://github.com/numba/numba/issues/6131)
             np.__version__  # reify
+            # isort: off
             import numba.cuda  # noqa: F401
             import cupy  # type: ignore  # noqa: F401
+            # isort: on
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
             sw.arrays.configure_cupy()

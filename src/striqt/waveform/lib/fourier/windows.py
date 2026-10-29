@@ -140,7 +140,7 @@ def register_extra_windows():
     The registration modifies the window table of `scipy.signal.get_window` for the
     process.
     """
-    import scipy.signal.windows._windows as _windows
+    from scipy.signal.windows import _windows
 
     if hasattr(_windows, '_win_equiv'):
         registry: dict[str, typing.Callable] = _windows._win_equiv
@@ -221,7 +221,7 @@ def get_window(
     fftbins: bool = True,
     norm: bool = True,
     dtype: DTypeLike = 'float32',
-    xp: 'XpType' = None,
+    xp: XpType = None,
 ) -> Array:
     """return a window of `nwindow` samples for `xp`, zero-padded to `nwindow + nzero`.
 

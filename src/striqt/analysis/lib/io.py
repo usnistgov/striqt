@@ -12,7 +12,6 @@ from pathlib import Path
 from yaml import SequenceNode
 
 from .. import specs
-
 from . import dataarrays, register, util
 from .util import np, pd, xr
 
@@ -21,6 +20,7 @@ if typing.TYPE_CHECKING:
     import yaml
     import zarr
     from typing_extensions import TypeIs
+
     from .typing import Array, ChunksSize, FileStream, ZarrFormat, ZarrStore
 
 else:
@@ -64,7 +64,7 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
         return fs.get_mapper('')
     elif str(target).endswith('.zip'):
         if mode != 'r':
-            raise IOError('only read mode is supported with zip stores')
+            raise OSError('only read mode is supported with zip stores')
         store = zarr.storage.ZipStore(target, mode=mode, compression=0)
     else:
         store = DirectoryStore(target)
@@ -73,8 +73,8 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
 
 
 def dump(
-    store: 'ZarrStore',
-    data: 'xr.DataArray | xr.Dataset',
+    store: ZarrStore,
+    data: xr.DataArray | xr.Dataset,
     *,
     append_dim: str = 'capture',
     compression: bool = True,
@@ -83,7 +83,7 @@ def dump(
     chunk_bytes: ChunksSize = 50_000_000,
     max_threads: int | None = None,
     **kwargs,
-) -> 'ZarrStore':
+) -> ZarrStore:
     """serialize a dataset into a zarr directory or zipfile"""
 
     if max_threads is not None:
@@ -144,7 +144,7 @@ def dump(
         return data.to_zarr(store, **kws, **kwargs)
 
 
-def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> 'xr.Dataset':
+def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> xr.Dataset:
     """load and return a dataset or data array.
 
     Args:
@@ -306,7 +306,7 @@ def decode_from_yaml_file(path: str | Path, *, type: type[_S]) -> _S: ...
 
 
 def decode_from_yaml_file(
-    path: str | Path, *, type: type[specs.SpecBase] | type[dict] = dict
+    path: str | Path, *, type: type[specs.SpecBase | dict] = dict
 ) -> dict[str, typing.Any] | specs.SpecBase:
     """decode a YAML file into a dict or a spec struct.
 
@@ -336,7 +336,7 @@ def decode_from_yaml_file(
     elif issubclass(type, specs.SpecBase):
         return type.from_dict(obj)
     else:
-        raise TypeError(f'unsupported type {repr(type)}')
+        raise TypeError(f'unsupported type {type!r}')
 
 
 class _FileStreamBase:
@@ -468,7 +468,7 @@ class MATNewFileStream(_FileStreamBase):
         elif '#refs#' in self._fd:
             self._refs = list(self._fd['#refs#'].values())
         else:
-            raise IOError('no data references found in file')
+            raise OSError('no data references found in file')
 
         self._pending = list(self._refs)
         self.read(self._skip_samples + pos)
@@ -720,7 +720,7 @@ def open_bare_iq(
     )
 
 
-def _is_fsspec_url(url_string: Path | str) -> 'TypeIs[str]':
+def _is_fsspec_url(url_string: Path | str) -> TypeIs[str]:
     if isinstance(url_string, Path):
         return False
 
@@ -767,7 +767,7 @@ def _get_store_info(store, zarr_format: ZarrFormat = 'auto') -> tuple[bool, dict
 
 
 def _choose_chunk_sizes(
-    ds: 'xr.Dataset|xr.DataArray', data_bytes=100_000_000, dim: str = 'capture'
+    ds: xr.Dataset | xr.DataArray, data_bytes=100_000_000, dim: str = 'capture'
 ) -> dict[str, int]:
     """pick chunk and chunk sizing for each data variable in data"""
     chunks = {dim: ds.sizes[dim]}
@@ -810,9 +810,11 @@ def _build_encodings_zarr_v3(
 
     for name, var in data.variables.items():
         meas_info = info_map.get(name, None)
-        if meas_info is None or not meas_info.store_compressed:
-            encodings[name]['compressors'] = None
-        elif issubclass(var.dtype.type, np.str_):
+        if (
+            meas_info is None
+            or not meas_info.store_compressed
+            or issubclass(var.dtype.type, np.str_)
+        ):
             encodings[name]['compressors'] = None
         else:
             encodings[name]['compressors'] = compressors

@@ -6,32 +6,35 @@ bound spec classes are module-global. A registered key binds once per process.
 """
 
 from __future__ import annotations as __
+
+import dataclasses
 import functools
+import sys
+import warnings
 from typing import (
     Any,
-    cast,
     Generic,
     Optional,
     Union,
+    cast,
 )
-import dataclasses
-import sys
-import warnings
 
-from .controller import Controller, bind_controller
-from .peripherals import NoPeripherals
-from .. import specs
-from .typing import Peripherals, PC, PS, SA, SC, SS, SP, SourceBackend, TypeVar
 import msgspec
+
 import striqt.analysis as sa
 from striqt.analysis.lib.register import check_group_registered
+
+from .. import specs
+from .controller import Controller, bind_controller
+from .peripherals import NoPeripherals
+from .typing import PC, PS, SA, SC, SP, SS, Peripherals, SourceBackend, TypeVar
 
 TC2 = TypeVar('TC2', bound=specs.SensorCapture)
 TP2 = TypeVar('TP2', bound=specs.Peripherals)
 TS2 = TypeVar('TS2', bound=specs.Source)
 
 
-registry: dict[str, 'type[Controller[Any, Any, Any, Any, Any, Any]]'] = {}
+registry: dict[str, type[Controller[Any, Any, Any, Any, Any, Any]]] = {}
 tagged_sweeps: Any = None
 
 
@@ -44,9 +47,7 @@ class Sensor(Generic[SS, SP, SC]):
     sweep_spec_cls: type[specs.ActionSpec[SS, SP, Any]] = specs.Sweep
     """the action spec type to bind; at the default of `specs.Sweep`, `Schema.action`
     selects the type"""
-    peripherals_cls: type[Peripherals[SP, SC]] | type[NoPeripherals[SP, SC]] = (
-        NoPeripherals
-    )
+    peripherals_cls: type[Peripherals[SP, SC] | NoPeripherals[SP, SC]] = NoPeripherals
     """the peripherals class instantiated from a `Sweep`; `NoPeripherals` opens
     nothing"""
 
@@ -187,8 +188,8 @@ def bind_sensor(
 
 
 def bind_manual_yfactor_calibration(
-    name: str, ctrl_cls: 'type[Controller[SS, SP, Any, SA, PS, PC]]'
-) -> 'type[Controller[SS, SP, Any, SA, PS, PC]]':
+    name: str, ctrl_cls: type[Controller[SS, SP, Any, SA, PS, PC]]
+) -> type[Controller[SS, SP, Any, SA, PS, PC]]:
     """bind the sensor of `ctrl_cls` for `ManualYFactorCalibration` under `name`.
 
     Deprecated in favor of `bind_sensor` with `ctrl_cls.sensor` and
@@ -212,7 +213,7 @@ def bind_manual_yfactor_calibration(
     )
 
 
-def get_registry() -> dict[str, 'type[Controller[Any, Any, Any, Any, Any, Any]]']:
+def get_registry() -> dict[str, type[Controller[Any, Any, Any, Any, Any, Any]]]:
     return dict(registry)
 
 

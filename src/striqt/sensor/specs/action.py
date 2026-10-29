@@ -7,11 +7,11 @@ failing field of the spec, with the loop point for an expanded capture.
 
 from __future__ import annotations as __
 
-from collections import Counter
-from collections.abc import Iterator
 import contextlib
 import math
-from typing import Any, Callable, TYPE_CHECKING
+from collections import Counter
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any, Callable
 
 import striqt.analysis as sa
 from striqt.analysis.specs.helpers import SpecValidationError, validation_path
