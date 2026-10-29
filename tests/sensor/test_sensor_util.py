@@ -12,8 +12,7 @@ import time
 import exceptiongroup
 import pytest
 import yaml
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 
 import striqt.analysis as sa
 from striqt.sensor.lib import util
@@ -32,7 +31,7 @@ def raised(exc):
     """return `exc` with a traceback attached, as a caught exception has"""
     try:
         raise exc
-    except BaseException as ex:  # noqa: BLE001
+    except BaseException as ex:
         return ex
 
 
@@ -52,7 +51,7 @@ def run_in_thread(func):
     def target():
         try:
             outcome.append(('ok', func()))
-        except BaseException as ex:  # noqa: BLE001
+        except BaseException as ex:
             outcome.append(('raised', ex))
 
     thread = threading.Thread(target=target)

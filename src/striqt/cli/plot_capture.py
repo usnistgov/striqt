@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 
 from __future__ import annotations
-import click
+
 import typing
+from pathlib import Path
+
+import click
 
 if typing.TYPE_CHECKING:
-    import dask.array
-    import striqt.figures as sf
     import xarray as xr
+
+    import striqt.figures as sf
 
     class WorkerData(typing.TypedDict):
         data: xr.Dataset
@@ -55,8 +58,10 @@ def run(
     interactive: sf.backend.TerminalGraphics | None = None,
     no_save=False,
 ):
-    import msgspec
     import multiprocessing
+
+    import msgspec
+
     from striqt import figures as sf
 
     if yaml_path is None:
@@ -70,11 +75,11 @@ def run(
             )
         opts = sf.specs.PlotOptions.from_dict(plot_hint)
     else:
-        yaml_text = open(yaml_path, 'rb').read()
+        yaml_text = Path(yaml_path).read_bytes()
         opts = msgspec.yaml.decode(yaml_text, type=sf.specs.PlotOptions, strict=False)
 
-    from concurrent import futures
     import os
+    from concurrent import futures
 
     if hasattr(os, 'process_cpu_count'):
         ncores = os.process_cpu_count() or 1
@@ -111,18 +116,18 @@ def run(
         pass
 
 
-def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.Dataset':
+def load_data(zarr_path: str, opts: sf.specs.PlotOptions, index=True) -> xr.Dataset:
+    import xarray as xr
+
     import striqt.analysis as sa
     import striqt.figures as sf
-    import xarray as xr
-    import dask.array
 
     dataset = sa.load(zarr_path)
 
     if not isinstance(dataset, xr.Dataset):
         raise TypeError(f'file contents are {type(dataset).__name__!r} a dataset')
 
-    for func_name in opts.variables.keys():
+    for func_name in opts.variables:
         if func_name not in dataset.data_vars:
             raise KeyError(
                 f'yaml specifies a {func_name!r} plot, but no such variable is in the dataset'
@@ -148,7 +153,7 @@ def load_data(zarr_path: str, opts: 'sf.specs.PlotOptions', index=True) -> 'xr.D
 
 def worker_init(
     zarr_path,
-    opts: 'sf.specs.PlotOptions',
+    opts: sf.specs.PlotOptions,
     interactive: sf.backend.TerminalGraphics | None,
     no_save: bool,
     lock,
@@ -156,8 +161,8 @@ def worker_init(
     from pathlib import Path
     from warnings import filterwarnings
 
-    import striqt.figures as sf
     import striqt.analysis as sa
+    import striqt.figures as sf
     import striqt.sensor as ss
 
     sf.backend.select_mpl_backend(opts.plotter.style, interactive)
@@ -188,11 +193,11 @@ def worker_init(
         plotter_options = opts.plotter.replace(
             filename_fmt=f'{p.stem} {name}={{{name}}}{p.suffix}'
         )
-        opts_dict = dict(
-            data=opts.data,
-            variables=sa.specs.helpers.unfreeze(opts.variables),
-            plotter=plotter_options,
-        )
+        opts_dict = {
+            'data': opts.data,
+            'variables': sa.specs.helpers.unfreeze(opts.variables),
+            'plotter': plotter_options,
+        }
         opts = opts.from_dict(sa.specs.helpers.freeze(opts_dict, 10))
 
     global worker_ctx

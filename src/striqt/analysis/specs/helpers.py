@@ -1,30 +1,36 @@
-"""helper functions for specification data structures and their aliases"""
+"""frozen containers, field subsets, conversion caches, and schema hooks for the
+specification structs."""
 
 from __future__ import annotations as __
 
 import contextlib
 import dataclasses
-import functools
 import fractions
-from typing import (
-    Any,
-    Callable,
+import functools
+from collections.abc import (
     Collection,
-    Iterator,
+    Generator,
     ItemsView,
     Iterable,
+    Iterator,
     KeysView,
     Mapping,
-    TYPE_CHECKING,
-    TypeVar,
     ValuesView,
+)
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    TypeVar,
     cast,
     get_args,
     get_origin,
     overload,
 )
+
 import msgspec
 from msgspec import inspect as mi
+
 from striqt.waveform.lib import util
 
 _T = TypeVar('_T')
@@ -75,7 +81,7 @@ class frozendict(Mapping[_K, _V]):
     An immutable dictionary that supports hashing
     """
 
-    __slots__ = ['_hash', '_dict']
+    __slots__ = ['_dict', '_hash']
     _dict: dict[_K, _V]
     _hash: int | None
 
@@ -118,7 +124,7 @@ class frozendict(Mapping[_K, _V]):
         for key, value in self.items():
             try:
                 h ^= hash((key, value))
-            except:
+            except TypeError:
                 raise TypeError(f'unhashable frozendict entry {(key, value)!r}')
         self._hash = h
 
@@ -144,13 +150,13 @@ class frozendict(Mapping[_K, _V]):
     def __ior__(self, other: Any) -> frozendict[_K, _V]:
         raise TypeError(f"'{self.__class__.__name__}' object is frozen")
 
-    def items(self) -> ItemsView[_K, _V]:  # noqa: D102
+    def items(self) -> ItemsView[_K, _V]:
         return self._dict.items()
 
-    def keys(self) -> KeysView[_K]:  # noqa: D102
+    def keys(self) -> KeysView[_K]:
         return self._dict.keys()
 
-    def values(self) -> ValuesView[_V]:  # noqa: D102
+    def values(self) -> ValuesView[_V]:
         return self._dict.values()
 
     def update(self, other: dict[_K, _V], /):
@@ -207,7 +213,7 @@ class SpecValidationError(msgspec.ValidationError):
 
 
 @contextlib.contextmanager
-def validation_path(*parts: str) -> Iterator[None]:
+def validation_path(*parts: str) -> Generator[None, None, None]:
     """prepend `parts` to the field path of a validation failure raised in the block.
 
     Yields:
@@ -533,7 +539,7 @@ def json_schema(cls: type[msgspec.Struct]) -> dict:
 
 
 @overload
-def freeze(obj: dict[_K, _V], max_depth: int | None = None) -> 'frozendict[_K, _V]':
+def freeze(obj: dict[_K, _V], max_depth: int | None = None) -> frozendict[_K, _V]:
     pass
 
 
@@ -552,7 +558,7 @@ def freeze(obj: _T, max_depth: int | None = None) -> _T:
 def freeze(
     obj: Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _T,
     max_depth: int | None = None,
-) -> 'frozendict[_K, _V]|tuple[_V, ...]|_T':
+) -> frozendict[_K, _V] | tuple[_V, ...] | _T:
     """recursively transform list and dict into tuple and frozendict"""
     if isinstance(obj, (list, tuple)):
         nd = None if max_depth is None else max_depth - 1
@@ -573,7 +579,7 @@ def freeze(
 
 
 @overload
-def unfreeze(obj: Mapping[_K, _V], max_depth: int | None = None) -> 'dict[_K, _V]':
+def unfreeze(obj: Mapping[_K, _V], max_depth: int | None = None) -> dict[_K, _V]:
     pass
 
 
@@ -590,7 +596,7 @@ def unfreeze(obj: _V, max_depth: int | None = None) -> _V:
 def unfreeze(
     obj: Mapping[_K, _V] | tuple[_V, ...] | list[_V] | _V,
     max_depth: int | None = None,
-) -> 'dict[_K, _V]|list[_V]|_V':
+) -> dict[_K, _V] | list[_V] | _V:
     """convert the tuple and `frozendict` values of `obj` to list and dict.
 
     Args:

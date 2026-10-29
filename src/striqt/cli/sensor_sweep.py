@@ -2,8 +2,9 @@
 
 """console entry point ``sensor-sweep``, installed on the shell PATH by pyproject.toml"""
 
+from typing import TYPE_CHECKING, Any, Callable, Union
+
 import click
-from typing import Any, Callable, Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import striqt.sensor as ss
@@ -11,9 +12,10 @@ if TYPE_CHECKING:
 
 
 def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
-    import striqt.sensor as ss
-    import striqt.analysis as sa
     from pprint import pformat
+
+    import striqt.analysis as sa
+    import striqt.sensor as ss
 
     labels = ss.specs.sequencing.list_capture_adjustments(spec, source_id)
     if len(labels) == 0:
@@ -90,13 +92,14 @@ def log_spectrogram_snr(
 
 
 def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None):
-    import striqt.sensor as ss
     from pathlib import Path
+
+    import striqt.sensor as ss
 
     if isinstance(path, Path):
         path = str(path)
 
-    if path.endswith('.yaml') or path.endswith('.yml'):
+    if path.endswith(('.yaml', '.yml')):
         spec = ss.read_yaml_spec(path, output_path=output_path)
     elif path.endswith('.json'):
         spec = ss.read_json_spec(path, output_path=output_path)
@@ -150,8 +153,9 @@ def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None
     help='override the output file path in the yaml specification',
 )
 def cli(*, path: str, debug: bool, verbose: bool, skip_confirm: bool, output_path):
-    import striqt.sensor as ss
     import sys
+
+    import striqt.sensor as ss
 
     except_handler = ss.util.DebugOnException(enable=debug, verbose=verbose)
     sys.excepthook = except_handler.run

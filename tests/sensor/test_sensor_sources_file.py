@@ -342,15 +342,34 @@ def test_mat_round_trip_scale_only(mat_files, rows, port):
     np.testing.assert_array_equal(to_numpy(filtered(stages.corrected)), expected)
 
 
-def test_mat_loop_repeats_file(mat_files):
+@pytest.fixture(scope='module')
+def mat_file_1row(mat_files):
+    return mat_files[1]
+
+
+@pytest.fixture(scope='module')
+def npy_file(tmp_path_factory):
+    """return a ``.npy`` file with the 1 tone row of `mat_files`"""
+    root = tmp_path_factory.mktemp('npy')
+    tone = {'frequency_offset': TONE_FREQUENCIES[0], 'count': FILE_SAMPLES}
+    waveform = testing.single_tone(None, FS, ports=1, **tone)
+    path = root / '1row.npy'
+    np.save(path, waveform)
+    return SimpleNamespace(path=path, waveform=waveform)
+
+
+@pytest.mark.parametrize(
+    'file', [lf('mat_file_1row'), lf('npy_file')], ids=['mat', 'npy']
+)
+def test_mat_loop_repeats_file(file):
     """with loop=True a capture longer than the file wraps around to index 0"""
     duration = 1.5 * FILE_DURATION
     capture = file_capture(port=0, duration=duration)
     stages = acquire_corrected(
-        ss.bindings.mat_file, capture, source=mat_spec(mat_files[1], loop=True)
+        ss.bindings.mat_file, capture, source=mat_spec(file, loop=True)
     )
     corrected = stages.corrected
-    file = mat_files[1].waveform
+    file = file.waveform
     count = round(duration * FS)
     expected = np.concatenate([file, file[:, : count - FILE_SAMPLES]], axis=1)
     np.testing.assert_array_equal(to_numpy(filtered(corrected)), expected)

@@ -1,6 +1,5 @@
 from __future__ import annotations as __
 
-import functools
 import time
 from typing import TYPE_CHECKING
 
@@ -8,15 +7,15 @@ from striqt.analysis.lib.util import np
 
 from ... import specs
 from .. import util
-from ..typing import SS, SC, SourceBackend
+from ..typing import SC, SS, SourceBackend
 
 if TYPE_CHECKING:
     from types import ModuleType
 
+    import striqt.waveform as sw
     from striqt.waveform.lib.typing import DTypeLike
 
-    from ..typing import Array, Self
-    import striqt.waveform as sw
+    from ..typing import Array
 
 
 class ReceiveStreamError(IOError):
@@ -215,7 +214,7 @@ class VirtualSource(SourceBackend[SS, SC]):
         self._stream_end_ns = self._sync_time_ns + self._sample_time_ns(index)
         self._origin_pending = True
 
-    def get_resampler(self, capture) -> 'sw.ResamplerDesign':
+    def get_resampler(self, capture) -> sw.ResamplerDesign:
         from ..compute import design_resampler
 
         return design_resampler(capture, self.setup_spec.master_clock_rate)

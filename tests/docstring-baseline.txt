@@ -1,7 +1,0 @@
-# docstrings that break the prose rules checked by tests/test_docstrings.py
-# before the gate was added. Entries are removed as they are fixed; none are added.
-# re-baselined 2026-10-28 when the gate changed from "it"/"its" to personal pronouns and "whose"
-src/striqt/analysis/specs/helpers.py::<module>
-src/striqt/waveform/lib/fourier/fft.py::fft_roundoff_rms
-src/striqt/waveform/lib/fourier/windows.py::get_window
-src/striqt/waveform/lib/power/convert.py::<module>

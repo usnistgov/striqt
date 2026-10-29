@@ -30,6 +30,40 @@ import striqt.waveform as sw
 TONE = ss.bindings.single_tone
 
 
+def test_failed_open_wakes_a_thread_waiting_for_the_id(isolated_lookup, monkeypatch):
+    """a thread blocked in `lookup.id` raises when the source fails to open.
+
+    The waiter sees the recorded exception, or the slot that the failed controller
+    cleared on close, as the two threads interleave. Both raise.
+    """
+    import time
+    from threading import Thread
+
+    def failing_buffers(controller):
+        # hold the open until the waiter has moved from the controller event to the
+        # id event. The registry replaces that event when the failed controller closes
+        time.sleep(0.1)
+        raise RuntimeError('no buffers')
+
+    monkeypatch.setattr(ss.lib.sources.buffers, 'ReceiveBuffers', failing_buffers)
+    outcome = []
+
+    def wait_for_id():
+        try:
+            outcome.append(isolated_lookup.id(SOURCE, timeout=2))
+        except BaseException as ex:
+            outcome.append(ex)
+
+    waiter = Thread(target=wait_for_id)
+    waiter.start()
+    with pytest.raises(RuntimeError):
+        TONE.from_source_spec(SOURCE)
+    waiter.join(timeout=2)
+
+    assert not waiter.is_alive(), 'the waiter is still blocked on the id'
+    assert isinstance(outcome[0], (ss.lib.util.ThreadInterruptRequest, RuntimeError))
+
+
 def test_close_is_idempotent():
     closes = []
     ctrl = TONE.from_source_spec(SOURCE)

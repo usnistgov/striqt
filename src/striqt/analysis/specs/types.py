@@ -1,7 +1,9 @@
 import fractions
 from typing import Annotated, Literal, Union
-from .helpers import Meta
+
 import striqt.waveform as sw
+
+from .helpers import Meta
 
 AnalysisBandwidth = Annotated[float, Meta('Analysis bandwidth', 'Hz')]
 AsXArray = Literal['delayed', True, False]

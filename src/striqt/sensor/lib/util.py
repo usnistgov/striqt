@@ -8,18 +8,18 @@ import logging
 import sys
 import threading
 import time
-from typing import Any, cast, Iterable, Iterator, TYPE_CHECKING
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 import striqt.analysis as sa
-
-from striqt.waveform.lib.util import lazy_import
-
+from striqt.waveform.lib.util import lazy_import as lazy_import
 
 if TYPE_CHECKING:
-    import exceptiongroup
     import concurrent.futures
     from typing import Callable
+
+    import exceptiongroup
 
     from .typing import P, PassThroughWrapper, R, TypeVar
 
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     _T = TypeVar('_T')
 
 else:
-    from functools import cached_property
+    from functools import cached_property as cached_property
 
     exceptiongroup = sa.util.lazy_import('exceptiongroup')
 
@@ -77,7 +77,7 @@ def zip_offsets(
 
 
 # %% Concurrency
-threadpool: 'concurrent.futures.ThreadPoolExecutor'
+threadpool: concurrent.futures.ThreadPoolExecutor
 _cancel_threads = threading.Event()
 
 
@@ -180,12 +180,11 @@ class ExceptionStack:
                 # prefer keyboardinterrupts
                 if isinstance(int, KeyboardInterrupt):
                     raise int
-            else:
-                raise ints[0]
+            raise ints[0]
 
 
 def await_and_ignore(
-    futures: 'Iterable[concurrent.futures.Future]', except_msg: str | None = None
+    futures: Iterable[concurrent.futures.Future], except_msg: str | None = None
 ):
     exc = ExceptionStack(except_msg)
     try:
@@ -221,11 +220,11 @@ class DebugOnException:
         triplet = (etype, exc, tb)
 
         with self.lock:
-            if triplet == (None, None, None):
-                return
-            elif self.prev == triplet:
-                return
-            elif isinstance(exc, KeyboardInterrupt):
+            if (
+                triplet == (None, None, None)
+                or self.prev == triplet
+                or isinstance(exc, KeyboardInterrupt)
+            ):
                 return
 
             if not hasattr(sys, 'last_value'):
@@ -268,7 +267,7 @@ def retry(
     backoff: float = 0,
     exception_func: Callable[..., None] = lambda *args, **kws: None,
     logger: logging.Logger | logging.LoggerAdapter | None = None,
-) -> 'PassThroughWrapper[P, R]':
+) -> PassThroughWrapper[P, R]:
     """return a decorator that repeats a call on the exceptions `excs`.
 
     The decorated function is called up to `tries` times. The result of the first
@@ -338,7 +337,7 @@ def retry(
 _LOG_LEVEL_NAMES = {
     'debug': logging.DEBUG,
     'info': logging.INFO,
-    'warning': logging.WARN,
+    'warning': logging.WARNING,
     'error': logging.ERROR,
     'critical': logging.CRITICAL,
 }
@@ -394,7 +393,7 @@ def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
 
 
 class _JSONFormatter(logging.Formatter):
-    _last = []
+    _last: ClassVar[list] = []
 
     def __init__(self):
         super().__init__(style='{')

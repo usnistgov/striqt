@@ -632,11 +632,6 @@ it was standing in for is enabled.
   Separate batches are still appended along `capture` by `sa.dump`'s default
   `append_dim`; tested with `batched_write_count == len(captures)`.
 
-- **`analysis/lib/io.py` `TDMSFileStream.read` references an undefined
-  `float_dtype`.** The same latent `np.finfo(...).dtype` misuse that was fixed
-  in `sensor/lib/sources/file.py` on 2026-09-18; the analysis-side reader is
-  unused by the sensor.
-
 - **`isolated_extension_import` does not restore `ss.lib.bindings.registry`.**
   `tests/conftest.py` snapshots `sys.path` and `sys.modules` around an extension
   import but not the binding registry, so a binding registered by one test stays

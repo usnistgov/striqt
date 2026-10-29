@@ -7,9 +7,9 @@ follow the cell search cases of TS 38.213 §4.1.
 from __future__ import annotations as __
 
 import dataclasses
+import typing
 from fractions import Fraction
 from math import ceil, isclose
-import typing
 
 from .. import arrays, fourier, power, util
 from ..arrays import array_namespace, is_cupy_array, isroundmod, pad_along_axis
@@ -721,7 +721,7 @@ def correlate_sync_sequence(
         round(params.sample_rate / params.subcarrier_spacing) + 2 * params.min_cp_size
     )
 
-    R_shape = list(max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape))
+    R_shape = [max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape)]
     R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
     R = xp.empty(tuple(R_shape), dtype='complex64')
 

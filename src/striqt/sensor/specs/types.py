@@ -1,11 +1,10 @@
 from __future__ import annotations as __
 
-from pathlib import Path
-from typing import Annotated, Any, Literal, Mapping, Optional, Union
-from striqt.analysis.lib.util import pd
-from striqt.analysis.specs import frozendict
-from striqt.analysis.specs.types import *
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal, Optional, Union
 
+from striqt.analysis.lib.util import pd
+from striqt.analysis.specs.types import *
 
 AliasCandidateMatches = Annotated[
     tuple[Mapping[str, Any], ...],

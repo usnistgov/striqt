@@ -1,10 +1,7 @@
-#!/usr/bin/env python
-
 import typing
 
 import click
 
-from striqt.sensor.lib import resources
 from striqt.sensor.lib.compute import cal_lookups
 
 
@@ -18,16 +15,17 @@ def cli(yaml_path):
 
 
 def run(yaml_path: str):
-    import striqt.sensor as ss
-    from pprint import pformat
     from pathlib import Path
+    from pprint import pformat
+
     import pandas as pd
+
+    import striqt.sensor as ss
 
     spec = ss.read_yaml_spec(yaml_path)
     print(f'Opened a bound specification for {type(spec).__name__!r} bindings')
 
-    print(f'Opening sensor resources...')
-    import sys
+    print('Opening sensor resources...')
 
     # `run_spec` writes nothing. The paths printed below come from `spec`.
     run_spec = spec.replace(sink=spec.sink.replace(path=None))
@@ -60,12 +58,12 @@ def run(yaml_path: str):
             expanded_paths['source.calibration'] = spec.source.calibration
         for name, p in expanded_paths.items():
             print(f'{name}:')
-            print(f'  Input: ', repr(p))
+            print('  Input: ', repr(p))
             if p is None:
                 continue
             if format_path is not None:
                 pf = format_path(p)
-                print(f'  Formatted: ', repr(pf))
+                print('  Formatted: ', repr(pf))
             else:
                 pf = p
             print('  Exists: ', 'yes' if Path(pf).exists() else 'no')

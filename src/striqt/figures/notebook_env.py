@@ -3,17 +3,17 @@
 # figure titles and captions are written into the image 'Title' metadata for export
 # to pdf or html
 from __future__ import annotations
+
 import datetime
 import functools
 
-
+import matplotlib.dates as mpldates
+import matplotlib.pyplot as plt
+import matplotlib.units as mplunits
+import numpy as np
 from IPython.display import HTML, display
 from matplotlib.backends.backend_svg import FigureCanvasSVG
-import matplotlib.pyplot as plt
-import matplotlib.dates as mpldates
-import matplotlib.units as mplunits
 from matplotlib_inline import backend_inline
-import numpy as np
 
 _captions = {}
 
@@ -28,8 +28,7 @@ def print_svg(self, *a, **k):
             title_ = ax.get_title()
             if title_:
                 return title_
-        else:
-            return 'untitled'
+        return 'untitled'
 
     def title_to_label(title_):
         """replace 1 or more non-alphanumeric characters with '-'"""
@@ -81,8 +80,7 @@ def set_matplotlib_formats(formats, *args, **kws):
             title_ = ax.get_title()
             if title_:
                 return title_
-        else:
-            return 'untitled'
+        return 'untitled'
 
     def title_to_label(title_):
         """replace 1 or more non-alphanumeric characters with '-'"""
@@ -97,14 +95,14 @@ def set_matplotlib_formats(formats, *args, **kws):
         label = title_to_label(guess_title(fig))
         caption_text = _captions.get(id(fig), '')
 
-        ret = pltt._print_figure(fig, fmt=fmt, *a, **k)
+        ret = pltt._print_figure(fig, *a, fmt=fmt, **k)
 
         markup = f'<tt>{label}.{fmt}:</tt>{"<br>" + caption_text if caption_text else " (no caption data)"}'
         display(HTML(markup))
 
         return ret
 
-    pltt.print_figure, pltt._print_figure = wrapper, pylabtools.pltt  # type: ignore
+    pltt.print_figure, pltt._print_figure = wrapper, pltt.print_figure  # type: ignore
 
 
 def set_caption(*args):
@@ -116,8 +114,6 @@ def set_caption(*args):
     Raises:
         ValueError: if called with neither 1 nor 2 positional arguments
     """
-    global _captions
-
     if len(args) == 1:
         fig, text = plt.gcf(), args[0]
     elif len(args) == 2:

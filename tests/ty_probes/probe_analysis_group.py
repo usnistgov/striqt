@@ -1,6 +1,5 @@
 """the analysis and trigger groups expose the measurement fields to the type checker"""
 
-# ruff: noqa: UP045  msgspec resolves the Quick annotations at runtime on py3.9
 from __future__ import annotations
 
 from typing import Optional

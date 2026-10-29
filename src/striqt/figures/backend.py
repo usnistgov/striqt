@@ -1,23 +1,25 @@
 from __future__ import annotations as __
+
 import contextlib
 import functools
 import io
-from pathlib import Path
 import sys
 import typing
-
-from . import specs, util
+from pathlib import Path
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
+from . import specs, util
+
 if typing.TYPE_CHECKING:
     from multiprocessing.synchronize import RLock
-    from typing_extensions import NotRequired, Unpack
+
     import matplotlib as mpl
-    import xarray.plot
     import xarray.core.types
+    import xarray.plot
+    from typing_extensions import NotRequired, Unpack
 
     _T = typing.TypeVar('_T', bound=xr.DataArray)
 
@@ -40,8 +42,8 @@ def select_mpl_backend(style: str | None, interactive: TerminalGraphics | None) 
             ``'kitty'``
     """
 
-    from matplotlib import pyplot as plt
     import matplotlib as mpl
+    from matplotlib import pyplot as plt
 
     styles = [style] if style else []
 
@@ -78,7 +80,7 @@ def term_graphics_notice(interactive: str | None):
         )
 
 
-def coerce_column(data: '_T', plotter: 'PlotBackend') -> '_T':
+def coerce_column(data: _T, plotter: PlotBackend) -> _T:
     """add a size-1 `_view` dimension to `data` when the plot options set neither `col` nor `row`"""
     opts = plotter.opts
     if opts.col is None and opts.row is None:
@@ -109,10 +111,14 @@ def plot_cyclic_channel_power(
     ax=None,
     colors=None,
     steps=True,
-    plot_kws: dict[str, typing.Any] = {},
+    plot_kws: dict[str, typing.Any] | None = None,
 ):
-    from . import labels
     import matplotlib.pyplot as plt
+
+    from . import labels
+
+    if plot_kws is None:
+        plot_kws = {}
 
     if ax is None:
         _, ax = plt.subplots()
@@ -184,14 +190,14 @@ def batch_term_images(interactive: TerminalGraphics | None):
 class PlotBackend:
     opts: specs.SharedPlotOptions
     lock: RLock | _FakeLock
-    last_grid: 'xarray.plot.FacetGrid | None' = None
+    last_grid: xarray.plot.FacetGrid | None = None
 
     def __init__(
         self,
         opts: specs.SharedPlotOptions,
         output_dir: Path | None,
         *,
-        interactive: None | bool | str = None,
+        interactive: bool | str | None = None,
         lock: RLock | None = None,
     ):
         self.opts = opts
@@ -206,7 +212,7 @@ class PlotBackend:
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    @functools.lru_cache()
+    @functools.lru_cache  # noqa: B019
     def _coord_kws(self, **kwargs: Unpack[_DimKws]) -> _LayoutKwArgs:
         if self.opts.col is None and self.opts.row is None:
             col = '_view'
@@ -223,7 +229,7 @@ class PlotBackend:
 
     def heatmap(
         self,
-        data: 'xr.DataArray',
+        data: xr.DataArray,
         *,
         cmap: str = 'cubehelix',
         vmin: float | None = None,
@@ -267,8 +273,8 @@ class PlotBackend:
 
     def line(
         self,
-        data: 'xr.DataArray',
-        yscale: 'xarray.core.types.ScaleOptions' = 'linear',
+        data: xr.DataArray,
+        yscale: xarray.core.types.ScaleOptions = 'linear',
         sharex: bool = True,
         **kwargs: Unpack[_DimKws],
     ):
@@ -287,12 +293,13 @@ class PlotBackend:
 
     def finish(
         self,
-        grid: 'xarray.plot.FacetGrid',
+        grid: xarray.plot.FacetGrid,
         # coords: _LayoutKwArgs,
         xticklabelunits: bool | typing.Literal['auto'] = 'auto',
     ) -> Path | None:
-        from . import labels
         import matplotlib.pyplot as plt
+
+        from . import labels
 
         data = grid.data
         x = grid._x_var
@@ -360,7 +367,7 @@ class PlotBackend:
             )
             path = Path(self.output_dir) / filename[0]
             grid.fig.savefig(path, dpi=dpi)
-            sa.util.get_logger('analysis').info(f"💾 '{str(path)}'")
+            sa.util.get_logger('analysis').info(f"💾 '{path!s}'")
         else:
             path = None
 
@@ -377,8 +384,8 @@ class PlotBackend:
 
     def limit_facets(
         self,
-        grid: 'xarray.plot.FacetGrid',
-        low: 'xr.DataArray | float | None',
+        grid: xarray.plot.FacetGrid,
+        low: xr.DataArray | float | None,
         high: float | None,
     ) -> None:
         """set the x limits of each facet of `grid` to (`low`, `high`).
@@ -398,10 +405,10 @@ class PlotBackend:
 
     def mark_noise_level(
         self,
-        data: 'xr.Dataset',
+        data: xr.Dataset,
         var_name: str,
-        grid: 'xarray.plot.FacetGrid',
-        where: typing.Literal['x'] | typing.Literal['y'] | typing.Literal['colorbar'],
+        grid: xarray.plot.FacetGrid,
+        where: typing.Literal['x', 'y', 'colorbar'],
     ):
         """draw the system noise level (in dBm) of `var_name` on each facet of `grid`.
 
@@ -464,7 +471,7 @@ class PlotBackend:
 
 
 def _facet_values(
-    values: 'xr.DataArray', grid: 'xarray.plot.FacetGrid'
+    values: xr.DataArray, grid: xarray.plot.FacetGrid
 ) -> list[float | None]:
     """return one value of `values` per facet of `grid`, in `grid.axs.flat` order.
 
@@ -499,7 +506,7 @@ def _facet_values(
     return out
 
 
-def _select_dpi(grid, x_data, y_data: 'xr.DataArray | None', min_=0, max_=300):
+def _select_dpi(grid, x_data, y_data: xr.DataArray | None, min_=0, max_=300):
     dpi = min_
     scale_inv = grid.fig.dpi_scale_trans.inverted()
     for ax in grid.fig.axes:

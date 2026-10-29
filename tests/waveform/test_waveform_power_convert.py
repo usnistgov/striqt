@@ -15,8 +15,7 @@ from conftest import (
     envelope_arrays,
     positive_power_arrays,
 )
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from hypothesis.extra.numpy import arrays
 from numeric_checks import (
     FLOAT_DTYPES,

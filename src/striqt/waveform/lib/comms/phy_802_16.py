@@ -36,9 +36,9 @@ def get_802_16_phy(
 class Phy802_16(PhyOFDM):
     """Sampling and index parameters and lookup tables for IEEE 802.16-2017 OFDMA"""
 
-    VALID_CP_RATIOS = {1 / 32, 1 / 16, 1 / 8, 1 / 4}
-    VALID_FFT_SIZES = {128, 512, 1024, 2048}
-    VALID_FRAME_DURATIONS = {
+    VALID_CP_RATIOS: typing.ClassVar[set[float]] = {1 / 32, 1 / 16, 1 / 8, 1 / 4}
+    VALID_FFT_SIZES: typing.ClassVar[set[int]] = {128, 512, 1024, 2048}
+    VALID_FRAME_DURATIONS: typing.ClassVar[set[float]] = {
         2e-3,
         2.5e-3,
         4e-3,
@@ -52,7 +52,7 @@ class Phy802_16(PhyOFDM):
         50e-3,
     }
 
-    SAMPLING_FACTOR_BY_FREQUENCY_DIV = {
+    SAMPLING_FACTOR_BY_FREQUENCY_DIV: typing.ClassVar[dict[float, float]] = {
         1.25: 28 / 25,
         1.5: 28 / 25,
         1.75e6: 8 / 7,
@@ -197,16 +197,14 @@ def _802_16_index_cyclic_prefix(
         symbols, '"symbols" argument', size=phy.symbols_per_frame, xp=xp
     )
 
-    grid = []
-
-    # axis 0: symbol number in each frame
-    grid.append(phy.cp_start_idx[symbol_inds])
-
-    # axis 1: frame number
-    grid.append(frames * phy.frame_size)
-
-    # axis 2: cp index
-    grid.append(xp.ogrid[0 : phy.cp_sizes[1]])
+    grid = [
+        # axis 0: symbol number in each frame
+        phy.cp_start_idx[symbol_inds],
+        # axis 1: frame number
+        frames * phy.frame_size,
+        # axis 2: cp index
+        xp.ogrid[0 : phy.cp_sizes[1]],
+    ]
 
     # pad the axis dimensions so they can be broadcast together
     a = xp.meshgrid(*grid, indexing='ij', copy=False)

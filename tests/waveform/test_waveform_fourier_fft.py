@@ -8,8 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from conftest import iq_waveforms
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from numeric_checks import (
     ATOL,
     RTOL_FLOAT64,

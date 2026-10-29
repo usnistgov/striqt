@@ -6,7 +6,6 @@ source with a fixed hardware id, and a Y-factor calibration binding derived from
 sensor.
 """
 
-# ruff: noqa: UP007, UP045  msgspec resolves these annotations at runtime on py3.9
 from __future__ import annotations
 
 import dataclasses

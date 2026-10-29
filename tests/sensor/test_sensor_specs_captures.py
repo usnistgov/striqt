@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import scalars
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from sweep_strategies import (
     capture_tuples,
     make_capture,

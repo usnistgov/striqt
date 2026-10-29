@@ -3,7 +3,8 @@ from __future__ import annotations as __
 import functools
 import itertools
 import math
-from typing import Any, Callable, cast, Generator, TypeVar, TYPE_CHECKING
+from collections.abc import Generator
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
 
 import array_api_compat
 
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
     import cupy  # ty: ignore[unresolved-import]
 
-    from .typing import _AT, ArrayLike, Array, DTypeLike, TypeIsCupy
+    from .typing import _AT, Array, ArrayLike, DTypeLike, TypeIsCupy
 
 
 # %% rounding
@@ -38,7 +39,7 @@ def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
 @util.lru_cache()
 def dtype_change_float(
     dtype, float_basis_dtype
-) -> type[np.complexfloating] | type[np.floating]:
+) -> type[np.complexfloating | np.floating]:
     """return a complex or float dtype similar to `dtype`, but
     with a float backing with size matching `float_basis_dtype`.
 
@@ -83,7 +84,7 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
     else:
         try:
             xp = array_namespace(x)
-        except:
+        except TypeError:
             # array_namespace does not recognize dask arrays
             xp = np
 
@@ -377,7 +378,7 @@ def axis_to_blocks(y: Array, size: int, truncate=False, axis=0) -> Array:
 
         slices = len(y.shape) * [slice(None, None)]
         slices[axis] = slice(None, size * (ax_size // size))
-        y = y.__getitem__(tuple(slices))
+        y = y[tuple(slices)]
 
     if axis == -1:
         shape_after = ()
@@ -571,7 +572,7 @@ def sync_if_cupy(x: Array):
 @functools.cache
 def configure_cupy():
     if cp is not None:
-        import cupy.fft as fft  # ty: ignore[unresolved-import]
+        from cupy import fft  # ty: ignore[unresolved-import]
 
         # the FFT plan cache allocates large buffers that striqt does not reuse
         fft.config.get_plan_cache().set_size(0)

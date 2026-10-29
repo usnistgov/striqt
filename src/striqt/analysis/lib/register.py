@@ -7,8 +7,8 @@ from __future__ import annotations as __
 import contextlib
 import functools
 import typing
-from typing import Any, Callable, cast, Literal, NamedTuple, TYPE_CHECKING
 from fractions import Fraction
+from typing import TYPE_CHECKING, Any, Callable, Literal, NamedTuple, cast
 
 import msgspec
 
@@ -16,10 +16,15 @@ from .. import specs
 from . import util
 
 if TYPE_CHECKING:
-    from striqt.waveform.lib.typing import ArrayBackend, DTypeLike
     import inspect
+
+    from striqt.waveform.lib.typing import ArrayBackend, DTypeLike
+
     from .dataarrays import AcquiredIQ
     from .typing import (
+        RM,
+        TC,
+        TM,
         AnalysisFunc,
         AnalysisFuncWrapper,
         Array,
@@ -29,10 +34,7 @@ if TYPE_CHECKING:
         Measurement,
         P,
         R,
-        RM,
         Self,
-        TC,
-        TM,
         WrappedAnalysis,
     )
 else:
@@ -89,7 +91,7 @@ class KwArgCache:
         self._key_iq = iq
         self._value = value
 
-    def apply(self, func: 'AnalysisFunc[P, RM]') -> 'AnalysisFunc[P, RM]':
+    def apply(self, func: AnalysisFunc[P, RM]) -> AnalysisFunc[P, RM]:
         """wrap `func` to return the cached result on a repeated call.
 
         Args:
@@ -155,7 +157,7 @@ class CoordInfo(NamedTuple):
     func: CoordFunc
     dtype: DTypeLike
     dims: tuple[str, ...] = ()
-    attrs: dict = {}
+    attrs: dict = {}  # noqa: RUF012
 
 
 class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
@@ -165,7 +167,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
         *,
         name: str | None = None,
         dims: tuple[str, ...] | None = None,
-        attrs: dict = {},
+        attrs: dict | None = None,
     ) -> CoordFuncWrapper[TC, TM, R]:
         """register the decorated function as the coordinate factory named `name`.
 
@@ -191,7 +193,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
         def wrapper(func: CoordFunc[TC, TM, R]) -> CoordFunc[TC, TM, R]:
             if isinstance(kws['dims'], str):
-                dims = tuple((kws['dims'],))
+                dims = (kws['dims'],)
             else:
                 dims = kws['dims']
 
@@ -216,7 +218,7 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
                 dims = (name,)
 
             self[func] = CoordInfo(
-                name=name, func=func, dims=dims, dtype=dtype, attrs=attrs
+                name=name, func=func, dims=dims, dtype=dtype, attrs=attrs or {}
             )
 
             return func
@@ -347,7 +349,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     __hash__ = object.__hash__
 
     caches: dict[AnalysisFunc, list[KwArgCache]]
-    parameter_fields: dict[str, 'msgspec.structs.FieldInfo|None']
+    parameter_fields: dict[str, msgspec.structs.FieldInfo | None]
     parameter_defaults: dict[str, Any]
 
     def __init__(self):
@@ -367,12 +369,12 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         name: str | None = None,
         dims: tuple[str, ...] | str | None = None,
         coord_factories: Iterable[CoordFunc] | CoordFunc | None = None,
-        depends: Iterable[Callable] | Callable = [],
+        depends: Iterable[Callable] | Callable = (),
         caches: Iterable[KwArgCache] | KwArgCache | None = None,
         store_compressed: bool = True,
         prefer_filtered: bool = True,
         prefer_aligned: bool = True,
-        attrs: dict[str, Any] = {},
+        attrs: dict[str, Any] | None = None,
         validate: AnalysisValidator | None = None,
         tolerance: AnalysisTolerance | None = None,
     ) -> AnalysisFuncWrapper[P]:
@@ -440,21 +442,21 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         if isinstance(dims, str):
             dims = (dims,)
 
-        info_kws: dict[str, Any] = dict(
-            name=name,
-            cache=caches,
-            dtype=dtype,
-            attrs=attrs,
-            store_compressed=store_compressed,
-            prefer_filtered=prefer_filtered,
-            prefer_aligned=prefer_aligned,
-            dims=dims,
-            validate=validate,
-            tolerance=tolerance,
-        )
+        info_kws: dict[str, Any] = {
+            'name': name,
+            'cache': caches,
+            'dtype': dtype,
+            'attrs': attrs or {},
+            'store_compressed': store_compressed,
+            'prefer_filtered': prefer_filtered,
+            'prefer_aligned': prefer_aligned,
+            'dims': dims,
+            'validate': validate,
+            'tolerance': tolerance,
+        }
 
         if coord_factories is None:
-            info_kws['coord_factories'] = tuple()
+            info_kws['coord_factories'] = ()
         elif callable(coord_factories):
             info_kws['coord_factories'] = (coord_factories,)
         else:
@@ -567,7 +569,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
             self[spec_type] = AnalysisInfo(func=wrapped, **info_kws)
 
-            setattr(wrapped, '__signature__', _make_measurement_signature(spec_type))
+            # ty rejects assignment to `__signature__` on the wrapper type
+            setattr(wrapped, '__signature__', _make_measurement_signature(spec_type))  # noqa: B010
             arg_doc = _make_measurement_docstring(spec_type)
             if func.__doc__ is None:
                 doc = arg_doc
@@ -575,7 +578,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 doc = func.__doc__.format(args=arg_doc)
             else:
                 doc = func.__doc__
-            setattr(wrapped, '__doc__', doc)
+            wrapped.__doc__ = doc
 
             # one runtime def with `as_xarray: bool | Literal['delayed']` cannot
             # satisfy the 3-overload WrappedAnalysis Protocol, so name the type
@@ -837,7 +840,7 @@ def get_signal_trigger_measurement_name(name: str, registry: AnalysisRegistry) -
     return meas_info.name
 
 
-def normalize_factory_return(ret, name: str) -> tuple['Array', dict[str, Any]]:
+def normalize_factory_return(ret, name: str) -> tuple[Array, dict[str, Any]]:
     """normalize the coordinate and data factory returns into (data, metadata)"""
 
     if not isinstance(ret, tuple):
@@ -847,12 +850,12 @@ def normalize_factory_return(ret, name: str) -> tuple['Array', dict[str, Any]]:
         arr, attrs = ret
     else:
         raise TypeError(
-            f'tuple returned by {repr(name)} coordinate factory must have length 2, not {len(ret)}. return a list or array if this was meant as data.'
+            f'tuple returned by {name!r} coordinate factory must have length 2, not {len(ret)}. return a list or array if this was meant as data.'
         )
 
     if not isinstance(attrs, dict):
         raise TypeError(
-            f'second item of {repr(name)} coordinate factory return tuple must be dict.return an array or list if this was meant as data.'
+            f'second item of {name!r} coordinate factory return tuple must be dict.return an array or list if this was meant as data.'
         )
     else:
         attrs = {

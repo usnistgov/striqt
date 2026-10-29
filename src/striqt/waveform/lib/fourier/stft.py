@@ -30,12 +30,7 @@ def _truncated_buffer(x: Array, shape, dtype=None):
 def _same_base_memory(a: Array, b: Array) -> bool:
     if b is None:
         return False
-    elif a is b:
-        return True
-    elif getattr(b, 'base', None) is a:
-        return True
-    else:
-        return False
+    return bool(a is b or getattr(b, 'base', None) is a)
 
 
 # %% STFT
@@ -114,7 +109,7 @@ def stft(
     if window is None:
         window = 'rect'
 
-    if isinstance(window, str) or isinstance(window, tuple):
+    if isinstance(window, (str, tuple)):
         should_norm = norm == 'power'
         w = get_window(
             window,
@@ -434,7 +429,7 @@ def downsample_stft(
 
     # copy first before zeroing, in case of input-output buffer reuse
     xp.copyto(
-        axis_slice(xout, *bounds_out, axis=ax),  #
+        axis_slice(xout, *bounds_out, axis=ax),
         axis_slice(y, *bounds_in, axis=ax),
     )
 

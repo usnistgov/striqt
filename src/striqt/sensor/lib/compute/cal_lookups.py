@@ -8,18 +8,19 @@ frequency.
 
 from __future__ import annotations as __
 
-from typing import Any
 from pathlib import Path
+from typing import Any
 
-from ... import specs
-from .. import io
-from . import corrections
 import striqt.analysis as sa
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM, PORT_DIM
 from striqt.analysis.lib.util import np, pd, xr
 
+from ... import specs
+from .. import io
+from . import corrections
 
-def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
+
+def summarize_calibration(corrections: xr.Dataset, **sel) -> pd.DataFrame:
     summaries = {
         'NF (dB)': _summarize_calibration_field(corrections, 'noise_figure', **sel),
         'Power Corr (dB)': _summarize_calibration_field(
@@ -32,7 +33,7 @@ def summarize_calibration(corrections: 'xr.Dataset', **sel) -> 'pd.DataFrame':
 
 @sa.util.lru_cache()
 def lookup_power_correction(
-    cal_data: 'str | Path | None',
+    cal_data: str | Path | None,
     capture: specs.SoapyCapture,
     master_clock_rate: float,
     format_path: specs.paths.PathFormatter | None = None,
@@ -59,7 +60,7 @@ def lookup_power_correction(
 
 @sa.util.lru_cache()
 def lookup_system_noise_power(
-    cal_data: 'Path | str | None',
+    cal_data: Path | str | None,
     capture: specs.SoapyCapture,
     master_clock_rate: float,
     format_path: specs.paths.PathFormatter | None = None,
@@ -145,15 +146,15 @@ def lookup_system_noise_power(
 
 
 def _summarize_calibration_field(
-    corrections: 'xr.Dataset', field_name, **sel
-) -> 'pd.Series':
+    corrections: xr.Dataset, field_name, **sel
+) -> pd.Series:
     max_gain = float(corrections.gain.max())
     corr = corrections[field_name].sel(gain=max_gain, **sel, drop=True).squeeze()
     stacked = corr.stack(condition=corr.dims).dropna('condition')
     return stacked.to_dataframe()[field_name]
 
 
-def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
+def _describe_missing_data(cal_data: xr.DataArray, exact_matches: dict):
     misses = []
     cal = cal_data.copy()
 
@@ -172,12 +173,12 @@ def _describe_missing_data(cal_data: 'xr.DataArray', exact_matches: dict):
             cal.sel({field: value})
         except KeyError:
             available = ', '.join([str(v) for v in cal[field].values])
-            misses += [f'{repr(value)} in {repr(field)} (available: {available})']
+            misses += [f'{value!r} in {field!r} (available: {available})']
     return '; '.join(misses)
 
 
 def _lookup_calibration_var(
-    cal_var: 'xr.DataArray',
+    cal_var: xr.DataArray,
     capture: specs.SoapyCapture,
     master_clock_rate: float,
     *,
@@ -247,7 +248,7 @@ def _lookup_calibration_var(
     return xp.asarray(results, dtype='float32')
 
 
-def _get_port_variable(ds: 'xr.DataArray|xr.Dataset') -> str:
+def _get_port_variable(ds: xr.DataArray | xr.Dataset) -> str:
     """return the port coordinate name of `ds`.
 
     ``'port'`` is returned when present, otherwise ``'channel'``.

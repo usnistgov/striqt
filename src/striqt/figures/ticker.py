@@ -4,15 +4,12 @@ import math
 import typing
 
 import numpy as np
+import pandas as pd
+from matplotlib import axis as _axis, scale as _scale, ticker as _ticker
 
 import striqt.waveform as sw
 
 from ..waveform.lib.util import lru_cache
-
-import pandas as pd
-from matplotlib import axis as _axis
-from matplotlib import scale as _scale
-from matplotlib import ticker as _ticker
 
 
 def round_places(x, digits):
@@ -48,7 +45,7 @@ def _linear_tick_range(vlo, vhi, count, steps=(1.0,)):
 
 
 @lru_cache()
-def _prune_ticks(ticks: tuple, count: int, prefer: tuple = tuple()) -> np.ndarray:
+def _prune_ticks(ticks: tuple, count: int, prefer: tuple = ()) -> np.ndarray:
     """remove the most closely spaced ticks from `ticks` until `count` remain.
 
     Args:
@@ -104,8 +101,6 @@ class EngFormatter(_ticker.EngFormatter):
     ):
         self.unitInTick = unitInTick
 
-        if sep is not None:
-            pass
         if unit is None or (len(unit) == 1 and not unit.isalnum()):
             sep = ''
         else:
@@ -186,7 +181,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
     axis: _axis.Axis
 
     # avoid removing these quantiles when selecting ticks
-    PREFER_TICKS = [
+    PREFER_TICKS: typing.ClassVar[list[float]] = [
         0.5,
         0.9,
         0.1,
@@ -260,7 +255,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
             minpos = 1e-12  # arbitrary floor well below any plotted probability
 
         ret = (
-            minpos if vmin <= minpos else vmin,
+            max(minpos, vmin),
             1.0 - minpos if vmax >= 1 - minpos else vmax,
         )
 
@@ -293,17 +288,17 @@ class GammaLogitFormatter(_ticker.LogitFormatter):
                 s = str(x)
         elif x < 0.1 and is_decade(x, rtol=1e-5):
             exponent = round(np.log10(x))
-            s = '10^{%d}' % exponent
+            s = '10^{%d}' % exponent  # noqa: UP031
         elif x > 0.9 and is_decade(1 - x, rtol=1e-5):
             exponent = round(np.log10(1 - x))
-            s = self._one_minus('10^{%d}' % exponent)  # type: ignore
+            s = self._one_minus('10^{%d}' % exponent)  # type: ignore  # noqa: UP031
         elif x < 0.05:
             s = self._format_value(x, self.locs)  # type: ignore
         elif x > 0.98:
             s = self._one_minus(self._format_value(1 - x, 1 - self.locs))  # type: ignore
         else:
             s = self._format_value(x, self.locs, sci_notation=False)  # type: ignore
-        return r'$\mathdefault{%s}$' % s
+        return r'$\mathdefault{%s}$' % s  # noqa: UP031
 
 
 class GammaQQScale(_scale.FuncScale):
@@ -407,7 +402,7 @@ def _has_tick_label_collision(ax, which: str, spacing_threshold=10):
     elif which == 'y':
         the_ax = ax.yaxis
     else:
-        raise ValueError(f'"which" must be "x" or "y", but got "{repr(which)}"')
+        raise ValueError(f'"which" must be "x" or "y", but got "{which!r}"')
 
     boxen = [
         t.get_tightbbox(fig.canvas.get_renderer()) for t in the_ax.get_ticklabels()
@@ -440,9 +435,7 @@ def rotate_ticklabels_on_collision(ax, which: str, angles: list, spacing_thresho
     elif which == 'y':
         the_ax = ax.yaxis
     else:
-        raise ValueError(
-            f'"which" argument must be "x" or "y", but got "{repr(which)}"'
-        )
+        raise ValueError(f'"which" argument must be "x" or "y", but got "{which!r}"')
 
     set_rotation(the_ax, angles[0])
     if len(angles) == 1:
@@ -467,10 +460,8 @@ def xaxis_concise_dates(fig, ax, adjacent_offset: bool = True):
     offset is prepended to the first tick label. The figure is redrawn.
     """
 
-    from matplotlib import dates, transforms
-
     # lazy_import does not work for matplotlib submodules
-    from matplotlib import pyplot as plt
+    from matplotlib import dates, pyplot as plt, transforms
 
     formatter = dates.ConciseDateFormatter(dates.AutoDateLocator(), show_offset=True)
 

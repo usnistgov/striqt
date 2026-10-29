@@ -5,18 +5,19 @@ import dataclasses
 import functools
 import inspect
 import weakref
-from typing import Any, Callable, cast, ClassVar, Generic, Generator, TYPE_CHECKING
 from collections import defaultdict
+from collections.abc import Generator
 from threading import Event, RLock
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, cast
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.util import np
 
-from .sources import base, buffers
-from .typing import SS, SP, SC, SA, S, PC, PS, SourceBackend, TypeVar
-from . import compute, util
 from .. import specs
+from . import compute, util
+from .sources import base, buffers
+from .typing import PC, PS, SA, SC, SP, SS, SourceBackend, TypeVar
 
 if TYPE_CHECKING:
     from .typing import Array, Self, TypeAlias
@@ -34,9 +35,9 @@ class lookup:
     is raised when none is registered within `timeout` seconds.
     """
 
-    _obj: dict[specs.Source, 'PendingSlot'] = defaultdict(Event)
-    _id: dict[specs.Source, Event | str] = defaultdict(Event)
-    _ready: dict[specs.Source, Event | bool] = defaultdict(Event)
+    _obj: ClassVar[dict[specs.Source, PendingSlot]] = defaultdict(Event)
+    _id: ClassVar[dict[specs.Source, Event | str | BaseException]] = defaultdict(Event)
+    _ready: ClassVar[dict[specs.Source, Event | bool]] = defaultdict(Event)
     _lock = RLock()
 
     @classmethod
@@ -90,9 +91,9 @@ class lookup:
     @classmethod
     def id(cls, spec: specs.Source, timeout=0.5) -> str:
         """lookup a source ID from a source specification."""
-        controller = cls.instance(spec, timeout)
+        cls.instance(spec, timeout)
 
-        obj: Event | str = cls._id[spec]
+        obj: Event | str | BaseException = cls._id[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
@@ -106,7 +107,7 @@ class lookup:
             util.propagate_thread_interrupts()
             raise util.ThreadInterruptRequest()
         elif isinstance(obj, Event):
-            raise TypeError
+            raise RuntimeError('the source closed before it reported a source id')
         elif isinstance(obj, str):
             return obj
 
@@ -131,9 +132,13 @@ class lookup:
     @classmethod
     def _clear(cls, spec: specs.Source) -> None:
         with cls._lock:
-            cls._obj[spec] = Event()
-            cls._ready[spec] = Event()
-            cls._id[spec] = Event()
+            for table in (cls._obj, cls._ready, cls._id):
+                # a waiter holds the event it found in the slot. Replacing the event
+                # without setting it leaves the waiter blocked
+                old = table.get(spec)
+                if isinstance(old, Event):
+                    old.set()
+                table[spec] = Event()
 
     @classmethod
     def _register(cls, spec: specs.Source, controller: Controller) -> None:
@@ -185,6 +190,10 @@ class lookup:
     @classmethod
     def _raise(cls, spec: specs.Source, exc: BaseException):
         cls._obj[spec] = exc
+        pending = cls._id[spec]
+        cls._id[spec] = exc
+        if isinstance(pending, Event):
+            pending.set()
         cls._set_ready(spec, False)
         raise exc
 
@@ -224,13 +233,13 @@ class ControllerConfig:
 
 
 def bind_controller(
-    binding: 'bindings.SensorBinding[SS, SP, SC]',
+    binding: bindings.SensorBinding[SS, SP, SC],
     schema: specs.Schema[SS, SP, SC, SA, PS, PC],
 ) -> type[Controller[SS, SP, SC, SA, PS, PC]]:
     class cls(Controller, sensor=binding, schema=schema):
         # wrapper shims for customized docstrings
         def __init__(self, *args: PS.args, **kwargs: PS.kwargs):
-            return super().__init__(*args, **kwargs)
+            super().__init__(*args, **kwargs)
 
         def arm(self, *args: PC.args, **kwargs: PC.kwargs) -> SC | None:
             return super().arm(*args, **kwargs)
@@ -255,8 +264,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     _closed: bool = False
     _prev_iq: specs.AcquiredIQ | None = None
     _config: ControllerConfig
-    schema: ClassVar['specs.Schema[Any, Any, Any, Any, Any, Any]']
-    sensor: ClassVar['bindings.SensorBinding[Any, Any, Any]']
+    schema: ClassVar[specs.Schema[Any, Any, Any, Any, Any, Any]]
+    sensor: ClassVar[bindings.SensorBinding[Any, Any, Any]]
 
     @sa.util.stopwatch(
         'open IQ source', 'sweep', threshold=0.5, logger_level=util.logging.INFO
@@ -276,7 +285,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     def __init_subclass__(
         cls,
         *,
-        sensor: 'bindings.SensorBinding[SS, SP, SC]',
+        sensor: bindings.SensorBinding[SS, SP, SC],
         schema: specs.Schema[SS, SP, SC, SA, PS, PC],
     ):
         """customize documentation on subclassing"""
@@ -320,7 +329,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         cls.arm.__signature__ = sig  # ty: ignore[unresolved-attribute]
         return cls
 
-    def _setup(self, spec: SS, config: ControllerConfig) -> 'Self':
+    def _setup(self, spec: SS, config: ControllerConfig) -> Self:
         self._config = config
         self.__setup__ = spec
         self._capture = None
@@ -394,12 +403,11 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             raise RuntimeError('open the radio before arming')
 
         cal = self.source_spec.calibration
-        if cal and specs.paths.get_format_fields(cal):
-            if not self._config.format_path:
-                raise TypeError(
-                    'calibration is specified with path formatter fields - '
-                    'set a formatter with set_path_formatter before arming'
-                )
+        if cal and specs.paths.get_format_fields(cal) and not self._config.format_path:
+            raise TypeError(
+                'calibration is specified with path formatter fields - '
+                'set a formatter with set_path_formatter before arming'
+            )
 
         if self._capture is not None:
             mcr = self.source_spec.master_clock_rate
@@ -509,7 +517,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             raise ConnectionError('backend is closed')
         return self.backend.get_info()
 
-    def read_iq(self, overlaps: tuple[int, int] = (0, 0)) -> 'tuple[Array, int|None]':
+    def read_iq(self, overlaps: tuple[int, int] = (0, 0)) -> tuple[Array, int | None]:
         """read IQ for the armed capture"""
         assert self._capture is not None, 'source must be armed to read IQ'
 
@@ -627,7 +635,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     def acquire(self, overlaps: tuple[int, int] | None = None) -> specs.AcquiredIQ:
         """acquire IQ samples needed for the armed capture."""
 
-        self.capture_spec  # raises AttributeError when no capture is armed
+        self.capture_spec  # noqa: B018  raises AttributeError when no capture is armed
         signal_trigger = None
 
         if isinstance(overlaps, tuple):

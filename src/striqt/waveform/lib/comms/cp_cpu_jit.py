@@ -5,6 +5,8 @@ import math
 
 # jit sets NUMBA_CACHE_DIR and patches the cache stamp, so it must load before numba
 from .. import jit  # noqa: F401
+
+# isort: split
 import numba as nb
 import numpy as np
 

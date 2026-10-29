@@ -1,5 +1,3 @@
-# ruff: noqa: F401
-
 from __future__ import annotations as __
 
 import typing
@@ -10,10 +8,11 @@ CellSSBIndexes = Union[
 ]
 
 if typing.TYPE_CHECKING:
-    from typing_extensions import TypeAlias, ParamSpec, TypeIs
-    from typing import Any, Callable, Optional, Protocol, TypeVar, Union
     from numbers import Number
     from types import ModuleType
+    from typing import Any, Callable, Optional, Protocol, TypeVar
+
+    from typing_extensions import ParamSpec, TypeAlias, TypeIs
 
     # the cupy import is confined to TYPE_CHECKING: at runtime, a failed cupy import
     # would lengthen the import of striqt.waveform
@@ -24,11 +23,12 @@ if typing.TYPE_CHECKING:
     except ModuleNotFoundError:
         import numpy as cp
 
-    import array_api_compat.numpy, array_api_compat.cupy
+    import array_api_compat.cupy
+    import array_api_compat.numpy
     import numpy as np
-    from numpy.typing import DTypeLike
     import pandas as pd
     import xarray as xr
+    from numpy.typing import DTypeLike
     from xarray.core.types import Dims
 
     # union of supported array types
@@ -52,9 +52,9 @@ if typing.TYPE_CHECKING:
     XpType: TypeAlias = Optional[ModuleType]
     ArrayBackend: TypeAlias = typing.Literal['numpy', 'cupy']
 
-    _ALN = TypeVar('_ALN', bound=Union[ArrayLike, Number])
-    _AL = TypeVar('_AL', bound=ArrayLike)
-    _AT = TypeVar('_AT', bound=Array)
+    # shared by the other waveform modules through `from ..typing import`
+    _ALN = TypeVar('_ALN', bound=Union[ArrayLike, Number])  # noqa: PYI018
+    _AT = TypeVar('_AT', bound=Array)  # noqa: PYI018
     P = ParamSpec('P')
     R = TypeVar('R')
 

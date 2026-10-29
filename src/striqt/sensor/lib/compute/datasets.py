@@ -2,20 +2,19 @@
 
 from __future__ import annotations as __
 
-from collections import defaultdict
 import dataclasses
 import logging
+from collections import defaultdict
 from typing import Any, Literal
 
-from ... import specs
+import msgspec
 
 import striqt.analysis as sa
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM
 from striqt.analysis.lib.util import np, pd, xr
-from ..typing import Callable, Sequence, TAR
 
-import msgspec
-
+from ... import specs
+from ..typing import TAR, Callable, Sequence
 
 SOURCE_ID_NAME = 'source_id'
 
@@ -39,7 +38,7 @@ class DelayedDataset:
     config: EvaluationOptions
 
 
-def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
+def from_delayed(dd: DelayedDataset) -> xr.Dataset:
     """return the materialized dataset of the capture in `dd`.
 
     The dataset has one ``capture`` entry per port of `dd.capture`, a coordinate per
@@ -76,7 +75,7 @@ def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
 
     # don't duplicate coords as attrs
     if coords is not None:
-        for name in coords.keys():
+        for name in coords:
             analysis.attrs.pop(name, None)
 
     analysis.attrs.update(dd.config.extra_attrs)
@@ -116,7 +115,7 @@ def from_delayed(dd: DelayedDataset) -> 'xr.Dataset':
     return analysis
 
 
-def concat_time_dim(datasets: list['xr.Dataset'], time_dim: str) -> 'xr.Dataset':
+def concat_time_dim(datasets: list[xr.Dataset], time_dim: str) -> xr.Dataset:
     """concatenate captured datasets into one along a time axis.
 
     Preconditions:
@@ -151,7 +150,7 @@ def build_capture_coords(
     capture: specs.SensorCapture,
     extras: specs.AcquisitionInfo,
     loops: tuple[specs.LoopBase, ...],
-) -> 'xr.Coordinates|None':
+) -> xr.Coordinates | None:
     captures = specs.captures.split_capture_ports(capture)
 
     if len(captures) == 0:
@@ -186,7 +185,7 @@ def build_capture_coords(
     return coords
 
 
-def get_looped_coords(ds: 'xr.Dataset', include_repeats=False) -> list[str]:
+def get_looped_coords(ds: xr.Dataset, include_repeats=False) -> list[str]:
     """return a list of coordinates that were looped"""
     if 'loops' not in ds.attrs:
         raise AttributeError('no loops metadata in data attributes')
@@ -198,11 +197,11 @@ def get_looped_coords(ds: 'xr.Dataset', include_repeats=False) -> list[str]:
 
 
 def index_dataset(
-    ds: 'xr.Dataset',
-    index_coords: list[str] = ['start_time', 'port'],
+    ds: xr.Dataset,
+    index_coords: Sequence[str] = ('start_time', 'port'),
     *,
     chunks: int | Literal['auto'] | None = None,
-) -> 'xr.Dataset':
+) -> xr.Dataset:
     """return `ds` with a multi-index over `index_coords`.
 
     Args:
@@ -219,6 +218,7 @@ def index_dataset(
         ValueError: if `index_coords` do not select exactly one capture
     """
 
+    index_coords = list(index_coords)
     _check_coord_indexes(ds, index_coords)  # must be before ds.chunk(...)
     if chunks is not None:
         ds = ds.chunk(chunks)
@@ -226,11 +226,11 @@ def index_dataset(
 
 
 def unstack_dataset(
-    ds: 'xr.Dataset',
-    dim_coords: list[str] = ['start_time', 'port'],
+    ds: xr.Dataset,
+    dim_coords: Sequence[str] = ('start_time', 'port'),
     *,
     chunks: int | Literal['auto'] | None = None,
-) -> 'xr.Dataset':
+) -> xr.Dataset:
     """Unstack a dataset from a flat list of captures into multiple dimensions.
 
     The dimensions are `['sweep_start_time', *extra_coord_dims, 'port']`.
@@ -246,6 +246,7 @@ def unstack_dataset(
     Returns:
         The unstacked dataset.
     """
+    dim_coords = list(dim_coords)
     idx_ds = index_dataset(ds, dim_coords, chunks=chunks)
     unstacked = idx_ds.unstack()
 
@@ -276,7 +277,7 @@ def _coords_template(
     loops: tuple[specs.LoopBase, ...],
     *,
     port_count: int,
-) -> 'xr.Coordinates':
+) -> xr.Coordinates:
     """returns a cached xr.Coordinates object to use as a template for data results"""
 
     coord_vars = {}

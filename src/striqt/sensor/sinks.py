@@ -2,8 +2,8 @@ from .lib.sinks import (
     MemoryCacheSink,
     NoSink,
     SinkBase,
-    ZarrSinkBase,
     ZarrCaptureSink,
+    ZarrSinkBase,
     ZarrTimeAppendSink,
 )
 

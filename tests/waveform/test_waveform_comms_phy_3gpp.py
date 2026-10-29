@@ -9,8 +9,7 @@ import functools
 
 import numpy as np
 import pytest
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from numeric_checks import assert_close
 from numpy.testing import assert_array_equal
 from waveform_strategies import FS, SCS_5G, khz_id, msps_id, phy_5g

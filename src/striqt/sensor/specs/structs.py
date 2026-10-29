@@ -6,9 +6,8 @@ msgspec resolves the field annotations at runtime. Field types are written as
 
 from __future__ import annotations as __
 
-import dataclasses
 import warnings
-from typing import Any, cast, ClassVar, Generic, Literal, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional, Union, cast
 
 import msgspec
 
@@ -17,22 +16,23 @@ from striqt.analysis import Trigger
 
 # pd must be bound here for msgspec to resolve the 'pd.Timestamp' types in `types`
 from striqt.analysis.lib.util import pd  # noqa: F401
-from striqt.analysis.specs import BuiltinAnalyses, BuiltinTriggers, Capture, SpecBase
-from striqt.analysis.specs import frozendict
 
 # re-exported through striqt.sensor.specs as the annotation of any analysis bundle
-from striqt.analysis.specs import AnalysisGroup
+from striqt.analysis.specs import (
+    AnalysisGroup,
+    BuiltinAnalyses,
+    BuiltinTriggers,
+    Capture,
+    SpecBase,
+)
 from striqt.analysis.specs.helpers import SpecValidationError, subset_of
 
-from ..lib.typing import TypeVar, SS, SP, SC, SA
+from ..lib.typing import SA, SC, SP, SS, TypeVar
 from . import types
-
 
 if TYPE_CHECKING:
     _T = TypeVar('_T')
     from typing_extensions import Self as _Self
-
-    import SoapySDR  # type: ignore[import-not-found, unused-ignore]
 
 
 @sa.util.lru_cache()
@@ -195,7 +195,7 @@ class TDMSSource(Source, frozen=True, kw_only=True):
 class ZarrIQSource(Source, frozen=True, kw_only=True):
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
-    select: types.ZarrSelect = dict()
+    select: types.ZarrSelect = msgspec.field(default_factory=dict)
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 
@@ -287,6 +287,7 @@ class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
 
     def get_points(self) -> list[float]:
         from math import ceil
+
         import numpy as np
 
         span = self.stop - self.start
@@ -401,7 +402,7 @@ class CaptureRemap(SpecBase, frozen=True, kw_only=True):
 
         # convert any stringified json array keys into tuples
         lookup = dict(self.lookup)
-        for k in self.lookup.keys():
+        for k in self.lookup:
             if not isinstance(k, tuple):
                 new_key = msgspec.json.decode(k, type=tuple)
                 lookup[new_key] = lookup.pop(k)

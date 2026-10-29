@@ -19,8 +19,7 @@ from analysis_strategies import (
     scalars,
     tuplify,
 )
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from msgspec import inspect as mi
 
 import striqt.analysis as sa
@@ -38,9 +37,9 @@ from striqt.analysis.specs.helpers import (
     infer_coord_info,
     inspect_freeze_depths,
     json_schema,
+    lru_cache_on_converted,
     spec_subset,
     subset_of,
-    lru_cache_on_converted,
     to_analysis_capture,
     unfreeze,
     validation_path,
@@ -206,9 +205,9 @@ class DepthProbe(msgspec.Struct):
     b: Annotated[list[int], Meta('b')]
     c: tuple[int, ...]
     d: set[int]
-    e: Optional[dict[str, Any]]  # noqa: UP045
+    e: Optional[dict[str, Any]]
     f: tuple[str, float]
-    g: Union[int, list[list[int]]]  # noqa: UP007
+    g: Union[int, list[list[int]]]
     hh: int
     i: fractions.Fraction
 

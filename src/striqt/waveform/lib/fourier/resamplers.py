@@ -53,7 +53,7 @@ class ResamplerDesign(typing.TypedDict):
     window: str | tuple[str, float]
     nfft: int
     nfft_out: int
-    frequency_shift: 'ShiftType'
+    frequency_shift: ShiftType
     passband: tuple[float | None, float | None]
     fs: float
 
@@ -66,7 +66,7 @@ def design_cola_resampler(
     bw_lo: float = 0,
     min_oversampling: float = 1.1,
     min_fft_size=2 * 4096 - 1,
-    shift: 'ShiftType' = False,
+    shift: ShiftType = False,
     avoid_primes=True,
     window=None,
     fs_sdr: typing.Optional[float] = None,
@@ -180,7 +180,7 @@ def design_cola_resampler(
     elif shift in ('none', False, None):
         sign = 0
     else:
-        raise ValueError(f'shift argument must be "left" or "right", not {repr(shift)}')
+        raise ValueError(f'shift argument must be "left" or "right", not {shift!r}')
 
     if sign != 0 and bw == inf:
         raise ValueError('a passband bandwidth must be set to design a LO shift')

@@ -1,11 +1,10 @@
 from __future__ import annotations as __
 
-import dataclasses
 import logging
 import types
 import typing
-from typing import Any, cast, TYPE_CHECKING
 from math import ceil, isfinite
+from typing import TYPE_CHECKING, cast
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -15,24 +14,24 @@ from ... import specs
 from ..typing import SC
 
 if TYPE_CHECKING:
-    from ..typing import Array
     from ..controller import Controller
+    from ..typing import Array
 
 
 class ReceiveBuffers(typing.Generic[SC]):
     """remember unused samples from the previous IQ capture"""
 
-    carryover_samples: 'np.ndarray | None'
+    carryover_samples: np.ndarray | None
     start_time_ns: int | None
-    buffers: list = [None, None]
+    buffers: list
     _hold_buffer_swap = False
 
-    def __init__(self, controller: 'Controller'):
+    def __init__(self, controller: Controller):
         self.controller = controller
         self.buffers = [None, None]
         self.clear()
 
-    def apply(self, samples: 'np.ndarray') -> tuple[int | None, int]:
+    def apply(self, samples: np.ndarray) -> tuple[int | None, int]:
         """carry over samples into `samples` from the previous capture.
 
         Returns:
@@ -56,7 +55,7 @@ class ReceiveBuffers(typing.Generic[SC]):
 
     def get_next(
         self, capture: SC, overlaps: tuple[int, int] = (0, 0)
-    ) -> 'tuple[np.ndarray, list[np.ndarray]]':
+    ) -> tuple[np.ndarray, list[np.ndarray]]:
         """swap the buffers, and reallocate if needed"""
 
         if not self._hold_buffer_swap:
@@ -72,7 +71,7 @@ class ReceiveBuffers(typing.Generic[SC]):
 
     def stash_carryover(
         self,
-        samples: 'np.ndarray',
+        samples: np.ndarray,
         sample_start_ns: int,
         unused_sample_count: int,
         capture: specs.SensorCapture,
@@ -125,7 +124,7 @@ def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.Module
     if array_backend == 'cupy':
         if sw.arrays.cp is None:
             # trigger the import error
-            import cupy  # type: ignore
+            import cupy  # type: ignore  # noqa: F401
 
             raise ImportError
         else:
@@ -178,11 +177,11 @@ def get_read_count(
     'allocate buffers', 'source', threshold=5e-3, logger_level=logging.DEBUG
 )
 def _alloc_empty_iq(
-    controller: 'Controller',
+    controller: Controller,
     capture: specs.SensorCapture,
-    prior: 'np.ndarray|None' = None,
+    prior: np.ndarray | None = None,
     overlaps: tuple[int, int] = (0, 0),
-) -> 'tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]':
+) -> tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]:
     """allocate a buffer of IQ return values.
 
     Returns:
@@ -287,7 +286,7 @@ def find_trigger_holdoff(
     return holdoff
 
 
-def cast_iq(spec: specs.Source, buffer: 'Array', acquired_count: int) -> 'Array':
+def cast_iq(spec: specs.Source, buffer: Array, acquired_count: int) -> Array:
     """cast the buffer to floating point, if necessary"""
     # array_namespace categorizes cupy pinned memory as numpy
     dtype_in = np.dtype(spec.transport_dtype)
@@ -322,7 +321,6 @@ def cast_iq(spec: specs.Source, buffer: 'Array', acquired_count: int) -> 'Array'
 def get_dtype_scale(transport_dtype: specs.types.TransportDType) -> float:
     """compute the scaling factor to convert the transport dtype to full scale"""
 
-    transport_dtype = transport_dtype
     if transport_dtype == 'int16':
         return 1.0 / float(np.iinfo(transport_dtype).max)
     else:

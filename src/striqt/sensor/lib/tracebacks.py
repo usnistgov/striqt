@@ -1,6 +1,6 @@
-from IPython.core import ultratb
 import typing
 
+from IPython.core import ultratb
 
 MATCH = ['site-packages/click', 'contextlib.py:', 'futures.py:']
 

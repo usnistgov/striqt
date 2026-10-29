@@ -1,9 +1,7 @@
 from __future__ import annotations as __
 
 import msgspec
-import typing
-import string
-import functools
+
 import striqt.sensor as ss
 
 
@@ -48,8 +46,9 @@ class PlotOptions(
     plotter: SharedPlotOptions
 
     def __post_init__(self):
-        from .data_vars import _data_plots
         import inspect
+
+        from .data_vars import _data_plots
 
         for name, kwargs in self.variables.items():
             if name not in _data_plots:
@@ -63,7 +62,7 @@ class PlotOptions(
                 ex.args = (f'.variables[{name!r}]: function ' + ex.args[0],) + ex.args[
                     1:
                 ]
-                raise ex
+                raise
 
         for n in self.data.groupby_dims:
             if n in (self.plotter.row, self.plotter.col):

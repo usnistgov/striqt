@@ -4,28 +4,43 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
+import tempfile
 import warnings
 from collections import UserDict
 from pathlib import Path
 from threading import Lock
 from typing import NamedTuple
 
+import platformdirs
+
+_user_cache_dir = Path(platformdirs.user_cache_dir('striqt'))
+
+# the striqt on-disk caches go to a directory of this session. The collection-time
+# spec validation below, and a shelf fault that deletes the cache files, then touch no
+# cache of the developer or of a concurrent test run. The numba kernel cache stays in
+# the user cache directory because its files are per Python version and a recompile
+# takes minutes on the Jetson
+_session_cache_dir = None
+if not os.environ.get('STRIQT_CACHE_DIR'):
+    _session_cache_dir = tempfile.mkdtemp(prefix='striqt-tests-')
+    os.environ['STRIQT_CACHE_DIR'] = _session_cache_dir
+if not os.environ.get('NUMBA_CACHE_DIR'):
+    (_user_cache_dir / 'numba').mkdir(parents=True, exist_ok=True)
+    os.environ['NUMBA_CACHE_DIR'] = str(_user_cache_dir / 'numba')
+
 # matplotlib reads the backend and config dir on first import. The figures tests plot
-# headless. The font cache goes beside the numba cache (jit.py) because a sandbox without
+# headless. The font cache goes beside the numba cache because a sandbox without
 # write access to ~/.matplotlib rebuilds the cache on every run otherwise
 os.environ.setdefault('MPLBACKEND', 'agg')
 if not os.environ.get('MPLCONFIGDIR'):
-    import platformdirs
-
-    _mpl_dir = Path(platformdirs.user_cache_dir('striqt')) / 'matplotlib'
-    _mpl_dir.mkdir(parents=True, exist_ok=True)
-    os.environ['MPLCONFIGDIR'] = str(_mpl_dir)
+    (_user_cache_dir / 'matplotlib').mkdir(parents=True, exist_ok=True)
+    os.environ['MPLCONFIGDIR'] = str(_user_cache_dir / 'matplotlib')
 
 import msgspec
 import numpy as np
 import pytest
-from hypothesis import HealthCheck, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, settings, strategies as st
 from hypothesis.extra.numpy import array_shapes, arrays
 
 np.seterr(divide='ignore')
@@ -52,25 +67,24 @@ class _MemoryShelf(UserDict):
         pass
 
 
-@pytest.fixture(autouse=True, scope='session')
-def isolated_persistent_cache():
-    """back `util.persistent_cache` with an in-memory dict for the test session.
+# `util.persistent_cache` is backed by an in-memory dict for the whole pytest process,
+# installed at import rather than by a session fixture. Module-level spec reads in the
+# strategy modules (`site_strategies.py`) validate sweeps during collection and design
+# windows before any fixture runs. The on-disk shelf is dbm.ndbm on macOS python 3.9,
+# which corrupts once the cache evicts past its size limit (the window-parameter
+# searches alone write dozens of entries per call) and then fails every later
+# `get_window` call in the process
+from striqt.waveform.lib import util as _sw_util
 
-    The on-disk shelf is dbm.ndbm on macOS. That backend corrupts once the cache
-    evicts past the size limit (the window-parameter searches alone write dozens of
-    entries per call) or when 2 test processes write concurrently. After either,
-    every later `get_window` call on the machine fails. Tests also must not leave
-    one-off entries in the cache of the developer.
-    """
-    from striqt.waveform.lib import util
+_memory_shelf = _MemoryShelf(), Lock()
+_disk_shelf_getter = _sw_util._get_cache_shelf
+_sw_util._get_cache_shelf = lambda: _memory_shelf
 
-    shelf = _MemoryShelf(), Lock()
-    original = util._get_cache_shelf
-    util._get_cache_shelf = lambda: shelf
-    try:
-        yield
-    finally:
-        util._get_cache_shelf = original
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    _sw_util._get_cache_shelf = _disk_shelf_getter
+    if _session_cache_dir is not None:
+        shutil.rmtree(_session_cache_dir, ignore_errors=True)
 
 
 # %% Array namespaces (numpy, cupy, dask)

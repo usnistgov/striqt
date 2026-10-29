@@ -27,15 +27,19 @@ repository.
   `tests/figures/` against the synthetic 3-capture datasets of `figures_datasets.py`
   (`make_dataset`, `predicted_levels_dBm`, `occupied_bins`), with the expected levels and
   bin supports from the dataset construction; the one plotting test runs headless through
-  `MPLBACKEND=agg`, set in the root conftest before any third-party import. The same lines
-  set `MPLCONFIGDIR` to `platformdirs.user_cache_dir('striqt')/matplotlib`, beside the numba
-  cache, because a sandbox that cannot write `~/.matplotlib` rebuilds the matplotlib font
-  cache on every run (12 s per process) when the default config dir is used.
+  `MPLBACKEND=agg`, set in the root conftest before any third-party import. The same block
+  sets `STRIQT_CACHE_DIR` to a directory of the session (removed at exit), keeps
+  `NUMBA_CACHE_DIR` in the user cache so compiled kernels persist, and sets `MPLCONFIGDIR`
+  to `platformdirs.user_cache_dir('striqt')/matplotlib` because a sandbox that cannot write
+  `~/.matplotlib` rebuilds the matplotlib font cache on every run (12 s per process). The
+  block also replaces the `persistent_cache` shelf with an in-memory dict at import time,
+  not in a fixture: `site_strategies.py` reads a site YAML at import, which validates the
+  sweep and designs windows during collection, before any fixture runs.
 - **The type checker's view** of the keyword-unpacking signatures is pinned by
   `tests/test_typing.py` and the probes under `tests/ty_probes/` (see Typing); import-time
-  side effects by `tests/test_imports.py`; the docstring prose gate (no "it"/"its" for code,
-  no `striqt.<pkg>.lib` path in a public docstring) by `tests/test_docstrings.py`, whose
-  pre-existing hits are listed in `tests/docstring-baseline.txt` and only ever removed.
+  side effects by `tests/test_imports.py`; the docstring prose gate (no personal pronoun
+  or "whose", no `striqt.<pkg>.lib` path in a public docstring) by
+  `tests/test_docstrings.py`, which has no baseline.
 - The downstream project's patterns are reproduced by `tests/sensor/sweeps/src/extensions.py`
   and the `site*` sweep directories; the papers the cyclic-power and sync tests derive their
   expectations from are under `_training_material/papers/` (untracked; locate with a search).
@@ -46,7 +50,7 @@ The suite is flat and every helper is imported by bare name, so a second definit
 same thing is invisible until the two drift. Look here before writing setup:
 
 - `tests/conftest.py`: fixtures (`xp`, `cupy_available`, `real_soapy`, `armed_tone_controller`,
-  the autouse `restore_logging_state` and `isolated_persistent_cache`, and
+  the autouse `restore_logging_state`, and
   `isolated_bindings`/`isolated_analysis_registry` for a test that binds a sensor or
   registers a measurement with the live registries), the array and scalar
   hypothesis primitives (`float_arrays`, `iq_waveforms`, `scalars`, `bounded_ints`,
@@ -136,18 +140,18 @@ Run both interpreters (pytest and hypothesis versions differ) and pass `tests` e
 because pytest 8 on py39 ignores `[tool.pytest]`:
 
 ```sh
-pixi run -e test39 ruff format src tests && pixi run -e test39 ruff check tests
+pixi run -e test39 ruff format src tests && pixi run -e test39 ruff check src tests
 pixi run -e test39 pytest -q -p no:cacheprovider tests -rxX
 pixi run -e test314 pytest -q -p no:cacheprovider tests -rxX
 grep -rn "mark.xfail" tests --include='*.py' | wc -l   # reconcile with the ledger
 pixi run -e test314 ty check src                        # must stay clean
 ```
 
-Lint `tests`, not `src tests` (see the ruff note under Typing). Account for every count
-delta: `passed` moves only by the arithmetic of folds, `xfailed` only by markers added or
-retired, and an equal drop in `passed` and `skipped` is the fingerprint of an
-`xp`-parametrized test disappearing. Keep new tests under about 0.3 s by shrinking the
-compute; the whole suite runs in under a minute per interpreter. If `pixi run` fails on a
+Account for every count delta: `passed` moves only by the arithmetic of folds, `xfailed`
+only by markers added or retired, and an equal drop in `passed` and `skipped` is the
+fingerprint of an `xp`-parametrized test disappearing. Keep new tests under about 0.3 s by
+shrinking the compute; the whole suite runs in under a minute per interpreter. If `pixi
+run` fails on a
 network fetch, `--frozen` skips the reinstall; as a last resort
 `PYTHONPATH="$PWD/src" ./.pixi/envs/<env>/bin/python -m pytest tests` runs without the
 editable install but does not exercise the console entry points.

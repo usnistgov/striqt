@@ -10,8 +10,7 @@ import functools
 import numpy as np
 import pytest
 from conftest import gaussian_iq
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from numeric_checks import (
     FIR_RECT_STOPBAND_DB,
     assert_close,

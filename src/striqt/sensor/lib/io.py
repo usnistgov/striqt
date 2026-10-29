@@ -8,16 +8,15 @@ from __future__ import annotations as __
 
 import sys
 import warnings
-import msgspec
 from pathlib import Path
-from typing import Any, Optional, overload, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional, overload
+
+import msgspec
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import np, xr
 
 from .. import specs
-
-import msgspec
 
 if TYPE_CHECKING:
     from .typing import ZarrStore
@@ -326,9 +325,8 @@ def read_tdms_iq(
     dtype='complex64',
     skip_samples=0,
     array_backend: specs.types.ArrayBackend,
-) -> tuple['np.ndarray', specs.FileCapture]:
+) -> tuple[np.ndarray, specs.FileCapture]:
     from ..bindings import tdms_file
-    from .sources.file import TDMSSource
 
     source_spec = tdms_file.schema.source(
         master_clock_rate=master_clock_rate, path=str(path)
@@ -350,13 +348,13 @@ def read_calibration(
 @overload
 def read_calibration(
     path: str | Path, format_path: specs.paths.PathFormatter | None = None
-) -> 'xr.Dataset': ...
+) -> xr.Dataset: ...
 
 
 @sa.util.lru_cache()
 def read_calibration(
     path: str | Path | None, format_path: specs.paths.PathFormatter | None = None
-) -> 'xr.Dataset|None':
+) -> xr.Dataset | None:
     if path is None:
         return None
 
@@ -369,7 +367,7 @@ def read_calibration(
         return dataset.load()
 
 
-def save_calibration(path, corrections: 'xr.Dataset'):
+def save_calibration(path, corrections: xr.Dataset):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     corrections.to_netcdf(path)
 
@@ -398,6 +396,7 @@ def _import_extensions_from_spec(
     """
 
     import importlib
+
     from .bindings import get_registry
 
     if spec.import_path is None:
@@ -413,7 +412,7 @@ def _import_extensions_from_spec(
             if not root.exists():
                 raise FileNotFoundError(f'root_path {root_dir!r} does not exist')
             elif not root.is_dir():
-                raise IOError(f'root_path {root_dir!r} is not a directory')
+                raise OSError(f'root_path {root_dir!r} is not a directory')
             p = root / p
 
         if not p.is_dir():

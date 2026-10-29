@@ -10,7 +10,7 @@ from __future__ import annotations as __
 import math
 from collections.abc import Iterable
 from math import isfinite
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import striqt.analysis as sa
 

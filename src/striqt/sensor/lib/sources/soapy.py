@@ -1,20 +1,20 @@
 from __future__ import annotations as __
 
 import contextlib
-import functools
 import time
 import typing
-
-from ... import specs
-from .. import util
-from ..typing import PS, PC, SourceBackend
-from . import base, buffers
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 
+from ... import specs
+from .. import util
+from ..typing import SourceBackend
+from . import base, buffers
+
 if typing.TYPE_CHECKING:
     import SoapySDR  # type: ignore[import-not-found, unused-ignore]
+
     from ..typing import Array, Self
 else:
     try:
@@ -35,11 +35,11 @@ class _SoapyRange(specs.SpecBase, frozen=True, cache_hash=True):
     step: float | None = None
 
     @classmethod
-    def from_soapy(cls, r: 'SoapySDR.Range') -> Self:
+    def from_soapy(cls, r: SoapySDR.Range) -> Self:
         return cls(minimum=r.minimum(), maximum=r.maximum(), step=r.step())
 
     @classmethod
-    def from_soapy_tuple(cls, seq: tuple['SoapySDR.Range']) -> tuple[Self, ...]:
+    def from_soapy_tuple(cls, seq: tuple[SoapySDR.Range]) -> tuple[Self, ...]:
         return tuple([cls.from_soapy(r) for r in seq])
 
 
@@ -55,7 +55,7 @@ class _SoapyArgInfo(specs.SpecBase, kw_only=True, frozen=True, cache_hash=True):
     options: tuple[str, ...]
 
     @classmethod
-    def from_soapy(cls, arg: 'SoapySDR.ArgInfo') -> Self:
+    def from_soapy(cls, arg: SoapySDR.ArgInfo) -> Self:
         return cls(
             name=arg.name,
             description=arg.description,
@@ -128,7 +128,7 @@ class SoapyInfo(specs.SourceInfo, kw_only=True, frozen=True, cache_hash=True):
     tx_ports: tuple[_SoapyPortInfo, ...]
 
 
-def _get_adc_peak(x: 'Array', capture: specs.SoapyCapture, source: specs.SoapySource):
+def _get_adc_peak(x: Array, capture: specs.SoapyCapture, source: specs.SoapySource):
     xp = sw.array_namespace(x)
 
     adc_scale = buffers.get_dtype_scale(source.transport_dtype)
@@ -319,7 +319,7 @@ class RxStream:
         self.ports = ports
 
     @sa.util.stopwatch('stream initialization', 'source')
-    def setup(self, device: 'SoapySDR.Device', ports: specs.types.Port | None = None):
+    def setup(self, device: SoapySDR.Device, ports: specs.types.Port | None = None):
         if self.source_spec.stream_all_rx_ports:
             ports = tuple(range(self.info.num_rx_ports))
         elif ports is not None:
@@ -351,7 +351,7 @@ class RxStream:
             self.stream = device.setupStream(SoapySDR.SOAPY_SDR_RX, stype, ports)
 
     @contextlib.contextmanager
-    def _minimized_rx_gain(self, device: 'SoapySDR.Device'):
+    def _minimized_rx_gain(self, device: SoapySDR.Device):
         """minimize the gain setting while in the context"""
         start_gains = {}
 
@@ -360,13 +360,13 @@ class RxStream:
             min_gain = info.full_gain_range.minimum
             device.setGain(SoapySDR.SOAPY_SDR_RX, port, min_gain)
 
-        yield
+        try:
+            yield
+        finally:
+            for port, gain in start_gains.items():
+                device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
 
-        # restore the initial gains
-        for port, gain in start_gains.items():
-            device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
-
-    def close(self, device: 'SoapySDR.Device'):
+    def close(self, device: SoapySDR.Device):
         print('close stream')
         stream = getattr(self, 'stream', None)
         if stream is None:
@@ -391,7 +391,7 @@ class RxStream:
         self.stream = None
         self.ports = ()
 
-    def enable(self, device: 'SoapySDR.Device', enable: bool):
+    def enable(self, device: SoapySDR.Device, enable: bool):
         if enable == self._enabled:
             return
 
@@ -416,7 +416,7 @@ class RxStream:
 
     def read(
         self,
-        device: 'SoapySDR.Device',
+        device: SoapySDR.Device,
         buffers,
         offset,
         count,
@@ -479,7 +479,7 @@ class RxStream:
         if sync_time_ns is None or sr.timeNs == 0:
             pass
         elif sync_time_ns > sr.timeNs:
-            raise base.ReceiveStreamError(f'invalid timestamp from before last sync')
+            raise base.ReceiveStreamError('invalid timestamp from before last sync')
 
         return result
 
@@ -496,7 +496,7 @@ class HardwareTimeSync:
         self.last_sync_time: int | None = None
         self.time_source = time_source
 
-    def __call__(self, device: 'SoapySDR.Device') -> int | None:
+    def __call__(self, device: SoapySDR.Device) -> int | None:
         if self.time_source in ('internal', 'host'):
             self.last_sync_time = self.to_host_os(device)
         elif self.time_source in ('gps', 'external'):
@@ -504,9 +504,9 @@ class HardwareTimeSync:
         else:
             raise TypeError('unsupported time source {self.time_source!r}')
 
-    def to_host_os(self, device: 'SoapySDR.Device') -> int | None:
+    def to_host_os(self, device: SoapySDR.Device) -> int | None:
         if not device.hasHardwareTime():
-            raise IOError('device does not expose hardware time')
+            raise OSError('device does not expose hardware time')
 
         hardware_time = device.getHardwareTime('now') / 1e9
         if abs(hardware_time - time.time()) >= 0.2:
@@ -516,9 +516,9 @@ class HardwareTimeSync:
         else:
             return self.last_sync_time
 
-    def to_external_pps(self, device: 'SoapySDR.Device') -> int | None:
+    def to_external_pps(self, device: SoapySDR.Device) -> int | None:
         if not device.hasHardwareTime():
-            raise IOError('this soapy device does not expose hardware time')
+            raise OSError('this soapy device does not expose hardware time')
 
         # let a PPS transition pass to avoid race conditions involving
         # applying the time of the next PPS
@@ -558,7 +558,7 @@ def device_time_source(spec: specs.SoapySource):
 class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
     """a source backend for device control and acquisition through SoapySDR"""
 
-    device: 'SoapySDR.Device'
+    device: SoapySDR.Device
     rx_stream: RxStream
     _capture: specs.SoapyCapture | None = None
     sync_time: HardwareTimeSync

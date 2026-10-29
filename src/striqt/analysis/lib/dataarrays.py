@@ -8,14 +8,14 @@ import math
 import typing
 import weakref
 
+import msgspec
+
+import striqt.waveform as sw
+
 from .. import specs
 from . import register, util
 from .typing import TAR
 from .util import array_api_compat, cached_property, np, xr
-
-import striqt.waveform as sw
-
-import msgspec
 
 if typing.TYPE_CHECKING:
     from .typing import Array, CoordFunc
@@ -190,7 +190,7 @@ def _results_as_arrays(
     return array
 
 
-def _empty_stub(dims, dtype, attrs={}):
+def _empty_stub(dims, dtype, attrs: dict[str, typing.Any] | None = None):
     x = np.empty(len(dims) * (1,), dtype=dtype)
     return xr.DataArray(x, dims=dims, attrs=attrs)
 
@@ -201,7 +201,7 @@ def dataarray_stub(
     coord_factories: tuple[CoordFunc, ...],
     dtype: str,
     expand_dims: tuple[str, ...] | None = None,
-) -> 'xr.DataArray':
+) -> xr.DataArray:
     """return an empty array of type `cls`"""
 
     coord_stubs = {}
@@ -219,7 +219,7 @@ def dataarray_stub(
     stub = stub.isel(slices)
 
     if expand_dims is not None:
-        stub = stub.expand_dims({n: 0 for n in expand_dims}, axis=0)
+        stub = stub.expand_dims(dict.fromkeys(expand_dims, 0), axis=0)
 
     return stub
 
@@ -244,7 +244,7 @@ def _reraise_coord_error(*, exc, coord, factory_info, data, name):
         raise ValueError(problem) from exc
 
 
-def _restore_padded_coord_dtype(da: 'xr.DataArray', info: register.CoordInfo) -> None:
+def _restore_padded_coord_dtype(da: xr.DataArray, info: register.CoordInfo) -> None:
     """restore the integer or bool dtype declared for coordinate `info.name` of `da`.
 
     The coordinate is replaced in place with zeros of `info.dtype` when `info.dtype`
@@ -266,7 +266,7 @@ def build_dataarray(
     delayed: DelayedDataArray,
     *,
     expand_dims=None,
-) -> 'xr.DataArray':
+) -> xr.DataArray:
     """build an `xarray.DataArray` from an ndarray, capture information, and channel analysis keyword arguments"""
 
     template = dataarray_stub(
@@ -290,7 +290,7 @@ def build_dataarray(
             da.data = data
         else:
             da.data[:] = data
-    except ValueError as ex:
+    except ValueError:
         exc = ValueError(
             f'{delayed.info.name} measurement data has unexpected '
             f'shape {data.shape} -- expected {da.data.shape}'
@@ -399,7 +399,7 @@ class DelayedDataArray(collections.UserDict):
             attrs=self.attrs,
         )
 
-    def to_xarray(self, expand_dims=None) -> 'xr.DataArray':
+    def to_xarray(self, expand_dims=None) -> xr.DataArray:
         """return the `xarray.DataArray` of `result` with the coordinates of `info`.
 
         Args:
@@ -457,7 +457,7 @@ def evaluate_by_spec(
     spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions,
-) -> 'dict[str, DelayedDataArray] | dict[str, Array]':
+) -> dict[str, DelayedDataArray] | dict[str, Array]:
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
     Args:
@@ -498,7 +498,7 @@ def evaluate_by_spec(
     if sw.is_cupy_array(_raw_array(iq)):
         sw.arrays.configure_cupy()
 
-    for name in spec_dict.keys():
+    for name in spec_dict:
         meas = options.registry[type(getattr(spec, name))]
 
         with util.stopwatch(name, 'analysis'):
@@ -532,7 +532,7 @@ def package_analysis(
     capture: specs.Capture,
     results: dict[str, DelayedDataArray] | dict[str, Array],
     expand_dims=None,
-) -> 'xr.Dataset':
+) -> xr.Dataset:
     # materialize as xarrays
     with util.stopwatch('package dataset'):
         xarrays = {}
@@ -554,7 +554,7 @@ def analyze_by_spec(
     spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[True]] | None = None,
-) -> 'xr.Dataset': ...
+) -> xr.Dataset: ...
 
 
 @typing.overload
@@ -563,7 +563,7 @@ def analyze_by_spec(
     spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal['delayed']],
-) -> 'dict[str, DelayedDataArray]': ...
+) -> dict[str, DelayedDataArray]: ...
 
 
 @typing.overload
@@ -572,7 +572,7 @@ def analyze_by_spec(
     spec: specs.AnalysisGroup,
     capture: specs.Capture,
     options: EvaluationOptions[typing.Literal[False]],
-) -> 'dict[str, Array]': ...
+) -> dict[str, Array]: ...
 
 
 def analyze_by_spec(

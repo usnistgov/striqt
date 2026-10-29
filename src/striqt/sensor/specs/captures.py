@@ -2,16 +2,15 @@
 
 from __future__ import annotations as __
 
-from collections import Counter
 import numbers
-from typing import cast, get_args, TYPE_CHECKING
+from collections import Counter
+from typing import TYPE_CHECKING, cast, get_args
 
 import msgspec
 
 import striqt.analysis as sa
 
 from . import structs
-
 
 if TYPE_CHECKING:
     from ..lib.typing import SC, TypeVar
@@ -47,7 +46,7 @@ def split_capture_ports(capture: SC) -> list[SC]:
     else:
         assert isinstance(capture.port, tuple)
 
-    remaps = [dict() for i in range(len(capture.port))]
+    remaps = [{} for i in range(len(capture.port))]
 
     for field in capture.__struct_fields__:
         values = getattr(capture, field)

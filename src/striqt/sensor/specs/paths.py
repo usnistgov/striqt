@@ -3,9 +3,9 @@
 from __future__ import annotations as __
 
 import string
-from typing import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 import striqt.analysis as sa
 

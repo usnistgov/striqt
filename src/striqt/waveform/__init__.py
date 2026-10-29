@@ -1,12 +1,12 @@
 from . import arrays, comms_5gnr, comms_802_16, comms_lte, fourier, power_analysis
-from .lib import typing, util
-
+from .arrays import *
 from .fourier import (
+    ResamplerDesign,
     design_cola_resampler,
     design_fir_lpf,
     equivalent_noise_bandwidth,
-    fftfreq,
     fft,
+    fftfreq,
     get_max_cupy_fft_chunk,
     get_window,
     ifft,
@@ -14,10 +14,10 @@ from .fourier import (
     oaconvolve,
     oaresample,
     resample,
-    ResamplerDesign,
     spectrogram,
     stft,
 )
+from .lib import typing, util
 from .power_analysis import (
     dBlinmean,
     dBlinsum,
@@ -29,4 +29,3 @@ from .power_analysis import (
     powtodB,
     sample_ccdf,
 )
-from .arrays import *

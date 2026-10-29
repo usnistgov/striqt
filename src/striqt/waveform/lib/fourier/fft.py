@@ -60,8 +60,8 @@ def fft_roundoff_rms(
         dtype: the working dtype; a complex dtype counts as the dtype of one component
         nffts: the size of each FFT pass in the computation
         n_elementwise: the number of elementwise roundings in the computation
-        array_backend: ``'numpy'`` or ``'cupy'``, the backend whose FFT constant
-            applies. The named backend need not be installed
+        array_backend: ``'numpy'`` or ``'cupy'``; selects the FFT roundoff constant
+            of that backend, which need not be installed
 
     Returns:
         a dimensionless fraction of the output rms, proportional to the unit
@@ -233,25 +233,25 @@ def _cupy_fftn_helper(
     from cupy.fft import _fft  # type: ignore
 
     if n is not None:
-        raise Exception('implement n here')
+        raise NotImplementedError('implement n here')
 
-    kws = dict(overwrite_x=overwrite_x, plan=plan, order='C')
+    kws = {'overwrite_x': overwrite_x, 'plan': plan, 'order': 'C'}
     args = (None,), (axis,), None, direction
 
     # `out=` is honored only by the private `_fft._fftn`, not the public `cupy.fft` API
     if out is None:
-        return _fft._fftn(x, out=out, *args, **kws)
+        return _fft._fftn(x, *args, out=out, **kws)
     else:
         out = out.reshape(x.shape)
 
     if MAX_CUPY_FFT_SAMPLES is None:
-        return _fft._fftn(x, out=out, *args, **kws)
+        return _fft._fftn(x, *args, out=out, **kws)
 
     x_views = grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
     out_views = grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
 
     for x_view, out_view in zip(x_views, out_views):
-        out_view[:] = _fft._fftn(x_view, out=out_view, *args, **kws)
+        out_view[:] = _fft._fftn(x_view, *args, out=out_view, **kws)
 
     return out
 
@@ -363,9 +363,9 @@ def slice_freqs(
     start = ic - count // 2
     stop = start + count
     if start < 0:
-        raise ValueError(f'offset - bandwidth/2 < fs/2')
+        raise ValueError('offset - bandwidth/2 < fs/2')
     if stop > nfft:
-        raise ValueError(f'offset + bandwidth/2 > fs/2')
+        raise ValueError('offset + bandwidth/2 > fs/2')
 
     return slice(start, stop)
 

@@ -7,8 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from conftest import _cupy, as_xp, float_arrays, shaped_arrays
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from hypothesis.extra.numpy import array_shapes
 from numeric_checks import assert_close, dtype_id, reference_binned_mean, to_numpy
 from numpy.testing import assert_array_equal

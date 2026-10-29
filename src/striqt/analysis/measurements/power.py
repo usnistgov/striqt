@@ -3,14 +3,13 @@ from __future__ import annotations as __
 import typing
 from typing import Any
 
-from .. import specs
+import striqt.waveform as sw
 
+from .. import specs
 from ..lib import dataarrays, register, util
 from ..lib.util import np
 from . import shared
-from .shared import registry, hint_keywords
-
-import striqt.waveform as sw
+from .shared import hint_keywords, registry
 
 if typing.TYPE_CHECKING:
     from ..lib.typing import Array, Measurement
@@ -122,7 +121,7 @@ def time_elapsed(
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def power_detector(
     capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
-) -> 'np.ndarray':
+) -> np.ndarray:
     return np.array(spec.power_detectors)
 
 

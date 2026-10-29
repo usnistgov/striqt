@@ -13,15 +13,16 @@ from .structs import *
 for k in list(locals().keys()):
     if k in ('pd', 'msgspec'):
         continue
-    if not k[0].upper() == k[0]:
+    if k[0].upper() != k[0]:
         locals().pop(k)
 del k
 
+from striqt.analysis.specs import frozendict
+
 from . import action, captures, paths, sequencing, structs, types
 from .dataclasses import AcquiredIQ, Schema
-from .structs import SS, SP, SC, SA
+from .structs import SA, SC, SP, SS
 from .types import Annotated, Meta
-from striqt.analysis.specs import frozendict
 
 for k, obj in list(locals().items()):
     if k in ('pd', 'msgspec'):

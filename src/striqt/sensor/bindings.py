@@ -7,7 +7,7 @@ backend. The ``sensor_binding`` key of a sweep file selects a binding by name.
 import dataclasses
 
 from . import specs
-from .lib import sources, peripherals
+from .lib import peripherals, sources
 from .lib.bindings import (
     Sensor,
     SensorBinding,

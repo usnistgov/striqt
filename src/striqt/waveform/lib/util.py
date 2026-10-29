@@ -3,12 +3,12 @@ from __future__ import annotations as __
 import collections
 import functools
 import importlib.util
-from pathlib import Path
+import os
 import sys
 import threading
+from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, TYPE_CHECKING, cast
-
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 _lazy_import_locks = collections.defaultdict(threading.RLock)
 
@@ -95,7 +95,7 @@ _caches = {}
 @functools.wraps(functools.lru_cache)
 def lru_cache(
     maxsize: int | None = 128, typed: bool = False
-) -> 'Callable[[Callable[P, R]], LRUWrapped[P, R]]':
+) -> Callable[[Callable[P, R]], LRUWrapped[P, R]]:
     # the type hint matches the wrapped function, which is assumed to take only
     # hashable arguments
     func = functools.lru_cache(maxsize, typed)
@@ -109,15 +109,33 @@ def lru_cache(
     return wrap
 
 
-def _cache_shelf_path() -> str:
-    import platformdirs
+def cache_dir() -> Path:
+    """return the directory of the striqt on-disk caches.
 
-    dir = Path(platformdirs.user_cache_dir('striqt'))
+    The directory is ``STRIQT_CACHE_DIR`` when that environment variable is set and
+    not empty, otherwise the platformdirs user cache directory for ``striqt``. The
+    directory is created if absent. Two processes with different directories share no
+    cache files.
+
+    Raises:
+        OSError: if the directory cannot be created
+    """
+    override = os.environ.get('STRIQT_CACHE_DIR')
+    if override:
+        dir = Path(override)
+    else:
+        import platformdirs
+
+        dir = Path(platformdirs.user_cache_dir('striqt'))
     dir.mkdir(parents=True, exist_ok=True)
+    return dir
+
+
+def _cache_shelf_path() -> str:
     # pickles written by one Python version may not load in another, so the cache
     # file is per version
     pyver = f'{sys.version_info.major}.{sys.version_info.minor}'
-    return str(dir / f'calls-py{pyver}.db')  # python 3.9 shelve requires str
+    return str(cache_dir() / f'calls-py{pyver}.db')  # python 3.9 shelve requires str
 
 
 _cache_shelf_disabled = False
@@ -157,13 +175,13 @@ def _get_cache_shelf():
     cache_lock = Lock()
 
     try:
-        shelf = shelve.open(filename, writeback=True)
+        shelf = shelve.open(filename, writeback=True)  # noqa: SIM115
     except dbm.error:
         # Cache file was created with a different dbm backend (e.g., different
         # Python version). Delete and recreate.
         for path in glob.glob(f'{filename}*'):
             Path(path).unlink(missing_ok=True)
-        shelf = shelve.open(filename, writeback=True)
+        shelf = shelve.open(filename, writeback=True)  # noqa: SIM115
 
     # sync is forced on each operation already
     shelf.__del__ = lambda: None  # ty: ignore[invalid-assignment]

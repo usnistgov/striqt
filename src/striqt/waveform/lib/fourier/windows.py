@@ -140,7 +140,7 @@ def register_extra_windows():
     The registration modifies the window table of `scipy.signal.get_window` for the
     process.
     """
-    import scipy.signal.windows._windows as _windows
+    from scipy.signal.windows import _windows
 
     if hasattr(_windows, '_win_equiv'):
         registry: dict[str, typing.Callable] = _windows._win_equiv
@@ -221,7 +221,7 @@ def get_window(
     fftbins: bool = True,
     norm: bool = True,
     dtype: DTypeLike = 'float32',
-    xp: 'XpType' = None,
+    xp: XpType = None,
 ) -> Array:
     """return a window of `nwindow` samples for `xp`, zero-padded to `nwindow + nzero`.
 
@@ -240,8 +240,8 @@ def get_window(
         fftshift: True to modulate the window by a half-band shift so that the FFT of
             a windowed signal is in ascending frequency order; the window is
             then complex when `nwindow + nzero` is odd
-        center_zeros: True to split the `nzero` zeros before and after the window
-            instead of appending them
+        center_zeros: True to split the `nzero` zeros before and after the window;
+            False appends all `nzero` zeros after the window
         fftbins: True for a periodic window (spectral analysis), False for a
             symmetric one, as in `scipy.signal.get_window`
         norm: True to scale the window to unit time-averaged power

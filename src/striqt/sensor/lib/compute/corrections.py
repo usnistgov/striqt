@@ -1,19 +1,20 @@
 from __future__ import annotations as __
 
 import dataclasses
-from math import ceil, gcd, isfinite
 import os
-from typing import cast, TYPE_CHECKING
 import warnings
-
-from .. import sources, util
-from ... import specs
+from math import ceil, gcd, isfinite
+from typing import TYPE_CHECKING, cast
 
 import striqt.analysis as sa
 from striqt.analysis.lib.dataarrays import format_units
 
+from ... import specs
+from .. import util
+
 if TYPE_CHECKING:
     import striqt.waveform as sw
+
     from ..typing import Array, ResamplerKws, Unpack
 
 else:
@@ -25,7 +26,7 @@ MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
 RESAMPLE_COLA_WINDOW = 'hamming'
 
 # bypass for the conjugate correction for downconversion based on high-side LO
-IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', 0))
+IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', '0'))
 if IGNORE_HIGHSIDE_LO:
     warnings.warn(
         'bypassing corrections for highside-LO downconversion '
@@ -33,7 +34,7 @@ if IGNORE_HIGHSIDE_LO:
     )
 
 # experimental: resample and low-pass in one STFT pass instead of _resample and the FIR
-USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', 0))
+USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', '0'))
 if USE_OARESAMPLE:
     warnings.warn('experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)')
 
@@ -779,9 +780,13 @@ def _get_resample_overlap(
 @sa.util.lru_cache()
 def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
     if array_backend == 'cupy':
-        import cupyx.scipy.fft as fft  # type: ignore
+        # numba.cuda must be imported before cupy, and cupy before any cupyx module
+        # (numba issue 6131)
+        import numba.cuda  # noqa: F401, I001
+        import cupy  # noqa: F401  # ty: ignore[unresolved-import]
+        from cupyx.scipy import fft  # type: ignore
     elif array_backend == 'numpy':
-        import scipy.fft as fft
+        from scipy import fft
     else:
         raise TypeError(f'invalid array_backend {array_backend}')
 

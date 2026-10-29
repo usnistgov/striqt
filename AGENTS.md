@@ -20,7 +20,14 @@ pixi run -e test314 pyright src                                   # advisory; ac
 pixi run -e test314 pyrefly check                                 # advisory; accepted count in Conventions → Typing
 pixi run -e doc sphinx-build -E -a -b html doc doc/html          # docs (see chores/push-docs.sh to deploy)
 pixi run -e cupy pytest                                          # GPU path, Jetson only
+STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python chores/tests/profile_zarr_sink.py  # own disk caches
 ```
+
+The on-disk caches (the `persistent_cache` window shelf, the numba kernel cache) live in
+the platformdirs user cache directory unless `STRIQT_CACHE_DIR` names another one. Two
+striqt processes that share the window shelf corrupt it on macOS Python 3.9, so a script
+run beside a test session or another script sets its own directory. The test suite does
+this itself.
 
 Every pixi environment installs the conda-forge `soapysdr` package (the `null` driver
 only) and striqt as an editable PyPI dependency with its `dev` extra; `pixi run` refreshes
@@ -56,6 +63,7 @@ Library defects that need a design decision rather than a local fix are written 
 
 ## Conventions
 
+- **Lint.** `pixi run -e test39 ruff check src tests` reports nothing. The rule set is ruff's default plus preview, with the architectural exclusions and the reason for each in `[tool.ruff.lint] ignore` in `pyproject.toml`; `pyupgrade.keep-runtime-typing` keeps `Union`/`Optional` for msgspec. A line that must keep a flagged pattern carries `# noqa: <RULE>` with the reason, never a bare `# noqa`. Three import orders are pinned with `# isort: split`/`# isort: off` because the sorted order breaks an import cycle or ty inference; keep the comment beside each. Fix with `ruff check --fix-only --fixable <RULES>` under the full config rather than `--select`, which redefines the enabled set and makes RUF100 report every other `noqa` as unused.
 - **Python 3.9 is the floor** (`requires-python = ">=3.9"`, ruff `target-version = "py39"`; the `test39` and `test314` pixi environments cover both ends). Modules start with `from __future__ import annotations as __` so annotations can use modern syntax, but anything evaluated at runtime cannot.
 - **msgspec resolves struct annotations at runtime.** In spec structs use `Union[...]`/`Optional[...]`, not `X | None`, and keep the names importable at runtime. `eval_type_backport` is a hard dependency for this reason. Several recent commits are reverts of "simplifications" here — collapsing a `Union`, or rewriting a `Literal` containing bools, has broken msgspec decoding before. Run the tests in `tests/sensor/` after touching a spec type.
 - **Lazy imports are enforced.** Heavy modules are loaded via `util.lazy_import('scipy')` under an `if TYPE_CHECKING:`/`else:` split. `tests/test_imports.py` asserts that `scipy`, `xarray`, and `pandas` are still unreified and that `dask` was never imported after importing all four packages. Adding a module-level `import xarray` in the wrong place fails that test.
@@ -108,7 +116,7 @@ Library defects that need a design decision rather than a local fix are written 
   - **Scope of a change.** Bring the docstring of any function you edit to this standard, including stale parameter names and exception lists. Do not rewrite docstrings of untouched functions in the same change. A revision pass over docstrings or comments covers only the code the task has changed, never code read along the way; a wider pass requires an explicit request or authorization from the user.
   - **A noisy docstring is worse than none.** A docstring that narrates mechanism, names a `.lib` module, or describes the change that produced it costs review and maintenance time and returns nothing. When a refactor touches a documented object, delete the sentences that referenced the old mechanism; do not rewrite them. Add a sentence only when it states a caller-facing rule: what a value selects, what is rejected, which input a derived value comes from. A summary line alone is a complete docstring.
   - **Prose changes stay visible.** A docstring rewrite goes in a commit whose message names it, never inside one titled for a rename or refactor. The final chat message of a change lists every docstring touched, by qualified name, so the list can be reviewed without the diff.
-  - **Gate.** `tests/test_docstrings.py` fails on any docstring under `src/` that contains a `striqt.<pkg>.lib` path outside a `lib/` directory, or one of "we", "our", "you", "your", "they", "their", "them", or "whose" outside backticks and doctest lines ("I" and "us" are not scanned: "I/Q" and the microsecond abbreviation). Pre-existing hits are listed in `tests/docstring-baseline.txt`; the test also fails when a listed entry no longer hits, so the file only shrinks, except that a change to the gate's rules re-baselines once in the same commit.
+  - **Gate.** `tests/test_docstrings.py` fails on any docstring under `src/` that contains a `striqt.<pkg>.lib` path outside a `lib/` directory, or one of "we", "our", "you", "your", "they", "their", "them", or "whose" outside backticks and doctest lines ("I" and "us" are not scanned: "I/Q" and the microsecond abbreviation). The scan has no baseline: every docstring under `src/` must pass.
 
   After editing, run 4 structural checks on every docstring you touched, before the lexical **Check** under **Prose in code**. These are the checks that a word scan does not replace:
   1. Strike every sentence whose subject is a module, a table, a check, a runner, or the design. What remains must still state the caller's contract; if it does not, cut the docstring to the summary line.

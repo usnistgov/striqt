@@ -2,19 +2,17 @@
 
 from __future__ import annotations as __
 
-import logging
-from typing import Any, cast, Literal, overload, TYPE_CHECKING
 import warnings
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
-from ... import specs
-from .. import sources
-from . import corrections, datasets
+import msgspec
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
-import msgspec
+from ... import specs
+from . import corrections, datasets
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -70,7 +68,7 @@ def _get_signal_trigger_name(setup: specs.Source) -> str | None:
             raise ValueError(
                 'specify exactly one trigger for an explicit signal_trigger'
             )
-        return list(meas.keys())[0]
+        return next(iter(meas.keys()))
     elif isinstance(setup.signal_trigger, str):
         return setup.signal_trigger
     else:
@@ -81,7 +79,7 @@ def _get_signal_trigger_name(setup: specs.Source) -> str | None:
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[True]],
-) -> 'xr.Dataset': ...
+) -> xr.Dataset: ...
 
 
 @overload
@@ -95,14 +93,14 @@ def analyze(
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[False]],
-) -> 'dict[str, Array]': ...
+) -> dict[str, Array]: ...
 
 
 @sa.util.stopwatch('', 'analysis')
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
-) -> 'dict[str, Array] | xr.Dataset | datasets.DelayedDataset':
+) -> dict[str, Array] | xr.Dataset | datasets.DelayedDataset:
     """run the analysis of ``options.sweep_spec`` on `iq`.
 
     The analysis is ``options.sweep_spec.analysis`` adjusted by
@@ -190,9 +188,11 @@ def prepare_compute(
         with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
             # numba.cuda must be imported before cupy on some versions/platforms
             # (https://github.com/numba/numba/issues/6131)
-            np.__version__  # reify
-            import numba.cuda
-            import cupy  # type: ignore
+            np.__version__  # noqa: B018  reifies the lazy import
+            # isort: off
+            import numba.cuda  # noqa: F401
+            import cupy  # type: ignore  # noqa: F401
+            # isort: on
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
             sw.arrays.configure_cupy()
@@ -203,8 +203,7 @@ def prepare_compute(
         message='Mean of empty slice.*',
     )
 
-    from ..actions import sweep as sweep_action
-    from ..actions import warmup
+    from ..actions import sweep as sweep_action, warmup
 
     if skip_warmup:
         warm = None

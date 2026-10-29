@@ -1,38 +1,39 @@
 from __future__ import annotations as __
+
+from collections.abc import Iterable
 from typing import (
+    TYPE_CHECKING,
     Any,
-    Iterable,
     Literal,
     Optional,
-    overload,
-    TypeVar,
-    TYPE_CHECKING,
     Union,
+    overload,
 )
 
+from typing_extensions import TypeVar
 
 # %% dataarrays.py
 AnalysisReturnFlag = Literal[True, False, 'delayed']
 TAR = TypeVar('TAR', bound=AnalysisReturnFlag)
 
 if TYPE_CHECKING:
+    from typing import Callable
+
+    import xarray as xr
+    import zarr
+    import zarr.storage
     from typing_extensions import (
-        Callable,
         ParamSpec,
         Protocol,
         Self,
         TypeAlias,
         TypedDict,
-        TypeVar,
     )
 
-    from . import dataarrays
     from striqt.waveform.lib.typing import Array, ArrayBackend
-    from .. import specs
 
-    import xarray as xr
-    import zarr
-    import zarr.storage
+    from .. import specs
+    from . import dataarrays
 
     P = ParamSpec('P')
     R = TypeVar('R', infer_variance=True)

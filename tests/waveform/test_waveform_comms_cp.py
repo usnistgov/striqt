@@ -12,8 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from conftest import gaussian_iq, iq_waveforms
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from numeric_checks import assert_close, numpy_and_cupy, reference_power
 from waveform_strategies import corr_atol_for, cp_case
 
