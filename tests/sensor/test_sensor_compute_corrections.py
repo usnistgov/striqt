@@ -531,7 +531,7 @@ def test_trigger_shifts_aligned_and_leaves_unaligned(preset, xp, subtests):
             assert_close(aligned(corrected)[port : port + 1], ratio * expected, **tol)
 
 
-# %% select: experimental oaresample path (STRIQT_USE_OARESAMPLE=1)
+# %% select: the oaresample path
 
 
 @RESAMPLED_PRESETS
@@ -576,7 +576,7 @@ def test_oaresample_leaks_in_band_noise_no_more_than_the_fir(corrections_flags):
 
 
 @pytest.mark.parametrize('lo_shift', ['left', 'right'])
-def test_lo_shift_design_moves_the_lo_out_of_band(lo_shift):
+def test_lo_shift_design_moves_the_lo_out_of_band(lo_shift, resample_path):
     """the LO leakage is at 0 Hz in the baseband of the radio. The shifted passband
     excludes 0 Hz and fits inside the Nyquist band of the radio."""
     capture = preset_capture('single_tone', **LO_SHIFT_CAPTURE, lo_shift=lo_shift)
@@ -591,7 +591,7 @@ def test_lo_shift_design_moves_the_lo_out_of_band(lo_shift):
 @pytest.mark.parametrize(
     'lo_shift, frequency', [('left', 1e6), ('right', -1e6)], ids=['left', 'right']
 )
-def test_lo_shift_is_removed_from_the_output(lo_shift, frequency):
+def test_lo_shift_is_removed_from_the_output(lo_shift, frequency, resample_path):
     capture = preset_capture(
         'single_tone',
         **LO_SHIFT_CAPTURE,
@@ -916,10 +916,11 @@ def test_impulse_acquisition(preset):
 # %% source_record_size
 
 
-def test_source_record_size_rounds_an_exact_half_sample_up():
+def test_source_record_size_rounds_an_exact_half_sample_up(corrections_flags):
     """23076 samples at 10 MS/s from the 125 MS/s clock resample 25:24, and the source
     record is exactly 24037.5 samples. The float product ``duration * fs_sdr`` falls
-    below the half and would round down."""
+    below the half and would round down. The design is the default path's."""
+    corrections_flags(use_oaresample=False)
     capture = _drawn_capture(1e7, 23076, inf)
     design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
     assert (design['nfft'], design['nfft_out']) == (300, 288)
@@ -955,9 +956,10 @@ def test_oaresample_pads_use_the_exact_record_size(corrections_flags):
 # %% _resample
 
 
-def test_resample_rejects_a_length_that_does_not_divide():
-    """6.25 MS/s to 6 MS/s is 25:24. One sample more than the (50, 50) overlaps
-    leaves a padded length that is not a multiple of 25."""
+def test_resample_rejects_a_length_that_does_not_divide(corrections_flags):
+    """6.25 MS/s to 6 MS/s is 25:24. One sample more than the (50, 50) overlaps of
+    the default path leaves a padded length that is not a multiple of 25."""
+    corrections_flags(use_oaresample=False)
     capture = preset_capture('dirac_delta', **RESAMPLE_ONLY, time=IMPULSE_TIME)
     lead, tail = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
     fs = fs_sdr(capture)

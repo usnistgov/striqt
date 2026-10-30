@@ -524,8 +524,9 @@ def corrections_flags(monkeypatch):
 
 @pytest.fixture(params=('resample', 'oaresample'))
 def resample_path(request, corrections_flags):
-    """run the test on the default resampler and on the oaresample path in turn, and
-    return the name of the path"""
+    """run the test on each resampler path in turn and return the name of the path:
+    ``'resample'`` for the whole-record FFT resampler and the FIR, ``'oaresample'``
+    for the STFT overlap-add resampler with the low-pass on its bins"""
     corrections_flags(use_oaresample=request.param == 'oaresample')
     return request.param
 

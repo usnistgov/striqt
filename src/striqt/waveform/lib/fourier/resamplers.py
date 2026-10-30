@@ -87,7 +87,7 @@ def design_cola_resampler(
     ``fs_sdr`` is the largest integer division of `fs_base` at or above
     ``fs_target + min_oversampling * bw + bw_lo``. The magnitude of
     ``lo_offset`` is ``bw / 2 + bw_lo / 2`` rounded up to a whole number of
-    ``fs_sdr / nfft`` bins, up to one bin more than that sum.
+    ``fs_sdr / nfft`` bins that is a multiple of the frames per hop of `window`.
 
     Args:
         fs_base: the master clock rate (in S/s) that ``fs_sdr`` divides
@@ -188,9 +188,15 @@ def design_cola_resampler(
         passband = (None, None)
     else:
         # records handed to `resample` are padded to a multiple of nfft_in, so an
-        # offset on the fs_sdr / nfft_in grid is a whole number of their bins too
+        # offset on the fs_sdr / nfft_in grid is a whole number of their bins too.
+        # `oaresample` demodulates each STFT frame by the shift, and consecutive
+        # frames agree in phase only when the shift is a multiple of the frames per
+        # hop
+        frames_per_hop = _COLA_WINDOW_SIZE_DIVISOR[window]
         bin_size = fs_sdr / nfft_in
-        lo_offset = sign * math.ceil((bw / 2 + bw_lo / 2) / bin_size) * bin_size
+        bins = math.ceil((bw / 2 + bw_lo / 2) / bin_size)
+        bins = math.ceil(bins / frames_per_hop) * frames_per_hop
+        lo_offset = sign * bins * bin_size
         passband = (lo_offset - bw / 2, lo_offset + bw / 2)
 
     if sign != 0 and abs(lo_offset) + fs_target / 2 > fs_sdr / 2:
@@ -415,7 +421,8 @@ def oaresample(
         overwrite_x: True permits the STFT to consume the buffer of `x`
         axis: the time axis of `x`
         frequency_shift: the frequency (in Hz) moved to the output DC, a multiple of
-            ``fs / down``; 0 keeps the center frequency
+            ``fs / down`` times the frames per hop of `window`; 0 keeps the center
+            frequency
         filter_bandwidth: the passband width (in Hz) of the low-pass; None or
             ``inf`` applies no low-pass
         transition_bandwidth: the width (in Hz) of the low-pass transition band
@@ -428,8 +435,8 @@ def oaresample(
 
     Raises:
         ValueError: if `frequency_shift` is nonzero while upsampling, is not a
-            multiple of ``fs / down``, or moves the output band past an edge of the
-            input band; if `up` or `down` is odd or not a multiple of the COLA
+            multiple of ``fs / down`` times the frames per hop, or moves the output
+            band past an edge of the input band; if `up` or `down` is odd or not a multiple of the COLA
             divisor; or if `window` has no COLA divisor
     """
 
@@ -451,6 +458,14 @@ def oaresample(
         raise ValueError('frequency_shift is only supported when downsampling')
     elif isroundmod(frequency_shift, fs / nfft):
         shift = round(frequency_shift / (fs / nfft))
+        frames_per_hop = _COLA_WINDOW_SIZE_DIVISOR[typing.cast('str', window)]
+        if shift % frames_per_hop != 0:
+            # the demodulation by `shift` bins advances 2π shift / frames_per_hop
+            # per hop, so other shifts invert or rotate alternate frames
+            raise ValueError(
+                f'frequency_shift must be a multiple of {frames_per_hop} * fs/down '
+                f'for the {window!r} window'
+            )
         edge_low = nfft // 2 - nfft_out // 2 + shift
         edge_high = edge_low + nfft_out
 

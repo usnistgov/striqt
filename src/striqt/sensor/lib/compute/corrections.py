@@ -34,10 +34,13 @@ if IGNORE_HIGHSIDE_LO:
         '(shell STRIQT_IGNORE_HIGHSIDE_LO=1)'
     )
 
-# experimental: resample and low-pass in one STFT pass instead of _resample and the FIR
-USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', '0'))
-if USE_OARESAMPLE:
-    warnings.warn('experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)')
+# 1 resamples and low-passes in one STFT pass; 0 selects the whole-record FFT
+# resampler followed by the FIR
+USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', '1'))
+if not USE_OARESAMPLE:
+    warnings.warn(
+        'the whole-record resampler and FIR are enabled (shell STRIQT_USE_OARESAMPLE=0)'
+    )
 
 
 _TIME_AXIS = 1

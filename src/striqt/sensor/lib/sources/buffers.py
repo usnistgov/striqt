@@ -280,8 +280,10 @@ def find_trigger_holdoff(
     holdoff = round(holdoff_ns / 1e9 * sample_rate)
 
     if holdoff < min_holdoff:
+        # the first strobe edge at or past min_holdoff
         trigger_strobe_samples = round(trigger_strobe * sample_rate)
-        holdoff += ceil(min_holdoff / trigger_strobe_samples) * trigger_strobe_samples
+        strobes = ceil((min_holdoff - holdoff) / trigger_strobe_samples)
+        holdoff += strobes * trigger_strobe_samples
 
     return holdoff
 

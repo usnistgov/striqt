@@ -287,15 +287,16 @@ including the controller's `reuse_iq` copy, starts with a fresh preprocessor. Th
 stages, in order:
 
 1. Resample to `sample_rate`: `_scale_only` when no resampling is needed, otherwise
-   `_resample`, or `_oaresample` when `STRIQT_USE_OARESAMPLE=1`. This is the only
+   `_oaresample`, or `_resample` when `STRIQT_USE_OARESAMPLE=0`. This is the only
    stage that reads `x`, and the one that may consume `x` in place under
    `overwrite_x`.
 2. Conjugate for a high-side LO. `STRIQT_IGNORE_HIGHSIDE_LO` disables the conjugation.
-3. Low-pass to `analysis_bandwidth`: the 4001-tap FIR on the default path, or the
-   response on the STFT bins inside `_oaresample` on the oaresample path, with the
-   same band edges (`FIR_TRANSITION_BW` centered on half the bandwidth). The FIR runs
-   only for a measurement registered `prefer_filtered=True` on a finite bandwidth;
-   the oaresample path filters the resampled waveform for every measurement.
+3. Low-pass to `analysis_bandwidth`: the response on the STFT bins inside
+   `_oaresample`, or the 4001-tap FIR when `STRIQT_USE_OARESAMPLE=0` or the capture
+   is not resampled, with the same band edges (`FIR_TRANSITION_BW` centered on half
+   the bandwidth). The FIR runs only for a measurement registered
+   `prefer_filtered=True` on a finite bandwidth; `_oaresample` filters the resampled
+   waveform for every measurement.
 4. Trim to `duration`.
 5. Run the `signal_trigger` and shift. This stage runs for a measurement registered
    `prefer_aligned=True` when a trigger is set. The trigger measurement receives the

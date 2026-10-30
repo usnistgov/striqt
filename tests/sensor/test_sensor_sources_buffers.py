@@ -105,13 +105,8 @@ def test_get_read_count_rejects_invalid_overlap(overlap):
 def test_find_trigger_holdoff_aligns_to_the_strobe(
     start_time_ns, strobe_us, start_overlap, rearmed
 ):
-    """the holdoff ends on a strobe edge (to within one sample), covers the
-    overlap and, on a fresh arm, the transient holdoff.
-
-    The upper bound records current behavior rather than a contract: the
-    implementation skips up to one extra strobe period beyond the first edge that
-    satisfies the minimum.
-    """
+    """the holdoff ends on the first strobe edge (to within one sample) that covers
+    the overlap and, on a fresh arm, the transient holdoff"""
     strobe = strobe_us * 1e-6
     source = source_spec(transient_holdoff_time=HOLDOFF_TIME, trigger_strobe=strobe)
     capture = soapy_capture()
@@ -125,7 +120,8 @@ def test_find_trigger_holdoff_aligns_to_the_strobe(
     min_holdoff = start_overlap + (0 if rearmed else round(HOLDOFF_TIME * fs))
     strobe_ns = strobe_us * 1000
     assert holdoff >= min_holdoff
-    assert holdoff < min_holdoff + 2 * round(strobe * fs)
+    # the first edge at or past the minimum is less than one strobe period away
+    assert holdoff < min_holdoff + round(strobe * fs) + 1
     end_ns = start_time_ns + round(holdoff * 1e9 / fs)
     excess_ns = end_ns % strobe_ns
     assert min(excess_ns, strobe_ns - excess_ns) <= 1e9 / fs

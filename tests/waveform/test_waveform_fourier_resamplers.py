@@ -118,6 +118,9 @@ class TestColaResamplerDesign:
         assert_allclose((hi + lo) / 2, design['lo_offset'])
         sign = {'left': -1, 'right': 1}.get(shift, 0)
         assert np.sign(design['lo_offset']) == sign
+        # the shift must keep consecutive STFT frames in phase in oaresample
+        bins = round(design['lo_offset'] / (design['fs_sdr'] / design['nfft']))
+        assert bins % _COLA_WINDOW_SIZE_DIVISOR[window] == 0
 
     def test_options(self):
         design = design_cola_resampler(125e6, 107.52e6)
@@ -348,6 +351,7 @@ class TestOaresample:
         'up, down, shift, match',
         [
             (128, 256, 1e6 / 256 / 3, 'multiple of fs/down'),
+            (128, 256, 3 * 1e6 / 256, 'multiple of 2'),
             (128, 256, 100 * 1e6 / 256, 'too large'),
             (128, 256, -100 * 1e6 / 256, 'too small'),
             (512, 256, 1e6 / 256, 'only supported when downsampling'),

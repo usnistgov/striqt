@@ -80,8 +80,9 @@ PRESETS = {
 }
 ONE_PORT = {**SCALE_ONLY, 'port': 0}
 
-# an lo_shift design from the 125 MHz clock: fs_sdr 11.364 MS/s (6250/4224-point
-# FFTs), lo_offset 1.6618 MHz (914 bins), 18750 samples per port
+# an lo_shift design from the 125 MHz clock: fs_sdr 11.364 MS/s, 18750 samples per
+# port; lo_offset 1.6618 MHz (914 bins of 6250/4224-point FFTs) on the default path
+# and 1.6618 MHz (3656 bins of 25000/16896-point FFTs) on the oaresample path
 LO_SHIFT_CAPTURE = {
     'port': (0, 1),
     'sample_rate': 7.68e6,
