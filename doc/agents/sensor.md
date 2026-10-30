@@ -233,10 +233,25 @@ Captures are expanded from `captures:` plus `loops:` (`Range`, `List`, `Repeat`,
 `FrequencyBinRange`) by `specs.sequencing.loop_captures`. The per-source overrides from
 `adjust_captures` are then applied.
 
-Output is appended along the `capture` dimension of a zarr store by `ZarrCaptureSink`.
-`ZarrTimeAppendSink` instead appends along the spectrogram time axis and is reached
-only by passing an instance through `iterate_sweep(res, sink=...)`. Paths ending in
-`.zarr.zip` go through `Zipper`.
+Output is written by `ZarrCaptureSink` (`lib/sinks.py`) into a zarr store that the sink
+allocates at `open` from the sweep spec: one row per port of every expanded capture
+along `capture`, every data variable and coordinate at full length, and no data.
+`compute/datasets.py:sweep_template` builds that zero-row dataset without IQ: the axis
+lengths and fixed coordinates come from the coordinate factories of the registry, the
+per-capture coordinates from the capture type and the `acquisition_info_cls` of the
+source backend (`sources/base.py`), and captures with different grids are unioned per
+dimension as `xr.concat(join='outer')` would. `analysis/lib/io.py:allocate_store` writes
+the metadata and resizes the arrays. Each `append` writes the arrays of the
+`DelayedDataset` into the chunks it completes (`ZarrSink.max_chunk_bytes` bounds a
+chunk), queues the rest, and adds the attrs that measurement bodies return, dropping a
+key that differs between captures. Store metadata is staged in memory by
+`analysis/lib/stores.py` and flushed after every capture for a directory store and once
+at `close` for a `.zarr.zip`, which is written in place, so no store key is written
+twice. `close` writes the partial chunks, trims the arrays to the rows written, and
+consolidates the metadata. `ZarrSink.batched_write_count` is deprecated and ignored.
+`ZarrTimeAppendSink` instead appends along the spectrogram time axis and is reached only
+by passing an instance through `iterate_sweep(res, sink=...)`; `Zipper` remains for the
+`zip-zarr` CLI.
 
 ### Timestamps and the trigger strobe
 

@@ -564,6 +564,10 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
     sync_time: HardwareTimeSync
     _info: SoapyInfo | None = None
 
+    acquisition_info_cls: typing.ClassVar[type[specs.AcquisitionInfo]] = (
+        specs.SoapyAcquisitionInfo
+    )
+
     # %% connection
     @sa.util.stopwatch('open soapy radio', 'source', threshold=1)
     def __init__(self, spec: SS, **device_kwargs: typing.Any):

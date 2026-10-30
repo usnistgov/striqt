@@ -452,7 +452,7 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
         if self.sweep.sink.path is None:
             return NoSink(self.sweep)
-        return ZarrCaptureSink(self.sweep, format_path)
+        return ZarrCaptureSink(self.sweep, format_path, action_spec=self.spec)
 
     def iterate(
         self,

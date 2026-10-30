@@ -1,12 +1,15 @@
 from __future__ import annotations as __
 
+import contextlib
 import functools
+import importlib
 import math
 import re
 import threading
 import typing
 import warnings
 from collections import defaultdict
+from collections.abc import Mapping
 from pathlib import Path
 
 from yaml import SequenceNode
@@ -38,6 +41,23 @@ warnings.filterwarnings(
 
 
 def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> ZarrStore:
+    """return the zarr store at `target`.
+
+    `mode` applies to a ``.zip`` path: ``'r'`` opens the archive read-only, ``'w'``
+    replaces the archive, and ``'a'`` creates or extends the archive. A directory store
+    opens read-write in every mode. A store passed as `target` is returned unchanged.
+
+    Args:
+        target: a directory path, a path ending in ``.zip``, an fsspec URL, or an open store
+        mode: the access mode of a ``.zip`` path
+
+    Returns:
+        a `ZipStore` for a ``.zip`` path, an fsspec mapper for a URL, and otherwise
+        a directory store (`DirectoryStore` on zarr 2, `LocalStore` on zarr 3)
+
+    Raises:
+        ValueError: if `target` is not a string, `Path`, or store
+    """
     import zarr.storage
 
     if _zarr_version() < (3, 0, 0):
@@ -63,8 +83,6 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
         fs, _ = fsspec.url_to_fs(target, asynchronous=True, **kws)
         return fs.get_mapper('')
     elif str(target).endswith('.zip'):
-        if mode != 'r':
-            raise OSError('only read mode is supported with zip stores')
         store = zarr.storage.ZipStore(target, mode=mode, compression=0)
     else:
         store = DirectoryStore(target)
@@ -142,6 +160,96 @@ def dump(
         warnings.simplefilter('ignore', UserWarning)
 
         return data.to_zarr(store, **kws, **kwargs)
+
+
+def allocate_store(
+    store: ZarrStore,
+    template: xr.Dataset,
+    *,
+    rows: int,
+    chunks: Mapping[str, tuple[int, ...]],
+    encoding: Mapping[str, Mapping[str, typing.Any]] = {},
+    compression: bool = True,
+    registry: register.AnalysisRegistry | None = None,
+) -> dict[str, typing.Any]:
+    """create the arrays of `template` in `store` with `rows` along the `capture` dimension.
+
+    The write is metadata only along `capture`: no chunk of a variable with the
+    `capture` dimension is written, and the coordinates without that dimension are
+    written in full. A variable already in `store` is replaced. A second call adds new
+    variables to the group. A returned array writes a chunk equal to its fill value
+    instead of deleting the chunk.
+
+    Args:
+        store: the open store of the group
+        template: a dataset with ``sizes['capture'] == 0`` and the other coordinates populated
+        rows: the length of the `capture` dimension in the allocated arrays
+        chunks: the chunk shape of each variable, keyed by name, in dimension order
+        encoding: xarray encoding entries per variable, applied over the compression and chunk entries
+        compression: `False` to store every variable uncompressed; `True` compresses the measurements registered with ``store_compressed`` using Blosc zstd (clevel 1)
+        registry: the measurement registry that selects the compressed variables; `None` selects the live registry
+
+    Returns:
+        the zarr array of each variable with the `capture` dimension, keyed by name
+
+    Raises:
+        ValueError: if `template` has no `capture` dimension or a nonzero length along it
+    """
+    if template.sizes.get('capture', None) != 0:
+        raise ValueError('template must have length 0 along the capture dimension')
+
+    if registry is None:
+        registry = register.registry
+
+    if _zarr_version() >= (3, 0, 0):
+        encodings = _build_encodings_zarr_v3(
+            template, registry=registry, compression=compression
+        )
+    else:
+        encodings = _build_encodings_zarr_v2(
+            template, registry=registry, compression=compression
+        )
+
+    for name, shape in chunks.items():
+        encodings[name]['chunks'] = tuple(shape)
+    for name, entries in encoding.items():
+        encodings[name].update(entries)
+
+    kws: dict[str, typing.Any] = {
+        'mode': 'a',
+        'consolidated': False,
+        'encoding': dict(encodings),
+        **zarr_format_kws(),
+    }
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', xr.SerializationWarning)
+        warnings.simplefilter('ignore', UserWarning)
+
+        template.to_zarr(store, **kws)
+
+    arrays: dict[str, typing.Any] = {}
+    with _write_empty_chunks():
+        for name, var in template.variables.items():
+            if 'capture' not in var.dims:
+                continue
+            array = zarr.open_array(store=store, path=str(name), mode='r+')
+            shape = list(array.shape)
+            shape[var.dims.index('capture')] = rows
+            array.resize(tuple(shape))
+            arrays[str(name)] = array
+
+    return arrays
+
+
+def _write_empty_chunks() -> typing.ContextManager[typing.Any]:
+    """return a context in which an opened zarr array writes its all-fill chunks."""
+    if _zarr_version() < (3, 0, 0):
+        # zarr 2 defaults to write_empty_chunks=True; zarr 3 defaults to False
+        return contextlib.nullcontext()
+
+    config = importlib.import_module('zarr.core.config').config
+    return config.set({'array.write_empty_chunks': True})
 
 
 def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> xr.Dataset:
@@ -745,28 +853,40 @@ def _xarray_version() -> tuple[int, ...]:
     return tuple(int(n) for n in xr.__version__.split('.'))
 
 
-def _get_store_info(store, zarr_format: ZarrFormat = 'auto') -> tuple[bool, dict]:
-    path = store.path if hasattr(store, 'path') else store.root
+def zarr_format_kws(zarr_format: ZarrFormat = 'auto') -> dict[str, int]:
+    """return the `to_zarr` keyword argument that selects the zarr format.
 
+    Args:
+        zarr_format: 2, 3, or ``'auto'`` for the major version of the installed zarr
+
+    Returns:
+        ``{'zarr_version': 2}`` or ``{'zarr_format': 3}``
+
+    Raises:
+        TypeError: if `zarr_format` is not 2, 3, or ``'auto'``
+    """
     if isinstance(zarr_format, str):
         zarr_format = zarr_format.lower()
 
-    if zarr_format in (2, 3):
-        pass
-    elif zarr_format == 'auto':
-        if _zarr_version() < (3, 0, 0):
-            zarr_format = 2
-        else:
-            zarr_format = 3
-    else:
+    if zarr_format == 'auto':
+        zarr_format = 2 if _zarr_version() < (3, 0, 0) else 3
+    elif zarr_format not in (2, 3):
         raise TypeError('zarr_format must be one of (2,3,"auto")')
 
     if zarr_format == 2:
-        exists = len(store) > 0
-        kws = {'zarr_version': 2}
+        return {'zarr_version': 2}
     else:
-        exists = Path(path).exists()
-        kws = {'zarr_format': 3}
+        return {'zarr_format': 3}
+
+
+def _get_store_info(store, zarr_format: ZarrFormat = 'auto') -> tuple[bool, dict]:
+    kws = zarr_format_kws(zarr_format)
+
+    if _zarr_version() < (3, 0, 0):
+        exists = len(store) > 0
+    else:
+        sync = importlib.import_module('zarr.core.sync').sync
+        exists = not sync(store.is_empty(''))
 
     return exists, kws
 

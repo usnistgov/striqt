@@ -75,7 +75,7 @@ def test_warmup_sweep_preserves_analysis_and_trigger_and_nulls_the_sink_path():
     """the analysis and the trigger of the source are copied. The sink is copied with
     `path` set to None."""
     source = CUPY.replace(signal_trigger='cellular_5g_pss_sync')
-    sink = ss.specs.ZarrSink(path='somewhere.zarr', batched_write_count=3)
+    sink = ss.specs.ZarrSink(path='somewhere.zarr')
     analysis = ss.specs.BundledAnalysis.from_dict({
         **ANALYSIS.to_dict(),
         # shared_spectrum selects SSB case C; a capture with no center_frequency

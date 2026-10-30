@@ -845,7 +845,13 @@ def fake_sweep_runner(tmp_path_factory):
             spec = spec.replace(sink=spec.sink.replace(path=str(path)), **replace)
             first_prompt = len(prompts)
             with ss.open_resources(spec, spec_path) as resources:
-                results = [ds for ds in ss.iterate_sweep(resources) if ds is not None]
+                results = [
+                    ss.lib.compute.from_delayed(dd)
+                    if isinstance(dd, ss.lib.compute.DelayedDataset)
+                    else dd
+                    for dd in ss.iterate_sweep(resources)
+                    if dd is not None
+                ]
             if results:
                 results = xr.concat(results, 'capture')
             return FakeRun(str(path), prompts[first_prompt:], spec, fake, results)

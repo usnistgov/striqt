@@ -583,11 +583,10 @@ it was standing in for is enabled.
 - **`open_resources` never restores the working directory.**
   `resources.py:200` `chdir`s to the spec directory and nothing undoes it, so
   the CLI and every test that runs a sweep inherit that cwd. Not fixed on
-  2026-09-16 because `Zipper` keeps a relative `zip_path` and `temp_dir` and
-  archives at sink close, after the sweep, so restoring the cwd would move
-  `.zarr.zip` output unless the sink first resolves its path against the spec
-  directory (zarr 2.18's `DirectoryStore` absolutises its own path, so
-  directory stores are unaffected). `test_sensor_sweeps` restores the cwd itself.
+  2026-09-16. Since 2026-10-30 `ZarrCaptureSink` opens its directory or zip
+  store at `open`, with the path resolved then, so restoring the cwd after the
+  sink opens would no longer move output; `test_sensor_sweeps` restores the cwd
+  itself.
 
 - **`summarize_calibration` labels a linear column as dB.** `compute/cal_lookups.py:39`
   names the column `Power Corr (dB)` but `_summarize_calibration_field`
@@ -630,7 +629,7 @@ it was standing in for is enabled.
 
 - **`ZarrTimeAppendSink` concatenates along time only within a batch.**
   Separate batches are still appended along `capture` by `sa.dump`'s default
-  `append_dim`; tested with `batched_write_count == len(captures)`.
+  `append_dim`; tested with `batch_size == len(captures)`.
 
 - **`isolated_extension_import` does not restore `ss.lib.bindings.registry`.**
   `tests/conftest.py` snapshots `sys.path` and `sys.modules` around an extension

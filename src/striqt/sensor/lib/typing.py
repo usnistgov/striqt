@@ -72,6 +72,13 @@ class Peripherals(Protocol[_SP, _SC]):
 # %% sources/base.py
 @runtime_checkable
 class SourceBackend(Protocol[_SS, SC]):
+    """a backend that controls one source device and streams IQ into capture buffers.
+
+    An implementation may declare the class attribute `acquisition_info_cls` as the
+    `AcquisitionInfo` subclass that `package_iq` attaches to each acquisition. An
+    implementation without the attribute attaches `AcquisitionInfo`.
+    """
+
     @abstractmethod
     def __init__(self, spec): ...
 

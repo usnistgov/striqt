@@ -498,6 +498,33 @@ def test_remaps_see_loop_values_as_the_field_type(site_sweep, values):
     assert [c.channel_name for c in captures] == ['3750 MHz', '3900 MHz']
 
 
+# %% repeat_captures
+
+
+def test_repeat_captures_without_a_repeat_is_loop_captures(synthetic_sweep):
+    repeat, *others = synthetic_sweep.loops
+    assert isinstance(repeat, ss.specs.Repeat)
+    sweep = synthetic_sweep.replace(loops=tuple(others))
+    assert S.repeat_captures(sweep) == S.loop_captures(sweep)
+
+
+@pytest.mark.parametrize('count', [1, 3])
+def test_repeat_captures_repeats_every_pass_in_order(synthetic_sweep, count):
+    """a leading `Repeat` gives `count` passes over the `loop_captures` tuple, each
+    pass in expansion order"""
+    repeat, *others = synthetic_sweep.loops
+    assert isinstance(repeat, ss.specs.Repeat)
+    sweep = synthetic_sweep.replace(loops=(ss.specs.Repeat(count=count), *others))
+    once = S.loop_captures(sweep)
+    assert len(once) > 1
+
+    repeated = S.repeat_captures(sweep)
+
+    assert len(repeated) == count * len(once)
+    for i in range(count):
+        assert repeated[i * len(once) : (i + 1) * len(once)] == once
+
+
 # %% loop_capture_origins
 
 

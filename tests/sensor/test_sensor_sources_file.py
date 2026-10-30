@@ -504,3 +504,27 @@ def test_request_past_end(file, open_source, match):
             source.get_waveform(8, FILE_SAMPLES - 7, port=0, xp=np)
     finally:
         source.close()
+
+
+# %% acquisition_info_cls
+
+
+@pytest.mark.parametrize(
+    'binding, file, make_spec',
+    [
+        pytest.param(
+            ss.bindings.zarr_iq,
+            lf('zarr_iq_file'),
+            lambda f: zarr_spec(f, capture_index=0),
+            id='zarr',
+        ),
+        pytest.param(ss.bindings.mat_file, lf('mat_file_1row'), mat_spec, id='mat'),
+        pytest.param(ss.bindings.mat_file, lf('npy_file'), mat_spec, id='npy'),
+        pytest.param(ss.bindings.tdms_file, lf('tdms_file'), tdms_spec, id='tdms'),
+    ],
+)
+def test_acquisition_info_is_the_class_of_the_binding(binding, file, make_spec):
+    """the metadata of an acquisition has exactly the class resolved from the binding"""
+    stages = acquire_corrected(binding, file_capture(port=0), source=make_spec(file))
+    expected = ss.lib.sources.acquisition_info_cls(binding.sensor.source_cls)
+    assert type(stages.raw.info) is expected

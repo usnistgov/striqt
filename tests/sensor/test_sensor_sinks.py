@@ -16,6 +16,7 @@ from synthetic_sources import (
     ONE_PORT,
     SPECTROGRAM,
     preset_capture,
+    preset_sweep,
     spectrogram_frames,
     tone_captures,
     tone_sweep,
@@ -23,7 +24,7 @@ from synthetic_sources import (
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-from striqt.sensor.lib import sinks
+from striqt.sensor.lib import compute, sinks
 
 OFFSETS = (1e6, 2e6)
 
@@ -76,37 +77,229 @@ def test_batch_tracker_merges_captures_of_different_shape():
 # %% ZarrCaptureSink
 
 
-def test_zarr_capture_sink_batches_rows(tmp_path, monkeypatch):
-    dumps = []
-    dump = sa.dump
+def materialize(delayed):
+    """return the `xr.Dataset` of each `DelayedDataset` that the sink returned"""
+    return [compute.from_delayed(dd) for dd in delayed]
 
-    def spy(store, data, **kws):
-        dumps.append(data.sizes['capture'])
-        return dump(store, data, **kws)
 
-    monkeypatch.setattr(sa, 'dump', spy)
-    offsets = (1e6, 2e6, 3e6, 4e6)
-    sweep = zarr_sweep(tmp_path / 'out.zarr', offsets, batched_write_count=2)
-    results = run_to_store(sweep)
-
+def outer_join(datasets):
     import xarray as xr
 
-    assert dumps == [2, 2]
+    return xr.concat(datasets, 'capture', join='outer', combine_attrs='drop_conflicts')
+
+
+def json_attrs(attrs):
+    """return `attrs` as a zarr store reads them back: tuples become lists"""
+    import json
+
+    return json.loads(json.dumps(dict(attrs)))
+
+
+def mixed_rate_sweep(path, **sink_kws):
+    """2 single-tone captures at 2 sample rates, so the PSD frequency grids differ"""
+    captures = (
+        preset_capture('single_tone', sample_rate=6.144e6),
+        preset_capture('single_tone', sample_rate=3.072e6, analysis_bandwidth=2.5e6),
+    )
+    sweep = preset_sweep('single_tone', captures)
+    return sweep.replace(sink=ss.specs.ZarrSink(path=str(path), **sink_kws))
+
+
+def test_zarr_capture_sink_store_equals_the_concatenated_captures(tmp_path):
+    """the store holds what `xr.concat(join='outer')` of the per-capture datasets
+    holds, with a chunk budget that leaves one partial chunk at close"""
+    import xarray as xr
+
+    offsets = (1e6, 2e6, 3e6)
+    sweep = zarr_sweep(tmp_path / 'out.zarr', offsets, max_chunk_bytes=200_000)
+    results = materialize(run_to_store(sweep))
+
     stored = sa.load(sweep.sink.path)
+    expected = outer_join(results)
     assert stored.capture_index.values.tolist() == list(range(len(offsets)))
     assert stored.iq_waveform.dtype == np.complex64
-    expected = xr.concat(results, 'capture').iq_waveform.values
-    assert np.array_equal(stored.iq_waveform.values, expected)
+    xr.testing.assert_equal(stored.iq_waveform, expected.iq_waveform)
+    for name in expected.coords:
+        if 'capture' in expected[name].dims:
+            a, b = stored[name].values, expected[name].values
+            if a.dtype.kind == 'f':
+                assert np.array_equal(a, b, equal_nan=True), name
+            else:
+                assert np.array_equal(a, b), name
+    assert dict(stored.iq_waveform.attrs) == json_attrs(expected.iq_waveform.attrs)
 
 
-def test_zarr_zip_path_is_archived_and_readable(tmp_path):
+def test_zarr_capture_sink_allocates_the_store_at_open(tmp_path):
+    """before any append the store has every variable and coordinate at the full
+    row count of the sweep, and no data chunk"""
+    sweep = zarr_sweep(tmp_path / 'out.zarr', (1e6, 2e6))
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    with ss.open_resources(unsunk, None) as res:
+        source_id = res['source'].source_id
+        sink = ss.sinks.ZarrCaptureSink(sweep)
+        with sink:
+            stored = sa.load(sweep.sink.path, consolidated=False)
+            rows = compute.datasets.sweep_row_count(sweep, source_id)
+            assert stored.sizes['capture'] == rows
+            assert set(stored.data_vars) == set(sweep.analysis.to_dict())
+            assert stored.iq_waveform.dtype == np.complex64
+            assert {'capture_index', 'port', 'source_id'} <= set(stored.coords)
+            # the fixed coordinates are written at open; no row of a variable is
+            chunk_files = [
+                p
+                for name in stored.data_vars
+                for p in (Path(sweep.sink.path) / str(name)).rglob('*')
+                if p.is_file() and not p.name.startswith(('.z', 'zarr.json'))
+            ]
+            assert chunk_files == []
+            # an unwritten store is trimmed to zero rows at close
+    assert sa.load(sweep.sink.path).sizes['capture'] == 0
+
+
+@pytest.mark.parametrize('store', ['directory', 'zip'], ids=['directory', 'zip'])
+def test_zarr_capture_sink_writes_each_key_once(tmp_path, caplog, store):
+    """every chunk and metadata key of the store is written one time"""
+    import logging
+
+    name = 'out.zarr.zip' if store == 'zip' else 'out.zarr'
+    sweep = zarr_sweep(tmp_path / name, (1e6, 2e6, 3e6), store=store)
+    with caplog.at_level(logging.WARNING, logger='striqt.analysis'):
+        run_to_store(sweep)
+    assert not [r for r in caplog.records if 'already written' in r.getMessage()]
+
+    path = Path(sweep.sink.path)
+    if store == 'zip':
+        assert zipfile.is_zipfile(path)
+        names = zipfile.ZipFile(path).namelist()
+        assert len(names) == len(set(names))
+    stored = sa.load(path)
+    assert stored.sizes['capture'] == 3
+    assert ss.read_zarr_spec(path) == sweep
+
+
+def test_zarr_capture_sink_unions_mixed_grids_like_outer_join(tmp_path):
+    """captures with different frequency grids share the union grid with NaN fill,
+    and the attrs that differ between the captures are dropped"""
+    import xarray as xr
+
+    sweep = mixed_rate_sweep(tmp_path / 'mixed.zarr')
+    results = materialize(run_to_store(sweep))
+    expected = outer_join(results)
+    stored = sa.load(sweep.sink.path)
+
+    xr.testing.assert_equal(
+        stored.power_spectral_density, expected.power_spectral_density
+    )
+    assert np.array_equal(
+        stored.baseband_frequency.values, expected.baseband_frequency.values
+    )
+    assert dict(stored.power_spectral_density.attrs) == json_attrs(
+        expected.power_spectral_density.attrs
+    )
+    assert dict(stored.attrs) == json_attrs(expected.attrs)
+
+
+def test_zarr_capture_sink_writes_extra_data_variables(tmp_path):
+    """peripheral data appears as variables with the dims `from_delayed` gives them"""
+    import xarray as xr
+
+    sweep = zarr_sweep(tmp_path / 'extra.zarr', (1e6, 2e6))
+    extra = {
+        'state': 1.5,
+        'temperature': xr.DataArray(
+            np.arange(3.0),
+            dims=['temperature_source'],
+            coords={'temperature_source': ['cpu', 'gpu', 'board']},
+        ),
+    }
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    with (
+        ss.open_resources(unsunk, None) as res,
+        ss.sinks.ZarrCaptureSink(sweep) as sink,
+    ):
+        results = [
+            compute.from_delayed(dd)
+            for dd in ss.lib.actions.core.iterate_captures(
+                res, extra_data=extra, sink=sink
+            )
+            if dd is not None
+        ]
+    stored = sa.load(sweep.sink.path)
+    expected = outer_join(results)
+    assert stored.state.dims == ('capture',)
+    assert stored.temperature.dims == ('capture', 'temperature_source')
+    assert np.array_equal(stored.state.values, expected.state.values)
+    assert np.array_equal(stored.temperature.values, expected.temperature.values)
+    assert stored.temperature_source.values.tolist() == ['cpu', 'gpu', 'board']
+
+
+def test_zarr_capture_sink_grows_past_the_planned_rows(tmp_path):
+    """a looped sweep writes more rows than the plan and the store keeps them all"""
+    sweep = zarr_sweep(tmp_path / 'loop.zarr', (1e6, 2e6))
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    taken = []
+    with (
+        ss.open_resources(unsunk, None) as res,
+        ss.sinks.ZarrCaptureSink(sweep) as sink,
+    ):
+        for dd in ss.iterate_sweep(res, loop=True, sink=sink):
+            if dd is None:
+                continue
+            taken.append(dd)
+            if len(taken) == 5:
+                break
+    stored = sa.load(sweep.sink.path)
+    assert stored.sizes['capture'] == 5
+    assert stored.capture_index.values.tolist() == [0, 1, 0, 1, 0]
+
+
+def test_zarr_capture_sink_trims_to_the_rows_written(tmp_path):
+    """a sweep stopped after 1 of 3 captures leaves a store of 1 row"""
+    sweep = zarr_sweep(tmp_path / 'short.zarr', (1e6, 2e6, 3e6))
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    with (
+        ss.open_resources(unsunk, None) as res,
+        ss.sinks.ZarrCaptureSink(sweep) as sink,
+    ):
+        for dd in ss.iterate_sweep(res, sink=sink):
+            if dd is not None:
+                break
+    stored = sa.load(sweep.sink.path)
+    assert stored.sizes['capture'] == 1
+    assert stored.capture_index.values.tolist() == [0]
+
+
+def test_zarr_sink_refuses_an_existing_store_without_force(tmp_path):
+    sweep = zarr_sweep(tmp_path / 'twice.zarr', (1e6,))
+    run_to_store(sweep)
+    with pytest.raises(FileExistsError):
+        run_to_store(sweep)
+
+
+def test_zarr_sink_force_replaces_an_existing_store(tmp_path):
+    sweep = zarr_sweep(tmp_path / 'twice.zarr', (1e6,))
+    run_to_store(sweep)
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    with (
+        ss.open_resources(unsunk, None) as res,
+        ss.sinks.ZarrCaptureSink(sweep, force=True) as sink,
+    ):
+        list(ss.iterate_sweep(res, sink=sink))
+    assert sa.load(sweep.sink.path).sizes['capture'] == 1
+
+
+def test_zarr_zip_path_is_written_directly_and_readable(tmp_path):
     path = tmp_path / 'out.zarr.zip'
     sweep = zarr_sweep(path, (1e6, 2e6))
-    run_to_store(sweep)
+    results = materialize(run_to_store(sweep))
 
     assert zipfile.is_zipfile(path)
     assert not path.with_suffix('').exists()
     assert ss.read_zarr_spec(path) == sweep
+    stored = sa.load(path)
+    assert np.array_equal(
+        stored.iq_waveform.values, outer_join(results).iq_waveform.values
+    )
 
 
 # %% ZarrTimeAppendSink
@@ -121,9 +314,7 @@ def test_time_append_sink_requires_a_spectrogram():
 def test_time_append_sink_concatenates_the_frames(tmp_path):
     """2 captures written as 1 batch form 1 row. The spectrogram time axis of that row
     has the frames of both captures back to back on a uniform grid."""
-    sweep = zarr_sweep(
-        tmp_path / 'spg.zarr', OFFSETS, analysis=SPECTROGRAM, batched_write_count=2
-    )
+    sweep = zarr_sweep(tmp_path / 'spg.zarr', OFFSETS, analysis=SPECTROGRAM)
     frames, hop_period = spectrogram_frames(sweep.captures[0], SPECTROGRAM.spectrogram)
 
     # the ZarrCaptureSink of the runner would open the same store if the opened sweep
@@ -132,7 +323,7 @@ def test_time_append_sink_concatenates_the_frames(tmp_path):
     unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
     with (
         ss.open_resources(unsunk, None) as res,
-        ss.sinks.ZarrTimeAppendSink(sweep) as sink,
+        ss.sinks.ZarrTimeAppendSink(sweep, batch_size=2) as sink,
     ):
         results = [ds for ds in ss.iterate_sweep(res, sink=sink) if ds is not None]
 

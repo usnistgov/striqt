@@ -5,6 +5,7 @@ from __future__ import annotations as __
 import dataclasses
 import logging
 from collections import defaultdict
+from collections.abc import Mapping
 from typing import Any, Literal
 
 import msgspec
@@ -87,32 +88,52 @@ def from_delayed(dd: DelayedDataset) -> xr.Dataset:
         logger_level=logging.DEBUG,
     ):
         if dd.extra_data is not None:
-            new_arrays = {}
-            allowed_capture_shapes = (0, 1, analysis.capture.size)
-
-            for k, v in dd.extra_data.items():
-                ndim = getattr(v, 'ndim', 0)
-
-                if not isinstance(v, xr.DataArray):
-                    if ndim > 0:
-                        dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, ndim)]
-                    else:
-                        dims = []
-                    v = xr.DataArray(v, dims=dims)
-
-                if ndim == 0 or v.dims[0] != CAPTURE_DIM:
-                    v = v.expand_dims({CAPTURE_DIM: analysis.capture.size})
-
-                if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
-                    raise ValueError(
-                        f'size of first axis of extra data "{k}" must be one of {allowed_capture_shapes}'
-                    )
-
-                new_arrays[k] = v
-
-            analysis = analysis.assign(new_arrays)
+            analysis = analysis.assign(
+                extra_data_arrays(dd.extra_data, analysis.capture.size)
+            )
 
     return analysis
+
+
+def extra_data_arrays(
+    extra_data: dict[str, Any], port_count: int
+) -> dict[str, xr.DataArray]:
+    """return the data variables of the `extra_data` of one capture.
+
+    A scalar becomes a ``capture`` vector of `port_count` copies. An array of
+    ``ndim`` axes takes the dims ``capture`` and ``<key>_dim1`` through
+    ``<key>_dim<ndim-1>``. An `xarray.DataArray` keeps its dims and coordinates and
+    gains a leading ``capture`` axis of `port_count` entries unless the first dim is
+    already ``capture``.
+
+    Raises:
+        ValueError: if the ``capture`` axis of a value has a size other than 0, 1,
+            or `port_count`
+    """
+    allowed_capture_shapes = (0, 1, port_count)
+    arrays = {}
+
+    for k, v in extra_data.items():
+        ndim = getattr(v, 'ndim', 0)
+
+        if not isinstance(v, xr.DataArray):
+            if ndim > 0:
+                dims = [CAPTURE_DIM] + [f'{k}_dim{n}' for n in range(1, ndim)]
+            else:
+                dims = []
+            v = xr.DataArray(v, dims=dims)
+
+        if ndim == 0 or v.dims[0] != CAPTURE_DIM:
+            v = v.expand_dims({CAPTURE_DIM: port_count})
+
+        if v.sizes[CAPTURE_DIM] not in allowed_capture_shapes:
+            raise ValueError(
+                f'size of first axis of extra data "{k}" must be one of {allowed_capture_shapes}'
+            )
+
+        arrays[k] = v
+
+    return arrays
 
 
 def concat_time_dim(datasets: list[xr.Dataset], time_dim: str) -> xr.Dataset:
@@ -353,3 +374,365 @@ def _check_coord_indexes(ds, index_coords: list[str]):
 def _xarray_version() -> tuple[int, int, int]:
     maj, min, rel = tuple(int(v) for v in xr.__version__.split('.'))
     return maj, min, rel
+
+
+# %% Store templates without data
+MIN_STRING_WIDTH = 16
+TIME_ENCODING = {
+    'units': 'nanoseconds since 1970-01-01',
+    'dtype': 'int64',
+    '_FillValue': np.iinfo(np.int64).min,
+}
+
+
+@dataclasses.dataclass(frozen=True)
+class VariableGrid:
+    """the output geometry of one measurement over every capture of a sweep."""
+
+    name: str
+    """the measurement name, which is the data variable name"""
+    dims: tuple[str, ...]
+    """the dims of one row, after the ``capture`` axis"""
+    shape: tuple[int, ...]
+    """the length of each of `dims` on the union grid"""
+    dtype: np.dtype
+    """the storage dtype: the registered dtype, promoted to a float when `mixed`
+    and the registered dtype is an integer or bool"""
+    coords: dict[str, np.ndarray]
+    """the coordinate values of each of `dims`, the union over the captures"""
+    coord_attrs: dict[str, dict[str, Any]]
+    """the attrs of each coordinate, without the attrs that differ between captures"""
+    attrs: dict[str, Any]
+    """the registered and spec attrs, without the attrs that differ between captures"""
+    mixed: bool
+    """True when a dim has different coordinate values on 2 captures"""
+
+
+def _equivalent(a: Any, b: Any) -> bool:
+    try:
+        return bool(np.array_equal(np.asarray(a), np.asarray(b)))
+    except (TypeError, ValueError):
+        return False
+
+
+def drop_conflicts(attrs_list: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """return the union of the attrs, without a key that differs between 2 mappings.
+
+    This is the ``combine_attrs='drop_conflicts'`` rule of `xarray.concat`: a key
+    present in some mappings is kept with its value, and a key with 2 unequal
+    values is removed.
+    """
+    result: dict[str, Any] = {}
+    dropped: set[str] = set()
+    for attrs in attrs_list:
+        for key, value in attrs.items():
+            if key in dropped:
+                continue
+            if key not in result:
+                result[key] = value
+            elif not _equivalent(result[key], value):
+                del result[key]
+                dropped.add(key)
+    return result
+
+
+def sweep_row_count(sweep: specs.Sweep, source_id: str) -> int:
+    """return the row count of a store of `sweep`: one per port of every expanded capture.
+
+    The captures are those of `specs.sequencing.repeat_captures`, so a leading
+    `Repeat` loop multiplies the count.
+    """
+    captures = specs.sequencing.repeat_captures(sweep, source_id)
+    return sum(len(specs.captures.split_capture_ports(c)) for c in captures)
+
+
+def _distinct_analyses(
+    sweep: specs.Sweep, captures: Sequence[specs.SensorCapture]
+) -> list[tuple[specs.SensorCapture, specs.AnalysisGroup]]:
+    pairs: dict[tuple[Any, Any], None] = {}
+    for capture in captures:
+        analysis = specs.sequencing.adjust_analysis(
+            sweep.analysis, capture.adjust_analysis
+        )
+        pairs.setdefault((capture, analysis), None)
+    return [pair for pair in pairs]
+
+
+def _fill_value(dtype: np.dtype) -> Any:
+    if dtype.kind in 'fc':
+        return np.nan
+    if dtype.kind in 'mM':
+        return np.datetime64('NaT')
+    return 0
+
+
+def measurement_grids(
+    sweep: specs.Sweep, captures: Sequence[specs.SensorCapture]
+) -> dict[str, VariableGrid]:
+    """return the output geometry of each enabled measurement over `captures`.
+
+    The coordinate factories of each measurement run once per distinct pair of
+    capture and adjusted analysis. A dim with equal coordinate values on every pair
+    keeps those values. Otherwise the coordinate is the sorted union of the values, which is
+    the outer join of `xarray.concat`, and the grid is `mixed`.
+
+    Raises:
+        NotImplementedError: if a coordinate with more than one dim differs between
+            captures, or if a dim of a measurement has no coordinate factory
+    """
+    pairs = _distinct_analyses(sweep, captures)
+    names = [name for name, kws in sweep.analysis.to_dict().items() if kws]
+    grids: dict[str, VariableGrid] = {}
+
+    for name in names:
+        per_pair = []
+        for capture, analysis in pairs:
+            # the registry wrapper hands the validated spec to the factories and
+            # the attrs, so a Fraction default reads back as a string
+            spec = getattr(analysis, name).validate()
+            info = sa.registry[type(spec)]
+            coords = sa.dataarrays.measurement_coords(info, capture, spec)
+            per_pair.append((coords, spec))
+        info = sa.registry[type(per_pair[0][1])]
+        dims = sa.dataarrays.measurement_dims(info)
+
+        union: dict[str, np.ndarray] = {}
+        coord_attrs: dict[str, dict[str, Any]] = {}
+        mixed = False
+        for dim in dims:
+            if dim not in per_pair[0][0]:
+                raise NotImplementedError(
+                    f'dimension {dim!r} of measurement {name!r} has no coordinate factory'
+                )
+            arrays = [coords[dim][0] for coords, _ in per_pair]
+            if all(_equivalent(arrays[0], a) for a in arrays[1:]):
+                union[dim] = arrays[0]
+            elif any(a.ndim != 1 for a in arrays):
+                raise NotImplementedError(
+                    f'coordinate {dim!r} of measurement {name!r} differs between '
+                    'captures and has more than one dim'
+                )
+            else:
+                union[dim] = np.unique(np.concatenate(arrays))
+                mixed = True
+            coord_attrs[dim] = drop_conflicts([
+                coords[dim][1] for coords, _ in per_pair
+            ])
+
+        dtype = np.dtype(info.dtype)
+        if mixed and dtype.kind in 'biu':
+            dtype = np.promote_types(dtype, np.float32)
+        attrs = drop_conflicts([
+            {**info.attrs, **spec.to_dict()} for _, spec in per_pair
+        ])
+        grids[name] = VariableGrid(
+            name=name,
+            dims=dims,
+            shape=tuple(len(union[d]) for d in dims),
+            dtype=dtype,
+            coords=union,
+            coord_attrs=coord_attrs,
+            attrs=attrs,
+            mixed=mixed,
+        )
+
+    return grids
+
+
+def row_index(
+    grid: VariableGrid, capture: specs.SensorCapture, spec: sa.specs.Analysis
+) -> tuple[slice | np.ndarray, ...]:
+    """return the position of the coordinates of one capture on the union grid.
+
+    Each entry is ``slice(None)`` when the capture's coordinate values equal the
+    union, and otherwise an integer index array, one per value.
+
+    Raises:
+        ValueError: if a coordinate value of the capture is not on the union grid
+    """
+    info = sa.registry[type(spec)]
+    coords = sa.dataarrays.measurement_coords(info, capture, spec)
+    index: list[slice | np.ndarray] = []
+    for dim in grid.dims:
+        values = coords[dim][0]
+        union = grid.coords[dim]
+        if _equivalent(values, union):
+            index.append(slice(None))
+            continue
+        if union.dtype.kind in 'OUS':
+            lookup = {v: i for i, v in enumerate(union.tolist())}
+            try:
+                pos = np.array([lookup[v] for v in values.tolist()], dtype=np.intp)
+            except KeyError as ex:
+                raise ValueError(
+                    f'coordinate value {ex.args[0]!r} of {dim!r} is not on the grid'
+                ) from None
+        else:
+            pos = np.searchsorted(union, values)
+            pos = np.minimum(pos, len(union) - 1)
+            if not _equivalent(union[pos], values):
+                raise ValueError(f'coordinate values of {dim!r} are not on the grid')
+        index.append(pos)
+    return tuple(index)
+
+
+def scatter_rows(
+    grid: VariableGrid, result: Any, index: tuple[slice | np.ndarray, ...]
+) -> np.ndarray:
+    """return the rows of one capture placed on the union grid of `grid`.
+
+    `result` has one leading axis of rows (ports) and the dims of `grid` after it.
+    When every entry of `index` is ``slice(None)``, `result` is returned as an
+    array without a copy. Otherwise the rows are placed into a block of the grid
+    shape filled with NaN (float and complex), NaT (datetime), or 0.
+    """
+    result = np.asarray(result)
+    if all(isinstance(i, slice) for i in index):
+        return result
+    block = np.full((result.shape[0], *grid.shape), _fill_value(grid.dtype), grid.dtype)
+    axes = [
+        np.arange(n) if isinstance(i, slice) else i for i, n in zip(index, grid.shape)
+    ]
+    block[(slice(None), *np.ix_(*axes))] = result
+    return block
+
+
+def _encode_times(values: np.ndarray) -> np.ndarray:
+    """return `values` as int64 nanoseconds since the epoch, NaT as the int64 minimum."""
+    arr = np.asarray(values)
+    if arr.dtype.kind != 'M':
+        # numpy's conversion of Timestamp objects truncates to microseconds
+        arr = pd.to_datetime(arr.ravel().tolist()).values.reshape(arr.shape)
+    return arr.astype('datetime64[ns]').view('int64')
+
+
+def capture_coord_storage(
+    values: np.ndarray, known: Sequence[Any] = ()
+) -> tuple[np.dtype, dict[str, Any], Callable[[np.ndarray], np.ndarray]]:
+    """return the storage dtype, encoding, and row encoder of a per-capture coordinate.
+
+    Strings are stored as fixed-width unicode wide enough for `values` and `known`,
+    and at least `MIN_STRING_WIDTH` characters. Timestamps are stored as int64
+    nanoseconds with `TIME_ENCODING`. Any other dtype is stored unchanged.
+
+    Returns:
+        the storage dtype, the xarray encoding of the variable (empty when none is
+        needed), and a function from the values of one capture to storage values
+    """
+    sample = np.asarray(values)
+    if sample.dtype.kind == 'O':
+        items = sample.tolist()
+        if any(isinstance(v, (pd.Timestamp, np.datetime64)) for v in items):
+            sample = np.array(items, dtype='datetime64[ns]')
+        else:
+            sample = np.array(items)
+            if sample.dtype.kind == 'O':
+                sample = np.array([str(v) for v in items])
+    if sample.dtype.kind in 'US':
+        widths = [len(str(v)) for v in (*sample.tolist(), *known)]
+        width = max((*widths, MIN_STRING_WIDTH))
+        dtype = np.dtype(f'<U{width}')
+        return dtype, {}, lambda v: np.asarray(v).astype(dtype)
+    if sample.dtype.kind == 'M':
+        return np.dtype('datetime64[ns]'), dict(TIME_ENCODING), _encode_times
+    return sample.dtype, {}, lambda v: np.asarray(v, dtype=sample.dtype)
+
+
+def capture_coords_template(
+    sweep: specs.Sweep,
+    captures: Sequence[specs.SensorCapture],
+    source_id: str,
+    info_cls: type[specs.AcquisitionInfo],
+) -> tuple[xr.Coordinates, dict[str, dict[str, Any]], dict[str, Callable]]:
+    """return the zero-row per-capture coordinates of a sweep and the storage rules.
+
+    The coordinate set is that of `build_capture_coords` for the capture type of
+    `captures` and `info_cls`. String widths cover every value of `captures` and
+    `source_id`.
+
+    Returns:
+        the coordinates with no entries along ``capture``, the xarray encoding per
+        coordinate that needs one, and the row encoder per coordinate
+    """
+    template = _coords_template(type(captures[0]), info_cls, sweep.loops, port_count=1)
+    known: dict[str, list[Any]] = defaultdict(list)
+    for capture in captures:
+        for name, value in capture.to_dict().items():
+            if name in template:
+                known[name].extend(value if isinstance(value, tuple) else [value])
+    known[SOURCE_ID_NAME].append(source_id)
+
+    coords: dict[str, Any] = {}
+    encoding: dict[str, dict[str, Any]] = {}
+    encoders: dict[str, Callable] = {}
+    for key, var in template.items():
+        name = str(key)
+        dtype, enc, encoder = capture_coord_storage(var.values, known.get(name, ()))
+        coords[name] = (var.dims, np.empty((0,), dtype=dtype), dict(var.attrs))
+        if enc:
+            encoding[name] = enc
+        encoders[name] = encoder
+    return xr.Coordinates(coords), encoding, encoders
+
+
+def sweep_template(
+    sweep: specs.Sweep,
+    source_id: str,
+    info_cls: type[specs.AcquisitionInfo],
+    *,
+    attrs: Mapping[str, Any],
+) -> tuple[
+    xr.Dataset, dict[str, VariableGrid], dict[str, dict[str, Any]], dict[str, Callable]
+]:
+    """return the zero-row dataset of a sweep, built from the specs without IQ.
+
+    The data variables are the enabled measurements on the union grids, with the
+    fixed coordinates and attrs of `measurement_grids`. The per-capture coordinates
+    are those of `capture_coords_template`. The dataset attrs are `attrs` over the
+    capture fields that are equal on every capture and are not coordinates.
+
+    Returns:
+        the dataset, the grid of each data variable, the xarray encoding per
+        coordinate that needs one, and the row encoder per per-capture coordinate
+
+    Raises:
+        NotImplementedError: as `measurement_grids`
+        ValueError: if 2 measurements share a dim with different union coordinates
+    """
+    captures = specs.sequencing.loop_captures(sweep, source_id=source_id)
+    grids = measurement_grids(sweep, captures)
+
+    coords: dict[str, Any] = {}
+    data_vars: dict[str, Any] = {}
+    for name, grid in grids.items():
+        for dim in grid.dims:
+            entry = (dim, grid.coords[dim], grid.coord_attrs[dim])
+            if dim in coords and not _equivalent(coords[dim][1], entry[1]):
+                raise ValueError(f'measurements disagree on the coordinate {dim!r}')
+            coords.setdefault(dim, entry)
+        data_vars[name] = (
+            (CAPTURE_DIM, *grid.dims),
+            np.empty((0, *grid.shape), dtype=grid.dtype),
+            grid.attrs,
+        )
+    capture_coords, encoding, encoders = capture_coords_template(
+        sweep, captures, source_id, info_cls
+    )
+
+    capture_attrs = drop_conflicts([
+        {
+            **c.to_dict(),
+            **(
+                {'analysis_filter': c.analysis_filter.to_dict()}
+                if isinstance(c, sa.specs.FilteredCapture)
+                else {}
+            ),
+        }
+        for c in captures
+    ])
+    for name in capture_coords:
+        capture_attrs.pop(str(name), None)
+
+    ds = xr.Dataset(data_vars, coords=coords, attrs={**capture_attrs, **attrs})
+    ds = ds.assign_coords(capture_coords)
+    return ds, grids, encoding, encoders
