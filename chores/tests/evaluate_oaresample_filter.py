@@ -22,7 +22,7 @@ Per design the tables report:
   output samples) of the response above -60 dBc, the rms level (dBc) over a fixed
   span each side beyond the FIR half-length ``FILTER_SIZE // 2``, and the rms
   difference from the FIR path's response
-- wall time per call on the selected backend, and a closing table of the time of
+- time per call (CUDA event time on cupy, wall time on numpy), and a closing table of the time of
   each correction stage per record (resample, and the FIR on the default path) with
   the ratio of record duration to correction time
 
@@ -203,11 +203,6 @@ def to_numpy(x: Any) -> np.ndarray:
     return x.get() if hasattr(x, 'get') else np.asarray(x)
 
 
-def synchronize() -> None:
-    if cp is not None:
-        cp.cuda.Device().synchronize()
-
-
 def interior(y: np.ndarray, design: Design) -> np.ndarray:
     """return `y` without the edge where the STFT or the FIR transient falls."""
     margin = max(design.nfft_out, FILTER_SIZE)
@@ -308,20 +303,28 @@ def impulse_response(design: Design, count: int, xp: Any) -> ImpulseResult:
 
 
 def _median_time(func: Any, repeat: int, *args: Any) -> float:
-    """return the median wall time (s) of `func(*args)` after one warm-up call."""
+    """return the median time (s) of `func(*args)` after one warm-up call.
+
+    On cupy the time is the device time between CUDA events around each call, from
+    `cupyx.profiler.benchmark`; on numpy the wall time.
+    """
+    if cp is not None:
+        from cupyx.profiler import benchmark  # ty: ignore[unresolved-import]
+
+        result = benchmark(func, args, n_repeat=repeat, n_warmup=1)
+        return float(np.median(result.gpu_times[0]))
+
     func(*args)
-    synchronize()
     times = []
     for _ in range(repeat):
         t0 = time.perf_counter()
         func(*args)
-        synchronize()
         times.append(time.perf_counter() - t0)
     return float(np.median(times))
 
 
 def stage_times(design: Design, count: int, xp: Any, repeat: int) -> dict[str, float]:
-    """return the median wall time (s) of each correction stage on a noise record.
+    """return the median time (s) of each correction stage on a noise record.
 
     The keys are ``'resample'`` and, for the default path, ``'filter'``.
     """
@@ -334,7 +337,7 @@ def stage_times(design: Design, count: int, xp: Any, repeat: int) -> dict[str, f
 
 
 def wall_time(design: Design, count: int, xp: Any, repeat: int) -> float:
-    """return the median wall time (s) of `run` on a noise record."""
+    """return the median time (s) of `run` on a noise record."""
     x = testing.circular_awgn(None, design.fs_sdr, count=count, xp=xp, seed=2)
     return _median_time(run, repeat, design, x, xp)
 
