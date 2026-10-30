@@ -4,7 +4,7 @@
 The sweep covers the oaresample path at each ``MIN_OARESAMPLE_FFT_SIZE`` and COLA
 window given on the command line, for the ADA 3750 MHz capture (125 MS/s radio clock,
 107.52 MS/s output, 100 MHz analysis bandwidth). The default path is the baseline:
-`sw.resample` (brick-wall FFT resampler, hamming COLA design) followed by the 4001-tap
+`sw.resample` (brick-wall FFT resampler) followed by the 4001-tap
 FIR of `sw.design_fir_lpf`. Both low-passes are specified with the same band edges,
 ``bw/2 - transition/2`` to ``bw/2 + transition/2``.
 
@@ -30,7 +30,7 @@ Usage:
     pixi run -e test39 python chores/tests/evaluate_oaresample_filter.py --backend numpy
     pixi run -e cupy python chores/tests/evaluate_oaresample_filter.py
     pixi run -e cupy python chores/tests/evaluate_oaresample_filter.py --duration 0.05
-        --min-fft-size 8191 16383 32767 --window hamming blackman
+        --min-fft-size 8191 16383 32767 --window hann blackman
 
 Run with its own cache directory beside a test session or another striqt script
 (``STRIQT_CACHE_DIR=$(mktemp -d)``): two processes sharing the window shelf corrupt it on
@@ -65,7 +65,7 @@ BW_LO = 0.25e6
 MIN_OVERSAMPLING = 1.1
 
 DEFAULT_MIN_FFT_SIZES = (4096 - 1, 4 * 4096 - 1, 16 * 4096 - 1)
-DEFAULT_WINDOWS = ('hamming', 'hann', 'blackman')
+DEFAULT_WINDOWS = ('hann', 'blackman')
 
 PSD_SEGMENT = 8192
 IMPULSE_FLOOR_DBC = -60.0
@@ -366,7 +366,7 @@ def main() -> None:
         '--window',
         nargs='+',
         default=list(DEFAULT_WINDOWS),
-        choices=('hamming', 'hann', 'blackman', 'blackmanharris'),
+        choices=('hann', 'blackman', 'blackmanharris'),
         help='OARESAMPLE_COLA_WINDOW candidates',
     )
     parser.add_argument(

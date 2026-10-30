@@ -165,8 +165,9 @@ ATOL = 1e-10
 # Overlap-add reconstruction of a tone is limited by the passband ripple of the COLA
 # window after spectral truncation, not by roundoff. Measured for a hamming window at
 # nfft=256: the rms level is within 0.015 dB and the per-sample envelope ripple within
-# 0.25 dB (0.47 dB for a tone in the FIR transition band). The bounds below add
-# margin over those measurements:
+# 0.25 dB (0.47 dB for a tone in the FIR transition band). The hann window of the
+# resampler has lower sidelobes and stays inside the same bounds, which add margin
+# over those measurements:
 COLA_LEVEL_DB = 0.05
 COLA_RIPPLE_DB = 0.5
 

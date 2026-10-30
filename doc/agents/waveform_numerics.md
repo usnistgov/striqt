@@ -71,15 +71,15 @@ shim is `striqt.waveform.fourier`.
   2·3·5·7-smooth (`_next_smooth_size`; `scipy.fft.next_fast_len` admits 11) and
   that puts `nfft_out` above `min_fft_size`. The smooth multiplier replaces the
   prime-size filter, which the even requirement had made dead.
-- The divisor table is `_COLA_WINDOW_SIZE_DIVISOR` in `filters.py`. The sensor
-  resamples with the hamming window on the default path (`RESAMPLE_COLA_WINDOW` in
-  `striqt/sensor/lib/compute/corrections.py`, divisor 2) and with the blackman window
-  on the oaresample path (`OARESAMPLE_COLA_WINDOW`, divisor 3). Each block is a
-  circular convolution, so the overlap-add leaks in-band energy out of band at the
-  level the window sets. At the ADA block sizes (`chores/tests/evaluate_oaresample_filter.py`)
-  the leakage is about -56 dB for hamming, -98 dB for hann, and -102 dB for blackman,
-  at 2, 2, and 3 STFT frames per hop; the hamming edge pedestal, not the frame count,
-  sets its floor.
+- The divisor table is `_COLA_WINDOW_SIZE_DIVISOR` in `filters.py`: hann (2),
+  blackman (3), blackmanharris (5), and rect (1). The sensor designs both paths with
+  hann (`RESAMPLE_COLA_WINDOW` and `OARESAMPLE_COLA_WINDOW` in
+  `striqt/sensor/lib/compute/corrections.py`). Each block is a circular convolution,
+  so the overlap-add leaks in-band energy out of band at the level the window sets.
+  At the ADA block sizes (`chores/tests/evaluate_oaresample_filter.py`) the leakage is
+  about -98 dB for hann and -102 dB for blackman, at 2 and 3 STFT frames per hop.
+  Hamming was removed from the table: its 0.08 edge pedestal held the floor near
+  -56 dB at any block size.
 - `oaresample` and `resample` implement the design through STFT overlap-add.
   `oafilter` is the same machinery used as a low-pass. `oaresample` applies the
   analysis low-pass as the block-length `firwin2` response of `_fir_lowpass_fft`,

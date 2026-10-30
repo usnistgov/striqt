@@ -102,7 +102,7 @@ def design_cola_resampler(
         shift: ``'left'`` or ``'right'`` places the protected band below or above
             the tuned LO; ``'none'``, None, or False leaves the LO at the center
             frequency
-        window: a key of the COLA window divisor table; None selects ``'hamming'``
+        window: a key of the COLA window divisor table; None selects ``'hann'``
         fs_sdr: the radio sample rate (in S/s) to use instead of selecting one
 
     Returns:
@@ -171,7 +171,6 @@ def design_cola_resampler(
     nfft_in = k * p
     nfft_out = k * q
 
-    # the LO shift arguments below assume a hamming COLA window
     if shift == 'left':
         sign = -1
     elif shift == 'right':
@@ -204,7 +203,7 @@ def design_cola_resampler(
     return ResamplerDesign(
         fs_sdr=fs_sdr,
         lo_offset=lo_offset,
-        window=window or 'hamming',
+        window=window or 'hann',
         nfft=int(nfft_in),
         nfft_out=int(nfft_out),
         frequency_shift=shift,
@@ -389,7 +388,7 @@ def oaresample(
     fs,
     # analysis_filter: dict,
     *,
-    window: str | tuple[str, float] = 'hamming',
+    window: str | tuple[str, float] = 'hann',
     overwrite_x: bool = False,
     axis: int = 1,
     frequency_shift: float = 0,

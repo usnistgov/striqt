@@ -41,13 +41,13 @@ from striqt.waveform.lib.fourier.resamplers import (
 
 # %% design_cola_resampler and design_fir_resampler
 
-# the window enters the design only through its COLA divisor. The hamming rows span
-# the rates and shifts; one blackman row covers the other divisor.
+# the window enters the design only through its COLA divisor. The hann rows span the
+# rates and shifts; the blackman rows cover the other divisor.
 COLA_DESIGN_CASES = [
     pytest.param(
         fs_base,
         fs_target,
-        'hamming',
+        'hann',
         shift,
         id=f'{msps_id(fs_base)}-{msps_id(fs_target)}-{shift}',
     )
@@ -121,7 +121,7 @@ class TestColaResamplerDesign:
 
     def test_options(self):
         design = design_cola_resampler(125e6, 107.52e6)
-        assert design['window'] == 'hamming'
+        assert design['window'] == 'hann'
         assert design['passband'] == (None, None) and design['lo_offset'] == 0
 
         forced = design_cola_resampler(125e6, 15.36e6, fs_sdr=50e6)
@@ -294,7 +294,7 @@ class TestOaresample:
         shift = shift_bins * self.FS / down
         x = self._tone(f0, channels=2)
 
-        kws = {'window': 'hamming', 'axis': 1, 'frequency_shift': shift, 'scale': scale}
+        kws = {'window': 'hann', 'axis': 1, 'frequency_shift': shift, 'scale': scale}
         y = oaresample(x, up, down, self.FS, **kws)
         assert y.shape == (2, round(x.shape[1] * up / down))
         assert y.dtype == x.dtype
@@ -309,12 +309,12 @@ class TestOaresample:
         up, down = self.NFFT // 2, self.NFFT
         x = self._tone(self.FS / self.NFFT * 4, channels=2)
         scale = np.array([1.0, 2.0])
-        y = oaresample(x, up, down, self.FS, window='hamming', axis=1, scale=scale)
+        y = oaresample(x, up, down, self.FS, window='hann', axis=1, scale=scale)
         yi = interior(y, up, axis=1)
         for row, gain in zip(yi, scale):
             assert_tone_level(row[np.newaxis], gain)
 
-    @pytest.mark.parametrize('window', ['hamming', 'hann', 'blackman'])
+    @pytest.mark.parametrize('window', ['hann', 'blackman'])
     def test_filter_bandwidth(self, window):
         """a tone inside the passband keeps its level; a tone past the transition band
         (``bw/2 + transition/2``) is rejected below the block-size floor"""
@@ -337,7 +337,7 @@ class TestOaresample:
     def test_upsample(self):
         up, down = 2 * self.NFFT, self.NFFT
         x = self._tone(0.05e6, 1)
-        y = oaresample(x, up, down, self.FS, window='hamming', axis=1)
+        y = oaresample(x, up, down, self.FS, window='hann', axis=1)
         assert y.shape == (1, 2 * x.shape[1])
         yi = interior(y, up, axis=1)
         assert_tone_level(yi)
@@ -382,7 +382,7 @@ class TestNumpyCupyCrossComparison:
         )
 
         shift = 8 * fs / nfft
-        kws = {'window': 'hamming', 'axis': 1, 'filter_bandwidth': 0.2e6}
+        kws = {'window': 'hann', 'axis': 1, 'filter_bandwidth': 0.2e6}
         resampler = functools.partial(oaresample, frequency_shift=shift, **kws)
         y_np, y_cp = numpy_and_cupy(cupy_available, resampler, x, nfft // 2, nfft, fs)
         # window multiply, fft(nfft), zeroing, ifft(nfft), window multiply, overlap

@@ -40,7 +40,6 @@ class TestFilterDesign:
     @pytest.mark.parametrize(
         'window, overlap_scale',
         [
-            ('hamming', 1 / 2),
             ('hann', 1 / 2),
             ('blackman', 2 / 3),
             ('blackmanharris', 4 / 5),
@@ -68,7 +67,7 @@ class TestFilterDesign:
                 "'blackmanharris'.*, not 'flattop'",
             ),
             (1210, {'window': 'blackman', 'nfft_out': 121}, ValueError, '% 3'),
-            (1000, {'window': 'hamming'}, ValueError, 'integer multiple of noverlap'),
+            (1000, {'window': 'hann'}, ValueError, 'integer multiple of noverlap'),
             (1230, {'window': 'blackman', 'nfft_out': 123}, ValueError, 'must be even'),
             (1200, {'window': 'rect', 'nfft': 125}, ValueError, 'must be even'),
         ],
@@ -87,12 +86,12 @@ class TestFilterDesign:
 
     def test_design_oafilter_options(self):
         pad_out = design_oafilter(
-            1000, window='hamming', nfft_out=120, nfft=120, extend=True
+            1000, window='hann', nfft_out=120, nfft=120, extend=True
         )[3]
         assert pad_out == 1000 % 60
 
         nfft_out = design_oafilter(
-            1200, window='hamming', nfft_out=None, nfft=120, extend=False
+            1200, window='hann', nfft_out=None, nfft=120, extend=False
         )[0]
         assert nfft_out == 120
 
@@ -169,7 +168,7 @@ class TestOafilter:
         return testing.tone(None, self.FS, frequency=f0, count=self.NFFT * self.NSEG)[0]
 
     def _oafilter(self, x, **kws):
-        kws = {'window': 'hamming', 'passband': self.PASSBAND, **kws}
+        kws = {'window': 'hann', 'passband': self.PASSBAND, **kws}
         return oafilter(x, fs=self.FS, nfft=self.NFFT, **kws)
 
     @settings(max_examples=20)
@@ -186,10 +185,10 @@ class TestOafilter:
     def test_rejects_out_of_band_tone(self):
         y = self._oafilter(self._tone(0.4e6))
         yi = interior(y, self.NFFT)
-        # the residual is the hamming sidelobe leakage (-53 dB). The -22 dB edge
-        # pedestal of the window leaves the ringing concentrated at the segment edges
-        assert level_error_dB(rms(yi)) < -40
-        assert level_error_dB(yi).max() < -25
+        # the residual is the hann sidelobe leakage, which falls 18 dB per octave;
+        # 50 bins past the passband edge it is near the float32 roundoff floor
+        assert level_error_dB(rms(yi)) < -90
+        assert level_error_dB(yi).max() < -80
 
     def test_downsample_length_and_level(self):
         x = self._tone(0.05e6)
@@ -226,7 +225,7 @@ class TestNumpyCupyCrossComparison:
         fs, nfft = 1e6, 256
         x = testing.tone(None, fs, frequency=f0_bins * fs / nfft, count=nfft * 40)[0]
 
-        kws = {'fs': fs, 'nfft': nfft, 'window': 'hamming', 'passband': (-0.2e6, 0.2e6)}
+        kws = {'fs': fs, 'nfft': nfft, 'window': 'hann', 'passband': (-0.2e6, 0.2e6)}
         y_np, y_cp = numpy_and_cupy(cupy_available, oafilter, x, **kws)
         # window multiply, fft(nfft), zeroing, ifft(nfft), window multiply, overlap add
         sigma = cross_backend_sigma(x.dtype, [nfft, nfft], n_elementwise=3)

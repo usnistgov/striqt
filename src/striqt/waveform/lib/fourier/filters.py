@@ -22,7 +22,6 @@ if typing.TYPE_CHECKING:
 _COLA_WINDOW_SIZE_DIVISOR = {
     None: 1,
     'rect': 1,
-    'hamming': 2,
     'hann': 2,
     'blackman': 3,
     'blackmanharris': 5,
@@ -55,7 +54,7 @@ def design_oafilter(
 
     if window is None or window == 'rect':
         overlap_scale = 1
-    elif window in ('hamming', 'hann'):
+    elif window == 'hann':
         overlap_scale = 1 / 2
     elif window == 'blackman':
         overlap_scale = 2 / 3
@@ -200,7 +199,7 @@ def oafilter(
     *,
     fs: float,
     nfft: int,
-    window: str | tuple = 'hamming',
+    window: str | tuple = 'hann',
     passband: tuple[float, float],
     nfft_out: int | None = None,
     frequency_shift=False,
@@ -214,7 +213,7 @@ def oafilter(
         x: the input waveform
         fs: the sample rate of the input waveform, in Hz
         noverlap: the size of overlap between adjacent FFT windows, in samples
-        window: the type of COLA window to apply, 'hamming', 'blackman', or 'blackmanharris'
+        window: the type of COLA window to apply, 'hann', 'blackman', or 'blackmanharris'
         passband: a tuple of low-pass cutoff and high-pass cutoff frequency (or None to skip either)
         nfft_out: implement downsampling by adjusting the size of overlap between adjacent FFT windows
         frequency_shift: the direction to shift the downsampled frequencies ('left' or 'right', or False to center)

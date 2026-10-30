@@ -23,8 +23,8 @@ else:
 FILTER_SIZE = 4001
 FIR_TRANSITION_BW = 250e3
 MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
-RESAMPLE_COLA_WINDOW = 'hamming'
-OARESAMPLE_COLA_WINDOW = 'blackman'
+RESAMPLE_COLA_WINDOW = 'hann'
+OARESAMPLE_COLA_WINDOW = 'hann'
 
 # bypass for the conjugate correction for downconversion based on high-side LO
 IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', '0'))

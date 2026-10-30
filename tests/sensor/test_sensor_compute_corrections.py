@@ -868,11 +868,11 @@ DOCUMENTED_OVERLAPS = {
         'filter_only': (4608, 4608),
     },
     # the oaresample path sizes the blocks of the resampled presets from
-    # MIN_OARESAMPLE_FFT_SIZE with the blackman window; a preset served at the
+    # MIN_OARESAMPLE_FFT_SIZE with the hann window; a preset served at the
     # firmware rate pads for the FIR as on the default path
     'oaresample': {
-        'resample_filter': (12500, 12500),
-        'resample_only': (12000, 17500),
+        'resample_filter': (9375, 15625),
+        'resample_only': (8575, 13225),
         'scale_only': (512, 512),
         'filter_only': (4608, 4608),
     },
