@@ -1,5 +1,5 @@
 from . import buffers, deepwave
-from .base import NoSource, VirtualSource
+from .base import NoSource, VirtualSource, acquisition_info_cls
 from .deepwave import (
     Air7101BSourceSpec,
     Air7201BSourceSpec,

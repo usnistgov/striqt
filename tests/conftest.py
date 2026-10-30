@@ -522,6 +522,15 @@ def corrections_flags(monkeypatch):
     sw.util.clear_caches()
 
 
+@pytest.fixture(params=('resample', 'oaresample'))
+def resample_path(request, corrections_flags):
+    """run the test on each resampler path in turn and return the name of the path:
+    ``'resample'`` for the whole-record FFT resampler and the FIR, ``'oaresample'``
+    for the STFT overlap-add resampler with the low-pass on its bins"""
+    corrections_flags(use_oaresample=request.param == 'oaresample')
+    return request.param
+
+
 @pytest.fixture
 def armed_tone_controller(isolated_lookup):
     """yield a `single_tone` Controller on the synthetic function source, armed with
@@ -845,7 +854,13 @@ def fake_sweep_runner(tmp_path_factory):
             spec = spec.replace(sink=spec.sink.replace(path=str(path)), **replace)
             first_prompt = len(prompts)
             with ss.open_resources(spec, spec_path) as resources:
-                results = [ds for ds in ss.iterate_sweep(resources) if ds is not None]
+                results = [
+                    ss.lib.compute.from_delayed(dd)
+                    if isinstance(dd, ss.lib.compute.DelayedDataset)
+                    else dd
+                    for dd in ss.iterate_sweep(resources)
+                    if dd is not None
+                ]
             if results:
                 results = xr.concat(results, 'capture')
             return FakeRun(str(path), prompts[first_prompt:], spec, fake, results)

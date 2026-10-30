@@ -6,6 +6,7 @@ resampler on tones, on numpy and cupy.
 from __future__ import annotations
 
 import functools
+from fractions import Fraction
 
 import numpy as np
 import pytest
@@ -25,9 +26,12 @@ from waveform_strategies import cross_backend_sigma, msps_id, noise_waveforms
 
 from striqt.analysis import testing
 from striqt.waveform.lib.fourier.fft import fft, fft_tolerance_rms, time_fftshift
-from striqt.waveform.lib.fourier.filters import design_oafilter
+from striqt.waveform.lib.fourier.filters import (
+    _COLA_WINDOW_SIZE_DIVISOR,
+    design_oafilter,
+)
 from striqt.waveform.lib.fourier.resamplers import (
-    _prime_fft_sizes,
+    OLA_MAX_FFT_SIZE,
     design_cola_resampler,
     design_fir_resampler,
     oaresample,
@@ -37,20 +41,40 @@ from striqt.waveform.lib.fourier.resamplers import (
 
 # %% design_cola_resampler and design_fir_resampler
 
-# the window enters the design only through its COLA divisor. The hamming rows span
-# the rates and shifts; one blackman row covers the other divisor.
+# the window enters the design only through its COLA divisor. The hann rows span the
+# rates and shifts; the blackman rows cover the other divisor.
 COLA_DESIGN_CASES = [
     pytest.param(
         fs_base,
         fs_target,
-        'hamming',
+        'hann',
         shift,
         id=f'{msps_id(fs_base)}-{msps_id(fs_target)}-{shift}',
     )
     for fs_base in [122.88e6, 125e6]
     for fs_target in [7.68e6, 15.36e6, 20e6, 30.72e6, 61.44e6, 107.52e6]
     for shift in [None, 'left', 'right']
-] + [pytest.param(125e6, 15.36e6, 'blackman', None, id='125MSps-15.36MSps-blackman')]
+] + [
+    pytest.param(125e6, 15.36e6, 'blackman', None, id='125MSps-15.36MSps-blackman'),
+    # 25/24 at 6 MS/s: the smallest rational pair is odd, and the sizing must grow
+    # it to even multiples of 3
+    pytest.param(125e6, 6e6, 'blackman', None, id='125MSps-6MSps-blackman'),
+]
+
+
+def largest_prime_factor(n: int) -> int:
+    factor = 1
+    for candidate in range(2, n + 1):
+        while n % candidate == 0:
+            n //= candidate
+            factor = candidate
+        if n == 1:
+            return factor
+    return factor
+
+
+def reduced_denominator(fs_sdr: float, fs_target: float) -> int:
+    return Fraction(fs_sdr / fs_target).limit_denominator(OLA_MAX_FFT_SIZE).denominator
 
 
 class TestColaResamplerDesign:
@@ -74,7 +98,12 @@ class TestColaResamplerDesign:
         assert design['nfft'] * fs_target == pytest.approx(
             design['nfft_out'] * design['fs_sdr'], rel=1e-12
         )
-        # both sizes satisfy the COLA overlap constraint that the window imposes
+        # both sizes are even multiples of the COLA divisor that the window imposes
+        assert design['nfft'] % 2 == 0 and design['nfft_out'] % 2 == 0
+        # the multiplier on the reduced ratio is 2·3·5·7-smooth
+        q = reduced_denominator(design['fs_sdr'], fs_target)
+        assert design['nfft_out'] % q == 0
+        assert largest_prime_factor(design['nfft_out'] // q) <= 7
         for nfft, nfft_out in [
             (design['nfft'], design['nfft_out']),
             (design['nfft_out'], design['nfft']),
@@ -89,10 +118,13 @@ class TestColaResamplerDesign:
         assert_allclose((hi + lo) / 2, design['lo_offset'])
         sign = {'left': -1, 'right': 1}.get(shift, 0)
         assert np.sign(design['lo_offset']) == sign
+        # the shift must keep consecutive STFT frames in phase in oaresample
+        bins = round(design['lo_offset'] / (design['fs_sdr'] / design['nfft']))
+        assert bins % _COLA_WINDOW_SIZE_DIVISOR[window] == 0
 
     def test_options(self):
         design = design_cola_resampler(125e6, 107.52e6)
-        assert design['window'] == 'hamming'
+        assert design['window'] == 'hann'
         assert design['passband'] == (None, None) and design['lo_offset'] == 0
 
         forced = design_cola_resampler(125e6, 15.36e6, fs_sdr=50e6)
@@ -102,14 +134,17 @@ class TestColaResamplerDesign:
         assert upsample['fs_sdr'] == pytest.approx(10e6)
         assert upsample['nfft'] < upsample['nfft_out']
 
-        # 8209 is the first prime above the default min_fft_size, so 8209 is the
-        # smallest rational FFT size for this ratio and the one avoid_primes rejects
-        prime = 8209
-        fs_target = 125e6 * prime / (prime + 1)
-        pruned = design_cola_resampler(125e6, fs_target)
-        with_primes = design_cola_resampler(125e6, fs_target, avoid_primes=False)
-        assert with_primes['nfft_out'] == prime
-        assert pruned['nfft_out'] == 2 * prime
+        # 25/24 at 6 MS/s with the blackman divisor 6: the smallest even multiple
+        # above min_fft_size is k = 684 = 2^2 * 3^2 * 19, and the design grows it
+        # to the 7-smooth k = 720
+        smooth = design_cola_resampler(
+            125e6, 6e6, min_fft_size=16383, window='blackman'
+        )
+        assert smooth['fs_sdr'] == pytest.approx(6.25e6)
+        q = reduced_denominator(smooth['fs_sdr'], 6e6)
+        assert q == 24
+        assert largest_prime_factor(smooth['nfft_out'] // q) <= 7
+        assert (smooth['nfft'], smooth['nfft_out']) == (18000, 17280)
 
         fs_sdr, fir = design_fir_resampler(125e6, 107.52e6)
         assert fs_sdr == pytest.approx(125e6)
@@ -123,7 +158,7 @@ class TestColaResamplerDesign:
             ({'bw': 10e6, 'shift': 'sideways'}, 'shift argument'),
             ({'bw': 10e6, 'shift': 'left', 'fs_base': 20e6}, 'minimum'),
             ({'fs_target': 125e6 / np.pi}, 'no rational FFT sizes'),
-            ({'window': 'hann'}, "'blackmanharris'.*, not 'hann'"),
+            ({'window': 'flattop'}, "'blackmanharris'.*, not 'flattop'"),
         ],
         ids=[
             'shift_without_bandwidth',
@@ -138,11 +173,6 @@ class TestColaResamplerDesign:
         kws = {'fs_base': 125e6, 'fs_target': 15.36e6, **kws}
         with pytest.raises(ValueError, match=match):
             design_cola_resampler(**kws)
-
-    def test_prime_fft_sizes(self):
-        primes = _prime_fft_sizes(100, 1000)
-        sieve = [n for n in range(101, 1000) if all(n % k for k in range(2, n))]
-        assert_array_equal(primes, sieve)
 
 
 # %% resample and resample_edges
@@ -196,7 +226,7 @@ class TestResample:
         'kws, match',
         [
             ({'num': 128, 'domain': 'bogus'}, 'domain'),
-            ({'num': 128, 'window': 'hann'}, 'window'),
+            ({'num': 128, 'window': 'flattop'}, 'window'),
             ({'num': 512, 'shift': 1}, 'downsampling'),
             ({'num': 128, 'shift': -100}, 'too small'),
             ({'num': 128, 'shift': 100}, 'too large'),
@@ -245,8 +275,10 @@ class TestOaresample:
     NFFT = 256
     NSEG = 40
 
-    def _tone(self, f0, channels=None):
-        x = testing.tone(None, self.FS, frequency=f0, count=self.NFFT * self.NSEG)[0]
+    def _tone(self, f0, channels=None, count=None):
+        if count is None:
+            count = self.NFFT * self.NSEG
+        x = testing.tone(None, self.FS, frequency=f0, count=count)[0]
         return x if channels is None else np.tile(x, (channels, 1))
 
     @settings(max_examples=20)
@@ -265,7 +297,7 @@ class TestOaresample:
         shift = shift_bins * self.FS / down
         x = self._tone(f0, channels=2)
 
-        kws = {'window': 'hamming', 'axis': 1, 'frequency_shift': shift, 'scale': scale}
+        kws = {'window': 'hann', 'axis': 1, 'frequency_shift': shift, 'scale': scale}
         y = oaresample(x, up, down, self.FS, **kws)
         assert y.shape == (2, round(x.shape[1] * up / down))
         assert y.dtype == x.dtype
@@ -274,23 +306,41 @@ class TestOaresample:
         for row in yi:
             assert abs(tone_frequency(row, fs_out) - (f0 - shift)) <= fs_out / row.size
 
-    def test_filter_bandwidth(self):
+    def test_downsample_tone_with_a_scale_per_channel(self):
+        """a 1-D `scale` applies one gain per channel, as `resample` does with the
+        per-port `voltage_scale` of a calibrated acquisition"""
         up, down = self.NFFT // 2, self.NFFT
+        x = self._tone(self.FS / self.NFFT * 4, channels=2)
+        scale = np.array([1.0, 2.0])
+        y = oaresample(x, up, down, self.FS, window='hann', axis=1, scale=scale)
+        yi = interior(y, up, axis=1)
+        for row, gain in zip(yi, scale):
+            assert_tone_level(row[np.newaxis], gain)
+
+    @pytest.mark.parametrize('window', ['hann', 'blackman'])
+    def test_filter_bandwidth(self, window):
+        """a tone inside the passband keeps its level; a tone past the transition band
+        (``bw/2 + transition/2``) is rejected below the block-size floor"""
+        divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
+        down = self.NFFT - self.NFFT % (2 * divisor)
+        up = down // 2
         kws = {
-            'window': 'hamming',
+            'window': window,
             'axis': 1,
             'filter_bandwidth': 0.2e6,
             'transition_bandwidth': 0.05e6,
         }
-        y_pass = oaresample(self._tone(0.05e6, 1), up, down, self.FS, **kws)
-        y_stop = oaresample(self._tone(0.2e6, 1), up, down, self.FS, **kws)
+        # the STFT needs a whole number of hops, and `down` is a multiple of the hop
+        count = down * self.NSEG
+        y_pass = oaresample(self._tone(0.05e6, 1, count), up, down, self.FS, **kws)
+        y_stop = oaresample(self._tone(0.15e6, 1, count), up, down, self.FS, **kws)
         assert_tone_level(interior(y_pass, up, axis=1))
         assert level_error_dB(interior(y_stop, up, axis=1)).max() < FIR_RECT_STOPBAND_DB
 
     def test_upsample(self):
         up, down = 2 * self.NFFT, self.NFFT
         x = self._tone(0.05e6, 1)
-        y = oaresample(x, up, down, self.FS, window='hamming', axis=1)
+        y = oaresample(x, up, down, self.FS, window='hann', axis=1)
         assert y.shape == (1, 2 * x.shape[1])
         yi = interior(y, up, axis=1)
         assert_tone_level(yi)
@@ -301,6 +351,7 @@ class TestOaresample:
         'up, down, shift, match',
         [
             (128, 256, 1e6 / 256 / 3, 'multiple of fs/down'),
+            (128, 256, 3 * 1e6 / 256, 'multiple of 2'),
             (128, 256, 100 * 1e6 / 256, 'too large'),
             (128, 256, -100 * 1e6 / 256, 'too small'),
             (512, 256, 1e6 / 256, 'only supported when downsampling'),
@@ -335,7 +386,7 @@ class TestNumpyCupyCrossComparison:
         )
 
         shift = 8 * fs / nfft
-        kws = {'window': 'hamming', 'axis': 1, 'filter_bandwidth': 0.2e6}
+        kws = {'window': 'hann', 'axis': 1, 'filter_bandwidth': 0.2e6}
         resampler = functools.partial(oaresample, frequency_shift=shift, **kws)
         y_np, y_cp = numpy_and_cupy(cupy_available, resampler, x, nfft // 2, nfft, fs)
         # window multiply, fft(nfft), zeroing, ifft(nfft), window multiply, overlap

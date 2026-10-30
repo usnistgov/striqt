@@ -11,6 +11,7 @@ import msgspec
 import numpy as np
 import pytest
 from conftest import SWEEP_DIR, construct_both, raises_on_both_paths
+from soapy_factories import soapy_capture
 from sweep_strategies import (
     SOURCE,
     CellularAnalyses,
@@ -21,7 +22,12 @@ from sweep_strategies import (
     make_sweep_kws,
     quick_binding,
 )
-from synthetic_sources import run_in_memory
+from synthetic_sources import (
+    BINDINGS,
+    RESAMPLE_FILTER,
+    acquire_corrected,
+    run_in_memory,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
@@ -426,3 +432,42 @@ class TestMockSource:
             **make_sweep_kws(mock_source='bogus'),
         )
         assert make_sweep(mock_source='warmup').mock_source == 'warmup'
+
+
+# %% acquisition_info_cls
+
+
+def test_every_binding_resolves_an_acquisition_info_class(subtests):
+    for name, ctrl_cls in ss.lib.bindings.registry.items():
+        with subtests.test(msg=name):
+            cls = ss.lib.sources.acquisition_info_cls(ctrl_cls.sensor.source_cls)
+            assert issubclass(cls, ss.specs.AcquisitionInfo)
+
+
+@pytest.mark.parametrize('name', [*BINDINGS, 'warmup'])
+def test_acquired_info_is_the_class_of_the_binding(name):
+    """the metadata of an acquisition has exactly the class resolved from the binding"""
+    binding = getattr(ss.bindings, name)
+    if name == 'warmup':
+        source = ss.specs.NoSource(
+            num_rx_ports=2, master_clock_rate=SOURCE.master_clock_rate
+        )
+    else:
+        source = SOURCE
+    capture = binding.schema.capture(**RESAMPLE_FILTER)
+
+    info = acquire_corrected(binding, capture, source=source).raw.info
+
+    expected = ss.lib.sources.acquisition_info_cls(binding.sensor.source_cls)
+    assert type(info) is expected
+
+
+def test_fake_soapy_acquires_soapy_acquisition_info(fake_controller):
+    source_cls = ss.lib.bindings.get_controller('fake_soapy').sensor.source_cls
+    assert (
+        ss.lib.sources.acquisition_info_cls(source_cls) is ss.specs.SoapyAcquisitionInfo
+    )
+    with fake_controller() as ctrl:
+        ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, 0)))
+        info = ctrl.acquire().info
+    assert type(info) is ss.specs.SoapyAcquisitionInfo

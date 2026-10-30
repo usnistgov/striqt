@@ -8,13 +8,14 @@ from __future__ import annotations as __
 
 import math
 import typing
+from fractions import Fraction
 from math import inf, isfinite
 
 from .. import util
 from ..arrays import array_namespace, axis_slice, isroundmod, pad_along_axis
 from ..util import np
-from .fft import fft, ifft, time_fftshift, time_ifftshift
-from .filters import _COLA_WINDOW_SIZE_DIVISOR, _stft_fir_lowpass, design_oafilter
+from .fft import _broadcast_onto, fft, ifft, time_fftshift, time_ifftshift
+from .filters import _COLA_WINDOW_SIZE_DIVISOR, _fir_lowpass_fft, design_oafilter
 from .stft import _find_downsample_copy_range, istft, stft
 
 if typing.TYPE_CHECKING:
@@ -24,15 +25,19 @@ if typing.TYPE_CHECKING:
 OLA_MAX_FFT_SIZE = 128 * 1024
 
 
-@util.lru_cache()
-def _prime_fft_sizes(min=2, max=OLA_MAX_FFT_SIZE):
-    s = np.arange(3, max, 2)
-
-    for m in range(3, int(np.sqrt(max) + 1), 2):
-        if s[(m - 3) // 2]:
-            s[(m * m - 3) // 2 :: m] = 0
-
-    return s[(s > min)]
+def _next_smooth_size(n: int) -> int:
+    """return the smallest 2·3·5·7-smooth integer at or above `n`."""
+    # scipy.fft.next_fast_len admits a factor of 11; cuFFT is tuned for sizes of the
+    # form 2^a 3^b 5^c 7^d
+    size = max(n, 1)
+    while True:
+        remainder = size
+        for prime in (2, 3, 5, 7):
+            while remainder % prime == 0:
+                remainder //= prime
+        if remainder == 1:
+            return size
+        size += 1
 
 
 class ResamplerDesign(typing.TypedDict):
@@ -67,7 +72,6 @@ def design_cola_resampler(
     min_oversampling: float = 1.1,
     min_fft_size=2 * 4096 - 1,
     shift: ShiftType = False,
-    avoid_primes=True,
     window=None,
     fs_sdr: typing.Optional[float] = None,
 ) -> ResamplerDesign:
@@ -75,12 +79,15 @@ def design_cola_resampler(
 
     The design resamples from the radio rate ``fs_sdr`` (an integer division of
     `fs_base`, unless given) to `fs_target` with FFT sizes in the ratio
-    ``nfft / nfft_out == fs_sdr / fs_target`` exactly, both divisible by the COLA
-    divisor of `window`. With `shift`, the radio is tuned ``lo_offset`` below the
-    center frequency, and ``fs_sdr`` is the largest integer division of `fs_base`
-    at or above ``fs_target + min_oversampling * bw + bw_lo``. The magnitude of
+    ``nfft / nfft_out == fs_sdr / fs_target`` exactly. The sizes are ``k * p`` and
+    ``k * q`` for the reduced ratio ``p / q`` of ``fs_sdr`` to `fs_target`. The
+    multiplier ``k`` is the smallest even multiple of the COLA divisor of `window`
+    that is 2·3·5·7-smooth and puts ``nfft_out`` above `min_fft_size`. With
+    `shift`, the radio is tuned ``lo_offset`` below the center frequency, and
+    ``fs_sdr`` is the largest integer division of `fs_base` at or above
+    ``fs_target + min_oversampling * bw + bw_lo``. The magnitude of
     ``lo_offset`` is ``bw / 2 + bw_lo / 2`` rounded up to a whole number of
-    ``fs_sdr / nfft`` bins, up to one bin more than that sum.
+    ``fs_sdr / nfft`` bins that is a multiple of the frames per hop of `window`.
 
     Args:
         fs_base: the master clock rate (in S/s) that ``fs_sdr`` divides
@@ -91,12 +98,11 @@ def design_cola_resampler(
             the protected band
         min_oversampling: the factor applied to `bw` when sizing ``fs_sdr`` for an
             LO shift
-        min_fft_size: the smallest ``nfft_out`` candidate considered
+        min_fft_size: the size that ``nfft_out`` must exceed
         shift: ``'left'`` or ``'right'`` places the protected band below or above
             the tuned LO; ``'none'``, None, or False leaves the LO at the center
             frequency
-        avoid_primes: True rejects ``nfft_out`` candidates that are large primes
-        window: a key of the COLA window divisor table; None selects ``'hamming'``
+        window: a key of the COLA window divisor table; None selects ``'hann'``
         fs_sdr: the radio sample rate (in S/s) to use instead of selecting one
 
     Returns:
@@ -106,9 +112,10 @@ def design_cola_resampler(
     Raises:
         ValueError: if `shift` is set while `bw` is infinite, `shift` is not a
             recognized direction, `window` has no COLA divisor, `bw` exceeds
-            `fs_base`, the LO shift needs a radio rate above `fs_base`, no FFT size
-            up to `OLA_MAX_FFT_SIZE` realizes the rate ratio, or the LO shift does
-            not fit the Nyquist band of the radio at ``fs_sdr``
+            `fs_base`, the LO shift needs a radio rate above `fs_base`, no
+            fraction with denominator up to `OLA_MAX_FFT_SIZE` realizes the rate
+            ratio, or the LO shift does not fit the Nyquist band of the radio at
+            ``fs_sdr``
     """
 
     if bw == inf and shift:
@@ -149,30 +156,21 @@ def design_cola_resampler(
 
     resample_ratio = fs_sdr / fs_target
 
-    # isroundmod admits ratios that round to a whole number, which covers downward
-    # rounding errors (e.g., 0.999)
-    trial_noverlap = resample_ratio * np.arange(1, OLA_MAX_FFT_SIZE + 1)
-    check_mods = isroundmod(trial_noverlap, 1) & (
-        trial_noverlap > min_fft_size * resample_ratio
-    )
-
-    # all valid noverlap size candidates
-    valid_noverlap_out = 1 + np.where(check_mods)[0]
-    if avoid_primes:
-        reject = _prime_fft_sizes(100)
-        valid_noverlap_out = np.setdiff1d(valid_noverlap_out, reject, True)
-    if len(valid_noverlap_out) == 0:
+    # isroundmod admits a float ratio that rounds to the fraction, which covers
+    # downward rounding errors (e.g., 0.999)
+    ratio = Fraction(resample_ratio).limit_denominator(OLA_MAX_FFT_SIZE)
+    p, q = ratio.numerator, ratio.denominator
+    if not isroundmod(resample_ratio * q, 1):
         raise ValueError('no rational FFT sizes satisfied design constraints')
 
-    nfft_out = valid_noverlap_out[0]
-    nfft_in = round(resample_ratio * nfft_out)
+    # the half-band shift that stft and istft apply is self-inverse only on an even
+    # block, so both sizes are even multiples of the COLA divisor. p and q are
+    # coprime, so the divisor divides k * p and k * q only when it divides k
+    divisor = math.lcm(2, _COLA_WINDOW_SIZE_DIVISOR[window])
+    k = divisor * _next_smooth_size(min_fft_size // (q * divisor) + 1)
+    nfft_in = k * p
+    nfft_out = k * q
 
-    divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
-    if nfft_out % divisor > 0 or nfft_in % divisor > 0:
-        nfft_out *= divisor
-        nfft_in *= divisor
-
-    # the LO shift arguments below assume a hamming COLA window
     if shift == 'left':
         sign = -1
     elif shift == 'right':
@@ -190,9 +188,15 @@ def design_cola_resampler(
         passband = (None, None)
     else:
         # records handed to `resample` are padded to a multiple of nfft_in, so an
-        # offset on the fs_sdr / nfft_in grid is a whole number of their bins too
+        # offset on the fs_sdr / nfft_in grid is a whole number of their bins too.
+        # `oaresample` demodulates each STFT frame by the shift, and consecutive
+        # frames agree in phase only when the shift is a multiple of the frames per
+        # hop
+        frames_per_hop = _COLA_WINDOW_SIZE_DIVISOR[window]
         bin_size = fs_sdr / nfft_in
-        lo_offset = sign * math.ceil((bw / 2 + bw_lo / 2) / bin_size) * bin_size
+        bins = math.ceil((bw / 2 + bw_lo / 2) / bin_size)
+        bins = math.ceil(bins / frames_per_hop) * frames_per_hop
+        lo_offset = sign * bins * bin_size
         passband = (lo_offset - bw / 2, lo_offset + bw / 2)
 
     if sign != 0 and abs(lo_offset) + fs_target / 2 > fs_sdr / 2:
@@ -205,7 +209,7 @@ def design_cola_resampler(
     return ResamplerDesign(
         fs_sdr=fs_sdr,
         lo_offset=lo_offset,
-        window=window or 'hamming',
+        window=window or 'hann',
         nfft=int(nfft_in),
         nfft_out=int(nfft_out),
         frequency_shift=shift,
@@ -221,21 +225,27 @@ def design_fir_resampler(
     bw_lo: float = 0,
     min_oversampling: float = 1.04,
 ) -> tuple[float, dict]:
-    """designs sampling and RF center frequency parameters that shift LO leakage outside of the specified bandwidth.
+    """design the radio sample rate and the FIR rate-change factors of a resampler.
 
-    The result includes the integer-divided SDR sample rate to request from the SDR, the LO frequency offset,
-    and the keyword arguments needed to realize resampling with `ola_filter`.
+    The factors are the FFT sizes of `design_cola_resampler` with ``min_fft_size``
+    of 1 and no LO shift.
 
     Args:
-        fs_base: the base clock rate (sometimes known as master clock rate, MCR) of the receiver
-        fs_target: the desired sample rate after resampling
-        bw: the analysis bandwidth to protect from LO leakage
-        bw_lo: the spectral leakage/phase noise bandwidth of the LO
-        shift: the direction to shift the LO
-        avoid_primes: whether to avoid large prime numbered FFTs for performance reasons
+        fs_base: the master clock rate (in S/s) that the radio rate divides
+        fs_target: the sample rate (in S/s) after resampling
+        bw: the bandwidth (in Hz) to protect from LO leakage; ``inf`` leaves the
+            passband unbounded
+        bw_lo: the bandwidth (in Hz) of the LO leakage and phase noise kept out of
+            the protected band
+        min_oversampling: the factor applied to `bw` when sizing the radio rate
 
     Returns:
-        (SDR sample rate, upfirdn keywords)
+        the radio sample rate (in S/s), and the ``{'up': nfft_out, 'down': nfft}``
+        keywords of ``scipy.signal.upfirdn``
+
+    Raises:
+        ValueError: if `bw` exceeds `fs_base`, or no fraction with denominator up
+            to `OLA_MAX_FFT_SIZE` realizes the rate ratio
     """
 
     design = design_cola_resampler(
@@ -245,7 +255,6 @@ def design_fir_resampler(
         bw_lo=bw_lo,
         min_oversampling=min_oversampling,
         min_fft_size=1,
-        avoid_primes=False,
     )
 
     fir_params = {
@@ -385,7 +394,7 @@ def oaresample(
     fs,
     # analysis_filter: dict,
     *,
-    window: str | tuple[str, float] = 'hamming',
+    window: str | tuple[str, float] = 'hann',
     overwrite_x: bool = False,
     axis: int = 1,
     frequency_shift: float = 0,
@@ -393,15 +402,46 @@ def oaresample(
     transition_bandwidth: float = 250e3,
     scale: Array | float = 1.0,
 ):
-    """apply resampler implemented through STFT overlap-and-add.
+    """resample `x` by ``up / down`` through STFT overlap-add.
+
+    Each STFT block of `down` samples is cropped or zero-padded to `up` bins, scaled
+    by the low-pass response and `scale`, and overlap-added at the output rate. The
+    response has the band edges of `design_fir_lpf`: the gain is 1/2 at
+    ``filter_bandwidth / 2`` and the transition is centered there.
+
+    Args:
+        x: the waveform, with time on `axis`; its length must be a whole number of
+            STFT hops, ``down + k * (down - noverlap)``
+        up: the output block size (in samples), an even multiple of the COLA divisor
+            of `window`
+        down: the input block size (in samples), an even multiple of the COLA
+            divisor of `window`
+        fs: the sample rate (in S/s) of `x`
+        window: the COLA window of the STFT, a key of the divisor table
+        overwrite_x: True permits the STFT to consume the buffer of `x`
+        axis: the time axis of `x`
+        frequency_shift: the frequency (in Hz) moved to the output DC, a multiple of
+            ``fs / down`` times the frames per hop of `window`; 0 keeps the center
+            frequency
+        filter_bandwidth: the passband width (in Hz) of the low-pass; None or
+            ``inf`` applies no low-pass
+        transition_bandwidth: the width (in Hz) of the low-pass transition band
+        scale: a voltage gain, a scalar or one value per entry of the axis before
+            `axis`
 
     Returns:
-        the filtered IQ capture
+        the waveform at ``fs * up / down`` on `axis`, of ``x.shape[axis] * up //
+        down`` samples, in the dtype and array namespace of `x`
+
+    Raises:
+        ValueError: if `frequency_shift` is nonzero while upsampling, is not a
+            multiple of ``fs / down`` times the frames per hop, or moves the output
+            band past an edge of the input band; if `up` or `down` is odd or not a multiple of the COLA
+            divisor; or if `window` has no COLA divisor
     """
 
     nfft = down
     nfft_out = up
-    size_in = x.size
 
     nfft_out, noverlap, overlap_scale, _ = design_oafilter(
         x.size,
@@ -418,6 +458,14 @@ def oaresample(
         raise ValueError('frequency_shift is only supported when downsampling')
     elif isroundmod(frequency_shift, fs / nfft):
         shift = round(frequency_shift / (fs / nfft))
+        frames_per_hop = _COLA_WINDOW_SIZE_DIVISOR[typing.cast('str', window)]
+        if shift % frames_per_hop != 0:
+            # the demodulation by `shift` bins advances 2π shift / frames_per_hop
+            # per hop, so other shifts invert or rotate alternate frames
+            raise ValueError(
+                f'frequency_shift must be a multiple of {frames_per_hop} * fs/down '
+                f'for the {window!r} window'
+            )
         edge_low = nfft // 2 - nfft_out // 2 + shift
         edge_high = edge_low + nfft_out
 
@@ -428,45 +476,116 @@ def oaresample(
     else:
         raise ValueError('frequency_shift must be a multiple of fs/down')
 
-    y = stft(
-        x,
-        fs=fs,
-        window=window,
-        nperseg=nfft,
-        noverlap=round(nfft * overlap_scale),
-        axis=axis,
-        truncate=False,
-        overwrite_x=overwrite_x,
-        return_axis_arrays=False,
+    xp = array_namespace(x)
+    y = typing.cast(
+        'Array',
+        stft(
+            x,
+            fs=fs,
+            window=window,
+            nperseg=nfft,
+            noverlap=round(nfft * overlap_scale),
+            axis=axis,
+            truncate=False,
+            overwrite_x=overwrite_x,
+            return_axis_arrays=False,
+        ),
     )
-
-    if nfft_out < nfft:
-        # downsample
-        bounds = _find_downsample_copy_range(nfft, nfft_out, edge_low, edge_high)[1]
-        y = axis_slice(y, *bounds, axis=axis + 1)
-
-    elif nfft_out > nfft:
-        # upsample
-        pad_left = (nfft_out - nfft) // 2
-        pad_right = pad_left + (nfft_out - nfft) % 2
-
-        y = pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
-
     del x
 
+    if nfft_out <= nfft:
+        bounds_out, bounds_in, _ = _find_downsample_copy_range(
+            nfft, nfft_out, edge_low, edge_high
+        )
+    else:
+        pad_left = (nfft_out - nfft) // 2
+        bounds_in = (0, nfft)
+        bounds_out = (pad_left, pad_left + nfft)
+
+    # the low-pass, the COLA rate scale, and the caller's scale are one multiply
+    # applied while the bins are copied
     if filter_bandwidth is not None and isfinite(filter_bandwidth):
-        y = _stft_fir_lowpass(
-            y,
+        gain = _fir_lowpass_fft(
+            nfft_out,
             sample_rate=fs * up / down,
-            bandwidth=filter_bandwidth,
-            transition_bandwidth=transition_bandwidth,
-            axis=axis,
-            out=y,
+            cutoff=filter_bandwidth / 2,
+            transition=transition_bandwidth,
+            dtype=typing.cast(str, y.dtype),
+            window='rect',
+            xp=xp,
+        )
+    else:
+        gain = xp.ones(nfft_out, dtype=y.dtype)
+    gain = _broadcast_onto(gain * (nfft_out / nfft), y, axis=axis + 1)
+    if np.ndim(scale) == 1:
+        # one gain per entry of the axis that is not resampled, as in `resample`
+        gain = gain * _broadcast_onto(xp.asarray(scale), y, axis=max(axis - 1, 0))
+    else:
+        gain = gain * scale
+
+    y = _copy_bins_to_fftfreq_order(
+        y, nfft_out, bounds_in, bounds_out, gain=gain.astype(y.dtype), axis=axis
+    )
+
+    return istft(
+        y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True, fftshift=False
+    )
+
+
+def _copy_bins_to_fftfreq_order(
+    y: Array,
+    nfft_out: int,
+    bounds_in: tuple[int, int],
+    bounds_out: tuple[int, int],
+    *,
+    gain: Array,
+    axis: int,
+) -> Array:
+    """return the `bounds_in` bins of each STFT segment of `y` as `nfft_out` bins in
+    `fftfreq` order.
+
+    `y` has segments on `axis` and bins in ascending frequency order on ``axis + 1``.
+    The copied bins occupy the ascending-order range `bounds_out` of the output, and
+    the other output bins are zero. The output is a new contiguous array of `nfft_out`
+    bins on ``axis + 1`` and the dtype of `y`.
+
+    Args:
+        y: the STFT
+        nfft_out: the even number of output bins
+        bounds_in: the ``(start, stop)`` ascending-order bins of `y` that are copied
+        bounds_out: the ``(start, stop)`` ascending-order output bins that receive
+            the copy, of the same length as `bounds_in`
+        gain: the multiplier of the copied bins, in ascending order on ``axis + 1``
+            and broadcastable onto the output
+        axis: the segment axis of `y`
+    """
+    xp = array_namespace(y)
+    shape = list(y.shape)
+    shape[axis + 1] = nfft_out
+    out = xp.empty(shape, dtype=y.dtype)
+
+    half = nfft_out // 2
+    bin_axis = axis + 1
+
+    def fftfreq_order_chunks(start: int, stop: int):
+        # split an ascending-order range at the DC bin, since each half maps onto one
+        # contiguous range of fftfreq-order bins
+        for a, b in ((start, min(stop, half)), (max(start, half), stop)):
+            if b > a:
+                yield a, b, (a + half) % nfft_out
+
+    for a, b, dest in (
+        *fftfreq_order_chunks(0, bounds_out[0]),
+        *fftfreq_order_chunks(bounds_out[1], nfft_out),
+    ):
+        xp.copyto(axis_slice(out, dest, dest + b - a, axis=bin_axis), 0)
+
+    offset = bounds_in[0] - bounds_out[0]
+    for a, b, dest in fftfreq_order_chunks(*bounds_out):
+        xp.multiply(
+            axis_slice(y, a + offset, b + offset, axis=bin_axis),
+            axis_slice(gain, a, b, axis=bin_axis),
+            out=axis_slice(out, dest, dest + b - a, axis=bin_axis),
         )
 
-    # reconstruct into a resampled waveform
-    x = istft(y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True)
-
-    x *= x.size / size_in * scale
-
-    return x
+    return out

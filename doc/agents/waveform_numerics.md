@@ -62,13 +62,36 @@ shim is `striqt.waveform.fourier`.
 ## Resampling
 
 - `design_cola_resampler` returns a `ResamplerDesign`. The ratio `nfft / nfft_out`
-  equals `fs_sdr / fs_target` exactly, and both sizes are divisible by the COLA
-  divisor of the window.
-- The divisor table is `_COLA_WINDOW_SIZE_DIVISOR` in `filters.py`. The sensor
-  resamples with the hamming window, `RESAMPLE_COLA_WINDOW` in
-  `striqt/sensor/lib/compute/corrections.py`, whose divisor is 2.
+  equals `fs_sdr / fs_target` exactly, and both sizes are even multiples of the COLA
+  divisor of the window: the half-band shift that `stft` and `istft` apply is
+  self-inverse only on an even block, and an odd block breaks the overlap-add sum.
+  `design_oafilter` rejects an odd `nfft` or `nfft_out`. The sizes are `k * p` and
+  `k * q` for the reduced ratio `p / q` (`Fraction.limit_denominator` bounded by
+  `OLA_MAX_FFT_SIZE`), with `k` the smallest even multiple of the divisor that is
+  2·3·5·7-smooth (`_next_smooth_size`; `scipy.fft.next_fast_len` admits 11) and
+  that puts `nfft_out` above `min_fft_size`. The smooth multiplier replaces the
+  prime-size filter, which the even requirement had made dead.
+- The divisor table is `_COLA_WINDOW_SIZE_DIVISOR` in `filters.py`: hann (2),
+  blackman (3), blackmanharris (5), and rect (1). The sensor designs both paths with
+  hann (`RESAMPLE_COLA_WINDOW` and `OARESAMPLE_COLA_WINDOW` in
+  `striqt/sensor/lib/compute/corrections.py`). Each block is a circular convolution,
+  so the overlap-add leaks in-band energy out of band at the level the window sets.
+  At the ADA block sizes (`chores/tests/evaluate_oaresample_filter.py`) the leakage is
+  about -98 dB for hann and -102 dB for blackman, at 2 and 3 STFT frames per hop.
+  Hamming was removed from the table: its 0.08 edge pedestal held the floor near
+  -56 dB at any block size.
 - `oaresample` and `resample` implement the design through STFT overlap-add.
-  `oafilter` is the same machinery used as a low-pass.
+  `oafilter` is the same machinery used as a low-pass. `oaresample` applies the
+  analysis low-pass as the block-length `firwin2` response of `_fir_lowpass_fft`,
+  with the transition band centered on the cutoff (the band edges of
+  `design_fir_lpf`). The response, the `nfft_out / nfft` rate scale, and the caller's
+  `scale` are one multiplier applied while the bins of each block are copied into a
+  contiguous `nfft_out`-bin buffer in `fftfreq` order (`_copy_bins_to_fftfreq_order`),
+  so `istft` runs the inverse FFT in place with ``fftshift=False`` and no time-domain
+  shift multiply. The overlap-add in `_unstack_stft_windows` adds each strided group
+  of windows into the output span viewed as ``(windows, nfft)`` without a copy. On
+  the TX2i these stages are memory-bound at about 60 GB/s, so each avoided pass over
+  the stacked frames is a measurable fraction of the call.
 - `resample` fftshifts in the time domain (`time_fftshift`) so that downsampling
   becomes a slice of the frequency axis.
 

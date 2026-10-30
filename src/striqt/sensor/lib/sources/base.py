@@ -1,7 +1,7 @@
 from __future__ import annotations as __
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from striqt.analysis.lib.util import np
 
@@ -20,6 +20,21 @@ if TYPE_CHECKING:
 
 class ReceiveStreamError(IOError):
     pass
+
+
+def acquisition_info_cls(
+    source_cls: type[SourceBackend[Any, Any]] | None,
+) -> type[specs.AcquisitionInfo]:
+    """return the `AcquisitionInfo` subclass that `source_cls` produces.
+
+    Args:
+        source_cls: a source backend class, or `None`
+
+    Returns:
+        the `acquisition_info_cls` class attribute of `source_cls`; `AcquisitionInfo`
+        when `source_cls` is `None` or declares no such attribute
+    """
+    return getattr(source_cls, 'acquisition_info_cls', specs.AcquisitionInfo)
 
 
 class NoSource(SourceBackend[specs.NoSource, specs.SensorCapture]):

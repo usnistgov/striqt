@@ -26,7 +26,7 @@ from analysis_strategies import (
 from hypothesis import given, settings, strategies as st
 
 import striqt.analysis as sa
-from striqt.analysis.lib import register
+from striqt.analysis.lib import dataarrays, register
 from striqt.analysis.specs.helpers import SpecValidationError
 
 CAPTURE = sa.specs.Capture(duration=1e-4, sample_rate=1e6)
@@ -650,6 +650,46 @@ def test_measurement_without_xarray(spec):
     # the raw array is not held to the registered dtype: power_spectral_density
     # returns float16 where it registers float32
     assert np.array_equal(data.astype(da.dtype), da.values, equal_nan=True)
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_measurement_geometry_matches_the_measured_dataarray(spec):
+    """the dims, shape, coordinate values, and coordinate attrs that a sink computes
+    from ``(capture, spec)`` before any acquisition equal those of the measured
+    DataArray"""
+    info, da = measure(spec, as_xarray=True)
+    spec = spec.validate()
+
+    assert dataarrays.measurement_dims(info) == da.dims[1:]
+    assert dataarrays.measurement_shape(info, CONTRACT_CAPTURE, spec) == da.shape[1:]
+
+    coords = dataarrays.measurement_coords(info, CONTRACT_CAPTURE, spec)
+    assert set(coords) == set(da.coords)
+    for name, (values, attrs) in coords.items():
+        assert values.dtype == da[name].dtype, name
+        assert np.array_equal(
+            values, da[name].values, equal_nan=values.dtype.kind in 'fc'
+        ), name
+        assert attrs == da[name].attrs, name
+
+
+def test_measurement_shape_rejects_a_dim_without_a_coordinate_factory():
+    info = register.AnalysisInfo(
+        name='toy',
+        func=lambda iq, capture, **kwargs: None,
+        coord_factories=(),
+        cache=None,
+        dtype='float32',
+        attrs={},
+        depends=(),
+        store_compressed=True,
+        prefer_filtered=True,
+        prefer_aligned=True,
+        dims=('toy',),
+    )
+
+    with pytest.raises(NotImplementedError, match="'toy'"):
+        dataarrays.measurement_shape(info, CONTRACT_CAPTURE, ToySpec())
 
 
 # the only measurement without a validator: iq_waveform clamps the start/stop bounds

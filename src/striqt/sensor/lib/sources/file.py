@@ -3,7 +3,7 @@
 from __future__ import annotations as __
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, overload
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -35,6 +35,9 @@ def _split_preroll(start_index: int, count: int) -> tuple[int, int, int]:
 class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
     """a source of IQ waveforms from a TDMS file"""
 
+    acquisition_info_cls: ClassVar[type[specs.AcquisitionInfo]] = (
+        specs.FileAcquisitionInfo
+    )
     _file_info: specs.FileAcquisitionInfo
 
     def __init__(self, spec):
@@ -114,6 +117,9 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
 class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     """returns IQ waveforms from a .mat file"""
 
+    acquisition_info_cls: ClassVar[type[specs.AcquisitionInfo]] = (
+        specs.FileAcquisitionInfo
+    )
     _file_info: specs.FileAcquisitionInfo
     _file_stream: FileStream
 
@@ -208,6 +214,9 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
 class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     """a source of IQ samples from the `iq_waveform` variable of a zarr store"""
 
+    acquisition_info_cls: ClassVar[type[specs.AcquisitionInfo]] = (
+        specs.FileAcquisitionInfo
+    )
     _waveform: xr.DataArray
     _capture_info: specs.FileAcquisitionInfo
 

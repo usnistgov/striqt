@@ -23,7 +23,8 @@ else:
 FILTER_SIZE = 4001
 FIR_TRANSITION_BW = 250e3
 MIN_OARESAMPLE_FFT_SIZE = 4 * 4096 - 1
-RESAMPLE_COLA_WINDOW = 'hamming'
+RESAMPLE_COLA_WINDOW = 'hann'
+OARESAMPLE_COLA_WINDOW = 'hann'
 
 # bypass for the conjugate correction for downconversion based on high-side LO
 IGNORE_HIGHSIDE_LO = int(os.environ.get('STRIQT_IGNORE_HIGHSIDE_LO', '0'))
@@ -33,10 +34,13 @@ if IGNORE_HIGHSIDE_LO:
         '(shell STRIQT_IGNORE_HIGHSIDE_LO=1)'
     )
 
-# experimental: resample and low-pass in one STFT pass instead of _resample and the FIR
-USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', '0'))
-if USE_OARESAMPLE:
-    warnings.warn('experimental oaresample is enabled (shell STRIQT_USE_OARESAMPLE=1)')
+# 1 resamples and low-passes in one STFT pass; 0 selects the whole-record FFT
+# resampler followed by the FIR
+USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', '1'))
+if not USE_OARESAMPLE:
+    warnings.warn(
+        'the whole-record resampler and FIR are enabled (shell STRIQT_USE_OARESAMPLE=0)'
+    )
 
 
 _TIME_AXIS = 1
@@ -152,7 +156,8 @@ def needs_analysis_filter(iq: specs.AcquiredIQ) -> bool:
     """return whether `preprocess` low-passes `iq` to `analysis_bandwidth` with the FIR.
 
     The filter runs when `analysis_bandwidth` is finite, except on the oaresample
-    path, where the resampler applies the low-pass.
+    path, where the resampler applies the low-pass as a response on the STFT bins
+    with the band edges of the FIR.
     """
     capture = _sensor_capture(iq)
     if not isfinite(capture.analysis_bandwidth):
@@ -334,11 +339,11 @@ def _get_resampler_overlaps(
             transient for a trigger shift
 
     Returns:
-        ``(lead, tail)`` at the source rate; on the default path, the padded record
-        is a whole number of resampler FFTs (`_get_resample_overlap`)
+        ``(lead, tail)`` at the source rate: `_get_oaresample_overlaps` when the
+        oaresample path resamples `capture`, otherwise `_get_resample_overlap`
     """
-
-    if USE_OARESAMPLE:
+    design = design_resampler(capture, setup.master_clock_rate)
+    if USE_OARESAMPLE and needs_resample(design, capture):
         return _get_oaresample_overlaps(capture, setup.master_clock_rate, min_overlap)
     else:
         return _get_resample_overlap(capture, setup, min_overlap)
@@ -369,13 +374,14 @@ def design_resampler(
     """
     kwargs.setdefault('bw_lo', 0.25e6)
     kwargs.setdefault('min_oversampling', 1.1)
-    kwargs.setdefault('window', RESAMPLE_COLA_WINDOW)
     kwargs.setdefault('min_fft_size', MIN_OARESAMPLE_FFT_SIZE)
 
     if USE_OARESAMPLE:
         kwargs['min_fft_size'] = MIN_OARESAMPLE_FFT_SIZE
+        kwargs.setdefault('window', OARESAMPLE_COLA_WINDOW)
     else:
         kwargs['min_fft_size'] = 256
+        kwargs.setdefault('window', RESAMPLE_COLA_WINDOW)
 
     if str(capture.lo_shift).lower() == 'none':
         lo_shift = False
@@ -684,10 +690,12 @@ def _get_oaresample_overlaps(
     """return the (lead, tail) pads, in source samples, that `_oaresample` needs.
 
     Each pad covers one STFT overlap: the span at either end of the `sw.oaresample`
-    output that fewer than the full count of COLA windows reach. The lead resamples to
-    a whole number of output samples. The tail adds `min_overlap` trigger-lag samples
-    (in source samples) and is extended until the padded acquisition is a whole
-    number of the STFT hops that `sw.oaresample` requires.
+    output that fewer than the full count of COLA windows reach. The low-pass of that
+    path is a response on the bins of each STFT block. No pad is reserved for a
+    filter transient. The lead resamples to a whole number of output samples. The
+    tail adds `min_overlap` trigger-lag samples (in source samples) and is extended
+    until the padded acquisition is a whole number of the STFT hops that
+    `sw.oaresample` requires.
     """
     design = design_resampler(capture, master_clock_rate)
     nfft = design['nfft']
@@ -780,10 +788,6 @@ def _get_resample_overlap(
 @sa.util.lru_cache()
 def _get_next_fast_len(n, array_backend: specs.types.ArrayBackend) -> int:
     if array_backend == 'cupy':
-        # numba.cuda must be imported before cupy, and cupy before any cupyx module
-        # (numba issue 6131)
-        import numba.cuda  # noqa: F401, I001
-        import cupy  # noqa: F401  # ty: ignore[unresolved-import]
         from cupyx.scipy import fft  # type: ignore
     elif array_backend == 'numpy':
         from scipy import fft

@@ -161,6 +161,21 @@ class TestIstft:
         assert y.shape == x.shape
         assert_close(y, x, sigma=self._roundtrip_sigma(x.dtype))
 
+    @settings(max_examples=20)
+    @given(x=iq_waveforms(min_size=8 * NFFT, max_size=16 * NFFT, multiple_of=NFFT))
+    def test_fftfreq_order_bins_skip_the_shift(self, x):
+        """bins rolled into `fftfreq` order with ``fftshift=False`` reconstruct the
+        same waveform as the ascending-order bins with the time-domain shift"""
+        nfft = self.NFFT
+        _, _, X = stft(x, fs=1.0, window='hann', nperseg=nfft, noverlap=nfft // 2)
+        y_shifted = istft(X.copy(), nfft=nfft, noverlap=nfft // 2)
+        y_rolled = istft(
+            np.fft.ifftshift(X, axes=1), nfft=nfft, noverlap=nfft // 2, fftshift=False
+        )
+        # one inverse FFT each on differently ordered bins, and the shift multiply
+        sigma = fft_tolerance_rms(x.dtype, [nfft], n_elementwise=1)
+        assert_close(y_rolled, y_shifted, sigma=sigma)
+
     @given(size=st.integers(min_value=NFFT, max_value=8 * NFFT))
     def test_size_trims_output(self, size):
         nfft = self.NFFT

@@ -727,3 +727,18 @@ class TestCellular5GNRSweep:
             r'captures\[0\]\.center_frequency',
             **make_cellular_sweep_kws(captures=captures),
         )
+
+
+# %% ZarrSink
+
+
+def test_zarr_sink_batched_write_count_is_deprecated():
+    """a non-default count warns; the default is silent and the value is kept"""
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        ss.specs.ZarrSink(path='x.zarr')
+    with pytest.warns(DeprecationWarning, match='batched_write_count'):
+        sink = ss.specs.ZarrSink(path='x.zarr', batched_write_count=24)
+    assert sink.batched_write_count == 24

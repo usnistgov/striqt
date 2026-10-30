@@ -6,6 +6,8 @@ the class bound under the ``sensor_binding`` tag unless a `type` is given.
 
 from __future__ import annotations as __
 
+import contextlib
+import shutil
 import sys
 import warnings
 from pathlib import Path
@@ -28,19 +30,21 @@ def open_store(
     format_path: specs.paths.PathFormatter | None = None,
     force=False,
 ) -> ZarrStore:
-    """open the zarr store at `spec.path` for appending.
+    """open a new zarr store at `spec.path` for writing.
 
-    The suffix of the path is set to ``.zarr`` for a directory store and
-    ``.zarr.zip`` for a zip store. Missing parent directories are created.
+    A path ending in ``.zip``, or any path when `spec.store` is ``'zip'``, opens a
+    zip store at a ``.zarr.zip`` path; any other path opens a directory store at a
+    ``.zarr`` path. Missing parent directories are created.
 
     Args:
         spec: the sink block with the `path` and `store` type
         format_path: expands the ``{fields}`` of `spec.path`; None leaves the path
             as is
-        force: if True, truncate an existing store; if False, append
+        force: if True, remove a store already at the path; if False, refuse one
 
     Raises:
         ValueError: if `spec.path` is None
+        FileExistsError: if a non-empty store is at the path and `force` is False
     """
     if spec.path is None:
         raise ValueError('sink.path is null, but a zarr store needs a path')
@@ -50,17 +54,34 @@ def open_store(
         spec_path = format_path(spec_path)
 
     spec_path = Path(spec_path)
+    name = spec_path.name.lower()
 
-    if spec.store == 'directory' and not spec_path.stem.endswith('.zarr'):
-        fixed_path = spec_path.with_suffix('.zarr')
-    elif spec.store == 'zip' and not spec_path.stem.endswith('.zarr.zip'):
-        fixed_path = spec_path.with_suffix('.zarr.zip')
-    else:
+    if spec.store == 'zip' or name.endswith('.zip'):
+        if name.endswith('.zarr.zip'):
+            fixed_path = spec_path
+        elif name.endswith('.zip'):
+            fixed_path = spec_path.with_name(
+                spec_path.name[: -len('.zip')] + '.zarr.zip'
+            )
+        else:
+            fixed_path = spec_path.with_name(spec_path.name + '.zarr.zip')
+    elif name.endswith('.zarr'):
         fixed_path = spec_path
+    else:
+        fixed_path = spec_path.with_name(spec_path.name + '.zarr')
 
     fixed_path.parent.mkdir(parents=True, exist_ok=True)
-    store_backend = sa.open_store(fixed_path, mode='w' if force else 'a')
-    return store_backend
+    occupied = fixed_path.is_file() or (
+        fixed_path.is_dir() and any(fixed_path.iterdir())
+    )
+    if occupied and not force:
+        raise FileExistsError(f'a store is already at {str(fixed_path)!r}')
+    if occupied:
+        if fixed_path.is_dir():
+            shutil.rmtree(fixed_path)
+        else:
+            fixed_path.unlink()
+    return sa.open_store(fixed_path, mode='w')
 
 
 def read_yaml_spec(
@@ -357,6 +378,12 @@ def read_calibration(
 ) -> xr.Dataset | None:
     if path is None:
         return None
+
+    # `format_path` blocks on the source id until the radio opens; the modules that
+    # the read needs load during that wait
+    _ = xr.__version__
+    with contextlib.suppress(ImportError):
+        import netCDF4  # noqa: F401
 
     if format_path is not None:
         path = format_path(path)

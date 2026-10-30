@@ -233,10 +233,25 @@ Captures are expanded from `captures:` plus `loops:` (`Range`, `List`, `Repeat`,
 `FrequencyBinRange`) by `specs.sequencing.loop_captures`. The per-source overrides from
 `adjust_captures` are then applied.
 
-Output is appended along the `capture` dimension of a zarr store by `ZarrCaptureSink`.
-`ZarrTimeAppendSink` instead appends along the spectrogram time axis and is reached
-only by passing an instance through `iterate_sweep(res, sink=...)`. Paths ending in
-`.zarr.zip` go through `Zipper`.
+Output is written by `ZarrCaptureSink` (`lib/sinks.py`) into a zarr store that the sink
+allocates at `open` from the sweep spec: one row per port of every expanded capture
+along `capture`, every data variable and coordinate at full length, and no data.
+`compute/datasets.py:sweep_template` builds that zero-row dataset without IQ: the axis
+lengths and fixed coordinates come from the coordinate factories of the registry, the
+per-capture coordinates from the capture type and the `acquisition_info_cls` of the
+source backend (`sources/base.py`), and captures with different grids are unioned per
+dimension as `xr.concat(join='outer')` would. `analysis/lib/io.py:allocate_store` writes
+the metadata and resizes the arrays. Each `append` writes the arrays of the
+`DelayedDataset` into the chunks it completes (`ZarrSink.max_chunk_bytes` bounds a
+chunk), queues the rest, and adds the attrs that measurement bodies return, dropping a
+key that differs between captures. Store metadata is staged in memory by
+`analysis/lib/stores.py` and flushed after every capture for a directory store and once
+at `close` for a `.zarr.zip`, which is written in place, so no store key is written
+twice. `close` writes the partial chunks, trims the arrays to the rows written, and
+consolidates the metadata. `ZarrSink.batched_write_count` is deprecated and ignored.
+`ZarrTimeAppendSink` instead appends along the spectrogram time axis and is reached only
+by passing an instance through `iterate_sweep(res, sink=...)`; `Zipper` remains for the
+`zip-zarr` CLI.
 
 ### Timestamps and the trigger strobe
 
@@ -272,12 +287,16 @@ including the controller's `reuse_iq` copy, starts with a fresh preprocessor. Th
 stages, in order:
 
 1. Resample to `sample_rate`: `_scale_only` when no resampling is needed, otherwise
-   `_resample`, or `_oaresample` when `STRIQT_USE_OARESAMPLE=1`. This is the only
+   `_oaresample`, or `_resample` when `STRIQT_USE_OARESAMPLE=0`. This is the only
    stage that reads `x`, and the one that may consume `x` in place under
    `overwrite_x`.
 2. Conjugate for a high-side LO. `STRIQT_IGNORE_HIGHSIDE_LO` disables the conjugation.
-3. FIR low-pass to `analysis_bandwidth`. The filter runs only for a measurement
-   registered `prefer_filtered=True` on a finite bandwidth.
+3. Low-pass to `analysis_bandwidth`: the response on the STFT bins inside
+   `_oaresample`, or the 4001-tap FIR when `STRIQT_USE_OARESAMPLE=0` or the capture
+   is not resampled, with the same band edges (`FIR_TRANSITION_BW` centered on half
+   the bandwidth). The FIR runs only for a measurement registered
+   `prefer_filtered=True` on a finite bandwidth; `_oaresample` filters the resampled
+   waveform for every measurement.
 4. Trim to `duration`.
 5. Run the `signal_trigger` and shift. This stage runs for a measurement registered
    `prefer_aligned=True` when a trigger is set. The trigger measurement receives the

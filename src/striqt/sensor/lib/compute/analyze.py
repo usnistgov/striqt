@@ -185,14 +185,7 @@ def prepare_compute(
         `always_yield` set, and nothing when the warmup sweep has no captures
     """
     if spec.source.array_backend == 'cupy':
-        with sa.util.stopwatch('import cuda computing packages', 'sweep', 2):
-            # numba.cuda must be imported before cupy on some versions/platforms
-            # (https://github.com/numba/numba/issues/6131)
-            np.__version__  # noqa: B018  reifies the lazy import
-            # isort: off
-            import numba.cuda  # noqa: F401
-            import cupy  # type: ignore  # noqa: F401
-            # isort: on
+        import numba.cuda
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
             sw.arrays.configure_cupy()

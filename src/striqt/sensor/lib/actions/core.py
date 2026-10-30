@@ -199,14 +199,12 @@ def iterate_captures(
 
     iq = None
     analysis = None
-    captures = specs.sequencing.loop_captures(
-        spec, source_id=resources['source'].source_id
-    )
+    source_id = resources['source'].source_id
+    captures = specs.sequencing.repeat_captures(spec, source_id=source_id)
     if indexer is None:
-        indexer = AcquisitionIndexer(len(captures))
-
-    if len(spec.loops) > 0 and isinstance(spec.loops[0], specs.Repeat):
-        captures = spec.loops[0].count * captures
+        # `sweep_index` advances once per pass of a leading Repeat
+        plan = specs.sequencing.loop_captures(spec, source_id=source_id)
+        indexer = AcquisitionIndexer(len(plan))
 
     if loop:
         capture_iter = itertools.cycle(captures)

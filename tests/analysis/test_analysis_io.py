@@ -1,15 +1,23 @@
-"""striqt.analysis.lib.io: YAML decoding with `!include`, and the attr repair of stores
-written with bandwidth-suffixed units"""
+"""striqt.analysis.lib.io: YAML decoding with `!include`, zarr store access and
+allocation, and the attr repair of stores written with bandwidth-suffixed units"""
 
 from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
+import xarray as xr
+import zarr
 
 import striqt.analysis as sa
 
 load = sa.lib.io.decode_from_yaml_file
+
+ZARR_MAJOR = int(zarr.__version__.split('.')[0])
+
+# the keys of a group or array document in either zarr format
+METADATA_BASENAMES = {'.zarray', '.zattrs', '.zgroup', '.zmetadata', 'zarr.json'}
 
 
 # %% !include
@@ -301,3 +309,266 @@ def test_load_repairs_legacy_attrs(tmp_path):
     assert loaded.cellular_5g_pss_correlation.attrs['noise_bandwidth'] == pytest.approx(
         30e3
     )
+
+
+# %% open_store and zarr_format_kws
+
+
+def store_keys(store) -> set[str]:
+    if ZARR_MAJOR < 3:
+        return set(store.keys())
+
+    from zarr.core.sync import sync
+
+    async def collect() -> set[str]:
+        return {key async for key in store.list()}
+
+    return sync(collect())
+
+
+def keys_under(store, name: str) -> set[str]:
+    return {key for key in store_keys(store) if key.startswith(name + '/')}
+
+
+def is_metadata_key(key: str) -> bool:
+    return key.rsplit('/', 1)[-1] in METADATA_BASENAMES
+
+
+@pytest.mark.parametrize('mode', ['w', 'a'])
+def test_open_store_zip_write_then_read(tmp_path, mode):
+    path = tmp_path / 'store.zip'
+    store = sa.lib.io.open_store(path, mode=mode)
+    assert isinstance(store, zarr.storage.ZipStore)
+
+    array = zarr.open_array(store=store, path='a', mode='w', shape=(3,), dtype='int64')
+    array[:] = [1, 2, 3]
+    store.close()
+
+    reader = sa.lib.io.open_store(path, mode='r')
+    assert isinstance(reader, zarr.storage.ZipStore)
+    assert zarr.open_array(store=reader, path='a', mode='r')[:].tolist() == [1, 2, 3]
+    reader.close()
+
+
+def test_zarr_format_kws_follows_the_installed_major():
+    if ZARR_MAJOR < 3:
+        expected = {'zarr_version': 2}
+    else:
+        expected = {'zarr_format': 3}
+    assert sa.lib.io.zarr_format_kws() == expected
+    assert sa.lib.io.zarr_format_kws('auto') == expected
+    assert sa.lib.io.zarr_format_kws(2) == {'zarr_version': 2}
+    assert sa.lib.io.zarr_format_kws(3) == {'zarr_format': 3}
+
+
+@pytest.mark.parametrize('bad', ['v2', 4, '2'])
+def test_zarr_format_kws_rejects_other_arguments(bad):
+    with pytest.raises(TypeError):
+        sa.lib.io.zarr_format_kws(bad)
+
+
+@pytest.mark.parametrize('suffix', ['.zarr', '.zip'])
+def test_get_store_info_exists_only_after_a_write(tmp_path, suffix):
+    store = sa.lib.io.open_store(tmp_path / f'store{suffix}', mode='w')
+    exists, kws = sa.lib.io._get_store_info(store)
+    assert exists is False
+    assert kws == sa.lib.io.zarr_format_kws()
+
+    zarr.open_group(store, mode='a')
+    exists, _ = sa.lib.io._get_store_info(store)
+    assert exists is True
+    store.close()
+
+
+# %% allocate_store
+
+ROWS = 5
+TEMPLATE_CHUNKS = {
+    'channel_power_time_series': (2, 4),
+    'iq_waveform': (2, 2),
+    'start_time': (2,),
+}
+TIME_ENCODING = {
+    'start_time': {'units': 'nanoseconds since 1970-01-01', 'dtype': 'int64'}
+}
+TIMES = np.array(['2026-10-30T12:00:00.000000001', '2026-10-30T12:00:01'], 'M8[ns]')
+
+
+def zero_row_template() -> xr.Dataset:
+    """2 registered measurements on a fixed coordinate `x` and a datetime capture
+    coordinate, with 0 rows along `capture`. `channel_power_time_series` is registered
+    with `store_compressed=True` and `iq_waveform` with `store_compressed=False`."""
+    return xr.Dataset(
+        {
+            'channel_power_time_series': (
+                ('capture', 'x'),
+                np.zeros((0, 4), 'float32'),
+            ),
+            'iq_waveform': (('capture', 'x'), np.zeros((0, 4), 'complex64')),
+        },
+        coords={
+            'x': ('x', np.arange(4.0)),
+            'start_time': ('capture', np.array([], 'M8[ns]')),
+        },
+    )
+
+
+def allocate_template(path, **kws):
+    store = sa.lib.io.open_store(path, mode='w')
+    arrays = sa.lib.io.allocate_store(
+        store,
+        zero_row_template(),
+        rows=ROWS,
+        chunks=TEMPLATE_CHUNKS,
+        encoding=TIME_ENCODING,
+        **kws,
+    )
+    return store, arrays
+
+
+def codec_of(array):
+    if ZARR_MAJOR < 3:
+        return array.compressor
+    elif len(array.compressors) == 0:
+        return None
+    else:
+        return array.compressors[0]
+
+
+@pytest.mark.parametrize('suffix', ['.zarr', '.zip'])
+def test_allocate_store_writes_metadata_only(tmp_path, suffix):
+    store, arrays = allocate_template(tmp_path / f'store{suffix}')
+
+    assert set(arrays) == set(TEMPLATE_CHUNKS)
+    for name, chunks in TEMPLATE_CHUNKS.items():
+        keys = keys_under(store, name)
+        assert len(keys) > 0, name
+        assert all(is_metadata_key(k) for k in keys), (name, keys)
+        assert tuple(arrays[name].chunks) == chunks
+    assert arrays['channel_power_time_series'].shape == (ROWS, 4)
+    assert arrays['iq_waveform'].shape == (ROWS, 4)
+    assert arrays['start_time'].shape == (ROWS,)
+    assert arrays['channel_power_time_series'].dtype == np.float32
+    assert arrays['iq_waveform'].dtype == np.complex64
+    assert arrays['start_time'].dtype == np.int64
+
+    assert any(not is_metadata_key(k) for k in keys_under(store, 'x'))
+    x = zarr.open_array(store=store, path='x', mode='r+')
+    assert x[:].tolist() == [0.0, 1.0, 2.0, 3.0]
+    store.close()
+
+
+@pytest.mark.parametrize('suffix', ['.zarr', '.zip'])
+def test_allocate_store_arrays_write_all_fill_chunks(tmp_path, suffix):
+    """a chunk equal to the fill value is stored rather than deleted. A zip store cannot
+    delete a key."""
+    store, arrays = allocate_template(tmp_path / f'store{suffix}')
+    array = arrays['channel_power_time_series']
+    array[0:2, :] = np.full((2, 4), array.fill_value, dtype=array.dtype)
+    chunk_keys = {
+        k
+        for k in keys_under(store, 'channel_power_time_series')
+        if not is_metadata_key(k)
+    }
+    assert len(chunk_keys) == 1
+    store.close()
+
+
+def test_allocate_store_rejects_populated_templates(tmp_path):
+    store = sa.lib.io.open_store(tmp_path / 'store.zarr', mode='w')
+    template = zero_row_template()
+    populated = xr.Dataset(
+        {'channel_power_time_series': (('capture', 'x'), np.zeros((2, 4), 'float32'))},
+        coords={'x': ('x', np.arange(4.0))},
+    )
+    with pytest.raises(ValueError, match='capture'):
+        sa.lib.io.allocate_store(store, populated, rows=ROWS, chunks=TEMPLATE_CHUNKS)
+    with pytest.raises(ValueError, match='capture'):
+        sa.lib.io.allocate_store(
+            store, template.drop_dims('capture'), rows=ROWS, chunks={}
+        )
+
+
+@pytest.mark.parametrize('compression', [True, False])
+def test_allocate_store_codec_follows_the_registry(tmp_path, compression):
+    store, arrays = allocate_template(tmp_path / 'store.zarr', compression=compression)
+
+    codec = codec_of(arrays['channel_power_time_series'])
+    if not compression:
+        assert codec is None
+    elif ZARR_MAJOR < 3:
+        import numcodecs
+
+        assert isinstance(codec, numcodecs.Blosc)
+        assert codec.cname == 'zstd'
+        assert codec.clevel == 1
+    else:
+        from zarr.codecs import BloscCodec
+
+        assert isinstance(codec, BloscCodec)
+        assert getattr(codec.cname, 'value', codec.cname) == 'zstd'
+        assert codec.clevel == 1
+
+    assert codec_of(arrays['iq_waveform']) is None
+    store.close()
+
+
+@pytest.mark.parametrize('suffix', ['.zarr', '.zip'])
+def test_allocate_store_region_write_round_trips(tmp_path, suffix):
+    path = tmp_path / f'store{suffix}'
+    store, arrays = allocate_template(path)
+
+    power = np.arange(8, dtype='float32').reshape(2, 4)
+    iq = (np.arange(8) + 1j * np.arange(8)).astype('complex64').reshape(2, 4)
+    arrays['channel_power_time_series'][0:2, :] = power
+    arrays['iq_waveform'][0:2, :] = iq
+    arrays['start_time'][0:2] = TIMES.astype('int64')
+    store.close()
+
+    ds = sa.load(path, consolidated=False)
+    assert ds.sizes == {'capture': ROWS, 'x': 4}
+    assert ds.channel_power_time_series.dtype == np.float32
+    assert ds.iq_waveform.dtype == np.complex64
+    assert ds.start_time.dtype == np.dtype('M8[ns]')
+    np.testing.assert_array_equal(ds.channel_power_time_series.values[:2], power)
+    np.testing.assert_array_equal(ds.iq_waveform.values[:2], iq)
+    np.testing.assert_array_equal(ds.start_time.values[:2], TIMES)
+    np.testing.assert_array_equal(ds.x.values, np.arange(4.0))
+    ds.close()
+
+
+def test_allocate_store_second_call_adds_a_variable(tmp_path):
+    path = tmp_path / 'store.zarr'
+    store, first = allocate_template(path)
+    power = np.arange(8, dtype='float32').reshape(2, 4)
+    first['channel_power_time_series'][0:2, :] = power
+
+    extra = xr.Dataset(
+        {'power_spectral_density': (('capture', 'y'), np.zeros((0, 3), 'float32'))},
+        coords={'y': ('y', np.arange(3.0))},
+    )
+    second = sa.lib.io.allocate_store(
+        store, extra, rows=ROWS, chunks={'power_spectral_density': (ROWS, 3)}
+    )
+    assert set(second) == {'power_spectral_density'}
+    assert second['power_spectral_density'].shape == (ROWS, 3)
+    assert tuple(second['power_spectral_density'].chunks) == (ROWS, 3)
+    assert all(is_metadata_key(k) for k in keys_under(store, 'power_spectral_density'))
+
+    reopened = zarr.open_array(store=store, path='channel_power_time_series', mode='r+')
+    assert reopened.shape == (ROWS, 4)
+    np.testing.assert_array_equal(reopened[0:2, :], power)
+    assert zarr.open_array(store=store, path='iq_waveform', mode='r+').shape == (
+        ROWS,
+        4,
+    )
+    store.close()
+
+    ds = sa.load(path, consolidated=False)
+    assert set(ds.data_vars) == {
+        'channel_power_time_series',
+        'iq_waveform',
+        'power_spectral_density',
+    }
+    assert ds.sizes == {'capture': ROWS, 'x': 4, 'y': 3}
+    ds.close()

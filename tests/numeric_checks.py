@@ -165,16 +165,20 @@ ATOL = 1e-10
 # Overlap-add reconstruction of a tone is limited by the passband ripple of the COLA
 # window after spectral truncation, not by roundoff. Measured for a hamming window at
 # nfft=256: the rms level is within 0.015 dB and the per-sample envelope ripple within
-# 0.25 dB (0.47 dB for a tone in the FIR transition band). The bounds below add
-# margin over those measurements:
+# 0.25 dB (0.47 dB for a tone in the FIR transition band). The hann window of the
+# resampler has lower sidelobes and stays inside the same bounds, which add margin
+# over those measurements:
 COLA_LEVEL_DB = 0.05
 COLA_RIPPLE_DB = 0.5
 
 # scipy.signal.firwin2 with a hamming window reaches about -53 dB in the stopband,
 # and the passband ripple is far below that. Both are bounded at -40 dB
 FIR_LEAKAGE = 1e-2
-# _stft_fir_lowpass designs the FIR with a rectangular window, and the Gibbs
-# sidelobes of that window limit the stopband to about -21 dB
+# the STFT low-pass of `oaresample` multiplies each block by the response, a circular
+# convolution of the block. At the 128-bin blocks of the kernel tests the wrapped
+# tails break the COLA sum and leave spurs at multiples of the hop rate near -34 dB;
+# the floor falls with the block size and is below -110 dB at the sensor's 16383-bin
+# minimum
 FIR_RECT_STOPBAND_DB = -20
 
 

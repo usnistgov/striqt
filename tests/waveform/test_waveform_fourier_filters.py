@@ -40,7 +40,7 @@ class TestFilterDesign:
     @pytest.mark.parametrize(
         'window, overlap_scale',
         [
-            ('hamming', 1 / 2),
+            ('hann', 1 / 2),
             ('blackman', 2 / 3),
             ('blackmanharris', 4 / 5),
             ('rect', 1),
@@ -60,11 +60,24 @@ class TestFilterDesign:
     @pytest.mark.parametrize(
         'size, kws, exc, match',
         [
-            (1200, {'window': 'hann'}, TypeError, "'blackmanharris'.*, not 'hann'"),
+            (
+                1200,
+                {'window': 'flattop'},
+                TypeError,
+                "'blackmanharris'.*, not 'flattop'",
+            ),
             (1210, {'window': 'blackman', 'nfft_out': 121}, ValueError, '% 3'),
-            (1000, {'window': 'hamming'}, ValueError, 'integer multiple of noverlap'),
+            (1000, {'window': 'hann'}, ValueError, 'integer multiple of noverlap'),
+            (1230, {'window': 'blackman', 'nfft_out': 123}, ValueError, 'must be even'),
+            (1200, {'window': 'rect', 'nfft': 125}, ValueError, 'must be even'),
         ],
-        ids=['unsupported_window', 'nfft_out_off_divisor', 'size_off_noverlap'],
+        ids=[
+            'unsupported_window',
+            'nfft_out_off_divisor',
+            'size_off_noverlap',
+            'odd_nfft_out',
+            'odd_nfft',
+        ],
     )
     def test_design_oafilter_errors(self, size, kws, exc, match):
         kws = {'nfft_out': 120, 'nfft': 120, 'extend': False, **kws}
@@ -73,12 +86,12 @@ class TestFilterDesign:
 
     def test_design_oafilter_options(self):
         pad_out = design_oafilter(
-            1000, window='hamming', nfft_out=120, nfft=120, extend=True
+            1000, window='hann', nfft_out=120, nfft=120, extend=True
         )[3]
         assert pad_out == 1000 % 60
 
         nfft_out = design_oafilter(
-            1200, window='hamming', nfft_out=None, nfft=120, extend=False
+            1200, window='hann', nfft_out=None, nfft=120, extend=False
         )[0]
         assert nfft_out == 120
 
@@ -92,15 +105,23 @@ class TestFilterDesign:
         assert abs(level_error_dB(b.sum())) < level_tolerance_dB(FIR_LEAKAGE)
 
     def test_fir_lowpass_fft_response(self):
+        """the transition band is centered on the cutoff, as in `design_fir_lpf`: unity
+        below ``cutoff - transition/2``, zero above ``cutoff + transition/2``, and
+        half gain (-6 dB) at the cutoff"""
         size = 256
-        H = _fir_lowpass_fft(size, 1.0, cutoff=0.1, transition=0.05)
+        cutoff, transition = 0.1, 0.05
+        H = _fir_lowpass_fft(size, 1.0, cutoff=cutoff, transition=transition)
         freqs = fftfreq(size, 1.0)
         assert H.shape == (size,) and H.dtype == np.complex64
 
-        passband = np.abs(freqs) < 0.08
-        stopband = np.abs(freqs) > 0.1 + 0.05 + 2 / size
+        passband = np.abs(freqs) < cutoff - transition / 2 - 2 / size
+        stopband = np.abs(freqs) > cutoff + transition / 2 + 2 / size
         assert np.abs(np.abs(H[passband]) - 1).max() < FIR_LEAKAGE
         assert np.abs(H[stopband]).max() < FIR_LEAKAGE
+        # the ramp is linear over the transition, so the gain at the cutoff is 1/2
+        # within the slope times half a bin
+        at_cutoff = np.abs(H[np.argmin(np.abs(freqs - cutoff))])
+        assert abs(at_cutoff - 0.5) < (1 / size) / transition / 2 + FIR_LEAKAGE
 
     @pytest.mark.parametrize('cutoff', [np.inf, 0.5])
     def test_fir_lowpass_fft_cutoff_at_or_past_nyquist_is_allpass(self, cutoff):
@@ -115,7 +136,7 @@ class TestFilterDesign:
         freqs = fftfreq(size, 1.0)
         assert H.shape == (size,) and H.dtype == np.complex64
 
-        passband = np.abs(freqs) < 0.38
+        passband = np.abs(freqs) < 0.4 - 0.15 - 2 / size
         assert np.abs(np.abs(H[passband]) - 1).max() < FIR_LEAKAGE
         # firwin2 constrains an even-length (type II) design to zero gain at nyquist
         assert np.abs(H[np.argmin(freqs)]) < FIR_LEAKAGE
@@ -147,7 +168,7 @@ class TestOafilter:
         return testing.tone(None, self.FS, frequency=f0, count=self.NFFT * self.NSEG)[0]
 
     def _oafilter(self, x, **kws):
-        kws = {'window': 'hamming', 'passband': self.PASSBAND, **kws}
+        kws = {'window': 'hann', 'passband': self.PASSBAND, **kws}
         return oafilter(x, fs=self.FS, nfft=self.NFFT, **kws)
 
     @settings(max_examples=20)
@@ -164,10 +185,10 @@ class TestOafilter:
     def test_rejects_out_of_band_tone(self):
         y = self._oafilter(self._tone(0.4e6))
         yi = interior(y, self.NFFT)
-        # the residual is the hamming sidelobe leakage (-53 dB). The -22 dB edge
-        # pedestal of the window leaves the ringing concentrated at the segment edges
-        assert level_error_dB(rms(yi)) < -40
-        assert level_error_dB(yi).max() < -25
+        # the residual is the hann sidelobe leakage, which falls 18 dB per octave;
+        # 50 bins past the passband edge it is near the float32 roundoff floor
+        assert level_error_dB(rms(yi)) < -90
+        assert level_error_dB(yi).max() < -80
 
     def test_downsample_length_and_level(self):
         x = self._tone(0.05e6)
@@ -204,7 +225,7 @@ class TestNumpyCupyCrossComparison:
         fs, nfft = 1e6, 256
         x = testing.tone(None, fs, frequency=f0_bins * fs / nfft, count=nfft * 40)[0]
 
-        kws = {'fs': fs, 'nfft': nfft, 'window': 'hamming', 'passband': (-0.2e6, 0.2e6)}
+        kws = {'fs': fs, 'nfft': nfft, 'window': 'hann', 'passband': (-0.2e6, 0.2e6)}
         y_np, y_cp = numpy_and_cupy(cupy_available, oafilter, x, **kws)
         # window multiply, fft(nfft), zeroing, ifft(nfft), window multiply, overlap add
         sigma = cross_backend_sigma(x.dtype, [nfft, nfft], n_elementwise=3)

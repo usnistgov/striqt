@@ -132,6 +132,19 @@ StartTime = Annotated[
 StoreFormat = Annotated[
     Literal['zip', 'directory'], Meta('serialization output format of the sink')
 ]
+CompressionThreads = Annotated[
+    Optional[int],
+    Meta('Blosc compression thread count, or null for the numcodecs default'),
+]
+ChunkBytes = Annotated[
+    int,
+    Meta(
+        'Upper bound on the uncompressed size of one chunk of each variable', 'B', gt=0
+    ),
+]
+BatchedWriteCount = Annotated[
+    int, Meta('Ignored; accepted for compatibility until the next release')
+]
 SweepStartTime = Annotated['pd.Timestamp', Meta('Capture acquisition start time')]
 SyncSource = Annotated[
     str,

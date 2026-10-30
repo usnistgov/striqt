@@ -101,7 +101,8 @@ def correction_error(
             sets the alignment overlap; None budgets no trigger
         array_backend: the backend with the FFT roundoff model that applies, or
             None for `source.array_backend`
-        filtered: False for the error of the waveform before the FIR low-pass
+        filtered: False for the error of the waveform before the low-pass; on the
+            oaresample path the low-pass is one multiply per STFT bin
 
     Returns:
         the rms error relative to the output rms (dimensionless and positive),
@@ -122,13 +123,16 @@ def correction_error(
         nffts += [n_in, n_out]
 
     filtered = filtered and isfinite(capture.analysis_bandwidth)
-    if filtered and not (resampled and corrections.USE_OARESAMPLE):
+    n_elementwise = 1
+    if filtered and resampled and corrections.USE_OARESAMPLE:
+        n_elementwise += 1
+    elif filtered:
         n_out = round(capture.duration * capture.sample_rate)
         fir_nfft = _oaconvolve_nfft(n_out, corrections.FILTER_SIZE, array_backend)
         nffts += [fir_nfft, fir_nfft]
 
     return sw.fourier.fft_tolerance_rms(
-        'complex64', nffts, n_elementwise=1, array_backend=array_backend
+        'complex64', nffts, n_elementwise=n_elementwise, array_backend=array_backend
     )
 
 

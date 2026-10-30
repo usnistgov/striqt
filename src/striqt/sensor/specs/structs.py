@@ -355,16 +355,27 @@ class Sink(SpecBase, frozen=True, kw_only=True):
 
 
 class ZarrSink(Sink, frozen=True, kw_only=True):
-    """the output block of a `Sweep`: a zarr store appended along `capture`.
+    """the output block of a `Sweep`: a zarr store with one row per port of each capture.
 
-    `store` selects a directory or zip store. The remaining fields tune the write
-    batching and chunking of the store.
+    The store is allocated when the sink opens and each capture is written into the
+    chunks that the capture completes. `store` selects a directory or a zip file,
+    which is written in place. `batched_write_count` is deprecated and ignored.
     """
 
     store: types.StoreFormat = 'directory'
-    max_threads: Optional[int] = None
-    batched_write_count: int = 1
-    max_chunk_bytes: int = 50000000
+    max_threads: types.CompressionThreads = None
+    batched_write_count: types.BatchedWriteCount = 1
+    max_chunk_bytes: types.ChunkBytes = 10_000_000
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.batched_write_count != 1:
+            warnings.warn(
+                'ZarrSink.batched_write_count is ignored and will be removed: the sink '
+                'writes each capture as the chunks of the store fill',
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
 
 class Extension(SpecBase, frozen=True, kw_only=True):

@@ -13,6 +13,70 @@ from typing import TYPE_CHECKING, Any, Callable, cast
 _lazy_import_locks = collections.defaultdict(threading.RLock)
 
 
+class _LazyModule(ModuleType):
+    """a module that runs its body on the first attribute access, once, under a lock.
+
+    Python 3.9 to 3.11 swap the class of a lazy module before running the body, so a
+    second thread that reads an attribute during the load sees a module with an
+    empty namespace. This class holds the module lock through the load, and the
+    loading thread re-enters without triggering a second load, as in Python 3.12.
+    """
+
+    def __getattribute__(self, attr: str) -> Any:
+        __spec__ = object.__getattribute__(self, '__spec__')
+        loader_state = __spec__.loader_state
+        with loader_state['lock']:
+            if object.__getattribute__(self, '__class__') is _LazyModule:
+                __class__ = loader_state['__class__']
+                if loader_state['is_loading']:
+                    return __class__.__getattribute__(self, attr)
+                loader_state['is_loading'] = True
+
+                __dict__ = __class__.__getattribute__(self, '__dict__')
+                original_name = __spec__.name
+                attrs_then = loader_state['__dict__']
+                attrs_updated = {
+                    key: value
+                    for key, value in __dict__.items()
+                    if key not in attrs_then or id(value) != id(attrs_then[key])
+                }
+                __spec__.loader.exec_module(self)
+                if (
+                    original_name in sys.modules
+                    and sys.modules[original_name] is not self
+                ):
+                    raise ValueError(
+                        f'module object for {original_name!r} substituted in '
+                        'sys.modules during a lazy load'
+                    )
+                __dict__.update(attrs_updated)
+                if isinstance(self, _LazyModule):
+                    object.__setattr__(self, '__class__', __class__)
+
+        return getattr(self, attr)
+
+    def __delattr__(self, attr: str) -> None:
+        self.__getattribute__(attr)
+        delattr(self, attr)
+
+
+class _LazyLoader(importlib.util.LazyLoader):
+    """a `LazyLoader` that makes a module a `_LazyModule`, loaded under a lock."""
+
+    def exec_module(self, module: ModuleType) -> None:
+        spec = module.__spec__
+        assert spec is not None
+        spec.loader = self.loader
+        module.__loader__ = self.loader
+        spec.loader_state = {
+            '__dict__': module.__dict__.copy(),
+            '__class__': module.__class__,
+            'lock': threading.RLock(),
+            'is_loading': False,
+        }
+        module.__class__ = _LazyModule
+
+
 def lazy_import(module_name: str, package: str | None = None) -> ModuleType:
     """return a module object that imports on first attribute access.
 
@@ -44,12 +108,10 @@ def lazy_import(module_name: str, package: str | None = None) -> ModuleType:
         spec = importlib.util.find_spec(module_name, package=package)
         if spec is None or spec.loader is None:
             raise ImportError(f'no module found named "{module_name}"')
-        spec.loader = importlib.util.LazyLoader(spec.loader)
-        # spec.loader = _LazyLoader(spec.loader)
+        spec.loader = _LazyLoader(spec.loader)
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
-        spec.loader_state['lock'] = _lazy_import_locks[module_name]
 
         # the import system binds a submodule onto its parent package; find_spec
         # plus module_from_spec does not, and later `import a.b` statements return

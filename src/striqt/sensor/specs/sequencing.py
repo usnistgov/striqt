@@ -110,6 +110,32 @@ def loop_captures(
     return _expand_capture_loops_with_origins(*args, **kws)[0]
 
 
+def repeat_captures(
+    sweep: structs.Sweep[Any, Any, SC, Any],
+    source_id: types.SourceID | None = None,
+) -> tuple[SC, ...]:
+    """return the captures that `sweep` runs, repeated by a leading `Repeat`.
+
+    A `Repeat` at ``sweep.loops[0]`` repeats the `loop_captures` tuple `count` times,
+    one whole pass after another. Every other loop is expanded by `loop_captures`.
+
+    Args:
+        sweep: the sweep to expand, as `loop_captures`
+        source_id: as `loop_captures`
+
+    Returns:
+        `count` copies of the `loop_captures` tuple under a leading `Repeat`, otherwise
+        the `loop_captures` tuple
+
+    Raises:
+        msgspec.ValidationError: as `loop_captures`
+    """
+    captures = loop_captures(sweep, source_id)
+    if len(sweep.loops) > 0 and isinstance(sweep.loops[0], structs.Repeat):
+        captures = sweep.loops[0].count * captures
+    return captures
+
+
 def loop_capture_origins(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,

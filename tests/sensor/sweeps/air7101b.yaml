@@ -258,7 +258,6 @@ sink:
   log_level: info
   store: directory
   max_threads: 1
-  batched_write_count: 24
   max_chunk_bytes: 50000000
 options:
   reuse_iq: false

@@ -18,6 +18,8 @@ from .typing import TAR
 from .util import array_api_compat, cached_property, np, xr
 
 if typing.TYPE_CHECKING:
+    from striqt.waveform.lib.typing import DTypeLike
+
     from .typing import Array, CoordFunc
 
 
@@ -262,6 +264,109 @@ def _restore_padded_coord_dtype(da: xr.DataArray, info: register.CoordInfo) -> N
     da[info.name] = xr.zeros_like(coord, dtype=dtype)
 
 
+def _coord_storage_dtype(dtype: DTypeLike) -> np.dtype:
+    """return the dtype of the stored values of a coordinate registered with `dtype`.
+
+    A bool, integer, float, or complex `dtype` is returned unchanged. Any other
+    registered dtype, such as ``'str'`` or `object`, is stored as `object`.
+    """
+    dtype = np.dtype(dtype)
+    if dtype.kind in 'biufc':
+        return dtype
+    return np.dtype(object)
+
+
+def measurement_dims(info: register.AnalysisInfo) -> tuple[str, ...]:
+    """return the dimension names of the measurement `info` after the port axis.
+
+    Returns:
+        `info.dims` when registered and not empty, otherwise the dimensions declared
+        by `info.coord_factories`, each at the first factory that declares it
+    """
+    if info.dims is None or info.dims == ():
+        return _infer_coord_dims(info.coord_factories)
+    return info.dims
+
+
+def measurement_coords(
+    info: register.AnalysisInfo, capture: specs.Capture, spec: specs.Analysis
+) -> dict[str, tuple[np.ndarray, dict[str, typing.Any]]]:
+    """return the coordinate values and attrs of the measurement `info` for one capture.
+
+    Args:
+        info: the registration of the measurement
+        capture: the acquisition parameters passed to each coordinate factory
+        spec: the measurement parameters passed to each coordinate factory
+
+    Returns:
+        ``(values, attrs)`` keyed by coordinate name, in the order of
+        `info.coord_factories`. `values` is a numpy array with the registered
+        coordinate dtype when that is a bool, integer, float, or complex dtype, and
+        an `object` array otherwise. `attrs` is the registered attrs of the
+        coordinate updated by the attrs that the factory returns.
+
+    Raises:
+        TypeError: when a factory returns a tuple that is not ``(values, attrs)``
+        ValueError: when the values of a factory cannot be cast to the registered
+            coordinate dtype
+    """
+    coords: dict[str, tuple[np.ndarray, dict[str, typing.Any]]] = {}
+
+    for factory in info.coord_factories:
+        coord_info = register.registry.coordinates[factory]
+        qualname = f'{info.name}.{coord_info.name}'
+        ret, attrs = register.normalize_factory_return(factory(capture, spec), qualname)
+
+        try:
+            values = np.asarray(ret, dtype=_coord_storage_dtype(coord_info.dtype))
+        except (TypeError, ValueError) as ex:
+            raise ValueError(f'in coordinate {qualname!r}, {ex}') from ex
+
+        coords[coord_info.name] = (values, coord_info.attrs | attrs)
+
+    return coords
+
+
+def measurement_shape(
+    info: register.AnalysisInfo, capture: specs.Capture, spec: specs.Analysis
+) -> tuple[int, ...]:
+    """return the shape of the measurement `info` after the port axis for one capture.
+
+    Args:
+        info: the registration of the measurement
+        capture: the acquisition parameters passed to each coordinate factory
+        spec: the measurement parameters passed to each coordinate factory
+
+    Returns:
+        one length per dimension of `measurement_dims(info)`, taken from the shape
+        of the coordinate values along that dimension
+
+    Raises:
+        NotImplementedError: when a dimension of the measurement has no coordinate
+            factory
+        TypeError: when a factory returns a tuple that is not ``(values, attrs)``
+        ValueError: when the values of a factory cannot be cast to the registered
+            coordinate dtype
+    """
+    coords = measurement_coords(info, capture, spec)
+
+    sizes: dict[str, int] = {}
+    for factory in info.coord_factories:
+        coord_info = register.registry.coordinates[factory]
+        values, _ = coords[coord_info.name]
+        sizes.update(zip(coord_info.dims, values.shape))
+
+    shape = []
+    for dim in measurement_dims(info):
+        if dim not in sizes:
+            raise NotImplementedError(
+                f'dimension {dim!r} of measurement {info.name!r} has no coordinate factory'
+            )
+        shape.append(sizes[dim])
+
+    return tuple(shape)
+
+
 def build_dataarray(
     delayed: DelayedDataArray,
     *,
@@ -301,18 +406,18 @@ def build_dataarray(
     if exc is not None:
         raise exc
 
+    coords = measurement_coords(delayed.info, delayed.capture, delayed.spec)
+
     for coord_factory in delayed.info.coord_factories:
         factory_info = register.registry.coordinates[coord_factory]
         _restore_padded_coord_dtype(da, factory_info)
         coord = da[factory_info.name]
-
-        ret = coord_factory(delayed.capture, delayed.spec)
+        values, attrs = coords[factory_info.name]
         qualname = f'{delayed.info.name}.{factory_info.name}'
-        arr, metadata = register.normalize_factory_return(ret, qualname)
 
         try:
             idx = coord.indexes[factory_info.dims[0]]
-            idx._values[:] = arr
+            idx._values[:] = values
         except ValueError as ex:
             exc = ex
         else:
@@ -320,10 +425,14 @@ def build_dataarray(
 
         if exc is not None:
             _reraise_coord_error(
-                exc=exc, coord=coord, factory_info=factory_info, data=arr, name=qualname
+                exc=exc,
+                coord=coord,
+                factory_info=factory_info,
+                data=values,
+                name=qualname,
             )
 
-        da[factory_info.name] = coord.assign_attrs(metadata)
+        da[factory_info.name] = coord.assign_attrs(attrs)
 
     spec_attrs = delayed.spec.to_dict()
     return da.assign_attrs(delayed.info.attrs | spec_attrs | delayed.attrs)
