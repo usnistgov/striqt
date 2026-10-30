@@ -65,7 +65,7 @@ BW_LO = 0.25e6
 MIN_OVERSAMPLING = 1.1
 
 DEFAULT_MIN_FFT_SIZES = (4096 - 1, 4 * 4096 - 1, 16 * 4096 - 1)
-DEFAULT_WINDOWS = ('hamming', 'blackman', 'blackmanharris')
+DEFAULT_WINDOWS = ('hamming', 'blackman')
 
 PSD_SEGMENT = 8192
 IMPULSE_FLOOR_DBC = -60.0
