@@ -381,6 +381,14 @@ class ZarrCaptureSink(ZarrSinkBase):
     ):
         super().__init__(sweep_spec, format_path, force=force)
         self._action_spec = sweep_spec if action_spec is None else action_spec
+
+        # in case this is run from `open_resources`, reify imports now before blocking
+        # on radio access for the source id below
+        from striqt.analysis.lib import stores  # noqa: F401
+        from striqt.analysis.lib.util import pd
+
+        _ = (pd.__version__, xr.__version__)
+
         self._source_id = controller.lookup.id(sweep_spec.source)
         self._planned_rows = compute.datasets.sweep_row_count(
             sweep_spec, self._source_id
