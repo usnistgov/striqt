@@ -228,3 +228,37 @@ def test_lazy_import_of_dask_array_leaves_the_dask_attribute_resolvable(
 
     assert dask.array is module
     assert da is module
+
+
+def test_lazy_import_loads_once_under_concurrent_first_access(monkeypatch, tmp_path):
+    """2 threads reading an attribute of an unloaded lazy module both see the loaded
+    module. The module body sleeps so that the second access lands during the load."""
+    import sys
+    import threading
+
+    name = 'striqt_lazy_probe'
+    (tmp_path / f'{name}.py').write_text(
+        'import time\ntime.sleep(0.2)\nVALUE = 1\nLOADS = globals().get("LOADS", 0) + 1\n'
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.delitem(sys.modules, name, raising=False)
+    module = util.lazy_import(name)
+
+    seen = []
+    errors = []
+
+    def read():
+        try:
+            seen.append(module.VALUE)
+        except Exception as ex:
+            errors.append(ex)
+
+    threads = [threading.Thread(target=read) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    assert seen == [1, 1]
+    assert module.LOADS == 1
