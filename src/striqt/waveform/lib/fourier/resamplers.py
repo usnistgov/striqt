@@ -13,7 +13,7 @@ from math import inf, isfinite
 from .. import util
 from ..arrays import array_namespace, axis_slice, isroundmod, pad_along_axis
 from ..util import np
-from .fft import fft, ifft, time_fftshift, time_ifftshift
+from .fft import _broadcast_onto, fft, ifft, time_fftshift, time_ifftshift
 from .filters import _COLA_WINDOW_SIZE_DIVISOR, _stft_fir_lowpass, design_oafilter
 from .stft import _find_downsample_copy_range, istft, stft
 
@@ -467,6 +467,10 @@ def oaresample(
     # reconstruct into a resampled waveform
     x = istft(y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True)
 
+    xp = array_namespace(x)
+    if np.ndim(scale) == 1:
+        # one gain per entry of the axis that is not resampled, as in `resample`
+        scale = _broadcast_onto(xp.asarray(scale), x, axis=max(axis - 1, 0))
     x *= x.size / size_in * scale
 
     return x

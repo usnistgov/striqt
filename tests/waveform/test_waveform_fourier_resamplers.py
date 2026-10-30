@@ -274,6 +274,17 @@ class TestOaresample:
         for row in yi:
             assert abs(tone_frequency(row, fs_out) - (f0 - shift)) <= fs_out / row.size
 
+    def test_downsample_tone_with_a_scale_per_channel(self):
+        """a 1-D `scale` applies one gain per channel, as `resample` does with the
+        per-port `voltage_scale` of a calibrated acquisition"""
+        up, down = self.NFFT // 2, self.NFFT
+        x = self._tone(self.FS / self.NFFT * 4, channels=2)
+        scale = np.array([1.0, 2.0])
+        y = oaresample(x, up, down, self.FS, window='hamming', axis=1, scale=scale)
+        yi = interior(y, up, axis=1)
+        for row, gain in zip(yi, scale):
+            assert_tone_level(row[np.newaxis], gain)
+
     def test_filter_bandwidth(self):
         up, down = self.NFFT // 2, self.NFFT
         kws = {
