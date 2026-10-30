@@ -42,10 +42,15 @@ def design_oafilter(
             f'window must be one of {tuple(_COLA_WINDOW_SIZE_DIVISOR)}, not {window!r}'
         )
 
-    if nfft_out % divisor != 0:
-        raise ValueError(
-            f'{window!r} window COLA requires output nfft_out % {divisor} == 0'
-        )
+    for name, size in (('nfft', nfft), ('nfft_out', nfft_out)):
+        if size % divisor != 0:
+            raise ValueError(
+                f'{window!r} window COLA requires {name} % {divisor} == 0, not {size}'
+            )
+        if size % 2 != 0:
+            # the half-band shift of `stft` and `istft` is self-inverse only on an
+            # even block
+            raise ValueError(f'{name} must be even, not {size}')
 
     if window is None or window == 'rect':
         overlap_scale = 1
@@ -113,14 +118,16 @@ def _fir_lowpass_fft(
     The taps are a `scipy.signal.firwin2` design. The result is the real amplitude
     response of that linear-phase design on the ascending-frequency bin grid of
     `stft`. Multiplying an STFT by the response filters each segment with no delay.
+    The transition band is centered on `cutoff`, as in `design_fir_lpf`. The gain at
+    `cutoff` is 1/2.
 
     Args:
         size: the number of taps and of bins
         sample_rate: the sample rate (in S/s) of the filtered waveform
-        cutoff: the passband edge (in Hz); at or above Nyquist, the result is all
-            ones
+        cutoff: the -6 dB edge (in Hz); at or above Nyquist, the result is all ones
         transition: the width (in Hz) over which the gain falls linearly from 1 to
-            0; a transition band that runs past Nyquist ends at Nyquist
+            0, from ``cutoff - transition/2`` to ``cutoff + transition/2``; a
+            transition band that runs past Nyquist ends at Nyquist
         window: the `scipy.signal.firwin2` window of the design
         xp: the array namespace of the result; None selects numpy
         dtype: the dtype of the result
@@ -140,11 +147,13 @@ def _fir_lowpass_fft(
 
     # firwin2 requires a nondecreasing grid that ends at nyquist, so a transition
     # band that runs past it is cut short there
-    if cutoff + transition < nyquist:
-        freqs = [0, cutoff, cutoff + transition, nyquist]
+    lower = max(cutoff - transition / 2, 0.0)
+    upper = cutoff + transition / 2
+    if upper < nyquist:
+        freqs = [0, lower, upper, nyquist]
         gains = [1.0, 1.0, 0.0, 0.0]
     else:
-        freqs = [0, cutoff, nyquist]
+        freqs = [0, lower, nyquist]
         gains = [1.0, 1.0, 0.0]
     h = signal.firwin2(size, freqs, gains, window=window, fs=sample_rate)
 

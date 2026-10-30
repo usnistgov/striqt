@@ -8,6 +8,7 @@ from __future__ import annotations as __
 
 import math
 import typing
+from fractions import Fraction
 from math import inf, isfinite
 
 from .. import util
@@ -24,15 +25,19 @@ if typing.TYPE_CHECKING:
 OLA_MAX_FFT_SIZE = 128 * 1024
 
 
-@util.lru_cache()
-def _prime_fft_sizes(min=2, max=OLA_MAX_FFT_SIZE):
-    s = np.arange(3, max, 2)
-
-    for m in range(3, int(np.sqrt(max) + 1), 2):
-        if s[(m - 3) // 2]:
-            s[(m * m - 3) // 2 :: m] = 0
-
-    return s[(s > min)]
+def _next_smooth_size(n: int) -> int:
+    """return the smallest 2·3·5·7-smooth integer at or above `n`."""
+    # scipy.fft.next_fast_len admits a factor of 11; cuFFT is tuned for sizes of the
+    # form 2^a 3^b 5^c 7^d
+    size = max(n, 1)
+    while True:
+        remainder = size
+        for prime in (2, 3, 5, 7):
+            while remainder % prime == 0:
+                remainder //= prime
+        if remainder == 1:
+            return size
+        size += 1
 
 
 class ResamplerDesign(typing.TypedDict):
@@ -67,7 +72,6 @@ def design_cola_resampler(
     min_oversampling: float = 1.1,
     min_fft_size=2 * 4096 - 1,
     shift: ShiftType = False,
-    avoid_primes=True,
     window=None,
     fs_sdr: typing.Optional[float] = None,
 ) -> ResamplerDesign:
@@ -75,10 +79,13 @@ def design_cola_resampler(
 
     The design resamples from the radio rate ``fs_sdr`` (an integer division of
     `fs_base`, unless given) to `fs_target` with FFT sizes in the ratio
-    ``nfft / nfft_out == fs_sdr / fs_target`` exactly, both divisible by the COLA
-    divisor of `window`. With `shift`, the radio is tuned ``lo_offset`` below the
-    center frequency, and ``fs_sdr`` is the largest integer division of `fs_base`
-    at or above ``fs_target + min_oversampling * bw + bw_lo``. The magnitude of
+    ``nfft / nfft_out == fs_sdr / fs_target`` exactly. The sizes are ``k * p`` and
+    ``k * q`` for the reduced ratio ``p / q`` of ``fs_sdr`` to `fs_target`. The
+    multiplier ``k`` is the smallest even multiple of the COLA divisor of `window`
+    that is 2·3·5·7-smooth and puts ``nfft_out`` above `min_fft_size`. With
+    `shift`, the radio is tuned ``lo_offset`` below the center frequency, and
+    ``fs_sdr`` is the largest integer division of `fs_base` at or above
+    ``fs_target + min_oversampling * bw + bw_lo``. The magnitude of
     ``lo_offset`` is ``bw / 2 + bw_lo / 2`` rounded up to a whole number of
     ``fs_sdr / nfft`` bins, up to one bin more than that sum.
 
@@ -91,11 +98,10 @@ def design_cola_resampler(
             the protected band
         min_oversampling: the factor applied to `bw` when sizing ``fs_sdr`` for an
             LO shift
-        min_fft_size: the smallest ``nfft_out`` candidate considered
+        min_fft_size: the size that ``nfft_out`` must exceed
         shift: ``'left'`` or ``'right'`` places the protected band below or above
             the tuned LO; ``'none'``, None, or False leaves the LO at the center
             frequency
-        avoid_primes: True rejects ``nfft_out`` candidates that are large primes
         window: a key of the COLA window divisor table; None selects ``'hamming'``
         fs_sdr: the radio sample rate (in S/s) to use instead of selecting one
 
@@ -106,9 +112,10 @@ def design_cola_resampler(
     Raises:
         ValueError: if `shift` is set while `bw` is infinite, `shift` is not a
             recognized direction, `window` has no COLA divisor, `bw` exceeds
-            `fs_base`, the LO shift needs a radio rate above `fs_base`, no FFT size
-            up to `OLA_MAX_FFT_SIZE` realizes the rate ratio, or the LO shift does
-            not fit the Nyquist band of the radio at ``fs_sdr``
+            `fs_base`, the LO shift needs a radio rate above `fs_base`, no
+            fraction with denominator up to `OLA_MAX_FFT_SIZE` realizes the rate
+            ratio, or the LO shift does not fit the Nyquist band of the radio at
+            ``fs_sdr``
     """
 
     if bw == inf and shift:
@@ -149,28 +156,20 @@ def design_cola_resampler(
 
     resample_ratio = fs_sdr / fs_target
 
-    # isroundmod admits ratios that round to a whole number, which covers downward
-    # rounding errors (e.g., 0.999)
-    trial_noverlap = resample_ratio * np.arange(1, OLA_MAX_FFT_SIZE + 1)
-    check_mods = isroundmod(trial_noverlap, 1) & (
-        trial_noverlap > min_fft_size * resample_ratio
-    )
-
-    # all valid noverlap size candidates
-    valid_noverlap_out = 1 + np.where(check_mods)[0]
-    if avoid_primes:
-        reject = _prime_fft_sizes(100)
-        valid_noverlap_out = np.setdiff1d(valid_noverlap_out, reject, True)
-    if len(valid_noverlap_out) == 0:
+    # isroundmod admits a float ratio that rounds to the fraction, which covers
+    # downward rounding errors (e.g., 0.999)
+    ratio = Fraction(resample_ratio).limit_denominator(OLA_MAX_FFT_SIZE)
+    p, q = ratio.numerator, ratio.denominator
+    if not isroundmod(resample_ratio * q, 1):
         raise ValueError('no rational FFT sizes satisfied design constraints')
 
-    nfft_out = valid_noverlap_out[0]
-    nfft_in = round(resample_ratio * nfft_out)
-
-    divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
-    if nfft_out % divisor > 0 or nfft_in % divisor > 0:
-        nfft_out *= divisor
-        nfft_in *= divisor
+    # the half-band shift that stft and istft apply is self-inverse only on an even
+    # block, so both sizes are even multiples of the COLA divisor. p and q are
+    # coprime, so the divisor divides k * p and k * q only when it divides k
+    divisor = math.lcm(2, _COLA_WINDOW_SIZE_DIVISOR[window])
+    k = divisor * _next_smooth_size(min_fft_size // (q * divisor) + 1)
+    nfft_in = k * p
+    nfft_out = k * q
 
     # the LO shift arguments below assume a hamming COLA window
     if shift == 'left':
@@ -221,21 +220,27 @@ def design_fir_resampler(
     bw_lo: float = 0,
     min_oversampling: float = 1.04,
 ) -> tuple[float, dict]:
-    """designs sampling and RF center frequency parameters that shift LO leakage outside of the specified bandwidth.
+    """design the radio sample rate and the FIR rate-change factors of a resampler.
 
-    The result includes the integer-divided SDR sample rate to request from the SDR, the LO frequency offset,
-    and the keyword arguments needed to realize resampling with `ola_filter`.
+    The factors are the FFT sizes of `design_cola_resampler` with ``min_fft_size``
+    of 1 and no LO shift.
 
     Args:
-        fs_base: the base clock rate (sometimes known as master clock rate, MCR) of the receiver
-        fs_target: the desired sample rate after resampling
-        bw: the analysis bandwidth to protect from LO leakage
-        bw_lo: the spectral leakage/phase noise bandwidth of the LO
-        shift: the direction to shift the LO
-        avoid_primes: whether to avoid large prime numbered FFTs for performance reasons
+        fs_base: the master clock rate (in S/s) that the radio rate divides
+        fs_target: the sample rate (in S/s) after resampling
+        bw: the bandwidth (in Hz) to protect from LO leakage; ``inf`` leaves the
+            passband unbounded
+        bw_lo: the bandwidth (in Hz) of the LO leakage and phase noise kept out of
+            the protected band
+        min_oversampling: the factor applied to `bw` when sizing the radio rate
 
     Returns:
-        (SDR sample rate, upfirdn keywords)
+        the radio sample rate (in S/s), and the ``{'up': nfft_out, 'down': nfft}``
+        keywords of ``scipy.signal.upfirdn``
+
+    Raises:
+        ValueError: if `bw` exceeds `fs_base`, or no fraction with denominator up
+            to `OLA_MAX_FFT_SIZE` realizes the rate ratio
     """
 
     design = design_cola_resampler(
@@ -245,7 +250,6 @@ def design_fir_resampler(
         bw_lo=bw_lo,
         min_oversampling=min_oversampling,
         min_fft_size=1,
-        avoid_primes=False,
     )
 
     fir_params = {

@@ -62,13 +62,27 @@ shim is `striqt.waveform.fourier`.
 ## Resampling
 
 - `design_cola_resampler` returns a `ResamplerDesign`. The ratio `nfft / nfft_out`
-  equals `fs_sdr / fs_target` exactly, and both sizes are divisible by the COLA
-  divisor of the window.
+  equals `fs_sdr / fs_target` exactly, and both sizes are even multiples of the COLA
+  divisor of the window: the half-band shift that `stft` and `istft` apply is
+  self-inverse only on an even block, and an odd block breaks the overlap-add sum.
+  `design_oafilter` rejects an odd `nfft` or `nfft_out`. The sizes are `k * p` and
+  `k * q` for the reduced ratio `p / q` (`Fraction.limit_denominator` bounded by
+  `OLA_MAX_FFT_SIZE`), with `k` the smallest even multiple of the divisor that is
+  2·3·5·7-smooth (`_next_smooth_size`; `scipy.fft.next_fast_len` admits 11) and
+  that puts `nfft_out` above `min_fft_size`. The smooth multiplier replaces the
+  prime-size filter, which the even requirement had made dead.
 - The divisor table is `_COLA_WINDOW_SIZE_DIVISOR` in `filters.py`. The sensor
-  resamples with the hamming window, `RESAMPLE_COLA_WINDOW` in
-  `striqt/sensor/lib/compute/corrections.py`, whose divisor is 2.
+  resamples with the hamming window on the default path (`RESAMPLE_COLA_WINDOW` in
+  `striqt/sensor/lib/compute/corrections.py`, divisor 2) and with the blackman window
+  on the oaresample path (`OARESAMPLE_COLA_WINDOW`, divisor 3). Each block is a
+  circular convolution, so the overlap-add leaks in-band energy out of band at the
+  level the window sets: about -61 dB for hamming and -82 dB for blackman at the
+  sensor's block sizes, at 2 and 3 STFT frames per hop.
 - `oaresample` and `resample` implement the design through STFT overlap-add.
-  `oafilter` is the same machinery used as a low-pass.
+  `oafilter` is the same machinery used as a low-pass. `oaresample` applies the
+  analysis low-pass as `_stft_fir_lowpass`: a block-length `firwin2` response with
+  the transition band centered on the cutoff, the band edges of `design_fir_lpf`,
+  multiplied onto the bins of each block.
 - `resample` fftshifts in the time domain (`time_fftshift`) so that downsampling
   becomes a slice of the frequency axis.
 

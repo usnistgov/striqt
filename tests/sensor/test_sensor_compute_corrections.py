@@ -148,7 +148,7 @@ def test_output_is_the_generator_from_index_zero(preset, array_backend):
 
 
 @PRESET_PARAMS
-def test_tone_phase_matches_the_generator(preset, array_backend):
+def test_tone_phase_matches_the_generator(preset, array_backend, resample_path):
     capture = preset_capture(
         'single_tone', **preset, frequency_offset=TONE_FREQUENCY, snr=None
     )
@@ -164,7 +164,9 @@ def test_tone_phase_matches_the_generator(preset, array_backend):
 
 
 @PRESET_PARAMS
-def test_impulse_level_through_the_stages(preset, array_backend, subtests):
+def test_impulse_level_through_the_stages(
+    preset, array_backend, subtests, resample_path
+):
     capture = preset_capture(
         'dirac_delta', **preset, time=IMPULSE_TIME, power=IMPULSE_POWER_DB
     )
@@ -176,15 +178,24 @@ def test_impulse_level_through_the_stages(preset, array_backend, subtests):
     impulse = expected_corrected('dirac_delta', capture)
 
     with subtests.test(stage='unfiltered'):
-        # a brick-wall resample keeps the N_out central bins of the flat spectrum
-        # and scales by N_out/N_in, so the on-sample impulse becomes fs/fs_sdr;
-        # the inverse FFT of a flat spectrum concentrates roundoff on the impulse's
-        # on-peak sample the way a tone's FFT does in its on-peak bin
-        ratio = fs / fs_sdr
-        tol = _resample_tol(preset, stages.raw)
-        if tol:
-            tol['atol'] = on_peak_roundoff(np.complex64) * amplitude * ratio
-        assert_close(unfiltered(stages.corrected), ratio * impulse, **tol)
+        x_unfiltered = unfiltered(stages.corrected)
+        if resample_path == 'oaresample' and preset is RESAMPLE_FILTER:
+            # the low-pass runs on the STFT bins inside the resampler, so the
+            # unfiltered stage of a filtered, resampled capture is the filtered one
+            assert np.array_equal(
+                to_numpy(x_unfiltered), to_numpy(filtered(stages.corrected))
+            )
+        else:
+            # a brick-wall resample keeps the N_out central bins of the flat
+            # spectrum and scales by N_out/N_in, so the on-sample impulse becomes
+            # fs/fs_sdr; the inverse FFT of a flat spectrum concentrates roundoff on
+            # the impulse's on-peak sample the way a tone's FFT does in its on-peak
+            # bin
+            ratio = fs / fs_sdr
+            tol = _resample_tol(preset, stages.raw)
+            if tol:
+                tol['atol'] = on_peak_roundoff(np.complex64) * amplitude * ratio
+            assert_close(x_unfiltered, ratio * impulse, **tol)
 
     with subtests.test(stage='filtered'):
         x_filtered = to_numpy(filtered(stages.corrected))
@@ -279,20 +290,22 @@ def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
     [(TONE_FREQUENCY, True), (OUT_OF_BAND_FREQUENCY, False)],
     ids=['in_band', 'out_of_band'],
 )
-def test_analysis_filter_passband(preset, frequency, passes, array_backend):
-    """the unfiltered waveform is the resampled tone at both frequencies. The filtered
-    waveform keeps the tone, with no delay, only inside `analysis_bandwidth`."""
+def test_analysis_filter_passband(
+    preset, frequency, passes, array_backend, resample_path
+):
+    """the filtered waveform is the resampled tone, with no delay, inside
+    `analysis_bandwidth`, and rejects the tone past the transition band on both paths"""
     capture = preset_capture(
         'single_tone', **preset, frequency_offset=frequency, snr=None
     )
     stages = acquire_corrected('single_tone', capture, array_backend=array_backend)
-    x_unfiltered = to_numpy(unfiltered(stages.corrected))
+    expected = to_numpy(expected_corrected('single_tone', capture))
     x_filtered = to_numpy(filtered(stages.corrected))
 
     if passes:
-        assert_close(x_filtered, x_unfiltered, atol=FIR_LEAKAGE)
+        assert_close(x_filtered, expected, atol=FIR_LEAKAGE)
     else:
-        assert rms(x_filtered) < FIR_LEAKAGE * rms(x_unfiltered)
+        assert rms(x_filtered) < FIR_LEAKAGE * rms(expected)
 
 
 # %% select: laziness and memoization
@@ -531,6 +544,34 @@ def test_oaresample_acquisition(preset, corrections_flags):
     assert_impulse_at(filtered(stages.corrected), capture, IMPULSE_TIME)
 
 
+def _stopband_to_passband_power(x, capture):
+    """return the ratio of the mean PSD past the transition band to the mean PSD inside
+    the passband of the analysis filter, from a windowed periodogram of `x`"""
+    seg = 4096
+    frames = x[0, : (x.shape[1] // seg) * seg].reshape(-1, seg) * np.hanning(seg)
+    psd = (np.abs(np.fft.fft(frames, axis=1)) ** 2).mean(0)
+    freqs = np.fft.fftfreq(seg, 1 / capture.sample_rate)
+    edge = capture.analysis_bandwidth / 2
+    passband = np.abs(freqs) < 0.8 * edge
+    stopband = np.abs(freqs) > edge + corrections.FIR_TRANSITION_BW
+    return psd[stopband].mean() / psd[passband].mean()
+
+
+def test_oaresample_leaks_in_band_noise_no_more_than_the_fir(corrections_flags):
+    """white noise through the resampled, filtered preset: the power that the
+    oaresample path leaves past the transition band is within the suite's FIR leakage
+    bound of what the time-domain FIR leaves there"""
+    capture = preset_capture('noise', **RESAMPLE_FILTER, noise_psd=1e-12)
+    ratios = {}
+    for path in ('resample', 'oaresample'):
+        corrections_flags(use_oaresample=path == 'oaresample')
+        stages = acquire_corrected('noise', capture)
+        x = to_numpy(filtered(stages.corrected))
+        ratios[path] = _stopband_to_passband_power(x, capture)
+    assert ratios['resample'] < FIR_LEAKAGE**2
+    assert ratios['oaresample'] <= ratios['resample'] + FIR_LEAKAGE**2
+
+
 # %% select: LO shift
 
 
@@ -571,9 +612,9 @@ def test_lo_shift_is_removed_from_the_output(lo_shift, frequency):
 @pytest.mark.parametrize(
     'design, host_resample, expected',
     [
-        ({'nfft': 550, 'nfft_out': 528}, True, True),
+        ({'nfft': 300, 'nfft_out': 288}, True, True),
         ({'nfft': 8192, 'nfft_out': 8192}, True, False),
-        ({'nfft': 550, 'nfft_out': 528}, False, False),
+        ({'nfft': 300, 'nfft_out': 288}, False, False),
     ],
     ids=['resamples', 'unity_ratio', 'firmware_rate'],
 )
@@ -751,7 +792,7 @@ def _drawn_capture(sample_rate, count, bandwidth_fraction):
 @example(sample_rate=12065e3, count=24977, bandwidth_fraction=0.5, max_lag=0.0)
 @soapy_record_examples(max_lag=0.0)
 def test_overlaps_cover_the_filter_and_trigger_pads(
-    sample_rate, count, bandwidth_fraction, max_lag
+    sample_rate, count, bandwidth_fraction, max_lag, resample_path
 ):
     capture = _drawn_capture(sample_rate, count, bandwidth_fraction)
     trigger = FakeTrigger(0.0, max_lag=max_lag)
@@ -760,14 +801,32 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
         capture, FUNCTION_SOURCE, min_overlap=lag_pad
     )
     fs = fs_sdr(capture)
+    design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
 
     assert lead >= 0 and tail >= 0
-    # the FIR transient spans FILTER_SIZE//2 samples at the output rate, where
-    # the analysis filter stage applies the filter, at each end of the record
-    filter_out = FILTER_SIZE // 2 if isfinite(capture.analysis_bandwidth) else 0
-    assert lead * capture.sample_rate / fs >= filter_out
-    # a trigger shift of up to max_lag then reads that far past the transient
-    assert tail * capture.sample_rate / fs >= filter_out + max_lag * capture.sample_rate
+    if resample_path == 'oaresample' and corrections.needs_resample(design, capture):
+        # the STFT low-pass has no transient beyond a block; each pad is one COLA
+        # overlap of the resampler, and the tail adds the trigger lag
+        overlap_scale = sw.fourier.design_oafilter(
+            design['nfft'],
+            window=design['window'],
+            nfft_out=design['nfft_out'],
+            nfft=design['nfft'],
+            extend=True,
+        )[2]
+        noverlap = round(design['nfft'] * overlap_scale)
+        assert lead >= noverlap
+        assert tail >= noverlap + lag_pad
+    else:
+        # the FIR transient spans FILTER_SIZE//2 samples at the output rate, where
+        # the analysis filter stage applies the filter, at each end of the record
+        filter_out = FILTER_SIZE // 2 if isfinite(capture.analysis_bandwidth) else 0
+        assert lead * capture.sample_rate / fs >= filter_out
+        # a trigger shift of up to max_lag then reads that far past the transient
+        assert (
+            tail * capture.sample_rate / fs
+            >= filter_out + max_lag * capture.sample_rate
+        )
     # the sum of the two is an overlap that read_iq accepts, and it asks the source
     # for exactly the padded resampler input
     read_count = buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=lead + tail)
@@ -802,21 +861,32 @@ def test_overlaps_pad_to_a_whole_resampler_block(
 
 
 DOCUMENTED_OVERLAPS = {
-    'resample_filter': (3125, 3125),
-    'resample_only': (350, 350),
-    'scale_only': (512, 512),
-    'filter_only': (4608, 4608),
+    'resample': {
+        'resample_filter': (3125, 3125),
+        'resample_only': (50, 50),
+        'scale_only': (512, 512),
+        'filter_only': (4608, 4608),
+    },
+    # the oaresample path sizes the blocks of the resampled presets from
+    # MIN_OARESAMPLE_FFT_SIZE with the blackman window; a preset served at the
+    # firmware rate pads for the FIR as on the default path
+    'oaresample': {
+        'resample_filter': (12500, 12500),
+        'resample_only': (12000, 17500),
+        'scale_only': (512, 512),
+        'filter_only': (4608, 4608),
+    },
 }
 
 
 @pytest.mark.parametrize('name', list(PRESETS))
-def test_preset_overlaps_are_acquirable(name):
-    """the preset overlaps equal the values documented in `synthetic_sources`. A change
-    in the overlap sizing then fails here rather than as unrelated acquisition
-    failures."""
+def test_preset_overlaps_are_acquirable(name, resample_path):
+    """the preset overlaps equal the documented values of each path (the default
+    path's are in `synthetic_sources`). A change in the overlap sizing then fails here
+    rather than as unrelated acquisition failures."""
     capture = preset_capture('single_tone', **PRESETS[name])
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
-    assert overlaps == DOCUMENTED_OVERLAPS[name]
+    assert overlaps == DOCUMENTED_OVERLAPS[resample_path][name]
 
 
 # %% acquisitions with odd or non-integral source-rate pads
@@ -852,7 +922,7 @@ def test_source_record_size_rounds_an_exact_half_sample_up():
     below the half and would round down."""
     capture = _drawn_capture(1e7, 23076, inf)
     design = corrections.design_resampler(capture, FUNCTION_SOURCE.master_clock_rate)
-    assert (design['nfft'], design['nfft_out']) == (550, 528)
+    assert (design['nfft'], design['nfft_out']) == (300, 288)
     assert corrections.source_record_size(capture, design) == 24038
     assert round(capture.duration * design['fs_sdr']) == 24037
 
@@ -886,7 +956,7 @@ def test_oaresample_pads_use_the_exact_record_size(corrections_flags):
 
 
 def test_resample_rejects_a_length_that_does_not_divide():
-    """6.25 MS/s to 6 MS/s is 25:24. One sample more than the (350, 350) overlaps
+    """6.25 MS/s to 6 MS/s is 25:24. One sample more than the (50, 50) overlaps
     leaves a padded length that is not a multiple of 25."""
     capture = preset_capture('dirac_delta', **RESAMPLE_ONLY, time=IMPULSE_TIME)
     lead, tail = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)

@@ -291,8 +291,11 @@ stages, in order:
    stage that reads `x`, and the one that may consume `x` in place under
    `overwrite_x`.
 2. Conjugate for a high-side LO. `STRIQT_IGNORE_HIGHSIDE_LO` disables the conjugation.
-3. FIR low-pass to `analysis_bandwidth`. The filter runs only for a measurement
-   registered `prefer_filtered=True` on a finite bandwidth.
+3. Low-pass to `analysis_bandwidth`: the 4001-tap FIR on the default path, or the
+   response on the STFT bins inside `_oaresample` on the oaresample path, with the
+   same band edges (`FIR_TRANSITION_BW` centered on half the bandwidth). The FIR runs
+   only for a measurement registered `prefer_filtered=True` on a finite bandwidth;
+   the oaresample path filters the resampled waveform for every measurement.
 4. Trim to `duration`.
 5. Run the `signal_trigger` and shift. This stage runs for a measurement registered
    `prefer_aligned=True` when a trigger is set. The trigger measurement receives the

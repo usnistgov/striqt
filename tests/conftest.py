@@ -522,6 +522,14 @@ def corrections_flags(monkeypatch):
     sw.util.clear_caches()
 
 
+@pytest.fixture(params=('resample', 'oaresample'))
+def resample_path(request, corrections_flags):
+    """run the test on the default resampler and on the oaresample path in turn, and
+    return the name of the path"""
+    corrections_flags(use_oaresample=request.param == 'oaresample')
+    return request.param
+
+
 @pytest.fixture
 def armed_tone_controller(isolated_lookup):
     """yield a `single_tone` Controller on the synthetic function source, armed with

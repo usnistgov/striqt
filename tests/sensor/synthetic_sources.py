@@ -44,7 +44,7 @@ SIGNAL_KWS = {
 }
 
 # the 4 signal paths of the conditioning stages. Measured overlaps from SOURCE: 3125/3125,
-# 350/350, 512/512 and 4608/4608 at fs_sdr 6.25e6, 6.25e6, 15.36e6 and 7.68e6.
+# 50/50, 512/512 and 4608/4608 at fs_sdr 6.25e6, 6.25e6, 15.36e6 and 7.68e6.
 # Both durations are multiples of the 1/8000 s detector period.
 RESAMPLE_FILTER = {
     'port': (0, 1),

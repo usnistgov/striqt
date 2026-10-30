@@ -63,8 +63,16 @@ class TestFilterDesign:
             (1200, {'window': 'hann'}, TypeError, "'blackmanharris'.*, not 'hann'"),
             (1210, {'window': 'blackman', 'nfft_out': 121}, ValueError, '% 3'),
             (1000, {'window': 'hamming'}, ValueError, 'integer multiple of noverlap'),
+            (1230, {'window': 'blackman', 'nfft_out': 123}, ValueError, 'must be even'),
+            (1200, {'window': 'rect', 'nfft': 125}, ValueError, 'must be even'),
         ],
-        ids=['unsupported_window', 'nfft_out_off_divisor', 'size_off_noverlap'],
+        ids=[
+            'unsupported_window',
+            'nfft_out_off_divisor',
+            'size_off_noverlap',
+            'odd_nfft_out',
+            'odd_nfft',
+        ],
     )
     def test_design_oafilter_errors(self, size, kws, exc, match):
         kws = {'nfft_out': 120, 'nfft': 120, 'extend': False, **kws}
@@ -92,15 +100,23 @@ class TestFilterDesign:
         assert abs(level_error_dB(b.sum())) < level_tolerance_dB(FIR_LEAKAGE)
 
     def test_fir_lowpass_fft_response(self):
+        """the transition band is centered on the cutoff, as in `design_fir_lpf`: unity
+        below ``cutoff - transition/2``, zero above ``cutoff + transition/2``, and
+        half gain (-6 dB) at the cutoff"""
         size = 256
-        H = _fir_lowpass_fft(size, 1.0, cutoff=0.1, transition=0.05)
+        cutoff, transition = 0.1, 0.05
+        H = _fir_lowpass_fft(size, 1.0, cutoff=cutoff, transition=transition)
         freqs = fftfreq(size, 1.0)
         assert H.shape == (size,) and H.dtype == np.complex64
 
-        passband = np.abs(freqs) < 0.08
-        stopband = np.abs(freqs) > 0.1 + 0.05 + 2 / size
+        passband = np.abs(freqs) < cutoff - transition / 2 - 2 / size
+        stopband = np.abs(freqs) > cutoff + transition / 2 + 2 / size
         assert np.abs(np.abs(H[passband]) - 1).max() < FIR_LEAKAGE
         assert np.abs(H[stopband]).max() < FIR_LEAKAGE
+        # the ramp is linear over the transition, so the gain at the cutoff is 1/2
+        # within the slope times half a bin
+        at_cutoff = np.abs(H[np.argmin(np.abs(freqs - cutoff))])
+        assert abs(at_cutoff - 0.5) < (1 / size) / transition / 2 + FIR_LEAKAGE
 
     @pytest.mark.parametrize('cutoff', [np.inf, 0.5])
     def test_fir_lowpass_fft_cutoff_at_or_past_nyquist_is_allpass(self, cutoff):
@@ -115,7 +131,7 @@ class TestFilterDesign:
         freqs = fftfreq(size, 1.0)
         assert H.shape == (size,) and H.dtype == np.complex64
 
-        passband = np.abs(freqs) < 0.38
+        passband = np.abs(freqs) < 0.4 - 0.15 - 2 / size
         assert np.abs(np.abs(H[passband]) - 1).max() < FIR_LEAKAGE
         # firwin2 constrains an even-length (type II) design to zero gain at nyquist
         assert np.abs(H[np.argmin(freqs)]) < FIR_LEAKAGE
