@@ -22,9 +22,11 @@ Per design the tables report:
   output samples) of the response above -60 dBc, the rms level (dBc) over a fixed
   span each side beyond the FIR half-length ``FILTER_SIZE // 2``, and the rms
   difference from the FIR path's response
-- time per call (CUDA event time on cupy, wall time on numpy), and a closing table of the time of
-  each correction stage per record (resample, and the FIR on the default path) with
-  the ratio of record duration to correction time
+- time per call (CUDA event time on cupy, wall time on numpy) on the ``--ports``-port
+  record (default 2, the ADA capture; the level, leakage, and impulse tables read
+  port 0), and a closing table of the time of each correction stage per record
+  (resample, and the FIR on the default path) with the ratio of record duration to
+  correction time
 
 Usage:
     pixi run -e test39 python chores/tests/evaluate_oaresample_filter.py --backend numpy
@@ -237,18 +239,20 @@ def tone_frequencies() -> list[tuple[str, float]]:
     ]
 
 
-def tone_levels(design: Design, count: int, xp: Any) -> dict[str, float]:
+def tone_levels(design: Design, count: int, ports: int, xp: Any) -> dict[str, float]:
     levels = {}
     for label, frequency in tone_frequencies():
-        x = testing.tone(None, design.fs_sdr, frequency=frequency, count=count, xp=xp)
+        x = testing.tone(
+            None, design.fs_sdr, frequency=frequency, count=count, ports=ports, xp=xp
+        )
         y = to_numpy(run(design, x, xp))
         levels[label] = db(rms_power(interior(y, design)))
     return levels
 
 
-def noise_leakage(design: Design, count: int, xp: Any) -> float:
+def noise_leakage(design: Design, count: int, ports: int, xp: Any) -> float:
     """return the stopband-to-passband PSD ratio (dB) of white noise input."""
-    x = testing.circular_awgn(None, design.fs_sdr, count=count, xp=xp, seed=1)
+    x = noise_record(design, count, ports, xp, seed=1)
     y = interior(to_numpy(run(design, x, xp)), design)
     seg = PSD_SEGMENT
     frames = y[: (y.size // seg) * seg].reshape(-1, seg) * np.hanning(seg)
@@ -274,13 +278,18 @@ class ImpulseResult:
     """rms level (dBc) over `TAIL_SPAN` samples each side beyond ``FILTER_SIZE // 2``"""
 
 
-def impulse_response(design: Design, count: int, xp: Any) -> ImpulseResult:
+def impulse_response(design: Design, count: int, ports: int, xp: Any) -> ImpulseResult:
     # an input index that maps onto a whole output sample
     step = design.nfft // math.gcd(design.nfft, design.nfft_out)
     index_in = (count // 2) // step * step
     index_out = index_in * design.nfft_out // design.nfft
     x = testing.dirac_delta(
-        None, design.fs_sdr, time=index_in / design.fs_sdr, count=count, xp=xp
+        None,
+        design.fs_sdr,
+        time=index_in / design.fs_sdr,
+        count=count,
+        ports=ports,
+        xp=xp,
     )
     y = to_numpy(run(design, x, xp))[0]
     mag = np.abs(y)
@@ -300,6 +309,15 @@ def impulse_response(design: Design, count: int, xp: Any) -> ImpulseResult:
         width=int(np.count_nonzero(mag > mag[peak] * 10 ** (IMPULSE_FLOOR_DBC / 20))),
         tail_dBc=db(rms_power(tail) / mag[peak] ** 2),
     )
+
+
+def noise_record(design: Design, count: int, ports: int, xp: Any, seed: int) -> Any:
+    """return a white-noise record in the C-contiguous ``(port, sample)`` layout of an
+    acquisition buffer; `circular_awgn` interleaves the ports in memory."""
+    x = testing.circular_awgn(
+        None, design.fs_sdr, count=count, ports=ports, xp=xp, seed=seed
+    )
+    return xp.ascontiguousarray(x)
 
 
 def _median_time(func: Any, repeat: int, *args: Any) -> float:
@@ -323,12 +341,14 @@ def _median_time(func: Any, repeat: int, *args: Any) -> float:
     return float(np.median(times))
 
 
-def stage_times(design: Design, count: int, xp: Any, repeat: int) -> dict[str, float]:
+def stage_times(
+    design: Design, count: int, ports: int, xp: Any, repeat: int
+) -> dict[str, float]:
     """return the median time (s) of each correction stage on a noise record.
 
     The keys are ``'resample'`` and, for the default path, ``'filter'``.
     """
-    x = testing.circular_awgn(None, design.fs_sdr, count=count, xp=xp, seed=2)
+    x = noise_record(design, count, ports, xp, seed=2)
     times = {'resample': _median_time(resample_stage, repeat, design, x, xp)}
     if design.fir:
         y = resample_stage(design, x, xp)
@@ -336,9 +356,9 @@ def stage_times(design: Design, count: int, xp: Any, repeat: int) -> dict[str, f
     return times
 
 
-def wall_time(design: Design, count: int, xp: Any, repeat: int) -> float:
+def wall_time(design: Design, count: int, ports: int, xp: Any, repeat: int) -> float:
     """return the median time (s) of `run` on a noise record."""
-    x = testing.circular_awgn(None, design.fs_sdr, count=count, xp=xp, seed=2)
+    x = noise_record(design, count, ports, xp, seed=2)
     return _median_time(run, repeat, design, x, xp)
 
 
@@ -371,6 +391,12 @@ def main() -> None:
     )
     parser.add_argument(
         '--duration', type=float, default=0.02, help='record length (s)'
+    )
+    parser.add_argument(
+        '--ports',
+        type=int,
+        default=2,
+        help='receive ports in the record, as the (port, sample) axis of a capture',
     )
     parser.add_argument('--repeat', type=int, default=5, help='timing repetitions')
     parser.add_argument('--backend', choices=('cupy', 'numpy'), default='cupy')
@@ -409,8 +435,8 @@ def main() -> None:
     counts = {d.name: signal_count(args.duration, d) for d in designs}
     fs_sdr = designs[0].fs_sdr
     print(
-        f'{min(counts.values())} to {max(counts.values())} samples per design '
-        f'at {fs_sdr / 1e6:g} MS/s -> {SAMPLE_RATE / 1e6:g} MS/s, '
+        f'{args.ports} ports x {min(counts.values())} to {max(counts.values())} '
+        f'samples per design at {fs_sdr / 1e6:g} MS/s -> {SAMPLE_RATE / 1e6:g} MS/s, '
         f'bw {ANALYSIS_BANDWIDTH / 1e6:g} MHz, transition {TRANSITION_BW / 1e3:g} kHz'
     )
 
@@ -433,11 +459,13 @@ def main() -> None:
     labels = [label for label, _ in tone_frequencies()]
     rows = []
     for d in designs:
-        levels = tone_levels(d, counts[d.name], xp)
+        levels = tone_levels(d, counts[d.name], args.ports, xp)
         rows.append([d.name] + [f'{levels[label]:.1f}' for label in labels])
     print_table('tone level (dB) by frequency', ['design'] + labels, rows)
 
-    impulses = {d.name: impulse_response(d, counts[d.name], xp) for d in designs}
+    impulses = {
+        d.name: impulse_response(d, counts[d.name], args.ports, xp) for d in designs
+    }
     reference = impulses[designs[0].name].response
     rows = []
     for d in designs:
@@ -445,13 +473,13 @@ def main() -> None:
         diff = db(rms_power(r.response - reference) / rms_power(reference))
         rows.append([
             d.name,
-            f'{noise_leakage(d, counts[d.name], xp):.1f}',
+            f'{noise_leakage(d, counts[d.name], args.ports, xp):.1f}',
             f'{r.peak_dB:+.3f}',
             str(r.peak_offset),
             str(r.width),
             f'{r.tail_dBc:.1f}',
             f'{diff:.1f}' if d is not designs[0] else '-',
-            f'{wall_time(d, counts[d.name], xp, args.repeat) * 1e3:.1f}',
+            f'{wall_time(d, counts[d.name], args.ports, xp, args.repeat) * 1e3:.1f}',
         ])
     print_table(
         'leakage, impulse response, and time',
@@ -472,7 +500,7 @@ def main() -> None:
     for d in designs:
         n = counts[d.name]
         record = n / d.fs_sdr
-        times = stage_times(d, n, xp, args.repeat)
+        times = stage_times(d, n, args.ports, xp, args.repeat)
         total = sum(times.values())
         rows.append([
             d.name,

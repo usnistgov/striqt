@@ -289,6 +289,11 @@ def _stack_stft_windows(
         )
 
     w = _broadcast_onto(window / scale, xstacked, axis=axis + 1)
+    if out is None:
+        # a fresh C-contiguous buffer: numpy and cupy would otherwise lay the result
+        # out like the strided view of `x`, and a Fortran-ordered `x` then leaves the
+        # FFT axis strided for every later stage
+        out = xp.empty(xstacked.shape, dtype=xstacked.dtype)
     return xp.multiply(xstacked, w.astype(xstacked.dtype), out=out)
 
 
