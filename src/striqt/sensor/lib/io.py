@@ -6,6 +6,7 @@ the class bound under the ``sensor_binding`` tag unless a `type` is given.
 
 from __future__ import annotations as __
 
+import contextlib
 import shutil
 import sys
 import warnings
@@ -377,6 +378,12 @@ def read_calibration(
 ) -> xr.Dataset | None:
     if path is None:
         return None
+
+    # `format_path` blocks on the source id until the radio opens; the modules that
+    # the read needs load during that wait
+    _ = xr.__version__
+    with contextlib.suppress(ImportError):
+        import netCDF4  # noqa: F401
 
     if format_path is not None:
         path = format_path(path)
