@@ -15,7 +15,7 @@ from .. import util
 from ..arrays import array_namespace, axis_slice, isroundmod, pad_along_axis
 from ..util import np
 from .fft import _broadcast_onto, fft, ifft, time_fftshift, time_ifftshift
-from .filters import _COLA_WINDOW_SIZE_DIVISOR, _stft_fir_lowpass, design_oafilter
+from .filters import _COLA_WINDOW_SIZE_DIVISOR, _fir_lowpass_fft, design_oafilter
 from .stft import _find_downsample_copy_range, istft, stft
 
 if typing.TYPE_CHECKING:
@@ -397,15 +397,45 @@ def oaresample(
     transition_bandwidth: float = 250e3,
     scale: Array | float = 1.0,
 ):
-    """apply resampler implemented through STFT overlap-and-add.
+    """resample `x` by ``up / down`` through STFT overlap-add.
+
+    Each STFT block of `down` samples is cropped or zero-padded to `up` bins, scaled
+    by the low-pass response and `scale`, and overlap-added at the output rate. The
+    response has the band edges of `design_fir_lpf`: the gain is 1/2 at
+    ``filter_bandwidth / 2`` and the transition is centered there.
+
+    Args:
+        x: the waveform, with time on `axis`; its length must be a whole number of
+            STFT hops, ``down + k * (down - noverlap)``
+        up: the output block size (in samples), an even multiple of the COLA divisor
+            of `window`
+        down: the input block size (in samples), an even multiple of the COLA
+            divisor of `window`
+        fs: the sample rate (in S/s) of `x`
+        window: the COLA window of the STFT, a key of the divisor table
+        overwrite_x: True permits the STFT to consume the buffer of `x`
+        axis: the time axis of `x`
+        frequency_shift: the frequency (in Hz) moved to the output DC, a multiple of
+            ``fs / down``; 0 keeps the center frequency
+        filter_bandwidth: the passband width (in Hz) of the low-pass; None or
+            ``inf`` applies no low-pass
+        transition_bandwidth: the width (in Hz) of the low-pass transition band
+        scale: a voltage gain, a scalar or one value per entry of the axis before
+            `axis`
 
     Returns:
-        the filtered IQ capture
+        the waveform at ``fs * up / down`` on `axis`, of ``x.shape[axis] * up //
+        down`` samples, in the dtype and array namespace of `x`
+
+    Raises:
+        ValueError: if `frequency_shift` is nonzero while upsampling, is not a
+            multiple of ``fs / down``, or moves the output band past an edge of the
+            input band; if `up` or `down` is odd or not a multiple of the COLA
+            divisor; or if `window` has no COLA divisor
     """
 
     nfft = down
     nfft_out = up
-    size_in = x.size
 
     nfft_out, noverlap, overlap_scale, _ = design_oafilter(
         x.size,
@@ -432,49 +462,116 @@ def oaresample(
     else:
         raise ValueError('frequency_shift must be a multiple of fs/down')
 
-    y = stft(
-        x,
-        fs=fs,
-        window=window,
-        nperseg=nfft,
-        noverlap=round(nfft * overlap_scale),
-        axis=axis,
-        truncate=False,
-        overwrite_x=overwrite_x,
-        return_axis_arrays=False,
+    xp = array_namespace(x)
+    y = typing.cast(
+        'Array',
+        stft(
+            x,
+            fs=fs,
+            window=window,
+            nperseg=nfft,
+            noverlap=round(nfft * overlap_scale),
+            axis=axis,
+            truncate=False,
+            overwrite_x=overwrite_x,
+            return_axis_arrays=False,
+        ),
     )
-
-    if nfft_out < nfft:
-        # downsample
-        bounds = _find_downsample_copy_range(nfft, nfft_out, edge_low, edge_high)[1]
-        y = axis_slice(y, *bounds, axis=axis + 1)
-
-    elif nfft_out > nfft:
-        # upsample
-        pad_left = (nfft_out - nfft) // 2
-        pad_right = pad_left + (nfft_out - nfft) % 2
-
-        y = pad_along_axis(y, [[pad_left, pad_right]], axis=axis + 1)
-
     del x
 
-    if filter_bandwidth is not None and isfinite(filter_bandwidth):
-        y = _stft_fir_lowpass(
-            y,
-            sample_rate=fs * up / down,
-            bandwidth=filter_bandwidth,
-            transition_bandwidth=transition_bandwidth,
-            axis=axis,
-            out=y,
+    if nfft_out <= nfft:
+        bounds_out, bounds_in, _ = _find_downsample_copy_range(
+            nfft, nfft_out, edge_low, edge_high
         )
+    else:
+        pad_left = (nfft_out - nfft) // 2
+        bounds_in = (0, nfft)
+        bounds_out = (pad_left, pad_left + nfft)
 
-    # reconstruct into a resampled waveform
-    x = istft(y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True)
-
-    xp = array_namespace(x)
+    # the low-pass, the COLA rate scale, and the caller's scale are one multiply
+    # applied while the bins are copied
+    if filter_bandwidth is not None and isfinite(filter_bandwidth):
+        gain = _fir_lowpass_fft(
+            nfft_out,
+            sample_rate=fs * up / down,
+            cutoff=filter_bandwidth / 2,
+            transition=transition_bandwidth,
+            dtype=typing.cast(str, y.dtype),
+            window='rect',
+            xp=xp,
+        )
+    else:
+        gain = xp.ones(nfft_out, dtype=y.dtype)
+    gain = _broadcast_onto(gain * (nfft_out / nfft), y, axis=axis + 1)
     if np.ndim(scale) == 1:
         # one gain per entry of the axis that is not resampled, as in `resample`
-        scale = _broadcast_onto(xp.asarray(scale), x, axis=max(axis - 1, 0))
-    x *= x.size / size_in * scale
+        gain = gain * _broadcast_onto(xp.asarray(scale), y, axis=max(axis - 1, 0))
+    else:
+        gain = gain * scale
 
-    return x
+    y = _copy_bins_to_fftfreq_order(
+        y, nfft_out, bounds_in, bounds_out, gain=gain.astype(y.dtype), axis=axis
+    )
+
+    return istft(
+        y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True, fftshift=False
+    )
+
+
+def _copy_bins_to_fftfreq_order(
+    y: Array,
+    nfft_out: int,
+    bounds_in: tuple[int, int],
+    bounds_out: tuple[int, int],
+    *,
+    gain: Array,
+    axis: int,
+) -> Array:
+    """return the `bounds_in` bins of each STFT segment of `y` as `nfft_out` bins in
+    `fftfreq` order.
+
+    `y` has segments on `axis` and bins in ascending frequency order on ``axis + 1``.
+    The copied bins occupy the ascending-order range `bounds_out` of the output, and
+    the other output bins are zero. The output is a new contiguous array of `nfft_out`
+    bins on ``axis + 1`` and the dtype of `y`.
+
+    Args:
+        y: the STFT
+        nfft_out: the even number of output bins
+        bounds_in: the ``(start, stop)`` ascending-order bins of `y` that are copied
+        bounds_out: the ``(start, stop)`` ascending-order output bins that receive
+            the copy, of the same length as `bounds_in`
+        gain: the multiplier of the copied bins, in ascending order on ``axis + 1``
+            and broadcastable onto the output
+        axis: the segment axis of `y`
+    """
+    xp = array_namespace(y)
+    shape = list(y.shape)
+    shape[axis + 1] = nfft_out
+    out = xp.empty(shape, dtype=y.dtype)
+
+    half = nfft_out // 2
+    bin_axis = axis + 1
+
+    def fftfreq_order_chunks(start: int, stop: int):
+        # split an ascending-order range at the DC bin, since each half maps onto one
+        # contiguous range of fftfreq-order bins
+        for a, b in ((start, min(stop, half)), (max(start, half), stop)):
+            if b > a:
+                yield a, b, (a + half) % nfft_out
+
+    for a, b, dest in (
+        *fftfreq_order_chunks(0, bounds_out[0]),
+        *fftfreq_order_chunks(bounds_out[1], nfft_out),
+    ):
+        xp.copyto(axis_slice(out, dest, dest + b - a, axis=bin_axis), 0)
+
+    offset = bounds_in[0] - bounds_out[0]
+    for a, b, dest in fftfreq_order_chunks(*bounds_out):
+        xp.multiply(
+            axis_slice(y, a + offset, b + offset, axis=bin_axis),
+            axis_slice(gain, a, b, axis=bin_axis),
+            out=axis_slice(out, dest, dest + b - a, axis=bin_axis),
+        )
+
+    return out

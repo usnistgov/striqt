@@ -23,6 +23,7 @@ _COLA_WINDOW_SIZE_DIVISOR = {
     None: 1,
     'rect': 1,
     'hamming': 2,
+    'hann': 2,
     'blackman': 3,
     'blackmanharris': 5,
 }
@@ -54,7 +55,7 @@ def design_oafilter(
 
     if window is None or window == 'rect':
         overlap_scale = 1
-    elif window == 'hamming':
+    elif window in ('hamming', 'hann'):
         overlap_scale = 1 / 2
     elif window == 'blackman':
         overlap_scale = 2 / 3

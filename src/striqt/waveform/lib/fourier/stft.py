@@ -184,12 +184,12 @@ def istft(
     out=None,
     overwrite_x=False,
     axis=0,
+    fftshift: bool = True,
 ) -> Array:
     """reconstruct the waveform from the STFT `y` by inverse FFT and overlap-add.
 
-    `y` has windows on `axis` and `nfft` frequency bins in ascending `fftfreq` order
-    on ``axis + 1``, the layout that `stft` returns. The windows are overlap-added at
-    a hop of ``nfft - noverlap`` samples.
+    `y` has windows on `axis` and `nfft` frequency bins on ``axis + 1``. The windows
+    are overlap-added at a hop of ``nfft - noverlap`` samples.
 
     Args:
         y: the STFT, with at least 2 dimensions
@@ -202,6 +202,10 @@ def istft(
             `out`
         overwrite_x: if True, `y` is overwritten by the inverse FFT of each window
         axis: the window axis of `y`
+        fftshift: True for bins in the ascending-frequency order that `stft` returns,
+            which multiplies each inverse transform by the half-band shift of the
+            analysis window; False for bins in `fftfreq` order, which skips that
+            multiply
 
     Returns:
         the waveform on `axis`, in the dtype and array namespace of `y`, of
@@ -220,17 +224,18 @@ def istft(
         out=y if overwrite_x else None,
     )
 
-    # correct the fft shift in the time domain, since the
-    # multiply operation can be applied in-place
-    w = get_window('rect', nfft, xp=xp, dtype=dtype, fftshift=True)
-    wstack = _broadcast_onto(w, xstack, axis=axis + 1)
-    xstack = xp.multiply(
-        xstack,
-        wstack,
-        out=xstack,
-        dtype=xstack.dtype,
-    )
-    assert xstack.dtype == dtype
+    if fftshift:
+        # correct the fft shift in the time domain, since the
+        # multiply operation can be applied in-place
+        w = get_window('rect', nfft, xp=xp, dtype=dtype, fftshift=True)
+        wstack = _broadcast_onto(w, xstack, axis=axis + 1)
+        xstack = xp.multiply(
+            xstack,
+            wstack,
+            out=xstack,
+            dtype=xstack.dtype,
+        )
+        assert xstack.dtype == dtype
 
     x = _unstack_stft_windows(
         xstack, noverlap=noverlap, nperseg=nfft, axis=axis, out=out
@@ -335,25 +340,22 @@ def _unstack_stft_windows(
     )
     xp.copyto(xr_slice, 0)
 
-    # for speed, sum up in groups of non-overlapping windows
-    for offs in range(nfft // hop_size):
-        yslice = axis_slice(y, start=offs, step=nfft // hop_size, axis=axis)
-        yshape = yslice.shape
-
-        yslice = yslice.reshape(
-            yshape[:axis] + (yshape[axis] * yshape[axis + 1],) + yshape[axis + 2 :]
+    # sum in groups of non-overlapping windows. The strided group of windows is
+    # added into the output span viewed as (windows, nfft): splitting the contiguous
+    # time axis is a view, where merging the strided window axis would copy
+    group_count = nfft // hop_size
+    for offs in range(group_count):
+        windows = axis_slice(y, start=offs, step=group_count, axis=axis)
+        start = offs * hop_size
+        span = axis_slice(
+            xr, start=start, stop=start + windows.shape[axis] * nfft, axis=axis
         )
-        xr_slice = axis_slice(
-            xr,
-            start=offs * hop_size,
-            stop=offs * hop_size + yslice.shape[axis],
-            axis=axis,
-        )
+        span = span.reshape(windows.shape)
 
         if offs == 0:
-            xp.copyto(xr_slice, yslice[: xr_slice.size])
+            xp.copyto(span, windows)
         else:
-            xr_slice += yslice[: xr_slice.size]
+            span += windows
 
     return xr
 

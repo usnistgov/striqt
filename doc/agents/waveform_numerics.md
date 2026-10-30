@@ -76,13 +76,22 @@ shim is `striqt.waveform.fourier`.
   `striqt/sensor/lib/compute/corrections.py`, divisor 2) and with the blackman window
   on the oaresample path (`OARESAMPLE_COLA_WINDOW`, divisor 3). Each block is a
   circular convolution, so the overlap-add leaks in-band energy out of band at the
-  level the window sets: about -61 dB for hamming and -82 dB for blackman at the
-  sensor's block sizes, at 2 and 3 STFT frames per hop.
+  level the window sets. At the ADA block sizes (`chores/tests/evaluate_oaresample_filter.py`)
+  the leakage is about -56 dB for hamming, -98 dB for hann, and -102 dB for blackman,
+  at 2, 2, and 3 STFT frames per hop; the hamming edge pedestal, not the frame count,
+  sets its floor.
 - `oaresample` and `resample` implement the design through STFT overlap-add.
   `oafilter` is the same machinery used as a low-pass. `oaresample` applies the
-  analysis low-pass as `_stft_fir_lowpass`: a block-length `firwin2` response with
-  the transition band centered on the cutoff, the band edges of `design_fir_lpf`,
-  multiplied onto the bins of each block.
+  analysis low-pass as the block-length `firwin2` response of `_fir_lowpass_fft`,
+  with the transition band centered on the cutoff (the band edges of
+  `design_fir_lpf`). The response, the `nfft_out / nfft` rate scale, and the caller's
+  `scale` are one multiplier applied while the bins of each block are copied into a
+  contiguous `nfft_out`-bin buffer in `fftfreq` order (`_copy_bins_to_fftfreq_order`),
+  so `istft` runs the inverse FFT in place with ``fftshift=False`` and no time-domain
+  shift multiply. The overlap-add in `_unstack_stft_windows` adds each strided group
+  of windows into the output span viewed as ``(windows, nfft)`` without a copy. On
+  the TX2i these stages are memory-bound at about 60 GB/s, so each avoided pass over
+  the stacked frames is a measurable fraction of the call.
 - `resample` fftshifts in the time domain (`time_fftshift`) so that downsampling
   becomes a slice of the frequency axis.
 

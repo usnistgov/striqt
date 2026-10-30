@@ -155,7 +155,7 @@ class TestColaResamplerDesign:
             ({'bw': 10e6, 'shift': 'sideways'}, 'shift argument'),
             ({'bw': 10e6, 'shift': 'left', 'fs_base': 20e6}, 'minimum'),
             ({'fs_target': 125e6 / np.pi}, 'no rational FFT sizes'),
-            ({'window': 'hann'}, "'blackmanharris'.*, not 'hann'"),
+            ({'window': 'flattop'}, "'blackmanharris'.*, not 'flattop'"),
         ],
         ids=[
             'shift_without_bandwidth',
@@ -223,7 +223,7 @@ class TestResample:
         'kws, match',
         [
             ({'num': 128, 'domain': 'bogus'}, 'domain'),
-            ({'num': 128, 'window': 'hann'}, 'window'),
+            ({'num': 128, 'window': 'flattop'}, 'window'),
             ({'num': 512, 'shift': 1}, 'downsampling'),
             ({'num': 128, 'shift': -100}, 'too small'),
             ({'num': 128, 'shift': 100}, 'too large'),
@@ -314,7 +314,7 @@ class TestOaresample:
         for row, gain in zip(yi, scale):
             assert_tone_level(row[np.newaxis], gain)
 
-    @pytest.mark.parametrize('window', ['hamming', 'blackman'])
+    @pytest.mark.parametrize('window', ['hamming', 'hann', 'blackman'])
     def test_filter_bandwidth(self, window):
         """a tone inside the passband keeps its level; a tone past the transition band
         (``bw/2 + transition/2``) is rejected below the block-size floor"""

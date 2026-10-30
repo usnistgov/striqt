@@ -41,6 +41,7 @@ class TestFilterDesign:
         'window, overlap_scale',
         [
             ('hamming', 1 / 2),
+            ('hann', 1 / 2),
             ('blackman', 2 / 3),
             ('blackmanharris', 4 / 5),
             ('rect', 1),
@@ -60,7 +61,12 @@ class TestFilterDesign:
     @pytest.mark.parametrize(
         'size, kws, exc, match',
         [
-            (1200, {'window': 'hann'}, TypeError, "'blackmanharris'.*, not 'hann'"),
+            (
+                1200,
+                {'window': 'flattop'},
+                TypeError,
+                "'blackmanharris'.*, not 'flattop'",
+            ),
             (1210, {'window': 'blackman', 'nfft_out': 121}, ValueError, '% 3'),
             (1000, {'window': 'hamming'}, ValueError, 'integer multiple of noverlap'),
             (1230, {'window': 'blackman', 'nfft_out': 123}, ValueError, 'must be even'),

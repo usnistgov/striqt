@@ -65,7 +65,7 @@ BW_LO = 0.25e6
 MIN_OVERSAMPLING = 1.1
 
 DEFAULT_MIN_FFT_SIZES = (4096 - 1, 4 * 4096 - 1, 16 * 4096 - 1)
-DEFAULT_WINDOWS = ('hamming', 'blackman')
+DEFAULT_WINDOWS = ('hamming', 'hann', 'blackman')
 
 PSD_SEGMENT = 8192
 IMPULSE_FLOOR_DBC = -60.0
@@ -366,7 +366,7 @@ def main() -> None:
         '--window',
         nargs='+',
         default=list(DEFAULT_WINDOWS),
-        choices=('hamming', 'blackman', 'blackmanharris'),
+        choices=('hamming', 'hann', 'blackman', 'blackmanharris'),
         help='OARESAMPLE_COLA_WINDOW candidates',
     )
     parser.add_argument(
@@ -374,6 +374,11 @@ def main() -> None:
     )
     parser.add_argument('--repeat', type=int, default=5, help='timing repetitions')
     parser.add_argument('--backend', choices=('cupy', 'numpy'), default='cupy')
+    parser.add_argument(
+        '--plan-cache',
+        action='store_true',
+        help='keep the cuFFT plan cache that configure_cupy disables in operation',
+    )
     parser.add_argument(
         '--save', default=None, help='.npz path for the impulse responses'
     )
@@ -387,6 +392,8 @@ def main() -> None:
 
         cp = cupy
         sw.arrays.configure_cupy()
+        if args.plan_cache:
+            cupy.fft.config.get_plan_cache().set_size(16)
         xp: Any = cp
         device = cp.cuda.runtime.getDeviceProperties(0)['name'].decode()
     else:
@@ -394,7 +401,8 @@ def main() -> None:
         device = 'none'
     print(
         f'{platform.machine()} numpy {np.__version__} '
-        f'cupy {getattr(cp, "__version__", "-")} device: {device}'
+        f'cupy {getattr(cp, "__version__", "-")} device: {device} '
+        f'plan cache: {"on" if args.plan_cache else "off"}'
     )
 
     designs = build_designs(args.min_fft_size, args.window)
