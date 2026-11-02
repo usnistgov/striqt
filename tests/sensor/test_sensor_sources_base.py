@@ -146,6 +146,22 @@ def test_rearm_continues_the_time_base_at_the_previous_rate(rearm_rate, resetup)
     )
 
 
+def test_reads_after_one_arm_are_consecutive_segments():
+    """each read at buffer position 0 after one `arm` continues the generator where
+    the previous read ended and is stamped that many sample periods later"""
+    source, _ = _sawtooth_source()
+    stamps = []
+
+    for k in range(3):
+        buffers = _buffers(COUNT)
+        _, time_ns = source.read(buffers, 0, COUNT)
+        stamps.append(time_ns)
+        expected = _expected_sawtooth(k * COUNT - OVERLAPS[0], COUNT)
+        assert np.array_equal(np.stack(buffers), expected), f'read {k}'
+
+    assert np.diff(stamps).tolist() == [_sample_period_ns(COUNT)] * 2
+
+
 def test_rows_follow_the_capture_port_order():
     """``buffers[i]`` is the i-th port of the capture, port 1 for ``port=(1, 0)``"""
     kws = {'port': (1, 0), 'noise_psd': NOISE_PSD}

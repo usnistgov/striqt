@@ -19,7 +19,11 @@ if TYPE_CHECKING:
 
 
 class ReceiveBuffers(typing.Generic[SC]):
-    """remember unused samples from the previous IQ capture"""
+    """the receive buffers of a controller and the carryover between acquisitions.
+
+    An instance keeps the unused tail of an acquisition from `stash_carryover` until
+    `clear`. `apply` copies that tail into the head of the next receive buffer.
+    """
 
     carryover_samples: np.ndarray | None
     start_time_ns: int | None
@@ -32,10 +36,17 @@ class ReceiveBuffers(typing.Generic[SC]):
         self.clear()
 
     def apply(self, samples: np.ndarray) -> tuple[int | None, int]:
-        """carry over samples into `samples` from the previous capture.
+        """copy the stashed carryover into the head of `samples`.
+
+        Args:
+            samples: the receive buffer of the next acquisition, shape (ports, count)
 
         Returns:
-            (start_time_ns, number of samples)
+            the stashed time (ns) of ``samples[:, 0]``, or `None` without a stash,
+            and the number of carried-over samples, 0 without a stash
+
+        Raises:
+            ValueError: a stash is present without its timestamp
         """
         if self.start_time_ns is None and self.carryover_samples is not None:
             raise ValueError(
@@ -75,10 +86,10 @@ class ReceiveBuffers(typing.Generic[SC]):
         capture: specs.SensorCapture,
         start_overlap: int = 0,
     ) -> None:
-        """stash the unused tail of `samples` to carry over into the next capture.
+        """stash the unused tail of `samples` for the head of the next acquisition.
 
-        The stashed `start_time_ns` is the time of the first carried-over sample.
-        `apply` returns that time as the time of the first sample of the next buffer.
+        The stashed `start_time_ns` is the time of the first carried-over sample. The
+        stash replaces any earlier one and persists until `clear`.
 
         Args:
             samples: the source-rate samples returned for the capture, with shape
@@ -105,7 +116,8 @@ class ReceiveBuffers(typing.Generic[SC]):
             1e9 * (carryover_index - start_overlap) / fs
         )
 
-    def clear(self):
+    def clear(self) -> None:
+        """drop the stashed carryover and its timestamp"""
         self.carryover_samples = None
         self.start_time_ns = None
 
@@ -291,6 +303,9 @@ def cast_iq(spec: specs.Source, buffer: Array, acquired_count: int) -> Array:
         xp = sw.arrays.cp
         assert xp is not None, ImportError('cupy is not installed')
         buffer = sw.arrays.pinned_array_as_cupy(buffer)
+        # the H2D copy is asynchronous, and the next member of a burst reads into
+        # the same pinned buffer 2 acquisitions later
+        xp.cuda.get_current_stream().synchronize()
     else:
         xp = np
         buffer = xp.array(buffer)

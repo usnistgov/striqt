@@ -43,16 +43,13 @@ def stub_controller(
     )
 
 
-GAPLESS_SOURCE = source_spec(time_sync_at='open')
+SOAPY_SOURCE = source_spec()
 
 
 def receive_buffers(
-    capture: ss.specs.SensorCapture, source: ss.specs.Source = GAPLESS_SOURCE
+    capture: ss.specs.SensorCapture, source: ss.specs.Source = SOAPY_SOURCE
 ) -> buffers.ReceiveBuffers:
-    """return a `ReceiveBuffers` over ``stub_controller(capture, source)``.
-
-    The carryover path requires the gapless default.
-    """
+    """return a `ReceiveBuffers` over ``stub_controller(capture, source)``"""
     return buffers.ReceiveBuffers(stub_controller(capture, source))
 
 
@@ -272,7 +269,7 @@ def test_carryover_round_trip_copies_the_tail_into_the_next_head():
     samples = np.full((2, 40), -1 - 1j, dtype='complex64')
     start_ns, count = rb.apply(samples)
 
-    fs = fs_sdr(capture, GAPLESS_SOURCE)
+    fs = fs_sdr(capture, SOAPY_SOURCE)
     assert count == unused
     assert start_ns == t0 + round(1e9 * (40 - unused - lead) / fs)
     np.testing.assert_array_equal(samples[:, :unused], tail)
@@ -283,8 +280,8 @@ def test_carryover_is_stamped_one_lead_before_the_next_record():
     """the stashed time is that of the first carried-over sample, which is the lead
     overlap that precedes the record of the next capture"""
     capture = soapy_capture(duration=1e-3, sample_rate=MCR / 2)
-    design = ss.lib.compute.design_resampler(capture, GAPLESS_SOURCE.master_clock_rate)
-    lead, tail = ss.lib.compute.get_correction_overlaps(capture, GAPLESS_SOURCE)
+    design = ss.lib.compute.design_resampler(capture, SOAPY_SOURCE.master_clock_rate)
+    lead, tail = ss.lib.compute.get_correction_overlaps(capture, SOAPY_SOURCE)
     record = ss.lib.compute.source_record_size(capture, design)
     assert lead > 0, 'the capture must have a lead overlap to be discriminating'
 
@@ -304,18 +301,6 @@ def test_carryover_without_a_stash_returns_the_timestamp_only():
     assert rb.apply(samples) == (None, 0)
     rb.start_time_ns = 55
     assert rb.apply(samples) == (55, 0)
-
-
-def test_carryover_is_disabled_when_not_gapless():
-    capture = soapy_capture()
-    rb = receive_buffers(capture, source_spec())
-    previous = np.ones((1, 20), dtype='complex64')
-    rb.stash_carryover(previous, 0, unused_sample_count=5, capture=capture)
-
-    samples = np.zeros((1, 20), dtype='complex64')
-    assert rb.carryover_samples is None
-    assert rb.apply(samples) == (None, 0)
-    assert not samples.any()
 
 
 def test_carryover_without_a_timestamp_is_an_error():
