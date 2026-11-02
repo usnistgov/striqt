@@ -3,12 +3,11 @@ from __future__ import annotations as __
 import contextlib
 import datetime
 import functools
-import itertools
 import logging
 import sys
 import threading
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -31,49 +30,6 @@ else:
     from functools import cached_property as cached_property
 
     exceptiongroup = sa.util.lazy_import('exceptiongroup')
-
-
-# %% Miscellaneous
-
-
-def zip_offsets(
-    seq: Iterable[_T],
-    shifts: tuple[int, ...] | list[int],
-    fill: Any,
-    *,
-    squeeze: bool = True,
-) -> Iterator[tuple[_T, ...]]:
-    """a generator that yields from `seq` at multiple index shifts.
-
-    Shifts that would yield an invalid index (i.e., before or beyond the end of `seq`) are
-    replaced with `fill`.
-
-    Args:
-        seq: iterable of values to shift
-        shifts: a sequence of integers indicating the index shifts to apply
-        fill: the value to yield before or after `seq` yields values
-
-    Yields:
-        tuples of length `shifts` composed of delayed/advanced values from `seq`
-    """
-    lo = min(shifts)
-
-    if lo < 0:
-        # prepend as necessary to allow [None] values
-        seq = itertools.chain(-lo * [fill], seq)
-    else:
-        lo = 0
-
-    iters = []
-
-    for it, shift in zip(itertools.tee(seq, len(shifts)), shifts):
-        sl = itertools.islice(it, shift - lo, None)
-        iters.append(sl)
-
-    if squeeze and len(shifts) == 1:
-        return iters[0]
-    else:
-        return itertools.zip_longest(*iters, fillvalue=fill)
 
 
 # %% Concurrency
