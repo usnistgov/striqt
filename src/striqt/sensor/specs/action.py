@@ -14,6 +14,7 @@ from collections.abc import Generator, Iterator
 from typing import TYPE_CHECKING, Any, Callable
 
 import striqt.analysis as sa
+import striqt.waveform as sw
 from striqt.analysis.specs.helpers import SpecValidationError, validation_path
 
 from . import sequencing, structs, types
@@ -69,7 +70,9 @@ def validate_sweep(
     * the `loops` entries: a `repeat` only outermost, and at most one loop per field;
     * a loop over a field that the `captures` entries set to different values;
     * a measurement name that shadows a capture field;
-    * `options.reuse_iq` together with a capture `burst` above 1;
+    * `options.reuse_iq` together with a capture `burst` above 1, and a capture
+      `burst` above 1 with a `duration` that is not a whole number of
+      `source.trigger_strobe` periods;
     * each unique (capture, analysis) combination against the registered
       measurements;
     * each unique capture against the conditioning signal path: trigger lookup,
@@ -196,21 +199,37 @@ def _validate_bursts(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
-    """reject `options.reuse_iq` when an expanded capture has `burst` above 1.
+    """check each expanded capture with `burst` above 1 against the sweep.
+
+    The rules, each located at the first capture that fails:
+
+    * `options.reuse_iq` must be false: the reuse cache holds one acquisition;
+    * with a `source.trigger_strobe`, `duration` must be a whole number of strobe
+      periods: every member starts on the strobe grid, so a shorter remainder would
+      leave a gap between members.
 
     Raises:
-        SpecValidationError: at ``$.options.reuse_iq``, located at the first such
+        SpecValidationError: at ``$.options.reuse_iq`` or at the `duration` of the
             capture
     """
-    if not sweep.options.reuse_iq:
-        return
+    strobe = sweep.source.trigger_strobe or 0
     for capture, origin in sequencing.loop_capture_origins(sweep, source_id).items():
-        if capture.burst > 1:
+        if capture.burst == 1:
+            continue
+        locations = sequencing.describe_capture_origin(sweep.loops, capture, origin)
+        if sweep.options.reuse_iq:
             raise SpecValidationError(
                 'Expected false, since the reuse cache holds one acquisition and a '
                 'capture burst produces several',
                 ('.options', '.reuse_iq'),
-                sequencing.describe_capture_origin(sweep.loops, capture, origin),
+                locations,
+            )
+        if strobe and not sw.isroundmod(capture.duration, strobe):
+            raise SpecValidationError(
+                'Expected a whole number of `trigger_strobe` periods, since the '
+                'members of a burst start on the strobe grid',
+                ('.duration',),
+                locations,
             )
 
 

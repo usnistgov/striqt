@@ -866,6 +866,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             the members in order when `queue` is None, otherwise an empty list
 
         Raises:
+            ValueError: if `burst` is above 1 and `capture.duration` is not a whole
+                number of `trigger_strobe` periods
             AcquisitionOverrunError: if `queue` is full under
                 ``bursts.on_gap='except'``
             ReceiveStreamError: on a stream error once the retries are exhausted
@@ -876,6 +878,12 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         capture = self.capture_spec
         bursts = self.source_spec.bursts
         retries = self.source_info.retries or 0
+        strobe = self.source_spec.trigger_strobe or 0
+        if capture.burst > 1 and strobe and not sw.isroundmod(capture.duration, strobe):
+            raise ValueError(
+                'the duration of a capture with burst above 1 must be a whole number '
+                'of trigger_strobe periods'
+            )
 
         results: list[specs.AcquiredIQ] = []
         k = 0

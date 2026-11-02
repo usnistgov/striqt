@@ -424,6 +424,30 @@ class TestBurst:
         assert sizes[-2:] == [record, record], 'members 1 and 2 read one record each'
         assert stashed is None, 'the carryover is cleared after the last member'
 
+    def test_members_under_a_dividing_strobe_stay_contiguous(
+        self, fake_soapy, fake_controller
+    ):
+        """with a strobe that divides the duration, the next edge falls at the end of
+        the previous record, so the members are one record apart with one enable"""
+        strobe = BURST_CAPTURE.duration / 2
+        with fake_controller(
+            time_sync_at='open', receive_retries=0, trigger_strobe=strobe
+        ) as ctrl:
+            ctrl._arm_spec(BURST_CAPTURE)
+            members = ctrl.acquire_burst()
+            period = record_ns(ctrl, BURST_CAPTURE)
+            device = fake_soapy.devices[0]
+        assert start_deltas_ns(members) == [period, period]
+        assert len(device.calls_named('activateStream')) == 1
+        assert members[0].info.start_time.value % round(strobe * 1e9) == 0
+
+    def test_a_strobe_with_a_remainder_is_rejected(self, fake_controller):
+        strobe = BURST_CAPTURE.duration / 3.5
+        with fake_controller(time_sync_at='open', trigger_strobe=strobe) as ctrl:
+            ctrl._arm_spec(BURST_CAPTURE)
+            with pytest.raises(ValueError, match='whole number of trigger_strobe'):
+                ctrl.acquire_burst()
+
     def test_carryover_is_kept_between_members(self, fake_soapy, fake_controller):
         """members 1 and 2 read once each, with no transient-holdoff read"""
         with fake_controller(time_sync_at='open', receive_retries=0) as ctrl:

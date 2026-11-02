@@ -57,7 +57,8 @@ block on the base source spec, so every backend reads one policy: `on_gap` (`'sk
 `'except'`) says whether a burst may contain a timing gap, `buffers` is the number of
 acquisitions queued ahead of analysis, and `trigger_on` (`'first'` or `'all'`) says how
 often the signal trigger runs within a burst. `validate_sweep` rejects `options.reuse_iq`
-with a `burst` above 1, `ManualYFactorCalibration` rejects a `burst` above 1, and the
+with a `burst` above 1, and a `burst` above 1 with a `duration` that is not a whole number
+of `trigger_strobe` periods, `ManualYFactorCalibration` rejects a `burst` above 1, and the
 warmup sweep forces `burst=1`. `specs.sequencing.count_acquisitions` is the number of
 acquisitions of one pass; `expand_bursts` repeats each capture `burst` times.
 
@@ -318,7 +319,9 @@ member k + 1. `apply` returns that stamp for member k + 1 in place of a source r
 member k + 1 starts exactly one record after member k. The carryover applies within a
 burst only: `Controller._arm_spec` clears the stash at arm, and `read_iq` clears it
 after the last member. Equal consecutive captures do not carry over; only a capture with
-`burst` above 1 is sample-contiguous.
+`burst` above 1 is sample-contiguous. Under a `trigger_strobe`, every member starts on the
+strobe grid; the `duration` of a burst capture is a whole number of strobe periods, so the
+next edge falls at the end of the previous record and the members stay contiguous.
 
 `sources/base.py:VirtualSource` keeps a synthetic clock. The clock is 0 at the first
 `arm`, so corrected sample 0 of the first capture is on every strobe grid. A re-arm
