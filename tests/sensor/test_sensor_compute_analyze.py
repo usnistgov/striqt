@@ -5,6 +5,7 @@ and the measurement registry, trigger selection, and the warmup decision
 from __future__ import annotations
 
 import dataclasses
+from concurrent.futures import Future
 
 import numpy as np
 import pytest
@@ -65,6 +66,15 @@ def test_analyze_result_matches_the_filtered_selection(stages, as_xarray, contai
     assert isinstance(result, container)
     ds = result if as_xarray is True else compute.from_delayed(result)
     assert np.array_equal(ds.iq_waveform.values, filtered(stages.corrected))
+
+
+def test_analyze_carries_the_pending_peripheral_read(stages):
+    future: Future = Future()
+    iq = dataclasses.replace(
+        fresh_raw(stages), pending_extra_data=ss.specs.PendingExtraData(future, {})
+    )
+    result = compute.analyze(iq, options(as_xarray='delayed'))
+    assert result.pending_extra_data is iq.pending_extra_data
 
 
 def test_as_xarray_false_returns_the_delayed_arrays(stages):

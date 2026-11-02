@@ -9,6 +9,7 @@ from __future__ import annotations as __
 import itertools as itertools
 import math
 import os
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, cast
 
@@ -181,6 +182,10 @@ class SinkBase(Generic[specs.SC]):
     def append(
         self, capture_result: compute.DelayedDataset
     ) -> xr.Dataset | compute.DelayedDataset:
+        """materialize `capture_result` and keep the dataset for `pop`.
+
+        The call blocks until a pending peripheral read of the acquisition completes.
+        """
         from . import compute
 
         if capture_result is None:
@@ -412,6 +417,7 @@ class ZarrCaptureSink(ZarrSinkBase):
         self._dropped_attrs: dict[str, set[str]] = {}
         self._root_attrs: dict[str, Any] = {}
         self._flush_each = True
+        self._deferred: deque[compute.DelayedDataset] = deque()
 
     @property
     def rows_written(self) -> int:
@@ -560,7 +566,44 @@ class ZarrCaptureSink(ZarrSinkBase):
             cast('StagedMetadataStore', self.store).flush_metadata()
 
     def append(self, capture_result: compute.DelayedDataset) -> compute.DelayedDataset:
-        dd = capture_result
+        """queue the rows of `capture_result` and write every queued row that is ready.
+
+        A row is ready when the acquisition has no pending peripheral read or the read
+        has completed. The rows behind a pending row wait, so the store keeps the
+        acquisition order.
+        """
+        self._deferred.append(capture_result)
+        self._write_ready(block=False)
+        return capture_result
+
+    def _write_ready(self, block: bool) -> None:
+        """write the queued rows from the head while the head is ready, or all with `block`.
+
+        A pending read that failed is written without the peripheral entries, with a
+        WARNING on the ``sink`` logger.
+        """
+        while self._deferred:
+            dd = self._deferred[0]
+            pending = dd.pending_extra_data
+            if pending is None:
+                extra_data = dd.extra_data
+            elif not block and not pending.peripherals.done():
+                return
+            elif pending.peripherals.exception() is None:
+                extra_data = compute.datasets.resolve_extra_data(dd)
+            else:
+                sa.util.get_logger('sink').warning(
+                    'the peripheral read of capture '
+                    f'{dd.extra_coords.capture_index} failed; writing the rows '
+                    'without the peripheral data'
+                )
+                extra_data = dd.extra_data | pending.override
+            self._deferred.popleft()
+            self._write_rows(dd, extra_data)
+
+    def _write_rows(
+        self, dd: compute.DelayedDataset, extra_data: dict[str, Any]
+    ) -> None:
         ports = len(specs.captures.split_capture_ports(dd.capture))
         if self._row + ports > self._rows_total:
             self._grow(self._row + ports)
@@ -581,8 +624,8 @@ class ZarrCaptureSink(ZarrSinkBase):
             for name in self._coord_names:
                 self._push(name, self._encoders[name](coords[name].values))
 
-        if dd.extra_data:
-            extra = compute.datasets.extra_data_arrays(dd.extra_data, ports)
+        if extra_data:
+            extra = compute.datasets.extra_data_arrays(extra_data, ports)
             self._add_extra_data(extra)
             for name, var in extra.items():
                 self._push(name, self._encoders[name](var.values))
@@ -595,10 +638,10 @@ class ZarrCaptureSink(ZarrSinkBase):
             'sink', capture_index=self.acquisitions_elapsed - 1
         ):
             sa.util.get_logger('sink').info('💾')
-        return dd
 
     def close(self, *exc_info):
         if self.store is not None and self._arrays:
+            self._write_ready(block=True)
             for name in self._arrays:
                 self._drain(name, final=True)
             self._trim()

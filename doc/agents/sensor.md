@@ -240,8 +240,18 @@ stream left enabled, and puts each `AcquiredIQ` on a bounded `AcquisitionQueue` 
 step, runs `compute.analyze` on the acquisition dequeued at the previous step in the
 foreground (GPU work stays on this thread), and submits the `sink.append` of the
 acquisition before that to the thread pool. N delivered acquisitions take N + 2 steps.
-The peripheral data of the capture and the `extra_data` of the runner are merged into
-every member, and the fields of the action spec are the dataset attrs.
+The peripheral read of a capture starts with member 0 and may run until the end of the
+burst; the acquisition thread awaits it before arming the next capture, so a peripheral
+exception surfaces there. Each member refers to the read through
+`AcquiredIQ.pending_extra_data` (a `PendingExtraData`: the future and the runner
+`extra_data` as `override`), and `compute.analyze` copies the reference onto the
+`DelayedDataset`. `compute/datasets.py:resolve_extra_data` joins the dict as
+source < peripheral < runner. `ZarrCaptureSink.append` queues rows whose read is still
+running and writes queued rows from the head as they become ready, so the store keeps the
+acquisition order and the pipeline never waits on a peripheral inside a burst;
+`SinkBase.append` blocks instead. The `extra_data` of the dataset given to `on_analyzed`
+has the source and runner entries only. The fields of the action spec are the dataset
+attrs.
 `lib/resources.py:resident_bytes_bound` is the worst case of raw IQ resident at once,
 `(buffers + 2)` times the largest read of the sweep; `open_resources` logs it at INFO on
 the `sweep` logger and `check-sweep` prints it.

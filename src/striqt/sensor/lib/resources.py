@@ -53,7 +53,8 @@ class SweepCallbacks:
     opens and before the first capture"""
     on_analyzed: AnalyzedCallback | None = None
     """hook run with the `DelayedDataset` of each acquisition before the sink
-    receives the dataset"""
+    receives the dataset; the `extra_data` of the dataset lacks the peripheral
+    entries, which the sink joins"""
     on_sink_cached: CachedCallback | None = None
     """hook run with ``(resources, cache, capture, result, **kwargs)`` each time a
     measurement fills a `KwArgCache`"""
@@ -291,7 +292,8 @@ def open_resources(
         on_source_opened: hook run once with ``(sweep, source_id)`` in a worker
             thread after the source opens and before the first capture
         on_analyzed: hook run in the analysis thread with the `DelayedDataset` of
-            each acquisition, before the sink receives the dataset
+            each acquisition, before the sink receives the dataset; the `extra_data`
+            of the dataset lacks the peripheral entries, which the sink joins
         on_sink_cached: hook run in the analysis thread with ``(resources, cache,
             capture, result, **kwargs)`` each time a measurement fills a `KwArgCache`
 

@@ -5,7 +5,9 @@ zip archive path
 from __future__ import annotations
 
 import dataclasses
+import logging
 import zipfile
+from concurrent.futures import Future
 from pathlib import Path
 
 import numpy as np
@@ -271,6 +273,72 @@ def burst_members(dd, burst):
         )
         for k in range(burst)
     ]
+
+
+def pending(dd, **override):
+    """return `dd` with an unresolved peripheral read, and the future to resolve"""
+    future: Future = Future()
+    pending = ss.specs.PendingExtraData(future, override)
+    return dataclasses.replace(dd, pending_extra_data=pending), future
+
+
+def test_zarr_capture_sink_defers_rows_behind_a_pending_peripheral_read(tmp_path):
+    """rows wait in acquisition order until the peripheral read of the head
+    resolves; the peripheral dict then joins the rows under the override"""
+    burst = 3
+    unsunk = tone_sweep((1e6,))
+    (dd,) = [dd for dd in run_to_store(unsunk) if dd is not None]
+    first, second, third = burst_members(dd, burst)
+    first, future = pending(first, shared='runner')
+
+    sweep = unsunk.replace(
+        captures=(first.capture,),
+        sink=ss.specs.ZarrSink(path=str(tmp_path / 'deferred.zarr')),
+    )
+    with (
+        ss.open_resources(unsunk, None),
+        ss.sinks.ZarrCaptureSink(sweep) as sink,
+    ):
+        sink.append(first)
+        sink.append(second)
+        assert sink.rows_written == 0
+
+        future.set_result({'temperature': 21.5, 'shared': 'peripheral'})
+        sink.append(third)
+        assert sink.rows_written == burst
+
+    stored = sa.load(sweep.sink.path)
+    assert stored.burst_index.values.tolist() == list(range(burst))
+    assert stored.temperature.values.tolist()[0] == 21.5
+    assert stored.shared.values.tolist()[0] == 'runner'
+
+
+def test_zarr_capture_sink_writes_the_rows_of_a_failed_peripheral_read(
+    tmp_path, caplog
+):
+    """a failed read is done, so the rows are written at once without the peripheral
+    variables and with one WARNING"""
+    unsunk = tone_sweep((1e6,))
+    (dd,) = [dd for dd in run_to_store(unsunk) if dd is not None]
+    dd, future = pending(dd)
+    future.set_exception(RuntimeError('simulated peripheral failure'))
+
+    sweep = unsunk.replace(
+        sink=ss.specs.ZarrSink(path=str(tmp_path / 'failed.zarr')),
+    )
+    with (
+        caplog.at_level(logging.WARNING, logger='striqt.sink'),
+        ss.open_resources(unsunk, None),
+        ss.sinks.ZarrCaptureSink(sweep) as sink,
+    ):
+        sink.append(dd)
+        assert sink.rows_written == 1
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+
+    stored = sa.load(sweep.sink.path)
+    assert stored.sizes['capture'] == 1
+    assert 'temperature' not in stored
 
 
 def test_zarr_capture_sink_writes_one_row_group_per_burst_member(tmp_path):

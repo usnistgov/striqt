@@ -7,6 +7,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import logging
+from concurrent.futures import Future
 
 import numpy as np
 import pytest
@@ -115,6 +116,50 @@ def test_from_delayed_broadcasts_extra_data_over_the_rows():
     assert ds.temperature.dims == ('capture',)
     assert ds.temperature.values.tolist() == [21.5, 21.5]
     assert ds.per_port.values.tolist() == [1.0, 2.0]
+
+
+def test_from_delayed_joins_a_pending_peripheral_read():
+    future: Future = Future()
+    future.set_result({'temperature': 21.5})
+    dd = dataclasses.replace(
+        two_port_run()[0],
+        pending_extra_data=ss.specs.PendingExtraData(future, {}),
+    )
+    ds = compute.from_delayed(dd)
+    assert ds.temperature.values.tolist() == [21.5, 21.5]
+
+
+# %% resolve_extra_data
+
+
+def test_resolve_extra_data_without_a_pending_read_is_the_extra_data():
+    dd = dataclasses.replace(two_port_run()[0], pending_extra_data=None)
+    assert datasets.resolve_extra_data(dd) is dd.extra_data
+
+
+def test_resolve_extra_data_precedence_is_source_then_peripheral_then_override():
+    future: Future = Future()
+    future.set_result({'a': 'peripheral', 'b': 'peripheral', 'c': 'peripheral'})
+    dd = dataclasses.replace(
+        two_port_run()[0],
+        extra_data={'a': 'source', 'b': 'source'},
+        pending_extra_data=ss.specs.PendingExtraData(future, {'a': 'runner'}),
+    )
+    assert datasets.resolve_extra_data(dd) == {
+        'a': 'runner',
+        'b': 'peripheral',
+        'c': 'peripheral',
+    }
+
+
+def test_resolve_extra_data_rejects_a_non_dict_peripheral_result():
+    future: Future = Future()
+    future.set_result(['not', 'a', 'dict'])
+    dd = dataclasses.replace(
+        two_port_run()[0], pending_extra_data=ss.specs.PendingExtraData(future, {})
+    )
+    with pytest.raises(TypeError, match='not dict'):
+        datasets.resolve_extra_data(dd)
 
 
 def test_from_delayed_rejects_extra_data_of_the_wrong_length():

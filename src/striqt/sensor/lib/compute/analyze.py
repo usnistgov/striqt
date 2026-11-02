@@ -159,6 +159,7 @@ def analyze(
         config=options,
         extra_coords=iq.info,
         extra_data=iq.extra_data,
+        pending_extra_data=iq.pending_extra_data,
     )
 
     if options.as_xarray == 'delayed':

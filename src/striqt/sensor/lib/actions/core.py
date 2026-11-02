@@ -11,9 +11,9 @@ from __future__ import annotations as __
 
 import contextlib
 import itertools
-import queue as queue_lib
 import threading
 from collections.abc import Generator, Iterable, Mapping
+from queue import Empty
 from typing import TYPE_CHECKING, Any, Protocol
 
 import striqt.analysis as sa
@@ -166,7 +166,9 @@ def iterate_captures(
     by several calls numbers the captures of all of those calls consecutively.
 
     The `on_analyzed` and `on_sink_cached` hooks of ``resources['callbacks']`` run in
-    the calling thread. An exception from a hook ends the pipeline.
+    the calling thread. An exception from a hook ends the pipeline. The `extra_data`
+    of the dataset given to `on_analyzed` has the source and runner entries; the
+    peripheral entries join when a sink resolves `pending_extra_data`.
 
     Args:
         resources: the open resources of `open_resources`
@@ -334,7 +336,7 @@ def _drain(queue: AcquisitionQueue) -> None:
     while True:
         try:
             queue.get_nowait()
-        except queue_lib.Empty:
+        except Empty:
             return
 
 
@@ -379,11 +381,12 @@ def acquisition_worker(
 
     Each capture is armed on the source and the peripherals, and the `burst` members
     are acquired with `Controller.acquire_burst`. The peripherals acquire once per
-    capture, concurrently with member 0, and the result is merged into the
-    `extra_data` of every member before the entries of `extra_data`; a later source
-    wins on a shared key. `indexer` stamps each member. After the last capture the
-    source is disarmed and `END` is put. An exception ends the acquisitions and is
-    put in place of `END`.
+    capture, from member 0 until the end of the burst, and the read is awaited before
+    the next capture is armed. Each member refers to the read through
+    `pending_extra_data`, with the entries of `extra_data` as the `override`, so a
+    sink joins the peripheral dict under the runner entries. `indexer` stamps each
+    member. After the last capture the source is disarmed and `END` is put. An
+    exception ends the acquisitions and is put in place of `END`.
 
     Args:
         resources: the open resources
@@ -446,25 +449,25 @@ def _acquire_capture(
             util.threadpool.submit(peripherals.arm, capture),
         ]
         util.await_and_ignore(arm, 'arm sensor')
-        periph = util.threadpool.submit(peripherals.acquire, capture)
+        override = {} if extra_data is None else dict(extra_data)
+        pending = specs.PendingExtraData(
+            util.threadpool.submit(peripherals.acquire, capture), override
+        )
 
         def finalize(iq: specs.AcquiredIQ) -> specs.AcquiredIQ:
             nonlocal ordinal
-            ext_data = periph.result()
-            if not isinstance(ext_data, dict):
-                raise TypeError(
-                    f'peripheral acquire() returned {type(ext_data)!r}, not dict'
-                )
             iq.info = indexer.apply(iq.info, capture)
-            iq.extra_data = iq.extra_data | ext_data
-            if extra_data is not None:
-                iq.extra_data = iq.extra_data | dict(extra_data)
+            iq.extra_data = iq.extra_data | override
+            iq.pending_extra_data = pending
             ordinal += 1
             stack.close()
             stack.enter_context(log_context())
             return iq
 
         source.acquire_burst(queue=queue, finalize=finalize)
+        # the stream is idle between bursts, so the read is awaited here rather than
+        # inside the burst, where the wait would overflow the receive stream
+        compute.datasets.peripheral_result(pending)
 
     return ordinal
 

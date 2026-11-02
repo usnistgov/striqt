@@ -37,6 +37,38 @@ class DelayedDataset:
     extra_coords: specs.AcquisitionInfo
     extra_data: dict[str, Any]
     config: EvaluationOptions
+    pending_extra_data: specs.PendingExtraData | None = None
+    """the peripheral read of the capture when still running; None when `extra_data`
+    is complete"""
+
+
+def peripheral_result(pending: specs.PendingExtraData) -> dict[str, Any]:
+    """return the dict of the peripheral read of `pending`, waiting for the read.
+
+    Raises:
+        TypeError: if the peripheral read returned an object other than a dict
+        Exception: the exception of the peripheral read
+    """
+    result = pending.peripherals.result()
+    if not isinstance(result, dict):
+        raise TypeError(f'peripheral acquire() returned {type(result)!r}, not dict')
+    return result
+
+
+def resolve_extra_data(dd: DelayedDataset) -> dict[str, Any]:
+    """return the complete `extra_data` of `dd`, waiting for a pending peripheral read.
+
+    A peripheral entry overrides an entry of `dd.extra_data` with the same key, and an
+    `override` entry of the pending read overrides the peripheral entry.
+
+    Raises:
+        TypeError: if the peripheral read returned an object other than a dict
+        Exception: the exception of the peripheral read
+    """
+    pending = dd.pending_extra_data
+    if pending is None:
+        return dd.extra_data
+    return dd.extra_data | peripheral_result(pending) | pending.override
 
 
 def from_delayed(dd: DelayedDataset) -> xr.Dataset:
@@ -44,12 +76,14 @@ def from_delayed(dd: DelayedDataset) -> xr.Dataset:
 
     The dataset has one ``capture`` entry per port of `dd.capture`, a coordinate per
     capture field and per acquisition info field, one variable per measurement and
-    per `dd.extra_data` entry, and the attrs ``dd.config.extra_attrs``. Timings log
-    at DEBUG on the ``analysis`` logger.
+    per entry of `resolve_extra_data`, and the attrs ``dd.config.extra_attrs``. The
+    call blocks until a pending peripheral read completes. Timings log at DEBUG on
+    the ``analysis`` logger.
 
     Raises:
         ValueError: if the first axis of an `extra_data` array has a size other
             than 0, 1, or the port count
+        TypeError: if the peripheral read returned an object other than a dict
     """
 
     with sa.util.stopwatch(
@@ -87,9 +121,10 @@ def from_delayed(dd: DelayedDataset) -> xr.Dataset:
         threshold=10e-3,
         logger_level=logging.DEBUG,
     ):
-        if dd.extra_data is not None:
+        extra_data = resolve_extra_data(dd)
+        if extra_data:
             analysis = analysis.assign(
-                extra_data_arrays(dd.extra_data, analysis.capture.size)
+                extra_data_arrays(extra_data, analysis.capture.size)
             )
 
     return analysis

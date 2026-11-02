@@ -33,7 +33,7 @@ from synthetic_sources import (
 )
 
 import striqt.sensor as ss
-from striqt.sensor.lib import util
+from striqt.sensor.lib import compute, util
 from striqt.sensor.lib.actions import core
 from striqt.waveform import fourier
 
@@ -169,9 +169,44 @@ def test_extra_data_reaches_every_acquisition_and_wins_over_the_peripherals(burs
 
     assert len(results) == burst * len(OFFSETS)
     for result in results:
-        assert result.extra_data['shared'] == 'runner'
-        assert result.extra_data['from_peripheral'] == 1
-        assert result.extra_data['state'] is True
+        # the peripheral entries join when a sink resolves the pending read
+        assert 'from_peripheral' not in result.extra_data
+        extra_data = compute.datasets.resolve_extra_data(result)
+        assert extra_data['shared'] == 'runner'
+        assert extra_data['from_peripheral'] == 1
+        assert extra_data['state'] is True
+
+
+class SlowPeripherals(TaggingPeripherals):
+    """a peripheral read that outlasts the whole burst"""
+
+    delay: ClassVar[float] = 0.1
+
+    def acquire(self, capture):
+        time.sleep(self.delay)
+        return super().acquire(capture)
+
+
+def test_a_peripheral_read_may_last_the_whole_burst(caplog):
+    """the acquisition thread never waits for the peripheral inside a burst, so a
+    read longer than the burst drops no member under a 1-slot queue, and every
+    member carries the peripheral data once the read resolves"""
+    burst = 4
+    sweep = burst_sweep(OFFSETS[:1], burst=burst, buffers=1)
+    with (
+        caplog.at_level(logging.WARNING, logger='striqt.source'),
+        ss.open_resources(sweep, None) as res,
+    ):
+        items = core.iterate_captures(
+            res, sink=ss.sinks.NoSink(sweep), peripherals=SlowPeripherals(sweep)
+        )
+        results = [item for item in items if item is not None]
+
+    assert [r.extra_coords.burst_index for r in results] == list(range(burst))
+    assert [rec for rec in caplog.records if rec.levelno == logging.WARNING] == []
+    for result in results:
+        assert result.pending_extra_data.peripherals.done()
+        assert compute.datasets.resolve_extra_data(result)['from_peripheral'] == 1
 
 
 # %% iterate_captures: on_analyzed callbacks
