@@ -231,6 +231,12 @@ class TestBursts:
         )
         assert source.receive_retries == 3
 
+    def test_source_accepts_the_bursts_block_as_a_dict(self):
+        """the binding call form of a controller passes the fields of `to_dict`"""
+        source = SoapySource(bursts={'buffers': 2}, **MCR)
+        assert source.bursts == ss.specs.BurstOptions(buffers=2)
+        assert hash(source) == hash(SoapySource(**source.to_dict()))
+
     def test_acquisition_info_burst_index_defaults_to_zero(self):
         assert ss.specs.AcquisitionInfo().burst_index == 0
         assert ss.specs.AcquisitionInfo(burst_index=2).burst_index == 2

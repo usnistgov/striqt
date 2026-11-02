@@ -43,7 +43,7 @@ def stub_controller(
     )
 
 
-GAPLESS_SOURCE = source_spec(gapless=True, time_sync_at='open')
+GAPLESS_SOURCE = source_spec(time_sync_at='open')
 
 
 def receive_buffers(

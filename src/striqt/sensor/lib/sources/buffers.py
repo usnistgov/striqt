@@ -42,9 +42,7 @@ class ReceiveBuffers(typing.Generic[SC]):
                 'carryover time information present, but missing timestamp'
             )
 
-        if not self.controller.source_spec.gapless:
-            return None, 0
-        elif self.carryover_samples is None:
+        if self.carryover_samples is None:
             return self.start_time_ns, 0
 
         carryover = self.carryover_samples.shape[1]
@@ -81,7 +79,6 @@ class ReceiveBuffers(typing.Generic[SC]):
 
         The stashed `start_time_ns` is the time of the first carried-over sample.
         `apply` returns that time as the time of the first sample of the next buffer.
-        A source that is not gapless stashes nothing.
 
         Args:
             samples: the source-rate samples returned for the capture, with shape
@@ -95,9 +92,6 @@ class ReceiveBuffers(typing.Generic[SC]):
             start_overlap: the lead overlap (in source-rate samples) that precedes
                 the record in `samples`
         """
-        if not self.controller.source_spec.gapless:
-            return
-
         from ..compute import design_resampler
 
         carryover_count = unused_sample_count

@@ -418,11 +418,11 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             else:
                 self._prev_iq = None
 
+        # a carryover belongs to the burst of the armed capture alone
+        self._buffers.clear()
+
         if spec == self._capture and self._capture is not None:
             return
-
-        if not self.source_spec.gapless or spec != self._capture:
-            self._buffers.clear()
 
         self._capture = self.backend.arm(spec) or spec
 
@@ -563,7 +563,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         chunk_count = remaining = output_count - carryover_count
 
         while remaining > 0:
-            if received_count > 0 or self.source_spec.gapless:
+            if received_count > 0:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'

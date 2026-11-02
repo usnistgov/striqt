@@ -139,6 +139,13 @@ class Source(SpecBase, frozen=True, kw_only=True):
     if TYPE_CHECKING:
         calibration: str | None
 
+    def __post_init__(self):
+        if isinstance(self.bursts, dict):
+            # the binding call form of Controller passes the fields of to_dict()
+            bursts = msgspec.convert(self.bursts, BurstOptions)
+            msgspec.structs.force_setattr(self, 'bursts', bursts)
+        super().__post_init__()
+
     # validation data
     transient_holdoff_time: ClassVar[float] = 0
     stream_all_rx_ports: ClassVar[Union[bool, None]] = False
