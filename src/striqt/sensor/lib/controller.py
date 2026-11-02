@@ -252,7 +252,8 @@ class AcquisitionQueue(_QueueBase):
     """
 
     nbytes: int
-    """the total `x.nbytes` of the `AcquiredIQ` items in the queue"""
+    """the total `x.nbytes` of the `AcquiredIQ` items in the queue; the holdoff
+    samples ahead of the record of a first member are not counted"""
 
     def __init__(self, buffers: int):
         """create an empty queue that holds up to `buffers` items."""
@@ -633,7 +634,9 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             self.backend.trigger(overlaps)
 
         # the return buffer
-        samples, stream_bufs = self._buffers.get_next(self._capture, overlaps=overlaps)
+        samples, stream_bufs = self._buffers.get_next(
+            self._capture, overlaps=overlaps, include_holdoff=first
+        )
 
         # carryover from the previous acquisition
         missing_start_time = True
@@ -655,10 +658,12 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         )
 
         # the total number of samples to acquire per channel
+        # a member that continues the stream consumes no holdoff, so the read, the
+        # copy, and the queued memory are bounded by the record and overlaps
         buffer_count = buffers.get_read_count(
             self.capture_spec,
             self.source_spec,
-            include_holdoff=True,
+            include_holdoff=first,
             overlap=sum(overlaps),
         )
 
@@ -730,8 +735,6 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         else:
             self._buffers.clear()
 
-        # convert to cupy before slicing, over the whole pinned buffer. Converting
-        # after the slice has produced CUDA memory corruption
         samples = buffers.cast_iq(self.source_spec, samples, buffer_count)
 
         return samples[:, sample_span], start_ns

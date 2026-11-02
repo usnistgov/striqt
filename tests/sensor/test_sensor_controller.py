@@ -439,7 +439,11 @@ class TestBurst:
             device = fake_soapy.devices[0]
         assert start_deltas_ns(members) == [period, period]
         assert len(device.calls_named('activateStream')) == 1
-        assert members[0].info.start_time.value % round(strobe * 1e9) == 0
+        # the holdoff is rounded to whole source samples, so the record start is on
+        # the strobe grid to within one sample period
+        sample_ns = 1e9 / ctrl.get_resampler()['fs_sdr']
+        residual = members[0].info.start_time.value % round(strobe * 1e9)
+        assert min(residual, round(strobe * 1e9) - residual) < sample_ns
 
     def test_a_strobe_with_a_remainder_is_rejected(self, fake_controller):
         strobe = BURST_CAPTURE.duration / 3.5
@@ -447,6 +451,32 @@ class TestBurst:
             ctrl._arm_spec(BURST_CAPTURE)
             with pytest.raises(ValueError, match='whole number of trigger_strobe'):
                 ctrl.acquire_burst()
+
+    def test_later_members_keep_no_holdoff_pad(self, fake_controller):
+        """member 0 is copied with the transient and strobe holdoff ahead of the
+        record; the later members, which read no holdoff, are copied without it"""
+        strobe = BURST_CAPTURE.duration / 2
+        with fake_controller(
+            time_sync_at='open', receive_retries=0, trigger_strobe=strobe
+        ) as ctrl:
+            ctrl._arm_spec(BURST_CAPTURE)
+            overlaps = ss.lib.compute.get_correction_overlaps(
+                BURST_CAPTURE, ctrl.source_spec
+            )
+            members = ctrl.acquire_burst()
+            padded, bare = (
+                ss.lib.sources.buffers.get_read_count(
+                    BURST_CAPTURE,
+                    ctrl.source_spec,
+                    include_holdoff=flag,
+                    overlap=sum(overlaps),
+                )
+                for flag in (True, False)
+            )
+        assert padded > bare
+        assert members[0].x.base.shape[1] == padded
+        assert [m.x.base.shape[1] for m in members[1:]] == [bare, bare]
+        assert [m.x.shape[1] for m in members] == [bare] * 3
 
     def test_carryover_is_kept_between_members(self, fake_soapy, fake_controller):
         """members 1 and 2 read once each, with no transient-holdoff read"""

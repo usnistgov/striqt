@@ -175,6 +175,29 @@ def test_cast_iq_int16_interleaved_pairs_become_unscaled_complex64():
     np.testing.assert_array_equal(out, expected.astype('complex64'))
 
 
+@pytest.mark.parametrize('transport', ['complex64', 'int16'])
+def test_cast_iq_copies_only_the_acquired_columns(transport):
+    """a receive buffer wider than the read, as a reused or holdoff-padded buffer is,
+    adds nothing to the copy that the acquisition keeps"""
+    source = source_spec(transport_dtype=transport)
+    ports, acquired, width = 2, 300, 500
+    buffer = np.zeros((ports, width), dtype='complex64')
+    if transport == 'int16':
+        pairs = np.arange(ports * 2 * acquired).reshape(ports, 2 * acquired)
+        buffer.view('int16')[:, : 2 * acquired] = pairs.astype('int16')
+        expected = pairs[:, 0::2] + 1j * pairs[:, 1::2]
+    else:
+        buffer[:, :acquired] = np.arange(ports * acquired).reshape(ports, acquired)
+        expected = buffer[:, :acquired].copy()
+
+    out = buffers.cast_iq(source, buffer, acquired)
+
+    assert out.shape == (ports, acquired)
+    assert out.base.shape[1] == acquired, 'the copy is bounded by the read'
+    assert not np.shares_memory(out, buffer)
+    np.testing.assert_array_equal(out, expected.astype('complex64'))
+
+
 @pytest.mark.namespaces('cupy')
 def test_cast_iq_cupy_returns_a_device_array(xp):
     source = SOURCE.replace(array_backend='cupy')
@@ -350,6 +373,25 @@ def test_alloc_shape_is_ports_by_read_count_with_one_stream_buffer_per_port():
     assert len(streams) == 2
     for i, stream in enumerate(streams):
         assert np.shares_memory(stream, samples[i])
+
+
+def test_alloc_without_holdoff_is_the_bare_read_count():
+    """a member that continues the stream reads no holdoff, so its buffer is the
+    record plus overlaps; a padded prior serves that request without reallocation"""
+    capture = _TWO_PORT
+    source = source_spec(transient_holdoff_time=1e-3, trigger_strobe=0.5e-3)
+    ctrl = stub_controller(capture, source)
+    bare = buffers.get_read_count(capture, source, include_holdoff=False)
+    padded = buffers.get_read_count(capture, source, include_holdoff=True)
+    assert padded > bare
+
+    _, (samples, _) = buffers._alloc_empty_iq(ctrl, capture, include_holdoff=False)
+    assert samples.shape == (2, bare)
+
+    prior, _ = buffers._alloc_empty_iq(ctrl, capture, include_holdoff=True)
+    assert prior.shape == (2, padded)
+    reused, _ = buffers._alloc_empty_iq(ctrl, capture, prior, include_holdoff=False)
+    assert reused is prior
 
 
 def test_alloc_overlaps_extend_the_read_count():

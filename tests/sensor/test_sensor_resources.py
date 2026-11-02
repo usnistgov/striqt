@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from pathlib import Path
 
@@ -161,6 +162,23 @@ def test_resident_bytes_bound_counts_queued_analyzed_and_written_members():
     assert ss.lib.resources.resident_bytes_bound(sweep, None) == expected
     one = ss.lib.resources.resident_bytes_bound(two_port_sweep(1), None)
     assert one == 3 * 2 * 8 * samples
+
+
+def test_resident_bytes_bound_includes_the_holdoff_of_a_first_member():
+    """a strobe pads the read of a first member by 2 strobe periods per port"""
+    buffers = 1
+    strobe = 0.25e-3
+    sweep = two_port_sweep(buffers)
+    strobed = sweep.replace(source=sweep.source.replace(trigger_strobe=strobe))
+    longest = sweep.captures[1]
+    fs = ss.lib.compute.design_resampler(longest, sweep.source.master_clock_rate)[
+        'fs_sdr'
+    ]
+    pad = math.ceil(fs * 2 * strobe)
+    plain = ss.lib.resources.resident_bytes_bound(sweep, None)
+    assert (
+        ss.lib.resources.resident_bytes_bound(strobed, None) == plain + 3 * 2 * 8 * pad
+    )
 
 
 def test_open_resources_logs_the_resident_bound_once(caplog):

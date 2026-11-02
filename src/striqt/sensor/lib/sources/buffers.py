@@ -63,14 +63,33 @@ class ReceiveBuffers(typing.Generic[SC]):
         return self.start_time_ns, carryover
 
     def get_next(
-        self, capture: SC, overlaps: tuple[int, int] = (0, 0)
+        self,
+        capture: SC,
+        overlaps: tuple[int, int] = (0, 0),
+        *,
+        include_holdoff: bool = True,
     ) -> tuple[np.ndarray, list[np.ndarray]]:
-        """swap the buffers, and reallocate if needed"""
+        """swap the buffers and return the next one, reallocated when too small.
+
+        Args:
+            capture: the armed capture, which sets the port count and the read count
+            overlaps: the ``(lead, tail)`` overlap in source samples
+            include_holdoff: True sizes the buffer for the transient and strobe
+                holdoff ahead of the record; False sizes it for the record and
+                overlaps alone, as a burst member that continues the stream reads
+
+        Returns:
+            the buffer with shape (ports, count) and the per-port stream views
+        """
 
         if not self._hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
         self.buffers[0], ret = _alloc_empty_iq(
-            self.controller, capture, self.buffers[0], overlaps=overlaps
+            self.controller,
+            capture,
+            self.buffers[0],
+            overlaps=overlaps,
+            include_holdoff=include_holdoff,
         )
         self._hold_buffer_swap = False
         return ret
@@ -187,8 +206,18 @@ def _alloc_empty_iq(
     capture: specs.SensorCapture,
     prior: np.ndarray | None = None,
     overlaps: tuple[int, int] = (0, 0),
+    *,
+    include_holdoff: bool = True,
 ) -> tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]:
-    """allocate a buffer of IQ return values.
+    """allocate a buffer of IQ return values, or reuse `prior` when it is large enough.
+
+    Args:
+        controller: the controller with the armed capture and the source spec
+        capture: the capture that sets the port rows
+        prior: a buffer to reuse when it has one row per port and at least the read
+            count of columns
+        overlaps: the ``(lead, tail)`` overlap in source samples
+        include_holdoff: True adds the transient and strobe holdoff to the read count
 
     Returns:
         The buffer and the list of buffer references for streaming.
@@ -196,7 +225,7 @@ def _alloc_empty_iq(
     count = get_read_count(
         controller.capture_spec,
         controller.source_spec,
-        include_holdoff=True,
+        include_holdoff=include_holdoff,
         overlap=sum(overlaps),
     )
 
@@ -295,9 +324,23 @@ def find_trigger_holdoff(
 
 
 def cast_iq(spec: specs.Source, buffer: Array, acquired_count: int) -> Array:
-    """cast the buffer to floating point, if necessary"""
+    """return the first `acquired_count` samples per port of `buffer` as complex64.
+
+    The result is a copy in the namespace of ``spec.array_backend``, so the receive
+    buffer is free for the next read. A buffer wider than `acquired_count` columns
+    contributes nothing beyond that width to the copy.
+
+    Args:
+        spec: the source spec, for `transport_dtype` and `array_backend`
+        buffer: the receive buffer with shape (ports, width) of complex64 slots;
+            under an int16 transport the interleaved (I, Q) pairs occupy the head
+        acquired_count: the number of complex samples per port to keep
+    """
     # array_namespace categorizes cupy pinned memory as numpy
     dtype_in = np.dtype(spec.transport_dtype)
+    # the slice bounds the copy, and so the memory of a queued acquisition, to the
+    # samples read; each port row of the slice stays contiguous
+    buffer = buffer[:, :acquired_count]
 
     if spec.array_backend == 'cupy':
         xp = sw.arrays.cp

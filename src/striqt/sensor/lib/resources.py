@@ -224,9 +224,11 @@ def resident_bytes_bound(
     members, the one under analysis, and the one being written. Each acquisition is
     sized as the largest read over the captures of
     `specs.sequencing.repeat_captures`: the port count of the capture, times 8 bytes
-    per complex64 sample, times the source samples of the record plus the
-    correction overlaps, without the trigger holdoff. The bound covers the `x`
-    arrays alone, not the resampled, filtered, or analyzed copies.
+    per complex64 sample, times the source samples of the record, the correction
+    overlaps, and the transient and strobe holdoff of a first burst member. The
+    later members of a burst read no holdoff, so the bound is exact for a sweep
+    without bursts and an overestimate for a sweep with bursts. The bound covers the
+    `x` arrays alone, not the resampled, filtered, or analyzed copies.
 
     Args:
         sweep: the sweep to size, with the `bursts` policy of its source
@@ -240,7 +242,7 @@ def resident_bytes_bound(
         )
         overlaps = compute.get_correction_overlaps(capture, sweep.source, analysis)
         count = buffers.get_read_count(
-            capture, sweep.source, include_holdoff=False, overlap=sum(overlaps)
+            capture, sweep.source, include_holdoff=True, overlap=sum(overlaps)
         )
         ports = len(specs.captures.split_capture_ports(capture))
         largest = max(largest, ports * 8 * count)

@@ -556,10 +556,29 @@ def pad_along_axis(
 
 
 # %% cupy configuration and memory management
-def pinned_array_as_cupy(x, stream=None):
+def pinned_array_as_cupy(x: np.ndarray, stream: Any = None) -> Array:
+    """return a device copy of the pinned host array `x`, started on `stream`.
+
+    The copy is asynchronous: synchronize `stream` (the current stream when None)
+    before `x` is rewritten. `x` is C-contiguous, or a 2-D array with contiguous rows
+    such as a column slice, which is copied one row at a time.
+
+    Raises:
+        ValueError: if `x` is neither C-contiguous nor 2-D with contiguous rows
+    """
     assert cp is not None
     out = cp.empty_like(x)
-    out.data.copy_from_host_async(x.ctypes.data, x.data.nbytes, stream=stream)
+    if x.flags.c_contiguous:
+        out.data.copy_from_host_async(x.ctypes.data, x.nbytes, stream=stream)
+    elif x.ndim == 2 and x.strides[1] == x.itemsize:
+        for row_out, row in zip(out, x):
+            row_out.data.copy_from_host_async(
+                row.ctypes.data, row.nbytes, stream=stream
+            )
+    else:
+        raise ValueError(
+            'the host array must be C-contiguous or 2-D with contiguous rows'
+        )
     return out
 
 
