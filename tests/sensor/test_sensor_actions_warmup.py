@@ -100,6 +100,11 @@ def test_warmup_sweep_preserves_analysis_and_trigger_and_nulls_the_sink_path():
     assert warm.sensor.source_cls is ss.sources.NoSource
 
 
+def test_warmup_capture_is_a_single_acquisition():
+    warm = warmup.derive_warmup_sweep(cupy_sweep((scale_only(burst=3),)))
+    assert [c.burst for c in warm.captures] == [1]
+
+
 def test_warmup_sweep_is_a_sweep_with_the_origin_capture_type():
     """the warmup binding has the capture type of the binding of the sweep, and the
     warmup runs as a plain `Sweep`"""

@@ -61,8 +61,8 @@ def derive_warmup_sweep(
     The source is a `NoSource` with ``max(port) + 1`` ports over every port that a
     capture or a `port` loop names, and the `master_clock_rate` and `signal_trigger`
     of `sweep_spec.source`. The captures are the first `count` captures of the loop
-    expansion of `sweep_spec`, with no loops. `analysis` is copied. `sink` is copied
-    with `path` None. The result is an instance of the sweep class of the
+    expansion of `sweep_spec`, with no loops and `burst` 1. `analysis` is copied.
+    `sink` is copied with `path` None. The result is an instance of the sweep class of the
     `warmup_binding` of the binding of `sweep_spec`.
 
     Args:
@@ -108,6 +108,7 @@ def derive_warmup_sweep(
     )
 
     captures = specs.sequencing.loop_captures(looped, limit=count)
+    captures = tuple(c.replace(burst=1) for c in captures)
 
     return looped.replace(captures=captures, loops=())
 

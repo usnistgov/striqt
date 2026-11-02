@@ -4,8 +4,9 @@ import contextlib
 import dataclasses
 import functools
 import inspect
+import queue as queue_lib
 import weakref
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Generator
 from threading import Event, RLock
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, cast
@@ -20,12 +21,19 @@ from .sources import base, buffers
 from .typing import PC, PS, SA, SC, SP, SS, SourceBackend, TypeVar
 
 if TYPE_CHECKING:
+    from typing import Callable
+
     from .typing import Array, Self, TypeAlias
 
     T = TypeVar('T', bound='Controller')
     PendingController: TypeAlias = 'Controller | Event | BaseException'
     PendingSlot: TypeAlias = 'weakref.ref[Controller] | Event | BaseException'
     from . import bindings
+
+    _QueueBase = queue_lib.Queue[Any]
+else:
+    # queue.Queue is not subscriptable at runtime on python 3.9
+    _QueueBase = queue_lib.Queue
 
 
 class lookup:
@@ -222,6 +230,69 @@ def read_retries(source: Controller) -> Generator[None]:
         yield
     finally:
         source.read_iq = initial  # ty: ignore[invalid-assignment]
+
+
+def _put_waiting(queue: AcquisitionQueue, iq: specs.AcquiredIQ) -> None:
+    """put `iq`, waiting for a free slot and checking for a thread interrupt."""
+    while True:
+        try:
+            queue.put(iq, timeout=0.1)
+        except queue_lib.Full:
+            util.propagate_thread_interrupts()
+        else:
+            return
+
+
+class AcquisitionQueue(_QueueBase):
+    """the bounded hand-off of acquisitions from the acquisition thread to analysis.
+
+    The items are `AcquiredIQ` objects and the sentinel or exception objects that the
+    producer puts to end the iteration. `maxsize` is the `buffers` count given at
+    construction.
+    """
+
+    nbytes: int
+    """the total `x.nbytes` of the `AcquiredIQ` items in the queue"""
+
+    def __init__(self, buffers: int):
+        """create an empty queue that holds up to `buffers` items."""
+        super().__init__(maxsize=buffers)
+        self.nbytes = 0
+
+    def _put(self, item: Any) -> None:
+        super()._put(item)
+        if isinstance(item, specs.AcquiredIQ):
+            self.nbytes += int(item.x.nbytes)
+
+    def _get(self) -> Any:
+        item = super()._get()
+        if isinstance(item, specs.AcquiredIQ):
+            self.nbytes -= int(item.x.nbytes)
+        return item
+
+    def purge(self, capture_index: int) -> int:
+        """remove the `AcquiredIQ` items with ``info.capture_index == capture_index``.
+
+        Returns:
+            the number of items removed
+        """
+        with self.mutex:
+            kept: deque[Any] = deque()
+            removed = 0
+            for item in self.queue:
+                if (
+                    isinstance(item, specs.AcquiredIQ)
+                    and item.info.capture_index == capture_index
+                ):
+                    removed += 1
+                    self.nbytes -= int(item.x.nbytes)
+                else:
+                    kept.append(item)
+            self.queue = kept
+            if removed:
+                self.unfinished_tasks -= removed
+                self.not_full.notify_all()
+        return removed
 
 
 @dataclasses.dataclass
@@ -517,9 +588,40 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             raise ConnectionError('backend is closed')
         return self.backend.get_info()
 
-    def read_iq(self, overlaps: tuple[int, int] = (0, 0)) -> tuple[Array, int | None]:
-        """read IQ for the armed capture"""
+    def read_iq(
+        self,
+        overlaps: tuple[int, int] = (0, 0),
+        *,
+        burst_index: int = 0,
+        resume: bool = False,
+    ) -> tuple[Array, int | None]:
+        """read the IQ of one burst member of the armed capture.
+
+        Member 0, and a member read with `resume`, triggers the backend and applies
+        the transient holdoff. A later member continues the enabled stream from the
+        samples carried over after the previous member. The carryover is kept for
+        the next member and cleared after the last member of the burst.
+
+        Args:
+            overlaps: the ``(lead, tail)`` overlap in source samples around the
+                record
+            burst_index: the index of the member within the burst of the armed
+                capture, from 0 to ``capture.burst - 1``
+            resume: True reads member `burst_index` as the first member after a
+                stream error, with no carryover
+
+        Returns:
+            ``(samples, start_time_ns)``: the samples with shape (ports, count), and
+            the time of the first record sample or None without a time stamp
+
+        Raises:
+            ValueError: if `overlaps` is not 2 non-negative integers
+            OverflowError: on a stream overflow after the first read of a member, or
+                at any read of a member that continues the stream
+            MemoryError: if the backend reports more samples than requested
+        """
         assert self._capture is not None, 'source must be armed to read IQ'
+        first = burst_index == 0 or resume
 
         if not isinstance(overlaps, (tuple, list)) or len(overlaps) != 2:
             raise ValueError('overlaps must be a sequence of 2 integers')
@@ -527,7 +629,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             if ol < 0 or not isinstance(ol, (np.integer, int)):
                 raise ValueError('overlaps must be non-negative integers')
 
-        self.backend.trigger(overlaps)
+        if first:
+            self.backend.trigger(overlaps)
 
         # the return buffer
         samples, stream_bufs = self._buffers.get_next(self._capture, overlaps=overlaps)
@@ -563,7 +666,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         chunk_count = remaining = output_count - carryover_count
 
         while remaining > 0:
-            if received_count > 0:
+            if received_count > 0 or not first:
                 on_overflow = 'except'
             else:
                 on_overflow = 'ignore'
@@ -616,7 +719,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
 
         record = compute.source_record_size(self._capture, self.get_resampler())
         unused_count = output_count - record
-        if start_ns is not None:
+        if burst_index < self._capture.burst - 1 and start_ns is not None:
             self._buffers.stash_carryover(
                 samples[:, sample_span],
                 start_ns,
@@ -624,6 +727,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                 capture=self._capture,
                 start_overlap=overlaps[0],
             )
+        else:
+            self._buffers.clear()
 
         # convert to cupy before slicing, over the whole pinned buffer. Converting
         # after the slice has produced CUDA memory corruption
@@ -632,11 +737,42 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         return samples[:, sample_span], start_ns
 
     @sa.util.stopwatch('acquire', 'source')
-    def acquire(self, overlaps: tuple[int, int] | None = None) -> specs.AcquiredIQ:
-        """acquire IQ samples needed for the armed capture."""
+    def acquire(
+        self,
+        overlaps: tuple[int, int] | None = None,
+        *,
+        burst_index: int = 0,
+        resume: bool = False,
+    ) -> specs.AcquiredIQ:
+        """acquire one burst member of the armed capture.
+
+        The read of member 0, or of a member with `resume`, is repeated up to
+        ``source_info.retries`` times on a stream error or overflow. A stream error
+        at a later member is raised to the caller, which owns the burst.
+
+        Args:
+            overlaps: the ``(lead, tail)`` overlap in source samples, or None to
+                derive the overlap from the capture and the analysis target
+            burst_index: the index of the member within the burst, stamped on
+                ``info.burst_index``
+            resume: True reads member `burst_index` as the first member after a
+                stream error
+
+        Returns:
+            the acquisition, with `x` of shape ``(ports, lead + record + tail)`` at
+            the source rate; the `reuse_iq` copy of the previous acquisition when
+            the armed capture is reusable
+
+        Raises:
+            AttributeError: if no capture is armed
+            ValueError: if `overlaps` is neither a tuple nor None
+            ReceiveStreamError: on a stream error once the retries are exhausted
+            OverflowError: on a stream overflow once the retries are exhausted
+        """
 
         self.capture_spec  # noqa: B018  raises AttributeError when no capture is armed
         signal_trigger = None
+        first = burst_index == 0 or resume
 
         if isinstance(overlaps, tuple):
             pass
@@ -659,10 +795,17 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             )
 
         if self._prev_iq is None:
-            with read_retries(self):
-                samples, time_ns = self.read_iq(overlaps)
+            if first:
+                with read_retries(self):
+                    samples, time_ns = self.read_iq(
+                        overlaps, burst_index=burst_index, resume=resume
+                    )
+            else:
+                samples, time_ns = self.read_iq(overlaps, burst_index=burst_index)
 
-            info = specs.AcquisitionInfo(source_id=self.source_id)
+            info = specs.AcquisitionInfo(
+                source_id=self.source_id, burst_index=burst_index
+            )
 
             iq = specs.AcquiredIQ(
                 format_path=self._config.format_path,
@@ -690,6 +833,107 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             self._prev_iq = iq
 
         return iq
+
+    def acquire_burst(
+        self,
+        overlaps: tuple[int, int] | None = None,
+        *,
+        queue: AcquisitionQueue | None = None,
+        finalize: Callable[[specs.AcquiredIQ], specs.AcquiredIQ] | None = None,
+    ) -> list[specs.AcquiredIQ]:
+        """acquire the ``capture.burst`` members of the armed capture.
+
+        The members are read back to back with the stream enabled. A stream error
+        or overflow at member `k` is retried up to ``source_info.retries`` times in
+        total per burst, after `prepare_retrigger` on the backend: under
+        ``bursts.on_gap='skip'`` member `k` is read again as a first member; under
+        ``'except'`` the members of the burst still in `queue` are removed and the
+        burst restarts at member 0. With no retries the error is raised.
+
+        Each member passes through `finalize` before it is queued or returned. A
+        member that finds `queue` full is dropped with a WARNING on the ``source``
+        logger under ``'skip'``, and raises under ``'except'``. The acquisition of a
+        capture with `burst` 1 waits for a free slot instead.
+
+        Args:
+            overlaps: the ``(lead, tail)`` overlap in source samples, or None to
+                derive the overlap from the capture and the analysis target
+            queue: the queue that receives each member, or None to return the
+                members
+            finalize: a function applied to each member before the queue put
+
+        Returns:
+            the members in order when `queue` is None, otherwise an empty list
+
+        Raises:
+            AcquisitionOverrunError: if `queue` is full under
+                ``bursts.on_gap='except'``
+            ReceiveStreamError: on a stream error once the retries are exhausted
+            OverflowError: on a stream overflow once the retries are exhausted
+            ThreadInterruptRequest: in a worker thread, when `cancel_threads` has
+                been called
+        """
+        capture = self.capture_spec
+        bursts = self.source_spec.bursts
+        retries = self.source_info.retries or 0
+
+        results: list[specs.AcquiredIQ] = []
+        k = 0
+        attempts = 0
+        resume = False
+        queued_index: int | None = None
+
+        while k < capture.burst:
+            try:
+                iq = self.acquire(overlaps, burst_index=k, resume=k > 0 and resume)
+            except (base.ReceiveStreamError, OverflowError):
+                attempts += 1
+                if attempts > retries:
+                    raise
+                self.backend.prepare_retrigger()
+                self._buffers.clear()
+                self._buffers.skip_next_buffer_swap()
+                if bursts.on_gap == 'skip':
+                    resume = True
+                else:
+                    if queue is not None and queued_index is not None:
+                        queue.purge(queued_index)
+                    k = 0
+                continue
+
+            resume = False
+            if finalize is not None:
+                iq = finalize(iq)
+
+            if queue is None:
+                results.append(iq)
+            elif capture.burst == 1:
+                _put_waiting(queue, iq)
+            else:
+                queued_index = iq.info.capture_index
+                try:
+                    queue.put_nowait(iq)
+                except queue_lib.Full:
+                    if bursts.on_gap == 'skip':
+                        sa.util.get_logger('source').warning(
+                            f'dropped burst member {k} of capture '
+                            f'{iq.info.capture_index}: the acquisition queue is full'
+                        )
+                    else:
+                        raise base.AcquisitionOverrunError(
+                            f'no free acquisition queue slot for burst member {k} '
+                            f'of capture {iq.info.capture_index}'
+                        ) from None
+
+            k += 1
+            if k < capture.burst:
+                util.propagate_thread_interrupts()
+
+        return results
+
+    def disarm(self) -> None:
+        """disable the stream of the backend until the next `arm` or `acquire`."""
+        self.backend.disarm()
 
     @property
     def capture_spec(self) -> SC:

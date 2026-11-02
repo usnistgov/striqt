@@ -19,6 +19,7 @@ from synthetic_sources import (
     RESAMPLE_FILTER,
     SCALE_ONLY,
     acquire_corrected,
+    build_acquired_iq,
     expected_raw,
     filtered,
     preset_capture,
@@ -366,22 +367,184 @@ def test_reuse_iq_clears_the_soapy_start_time(fake_controller):
     assert second.x is first.x
 
 
-def test_gapless_repeats_are_stamped_one_record_apart(fake_controller):
-    """the start time of a gapless repeat follows the previous start by one record,
-    although the carried-over samples begin one lead overlap before that"""
-    capture = soapy_capture(port=(0, 1), gain=(0, 0), sample_rate=MCR / 2)
-    with fake_controller(gapless=True, time_sync_at='open', receive_retries=0) as ctrl:
-        ctrl._arm_spec(capture)
-        first = ctrl.acquire()
-        ctrl._arm_spec(capture)
-        second = ctrl.acquire()
-        design = ctrl.get_resampler()
-        lead, _ = ss.lib.compute.get_correction_overlaps(capture, ctrl.source_spec)
+# %% bursts (fake SoapySDR device)
 
-    assert lead > 0, 'the capture must have a lead overlap to be discriminating'
+BURST_CAPTURE = soapy_capture(port=(0, 1), gain=(0, 0), sample_rate=MCR / 2, burst=3)
+AcquisitionQueue = ss.lib.controller.AcquisitionQueue
+AcquisitionOverrunError = ss.lib.sources.base.AcquisitionOverrunError
+
+
+def record_ns(ctrl, capture) -> int:
+    """return the duration (ns) of one source record of `capture` on `ctrl`"""
+    design = ctrl.get_resampler()
     record = ss.lib.compute.source_record_size(capture, design)
-    elapsed = second.info.start_time - first.info.start_time
-    assert elapsed / np.timedelta64(1, 'ns') == round(1e9 * record / design['fs_sdr'])
+    return round(1e9 * record / design['fs_sdr'])
+
+
+def start_deltas_ns(members) -> list[int]:
+    starts = [m.info.start_time.value for m in members]
+    return [b - a for a, b in zip(starts, starts[1:])]
+
+
+def burst_indexes(members) -> list[int]:
+    return [m.info.burst_index for m in members]
+
+
+class TestBurst:
+    @pytest.mark.parametrize('via', ['acquire', 'acquire_burst'])
+    def test_members_are_stamped_one_record_apart(
+        self, via, fake_soapy, fake_controller
+    ):
+        """the start time of each member follows the previous start by one record,
+        although the carried-over samples begin one lead overlap before that. The
+        stream is enabled once, and the later members read one record each with no
+        transient holdoff."""
+        with fake_controller(time_sync_at='open', receive_retries=0) as ctrl:
+            ctrl._arm_spec(BURST_CAPTURE)
+            if via == 'acquire':
+                members = [ctrl.acquire(burst_index=k) for k in range(3)]
+            else:
+                members = ctrl.acquire_burst()
+            lead, _ = ss.lib.compute.get_correction_overlaps(
+                BURST_CAPTURE, ctrl.source_spec
+            )
+            record = ss.lib.compute.source_record_size(
+                BURST_CAPTURE, ctrl.get_resampler()
+            )
+            period = record_ns(ctrl, BURST_CAPTURE)
+            stashed = ctrl._buffers.carryover_samples
+            device = fake_soapy.devices[0]
+
+        assert lead > 0, 'the capture must have a lead overlap to be discriminating'
+        assert burst_indexes(members) == [0, 1, 2]
+        assert start_deltas_ns(members) == [period, period]
+        assert len(device.calls_named('activateStream')) == 1
+        sizes = [c[1] for c in device.calls_named('readStream')]
+        assert sizes[0] == members[0].x.shape[1]
+        assert sizes[-2:] == [record, record], 'members 1 and 2 read one record each'
+        assert stashed is None, 'the carryover is cleared after the last member'
+
+    def test_carryover_is_kept_between_members(self, fake_soapy, fake_controller):
+        """members 1 and 2 read once each, with no transient-holdoff read"""
+        with fake_controller(time_sync_at='open', receive_retries=0) as ctrl:
+            device = fake_soapy.devices[0]
+            ctrl._arm_spec(BURST_CAPTURE)
+            ctrl.acquire(burst_index=0)
+            reads = len(device.calls_named('readStream'))
+            assert ctrl._buffers.carryover_samples is not None
+            ctrl.acquire(burst_index=1)
+            assert len(device.calls_named('readStream')) == reads + 1
+            assert ctrl._buffers.carryover_samples is not None
+            ctrl.acquire(burst_index=2)
+            assert len(device.calls_named('readStream')) == reads + 2
+            assert ctrl._buffers.carryover_samples is None
+
+    def test_disarm_deactivates_the_stream(self, fake_soapy, fake_controller):
+        with fake_controller(time_sync_at='open') as ctrl:
+            ctrl._arm_spec(BURST_CAPTURE)
+            ctrl.acquire(burst_index=0)
+            device = fake_soapy.devices[0]
+            assert device.streams[0].active
+            ctrl.disarm()
+            assert not device.streams[0].active
+
+    @pytest.mark.parametrize('on_gap', ['skip', 'except'])
+    def test_full_queue_delivers_member_0_only(self, on_gap, fake_controller, caplog):
+        """with one buffer and no consumer, member 0 fills the queue. Under skip the
+        other 2 members are dropped with one warning each; under except the second
+        member raises."""
+        bursts = ss.specs.BurstOptions(on_gap=on_gap, buffers=1)
+        queue = AcquisitionQueue(bursts.buffers)
+        with (
+            fake_controller(time_sync_at='open', bursts=bursts) as ctrl,
+            caplog.at_level(logging.WARNING, logger='striqt.source'),
+        ):
+            ctrl._arm_spec(BURST_CAPTURE)
+            if on_gap == 'skip':
+                assert ctrl.acquire_burst(queue=queue) == []
+            else:
+                with pytest.raises(AcquisitionOverrunError):
+                    ctrl.acquire_burst(queue=queue)
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == (2 if on_gap == 'skip' else 0)
+        assert queue.qsize() == 1
+        assert queue.get_nowait().info.burst_index == 0
+
+    @pytest.mark.parametrize('on_gap', ['skip', 'except'])
+    def test_overflow_at_member_1_is_retried(self, on_gap, fake_soapy, fake_controller):
+        """an overflow at member 1 re-triggers the stream. Under skip member 1 is
+        read again and members 1 and 2 are contiguous; under except the burst
+        restarts and the queued member 0 is replaced. The finalizer of member 0
+        queues the fault for the first read of member 1."""
+        bursts = ss.specs.BurstOptions(on_gap=on_gap, buffers=3)
+        queue = AcquisitionQueue(bursts.buffers)
+        finalized = []
+
+        def finalize(iq):
+            finalized.append(iq.info.burst_index)
+            if not finalized[:-1]:
+                device.fault_queue = [fake_soapy.SOAPY_SDR_OVERFLOW]
+            return iq
+
+        with fake_controller(
+            time_sync_at='open', receive_retries=1, bursts=bursts
+        ) as ctrl:
+            device = fake_soapy.devices[0]
+            ctrl._arm_spec(BURST_CAPTURE)
+            ctrl.acquire_burst(queue=queue, finalize=finalize)
+            period = record_ns(ctrl, BURST_CAPTURE)
+            retrigger_ns = device.streams[0].activate_time_ns
+
+        members = [queue.get_nowait() for _ in range(3)]
+        assert queue.qsize() == 0
+        assert burst_indexes(members) == [0, 1, 2]
+        assert len(device.calls_named('activateStream')) == 2
+        deltas = start_deltas_ns(members)
+        if on_gap == 'skip':
+            assert finalized == [0, 1, 2]
+            assert members[1].info.start_time.value >= retrigger_ns
+            assert deltas[1] == period
+        else:
+            assert finalized == [0, 0, 1, 2]
+            assert members[0].info.start_time.value >= retrigger_ns
+            assert deltas == [period, period]
+
+    def test_overflow_at_member_1_without_retries_raises(
+        self, fake_soapy, fake_controller
+    ):
+        def fault_after_member_0(iq):
+            device.fault_queue = [fake_soapy.SOAPY_SDR_OVERFLOW]
+            return iq
+
+        with fake_controller(time_sync_at='open', receive_retries=0) as ctrl:
+            device = fake_soapy.devices[0]
+            ctrl._arm_spec(BURST_CAPTURE)
+            with pytest.raises(OverflowError):
+                ctrl.acquire_burst(finalize=fault_after_member_0)
+
+
+def test_acquisition_queue_tracks_nbytes_and_purges_one_capture():
+    def member(capture_index, count):
+        info = ss.specs.AcquisitionInfo(capture_index=capture_index)
+        x = np.zeros((1, count), dtype='complex64')
+        return build_acquired_iq(x, REUSABLE, info=info)
+
+    queue = AcquisitionQueue(3)
+    for capture_index, count in [(0, 10), (1, 20), (0, 30)]:
+        queue.put_nowait(member(capture_index, count))
+    assert queue.nbytes == 60 * 8
+    with pytest.raises(ss.lib.controller.queue_lib.Full):
+        queue.put_nowait(member(1, 1))
+
+    assert queue.purge(0) == 2
+    assert queue.qsize() == 1
+    assert queue.nbytes == 20 * 8
+    queue.put_nowait(member(2, 5))
+    assert queue.get_nowait().info.capture_index == 1
+    assert queue.nbytes == 5 * 8
+    queue.put_nowait(object())
+    assert queue.nbytes == 5 * 8
 
 
 # %% read_iq: buffer reuse across captures, chunked reads and validation
