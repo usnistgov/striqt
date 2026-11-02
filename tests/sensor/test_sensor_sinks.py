@@ -4,6 +4,7 @@ zip archive path
 
 from __future__ import annotations
 
+import dataclasses
 import zipfile
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from synthetic_sources import (
     preset_capture,
     preset_sweep,
     spectrogram_frames,
+    tone_capture,
     tone_captures,
     tone_sweep,
 )
@@ -48,7 +50,7 @@ def test_no_sink_append_returns_its_argument():
     sink = ss.sinks.NoSink(tone_sweep((1e6,)))
     token = object()
     assert sink.append(token) is token
-    assert sink.captures_elapsed == 1
+    assert sink.acquisitions_elapsed == 1
 
 
 # %% _BatchTracker
@@ -72,6 +74,32 @@ def test_batch_tracker_merges_captures_of_different_shape():
     tracker = sinks._BatchTracker(captures, min_size=1)
     assert tracker.total_size == 3
     assert tracker.size == 3
+
+
+def test_batch_tracker_counts_each_burst_member():
+    """the members of a burst are appended one at a time, so 2 captures of `burst=2`
+    expanded by `expand_bursts` batch as 4 acquisitions in 2 groups of 2"""
+    captures = tone_captures((1e6,) * 2, burst=2)
+    expanded = ss.specs.sequencing.expand_bursts(captures)
+    tracker = sinks._BatchTracker(expanded, min_size=2)
+    assert tracker.total_size == 4
+    assert tracker.size == 2
+    assert tracker.next() == 2
+
+
+# %% sweep_row_count
+
+
+def test_sweep_row_count_sums_ports_times_burst():
+    """one row per port per burst member: a 1-port capture, a 1-port `burst=3`
+    capture, and a 2-port `burst=2` capture give 1 + 3 + 4 rows"""
+    captures = (
+        *tone_captures((1e6,)),
+        *tone_captures((2e6,), burst=3),
+        tone_capture({**ONE_PORT, 'port': (0, 1)}, burst=2),
+    )
+    sweep = tone_sweep((1e6,), analysis=IQ_ONLY).replace(captures=captures)
+    assert compute.datasets.sweep_row_count(sweep, 'x') == 1 + 3 + 4
 
 
 # %% ZarrCaptureSink
@@ -233,6 +261,47 @@ def test_zarr_capture_sink_writes_extra_data_variables(tmp_path):
     assert stored.temperature_source.values.tolist() == ['cpu', 'gpu', 'board']
 
 
+def burst_members(dd, burst):
+    """return `dd` as the `burst` members of one capture of `burst` acquisitions, each
+    with its own `burst_index`"""
+    capture = dd.capture.replace(burst=burst)
+    return [
+        dataclasses.replace(
+            dd, capture=capture, extra_coords=dd.extra_coords.replace(burst_index=k)
+        )
+        for k in range(burst)
+    ]
+
+
+def test_zarr_capture_sink_writes_one_row_group_per_burst_member(tmp_path):
+    """the `burst` appends of one 1-port capture fill the `burst` planned rows, with
+    `burst_index` counting the members and `capture_index` shared"""
+    burst = 3
+    unsunk = tone_sweep((1e6,))
+    (dd,) = [dd for dd in run_to_store(unsunk) if dd is not None]
+    members = burst_members(dd, burst)
+
+    sweep = unsunk.replace(
+        captures=(members[0].capture,),
+        sink=ss.specs.ZarrSink(path=str(tmp_path / 'burst.zarr')),
+    )
+    with (
+        ss.open_resources(unsunk, None),
+        ss.sinks.ZarrCaptureSink(sweep) as sink,
+    ):
+        for member in members:
+            sink.append(member)
+        assert sink.rows_written == burst
+        assert sink.acquisitions_elapsed == burst
+
+    stored = sa.load(sweep.sink.path)
+    assert stored.sizes['capture'] == burst
+    assert stored.burst_index.values.tolist() == list(range(burst))
+    assert stored.burst.values.tolist() == [burst] * burst
+    assert stored.capture_index.values.tolist() == [0] * burst
+    assert stored.port.values.tolist() == [0] * burst
+
+
 def test_zarr_capture_sink_grows_past_the_planned_rows(tmp_path):
     """a looped sweep writes more rows than the plan and the store keeps them all"""
     sweep = zarr_sweep(tmp_path / 'loop.zarr', (1e6, 2e6))
@@ -309,6 +378,20 @@ def test_time_append_sink_requires_a_spectrogram():
     sweep = zarr_sweep('unused.zarr', (1e6,))
     with pytest.raises(ValueError, match='spectrogram'):
         ss.sinks.ZarrTimeAppendSink(sweep)
+
+
+def test_time_append_sink_batches_count_burst_members(tmp_path):
+    """the batch sizes of the sink are over acquisitions: 2 captures of `burst=2`
+    form 4 appends, and a batch size of 2 closes after every 2"""
+    sweep = zarr_sweep(tmp_path / 'spg.zarr', OFFSETS, analysis=SPECTROGRAM)
+    sweep = sweep.replace(captures=tuple(c.replace(burst=2) for c in sweep.captures))
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    with (
+        ss.open_resources(unsunk, None),
+        ss.sinks.ZarrTimeAppendSink(sweep, batch_size=2) as sink,
+    ):
+        assert sink._batch.total_size == 4
+        assert sink._batch.size == 2
 
 
 def test_time_append_sink_concatenates_the_frames(tmp_path):

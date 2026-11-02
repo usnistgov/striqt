@@ -206,15 +206,34 @@ def build_capture_coords(
     return coords
 
 
-def get_looped_coords(ds: xr.Dataset, include_repeats=False) -> list[str]:
-    """return a list of coordinates that were looped"""
+def get_looped_coords(ds: xr.Dataset, include_repeats: bool = False) -> list[str]:
+    """return the names of the coordinates of `ds` that distinguish its rows.
+
+    The list is the `field` of each loop in the ``loops`` attr of `ds`, in loop
+    order, followed by ``'burst_index'`` when the ``burst`` coordinate of `ds` is
+    above 1 on any row.
+
+    Args:
+        ds: a sensor dataset with the ``loops`` attr of a sweep
+        include_repeats: if True, keep the `Repeat` loops, listed as None
+
+    Raises:
+        AttributeError: if `ds` has no ``loops`` attr
+    """
     if 'loops' not in ds.attrs:
         raise AttributeError('no loops metadata in data attributes')
-    return [
+    names = [
         l['field']
         for l in ds.attrs['loops']
         if include_repeats or l['kind'] != 'repeat'
     ]
+    if _has_bursts(ds):
+        names.append('burst_index')
+    return names
+
+
+def _has_bursts(ds: xr.Dataset) -> bool:
+    return 'burst' in ds.coords and ds['burst'].size > 0 and int(ds['burst'].max()) > 1
 
 
 def index_dataset(
@@ -338,7 +357,7 @@ def _coords_template(
     return xr.Coordinates(coord_vars)
 
 
-def _check_coord_indexes(ds, index_coords: list[str]):
+def _check_coord_indexes(ds: xr.Dataset, index_coords: list[str]) -> None:
     if _xarray_version() < (2024, 9, 0):
         sa.util.get_logger('analysis').warning(
             'xarray is too old to to validate coord indexes'
@@ -359,13 +378,15 @@ def _check_coord_indexes(ds, index_coords: list[str]):
     # suggest coordinates that would make the index unique
     counts = {n: np.unique(da).tolist() for n, da in sub.data_vars.items()}
     counts = {n: c for n, c in counts.items() if len(c) == sub.sizes['capture']}
+    suggest = set(counts.keys())
+    if _has_bursts(ds) and 'burst_index' not in index_coords:
+        suggest.add('burst_index')
 
-    if len(counts) == 0:
+    if len(suggest) == 0:
         raise ValueError(
             f'coords {index_coords} are insufficient to unstack and least two more may be needed'
         )
     else:
-        suggest = set(counts.keys())
         raise ValueError(
             f'coords {index_coords} are insufficient to unstack. consider adding one of {suggest}'
         )
@@ -437,13 +458,14 @@ def drop_conflicts(attrs_list: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def sweep_row_count(sweep: specs.Sweep, source_id: str) -> int:
-    """return the row count of a store of `sweep`: one per port of every expanded capture.
+    """return the row count of a store of `sweep`: one per port per burst member.
 
     The captures are those of `specs.sequencing.repeat_captures`, so a leading
-    `Repeat` loop multiplies the count.
+    `Repeat` loop multiplies the count. Each capture contributes `burst`
+    acquisitions.
     """
     captures = specs.sequencing.repeat_captures(sweep, source_id)
-    return sum(len(specs.captures.split_capture_ports(c)) for c in captures)
+    return sum(len(specs.captures.split_capture_ports(c)) * c.burst for c in captures)
 
 
 def _distinct_analyses(

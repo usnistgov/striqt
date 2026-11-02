@@ -51,6 +51,16 @@ Action specs form a data-only chain in `specs/structs.py`:
 `CapturePlan` expands without `options`. `specs/paths.py:PathFormatter` reads the action
 spec. The class name of the action spec is the `{sensor_binding}` field.
 
+`SensorCapture.burst` is the number of back-to-back acquisitions that one capture
+produces with the stream left enabled, 1 by default. `Source.bursts` is a `BurstOptions`
+block on the base source spec, so every backend reads one policy: `on_gap` (`'skip'` or
+`'except'`) says whether a burst may contain a timing gap, `buffers` is the number of
+acquisitions queued ahead of analysis, and `trigger_on` (`'first'` or `'all'`) says how
+often the signal trigger runs within a burst. `validate_sweep` rejects `options.reuse_iq`
+with a `burst` above 1, `ManualYFactorCalibration` rejects a `burst` above 1, and the
+warmup sweep forces `burst=1`. `specs.sequencing.count_acquisitions` is the number of
+acquisitions of one pass; `expand_bursts` repeats each capture `burst` times.
+
 ## Actions and runners
 
 An *action* is an action spec type paired with a runner. `sensor/lib/actions/registry.py`
@@ -201,8 +211,8 @@ built sweep), `runner`, and `callbacks`.
 
 A front end registers hooks for one run as keywords of `open_resources`, each one
 callable or None: `on_source_opened(sweep, source_id)` runs from a worker thread after
-the source opens; `on_analyzed(dd)` receives the `DelayedDataset` of each capture in the
-analysis thread, after `compute.analyze` and before the dataset is submitted to
+the source opens; `on_analyzed(dd)` receives the `DelayedDataset` of each acquisition in
+the analysis thread, after `compute.analyze` and before the dataset is submitted to
 `sink.append`; `on_sink_cached(resources, cache, capture, result, **kwargs)` runs in the
 analysis thread each time a measurement fills a `KwArgCache` (the pipeline forwards the
 cache's own callback arguments and prepends `resources`, since the SNR line needs the
@@ -223,19 +233,45 @@ beside `confirm_labels` and `web-plotter` imports and calls from its own callbac
 `from_delayed` emits none of these messages.
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in
-`actions/core.py:iterate_captures`, the three-stage software pipeline in threads
-(acquire, analyze, write). The docstring of `iterate_captures` diagrams the stage
-offsets. The `extra_data` of the runner is merged at the end of each acquisition, and
-the fields of the action spec are the dataset attrs. GPU analysis deliberately runs in
-the foreground thread.
+`actions/core.py:iterate_captures`. A dedicated acquisition thread (`striqt-acquire`)
+arms the source once per capture, acquires the `burst` members of the capture with the
+stream left enabled, and puts each `AcquiredIQ` on a bounded `AcquisitionQueue` of
+`source.bursts.buffers` acquisitions. The caller's thread dequeues one acquisition per
+step, runs `compute.analyze` on the acquisition dequeued at the previous step in the
+foreground (GPU work stays on this thread), and submits the `sink.append` of the
+acquisition before that to the thread pool. N delivered acquisitions take N + 2 steps.
+The peripheral data of the capture and the `extra_data` of the runner are merged into
+every member, and the fields of the action spec are the dataset attrs.
+`lib/resources.py:resident_bytes_bound` is the worst case of raw IQ resident at once,
+`(buffers + 2)` times the largest read of the sweep; `open_resources` logs it at INFO on
+the `sweep` logger and `check-sweep` prints it.
+
+`source.bursts.on_gap` decides what happens when a burst cannot stay contiguous. A capture
+with `burst` 1 is not a burst: the acquisition thread waits for a free queue slot, so a
+sweep without bursts keeps the one-ahead pacing of acquisition and analysis. Under
+`'skip'`, a member that finds the queue full is dropped: the time grid of the burst is
+kept, `burst_index` skips that member, and a WARNING is logged on the `source` logger. A
+stream overflow with `receive_retries` left re-triggers and resumes at the failed member.
+The earlier members stand and `start_time` has one gap at that member. Under `'except'`, a full queue
+raises `AcquisitionOverrunError` and ends the run, and a stream overflow re-triggers and
+restarts the burst from member 0 after purging the members of that burst still in the
+queue. Members already consumed by analysis stay in the output: `(capture_index,
+burst_index)` can repeat with a later `start_time`. With `receive_retries` exhausted,
+either mode raises. `source.bursts.trigger_on` governs the signal trigger only: `'first'`
+computes the lag on the first delivered member of a burst and applies it to the rest;
+`'all'` runs the trigger on every member. The hardware clock syncs once per burst, on
+member 0.
 
 Captures are expanded from `captures:` plus `loops:` (`Range`, `List`, `Repeat`,
 `FrequencyBinRange`) by `specs.sequencing.loop_captures`. The per-source overrides from
 `adjust_captures` are then applied.
 
 Output is written by `ZarrCaptureSink` (`lib/sinks.py`) into a zarr store that the sink
-allocates at `open` from the sweep spec: one row per port of every expanded capture
-along `capture`, every data variable and coordinate at full length, and no data.
+allocates at `open` from the sweep spec: one row per port per burst member of every
+expanded capture along `capture`, every data variable and coordinate at full length, and
+no data. The row count is `compute/datasets.py:sweep_row_count`; `burst` and
+`burst_index` are `capture`-dim coordinates, and `get_looped_coords` appends
+`burst_index` to the index fields of a dataset with a `burst` above 1.
 `compute/datasets.py:sweep_template` builds that zero-row dataset without IQ: the axis
 lengths and fixed coordinates come from the coordinate factories of the registry, the
 per-capture coordinates from the capture type and the `acquisition_info_cls` of the
@@ -245,10 +281,11 @@ the metadata and resizes the arrays. Each `append` writes the arrays of the
 `DelayedDataset` into the chunks it completes (`ZarrSink.max_chunk_bytes` bounds a
 chunk), queues the rest, and adds the attrs that measurement bodies return, dropping a
 key that differs between captures. Store metadata is staged in memory by
-`analysis/lib/stores.py` and flushed after every capture for a directory store and once
+`analysis/lib/stores.py` and flushed after every acquisition for a directory store and once
 at `close` for a `.zarr.zip`, which is written in place, so no store key is written
 twice. `close` writes the partial chunks, trims the arrays to the rows written, and
-consolidates the metadata. `ZarrSink.batched_write_count` is deprecated and ignored.
+consolidates the metadata. A row group written for a re-acquired burst member stays in
+the store (see `on_gap` above). `ZarrSink.batched_write_count` is deprecated and ignored.
 `ZarrTimeAppendSink` instead appends along the spectrogram time axis and is reached only
 by passing an instance through `iterate_sweep(res, sink=...)`; `Zipper` remains for the
 `zip-zarr` CLI.
@@ -265,16 +302,22 @@ dropped before the record: at least the lead, plus `transient_holdoff_time` afte
 re-arm (no carryover), rounded up to the next `trigger_strobe` edge when a strobe is
 set. The record start time is the stamp plus the holdoff.
 
-With `gapless`, `ReceiveBuffers.stash_carryover` keeps the trailing lead and tail of the
-record and stamps the first carried sample one lead before the next record. `apply`
-returns that stamp for the next capture in place of a source read.
+Within a burst, `ReceiveBuffers.stash_carryover` keeps the trailing lead and tail of the
+record of member k and stamps the first carried sample one lead before the record of
+member k + 1. `apply` returns that stamp for member k + 1 in place of a source read, so
+member k + 1 starts exactly one record after member k. The carryover applies within a
+burst only: `Controller._arm_spec` clears the stash at arm, and `read_iq` clears it
+after the last member. Equal consecutive captures do not carry over; only a capture with
+`burst` above 1 is sample-contiguous.
 
 `sources/base.py:VirtualSource` keeps a synthetic clock. The clock is 0 at the first
 `arm`, so corrected sample 0 of the first capture is on every strobe grid. A re-arm
 continues the stream: the first read after `arm` is stamped where the previous samples
-ended, and the origin of the new capture is one new-rate lead overlap later.
-`ZarrIQSource.read` replaces the stamp with the store's `start_time` less the lead, so
-`start_time` stays the time of file index 0.
+ended, and the origin of the new capture is one new-rate lead overlap later. The members
+of a burst continue the clock without a re-arm, so member k reads the generator k
+records after member 0. `ZarrIQSource.read` stamps member k with the store's
+`start_time` less the lead, advanced by k records, so `start_time` of member 0 stays the
+time of file index 0.
 
 ### The per-capture signal path
 

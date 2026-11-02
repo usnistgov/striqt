@@ -112,7 +112,8 @@ class BurstOptions(SpecBase, frozen=True, kw_only=True):
     bounds the acquisitions held ahead of analysis, `on_gap` says whether a member
     may be dropped or re-triggered when analysis falls behind or the stream
     overflows, and `trigger_on` says how often the signal trigger runs within one
-    burst. The hardware clock syncs once per burst.
+    burst. The hardware clock syncs once per burst. A capture with `burst` 1 waits
+    for a free slot and is never dropped.
     """
 
     on_gap: types.OnGap = 'skip'
