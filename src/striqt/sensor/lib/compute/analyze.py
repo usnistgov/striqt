@@ -9,7 +9,7 @@ import msgspec
 
 import striqt.analysis as sa
 import striqt.waveform as sw
-from striqt.analysis.lib.util import np, xr
+from striqt.analysis.lib.util import xr
 
 from ... import specs
 from . import corrections, datasets
@@ -185,7 +185,8 @@ def prepare_compute(
         `always_yield` set, and nothing when the warmup sweep has no captures
     """
     if spec.source.array_backend == 'cupy':
-        import numba.cuda
+        # imported for the side effect of initializing the CUDA driver
+        import numba.cuda  # noqa: F401
 
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
             sw.arrays.configure_cupy()

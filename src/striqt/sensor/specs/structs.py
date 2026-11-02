@@ -61,6 +61,7 @@ class SensorCapture(Capture, frozen=True, kw_only=True):
     backend_sample_rate: Optional[types.BackendSampleRate] = None
     adjust_analysis: types.AnalysisAdjustments = msgspec.field(default_factory=dict)
     external_lo_frequency: types.LOFrequency = None
+    burst: types.BurstCount = 1
 
 
 class SoapyCapture(SensorCapture, frozen=True, kw_only=True):
@@ -103,6 +104,22 @@ class FileCapture(SensorCapture, frozen=True, kw_only=True):
 # %% Source specs
 
 
+class BurstOptions(SpecBase, frozen=True, kw_only=True):
+    """the `bursts` block of a `Source`: the policy for the members of a capture burst.
+
+    A capture with `burst` above 1 is acquired as that many back-to-back members
+    with the stream left enabled, so the members are sample-contiguous. `buffers`
+    bounds the acquisitions held ahead of analysis, `on_gap` says whether a member
+    may be dropped or re-triggered when analysis falls behind or the stream
+    overflows, and `trigger_on` says how often the signal trigger runs within one
+    burst. The hardware clock syncs once per burst.
+    """
+
+    on_gap: types.OnGap = 'skip'
+    buffers: types.BurstBuffers = 1
+    trigger_on: types.TriggerOn = 'first'
+
+
 class Source(SpecBase, frozen=True, kw_only=True):
     """run-time characteristics of the radio that are left invariant during a sweep"""
 
@@ -114,13 +131,12 @@ class Source(SpecBase, frozen=True, kw_only=True):
     signal_trigger: Union[str, BuiltinTriggers, None] = None
 
     array_backend: types.ArrayBackend = 'numpy'
+    bursts: BurstOptions = msgspec.field(default_factory=BurstOptions)
 
-    # unannotated so that a subclass can declare these as schema fields; source
-    # implementations read the attributes
-    gapless = False
+    # unannotated so that a subclass can declare this as a schema field; source
+    # implementations read the attribute
     calibration = None
     if TYPE_CHECKING:
-        gapless: bool
         calibration: str | None
 
     # validation data
@@ -141,19 +157,12 @@ class SoapySource(Source, frozen=True, kw_only=True):
     # True when one clock drives acquisition on all RX ports
     shared_rx_sample_clock = True
     rx_enable_delay = 0.0
-    gapless: types.GaplessRepeat = False
 
     def __post_init__(self):
         from striqt.analysis import registry
 
         super().__post_init__()
 
-        if not self.gapless:
-            pass
-        elif self.time_sync_at == 'acquire':
-            raise ValueError('time_sync_at must be "open" when gapless')
-        elif self.receive_retries > 0:
-            raise ValueError('receive_retries must be 0 when gapless is enabled')
         trigger = self.signal_trigger
         if trigger is None:
             pass
@@ -559,8 +568,9 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only
     An `analysis` block is accepted, discarded, and reported with a
     `DeprecationWarning`. More than one capture is accepted only when
     `calibration.implied_loops` names the fields that the captures vary, and
-    `source.calibration` must be None. A bound spec is also rejected when the
-    runner cannot derive the calibration sweep.
+    `source.calibration` must be None. Every capture must have `burst` equal to 1.
+    A bound spec is also rejected when the runner cannot derive the calibration
+    sweep.
     """
 
     calibration: ManualYFactorSpec
@@ -588,6 +598,13 @@ class ManualYFactorCalibration(CapturePlan[SS, SP, SC, SA], frozen=True, kw_only
                 'calibration peripheral declares `implied_loops`',
                 ('.captures',),
             )
+        for i, capture in enumerate(self.captures):
+            if capture.burst != 1:
+                raise SpecValidationError(
+                    'Expected 1, since a calibration indexes one acquisition per '
+                    'capture',
+                    ('.captures', f'[{i}]', '.burst'),
+                )
         if self.source.calibration is not None:
             raise SpecValidationError(
                 'Expected `null`, since a calibration sweep cannot itself be calibrated',
@@ -884,6 +901,7 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     source_id: types.SourceID = ''
     sweep_index: int = 0
     capture_index: int = 0
+    burst_index: int = 0
 
     signal_trigger: Union[Trigger, None] = None
 

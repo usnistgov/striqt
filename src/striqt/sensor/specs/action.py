@@ -69,6 +69,7 @@ def validate_sweep(
     * the `loops` entries: a `repeat` only outermost, and at most one loop per field;
     * a loop over a field that the `captures` entries set to different values;
     * a measurement name that shadows a capture field;
+    * `options.reuse_iq` together with a capture `burst` above 1;
     * each unique (capture, analysis) combination against the registered
       measurements;
     * each unique capture against the conditioning signal path: trigger lookup,
@@ -90,6 +91,7 @@ def validate_sweep(
     _validate_loops(sweep.loops)
     _validate_loop_capture_collisions(sweep.loops, sweep.captures)
     _validate_measurement_names(sweep)
+    _validate_bursts(sweep, source_id)
     _validate_sweep_analysis(sweep, source_id)
     _validate_sweep_corrections(sweep, source_id)
 
@@ -188,6 +190,28 @@ def _validate_measurement_names(sweep: structs.Sweep) -> None:
             'shadows a capture field of the same name',
             ('.analysis',),
         )
+
+
+def _validate_bursts(
+    sweep: structs.Sweep[Any, Any, SC, Any],
+    source_id: types.SourceID | None = None,
+) -> None:
+    """reject `options.reuse_iq` when an expanded capture has `burst` above 1.
+
+    Raises:
+        SpecValidationError: at ``$.options.reuse_iq``, located at the first such
+            capture
+    """
+    if not sweep.options.reuse_iq:
+        return
+    for capture, origin in sequencing.loop_capture_origins(sweep, source_id).items():
+        if capture.burst > 1:
+            raise SpecValidationError(
+                'Expected false, since the reuse cache holds one acquisition and a '
+                'capture burst produces several',
+                ('.options', '.reuse_iq'),
+                sequencing.describe_capture_origin(sweep.loops, capture, origin),
+            )
 
 
 def _validate_sweep_analysis(

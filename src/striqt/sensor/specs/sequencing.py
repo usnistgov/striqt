@@ -136,6 +136,36 @@ def repeat_captures(
     return captures
 
 
+def count_acquisitions(
+    sweep: structs.Sweep[Any, Any, SC, Any],
+    source_id: types.SourceID | None = None,
+    *,
+    loop: bool = False,
+) -> int:
+    """return the number of acquisitions that one run of `sweep` produces.
+
+    Each capture of `repeat_captures` contributes `burst` acquisitions. A member
+    dropped at run time under ``bursts.on_gap='skip'`` is still counted, so the
+    result is the upper bound of the acquisitions delivered.
+
+    Args:
+        sweep: the sweep to expand, as `loop_captures`
+        source_id: as `loop_captures`
+        loop: True selects the unbounded run that cycles through the captures
+
+    Returns:
+        the acquisition count, or -1 when `loop` is True
+    """
+    if loop:
+        return -1
+    return sum(c.burst for c in repeat_captures(sweep, source_id))
+
+
+def expand_bursts(captures: Iterable[SC]) -> tuple[SC, ...]:
+    """return `captures` with each entry repeated `burst` times in place."""
+    return tuple(c for c in captures for _ in range(c.burst))
+
+
 def loop_capture_origins(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,

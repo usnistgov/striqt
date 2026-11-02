@@ -68,6 +68,9 @@ class AcquiredIQ(sa.AcquiredIQ):
     `info.signal_trigger`"""
     overwrite_x: bool = False
     """True permits the resampling stage to overwrite `x`"""
+    trigger_shifts: sw.typing.Array | None = None
+    """one shift per port (samples at `capture.sample_rate`) that the alignment stage
+    applies in place of running the trigger; None runs the trigger"""
 
     @util.cached_property
     def preprocess(self) -> corrections.Preprocessor:
