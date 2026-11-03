@@ -295,9 +295,7 @@ def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.nda
     return freqs.astype('float64').round(16)
 
 
-@registry.coordinates(
-    dtype='float64', attrs={'standard_name': 'Baseband Frequency', 'units': 'Hz'}
-)
+@registry.coordinates(dtype='float64', standard_name='Baseband Frequency', units='Hz')
 def spectrogram_baseband_frequency(
     capture: specs.Capture, spec: specs.Spectrogram
 ) -> np.ndarray:
@@ -371,9 +369,7 @@ def spectrogram_level_tolerance(
 
 
 # %% spectrogram
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
-)
+@registry.coordinates(dtype='float32', standard_name='Time Elapsed', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
     sizing = validated_spectrogram_sizing(capture, spec)
@@ -403,7 +399,7 @@ def spectrogram_tolerance(
     spec_type=specs.Spectrogram,
     dtype='float16',
     caches=spectrogram_cache,
-    attrs={'standard_name': 'PSD'},
+    standard_name='PSD',
     validate=validated_spectrogram_sizing,
     tolerance=spectrogram_tolerance,
     prefer_filtered=False,
@@ -441,7 +437,7 @@ def spectrogram(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
 
 
 # %% power_spectral_density
-@registry.coordinates(dtype='str', attrs={'standard_name': 'Time statistic'})
+@registry.coordinates(dtype='str', standard_name='Time statistic')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def time_statistic(
     capture: specs.Capture, spec: specs.PowerSpectralDensity
@@ -450,9 +446,7 @@ def time_statistic(
     return np.asarray(time_statistic, dtype=object)
 
 
-@registry.coordinates(
-    dtype='float64', attrs={'standard_name': 'Baseband frequency', 'units': 'Hz'}
-)
+@registry.coordinates(dtype='float64', standard_name='Baseband frequency', units='Hz')
 @specs.helpers.lru_cache_on_converted(specs.Capture, specs.Spectrogram)
 def baseband_frequency(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
     return spectrogram_baseband_frequency(capture, spec)
@@ -494,7 +488,7 @@ def power_spectral_density_tolerance(
     coord_factories=[time_statistic, baseband_frequency],
     spec_type=specs.PowerSpectralDensity,
     dtype='float32',
-    attrs={'standard_name': 'Power spectral density'},
+    standard_name='Power spectral density',
     validate=validated_psd_sizing,
     tolerance=power_spectral_density_tolerance,
     prefer_filtered=False,
@@ -579,7 +573,8 @@ def power_spectral_density(
 # %% spectrogram_histogram
 @registry.coordinates(
     dtype='float32',
-    attrs={'standard_name': 'Spectrogram bin power', 'units': sw.units.DB_POWER},
+    standard_name='Spectrogram bin power',
+    units=sw.units.DB_POWER,
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture, specs.SpectrogramHistogram)
 def spectrogram_power_bin(
@@ -616,7 +611,7 @@ def spectrogram_power_bin(
     coord_factories=[spectrogram_power_bin],
     spec_type=specs.SpectrogramHistogram,
     dtype='float32',
-    attrs={'standard_name': 'Fraction of counts'},
+    standard_name='Fraction of counts',
     validate=validated_spectrogram_sizing,
     prefer_filtered=False,
 )
@@ -674,7 +669,8 @@ def spectrogram_histogram(
 # %% spectrogram_ratio_histogram
 @registry.coordinates(
     dtype='float32',
-    attrs={'standard_name': 'Spectrogram cross-channel power ratio', 'units': 'dB'},
+    standard_name='Spectrogram cross-channel power ratio',
+    units='dB',
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def spectrogram_ratio_power_bin(
@@ -698,7 +694,7 @@ def spectrogram_ratio_power_bin(
     coord_factories=[spectrogram_ratio_power_bin],
     spec_type=specs.SpectrogramHistogramRatio,
     dtype='float32',
-    attrs={'standard_name': 'Fraction of counts'},
+    standard_name='Fraction of counts',
     validate=validated_spectrogram_sizing,
     prefer_filtered=False,
 )

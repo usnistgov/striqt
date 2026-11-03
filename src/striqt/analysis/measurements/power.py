@@ -106,9 +106,7 @@ def channel_power_tolerance(
     )
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Time elapsed', 'units': 's'}
-)
+@registry.coordinates(dtype='float32', standard_name='Time elapsed', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def time_elapsed(
     capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
@@ -117,7 +115,7 @@ def time_elapsed(
     return np.arange(binning.bin_count) * float(spec.detector_period)
 
 
-@registry.coordinates(dtype=object, attrs={'standard_name': 'Power detector'})
+@registry.coordinates(dtype=object, standard_name='Power detector')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def power_detector(
     capture: specs.Capture, spec: specs.ChannelPowerTimeSeries
@@ -157,7 +155,8 @@ def evaluate_channel_power_time_series(
     dtype='float32',
     spec_type=specs.ChannelPowerTimeSeries,
     caches=_channel_power_cache,
-    attrs={'standard_name': 'Channel Power', 'units': sw.units.DB_POWER},
+    standard_name='Channel Power',
+    units=sw.units.DB_POWER,
     validate=validated_channel_power_binning,
     tolerance=channel_power_tolerance,
 )
@@ -259,7 +258,8 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 
 @registry.coordinates(
     dtype='float32',
-    attrs={'standard_name': 'Channel power', 'units': sw.units.DB_POWER},
+    standard_name='Channel power',
+    units=sw.units.DB_POWER,
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def channel_power_bin(
@@ -282,7 +282,7 @@ def channel_power_bin(
     depends=[channel_power_time_series],
     spec_type=specs.ChannelPowerHistogram,
     dtype='float32',
-    attrs={'standard_name': 'Fraction of channel power readings'},
+    standard_name='Fraction of channel power readings',
     validate=validated_channel_power_binning,
 )
 def channel_power_histogram(
@@ -344,7 +344,7 @@ def channel_power_histogram(
 
 
 # %% cyclic_channel_power
-@registry.coordinates(dtype=object, attrs={'standard_name': 'Cyclic statistic'})
+@registry.coordinates(dtype=object, standard_name='Cyclic statistic')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_statistic(capture: specs.Capture, spec: specs.CyclicChannelPower):
     return list(spec.cyclic_statistics)
@@ -433,9 +433,7 @@ def cyclic_channel_power_tolerance(
     )
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Cyclic lag', 'units': 's'}
-)
+@registry.coordinates(dtype='float32', standard_name='Cyclic lag', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.ndarray:
     lag_count = validated_cyclic_lag_count(capture, spec)
@@ -448,7 +446,8 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.nda
     coord_factories=[power_detector, cyclic_statistic, cyclic_lag],
     spec_type=specs.CyclicChannelPower,
     dtype='float32',
-    attrs={'standard_name': 'Cyclic channel power', 'units': sw.units.DB_POWER},
+    standard_name='Cyclic channel power',
+    units=sw.units.DB_POWER,
     validate=validated_cyclic_lag_count,
     tolerance=cyclic_channel_power_tolerance,
 )

@@ -78,9 +78,11 @@ arguments, validates the fields, and returns a `DelayedDataArray`
 registration is an identity at runtime that gives the type checker the fields of the
 spec as keyword parameters.
 
-A power output or power-bin coordinate declares the *form* of its unit with one of
-`striqt.waveform.units.DB_POWER` (`'{dB}'`), `POWER` (`'{P}'`), or `AMPLITUDE`
-(`'√{P}'`), with an optional denominator. `dataarrays.measurement_attrs` and
+A registration names its output with the `standard_name=` keyword and its unit with
+`units=`; those two are the registered attrs, and every other attr is returned by the
+measurement body. A power output or power-bin coordinate declares the *form* of its unit
+with one of `striqt.waveform.units.DB_POWER` (`'{dB}'`), `POWER` (`'{P}'`), or
+`AMPLITUDE` (`'√{P}'`), with an optional denominator. `dataarrays.measurement_attrs` and
 `dataarrays.measurement_coords` compose the attrs of an output and resolve the form into
 the family of `AcquiredIQ.power_units` (`'mW'`, `'FS'`, or `'a.u.'`; a bare array is
 `'a.u.'`). `build_dataarray` and the sensor's zarr template (`sensor/lib/compute/datasets.py:

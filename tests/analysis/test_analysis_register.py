@@ -58,6 +58,7 @@ def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=No
     @registry.measurement(
         spec_type,
         dtype='float32',
+        standard_name='Toy',
         dims=('toy',),
         validate=validate,
         tolerance=tolerance,
@@ -99,7 +100,9 @@ def build_preference_registry(**preferences: bool):
     registry = register.AnalysisRegistry()
     received = []
 
-    @registry.measurement(ToySpec, dtype='complex64', dims=('toy',), **preferences)
+    @registry.measurement(
+        ToySpec, dtype='complex64', standard_name='Toy', dims=('toy',), **preferences
+    )
     def toy(x, capture, **kwargs):
         received.append(x)
         return x
@@ -254,6 +257,7 @@ def build_group_registry(*validators, tolerances=(None, None)):
     @registry.measurement(
         ToySpec,
         dtype='float32',
+        standard_name='Toy',
         dims=('toy',),
         validate=toy_validate,
         tolerance=toy_tolerance,
@@ -264,6 +268,7 @@ def build_group_registry(*validators, tolerances=(None, None)):
     @registry.measurement(
         OtherToySpec,
         dtype='float32',
+        standard_name='Other toy',
         dims=('other',),
         validate=other_validate,
         tolerance=other_tolerance,
@@ -923,3 +928,55 @@ def test_group_checks_reject_a_field_that_is_not_optional(check):
 
     with pytest.raises(TypeError, match='Optional'):
         check(Bad)
+
+
+# %% registration keywords
+
+
+def test_registration_requires_a_standard_name():
+    registry = register.AnalysisRegistry()
+    with pytest.raises(TypeError):
+        registry.measurement(ToySpec, dtype='float32', dims=('toy',))  # ty: ignore[missing-argument]
+
+
+def test_registered_attrs_are_the_standard_name_and_units():
+    """the attrs of a registration are exactly the keywords given; `units` None is
+    absent rather than null"""
+    registry = register.AnalysisRegistry()
+
+    @registry.measurement(ToySpec, dtype='float32', standard_name='Toy', dims=('toy',))
+    def toy(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    @registry.measurement(
+        OtherToySpec,
+        dtype='float32',
+        standard_name='Other toy',
+        units=sa.units.DB_POWER,
+        dims=('other',),
+    )
+    def other_toy(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    assert registry[ToySpec].attrs == {'standard_name': 'Toy'}
+    assert registry[OtherToySpec].attrs == {
+        'standard_name': 'Other toy',
+        'units': sa.units.DB_POWER,
+    }
+    assert registry[ToySpec].name == 'toy'
+    assert registry[OtherToySpec].name == 'other_toy'
+
+
+def test_coordinate_registration_names_itself_and_keeps_its_units():
+    coords = register.CoordRegistry()
+
+    @coords(dtype='float64', standard_name='Toy lag', units='s')
+    def toy_lag(capture, spec):
+        return np.arange(2.0)
+
+    info = coords[toy_lag]
+    assert info.name == 'toy_lag'
+    assert info.dims == ('toy_lag',)
+    assert info.attrs == {'standard_name': 'Toy lag', 'units': 's'}
+    with pytest.raises(KeyError):
+        coords(dtype='float64', standard_name='Again')(toy_lag)

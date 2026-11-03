@@ -75,7 +75,7 @@ def ssb_block_count(
 
 
 @registry.coordinates(
-    dtype='uint16', attrs={'standard_name': r'Cell Sector ID ($N_{ID}^\text{(2)}$)'}
+    dtype='uint16', standard_name=r'Cell Sector ID ($N_{ID}^\text{(2)}$)'
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_cell_id2(capture: specs.Capture, spec: Any):
@@ -83,7 +83,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: Any):
     return values
 
 
-@registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
+@registry.coordinates(dtype='uint16', standard_name='SSB beam index')
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
 def cellular_ssb_beam_index(
     capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBSync
@@ -94,9 +94,7 @@ def cellular_ssb_beam_index(
     return list(range(len(params.symbol_indexes)))
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
-)
+@registry.coordinates(dtype='float32', standard_name='Time Elapsed', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_start_time(
     capture: specs.Capture,
@@ -110,7 +108,7 @@ def cellular_ssb_start_time(
     return np.arange(count).astype('float32') * spec.discovery_periodicity
 
 
-@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
+@registry.coordinates(dtype='float32', standard_name='Lag', units='s')
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
 def cellular_ssb_lag(
     capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator
@@ -303,7 +301,8 @@ def choose_pss_sync_offsets(
     dtype='float32',
     caches=(_pss_correlator_cache, ssb_iq_cache, _pss_sync_cache),
     store_compressed=False,
-    attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
+    standard_name='PSS Synchronization Delay',
+    units='s',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -337,7 +336,7 @@ def cellular_5g_pss_sync(
     dtype='complex64',
     caches=(_pss_correlator_cache, ssb_iq_cache),
     store_compressed=False,
-    attrs={'standard_name': 'PSS Cross-Covariance'},
+    standard_name='PSS Cross-Covariance',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -442,7 +441,8 @@ def choose_sss_sync_offsets(
     dtype='float32',
     caches=(_sss_correlator_cache, ssb_iq_cache, _sss_sync_cache),
     store_compressed=False,
-    attrs={'standard_name': 'SSS Synchronization Delay', 'units': 's'},
+    standard_name='SSS Synchronization Delay',
+    units='s',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -476,7 +476,7 @@ def cellular_5g_sss_sync(
     dtype='complex64',
     caches=(_sss_correlator_cache, ssb_iq_cache),
     store_compressed=False,
-    attrs={'standard_name': 'SSS Cross-Covariance'},
+    standard_name='SSS Cross-Covariance',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -526,7 +526,7 @@ def cellular_5g_sss_correlation(
 
 
 # %% cellular_5g_ssb_spectrogram
-@registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
+@registry.coordinates(dtype='uint16', standard_name='Symbols elapsed')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_symbol_index(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
@@ -536,7 +536,7 @@ def cellular_ssb_symbol_index(
 
 
 @registry.coordinates(
-    dtype='float64', attrs={'standard_name': 'SSB Baseband Frequency', 'units': 'Hz'}
+    dtype='float64', standard_name='SSB Baseband Frequency', units='Hz'
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_baseband_frequency(
@@ -557,7 +557,7 @@ def cellular_ssb_baseband_frequency(
     return bb_freqs - spec.frequency_offset
 
 
-@registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
+@registry.coordinates(dtype='uint16', standard_name='Capture SSB index')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_index(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
@@ -671,7 +671,7 @@ def ssb_spectrogram_tolerance(
     coord_factories=_SSB_SPECTROGRAM_COORDS,
     dtype='float16',
     caches=(spectrum.spectrogram_cache,),
-    attrs={'standard_name': 'SSB Spectrogram'},
+    standard_name='SSB Spectrogram',
     validate=validated_ssb_spectrogram_sizing,
     tolerance=ssb_spectrogram_tolerance,
     prefer_filtered=False,
@@ -871,9 +871,7 @@ def tdd_config_from_str(
     )
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Cyclic sample lag', 'units': 's'}
-)
+@registry.coordinates(dtype='float32', standard_name='Cyclic sample lag', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_sample_lag(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
@@ -883,9 +881,7 @@ def cyclic_sample_lag(
     return pd.RangeIndex(0, max_len, name=name) / capture.sample_rate
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
-)
+@registry.coordinates(dtype='float32', standard_name='Subcarrier spacing', units='Hz')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def subcarrier_spacing(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
@@ -896,7 +892,7 @@ def subcarrier_spacing(
         return [spec.subcarrier_spacings]
 
 
-@registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
+@registry.coordinates(dtype='str', standard_name='Link direction')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def link_direction(capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator):
     values = np.array(['downlink', 'uplink'], dtype='U8')
@@ -1063,7 +1059,8 @@ def validated_autocorrelation_lag_count(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
     spec_type=specs.CellularCyclicAutocorrelator,
-    attrs={'units': sw.units.POWER, 'standard_name': 'Cyclic Autocovariance'},
+    standard_name='Cyclic Autocovariance',
+    units=sw.units.POWER,
     validate=validated_autocorrelation_lag_count,
     prefer_aligned=False,
 )
@@ -1150,10 +1147,8 @@ def cellular_cyclic_autocorrelation(
 # %% cellular_resource_power_histogram
 @registry.coordinates(
     dtype='float32',
-    attrs={
-        'standard_name': 'Cellular resource grid bin power',
-        'units': sw.units.DB_POWER,
-    },
+    standard_name='Cellular resource grid bin power',
+    units=sw.units.DB_POWER,
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_resource_power_bin(
@@ -1445,7 +1440,7 @@ def validated_resource_grid_sizing(
     dtype='float32',
     depends=spectrum.spectrogram,
     spec_type=specs.CellularResourcePowerHistogram,
-    attrs={'standard_name': 'Fraction of resource grid'},
+    standard_name='Fraction of resource grid',
     validate=validated_resource_grid_sizing,
     prefer_filtered=False,
 )

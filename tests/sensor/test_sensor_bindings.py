@@ -390,7 +390,9 @@ def test_an_extension_measurement_runs_from_the_analysis_block(
     ``analysis:`` block of a binding with a group that names the measurement. The
     value of the spec field in the block reaches the output variable."""
 
-    @sa.registry.measurement(ToyPower, dtype='float32', dims=())
+    @sa.registry.measurement(
+        ToyPower, dtype='float32', standard_name='Toy power', dims=()
+    )
     def toy_power(
         x: np.ndarray, capture: sa.specs.Capture, scale: float = 1.0
     ) -> np.ndarray:

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import (
@@ -1589,67 +1588,20 @@ def _build_variable_labels_from_registry(
 ) -> dict[str, str]:
     """return a label for each enabled field of `analysis_spec`, keyed by field name.
 
-    The label of a field with a `registry` entry is derived from the name of the
-    spec class. A field without an entry is labeled by the field name in title case
-    with underscores replaced by spaces.
-
-    Returns:
-        a dict from variable name to label, such as ``'spectrogram_histogram'`` to
-        ``'Spectrogram Histogram'``
+    The label of a field with a `registry` entry is the `standard_name` of the
+    registration. A field without an entry is labeled by the field name in title
+    case with underscores replaced by spaces.
     """
+    standard_names = {
+        info.name: str(info.attrs['standard_name']) for info in registry.values()
+    }
     labels: dict[str, str] = {}
-
-    # Build a reverse lookup: variable name -> spec class name
-    name_to_class: dict[str, str] = {}
-    for spec_type, info in registry.items():
-        name_to_class[info.name] = spec_type.__name__
-
     for field_name in analysis_spec.__struct_fields__:
-        value = getattr(analysis_spec, field_name)
-        if value is not None:
-            # This field is enabled in the spec
-            if field_name in name_to_class:
-                labels[field_name] = _spec_class_to_label(name_to_class[field_name])
-            else:
-                # Fallback: convert snake_case to Title Case
-                labels[field_name] = field_name.replace('_', ' ').title()
-
+        if getattr(analysis_spec, field_name) is None:
+            continue
+        fallback = field_name.replace('_', ' ').title()
+        labels[field_name] = standard_names.get(field_name, fallback)
     return labels
-
-
-def _spec_class_to_label(class_name: str) -> str:
-    """Convert a spec class name to a human-readable label.
-
-    Examples:
-        SpectrogramHistogram -> "Spectrogram Histogram"
-        Cellular5GNRSSBSpectrogram -> "Cellular 5G-NR SSB Spectrogram"
-        ChannelPowerTimeSeries -> "Channel Power Time Series"
-        CellularCyclicAutocorrelator -> "Cellular Cyclic Autocorrelator"
-    """
-    # Strip leading underscores (private class names)
-    result = class_name.lstrip('_')
-
-    # Replace known abbreviations with spaced versions (order matters - longer first)
-    abbreviations = [
-        ('5GNR', ' 5G-NR '),
-        ('SSB', ' SSB '),
-        ('PSS', ' PSS '),
-        ('SSS', ' SSS '),
-        ('PSD', ' PSD '),
-        ('IQ', ' IQ '),
-    ]
-
-    for abbrev, replacement in abbreviations:
-        result = result.replace(abbrev, replacement)
-
-    # split CamelCase at lowercase-to-uppercase boundaries, keeping acronyms intact
-    result = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', result)
-    result = re.sub(r'(?<=[A-Z])(?=[A-Z][a-z])', ' ', result)
-
-    # Clean up multiple spaces
-    result = re.sub(r'\s+', ' ', result).strip()
-
-    return result
 
 
 def update_dataset(result: ss.lib.compute.DelayedDataset):
