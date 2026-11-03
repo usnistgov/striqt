@@ -85,13 +85,13 @@ def frequency_axis(ax) -> xr.DataArray:
 
 
 def test_units_in_the_label_leave_bare_ticks(ax) -> None:
-    """the prefix of the largest magnitude (G) goes in the axis label, and every tick
-    is a bare mantissa"""
+    """the extent 0.8 to 1.1 GHz spans 300 MHz, so the shared prefix is M: it goes
+    in the axis label, and every tick is a bare mantissa"""
     freq = frequency_axis(ax)
 
     labels.label_axis('x', freq, ax=ax, tick_units=False)
 
-    assert ax.get_xlabel().endswith('(GHz)')
+    assert ax.get_xlabel().endswith('(MHz)')
     ticks = tick_texts(ax.xaxis)
     assert len(ticks) > 1
     assert not any('Hz' in t for t in ticks)
@@ -105,20 +105,35 @@ def test_units_in_the_ticks_leave_a_bare_label(ax) -> None:
     assert '(' not in ax.get_xlabel()
     ticks = tick_texts(ax.xaxis)
     assert len(ticks) > 1
-    assert all(t.endswith(' GHz') for t in ticks)
+    assert all(t.endswith(' MHz') for t in ticks)
 
 
 def test_ticks_and_label_use_one_frozen_prefix_after_a_zoom(ax) -> None:
     """the prefix is frozen from the data, so a view over a narrow span keeps the
-    GHz label and the ticks stay mantissas in GHz"""
+    MHz label and the ticks stay mantissas in MHz"""
     freq = frequency_axis(ax)
     labels.label_axis('x', freq, ax=ax, tick_units=False)
 
     ax.set_xlim(1.0e9, 1.01e9)
 
-    assert ax.get_xlabel().endswith('(GHz)')
+    assert ax.get_xlabel().endswith('(MHz)')
     values = [float(t) for t in tick_texts(ax.xaxis) if t]
-    assert values and all(1.0 <= v <= 1.01 for v in values)
+    assert values and all(1000 <= v <= 1010 for v in values)
+
+
+def test_a_narrow_axis_far_from_zero_reads_in_the_prefix_of_its_span(ax) -> None:
+    """3.695 to 3.71 GHz labels in MHz with ticks such as 3700, not 3.7 in GHz"""
+    freq = xr.DataArray(
+        np.linspace(3.695e9, 3.71e9, 4), dims='f', name='f', attrs=FREQUENCY_ATTRS
+    )
+    ax.plot(freq.values, np.zeros(freq.size))
+    ax.set_xlim(3.695e9, 3.71e9)
+
+    labels.label_axis('x', freq, ax=ax, tick_units=False)
+
+    assert ax.get_xlabel().endswith('(MHz)')
+    values = [float(t) for t in tick_texts(ax.xaxis) if t]
+    assert 3700.0 in values
 
 
 def test_all_nan_data_is_still_labeled(ax) -> None:

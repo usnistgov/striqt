@@ -77,101 +77,67 @@ def _prune_ticks(ticks: tuple, count: int, prefer: tuple = ()) -> np.ndarray:
     return x
 
 
-class EngFormatter(_ticker.EngFormatter):
-    """a `matplotlib.ticker.EngFormatter` with the option of one unit prefix per axis.
+class EngFormatter(_ticker.Formatter):
+    """a tick formatter in engineering notation with one SI prefix for every tick.
 
-    With ``unitInTick=False``, each tick is a mantissa at one shared order of
-    magnitude, and `get_axis_unit_suffix` returns the prefixed unit for the axis
+    The prefix is that of `striqt.waveform.units.si_prefix` over the tick locations,
+    or the frozen `exponent`. With `unit_in_tick` True each tick ends with the prefixed
+    units and `axis_units_label` returns ``''``. With `unit_in_tick` False each tick
+    is a bare mantissa and `axis_units_label` returns the prefixed units for the axis
     label.
     """
 
-    _usetex: bool
-    _useMathText: bool
-
     def __init__(
         self,
-        unit='',
-        unitInTick=True,
-        places=None,
-        sep=None,
+        units: str | None = '',
         *,
-        usetex=None,
-        useMathText=None,
-        **kws,
-    ):
-        self.unitInTick = unitInTick
+        unit_in_tick: bool = True,
+        exponent: int | None = None,
+        places: int | None = None,
+        sep: str = ' ',
+    ) -> None:
+        """store the formatting options; no tick location is read.
 
-        if unit is None or (len(unit) == 1 and not unit.isalnum()):
-            sep = ''
-        else:
-            sep = ' '
-
-        super().__init__(
-            unit,
-            places,
-            sep,
-            usetex=usetex,
-            useMathText=useMathText,
-            **kws,
+        Args:
+            units: the units string of the tick values, ``''`` for a bare prefix, or
+                None for a bare number
+            unit_in_tick: True places the prefixed units in every tick label, False in
+                `axis_units_label` alone
+            exponent: a decimal exponent in `striqt.waveform.units.PREFIXES` that
+                fixes the prefix, or None to select it from the tick locations
+            places: the decimal places of each mantissa, or None for the shortest
+                representation
+            sep: the text between a mantissa and the units
+        """
+        self.units = units
+        self.unit_in_tick = unit_in_tick
+        self.places = places
+        self.sep = sep
+        self._frozen = exponent is not None
+        self._prefix = sw.units.SIPrefix(
+            exponent or 0, sw.units.PREFIXES[exponent or 0]
         )
 
-    def format_data(self, value):
-        sign = 1
-        fmt = 'g' if self.places is None else f'.{self.places:d}f'
+    def set_locs(self, locs: typing.Sequence[float]) -> None:
+        """store the tick locations and, unless the exponent is frozen, select the prefix."""
+        self._locs = list(locs)
+        if not self._frozen:
+            self._prefix = sw.units.si_prefix(
+                self._locs, self.units, places=self.places
+            )
 
-        if value < 0:
-            sign = -1
-            value = -value
+    def __call__(self, x: float, pos: int | None = None) -> str:
+        units = self.units if self.unit_in_tick else None
+        text = sw.units.format_quantity(
+            x, units, prefix=self._prefix, places=self.places, sep=self.sep
+        )
+        return self.fix_minus(text)
 
-        elif value == float('inf'):
-            return '∞'
-
-        elif value == float('-inf'):
-            return '-∞'
-
-        if value != 0:
-            pow10 = int(math.floor(math.log10(value) / 3) * 3)
-        else:
-            pow10 = 0
-            # Force value to zero, to avoid inconsistencies like
-            # format_eng(-0) = "0" and format_eng(0.0) = "0"
-            # but format_eng(-0.0) = "-0.0"
-            value = 0.0
-
-        if self.unitInTick:
-            pow10 = np.clip(pow10, min(self.ENG_PREFIXES), max(self.ENG_PREFIXES))
-        else:
-            pow10 = self.orderOfMagnitude
-
-        mant = sign * value / (10.0**pow10)
-        # a mantissa such as 999.9 may round to 1000 and is then carried to the
-        # next prefix, except beyond the largest SI prefix ('Y')
-        if (
-            abs(float(format(mant, fmt))) >= 1000
-            and pow10 < max(self.ENG_PREFIXES)
-            and self.unitInTick
-        ):
-            mant /= 1000
-            pow10 += 3
-
-        unit_prefix = self.ENG_PREFIXES[int(pow10)]
-        if self.unitInTick and (self.unit or unit_prefix):
-            suffix = f'{self.sep}{unit_prefix}{self.unit}'
-        else:
-            suffix = ''
-
-        if self._usetex or self._useMathText:
-            return f'{mant:{fmt}}{suffix}'
-        else:
-            return f'{mant:{fmt}}{suffix}'
-
-    def get_axis_unit_suffix(self, vmin, vmax):
-        if self.unitInTick:
+    def axis_units_label(self) -> str:
+        """return the prefixed units for the axis label, or ``''`` with `unit_in_tick` or no units."""
+        if self.unit_in_tick or self.units is None:
             return ''
-
-        orderOfMagnitude = math.floor(math.log(vmax - vmin, 1000)) * 3
-        unit_prefix = self.ENG_PREFIXES[int(orderOfMagnitude)]
-        return f'{self.sep}({unit_prefix}{self.unit})'
+        return f'{self._prefix.symbol}{self.units}'
 
 
 class GammaMaxNLocator(_ticker.MaxNLocator):

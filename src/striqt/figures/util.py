@@ -100,9 +100,9 @@ def get_system_noise(
             minimum over captures minus `margin`
 
     Returns:
-        a DataArray over the captures with ``units='dBm'``, or the scalar minimum
-        with `margin`; None without `system_noise` or without a noise bandwidth for
-        `var_name`
+        a DataArray over the captures with ``units='dBm'`` and, for a scalar `B`, the
+        `noise_bandwidth` attr; the scalar minimum with `margin`; None without
+        `system_noise` or without a noise bandwidth for `var_name`
     """
     if 'system_noise' not in data:
         return None
@@ -115,10 +115,7 @@ def get_system_noise(
         standard_name='System noise', units='dBm'
     )
     if isinstance(B, float):
-        bandwidth = sa.dataarrays.format_units(B, 'Hz')
-        noise = noise.assign_attrs(
-            noise_bandwidth=B, long_name=f'System noise (dBm/{bandwidth})'
-        )
+        noise = noise.assign_attrs(noise_bandwidth=B)
 
     if margin is None:
         return noise

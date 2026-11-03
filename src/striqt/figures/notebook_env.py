@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import datetime
 import functools
+import re
+import typing
 
 import matplotlib.dates as mpldates
 import matplotlib.pyplot as plt
@@ -15,30 +17,34 @@ from IPython.display import HTML, display
 from matplotlib.backends.backend_svg import FigureCanvasSVG
 from matplotlib_inline import backend_inline
 
+if typing.TYPE_CHECKING:
+    from matplotlib.figure import Figure
+
 _captions = {}
+
+
+def _guess_title(fig: Figure) -> str:
+    """return the suptitle of `fig`, else the title of the last axes with one, else ``'untitled'``."""
+    suptitle = getattr(fig, '_suptitle', None)
+    if suptitle is not None:
+        return suptitle.get_text()
+
+    for ax in fig.get_axes()[::-1]:
+        title_ = ax.get_title()
+        if title_:
+            return title_
+    return 'untitled'
+
+
+def _title_to_label(title_: str) -> str:
+    """return `title_` lowercased with each run of non-alphanumeric characters replaced by ``-``."""
+    return re.sub(r'[\W_]+', '-', title_).lower()
 
 
 @functools.wraps(FigureCanvasSVG.print_svg)
 def print_svg(self, *a, **k):
-    def guess_title(fig):
-        if self.figure._suptitle is not None:
-            return self.figure._suptitle.get_text()
-
-        for ax in self.figure.get_axes()[::-1]:
-            title_ = ax.get_title()
-            if title_:
-                return title_
-        return 'untitled'
-
-    def title_to_label(title_):
-        """replace 1 or more non-alphanumeric characters with '-'"""
-        import re
-
-        pattern = re.compile(r'[\W_]+')
-        return pattern.sub('-', title_).lower()
-
     k = dict(k)
-    label = title_to_label(guess_title(self.figure))
+    label = _title_to_label(_guess_title(self.figure))
     caption_text = _captions.get(id(self.figure), '')
     title_ = f'{label}##{caption_text}' if caption_text else label
     k.setdefault('metadata', {})['Title'] = title_
@@ -72,27 +78,10 @@ def set_matplotlib_formats(formats, *args, **kws):
 
     pltt = reload(pltt)
 
-    def guess_title(fig):
-        if fig._suptitle is not None:
-            return fig._suptitle.get_text()
-
-        for ax in fig.get_axes()[::-1]:
-            title_ = ax.get_title()
-            if title_:
-                return title_
-        return 'untitled'
-
-    def title_to_label(title_):
-        """replace 1 or more non-alphanumeric characters with '-'"""
-        import re
-
-        pattern = re.compile(r'[\W_]+')
-        return pattern.sub('-', title_).lower()
-
     @functools.wraps(pltt.print_figure)
     def wrapper(fig, fmt='png', *a, **k):
         k = dict(k)
-        label = title_to_label(guess_title(fig))
+        label = _title_to_label(_guess_title(fig))
         caption_text = _captions.get(id(fig), '')
 
         ret = pltt._print_figure(fig, *a, fmt=fmt, **k)
