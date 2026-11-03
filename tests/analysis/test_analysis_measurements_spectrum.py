@@ -180,7 +180,7 @@ class TestSpectrogram:
         # the frequency bins are summed, not averaged, so a tone inside one bin keeps
         # the level of the finer resolution while the noise_bandwidth grows
         assert ref_metadata['noise_bandwidth'] == RES
-        assert ref_metadata['units'] == 'dBm'
+        assert ref_metadata['units'] == sa.units.DB_POWER
         assert ref_metadata['long_name'] == 'Power spectral density'
         assert da.attrs['noise_bandwidth'] == frequency_bins * RES
         assert da.attrs['long_name'] == 'Power spectral density'

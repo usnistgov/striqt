@@ -10,6 +10,7 @@ from __future__ import annotations as __
 
 import dataclasses
 import math
+import re
 from collections.abc import Iterable
 from typing import Literal, Union, cast
 
@@ -42,6 +43,16 @@ _TO_LINEAR = {**_DB_TO_LINEAR, **{v: v for v in _DB_TO_LINEAR.values()}}
 _TO_WAVE = {k: _WAVE + v for k, v in _TO_LINEAR.items()}
 _UNPREFIXED = frozenset({'mW', 'unitless', 'FS', 'a.u.'})
 _POWER_FAMILIES: frozenset[str] = frozenset({'mW', 'FS', 'a.u.'})
+
+DB_POWER = '{dB}'
+"""the units of a power in dB of the power unit of the acquisition: dBm, dBFS, or
+dB(a.u.) once resolved"""
+POWER = '{P}'
+"""the units of a linear power in the power unit of the acquisition: mW, FS, or a.u."""
+AMPLITUDE = '√{P}'
+"""the units of an amplitude, the square root of the power unit of the acquisition:
+√mW, √FS, or √a.u."""
+_FORM_FIELDS = re.compile(r'\{(dB|P)\}')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -163,6 +174,23 @@ def with_power_units(units: str, power_units: PowerUnits) -> str:
     else:
         base = power_units
     return str(dataclasses.replace(parsed, base=base))
+
+
+def has_power_form(units: str) -> bool:
+    """return whether `units` carries a `DB_POWER`, `POWER`, or `AMPLITUDE` field."""
+    return _FORM_FIELDS.search(units) is not None
+
+
+def resolve_power_units(units: str, power_units: PowerUnits) -> str:
+    """return `units` with its power form fields filled by `power_units`.
+
+    `DB_POWER` becomes the dB unit of `power_units` (``'dBm'`` for ``'mW'``), `POWER`
+    becomes `power_units`, and `AMPLITUDE` the square root form; a denominator such
+    as ``'{dB}/Hz'`` is kept. A string without a form field is returned unchanged.
+    """
+    if not has_power_form(units):
+        return units
+    return units.format_map({'dB': _TO_DB[power_units], 'P': power_units})
 
 
 def _floor3(value: float) -> int:

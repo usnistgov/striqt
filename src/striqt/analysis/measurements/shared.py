@@ -54,7 +54,8 @@ def bandwidth_attrs(
 
     Args:
         noise_bandwidth: in Hz
-        units: the unit of the stored values in the mW family, ``'dBm'`` or ``'√mW'``
+        units: the power form of the output, `striqt.waveform.units.DB_POWER` or
+            `AMPLITUDE`, resolved into the power unit of the acquisition
         quantity: the `long_name` of the output, a noun phrase without units
         resolution_bandwidth: the equivalent noise bandwidth (in Hz) of the analysis
             window, which sets the output level of a CW tone; None omits the key

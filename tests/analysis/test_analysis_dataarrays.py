@@ -253,8 +253,9 @@ def test_a_bare_array_is_in_arbitrary_units(power_units_x: np.ndarray) -> None:
 def test_power_units_leave_the_registered_and_cached_attrs_in_mW(
     power_units_x: np.ndarray,
 ) -> None:
-    """an evaluation in full scale rewrites copies: the registered attrs, the cached
-    coordinate factory result, and a following evaluation in mW keep the mW family"""
+    """an evaluation in full scale resolves copies: the registered attrs and the cached
+    coordinate factory result keep the form token, and a following evaluation in mW
+    is in the mW family"""
     units_of(sa.AcquiredIQ(power_units_x, POWER_UNITS_CAPTURE, power_units='FS'))
 
     assert (
@@ -262,17 +263,19 @@ def test_power_units_leave_the_registered_and_cached_attrs_in_mW(
         == POWER_UNITS_EXPECTED['mW']
     )
     info = sa.registry[sa.specs.ChannelPowerTimeSeries]
-    assert info.attrs['units'] == 'dBm'
+    assert info.attrs['units'] == sa.units.DB_POWER
     info = sa.registry[sa.specs.SpectrogramHistogram]
     spec = POWER_UNITS_GROUP.spectrogram_histogram
     assert spec is not None
     coords = sa.dataarrays.measurement_coords(info, POWER_UNITS_CAPTURE, spec)
-    assert coords['spectrogram_power_bin'][1]['units'] == 'dBm'
+    assert coords['spectrogram_power_bin'][1]['units'] == sa.units.DB_POWER
 
 
-def test_to_xarray_leaves_the_delayed_attrs_in_mW(power_units_x: np.ndarray) -> None:
-    """the attrs that a measurement body returns stay in the declared family after
-    the DataArray is built in another"""
+def test_to_xarray_leaves_the_delayed_attrs_as_the_form(
+    power_units_x: np.ndarray,
+) -> None:
+    """the attrs that a measurement body returns keep the form token after the
+    DataArray is built in a family"""
     iq = sa.AcquiredIQ(power_units_x, POWER_UNITS_CAPTURE, power_units='FS')
     results = sa.analyze_by_spec(
         iq, POWER_UNITS_GROUP, POWER_UNITS_CAPTURE, options(as_xarray='delayed')
@@ -282,7 +285,7 @@ def test_to_xarray_leaves_the_delayed_attrs_in_mW(power_units_x: np.ndarray) -> 
     da = delayed.to_xarray(expand_dims=('port',))
 
     assert da.attrs['units'] == 'dBFS'
-    assert delayed.attrs['units'] == 'dBm'
+    assert delayed.attrs['units'] == sa.units.DB_POWER
 
 
 def test_compute_keeps_the_power_units(power_units_x: np.ndarray) -> None:
@@ -295,3 +298,35 @@ def test_compute_keeps_the_power_units(power_units_x: np.ndarray) -> None:
 
     assert delayed.power_units == 'FS'
     assert delayed.compute().power_units == 'FS'
+
+
+# %% measurement_attrs / measurement_coords
+
+
+def test_measurement_attrs_layers_and_resolves_the_form():
+    """the registered attrs, the spec fields, and the body attrs merge in that order,
+    and a power form in `units` resolves into the family"""
+    info = sa.registry[sa.specs.ChannelPowerTimeSeries]
+    spec = sa.specs.ChannelPowerTimeSeries(detector_period=1e-3)
+    attrs = sa.dataarrays.measurement_attrs(
+        info, spec, {'units': sa.units.AMPLITUDE, 'extra': 1}, 'FS'
+    )
+    assert attrs['units'] == '√FS'
+    assert attrs['detector_period'] == 1e-3
+    assert attrs['extra'] == 1
+    assert attrs['standard_name'] == info.attrs['standard_name']
+    assert info.attrs['units'] == sa.units.DB_POWER, 'the registration is untouched'
+
+
+def test_measurement_coords_leave_the_form_without_a_family():
+    info = sa.registry[sa.specs.SpectrogramHistogram]
+    spec = sa.specs.SpectrogramHistogram(
+        **_STFT, power_low=-100, power_high=-50, power_resolution=1
+    )
+    unresolved = sa.dataarrays.measurement_coords(info, POWER_UNITS_CAPTURE, spec)
+    resolved = sa.dataarrays.measurement_coords(info, POWER_UNITS_CAPTURE, spec, 'a.u.')
+    assert unresolved['spectrogram_power_bin'][1]['units'] == sa.units.DB_POWER
+    assert resolved['spectrogram_power_bin'][1]['units'] == 'dB(a.u.)'
+    assert resolved['spectrogram_power_bin'][0].tolist() == (
+        unresolved['spectrogram_power_bin'][0].tolist()
+    )

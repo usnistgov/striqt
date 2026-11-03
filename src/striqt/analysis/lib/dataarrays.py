@@ -203,8 +203,43 @@ def measurement_dims(info: register.AnalysisInfo) -> tuple[str, ...]:
     return info.dims
 
 
+def measurement_attrs(
+    info: register.AnalysisInfo,
+    spec: specs.Analysis,
+    body_attrs: typing.Mapping[str, typing.Any],
+    power_units: sw.units.PowerUnits,
+) -> dict[str, typing.Any]:
+    """return the attrs of the output of the measurement `info` for one acquisition.
+
+    The registered attrs of `info`, the fields of `spec`, and `body_attrs` are merged
+    in that order, a later source winning on a shared key, and a `units` entry in a
+    power form (`striqt.waveform.units.DB_POWER`, `POWER`, `AMPLITUDE`) is resolved
+    into `power_units`.
+
+    Args:
+        info: the registration of the measurement
+        spec: the measurement parameters
+        body_attrs: the attrs returned by the measurement body
+        power_units: the power unit of the acquisition
+    """
+    attrs = {**info.attrs, **spec.to_dict(), **body_attrs}
+    return _resolve_units(attrs, power_units)
+
+
+def _resolve_units(
+    attrs: dict[str, typing.Any], power_units: sw.units.PowerUnits
+) -> dict[str, typing.Any]:
+    units = attrs.get('units', None)
+    if not isinstance(units, str) or not sw.units.has_power_form(units):
+        return attrs
+    return {**attrs, 'units': sw.units.resolve_power_units(units, power_units)}
+
+
 def measurement_coords(
-    info: register.AnalysisInfo, capture: specs.Capture, spec: specs.Analysis
+    info: register.AnalysisInfo,
+    capture: specs.Capture,
+    spec: specs.Analysis,
+    power_units: sw.units.PowerUnits | None = None,
 ) -> dict[str, tuple[np.ndarray, dict[str, typing.Any]]]:
     """return the coordinate values and attrs of the measurement `info` for one capture.
 
@@ -212,6 +247,8 @@ def measurement_coords(
         info: the registration of the measurement
         capture: the acquisition parameters passed to each coordinate factory
         spec: the measurement parameters passed to each coordinate factory
+        power_units: the power unit that resolves a `units` attr in a power form, or
+            None to leave the form fields in place
 
     Returns:
         ``(values, attrs)`` keyed by coordinate name, in the order of
@@ -237,7 +274,10 @@ def measurement_coords(
         except (TypeError, ValueError) as ex:
             raise ValueError(f'in coordinate {qualname!r}, {ex}') from ex
 
-        coords[coord_info.name] = (values, coord_info.attrs | attrs)
+        merged = coord_info.attrs | attrs
+        if power_units is not None:
+            merged = _resolve_units(merged, power_units)
+        coords[coord_info.name] = (values, merged)
 
     return coords
 
@@ -321,7 +361,9 @@ def build_dataarray(
     if exc is not None:
         raise exc
 
-    coords = measurement_coords(delayed.info, delayed.capture, delayed.spec)
+    coords = measurement_coords(
+        delayed.info, delayed.capture, delayed.spec, delayed.power_units
+    )
 
     for coord_factory in delayed.info.coord_factories:
         factory_info = register.registry.coordinates[coord_factory]
@@ -347,27 +389,13 @@ def build_dataarray(
                 name=qualname,
             )
 
-        da[factory_info.name] = coord.assign_attrs(
-            _in_power_units(attrs, delayed.power_units)
+        da[factory_info.name] = coord.assign_attrs(attrs)
+
+    return da.assign_attrs(
+        measurement_attrs(
+            delayed.info, delayed.spec, delayed.attrs, delayed.power_units
         )
-
-    spec_attrs = delayed.spec.to_dict()
-    attrs = delayed.info.attrs | spec_attrs | delayed.attrs
-    return da.assign_attrs(_in_power_units(attrs, delayed.power_units))
-
-
-def _in_power_units(
-    attrs: dict[str, typing.Any], power_units: sw.units.PowerUnits
-) -> dict[str, typing.Any]:
-    """return `attrs` with a power `units` entry rewritten into `power_units`.
-
-    The measurement registry declares every power output in the mW family; the
-    acquisition selects the family that the stored values are in.
-    """
-    units = attrs.get('units', None)
-    if not isinstance(units, str):
-        return attrs
-    return {**attrs, 'units': sw.units.with_power_units(units, power_units)}
+    )
 
 
 @util.lru_cache()

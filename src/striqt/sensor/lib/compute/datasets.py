@@ -524,28 +524,19 @@ def _fill_value(dtype: np.dtype) -> Any:
     return 0
 
 
-def _in_power_units(
-    attrs: dict[str, Any], power_units: sw.units.PowerUnits
-) -> dict[str, Any]:
-    """return `attrs` with a power `units` entry rewritten into `power_units`."""
-    units = attrs.get('units')
-    if not isinstance(units, str):
-        return attrs
-    return {**attrs, 'units': sw.units.with_power_units(units, power_units)}
-
-
 def measurement_grids(
     sweep: specs.Sweep,
     captures: Sequence[specs.SensorCapture],
-    power_units: sw.units.PowerUnits = 'mW',
+    power_units: sw.units.PowerUnits,
 ) -> dict[str, VariableGrid]:
     """return the output geometry of each enabled measurement over `captures`.
 
     The coordinate factories of each measurement run once per distinct pair of
     capture and adjusted analysis. A dim with equal coordinate values on every pair
     keeps those values. Otherwise the coordinate is the sorted union of the values, which is
-    the outer join of `xarray.concat`, and the grid is `mixed`. A `units` attr in a
-    power family, on a variable or a coordinate, is rewritten into `power_units`.
+    the outer join of `xarray.concat`, and the grid is `mixed`. The attrs of each
+    variable and coordinate are those of `striqt.analysis.dataarrays.measurement_attrs`
+    and `measurement_coords` in `power_units`, less the body attrs of a measurement.
 
     Args:
         sweep: the sweep with the enabled measurements in `analysis`
@@ -567,7 +558,7 @@ def measurement_grids(
             # the attrs, so a Fraction default reads back as a string
             spec = getattr(analysis, name).validate()
             info = sa.registry[type(spec)]
-            coords = sa.dataarrays.measurement_coords(info, capture, spec)
+            coords = sa.dataarrays.measurement_coords(info, capture, spec, power_units)
             per_pair.append((coords, spec))
         info = sa.registry[type(per_pair[0][1])]
         dims = sa.dataarrays.measurement_dims(info)
@@ -591,18 +582,17 @@ def measurement_grids(
             else:
                 union[dim] = np.unique(np.concatenate(arrays))
                 mixed = True
-            coord_attrs[dim] = _in_power_units(
-                drop_conflicts([coords[dim][1] for coords, _ in per_pair]),
-                power_units,
-            )
+            coord_attrs[dim] = drop_conflicts([
+                coords[dim][1] for coords, _ in per_pair
+            ])
 
         dtype = np.dtype(info.dtype)
         if mixed and dtype.kind in 'biu':
             dtype = np.promote_types(dtype, np.float32)
-        attrs = _in_power_units(
-            drop_conflicts([{**info.attrs, **spec.to_dict()} for _, spec in per_pair]),
-            power_units,
-        )
+        attrs = drop_conflicts([
+            sa.dataarrays.measurement_attrs(info, spec, {}, power_units)
+            for _, spec in per_pair
+        ])
         grids[name] = VariableGrid(
             name=name,
             dims=dims,
@@ -759,7 +749,7 @@ def sweep_template(
     info_cls: type[specs.AcquisitionInfo],
     *,
     attrs: Mapping[str, Any],
-    power_units: sw.units.PowerUnits = 'mW',
+    power_units: sw.units.PowerUnits,
 ) -> tuple[
     xr.Dataset, dict[str, VariableGrid], dict[str, dict[str, Any]], dict[str, Callable]
 ]:

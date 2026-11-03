@@ -267,7 +267,7 @@ def _cached_spectrogram(
 
     attrs = shared.bandwidth_attrs(
         sizing.noise_bandwidth,
-        'dBm',
+        sw.units.DB_POWER,
         'Power spectral density',
         resolution_bandwidth=sizing.resolution_bandwidth,
     )
@@ -568,7 +568,7 @@ def power_spectral_density(
     sizing = validated_spectrogram_sizing(capture, spg_spec)
     metadata = shared.bandwidth_attrs(
         sizing.noise_bandwidth,
-        'dBm',
+        sw.units.DB_POWER,
         'Power spectral density',
         resolution_bandwidth=sizing.resolution_bandwidth,
     )
@@ -578,7 +578,8 @@ def power_spectral_density(
 
 # %% spectrogram_histogram
 @registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Spectrogram bin power', 'units': 'dBm'}
+    dtype='float32',
+    attrs={'standard_name': 'Spectrogram bin power', 'units': sw.units.DB_POWER},
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture, specs.SpectrogramHistogram)
 def spectrogram_power_bin(
@@ -601,7 +602,7 @@ def spectrogram_power_bin(
     sizing = validated_spectrogram_sizing(capture, spec)
     attrs = shared.bandwidth_attrs(
         sizing.noise_bandwidth,
-        'dBm',
+        sw.units.DB_POWER,
         'Spectrogram bin power',
         resolution_bandwidth=sizing.resolution_bandwidth,
     )

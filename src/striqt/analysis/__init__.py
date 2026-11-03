@@ -1,6 +1,14 @@
 """implementations of channel analysis measurements packaged into xarray.DataArray and xarray.Dataset"""
 
-from striqt.waveform import dBlinmean, dBlinsum, dBtopow, envtodB, envtopow, powtodB
+from striqt.waveform import (
+    dBlinmean,
+    dBlinsum,
+    dBtopow,
+    envtodB,
+    envtopow,
+    powtodB,
+    units,
+)
 
 from . import specs, testing
 from .lib import dataarrays, io, labels, register, typing, util

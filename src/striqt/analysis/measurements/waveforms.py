@@ -3,6 +3,8 @@ from __future__ import annotations as __
 import typing
 from typing import Any, Literal
 
+import striqt.waveform as sw
+
 from .. import specs
 from ..lib.util import pd
 from . import shared
@@ -96,7 +98,7 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     coord_factories=[iq_index],
     spec_type=specs.IQWaveform,
     dtype='complex64',
-    attrs={'standard_name': 'IQ waveform', 'units': '√mW'},
+    attrs={'standard_name': 'IQ waveform', 'units': sw.units.AMPLITUDE},
     store_compressed=False,
     tolerance=iq_waveform_tolerance,
 )

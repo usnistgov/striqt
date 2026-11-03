@@ -421,7 +421,7 @@ def test_sweep_template_matches_the_outer_join_geometry(subtests):
     ref = mixed_rate_reference()
     delayed = delayed_results(sweep)
     template, grids, encoding, encoders = datasets.sweep_template(
-        sweep, 'x', ss.specs.AcquisitionInfo, attrs={}
+        sweep, 'x', ss.specs.AcquisitionInfo, attrs={}, power_units='mW'
     )
 
     assert set(template.data_vars) == set(ref.data_vars)
@@ -452,7 +452,11 @@ def test_sweep_template_capture_coordinates_have_storage_dtypes():
     at least 16 characters; numeric and bool coordinates keep their dtype"""
     sweep = mixed_rate_sweep()
     template, *_ = datasets.sweep_template(
-        sweep, 'a_source_id_longer_than_16_chars', ss.specs.AcquisitionInfo, attrs={}
+        sweep,
+        'a_source_id_longer_than_16_chars',
+        ss.specs.AcquisitionInfo,
+        attrs={},
+        power_units='mW',
     )
     assert template['lo_shift'].dtype == np.dtype('<U16')
     assert template['source_id'].dtype == np.dtype('<U32')
@@ -469,7 +473,11 @@ def test_sweep_template_attrs_hold_the_shared_capture_fields_and_the_given_attrs
     capture_level = {k: v for k, v in ref.attrs.items() if k not in sweep_level}
 
     template, *_ = datasets.sweep_template(
-        sweep, 'x', ss.specs.AcquisitionInfo, attrs={'sensor_binding': 'single_tone'}
+        sweep,
+        'x',
+        ss.specs.AcquisitionInfo,
+        attrs={'sensor_binding': 'single_tone'},
+        power_units='mW',
     )
     assert dict(template.attrs) == {**capture_level, 'sensor_binding': 'single_tone'}
     assert 'sample_rate' not in template.attrs
@@ -487,13 +495,22 @@ def test_sweep_template_power_units_follow_the_source():
     assert template.time_elapsed.attrs['units'] == 's'
 
 
+def test_sweep_template_requires_the_power_units():
+    """a template allocated without the family of the source would label an
+    uncalibrated sweep in mW"""
+    with pytest.raises(TypeError):
+        datasets.sweep_template(
+            mixed_rate_sweep(), 'x', ss.specs.AcquisitionInfo, attrs={}
+        )  # ty: ignore[missing-argument]
+
+
 def test_row_index_and_scatter_rows_reproduce_the_outer_join_fill():
     """a capture's rows land where `xarray.align(join='outer')` puts them, with NaN
     where the capture has no value"""
     sweep = mixed_rate_sweep()
     ref = mixed_rate_reference()
     _, grids, *_ = datasets.sweep_template(
-        sweep, 'x', ss.specs.AcquisitionInfo, attrs={}
+        sweep, 'x', ss.specs.AcquisitionInfo, attrs={}, power_units='mW'
     )
     grid = grids['power_spectral_density']
     delayed = delayed_results(sweep)
@@ -514,7 +531,7 @@ def test_row_index_and_scatter_rows_reproduce_the_outer_join_fill():
 def test_scatter_rows_returns_the_input_on_an_identical_grid():
     sweep = mixed_rate_sweep()
     _, grids, *_ = datasets.sweep_template(
-        sweep, 'x', ss.specs.AcquisitionInfo, attrs={}
+        sweep, 'x', ss.specs.AcquisitionInfo, attrs={}, power_units='mW'
     )
     grid = grids['channel_power_time_series']
     rows = np.zeros((2, *grid.shape), dtype=grid.dtype)
@@ -525,7 +542,7 @@ def test_scatter_rows_returns_the_input_on_an_identical_grid():
 def test_row_index_rejects_a_value_off_the_grid():
     sweep = mixed_rate_sweep()
     _, grids, *_ = datasets.sweep_template(
-        sweep, 'x', ss.specs.AcquisitionInfo, attrs={}
+        sweep, 'x', ss.specs.AcquisitionInfo, attrs={}, power_units='mW'
     )
     grid = grids['power_spectral_density']
     off_grid = dataclasses.replace(

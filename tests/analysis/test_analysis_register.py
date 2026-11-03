@@ -600,12 +600,33 @@ def test_measurement_attrs(spec):
     info, da = measure(spec, as_xarray=True)
 
     for name, value in info.attrs.items():
+        if name == 'units':
+            value = sw.units.resolve_power_units(value, 'mW')
         assert da.attrs[name] == value
 
     # the wrapper decodes the keywords into a spec before calling, so the attrs are
     # the validated field values rather than the ones passed in
     for name, value in spec.validate().to_dict().items():
         assert da.attrs[name] == value
+
+
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_registered_power_units_are_form_tokens(spec):
+    """a registered or returned `units` that resolves to a power family is declared
+    as a form token, never as a literal family"""
+    info, (_, body_attrs) = measure(spec, as_xarray=False)
+    for attrs, what in [(info.attrs, info.name), (body_attrs, f'{info.name} body')]:
+        units = attrs.get('units')
+        if not isinstance(units, str):
+            continue
+        resolved = sw.units.resolve_power_units(units, 'mW')
+        if sw.units.power_family(resolved) is not None:
+            assert sw.units.has_power_form(units), what
+    for factory in info.coord_factories:
+        coord_info = sa.registry.coordinates[factory]
+        units = coord_info.attrs.get('units')
+        if isinstance(units, str) and sw.units.power_family(units) is not None:
+            raise AssertionError(f'{coord_info.name} declares the literal {units!r}')
 
 
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
@@ -664,7 +685,7 @@ def test_measurement_geometry_matches_the_measured_dataarray(spec):
     assert dataarrays.measurement_dims(info) == da.dims[1:]
     assert dataarrays.measurement_shape(info, CONTRACT_CAPTURE, spec) == da.shape[1:]
 
-    coords = dataarrays.measurement_coords(info, CONTRACT_CAPTURE, spec)
+    coords = dataarrays.measurement_coords(info, CONTRACT_CAPTURE, spec, 'mW')
     assert set(coords) == set(da.coords)
     for name, (values, attrs) in coords.items():
         assert values.dtype == da[name].dtype, name

@@ -381,7 +381,7 @@ def cellular_5g_pss_correlation(
         R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
 
     metadata = shared.bandwidth_attrs(
-        spec.subcarrier_spacing, '√mW', 'PSS cross-covariance'
+        spec.subcarrier_spacing, sw.units.AMPLITUDE, 'PSS cross-covariance'
     )
 
     return R, metadata
@@ -519,7 +519,7 @@ def cellular_5g_sss_correlation(
         R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
 
     metadata = shared.bandwidth_attrs(
-        spec.subcarrier_spacing, '√mW', 'SSS cross-covariance'
+        spec.subcarrier_spacing, sw.units.AMPLITUDE, 'SSS cross-covariance'
     )
 
     return R, metadata
@@ -1063,7 +1063,7 @@ def validated_autocorrelation_lag_count(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
     spec_type=specs.CellularCyclicAutocorrelator,
-    attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
+    attrs={'units': sw.units.POWER, 'standard_name': 'Cyclic Autocovariance'},
     validate=validated_autocorrelation_lag_count,
     prefer_aligned=False,
 )
@@ -1150,7 +1150,10 @@ def cellular_cyclic_autocorrelation(
 # %% cellular_resource_power_histogram
 @registry.coordinates(
     dtype='float32',
-    attrs={'standard_name': 'Cellular resource grid bin power', 'units': 'dBm'},
+    attrs={
+        'standard_name': 'Cellular resource grid bin power',
+        'units': sw.units.DB_POWER,
+    },
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_resource_power_bin(
@@ -1174,7 +1177,7 @@ def cellular_resource_power_bin(
     sizing = validated_resource_grid_sizing(capture, spec)
     metadata = shared.bandwidth_attrs(
         sizing.noise_bandwidth,
-        'dBm',
+        sw.units.DB_POWER,
         'Cellular resource grid bin power',
         resolution_bandwidth=sizing.resolution_bandwidth,
     )

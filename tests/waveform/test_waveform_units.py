@@ -156,6 +156,47 @@ def test_with_power_units(units, target, expected):
     assert U.with_power_units(expected, target) == expected
 
 
+# %% power forms
+
+
+@pytest.mark.parametrize(
+    'units, target, expected',
+    [
+        (U.DB_POWER, 'mW', 'dBm'),
+        (U.DB_POWER, 'FS', 'dBFS'),
+        (U.DB_POWER, 'a.u.', 'dB(a.u.)'),
+        (U.POWER, 'mW', 'mW'),
+        (U.POWER, 'FS', 'FS'),
+        (U.AMPLITUDE, 'a.u.', '√a.u.'),
+        (U.AMPLITUDE, 'mW', '√mW'),
+        (U.DB_POWER + '/Hz', 'FS', 'dBFS/Hz'),
+        ('dB', 'FS', 'dB'),
+        ('dBm/Hz', 'FS', 'dBm/Hz'),
+    ],
+)
+def test_resolve_power_units(units, target, expected):
+    assert U.resolve_power_units(units, target) == expected
+
+
+@pytest.mark.parametrize(
+    'units, expected',
+    [
+        (U.DB_POWER, True),
+        (U.POWER, True),
+        (U.AMPLITUDE, True),
+        ('dBm', False),
+        ('', False),
+    ],
+)
+def test_has_power_form(units, expected):
+    assert U.has_power_form(units) is expected
+
+
+def test_a_form_token_is_not_a_family():
+    assert U.power_family(U.DB_POWER) is None
+    assert U.power_family(U.resolve_power_units(U.DB_POWER, 'FS')) == 'FS'
+
+
 # %% si_prefix
 
 

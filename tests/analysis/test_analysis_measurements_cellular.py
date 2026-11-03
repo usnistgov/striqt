@@ -331,7 +331,7 @@ def test_pss_correlation_noise_bandwidth_is_one_subcarrier():
     spec = sa.specs.Cellular5GNRPSSCorrelator(**SSB)
     R, metadata = measure(spec, cap)
 
-    assert metadata['units'] == '√mW'
+    assert metadata['units'] == sa.units.AMPLITUDE
     assert metadata['noise_bandwidth'] == SCS
     assert metadata['long_name'] == 'PSS cross-covariance'
 

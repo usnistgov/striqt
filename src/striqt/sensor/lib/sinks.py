@@ -620,7 +620,13 @@ class ZarrCaptureSink(ZarrSinkBase):
                 index = compute.datasets.row_index(grid, dd.capture, delayed.spec)
                 result = compute.datasets.scatter_rows(grid, result, index)
             self._push(name, result)
-            self._update_attrs(name, dict(delayed.attrs))
+            # the body attrs carry the power form; the composition resolves it
+            self._update_attrs(
+                name,
+                sa.dataarrays.measurement_attrs(
+                    delayed.info, delayed.spec, delayed.attrs, delayed.power_units
+                ),
+            )
 
         coords = compute.datasets.build_capture_coords(
             dd.capture, dd.extra_coords, self._sweep.loops

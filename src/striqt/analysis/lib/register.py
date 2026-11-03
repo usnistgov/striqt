@@ -179,7 +179,9 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
             name: the coordinate name, or None for the `__name__` of the factory
             dims: the dimension names of the coordinate, a single name, or None
                 for ``(name,)``
-            attrs: attrs of the coordinate variable
+            attrs: attrs of the coordinate variable; a power `units` is one of
+                `striqt.waveform.units.DB_POWER`, `POWER`, or `AMPLITUDE`, resolved
+                into the `power_units` of the acquisition with the measurement
 
         Returns:
             a decorator that registers the factory and returns it unchanged
@@ -419,7 +421,11 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 shift; applies only when the acquisition runs a trigger. A
                 `signal_trigger` measurement must set False
             attrs: attrs of the output `xarray.DataArray`; the spec fields and any
-                attrs returned by the function take precedence
+                attrs returned by the function take precedence. A power `units` is
+                one of `striqt.waveform.units.DB_POWER`, `POWER`, or `AMPLITUDE`,
+                with an optional denominator, which the output resolves into the
+                `power_units` of the acquisition; a literal unit is for a quantity
+                that the acquisition does not scale, such as a ratio in ``'dB'``
             validate: a function of ``(capture, spec)`` that raises on a rejected
                 combination without reading IQ; `capture` is the
                 `specs.AnalysisCapture` projection, and the return value is ignored

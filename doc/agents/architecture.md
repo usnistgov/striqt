@@ -78,11 +78,15 @@ arguments, validates the fields, and returns a `DelayedDataArray`
 registration is an identity at runtime that gives the type checker the fields of the
 spec as keyword parameters.
 
-The registry declares every power output and power-bin coordinate in the mW family
-(`'dBm'`, `'mW'`, `'√mW'`), and `build_dataarray` rewrites those `units` attrs into
+A power output or power-bin coordinate declares the *form* of its unit with one of
+`striqt.waveform.units.DB_POWER` (`'{dB}'`), `POWER` (`'{P}'`), or `AMPLITUDE`
+(`'√{P}'`), with an optional denominator. `dataarrays.measurement_attrs` and
+`dataarrays.measurement_coords` compose the attrs of an output and resolve the form into
 the family of `AcquiredIQ.power_units` (`'mW'`, `'FS'`, or `'a.u.'`; a bare array is
-`'a.u.'`) when the DataArray is built, without mutating the registered attrs, the
-cached coordinate-factory results, or `DelayedDataArray.attrs`.
+`'a.u.'`). `build_dataarray` and the sensor's zarr template (`sensor/lib/compute/datasets.py:
+measurement_grids`) both call those two functions, so the registered attrs, the cached
+coordinate-factory results, and `DelayedDataArray.attrs` keep the form fields and are
+never mutated. A literal unit such as the ratio `'dB'` is left as written.
 
 Materialization to xarray is deferred so that the GPU can queue several measurements
 before anything is pulled back to the CPU. `evaluate_by_spec` runs every measurement

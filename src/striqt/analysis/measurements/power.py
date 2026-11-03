@@ -157,7 +157,7 @@ def evaluate_channel_power_time_series(
     dtype='float32',
     spec_type=specs.ChannelPowerTimeSeries,
     caches=_channel_power_cache,
-    attrs={'standard_name': 'Channel Power', 'units': 'dBm'},
+    attrs={'standard_name': 'Channel Power', 'units': sw.units.DB_POWER},
     validate=validated_channel_power_binning,
     tolerance=channel_power_tolerance,
 )
@@ -258,7 +258,8 @@ def make_power_histogram_bin_edges(power_low, power_high, power_resolution, xp=n
 
 
 @registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Channel power', 'units': 'dBm'}
+    dtype='float32',
+    attrs={'standard_name': 'Channel power', 'units': sw.units.DB_POWER},
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def channel_power_bin(
@@ -447,7 +448,7 @@ def cyclic_lag(capture: specs.Capture, spec: specs.CyclicChannelPower) -> np.nda
     coord_factories=[power_detector, cyclic_statistic, cyclic_lag],
     spec_type=specs.CyclicChannelPower,
     dtype='float32',
-    attrs={'standard_name': 'Cyclic channel power', 'units': 'dBm'},
+    attrs={'standard_name': 'Cyclic channel power', 'units': sw.units.DB_POWER},
     validate=validated_cyclic_lag_count,
     tolerance=cyclic_channel_power_tolerance,
 )
