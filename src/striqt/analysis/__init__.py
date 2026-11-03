@@ -3,7 +3,7 @@
 from striqt.waveform import dBlinmean, dBlinsum, dBtopow, envtodB, envtopow, powtodB
 
 from . import specs, testing
-from .lib import dataarrays, io, register, typing, util
+from .lib import dataarrays, io, labels, register, typing, util
 from .lib.dataarrays import (
     AcquiredIQ,
     EvaluationOptions,
