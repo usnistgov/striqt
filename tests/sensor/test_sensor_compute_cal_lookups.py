@@ -216,6 +216,8 @@ class TestLookupSystemNoisePower:
         assert noise.attrs['standard_name'] == 'System noise'
         assert noise.attrs['reference_temperature'] == 290.0
         assert '290 K' in noise.attrs['long_name']
+        assert '(' not in noise.attrs['long_name']
+        assert 'noise_bandwidth' not in noise.attrs
         assert noise.item() == pytest.approx(8.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
     def test_bandwidth_and_temperature_scale_the_result(self, calibration_nc):
@@ -227,7 +229,8 @@ class TestLookupSystemNoisePower:
         assert noise.attrs['units'] == 'dBm'
         assert noise.attrs['noise_bandwidth'] == 1e6
         assert noise.attrs['reference_temperature'] == 300.0
-        assert noise.attrs['long_name'].endswith('300 K source (dBm/1 MHz)')
+        assert noise.attrs['long_name'].endswith('300 K source')
+        assert '(' not in noise.attrs['long_name']
 
     def test_noise_figure_is_interpolated_in_frequency(self, calibration_nc):
         noise = self._lookup(calibration_nc, soapy_capture(center_frequency=1.5e9))

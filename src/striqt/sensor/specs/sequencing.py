@@ -918,7 +918,7 @@ def describe_capture(
         use_fields = fields
 
     for name in use_fields:
-        desc = sa.lib.dataarrays.describe_field(capture, name, sep=': ')
+        desc = sa.labels.describe_field(capture, name, sep=': ')
         diffs.append(desc)
 
     return join.join(diffs)

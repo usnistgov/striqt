@@ -7,7 +7,6 @@ from math import ceil, gcd, isfinite
 from typing import TYPE_CHECKING, cast
 
 import striqt.analysis as sa
-from striqt.analysis.lib.dataarrays import format_units
 
 from ... import specs
 from .. import util
@@ -474,18 +473,19 @@ def validate_fir_band(capture: specs.SensorCapture) -> None:
     """
     bw = capture.analysis_bandwidth
     fs = capture.sample_rate
-    transition = format_units(FIR_TRANSITION_BW, unit='Hz')
+    transition = sw.units.format_quantity(FIR_TRANSITION_BW, 'Hz')
+    bw_text = sw.units.format_quantity(bw, 'Hz')
 
     if not bw / 2 - FIR_TRANSITION_BW / 2 > 0:
         raise ValueError(
-            f'analysis_bandwidth {format_units(bw, unit="Hz")} leaves no passband '
-            f'below the {transition} FIR transition band'
+            f'analysis_bandwidth {bw_text} leaves no passband below the '
+            f'{transition} FIR transition band'
         )
     if not bw / 2 + FIR_TRANSITION_BW / 2 < fs / 2:
         raise ValueError(
-            f'analysis_bandwidth {format_units(bw, unit="Hz")} leaves no room for '
-            f'the {transition} FIR transition band below the '
-            f'{format_units(fs, unit="S/s")} sample_rate'
+            f'analysis_bandwidth {bw_text} leaves no room for the {transition} FIR '
+            f'transition band below the {sw.units.format_quantity(fs, "S/s")} '
+            'sample_rate'
         )
 
 
@@ -508,17 +508,18 @@ def validate_oaresample_shift(design: sw.ResamplerDesign) -> None:
         return
     if nfft < nfft_out:
         raise ValueError('lo_shift is only supported when downsampling')
+    shift_text = sw.units.format_quantity(shift, 'Hz')
     if not sw.isroundmod(shift, bin_size):
         raise ValueError(
-            f'the LO offset {format_units(shift, unit="Hz")} is not a multiple of '
-            f'the {format_units(bin_size, unit="Hz")} resampler bin'
+            f'the LO offset {shift_text} is not a multiple of the '
+            f'{sw.units.format_quantity(bin_size, "Hz")} resampler bin'
         )
 
     edge_low = nfft // 2 - nfft_out // 2 + round(shift / bin_size)
     if edge_low < 0 or edge_low + nfft_out > nfft:
         raise ValueError(
-            f'the LO offset {format_units(shift, unit="Hz")} shifts the passband '
-            'outside the source bandwidth'
+            f'the LO offset {shift_text} shifts the passband outside the source '
+            'bandwidth'
         )
 
 
@@ -617,9 +618,9 @@ def _resample(
         )
     if not sw.isroundmod(lo_offset * x.shape[axis], fs):
         raise ValueError(
-            f'the lo_shift offset {format_units(lo_offset, unit="Hz")} is not a '
+            f'the lo_shift offset {sw.units.format_quantity(lo_offset, "Hz")} is not a '
             f'whole number of bins of the {x.shape[axis]}-sample record at '
-            f'{format_units(fs, unit="S/s")}'
+            f'{sw.units.format_quantity(fs, "S/s")}'
         )
     ny = round(x.shape[1] * capture.sample_rate / fs)
     shift = round(lo_offset * x.shape[axis] / fs)

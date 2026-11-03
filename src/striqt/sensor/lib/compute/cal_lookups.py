@@ -88,10 +88,11 @@ def lookup_system_noise_power(
         xp: the array namespace of the result, or None for numpy
 
     Returns:
-        a `DataArray` on the capture dimension, one value per port, in dBm/Hz when
-        `B` is 1 and in dBm with a `noise_bandwidth` attr otherwise; the
-        `reference_temperature` attr is `T`. None when `cal_data` is None or the
-        file has no corrections.
+        a `DataArray` on the capture dimension, one value per port, with `units`
+        ``'dBm/Hz'`` when `B` is 1 and ``'dBm'`` beside a `noise_bandwidth` attr of
+        `B` otherwise; `standard_name` and `long_name` name the quantity without
+        units, and `reference_temperature` is `T`. None when `cal_data` is None or
+        the file has no corrections.
 
     Raises:
         TypeError: if `cal_data` is neither a path nor None
@@ -127,21 +128,14 @@ def lookup_system_noise_power(
 
     attrs: dict[str, Any] = {
         'standard_name': 'System noise',
-        'name': 'Sensor system noise spectral density',
+        'long_name': f'Sensor noise power referred to a {T:g} K source',
         'reference_temperature': float(T),
     }
     if B == 1:
         attrs['units'] = 'dBm/Hz'
-        attrs['long_name'] = (
-            f'Sensor noise power spectral density referred to a {T:g} K source'
-        )
     else:
         attrs['units'] = 'dBm'
         attrs['noise_bandwidth'] = float(B)
-        attrs['long_name'] = (
-            f'Sensor noise power referred to a {T:g} K source '
-            f'(dBm/{sa.dataarrays.format_units(B, "Hz")})'
-        )
     return xr.DataArray(data=noise_psd, dims=CAPTURE_DIM, attrs=attrs)
 
 

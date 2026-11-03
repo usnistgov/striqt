@@ -113,6 +113,16 @@ def test_describe_overloads_names_the_overloaded_ports():
     assert 'port 1' not in text
 
 
+def test_describe_overloads_renders_frequencies_in_mhz():
+    ports = summary.overloads(
+        delayed({'adc_headroom': (-1.0, 3.0), 'if_headroom': (10.0, 10.0)})
+    )
+    text = summary.describe_overloads(ports)
+    assert isinstance(text, str)
+    assert 'port 0 (1000 MHz)' in text
+    assert 'onto 2000 MHz' in text
+
+
 # %% spectrogram_snr
 
 NOISE_BANDWIDTH = 1e4

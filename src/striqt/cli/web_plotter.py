@@ -310,7 +310,7 @@ class WebPlotBackend:
 
         if show_colorbar:
             trace['colorbar'] = {
-                'title': {'text': _format_units_only(data)},
+                'title': {'text': _colorbar_title(data)},
             }
 
         if vmin is not None:
@@ -353,16 +353,16 @@ class WebPlotBackend:
                 ]
 
                 layout[f'xaxis{suffix}'] = {
-                    'title': {'text': _format_coord_label(data[x])},
+                    'title': {'text': _axis_title(data[x])},
                     'domain': x_domain,
                 }
                 layout[f'yaxis{suffix}'] = {
-                    'title': {'text': _format_coord_label(data[y])},
+                    'title': {'text': _axis_title(data[y])},
                     'domain': y_domain,
                 }
         else:
-            layout['xaxis'] = {'title': {'text': _format_coord_label(data[x])}}
-            layout['yaxis'] = {'title': {'text': _format_coord_label(data[y])}}
+            layout['xaxis'] = {'title': {'text': _axis_title(data[x])}}
+            layout['yaxis'] = {'title': {'text': _axis_title(data[y])}}
 
         return layout
 
@@ -663,7 +663,7 @@ class WebPlotBackend:
                 ]
 
                 layout[f'xaxis{suffix}'] = {
-                    'title': {'text': _format_coord_label(data[x])},
+                    'title': {'text': _axis_title(data[x])},
                     'domain': x_domain,
                 }
 
@@ -679,16 +679,16 @@ class WebPlotBackend:
 
                 # Only show y-axis title and tick labels on leftmost column
                 if is_leftmost:
-                    y_axis_config['title'] = {'text': _format_label_with_units(data)}
+                    y_axis_config['title'] = {'text': _axis_title(data)}
                 else:
                     y_axis_config['title'] = {'text': ''}
                     y_axis_config['showticklabels'] = False
 
                 layout[f'yaxis{suffix}'] = y_axis_config
         else:
-            layout['xaxis'] = {'title': {'text': _format_coord_label(data[x])}}
+            layout['xaxis'] = {'title': {'text': _axis_title(data[x])}}
             y_axis_config = {
-                'title': {'text': _format_label_with_units(data)},
+                'title': {'text': _axis_title(data)},
                 'type': yscale,
             }
             if ylim is not None and (ylim[0] is not None or ylim[1] is not None):
@@ -924,11 +924,6 @@ def _to_json_serializable(
     return arr
 
 
-def _format_label(data: xr.DataArray) -> str:
-    """Format a label from DataArray name (without units) - for plot titles."""
-    return data.attrs.get('long_name', data.attrs['standard_name'])
-
-
 def _format_subplots(data, opts: sf.specs.SharedPlotOptions):
     import striqt.figures as sf
 
@@ -956,28 +951,25 @@ def _format_subplots(data, opts: sf.specs.SharedPlotOptions):
     ]
 
 
-def _format_label_with_units(data: xr.DataArray) -> str:
-    """Format a label from DataArray name with units - for axis labels."""
-    name = data.attrs['standard_name']
-    units = data.attrs.get('units', '')
-    if units:
-        return f'{name} ({units})'
-    return name
+def _measurand(da: xr.DataArray) -> sa.labels.Measurand:
+    import striqt.analysis as sa
+
+    name = None if da.name is None else str(da.name)
+    return sa.labels.measurand_from_attrs(da.attrs, name)
 
 
-def _format_units_only(data: xr.DataArray) -> str:
-    """Format only the units from DataArray - for colorbar labels."""
-    units = data.attrs.get('units', '')
-    return units
+def _axis_title(da: xr.DataArray) -> str:
+    """return the name of `da` with its units in parentheses, from its attrs."""
+    import striqt.analysis as sa
+
+    return sa.labels.quantity_label(_measurand(da))
 
 
-def _format_coord_label(coord: xr.DataArray) -> str:
-    """Format a coordinate label."""
-    name = coord.attrs['standard_name']
-    units = coord.attrs.get('units', '')
-    if units:
-        return f'{name} ({units})'
-    return name
+def _colorbar_title(da: xr.DataArray) -> str:
+    """return the units text of `da` from its attrs, or ``''`` without units."""
+    import striqt.analysis as sa
+
+    return sa.labels.units_label(_measurand(da)) or ''
 
 
 def _mpl_to_plotly_colorscale(cmap: str) -> Any:
@@ -1432,11 +1424,14 @@ def _extract_extra_coords(
     """
     from collections import defaultdict
 
+    import striqt.analysis as sa
+
     extra_coords = result.extra_coords
     if extra_coords is None:
         return {}
 
     field_origins = _get_field_origins(type(extra_coords))
+    field_attrs = sa.specs.helpers.get_capture_type_attrs(type(extra_coords))
 
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
@@ -1449,9 +1444,7 @@ def _extract_extra_coords(
             continue
 
         formatted_value = _format_coord_value(value)
-
-        # AcquisitionInfo fields have no units metadata
-        unit = ''
+        unit = field_attrs.get(field_name, {}).get('units', '')
 
         coord_dict = {
             'name': field_name,
@@ -1484,6 +1477,7 @@ def _extract_capture_coordinates(
     from collections import defaultdict
 
     import striqt.sensor as ss
+    import striqt.waveform as sw
 
     capture_coords = ss.lib.compute.datasets.build_capture_coords(
         result.capture, result.extra_coords, result.config.sweep_spec.loops
@@ -1532,12 +1526,11 @@ def _extract_capture_coordinates(
                 and np.isfinite(v)
             ]
             if len(numeric_vals) == len(raw_values):
-                # All values are numeric - apply SI prefix based on smallest absolute value
-                pow10, prefix = _get_si_prefix_for_values(numeric_vals, unit)
+                p = sw.units.si_prefix(numeric_vals, unit)
                 values = [
-                    _format_value_with_prefix(float(v), pow10) for v in raw_values
+                    sw.units.format_quantity(v, None, prefix=p) for v in numeric_vals
                 ]
-                unit = f'{prefix}{unit}'
+                unit = f'{p.symbol}{unit}'
             else:
                 # Mixed or non-numeric - format without SI prefix
                 values = [_format_coord_value(v) for v in raw_values]
@@ -1571,54 +1564,6 @@ def _extract_capture_coordinates(
             'extra_coords': extra_coords_groups,
         },
     )
-
-
-def _get_si_prefix_for_values(values: list[float], unit: str) -> tuple[int, str]:
-    """return the engineering power of 10 and SI prefix for the smallest nonzero value.
-
-    Returns:
-        ``(power_of_10, prefix)``. The power is 0 and the prefix empty for a dB
-        `unit`, or when no value is finite and nonzero. Otherwise the power is the
-        multiple of 3 at or below the smallest absolute value, clamped to the known
-        prefixes.
-    """
-    import math
-
-    from striqt.analysis.lib.dataarrays import _ENG_PREFIXES
-
-    # dB units don't get SI prefixes
-    if unit.lower().startswith('db'):
-        return 0, ''
-
-    finite_vals = [abs(v) for v in values if np.isfinite(v) and v != 0]
-    if not finite_vals:
-        return 0, ''
-
-    min_val = min(finite_vals)
-
-    # Calculate power of 1000 (engineering notation)
-    pow10 = int(math.floor(math.log10(min_val) / 3) * 3)
-
-    # Clamp to available prefixes
-    pow10 = int(np.clip(pow10, min(_ENG_PREFIXES), max(_ENG_PREFIXES)))
-
-    return pow10, _ENG_PREFIXES.get(pow10, '')
-
-
-def _format_value_with_prefix(value: float, pow10: int) -> str:
-    """Format a value using the given power of 10."""
-    from striqt.analysis.lib.dataarrays import _ENG_PREFIXES
-
-    if not np.isfinite(value):
-        return str(value)
-
-    scaled = value / (10.0**pow10)
-
-    if abs(scaled) >= 1000 and pow10 < max(_ENG_PREFIXES.keys()):
-        scaled /= 1000
-        # pow10 is not advanced because every value shares one prefix
-
-    return f'{scaled:.4g}'
 
 
 def _format_coord_value(value: Any) -> str:
