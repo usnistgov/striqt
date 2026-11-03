@@ -155,7 +155,7 @@ def evaluate_channel_power_time_series(
     dtype='float32',
     spec_type=specs.ChannelPowerTimeSeries,
     caches=_channel_power_cache,
-    standard_name='Channel Power',
+    standard_name='Channel power',
     units=sw.units.DB_POWER,
     validate=validated_channel_power_binning,
     tolerance=channel_power_tolerance,

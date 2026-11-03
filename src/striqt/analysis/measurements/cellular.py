@@ -75,7 +75,7 @@ def ssb_block_count(
 
 
 @registry.coordinates(
-    dtype='uint16', standard_name=r'Cell Sector ID ($N_{ID}^\text{(2)}$)'
+    dtype='uint16', standard_name=r'Cell sector ID ($N_{ID}^\text{(2)}$)'
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_cell_id2(capture: specs.Capture, spec: Any):
@@ -94,7 +94,7 @@ def cellular_ssb_beam_index(
     return list(range(len(params.symbol_indexes)))
 
 
-@registry.coordinates(dtype='float32', standard_name='Time Elapsed', units='s')
+@registry.coordinates(dtype='float32', standard_name='Time elapsed', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_start_time(
     capture: specs.Capture,
@@ -301,7 +301,7 @@ def choose_pss_sync_offsets(
     dtype='float32',
     caches=(_pss_correlator_cache, ssb_iq_cache, _pss_sync_cache),
     store_compressed=False,
-    standard_name='PSS Synchronization Delay',
+    standard_name='PSS synchronization delay',
     units='s',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
@@ -336,7 +336,7 @@ def cellular_5g_pss_sync(
     dtype='complex64',
     caches=(_pss_correlator_cache, ssb_iq_cache),
     store_compressed=False,
-    standard_name='PSS Cross-Covariance',
+    standard_name='PSS cross-covariance',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -441,7 +441,7 @@ def choose_sss_sync_offsets(
     dtype='float32',
     caches=(_sss_correlator_cache, ssb_iq_cache, _sss_sync_cache),
     store_compressed=False,
-    standard_name='SSS Synchronization Delay',
+    standard_name='SSS synchronization delay',
     units='s',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
@@ -476,7 +476,7 @@ def cellular_5g_sss_sync(
     dtype='complex64',
     caches=(_sss_correlator_cache, ssb_iq_cache),
     store_compressed=False,
-    standard_name='SSS Cross-Covariance',
+    standard_name='SSS cross-covariance',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -536,7 +536,7 @@ def cellular_ssb_symbol_index(
 
 
 @registry.coordinates(
-    dtype='float64', standard_name='SSB Baseband Frequency', units='Hz'
+    dtype='float64', standard_name='SSB baseband frequency', units='Hz'
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_baseband_frequency(
@@ -671,7 +671,7 @@ def ssb_spectrogram_tolerance(
     coord_factories=_SSB_SPECTROGRAM_COORDS,
     dtype='float16',
     caches=(spectrum.spectrogram_cache,),
-    standard_name='SSB Spectrogram',
+    standard_name='SSB spectrogram',
     validate=validated_ssb_spectrogram_sizing,
     tolerance=ssb_spectrogram_tolerance,
     prefer_filtered=False,
@@ -1059,7 +1059,7 @@ def validated_autocorrelation_lag_count(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
     spec_type=specs.CellularCyclicAutocorrelator,
-    standard_name='Cyclic Autocovariance',
+    standard_name='Cyclic autocovariance',
     units=sw.units.POWER,
     validate=validated_autocorrelation_lag_count,
     prefer_aligned=False,

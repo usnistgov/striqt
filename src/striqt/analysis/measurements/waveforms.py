@@ -86,7 +86,7 @@ def iq_waveform_tolerance(
     )
 
 
-@registry.coordinates(dtype='uint64', standard_name='Sample Index')
+@registry.coordinates(dtype='uint64', standard_name='Sample index')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[int]:
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)

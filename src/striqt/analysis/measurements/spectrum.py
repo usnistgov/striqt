@@ -295,7 +295,7 @@ def spectrogram_freqs(capture: specs.Capture, spec: specs.Spectrogram) -> np.nda
     return freqs.astype('float64').round(16)
 
 
-@registry.coordinates(dtype='float64', standard_name='Baseband Frequency', units='Hz')
+@registry.coordinates(dtype='float64', standard_name='Baseband frequency', units='Hz')
 def spectrogram_baseband_frequency(
     capture: specs.Capture, spec: specs.Spectrogram
 ) -> np.ndarray:
@@ -369,7 +369,7 @@ def spectrogram_level_tolerance(
 
 
 # %% spectrogram
-@registry.coordinates(dtype='float32', standard_name='Time Elapsed', units='s')
+@registry.coordinates(dtype='float32', standard_name='Time elapsed', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def spectrogram_time(capture: specs.Capture, spec: specs.Spectrogram) -> np.ndarray:
     sizing = validated_spectrogram_sizing(capture, spec)
