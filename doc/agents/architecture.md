@@ -21,6 +21,7 @@ changes without warning.
 The top-level modules of `striqt.waveform` re-export names from `striqt.waveform.lib`:
 
 - `striqt.waveform.arrays` re-exports `waveform/lib/arrays.py`.
+- `striqt.waveform.units` re-exports `waveform/lib/units.py`.
 - `striqt.waveform.fourier` and `striqt.waveform.power_analysis` re-export the
   packages `waveform/lib/fourier` and `waveform/lib/power`.
 - `striqt.waveform.comms_5gnr`, `striqt.waveform.comms_lte`, and
