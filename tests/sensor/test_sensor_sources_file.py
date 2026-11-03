@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from conftest import FAKE_SOAPY_SPEC
 from numeric_checks import FIR_LEAKAGE, assert_close, interior, to_numpy
 from pytest_lazy_fixtures import lf
 from synthetic_sources import (
@@ -267,6 +268,52 @@ def test_zarr_round_trip_filtered(zarr_iq_file):
     )
 
 
+@pytest.fixture
+def fake_soapy_iq_store(fake_soapy_ext, tmp_path):
+    """return the path of a zarr store of `iq_waveform` written by a one-capture
+    sweep on the uncalibrated fake SoapySDR device"""
+    spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
+    sweep = spec.replace(
+        captures=(spec.captures[1].replace(duration=1e-4),),
+        analysis=type(spec.analysis).from_dict({'iq_waveform': {}}),
+        sink=spec.sink.replace(path=str(tmp_path / 'fake_soapy.zarr')),
+    )
+    with ss.open_resources(sweep, FAKE_SOAPY_SPEC, test_only=True) as res:
+        for _ in ss.iterate_sweep(res):
+            pass
+    return sweep.sink.path
+
+
+def test_zarr_power_units_of_a_synthetic_store(zarr_iq_file):
+    """a store written by the synthetic sources has ``'√mW'`` on `iq_waveform` and the
+    family ``'mW'``"""
+    assert sa.load(zarr_iq_file.path).iq_waveform.attrs['units'] == '√mW'
+    source = ss.lib.sources.ZarrIQSource(zarr_spec(zarr_iq_file))
+    assert source.power_units() == 'mW'
+
+
+def test_zarr_power_units_of_an_uncalibrated_soapy_store(fake_soapy_iq_store):
+    """a store written by an uncalibrated SoapySDR sweep has ``'√FS'`` on `iq_waveform`
+    and the family ``'FS'``"""
+    assert sa.load(fake_soapy_iq_store).iq_waveform.attrs['units'] == '√FS'
+    spec = ss.specs.ZarrIQSource(
+        path=str(fake_soapy_iq_store),
+        center_frequency=1.5e9,
+        master_clock_rate=62.5e6,
+    )
+    assert ss.lib.sources.ZarrIQSource(spec).power_units() == 'FS'
+
+
+def test_zarr_power_units_without_a_units_attr_are_arbitrary(zarr_iq_file, tmp_path):
+    ds = sa.load(zarr_iq_file.path).load()
+    del ds.iq_waveform.attrs['units']
+    path = tmp_path / 'unitless.zarr'
+    sa.dump(sa.open_store(path, mode='w'), ds)
+
+    spec = zarr_spec(zarr_iq_file).replace(path=str(path))
+    assert ss.lib.sources.ZarrIQSource(spec).power_units() == 'a.u.'
+
+
 @pytest.mark.xfail(
     strict=True,
     raises=AssertionError,
@@ -338,6 +385,19 @@ def test_mat_get_waveform_preroll(mat_files, array_backend, fill):
 def test_mat_explicit_key_reads_the_named_variable(mat_files):
     waveform = mat_waveform(mat_files[1], 0, key='waveform')
     assert_preroll_then_file(waveform, 0, mat_files[1].waveform)
+
+
+@pytest.mark.parametrize(
+    'spec_kws, expected', [({}, 'a.u.'), ({'power_units': 'FS'}, 'FS')], ids=str
+)
+def test_mat_power_units_are_the_spec_field(mat_files, spec_kws, expected):
+    """a MAT file has no known scale: the family is ``'a.u.'`` unless the spec sets
+    `power_units`"""
+    source = ss.lib.sources.MATSource(mat_spec(mat_files[1], **spec_kws))
+    try:
+        assert source.power_units() == expected
+    finally:
+        source.close()
 
 
 def test_mat_missing_file(tmp_path):
@@ -448,6 +508,18 @@ def test_tdms_file_info(tdms_file):
     assert source._file_info.backend_sample_rate == FS
     assert source._file_info.center_frequency == CENTER_FREQUENCY
     assert source.get_info().num_rx_ports == 1
+
+
+def test_tdms_power_units_are_milliwatts_at_the_reference_level(tdms_file):
+    """full-scale int16 maps to the reference level of the header in dBm. The
+    unit-magnitude tone of the file is then 0 dBm in the read waveform."""
+    source = ss.lib.sources.TDMSSource(tdms_spec(tdms_file))
+    waveform = source.get_waveform(READ_SAMPLES, 0, port=0, xp=np)
+    peak_dBm = 10 * np.log10(np.abs(waveform).max() ** 2)
+    expected_dBm = 10 * np.log10(np.abs(tdms_file.waveform).max() ** 2)
+    assert source.power_units() == 'mW'
+    assert expected_dBm == pytest.approx(0.0, abs=0.01)
+    assert peak_dBm == pytest.approx(expected_dBm, abs=0.01)
 
 
 @PREROLL_FILLS

@@ -41,8 +41,9 @@ def noise_bandwidth(data: xr.Dataset, var_name: str) -> xr.DataArray | float | N
     * `var_name` has a `noise_bandwidth` attr: that value;
     * `var_name` is a coordinate: the `noise_bandwidth` attr of a data variable on
       the dimension of the coordinate;
-    * `var_name` has `units` beginning with dBm or √mW: the `analysis_bandwidth`
-      coordinate where finite, and the `sample_rate` coordinate where infinite;
+    * `var_name` has `units` of a power quantity (`striqt.waveform.units.power_family`
+      is not None): the `analysis_bandwidth` coordinate where finite, and the
+      `sample_rate` coordinate where infinite;
     * otherwise: None.
 
     Returns:
@@ -57,8 +58,7 @@ def noise_bandwidth(data: xr.Dataset, var_name: str) -> xr.DataArray | float | N
     if from_owner is not None:
         return from_owner
 
-    units = str(da.attrs.get('units', ''))
-    if not units.startswith(('dBm', '√mW')):
+    if sw.units.power_family(str(da.attrs.get('units', ''))) is None:
         return None
     if 'analysis_bandwidth' in data.variables:
         bw = data['analysis_bandwidth']
@@ -100,13 +100,17 @@ def get_system_noise(
             minimum over captures minus `margin`
 
     Returns:
-        a DataArray over the captures with ``units='dBm'``, or the scalar minimum
-        with `margin`; None without `system_noise` or without a noise bandwidth for
-        `var_name`
+        a DataArray over the captures with ``units='dBm'`` and, for a scalar `B`, the
+        `noise_bandwidth` attr; the scalar minimum with `margin`; None without
+        `system_noise` or without a noise bandwidth for `var_name`
+
+    Raises:
+        ValueError: if the `units` of `var_name` are in a power family other than mW
     """
     if 'system_noise' not in data:
         return None
 
+    _check_mW_family(data, var_name)
     B = noise_bandwidth(data, var_name)
     if B is None:
         return None
@@ -115,15 +119,23 @@ def get_system_noise(
         standard_name='System noise', units='dBm'
     )
     if isinstance(B, float):
-        bandwidth = sa.dataarrays.format_units(B, 'Hz')
-        noise = noise.assign_attrs(
-            noise_bandwidth=B, long_name=f'System noise (dBm/{bandwidth})'
-        )
+        noise = noise.assign_attrs(noise_bandwidth=B)
 
     if margin is None:
         return noise
     else:
         return float(noise.min() - margin)
+
+
+def _check_mW_family(data: xr.Dataset, var_name: str) -> None:
+    """raise ValueError when `var_name` is in a power unit other than mW."""
+    units = str(data[var_name].attrs.get('units', ''))
+    family = sw.units.power_family(units)
+    if family is not None and family != 'mW':
+        raise ValueError(
+            f'{var_name!r} is in {units!r}, but the system noise is in dBm; '
+            'a calibrated acquisition is required'
+        )
 
 
 def system_noise_floor(data: xr.Dataset, var_name: str, margin: float) -> float | None:
@@ -153,8 +165,9 @@ def check_noise_floor(data: xr.Dataset, var_name: str) -> xr.Dataset:
 
     Raises:
         ValueError: if `var_name` does not have exactly one ``*_power_bin``
-            dimension, or `data` has no `system_noise` or no noise bandwidth for
-            `var_name`
+            dimension, if the `units` of the bin coordinate are in a power family
+            other than mW, or if `data` has no `system_noise` or no noise bandwidth
+            for `var_name`
     """
     hist = data[var_name]
     bin_dims = [str(d) for d in hist.dims if str(d).endswith('_power_bin')]
@@ -163,6 +176,7 @@ def check_noise_floor(data: xr.Dataset, var_name: str) -> xr.Dataset:
             f'{var_name!r} must have one *_power_bin dimension, found {bin_dims}'
         )
     bin_dim = bin_dims[0]
+    _check_mW_family(data, bin_dim)
 
     predicted = get_system_noise(data, var_name)
     if predicted is None:

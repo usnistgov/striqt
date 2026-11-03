@@ -3,6 +3,8 @@ from __future__ import annotations as __
 import typing
 from typing import Any, Literal
 
+import striqt.waveform as sw
+
 from .. import specs
 from ..lib.util import pd
 from . import shared
@@ -84,7 +86,7 @@ def iq_waveform_tolerance(
     )
 
 
-@registry.coordinates(dtype='uint64', attrs={'standard_name': 'Sample Index'})
+@registry.coordinates(dtype='uint64', standard_name='Sample index')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[int]:
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)
@@ -96,7 +98,8 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     coord_factories=[iq_index],
     spec_type=specs.IQWaveform,
     dtype='complex64',
-    attrs={'standard_name': 'IQ waveform', 'units': '√mW'},
+    standard_name='IQ waveform',
+    units=sw.units.AMPLITUDE,
     store_compressed=False,
     tolerance=iq_waveform_tolerance,
 )
@@ -105,8 +108,10 @@ def iq_waveform(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
 
     The input is the IQ after the `analysis_bandwidth` filter and trigger alignment.
     Per capture, the output has the dimension ``(iq_index,)`` of sample indexes into
-    the capture. The values are complex64 in √mW. The squared magnitude ``|iq|**2``
-    is power in mW. A None time bound selects the start or the end of the capture.
+    the capture. The values are complex64 in the square root of the power unit of
+    the acquisition (`AcquiredIQ.power_units`), √mW when calibrated. The squared
+    magnitude ``|iq|**2`` is power in that unit. A None time bound selects the start
+    or the end of the capture.
     A bound outside the capture is clamped to the capture. The output has no
     `noise_bandwidth` attr. The noise bandwidth of each capture is the
     `analysis_bandwidth` coordinate, or `sample_rate` where `analysis_bandwidth` is

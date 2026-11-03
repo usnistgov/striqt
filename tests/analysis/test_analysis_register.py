@@ -26,6 +26,7 @@ from analysis_strategies import (
 from hypothesis import given, settings, strategies as st
 
 import striqt.analysis as sa
+import striqt.waveform as sw
 from striqt.analysis.lib import dataarrays, register
 from striqt.analysis.specs.helpers import SpecValidationError
 
@@ -57,6 +58,7 @@ def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=No
     @registry.measurement(
         spec_type,
         dtype='float32',
+        standard_name='Toy',
         dims=('toy',),
         validate=validate,
         tolerance=tolerance,
@@ -98,7 +100,9 @@ def build_preference_registry(**preferences: bool):
     registry = register.AnalysisRegistry()
     received = []
 
-    @registry.measurement(ToySpec, dtype='complex64', dims=('toy',), **preferences)
+    @registry.measurement(
+        ToySpec, dtype='complex64', standard_name='Toy', dims=('toy',), **preferences
+    )
     def toy(x, capture, **kwargs):
         received.append(x)
         return x
@@ -125,7 +129,7 @@ def test_the_wrapper_hands_the_body_the_preprocessed_array():
         prefer_filtered=False, prefer_aligned=True
     )
     x = np.arange(8, dtype='complex64').reshape(1, 8)
-    iq = RecordingIQ(x=x, capture=CAPTURE)
+    iq = RecordingIQ(x=x, capture=CAPTURE, power_units='a.u.')
 
     toy(iq, CAPTURE, as_xarray=False)
 
@@ -253,6 +257,7 @@ def build_group_registry(*validators, tolerances=(None, None)):
     @registry.measurement(
         ToySpec,
         dtype='float32',
+        standard_name='Toy',
         dims=('toy',),
         validate=toy_validate,
         tolerance=toy_tolerance,
@@ -263,6 +268,7 @@ def build_group_registry(*validators, tolerances=(None, None)):
     @registry.measurement(
         OtherToySpec,
         dtype='float32',
+        standard_name='Other toy',
         dims=('other',),
         validate=other_validate,
         tolerance=other_tolerance,
@@ -561,12 +567,13 @@ SPEC_IDS = [type(spec).__name__ for spec in CONTRACT_SPECS]
 
 def measure(spec, as_xarray):
     """run the measurement registered for `type(spec)` on a unit tone over
-    `CONTRACT_CAPTURE` and return the registration with the result."""
+    `CONTRACT_CAPTURE`, acquired in mW, and return the registration with the result."""
     info = sa.registry[type(spec)]
     ports = 2 if isinstance(spec, sa.specs.SpectrogramHistogramRatio) else 1
-    iq = sa.testing.tone(
+    x = sa.testing.tone(
         CONTRACT_CAPTURE.duration, CONTRACT_CAPTURE.sample_rate, ports=ports
     )
+    iq = sa.AcquiredIQ(x, CONTRACT_CAPTURE, power_units='mW')
     return info, info.func(iq, CONTRACT_CAPTURE, as_xarray=as_xarray, **spec.to_dict())
 
 
@@ -598,6 +605,8 @@ def test_measurement_attrs(spec):
     info, da = measure(spec, as_xarray=True)
 
     for name, value in info.attrs.items():
+        if name == 'units':
+            value = sw.units.resolve_power_units(value, 'mW')
         assert da.attrs[name] == value
 
     # the wrapper decodes the keywords into a spec before calling, so the attrs are
@@ -606,15 +615,32 @@ def test_measurement_attrs(spec):
         assert da.attrs[name] == value
 
 
-ABSOLUTE_POWER_UNITS = ('dBm', '√mW')
+@pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
+def test_registered_power_units_are_form_tokens(spec):
+    """a registered or returned `units` that resolves to a power family is declared
+    as a form token, never as a literal family"""
+    info, (_, body_attrs) = measure(spec, as_xarray=False)
+    for attrs, what in [(info.attrs, info.name), (body_attrs, f'{info.name} body')]:
+        units = attrs.get('units')
+        if not isinstance(units, str):
+            continue
+        resolved = sw.units.resolve_power_units(units, 'mW')
+        if sw.units.power_family(resolved) is not None:
+            assert sw.units.has_power_form(units), what
+    for factory in info.coord_factories:
+        coord_info = sa.registry.coordinates[factory]
+        units = coord_info.attrs.get('units')
+        if isinstance(units, str) and sw.units.power_family(units) is not None:
+            raise AssertionError(f'{coord_info.name} declares the literal {units!r}')
 
 
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
-    """every output and power-bin coordinate in absolute power units has a
-    `noise_bandwidth` (Hz) and a `long_name` that names the bandwidth. The outputs
-    with the per-capture `analysis_bandwidth` as noise bandwidth set neither. Ratios
-    in dB set neither."""
+    """every output and power-bin coordinate in a power family (`power_family` is not
+    None) has a `noise_bandwidth` (Hz), `units` without a bandwidth, and `long_name`
+    and `standard_name` without a parenthesized suffix. The outputs with the
+    per-capture `analysis_bandwidth` as noise bandwidth set no `noise_bandwidth`.
+    Ratios in dB set no `noise_bandwidth`."""
     info, da = measure(spec, as_xarray=True)
 
     def check(attrs, what):
@@ -622,11 +648,12 @@ def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
         if str(what) in sa.lib.io._CAPTURE_BANDWIDTH_NAMES:
             assert 'noise_bandwidth' not in attrs, what
             assert '/' not in str(attrs.get('long_name', '')), what
-        elif units in ABSOLUTE_POWER_UNITS:
+        elif isinstance(units, str) and sw.units.power_family(units) is not None:
             assert isinstance(attrs.get('noise_bandwidth'), float), what
             assert attrs['noise_bandwidth'] > 0, what
-            assert f'({units}/' in attrs['long_name'], what
             assert 'dBm/' not in units, what
+            assert '(' not in attrs.get('long_name', ''), what
+            assert '(' not in attrs.get('standard_name', ''), what
         elif units == 'dB':
             assert 'noise_bandwidth' not in attrs, what
 
@@ -663,7 +690,7 @@ def test_measurement_geometry_matches_the_measured_dataarray(spec):
     assert dataarrays.measurement_dims(info) == da.dims[1:]
     assert dataarrays.measurement_shape(info, CONTRACT_CAPTURE, spec) == da.shape[1:]
 
-    coords = dataarrays.measurement_coords(info, CONTRACT_CAPTURE, spec)
+    coords = dataarrays.measurement_coords(info, CONTRACT_CAPTURE, spec, 'mW')
     assert set(coords) == set(da.coords)
     for name, (values, attrs) in coords.items():
         assert values.dtype == da[name].dtype, name
@@ -901,3 +928,55 @@ def test_group_checks_reject_a_field_that_is_not_optional(check):
 
     with pytest.raises(TypeError, match='Optional'):
         check(Bad)
+
+
+# %% registration keywords
+
+
+def test_registration_requires_a_standard_name():
+    registry = register.AnalysisRegistry()
+    with pytest.raises(TypeError):
+        registry.measurement(ToySpec, dtype='float32', dims=('toy',))  # ty: ignore[missing-argument]
+
+
+def test_registered_attrs_are_the_standard_name_and_units():
+    """the attrs of a registration are exactly the keywords given; `units` None is
+    absent rather than null"""
+    registry = register.AnalysisRegistry()
+
+    @registry.measurement(ToySpec, dtype='float32', standard_name='Toy', dims=('toy',))
+    def toy(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    @registry.measurement(
+        OtherToySpec,
+        dtype='float32',
+        standard_name='Other toy',
+        units=sa.units.DB_POWER,
+        dims=('other',),
+    )
+    def other_toy(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    assert registry[ToySpec].attrs == {'standard_name': 'Toy'}
+    assert registry[OtherToySpec].attrs == {
+        'standard_name': 'Other toy',
+        'units': sa.units.DB_POWER,
+    }
+    assert registry[ToySpec].name == 'toy'
+    assert registry[OtherToySpec].name == 'other_toy'
+
+
+def test_coordinate_registration_names_itself_and_keeps_its_units():
+    coords = register.CoordRegistry()
+
+    @coords(dtype='float64', standard_name='Toy lag', units='s')
+    def toy_lag(capture, spec):
+        return np.arange(2.0)
+
+    info = coords[toy_lag]
+    assert info.name == 'toy_lag'
+    assert info.dims == ('toy_lag',)
+    assert info.attrs == {'standard_name': 'Toy lag', 'units': 's'}
+    with pytest.raises(KeyError):
+        coords(dtype='float64', standard_name='Again')(toy_lag)

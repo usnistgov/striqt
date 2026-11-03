@@ -6,7 +6,6 @@ bound the results on both backends."""
 from __future__ import annotations as __
 
 import math
-import re
 import typing
 import warnings
 from collections.abc import Sequence
@@ -14,7 +13,7 @@ from numbers import Number
 from types import ModuleType
 from typing import Any, Literal, Optional
 
-from .. import util
+from .. import units, util
 from ..arrays import (
     ROUNDOFF_SAFETY,
     array_namespace,
@@ -39,39 +38,6 @@ else:
 
 warnings.filterwarnings('ignore', message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
-
-
-_DB_UNIT_MAPPING = {'dBm': 'mW', 'dBW': 'W', 'dB': 'unitless'}
-
-
-def unit_dB_to_linear(s: str):
-    for db_unit, lin_unit in _DB_UNIT_MAPPING.items():
-        s, _ = re.subn('^' + db_unit, lin_unit, s, count=1)
-    return s
-
-
-def unit_linear_to_dB(s: str):
-    for db_unit, lin_unit in _DB_UNIT_MAPPING.items():
-        s, _ = re.subn('^' + lin_unit, db_unit, s, count=1)
-    return s
-
-
-def unit_dB_to_wave(s: str):
-    for db_unit, lin_unit in _DB_UNIT_MAPPING.items():
-        s, _ = re.subn('^' + db_unit, '√' + lin_unit, s, count=1)
-    return s
-
-
-def unit_wave_to_dB(s: str):
-    for db_unit, lin_unit in _DB_UNIT_MAPPING.items():
-        s, _ = re.subn('^√' + lin_unit, db_unit, s, count=1)
-    return s
-
-
-def unit_wave_to_linear(s: str):
-    for lin_unit in _DB_UNIT_MAPPING.values():
-        s, _ = re.subn('^√' + lin_unit, lin_unit, s, count=1)
-    return s
 
 
 # %% roundoff model
@@ -293,7 +259,7 @@ def _lin_to_dB(
     return _repackage_arraylike(
         values,
         x,
-        unit_transform=unit_linear_to_dB if scale == 10 else unit_wave_to_dB,
+        unit_transform=units.to_dB,
     )
 
 
@@ -387,7 +353,7 @@ def dBtopow(
         )
         values = xp.power(10, values, out=out)
 
-    return _repackage_arraylike(values, x, unit_transform=unit_dB_to_linear)
+    return _repackage_arraylike(values, x, unit_transform=units.to_linear)
 
 
 def envtopow(
@@ -437,7 +403,7 @@ def envtopow(
         values = xp.abs(values, out=out)
         values *= values
 
-    return _repackage_arraylike(values, x, unit_transform=unit_wave_to_linear)
+    return _repackage_arraylike(values, x, unit_transform=units.to_linear)
 
 
 def envtodB(

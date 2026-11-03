@@ -191,8 +191,8 @@ class TestChannelPowerTimeSeries:
     @pytest.mark.parametrize('power', [0.0, -13.0, 7.5], ids='{:g}dBm'.format)
     def test_absolute_level_is_the_amplitude_in_dBm(self, power):
         amplitude = np.float32(10 ** (power / 20))
-        iq = testing.tone(DURATION, FS, frequency=1e5) * amplitude
-        da = cpts(iq)
+        x = testing.tone(DURATION, FS, frequency=1e5) * amplitude
+        da = cpts(sa.AcquiredIQ(x, capture(), power_units='mW'))
 
         assert da.attrs['units'] == 'dBm'
         tol = tolerance(CPTS_SPEC)
@@ -495,7 +495,7 @@ def test_channel_power_outputs_set_no_noise_bandwidth():
     cap = sa.specs.Capture(
         duration=HIST_DURATION, sample_rate=FS, analysis_bandwidth=FS / 4
     )
-    iq = sa.testing.tone(HIST_DURATION, FS)
+    iq = sa.AcquiredIQ(sa.testing.tone(HIST_DURATION, FS), cap, power_units='mW')
     kws = {'detector_period': HIST_DETECTOR_PERIOD, 'as_xarray': True}
 
     series = sa.measurements.channel_power_time_series(iq, cap, **kws)

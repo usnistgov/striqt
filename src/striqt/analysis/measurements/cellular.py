@@ -75,7 +75,7 @@ def ssb_block_count(
 
 
 @registry.coordinates(
-    dtype='uint16', attrs={'standard_name': r'Cell Sector ID ($N_{ID}^\text{(2)}$)'}
+    dtype='uint16', standard_name=r'Cell sector ID ($N_{ID}^\text{(2)}$)'
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_cell_id2(capture: specs.Capture, spec: Any):
@@ -83,7 +83,7 @@ def cellular_cell_id2(capture: specs.Capture, spec: Any):
     return values
 
 
-@registry.coordinates(dtype='uint16', attrs={'standard_name': 'SSB beam index'})
+@registry.coordinates(dtype='uint16', standard_name='SSB beam index')
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
 def cellular_ssb_beam_index(
     capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBSync
@@ -94,9 +94,7 @@ def cellular_ssb_beam_index(
     return list(range(len(params.symbol_indexes)))
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Time Elapsed', 'units': 's'}
-)
+@registry.coordinates(dtype='float32', standard_name='Time elapsed', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_start_time(
     capture: specs.Capture,
@@ -110,7 +108,7 @@ def cellular_ssb_start_time(
     return np.arange(count).astype('float32') * spec.discovery_periodicity
 
 
-@registry.coordinates(dtype='float32', attrs={'standard_name': 'Lag', 'units': 's'})
+@registry.coordinates(dtype='float32', standard_name='Lag', units='s')
 @specs.helpers.lru_cache_on_converted(specs.AnalysisCapture)
 def cellular_ssb_lag(
     capture: specs.AnalysisCapture, spec: _Cellular5GNRSSBCorrelator
@@ -303,7 +301,8 @@ def choose_pss_sync_offsets(
     dtype='float32',
     caches=(_pss_correlator_cache, ssb_iq_cache, _pss_sync_cache),
     store_compressed=False,
-    attrs={'standard_name': 'PSS Synchronization Delay', 'units': 's'},
+    standard_name='PSS synchronization delay',
+    units='s',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -337,7 +336,7 @@ def cellular_5g_pss_sync(
     dtype='complex64',
     caches=(_pss_correlator_cache, ssb_iq_cache),
     store_compressed=False,
-    attrs={'standard_name': 'PSS Cross-Covariance'},
+    standard_name='PSS cross-covariance',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -351,10 +350,12 @@ def cellular_5g_pss_correlation(
     alignment. The band at `frequency_offset` is shifted to baseband and resampled
     to `sample_rate`, then cross-correlated with the PSS sequence of each cell sector
     ID (3GPP TS 38.211 §7.4.2.2). Per capture, the output is the complex64
-    correlation (in √mW) with dimensions `cellular_cell_id2`,
-    `cellular_ssb_start_time` (in s), `cellular_ssb_beam_index`, and
-    `cellular_ssb_lag` (in s). The output keeps the first `max_block_count` sync
-    blocks. A `max_block_count` of None keeps every block. The PSS template has unit
+    correlation in the square root of the power unit of the acquisition
+    (`AcquiredIQ.power_units`), √mW when calibrated, with dimensions
+    `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
+    `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s). The output keeps the
+    first `max_block_count` sync blocks. A `max_block_count` of None keeps every
+    block. The PSS template has unit
     energy over the 127 PSS subcarriers. The squared magnitude of a peak on a lag
     sample equals the received PSS symbol power. White noise with power spectral
     density N0 has a mean squared magnitude of ``N0 * subcarrier_spacing`` in each
@@ -379,7 +380,7 @@ def cellular_5g_pss_correlation(
         R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
 
     metadata = shared.bandwidth_attrs(
-        spec.subcarrier_spacing, '√mW', 'PSS cross-covariance'
+        spec.subcarrier_spacing, sw.units.AMPLITUDE, 'PSS cross-covariance'
     )
 
     return R, metadata
@@ -440,7 +441,8 @@ def choose_sss_sync_offsets(
     dtype='float32',
     caches=(_sss_correlator_cache, ssb_iq_cache, _sss_sync_cache),
     store_compressed=False,
-    attrs={'standard_name': 'SSS Synchronization Delay', 'units': 's'},
+    standard_name='SSS synchronization delay',
+    units='s',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -474,7 +476,7 @@ def cellular_5g_sss_sync(
     dtype='complex64',
     caches=(_sss_correlator_cache, ssb_iq_cache),
     store_compressed=False,
-    attrs={'standard_name': 'SSS Cross-Covariance'},
+    standard_name='SSS cross-covariance',
     validate=validated_5g_ssb_sync_params,
     prefer_filtered=False,
     prefer_aligned=False,
@@ -487,8 +489,9 @@ def cellular_5g_sss_correlation(
     The input is the IQ before the `analysis_bandwidth` filter and before trigger
     alignment. The band at `frequency_offset` is shifted to baseband and resampled
     to `sample_rate`, then cross-correlated with the SSS sequences (3GPP TS 38.211
-    §7.4.2.3). Per capture, the output is the complex64 correlation (in √mW) with
-    dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
+    §7.4.2.3). Per capture, the output is the complex64 correlation in the square
+    root of the power unit of the acquisition (`AcquiredIQ.power_units`), √mW when
+    calibrated, with dimensions `cellular_cell_id2`, `cellular_ssb_start_time` (in s),
     `cellular_ssb_beam_index`, and `cellular_ssb_lag` (in s). The output keeps the
     first `max_block_count` sync blocks. A `max_block_count` of None keeps every
     block. The SSS template has unit energy over the 127 SSS subcarriers. The squared
@@ -516,14 +519,14 @@ def cellular_5g_sss_correlation(
         R = sw.arrays.axis_slice(R, 0, spec.max_block_count, axis=-3)
 
     metadata = shared.bandwidth_attrs(
-        spec.subcarrier_spacing, '√mW', 'SSS cross-covariance'
+        spec.subcarrier_spacing, sw.units.AMPLITUDE, 'SSS cross-covariance'
     )
 
     return R, metadata
 
 
 # %% cellular_5g_ssb_spectrogram
-@registry.coordinates(dtype='uint16', attrs={'standard_name': 'Symbols elapsed'})
+@registry.coordinates(dtype='uint16', standard_name='Symbols elapsed')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_symbol_index(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
@@ -533,7 +536,7 @@ def cellular_ssb_symbol_index(
 
 
 @registry.coordinates(
-    dtype='float64', attrs={'standard_name': 'SSB Baseband Frequency', 'units': 'Hz'}
+    dtype='float64', standard_name='SSB baseband frequency', units='Hz'
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_baseband_frequency(
@@ -554,7 +557,7 @@ def cellular_ssb_baseband_frequency(
     return bb_freqs - spec.frequency_offset
 
 
-@registry.coordinates(dtype='uint16', attrs={'standard_name': 'Capture SSB index'})
+@registry.coordinates(dtype='uint16', standard_name='Capture SSB index')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_ssb_index(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
@@ -668,7 +671,7 @@ def ssb_spectrogram_tolerance(
     coord_factories=_SSB_SPECTROGRAM_COORDS,
     dtype='float16',
     caches=(spectrum.spectrogram_cache,),
-    attrs={'standard_name': 'SSB Spectrogram'},
+    standard_name='SSB spectrogram',
     validate=validated_ssb_spectrogram_sizing,
     tolerance=ssb_spectrogram_tolerance,
     prefer_filtered=False,
@@ -685,10 +688,12 @@ def cellular_5g_ssb_spectrogram(
     of the burst set in the first 2 ms of each `discovery_periodicity` are kept
     (3GPP TS 38.213 §4.1).
 
-    Per capture, the output is power per subcarrier in dBm in a noise bandwidth of
-    one `subcarrier_spacing`, with dimensions `cellular_ssb_index` (burst set within
-    the capture), `cellular_ssb_symbol_index` (OFDM symbol within the burst set),
-    and `cellular_ssb_baseband_frequency` (in Hz, relative to `frequency_offset`).
+    Per capture, the output is power per subcarrier in a noise bandwidth of one
+    `subcarrier_spacing`, in dB of the power unit of the acquisition
+    (`AcquiredIQ.power_units`), dBm when calibrated, with dimensions
+    `cellular_ssb_index` (burst set within the capture), `cellular_ssb_symbol_index`
+    (OFDM symbol within the burst set), and `cellular_ssb_baseband_frequency` (in Hz,
+    relative to `frequency_offset`).
     Values are rounded to 3 decimals and stored as float16. The `noise_bandwidth`
     and `resolution_bandwidth` attrs follow the `spectrogram` measurement.
 
@@ -866,9 +871,7 @@ def tdd_config_from_str(
     )
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Cyclic sample lag', 'units': 's'}
-)
+@registry.coordinates(dtype='float32', standard_name='Cyclic sample lag', units='s')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cyclic_sample_lag(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
@@ -878,9 +881,7 @@ def cyclic_sample_lag(
     return pd.RangeIndex(0, max_len, name=name) / capture.sample_rate
 
 
-@registry.coordinates(
-    dtype='float32', attrs={'standard_name': 'Subcarrier spacing', 'units': 'Hz'}
-)
+@registry.coordinates(dtype='float32', standard_name='Subcarrier spacing', units='Hz')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def subcarrier_spacing(
     capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator
@@ -891,7 +892,7 @@ def subcarrier_spacing(
         return [spec.subcarrier_spacings]
 
 
-@registry.coordinates(dtype='str', attrs={'standard_name': 'Link direction'})
+@registry.coordinates(dtype='str', standard_name='Link direction')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def link_direction(capture: specs.Capture, spec: specs.CellularCyclicAutocorrelator):
     values = np.array(['downlink', 'uplink'], dtype='U8')
@@ -1058,7 +1059,8 @@ def validated_autocorrelation_lag_count(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
     dtype='float32',
     spec_type=specs.CellularCyclicAutocorrelator,
-    attrs={'units': 'mW', 'standard_name': 'Cyclic Autocovariance'},
+    standard_name='Cyclic autocovariance',
+    units=sw.units.POWER,
     validate=validated_autocorrelation_lag_count,
     prefer_aligned=False,
 )
@@ -1072,7 +1074,8 @@ def cellular_cyclic_autocorrelation(
     a copy of the IQ delayed by the OFDM symbol length, summed over the
     cyclic-prefix samples of the symbols that `frame_range` and `symbol_range`
     select. The downlink slots and the uplink slots of `frame_slots` are summed
-    separately. Per capture, the output is the correlation magnitude in mW as
+    separately. Per capture, the output is the correlation magnitude in the power
+    unit of the acquisition (`AcquiredIQ.power_units`), mW when calibrated, as
     float32 with dimensions ``(link_direction, subcarrier_spacing,
     cyclic_sample_lag)``. `cyclic_sample_lag` (in s) spans the longest symbol over
     the spacings. Entries past the symbol length of a spacing are ``nan``, as is the
@@ -1144,7 +1147,8 @@ def cellular_cyclic_autocorrelation(
 # %% cellular_resource_power_histogram
 @registry.coordinates(
     dtype='float32',
-    attrs={'standard_name': 'Cellular resource grid bin power', 'units': 'dBm'},
+    standard_name='Cellular resource grid bin power',
+    units=sw.units.DB_POWER,
 )
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def cellular_resource_power_bin(
@@ -1153,10 +1157,10 @@ def cellular_resource_power_bin(
     """return the `cellular_resource_power_bin` coordinate values and attrs.
 
     Returns:
-        the bin centers of `power.make_power_bins` in dBm, with ``-inf`` and ``inf``
+        the bin centers of `power.make_power_bins` in dB, with ``-inf`` and ``inf``
         catch-all bins, and the attrs of `shared.bandwidth_attrs` for the resource
-        grid: ``'units'`` of dBm, `long_name`, and `noise_bandwidth` and
-        `resolution_bandwidth` in Hz
+        grid: ``'units'`` of ``'dBm'``, `long_name` as the quantity without units,
+        and `noise_bandwidth` and `resolution_bandwidth` in Hz
     """
 
     bins = power.make_power_bins(
@@ -1168,7 +1172,7 @@ def cellular_resource_power_bin(
     sizing = validated_resource_grid_sizing(capture, spec)
     metadata = shared.bandwidth_attrs(
         sizing.noise_bandwidth,
-        'dBm',
+        sw.units.DB_POWER,
         'Cellular resource grid bin power',
         resolution_bandwidth=sizing.resolution_bandwidth,
     )
@@ -1436,7 +1440,7 @@ def validated_resource_grid_sizing(
     dtype='float32',
     depends=spectrum.spectrogram,
     spec_type=specs.CellularResourcePowerHistogram,
-    attrs={'standard_name': 'Fraction of resource grid'},
+    standard_name='Fraction of resource grid',
     validate=validated_resource_grid_sizing,
     prefer_filtered=False,
 )
@@ -1449,10 +1453,11 @@ def cellular_resource_power_histogram(
     alignment. A spectrogram with one bin per subcarrier (or per resource block,
     with `average_rbs`) and one hop per OFDM symbol is split into downlink and
     uplink symbols by `frame_slots` and `special_symbols`. With `average_slots`, the
-    power is averaged over each slot. The power is converted to dBm before binning.
+    power is averaged over each slot. The power is converted to dB before binning.
     Per capture, the output is float32 with dimensions `link_direction` and
-    `cellular_resource_power_bin` (in dBm per bin bandwidth). The fractions of both
-    link directions together sum to 1 on each port. Subcarriers inside the
+    `cellular_resource_power_bin`, in dB of the power unit of the acquisition
+    (`AcquiredIQ.power_units`) per bin bandwidth, dBm when calibrated. The fractions
+    of both link directions together sum to 1 on each port. Subcarriers inside the
     `guard_bandwidths` and flexible symbols are excluded from the count.
 
     Args:

@@ -109,11 +109,15 @@ def describe_overloads(ports: Sequence[PortOverload]) -> str | None:
     for p in ports:
         assert not isinstance(p.capture.center_frequency, tuple)
         if p.adc:
-            adc.append(
-                f'port {p.capture.port} ({p.capture.center_frequency / 1e6:0.0f} MHz)'
+            fc = sw.units.format_quantity(
+                p.capture.center_frequency, 'Hz', prefix='M', places=0
             )
+            adc.append(f'port {p.capture.port} ({fc})')
         if p.im3_victims:
-            freqs = ', '.join(f'{f / 1e6:0.0f}' for f in p.im3_victims)
+            freqs = ', '.join(
+                sw.units.format_quantity(f, None, prefix='M', places=0)
+                for f in p.im3_victims
+            )
             im3.append(f'port {p.capture.port} (onto {freqs} MHz)')
 
     parts = []

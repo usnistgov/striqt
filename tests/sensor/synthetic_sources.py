@@ -227,11 +227,12 @@ def expected_raw(
     )
 
 
-def build_acquired_iq(x, capture, source=SOURCE, *, info=None):
+def build_acquired_iq(x, capture, source=SOURCE, *, info=None, power_units='mW'):
     """return `x` packaged as the `AcquiredIQ` of `capture` before any correction"""
     return ss.specs.AcquiredIQ(
         x=x,
         capture=capture,
+        power_units=power_units,
         info=ss.specs.AcquisitionInfo() if info is None else info,
         extra_data={},
         source_spec=source,

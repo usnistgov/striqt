@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 import numpy as np
 import pytest
+import xarray as xr
 from figures_datasets import (
     CORRELATOR_BANDWIDTH,
     HISTOGRAM_BANDWIDTH,
@@ -17,13 +18,15 @@ from figures_datasets import (
     predicted_levels_dBm,
 )
 
+import striqt.analysis as sa
+import striqt.waveform as sw
 from striqt.figures import util
 
 # %% noise_bandwidth and get_system_noise
 
 
 @pytest.mark.parametrize(
-    ('var_name', 'attr_missing', 'bandwidth', 'long_name'),
+    ('var_name', 'attr_missing', 'bandwidth', 'units_text'),
     [
         ('spectrogram_histogram', False, HISTOGRAM_BANDWIDTH, 'dBm/10 kHz'),
         ('spectrogram_power_bin', False, HISTOGRAM_BANDWIDTH, 'dBm/10 kHz'),
@@ -33,12 +36,14 @@ from striqt.figures import util
     ids=['variable_attr', 'coordinate_attr', 'coordinate_without_attr', 'sqrt_mW_attr'],
 )
 def test_system_noise_in_the_noise_bandwidth_attr(
-    var_name: str, attr_missing: bool, bandwidth: float, long_name: str
+    var_name: str, attr_missing: bool, bandwidth: float, units_text: str
 ) -> None:
     """the level is the system noise in the `noise_bandwidth` of the variable.
 
     A bin coordinate without the attr and with ``dBm/<bandwidth>`` units resolves to
-    the `noise_bandwidth` of the histogram variable on the same dimension.
+    the `noise_bandwidth` of the histogram variable on the same dimension. The attrs
+    carry the units and the bandwidth as facts, and the units text is composed from
+    them.
     """
     ds = make_dataset(attr_missing=attr_missing)
 
@@ -49,7 +54,9 @@ def test_system_noise_in_the_noise_bandwidth_attr(
     np.testing.assert_allclose(noise.values, predicted_levels_dBm(bandwidth), atol=1e-4)
     assert noise.attrs['units'] == 'dBm'
     assert noise.attrs['noise_bandwidth'] == bandwidth
-    assert noise.attrs['long_name'] == f'System noise ({long_name})'
+    assert 'long_name' not in noise.attrs
+    measurand = sa.labels.measurand_from_attrs(noise.attrs)
+    assert sa.labels.units_label(measurand) == units_text
 
 
 @pytest.mark.parametrize('var_name', ['channel_power_time_series', 'channel_power_bin'])
@@ -74,6 +81,54 @@ def test_dBm_variable_without_the_attr_in_the_capture_bandwidth(var_name: str) -
 def test_ratios_have_no_system_noise(var_name: str) -> None:
     assert util.noise_bandwidth(make_dataset(), var_name) is None
     assert util.get_system_noise(make_dataset(), var_name) is None
+
+
+def in_full_scale(ds: xr.Dataset, name: str) -> xr.Dataset:
+    """return `ds` with the `units` attr of `name` rewritten into the FS family"""
+    units = ds[name].attrs['units']
+    ds[name].attrs['units'] = sw.units.with_power_units(units, 'FS')
+    return ds
+
+
+@pytest.mark.parametrize(
+    ('var_name', 'bandwidth'),
+    [
+        ('channel_power_time_series', capture_bandwidth()),
+        ('spectrogram_power_bin', HISTOGRAM_BANDWIDTH),
+    ],
+    ids=['capture_bandwidth', 'noise_bandwidth_attr'],
+)
+def test_noise_bandwidth_of_a_full_scale_variable(
+    var_name: str, bandwidth: float | np.ndarray
+) -> None:
+    """the noise bandwidth of a dBFS variable follows the `noise_bandwidth` attr and
+    the capture coordinates as for dBm"""
+    ds = in_full_scale(make_dataset(), var_name)
+
+    result = util.noise_bandwidth(ds, var_name)
+
+    assert result is not None
+    np.testing.assert_array_equal(np.asarray(result), bandwidth)
+
+
+@pytest.mark.parametrize(
+    ('func', 'var_name', 'rewritten'),
+    [
+        (util.get_system_noise, 'channel_power_time_series', None),
+        (util.get_system_noise, 'spectrogram_power_bin', None),
+        (util.check_noise_floor, 'spectrogram_histogram', 'spectrogram_power_bin'),
+    ],
+    ids=['variable', 'coordinate', 'histogram_bin_coordinate'],
+)
+def test_full_scale_units_are_rejected_against_the_dBm_system_noise(
+    func: Callable, var_name: str, rewritten: str | None
+) -> None:
+    """the system noise is in dBm, so a variable or bin coordinate in dBFS has no
+    predicted level. `rewritten` names the bin coordinate of a histogram variable."""
+    ds = in_full_scale(make_dataset(), rewritten or var_name)
+
+    with pytest.raises(ValueError, match='dBFS'):
+        func(ds, var_name)
 
 
 def test_no_calibration_gives_none() -> None:

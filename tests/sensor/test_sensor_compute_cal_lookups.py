@@ -216,6 +216,8 @@ class TestLookupSystemNoisePower:
         assert noise.attrs['standard_name'] == 'System noise'
         assert noise.attrs['reference_temperature'] == 290.0
         assert '290 K' in noise.attrs['long_name']
+        assert '(' not in noise.attrs['long_name']
+        assert 'noise_bandwidth' not in noise.attrs
         assert noise.item() == pytest.approx(8.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
     def test_bandwidth_and_temperature_scale_the_result(self, calibration_nc):
@@ -227,7 +229,8 @@ class TestLookupSystemNoisePower:
         assert noise.attrs['units'] == 'dBm'
         assert noise.attrs['noise_bandwidth'] == 1e6
         assert noise.attrs['reference_temperature'] == 300.0
-        assert noise.attrs['long_name'].endswith('300 K source (dBm/1 MHz)')
+        assert noise.attrs['long_name'].endswith('300 K source')
+        assert '(' not in noise.attrs['long_name']
 
     def test_noise_figure_is_interpolated_in_frequency(self, calibration_nc):
         noise = self._lookup(calibration_nc, soapy_capture(center_frequency=1.5e9))
@@ -439,6 +442,7 @@ class TestFakeMeasurementSweep:
         noise_dBm = _expected_dBm(1, 40e6)
         expected = [tone_dBm, noise_dBm, tone_dBm]
         assert _rms_dBm(ds).values == pytest.approx(expected + gain_dB, abs=0.1)
+        assert ds.channel_power_time_series.attrs['units'] == 'dBFS'
         assert 'system_noise' not in ds
 
     def test_calibrated_power_recovers_the_input(
@@ -453,6 +457,7 @@ class TestFakeMeasurementSweep:
         ).results
 
         rms = _rms_dBm(ds).values
+        assert ds.channel_power_time_series.attrs['units'] == 'dBm'
         assert rms[0] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
         assert rms[2] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
         # a wider tolerance for the noise-only port, where the FIR passband is not

@@ -160,65 +160,70 @@ class CoordInfo(NamedTuple):
     attrs: dict = {}  # noqa: RUF012
 
 
+def _registered_attrs(standard_name: str, units: str | None) -> dict[str, str]:
+    """return the attrs of a registration: `standard_name`, and `units` when given."""
+    attrs = {'standard_name': standard_name}
+    if units is not None:
+        attrs['units'] = units
+    return attrs
+
+
 class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
     def __call__(
         self,
         dtype: DTypeLike,
         *,
-        name: str | None = None,
-        dims: tuple[str, ...] | None = None,
-        attrs: dict | None = None,
+        standard_name: str,
+        units: str | None = None,
+        dims: tuple[str, ...] | str | None = None,
     ) -> CoordFuncWrapper[TC, TM, R]:
-        """register the decorated function as the coordinate factory named `name`.
+        """register the decorated function as a coordinate factory.
 
-        The factory is called as ``func(capture, spec)`` and returns the coordinate
-        values along `dims`, or None for a dimension without coordinate values.
+        The coordinate is named by the `__name__` of the factory. The factory is
+        called as ``func(capture, spec)`` and returns the coordinate values along
+        `dims`, or None for a dimension without coordinate values.
 
         Args:
             dtype: numpy dtype of the coordinate values
-            name: the coordinate name, or None for the `__name__` of the factory
+            standard_name: the short noun phrase that names the coordinate, stored
+                as the `standard_name` attr
+            units: the units of the values, stored as the `units` attr: a power form
+                (`striqt.waveform.units.DB_POWER`, `POWER`, or `AMPLITUDE`) that the
+                output resolves into the `power_units` of the acquisition, a literal
+                unit, or None for a dimensionless coordinate
             dims: the dimension names of the coordinate, a single name, or None
-                for ``(name,)``
-            attrs: attrs of the coordinate variable
+                for the coordinate name alone
 
         Returns:
             a decorator that registers the factory and returns it unchanged
 
         Raises:
-            TypeError: from the returned decorator, when `name` is None and the
-                factory has no `__name__`
-            KeyError: from the returned decorator, when `name` is already registered
+            TypeError: from the returned decorator, when the factory has no
+                `__name__`
+            KeyError: from the returned decorator, when the name is already registered
         """
-        kws = locals()
+        attrs = _registered_attrs(standard_name, units)
 
         def wrapper(func: CoordFunc[TC, TM, R]) -> CoordFunc[TC, TM, R]:
-            if isinstance(kws['dims'], str):
-                dims = (kws['dims'],)
-            else:
-                dims = kws['dims']
+            try:
+                name = func.__name__
+            except AttributeError as ex:
+                raise TypeError('a coordinate factory must have a __name__') from ex
 
-            if kws['name'] is None:
-                try:
-                    name = func.__name__
-                except AttributeError as ex:
-                    raise TypeError(
-                        'specify the coordinate name with coordinates(name, ...)'
-                    ) from ex
-            else:
-                name = str(kws['name'])
-
-            assert name is not None
-
-            if name in self:
+            if any(info.name == name for info in self.values()):
                 raise KeyError(
                     f'a coordinate has already been registered for coordinate {name!r}'
                 )
 
             if dims is None:
-                dims = (name,)
+                coord_dims: tuple[str, ...] = (name,)
+            elif isinstance(dims, str):
+                coord_dims = (dims,)
+            else:
+                coord_dims = dims
 
             self[func] = CoordInfo(
-                name=name, func=func, dims=dims, dtype=dtype, attrs=attrs or {}
+                name=name, func=func, dims=coord_dims, dtype=dtype, attrs=attrs
             )
 
             return func
@@ -246,17 +251,16 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
         meas_spec_type: type[specs.Analysis],
         *,
         lag_coord_func: CoordFunc,
-        name: str | None = None,
     ) -> Callable[[WrappedAnalysis[P, RM]], WrappedAnalysis[P, RM]]:
         """register the decorated measurement as a signal trigger.
 
-        The entry is keyed by both `name` and the measurement wrapper.
+        The entry is keyed by both the `__name__` of the measurement and the
+        measurement wrapper.
 
         Args:
             meas_spec_type: the spec type of a measurement already registered with
                 ``prefer_aligned=False``
             lag_coord_func: the coordinate factory of the lag axis of the measurement
-            name: the trigger name, or None for the `__name__` of the measurement
 
         Returns:
             a decorator that registers the measurement wrapper and returns it
@@ -267,13 +271,14 @@ class AlignmentSourceRegistry(dict['str | Callable', 'SyncInfo']):
                 registered
             ValueError: from the returned decorator, when the measurement was
                 registered with ``prefer_aligned=True``
-            TypeError: from the returned decorator, when `name` is already registered
+            TypeError: from the returned decorator, when the name is already
+                registered
         """
 
         def wrapper(
             func: WrappedAnalysis[P, RM],
         ) -> WrappedAnalysis[P, RM]:
-            sync_name = func.__name__ if name is None else name
+            sync_name = func.__name__
 
             if self._registry[meas_spec_type].prefer_aligned:
                 raise ValueError(
@@ -366,7 +371,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         spec_type: type[specs.Analysis],
         *,
         dtype: str,
-        name: str | None = None,
+        standard_name: str,
+        units: str | None = None,
         dims: tuple[str, ...] | str | None = None,
         coord_factories: Iterable[CoordFunc] | CoordFunc | None = None,
         depends: Iterable[Callable] | Callable = (),
@@ -374,7 +380,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         store_compressed: bool = True,
         prefer_filtered: bool = True,
         prefer_aligned: bool = True,
-        attrs: dict[str, Any] | None = None,
         validate: AnalysisValidator | None = None,
         tolerance: AnalysisTolerance | None = None,
     ) -> AnalysisFuncWrapper[P]:
@@ -402,7 +407,14 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             spec_type: the `specs.Analysis` subclass with the keyword arguments of
                 the measurement as fields; one measurement per type
             dtype: numpy dtype name of the output array
-            name: the output data variable name, or None for the function `__name__`
+            standard_name: the short noun phrase that names the output, stored as the
+                `standard_name` attr
+            units: the units of the output values, stored as the `units` attr: a
+                power form (`striqt.waveform.units.DB_POWER`, `POWER`, or
+                `AMPLITUDE`) that the output resolves into the `power_units` of the
+                acquisition, a literal unit such as the ratio ``'dB'``, or None for
+                a dimensionless output. The spec fields and the attrs returned by
+                the function are added to these attrs and win on a shared key
             dims: dimension names of the output axes, or None for the dimensions of
                 `coord_factories`, in order
             coord_factories: functions registered with `coordinates` that produce the
@@ -418,8 +430,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             prefer_aligned: False to measure the waveform before the signal-trigger
                 shift; applies only when the acquisition runs a trigger. A
                 `signal_trigger` measurement must set False
-            attrs: attrs of the output `xarray.DataArray`; the spec fields and any
-                attrs returned by the function take precedence
             validate: a function of ``(capture, spec)`` that raises on a rejected
                 combination without reading IQ; `capture` is the
                 `specs.AnalysisCapture` projection, and the return value is ignored
@@ -433,7 +443,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         Raises:
             ValueError: when `spec_type` is already registered
             TypeError: when a `coord_factories` entry is not callable; from the
-                returned decorator, when `name` is already registered, when `caches`
+                returned decorator, when the function name is already registered,
+                when `caches`
                 contains something other than `KwArgCache` instances, or when a field
                 of `spec_type` shares a name with a field of another registered spec
                 and differs in type
@@ -443,10 +454,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             dims = (dims,)
 
         info_kws: dict[str, Any] = {
-            'name': name,
+            'name': None,
             'cache': caches,
             'dtype': dtype,
-            'attrs': attrs or {},
+            'attrs': _registered_attrs(standard_name, units),
             'store_compressed': store_compressed,
             'prefer_filtered': prefer_filtered,
             'prefer_aligned': prefer_aligned,
@@ -514,6 +525,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                     spec=spec,
                     attrs=more_attrs,
                     info=self[spec_type],
+                    power_units=getattr(iq, 'power_units', 'a.u.'),
                 )
 
                 if as_xarray == 'delayed':
@@ -521,17 +533,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                 else:
                     return data.to_xarray(expand_dims=('port',))
 
-            if info_kws['name'] is None:
-                name = info_kws['name'] = func.__name__
-
-            elif info_kws['name'] in self.names:
-                raise TypeError(
-                    f'a measurement named {info_kws["name"]!r} was already registered'
-                )
-            else:
-                name = info_kws['name']
-                assert isinstance(name, str)
-                self.names.add(info_kws['name'])
+            name = info_kws['name'] = func.__name__
+            if name in self.names:
+                raise TypeError(f'a measurement named {name!r} was already registered')
+            self.names.add(name)
 
             for field in msgspec.structs.fields(spec_type):
                 if field.name is None:

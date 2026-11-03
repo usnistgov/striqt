@@ -21,6 +21,7 @@ changes without warning.
 The top-level modules of `striqt.waveform` re-export names from `striqt.waveform.lib`:
 
 - `striqt.waveform.arrays` re-exports `waveform/lib/arrays.py`.
+- `striqt.waveform.units` re-exports `waveform/lib/units.py`.
 - `striqt.waveform.fourier` and `striqt.waveform.power_analysis` re-export the
   packages `waveform/lib/fourier` and `waveform/lib/power`.
 - `striqt.waveform.comms_5gnr`, `striqt.waveform.comms_lte`, and
@@ -76,6 +77,18 @@ arguments, validates the fields, and returns a `DelayedDataArray`
 (`analysis/lib/dataarrays.py`). The `@hint_keywords(spec_type)` stacked above the
 registration is an identity at runtime that gives the type checker the fields of the
 spec as keyword parameters.
+
+A registration names its output with the `standard_name=` keyword and its unit with
+`units=`; those two are the registered attrs, and every other attr is returned by the
+measurement body. A power output or power-bin coordinate declares the *form* of its unit
+with one of `striqt.waveform.units.DB_POWER` (`'{dB}'`), `POWER` (`'{P}'`), or
+`AMPLITUDE` (`'√{P}'`), with an optional denominator. `dataarrays.measurement_attrs` and
+`dataarrays.measurement_coords` compose the attrs of an output and resolve the form into
+the family of `AcquiredIQ.power_units` (`'mW'`, `'FS'`, or `'a.u.'`; a bare array is
+`'a.u.'`). `build_dataarray` and the sensor's zarr template (`sensor/lib/compute/datasets.py:
+measurement_grids`) both call those two functions, so the registered attrs, the cached
+coordinate-factory results, and `DelayedDataArray.attrs` keep the form fields and are
+never mutated. A literal unit such as the ratio `'dB'` is left as written.
 
 Materialization to xarray is deferred so that the GPU can queue several measurements
 before anything is pulled back to the CPU. `evaluate_by_spec` runs every measurement

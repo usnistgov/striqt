@@ -5,7 +5,6 @@ roundoff models, including numpy-vs-cupy agreement within ulp budgets.
 from __future__ import annotations
 
 import functools
-from typing import ClassVar
 
 import numpy as np
 import pytest
@@ -44,11 +43,6 @@ from striqt.waveform.lib.power import (
     powtodB,
     roundtrip_dB_tol,
     roundtrip_power_rtol,
-    unit_dB_to_linear,
-    unit_dB_to_wave,
-    unit_linear_to_dB,
-    unit_wave_to_dB,
-    unit_wave_to_linear,
 )
 from striqt.waveform.lib.power.convert import _arraylike_with_buffer
 
@@ -91,47 +85,6 @@ BOUNDED_DTYPES = [
     (np.complex64, np.float32),
     (np.complex128, np.float64),
 ]
-
-
-class TestUnitConversionProperties:
-    """Property: Unit conversions form bijections (invertible mappings)."""
-
-    UNIT_PAIRS: ClassVar = [
-        ('dBm', 'mW'),
-        ('dBW', 'W'),
-        ('dB', 'unitless'),
-        ('dBm/Hz', 'mW/Hz'),
-        ('dBW/Hz', 'W/Hz'),
-    ]
-
-    WAVE_PAIRS: ClassVar = [
-        ('dBm', '√mW'),
-        ('dBW', '√W'),
-        ('dB', '√unitless'),
-    ]
-
-    @pytest.mark.parametrize('dB_unit,linear_unit', UNIT_PAIRS)
-    def test_dB_linear_roundtrip(self, dB_unit: str, linear_unit: str):
-        assert unit_dB_to_linear(dB_unit) == linear_unit
-        assert unit_linear_to_dB(unit_dB_to_linear(dB_unit)) == dB_unit
-        assert unit_dB_to_linear(unit_linear_to_dB(linear_unit)) == linear_unit
-
-    @pytest.mark.parametrize('dB_unit,wave_unit', WAVE_PAIRS)
-    def test_dB_wave_roundtrip(self, dB_unit: str, wave_unit: str):
-        assert unit_wave_to_dB(unit_dB_to_wave(dB_unit)) == dB_unit
-        assert unit_wave_to_linear(wave_unit) == unit_dB_to_linear(dB_unit)
-
-    def test_unknown_units_pass_through(self, subtests):
-        unit = 'counts'
-        for func in (
-            unit_dB_to_linear,
-            unit_linear_to_dB,
-            unit_dB_to_wave,
-            unit_wave_to_dB,
-            unit_wave_to_linear,
-        ):
-            with subtests.test(msg=func.__name__):
-                assert func(unit) == unit
 
 
 class TestConversionIdentities:

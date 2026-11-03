@@ -202,11 +202,19 @@ class MATSource(Source, kw_only=True, frozen=True):
     loop: types.FileLoop = False
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
     key: Union[str, None] = None
+    power_units: types.PowerUnits = 'a.u.'
 
 
 class TDMSSource(Source, frozen=True, kw_only=True):
+    """a source of IQ from a TDMS file with int16 I and Q channels.
+
+    Full-scale int16 is scaled to the ``reference_level_dBm`` header of the file. The
+    squared magnitude of the scaled IQ is in mW.
+    """
+
     path: types.WaveformInputPath
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
+    power_units: types.PowerUnits = 'mW'
 
 
 class ZarrIQSource(Source, frozen=True, kw_only=True):

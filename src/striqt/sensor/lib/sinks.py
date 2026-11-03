@@ -373,7 +373,9 @@ class ZarrCaptureSink(ZarrSinkBase):
     `open` allocates every data variable and coordinate of the store from the sweep
     spec, with one row per port per burst segment of every expanded capture along
     ``capture`` (`sweep_row_count`), and keeps the metadata in memory until each
-    `append` (directory store) or until `close` (zip store). `append` places the
+    `append` (directory store) or until `close` (zip store). The power `units` attrs
+    of the allocated variables and coordinates are in the power family of the source
+    (`Controller.power_units`). `append` places the
     arrays of a `DelayedDataset` on the union grid of the sweep and writes every
     chunk that the acquisition completes, so each chunk is written once. A burst
     segment re-acquired after a stream overflow is a further row:
@@ -401,6 +403,8 @@ class ZarrCaptureSink(ZarrSinkBase):
         _ = (pd.__version__, xr.__version__)
 
         self._source_id = controller.lookup.id(sweep_spec.source)
+        # `lookup.id` returns after the backend of the controller is constructed
+        self._power_units = controller.lookup.instance(sweep_spec.source).power_units
         self._planned_rows = compute.datasets.sweep_row_count(
             sweep_spec, self._source_id
         )
@@ -451,6 +455,7 @@ class ZarrCaptureSink(ZarrSinkBase):
                 self._source_id,
                 self._acquisition_info_cls(),
                 attrs=self._action_spec.to_dict(True, allow_tuple_keys=False),
+                power_units=self._power_units,
             )
             self._grids = grids
             self._encoders = encoders
@@ -615,7 +620,13 @@ class ZarrCaptureSink(ZarrSinkBase):
                 index = compute.datasets.row_index(grid, dd.capture, delayed.spec)
                 result = compute.datasets.scatter_rows(grid, result, index)
             self._push(name, result)
-            self._update_attrs(name, dict(delayed.attrs))
+            # the body attrs carry the power form; the composition resolves it
+            self._update_attrs(
+                name,
+                sa.dataarrays.measurement_attrs(
+                    delayed.info, delayed.spec, delayed.attrs, delayed.power_units
+                ),
+            )
 
         coords = compute.datasets.build_capture_coords(
             dd.capture, dd.extra_coords, self._sweep.loops

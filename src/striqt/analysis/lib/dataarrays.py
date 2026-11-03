@@ -4,7 +4,6 @@ from __future__ import annotations as __
 
 import collections
 import dataclasses
-import math
 import typing
 import weakref
 
@@ -78,6 +77,9 @@ class AcquiredIQ:
     """the acquired waveform with shape (port, sample)"""
     capture: specs.Capture | None
     """the acquisition parameters of `x`, or None when not known"""
+    power_units: sw.units.PowerUnits
+    """the unit of the squared magnitude of `x`: ``'mW'`` when calibrated, ``'FS'``
+    for full scale, ``'a.u.'`` for arbitrary units"""
 
     @cached_property
     def preprocess(self) -> Preprocessor:
@@ -86,93 +88,6 @@ class AcquiredIQ:
         A `dataclasses.replace` copy starts with a `Preprocessor` of its own.
         """
         return Preprocessor(self)
-
-
-_ENG_PREFIXES = {
-    -15: 'f',
-    -12: 'p',
-    -9: 'n',
-    -6: '\N{MICRO SIGN}',
-    -3: 'm',
-    0: '',
-    3: 'k',
-    6: 'M',
-    9: 'G',
-    12: 'T',
-    15: 'P',
-}
-
-
-@util.lru_cache()
-def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str:
-    """Format a number with SI unit prefixes"""
-
-    sign = 1
-    fmt = 'g' if places is None else f'.{places:d}f'
-
-    if value < 0:
-        sign = -1
-        value = -value
-
-    if unit.lower().startswith('db'):
-        pow10 = 0
-    elif force_prefix is not None:
-        remap = dict(zip(_ENG_PREFIXES.values(), _ENG_PREFIXES.keys()))
-        pow10 = remap[force_prefix]
-    elif value != 0:
-        pow10 = int(math.floor(math.log10(value) / 3) * 3)
-    else:
-        pow10 = 0
-        # Force value to zero, to avoid inconsistencies like
-        # format_eng(-0) = "0" and format_eng(0.0) = "0"
-        # but format_eng(-0.0) = "-0.0"
-        value = 0.0
-
-    pow10 = np.clip(pow10, min(_ENG_PREFIXES), max(_ENG_PREFIXES))
-
-    mant = sign * value / (10.0**pow10)
-    # a mantissa that formats as 1000 (e.g., 999.99) is carried into the next prefix,
-    # except at the largest prefix in `_ENG_PREFIXES`
-    if (
-        force_prefix is None
-        and abs(float(format(mant, fmt))) >= 1000
-        and pow10 < max(_ENG_PREFIXES)
-    ):
-        mant /= 1000
-        pow10 += 3
-
-    unit_prefix = _ENG_PREFIXES[int(pow10)]
-    if unit or unit_prefix:
-        suffix = f'{sep}{unit_prefix}{unit}'
-    else:
-        suffix = ''
-
-    return f'{mant:{fmt}}{suffix}'
-
-
-def describe_field(capture: specs.Capture, name: str, *, sep='='):
-    meta = specs.helpers.get_capture_type_attrs(type(capture))
-    attrs = meta[name]
-    value = getattr(capture, name)
-    value_str = describe_value(value, attrs)
-
-    return f'{name}{sep}{value_str}'
-
-
-def describe_value(value, attrs: dict, unit_prefix=None):
-    if value is None:
-        value_str = 'None'
-    elif attrs.get('units', None) is not None and np.isfinite(value):
-        unit_kws = {'force_prefix': unit_prefix, 'unit': attrs['units']}
-        if isinstance(value, tuple):
-            value_tup = [format_units(v, **unit_kws) for v in value]
-            value_str = f'({", ".join(value_tup)})'
-        else:
-            value_str = format_units(value, **unit_kws)
-    else:
-        value_str = repr(value)
-
-    return value_str
 
 
 def _results_as_arrays(
@@ -288,8 +203,43 @@ def measurement_dims(info: register.AnalysisInfo) -> tuple[str, ...]:
     return info.dims
 
 
+def measurement_attrs(
+    info: register.AnalysisInfo,
+    spec: specs.Analysis,
+    body_attrs: typing.Mapping[str, typing.Any],
+    power_units: sw.units.PowerUnits,
+) -> dict[str, typing.Any]:
+    """return the attrs of the output of the measurement `info` for one acquisition.
+
+    The registered attrs of `info`, the fields of `spec`, and `body_attrs` are merged
+    in that order, a later source winning on a shared key, and a `units` entry in a
+    power form (`striqt.waveform.units.DB_POWER`, `POWER`, `AMPLITUDE`) is resolved
+    into `power_units`.
+
+    Args:
+        info: the registration of the measurement
+        spec: the measurement parameters
+        body_attrs: the attrs returned by the measurement body
+        power_units: the power unit of the acquisition
+    """
+    attrs = {**info.attrs, **spec.to_dict(), **body_attrs}
+    return _resolve_units(attrs, power_units)
+
+
+def _resolve_units(
+    attrs: dict[str, typing.Any], power_units: sw.units.PowerUnits
+) -> dict[str, typing.Any]:
+    units = attrs.get('units', None)
+    if not isinstance(units, str) or not sw.units.has_power_form(units):
+        return attrs
+    return {**attrs, 'units': sw.units.resolve_power_units(units, power_units)}
+
+
 def measurement_coords(
-    info: register.AnalysisInfo, capture: specs.Capture, spec: specs.Analysis
+    info: register.AnalysisInfo,
+    capture: specs.Capture,
+    spec: specs.Analysis,
+    power_units: sw.units.PowerUnits | None = None,
 ) -> dict[str, tuple[np.ndarray, dict[str, typing.Any]]]:
     """return the coordinate values and attrs of the measurement `info` for one capture.
 
@@ -297,6 +247,8 @@ def measurement_coords(
         info: the registration of the measurement
         capture: the acquisition parameters passed to each coordinate factory
         spec: the measurement parameters passed to each coordinate factory
+        power_units: the power unit that resolves a `units` attr in a power form, or
+            None to leave the form fields in place
 
     Returns:
         ``(values, attrs)`` keyed by coordinate name, in the order of
@@ -322,7 +274,10 @@ def measurement_coords(
         except (TypeError, ValueError) as ex:
             raise ValueError(f'in coordinate {qualname!r}, {ex}') from ex
 
-        coords[coord_info.name] = (values, coord_info.attrs | attrs)
+        merged = coord_info.attrs | attrs
+        if power_units is not None:
+            merged = _resolve_units(merged, power_units)
+        coords[coord_info.name] = (values, merged)
 
     return coords
 
@@ -406,7 +361,9 @@ def build_dataarray(
     if exc is not None:
         raise exc
 
-    coords = measurement_coords(delayed.info, delayed.capture, delayed.spec)
+    coords = measurement_coords(
+        delayed.info, delayed.capture, delayed.spec, delayed.power_units
+    )
 
     for coord_factory in delayed.info.coord_factories:
         factory_info = register.registry.coordinates[coord_factory]
@@ -434,8 +391,11 @@ def build_dataarray(
 
         da[factory_info.name] = coord.assign_attrs(attrs)
 
-    spec_attrs = delayed.spec.to_dict()
-    return da.assign_attrs(delayed.info.attrs | spec_attrs | delayed.attrs)
+    return da.assign_attrs(
+        measurement_attrs(
+            delayed.info, delayed.spec, delayed.attrs, delayed.power_units
+        )
+    )
 
 
 @util.lru_cache()
@@ -486,6 +446,9 @@ class DelayedDataArray(collections.UserDict):
     result: Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]
     info: register.AnalysisInfo
     attrs: dict
+    power_units: sw.units.PowerUnits = 'a.u.'
+    """the power unit of the acquisition, which `to_xarray` writes into the `units`
+    attrs of the power outputs and coordinates"""
 
     def compute(self) -> DelayedDataArray:
         """return a copy with `result` materialized to numpy.
@@ -506,6 +469,7 @@ class DelayedDataArray(collections.UserDict):
             result=_results_as_arrays(self.result),
             info=self.info,
             attrs=self.attrs,
+            power_units=self.power_units,
         )
 
     def to_xarray(self, expand_dims=None) -> xr.DataArray:

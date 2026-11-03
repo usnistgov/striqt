@@ -331,9 +331,9 @@ def test_pss_correlation_noise_bandwidth_is_one_subcarrier():
     spec = sa.specs.Cellular5GNRPSSCorrelator(**SSB)
     R, metadata = measure(spec, cap)
 
-    assert metadata['units'] == '√mW'
+    assert metadata['units'] == sa.units.AMPLITUDE
     assert metadata['noise_bandwidth'] == SCS
-    assert metadata['long_name'] == 'PSS cross-covariance (√mW/30 kHz)'
+    assert metadata['long_name'] == 'PSS cross-covariance'
 
     # the awgn has unit power over CELL_FS. The last lags of each block are zero
     psd = 1.0 / CELL_FS
@@ -355,7 +355,6 @@ def test_ssb_spectrogram_white_noise_reads_one_subcarrier():
     periods = 10
     da = ssb_of(periods * SSB_SPECTROGRAM_PERIODICITY)
 
-    assert da.attrs['units'] == 'dBm'
     assert da.attrs['noise_bandwidth'] == SSB_SPECTROGRAM_SCS
     _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
     nfft = round(2 * SSB_SPECTROGRAM_FS / SSB_SPECTROGRAM_SCS)
@@ -400,7 +399,8 @@ RTOL = elementwise_rtol(np.float32)
 
 
 def resource_histogram(*, frame_slots, **kwargs):
-    iq = sa.testing.tone(RESOURCE_GRID_DURATION, RESOURCE_GRID_FS)
+    x = sa.testing.tone(RESOURCE_GRID_DURATION, RESOURCE_GRID_FS)
+    iq = sa.AcquiredIQ(x, RESOURCE_GRID_CAPTURE, power_units='mW')
     return sa.measurements.cellular_resource_power_histogram(
         iq,
         RESOURCE_GRID_CAPTURE,
@@ -426,7 +426,7 @@ def test_cellular_resource_power_histogram_bin_coordinate_bandwidth(
     coord_attrs = da.cellular_resource_power_bin.attrs
     assert coord_attrs['units'] == 'dBm'
     assert coord_attrs['noise_bandwidth'] == pytest.approx(bandwidth)
-    assert coord_attrs['long_name'].startswith('Cellular resource grid bin power (dBm/')
+    assert coord_attrs['long_name'] == 'Cellular resource grid bin power'
     assert da.attrs['noise_bandwidth'] == pytest.approx(bandwidth)
     assert da.attrs['resolution_bandwidth'] == coord_attrs['resolution_bandwidth']
     assert 'units' not in da.attrs

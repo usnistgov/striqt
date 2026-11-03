@@ -1,19 +1,18 @@
 from __future__ import annotations as __
 
+import dataclasses
 import functools
 import math
 import typing
 
 import striqt.analysis as sa
+import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
 if typing.TYPE_CHECKING:
-    import dask.array as dask_array
     import matplotlib.axes
     import matplotlib.figure
     import matplotlib.legend
-else:
-    dask_array = sa.util.lazy_import('dask.array')
 
 
 @functools.cache
@@ -30,79 +29,108 @@ def _monkeypatch_xarray_unit_labels():
 def label_by_coord(
     data: xr.DataArray,
     fmt: str,
-    coord_or_dim='port',
+    coord_or_dim: str = 'port',
     *,
-    title_case=True,
-    **extra_fields,
-):
+    title_case: bool = True,
+    **extra_fields: typing.Any,
+) -> list[str]:
+    """return `fmt` formatted once per value of `coord_or_dim` in `data`.
+
+    The fields of `fmt` are the coordinates on the dimension of `coord_or_dim` and
+    `extra_fields`. A coordinate field takes precedence over an extra field of the
+    same name.
+
+    Args:
+        data: the array with the coordinates
+        fmt: a `str.format` template; a numeric field accepts a prefix symbol spec
+            (``'{center_frequency:M}'``) or a float spec (``'{center_frequency:.0f}'``)
+        coord_or_dim: the coordinate or dimension that selects one entry per value
+        title_case: True title-cases a lowercase string coordinate value
+        **extra_fields: further fields of `fmt`
+
+    Returns:
+        one string per value of `coord_or_dim`
+    """
     _monkeypatch_xarray_unit_labels()
     coords = _coords_to_dicts(data, coord_or_dim=coord_or_dim, title_case=title_case)
     return [fmt.format(**(extra_fields | c)) for c in coords]
 
 
-def summarize_metadata(
-    source: xr.Dataset,
-    capture_type: type[sa.specs.Capture],
-    array: xr.DataArray | None = None,
-    *,
-    as_str: bool = False,
-):
-    meta: dict = {
-        k: source.attrs[k] for k in capture_type.__struct_fields__ if k in source.attrs
-    }
+@dataclasses.dataclass(frozen=True)
+class _FacetValue:
+    """a numeric coordinate value that is formatted in its units by a template field.
 
-    if array is not None:
-        meta.update({
-            name: coord.item()
-            for name, coord in array.coords.items()
-            if coord.size == 1
-        })
+    The format spec ``''`` or ``'auto'`` applies `shared`; a spec that is one SI
+    prefix symbol (``'M'``, ``'G'``, ``'k'``, ``'u'``) forces that prefix; any other
+    spec formats the bare number through `format`.
+    """
 
-    if as_str:
-        return '\n'.join([f'{k}: {v}' for k, v in meta.items()])
-    else:
-        return meta
+    value: typing.Union[int, float]
+    """the coordinate value in `units`"""
+    units: typing.Union[str, None]
+    """the units string of the coordinate, or None"""
+    shared: sw.units.SIPrefix
+    """the prefix shared by every value of the coordinate"""
+
+    def __format__(self, spec: str) -> str:
+        if spec in ('', 'auto'):
+            return sa.labels.describe_value(self.value, self.units, prefix=self.shared)
+        if spec == 'u' or spec in sw.units.PREFIXES.values():
+            return sa.labels.describe_value(self.value, self.units, prefix=spec)
+        return format(self.value, spec)
+
+    def __str__(self) -> str:
+        return self.__format__('')
+
+
+def _python_scalar(value: typing.Any) -> typing.Any:
+    return value.item() if isinstance(value, np.generic) else value
+
+
+def _numbers(values: typing.Iterable[typing.Any]) -> list[float]:
+    """return the finite numbers among `values` and the members of its tuples."""
+    out = []
+    for v in values:
+        if isinstance(v, tuple):
+            out.extend(_numbers(v))
+        elif isinstance(v, (int, float)) and not isinstance(v, bool):
+            out.append(float(v))
+    return out
 
 
 def _coords_to_dicts(
-    da: xr.DataArray, coord_or_dim='port', title_case=False
+    da: xr.DataArray, coord_or_dim: str = 'port', title_case: bool = False
 ) -> list[dict[str, typing.Any]]:
-    UNIT_PREFIXES = {'center_frequency': 'M'}
+    """return the coordinates on the dimension of `coord_or_dim`, one dict per value.
 
+    A datetime64 value is text to the millisecond. A string is written with ``_``
+    replaced by a space, title-cased when `title_case` is True and the string is
+    lowercase. A bool is ``'True'`` or ``'False'``. A number is a `_FacetValue` with the
+    prefix shared by every value of the coordinate. Any other object, such as a tuple
+    or None, is text from `striqt.analysis.labels.describe_value`.
+    """
     coord = da.coords[coord_or_dim]
-    result = [{} for _ in range(len(coord))]
+    result: list[dict[str, typing.Any]] = [{} for _ in range(len(coord))]
     for k, var in coord.coords.variables.items():
-        dtype = var.values.dtype
-        value = np.atleast_1d(var.values)[0]
-        if np.ndim(var) == 0:
-            value = [var.data] * len(result)
-        else:
-            value = var.data
-        for d, v in zip(result, value):
-            if isinstance(v, dask_array.Array):
-                v = v.compute()
-            if isinstance(v, (str, float, int)):
-                d[k] = v
-            elif np.issubdtype(dtype, np.datetime64):
-                d[k] = np.datetime_as_string(v, unit='ms').item()
-            elif np.issubdtype(dtype, np.number):
-                prefix = UNIT_PREFIXES.get(k, None)
-                d[k] = sa.dataarrays.describe_value(
-                    v.item(), var.attrs, unit_prefix=prefix
-                )
-            elif np.issubdtype(dtype, np.str_):
-                d[k] = v.item().replace('_', ' ')
+        values = np.atleast_1d(var.values)
+        if var.ndim == 0:
+            values = np.repeat(values, len(result))
+        units = var.attrs.get('units', None)
+        scalars = [_python_scalar(v) for v in values]
+        shared = sw.units.si_prefix(_numbers(scalars), units)
+        for d, raw, v in zip(result, values, scalars):
+            if np.issubdtype(values.dtype, np.datetime64):
+                d[k] = np.datetime_as_string(raw, unit='ms').item()
+            elif isinstance(v, str):
+                d[k] = v.replace('_', ' ')
                 if title_case and d[k] == d[k].lower():
                     d[k] = d[k].title()
-            elif np.issubdtype(dtype, np.bool):
-                d[k] = str(v.item())
-            elif v is None:
-                pass
+            elif isinstance(v, bool):
+                d[k] = str(v)
+            elif isinstance(v, (int, float)):
+                d[k] = _FacetValue(v, units, shared)
             else:
-                sa.util.get_logger('analysis').warning(
-                    f'unhandled type for coord {k!r}'
-                )
-                d[k] = v.item()
+                d[k] = sa.labels.describe_value(v, units, prefix=shared)
     return result
 
 
@@ -133,47 +161,35 @@ def _get_fig_center_y(fig: matplotlib.figure.Figure) -> float:
     return (top + bot) / 2
 
 
-def _units_with_bandwidth(attrs: typing.Mapping[str, typing.Any]) -> str | None:
-    """return `units` of `attrs` with `noise_bandwidth` appended, as in ``dBm/360 kHz``.
-
-    The `units` value is returned as written when `attrs` has no `noise_bandwidth`
-    or `units` already contains a slash. None when `attrs` has no `units`.
-    """
-    units = attrs.get('units', None)
-    bandwidth = attrs.get('noise_bandwidth', None)
-    if units is None or bandwidth is None or '/' in str(units):
-        return units
-    return f'{units}/{sa.dataarrays.format_units(float(bandwidth), "Hz")}'
-
-
 def label_axis(
     which_axis: typing.Literal['x', 'y', 'colorbar'],
     ax_data: typing.Union[xr.DataArray, xr.Dataset],
     *,
-    coord_name: typing.Optional[xr.Coordinates] = None,
+    coord_name: typing.Optional[str] = None,
     tick_units: bool | typing.Literal['auto'] = 'auto',
-    short=False,
+    short: bool = False,
     ax: typing.Optional[matplotlib.axes.Axes | list[matplotlib.axes.Axes]] = None,
     fig: typing.Optional[matplotlib.figure.Figure] = None,
-):
-    """label an axis with the `standard_name` and `units` attrs of `ax_data`.
+) -> None:
+    """label an axis with the quantity and units named by the attrs of `ax_data`.
 
-    The label text is the `long_name` attr of `ax_data`, or the `standard_name` attr
-    when `short` is True or `long_name` is absent, or the name of `ax_data` without
-    either. The `noise_bandwidth` attr is appended to the units as in
-    ``dBm/360 kHz``. With units, each target axis gets an engineering tick
-    formatter, and the label gets a unit suffix scaled to the finite values of
-    `ax_data`. No label is set when `ax_data` has units and no finite value.
+    The label text is `striqt.analysis.labels.quantity_label` of the attrs. With a
+    `units` attr, each target axis gets an `EngFormatter` with one SI prefix, frozen
+    from the extent of the finite values as `si_prefix` selects it for a sequence
+    (the magnitude of the largest value, lowered to the span by at most one prefix).
+    The prefixed units appear in
+    every tick label (`tick_units` True) or once in the axis label (`tick_units`
+    False), never in both. A label is set with or without finite values.
 
     Args:
         which_axis: ``'x'``, ``'y'``, or ``'colorbar'``; the colorbar axis is the
             first colorbar of the figure
-        ax_data: the array with the attrs that name the quantity; the finite values
-            select the unit scaling
-        coord_name: a coordinate of `ax_data` that supplies the units, or None for
-            the attrs of `ax_data`
-        tick_units: True places the unit in each tick label and False in the axis
-            label; ``'auto'`` is True for a unit of 1 or 2 characters
+        ax_data: the array with the attrs that name the quantity and the values that
+            select the prefix
+        coord_name: a coordinate of `ax_data` that supplies the attrs and values
+            instead, or None
+        tick_units: True places the prefixed units in each tick label and False in
+            the axis label; ``'auto'`` is True for a `units` attr of 1 or 2 characters
         short: True labels with `standard_name` instead of `long_name`
         ax: the axes, or list of axes, to label; None labels the current axes, or
             every axes of `fig` when `fig` is given
@@ -194,11 +210,11 @@ def label_axis(
     if which_axis not in ('x', 'y', 'colorbar'):
         raise ValueError("which_axis must be one of 'x', 'y', 'colorbar'")
 
+    target = ax_data if coord_name is None else ax_data[coord_name]
+    m = sa.labels.measurand_from_attrs(target.attrs, getattr(target, 'name', None))
+
     if tick_units == 'auto':
-        if len(ax_data.attrs.get('units', '')) in (1, 2):
-            tick_units = True
-        else:
-            tick_units = False
+        tick_units = len(m.units or '') in (1, 2)
 
     if fig is None:
         fig = plt.gcf()
@@ -236,38 +252,26 @@ def label_axis(
     elif which_axis == 'colorbar':
         target_axs = [a.yaxis for a in axs if hasattr(a, '_colorbar')]
 
-    if coord_name is None:
-        units = _units_with_bandwidth(ax_data.attrs)
-    else:
-        units = _units_with_bandwidth(ax_data[coord_name].attrs)
+    extent: tuple[float, ...] = ()
+    if m.units is not None and isinstance(target, xr.DataArray):
+        values = target.to_numpy()
+        finite = values[np.isfinite(values)]
+        if finite.size:
+            extent = (float(finite.min()), float(finite.max()))
+    # the extent selects the prefix as a sequence does, so a 3.69 to 3.71 GHz axis
+    # reads in MHz, and the ticks keep the prefix through a zoom
+    p = sw.units.si_prefix(extent, m.units)
 
-    standard_name = ax_data.attrs.get('standard_name', None) or ax_data.name
-    long_name = ax_data.attrs.get('long_name', None) or standard_name
+    if m.units is not None:
+        formatter = ticker.EngFormatter(
+            sa.labels.units_label(m), unit_in_tick=tick_units, exponent=p.exponent
+        )
+        for target_ax in target_axs:
+            target_ax.set_major_formatter(formatter)
 
-    if short:
-        desc_text = standard_name
-    else:
-        desc_text = long_name
-
-    if units is not None:
-        formatter = ticker.EngFormatter(unit=units, unitInTick=tick_units)
-
-        for target in target_axs:
-            target.set_major_formatter(formatter)
-
-        ax_finite_data = ax_data.data[np.isfinite(ax_data.data)]
-        if len(ax_finite_data) > 0:
-            unit_suffix = formatter.get_axis_unit_suffix(
-                ax_finite_data.min(), ax_finite_data.max()
-            )
-            label_str = f'{desc_text}{unit_suffix}'
-        else:
-            label_str = None
-    else:
-        label_str = f'{desc_text}'
-
-    if label_str is None:
-        return
+    label_str = sa.labels.quantity_label(
+        m, short=short, with_units=not tick_units, prefix=p.symbol
+    )
 
     if do_suplabel:
         if which_axis == 'x':
@@ -277,32 +281,32 @@ def label_axis(
             assert fig is not None
             fig.supylabel(label_str, y=_get_fig_center_y(fig))
 
-        for target in target_axs:
-            target.label.set_visible(False)
+        for target_ax in target_axs:
+            target_ax.label.set_visible(False)
     else:
-        for target in target_axs:
-            target.set_label_text(label_str)
+        for target_ax in target_axs:
+            target_ax.set_label_text(label_str)
 
 
 def label_legend(
     data: typing.Union[xr.DataArray, xr.Dataset],
     *,
     coord_name: str | None = None,
-    tick_units=True,
+    tick_units: bool = True,
     ax: typing.Optional[matplotlib.axes.Axes] = None,
 ) -> matplotlib.legend.Legend:
-    """add a legend labeled with the `standard_name` and `units` attrs of `data`.
+    """add a legend with one entry per value of `data` and a title naming the quantity.
 
-    Each entry is a value in engineering notation with the unit when `units` is set,
-    else ``str(value)``. The legend title is the `standard_name` attr, or none
-    without that attr.
+    Numeric entries share one SI prefix. With `tick_units` True each entry ends with
+    the prefixed units and the title has none; with False each entry is a bare
+    mantissa and the title ends with the prefixed units in parentheses. A string value
+    is written as is.
 
     Args:
         data: the array or dataset with the attrs and values that label the legend
         coord_name: a coordinate of `data` that supplies the attrs and values, or
             None for `data` itself
-        tick_units: True puts the unit in each entry only; False also appends
-            ``(units)`` to the title
+        tick_units: True puts the units in each entry, False in the title
         ax: the axes that receives the legend; None uses the current axes
 
     Returns:
@@ -310,76 +314,26 @@ def label_legend(
     """
     import matplotlib.pyplot as plt
 
-    from . import ticker
-
     _monkeypatch_xarray_unit_labels()
 
     if ax is None:
         ax = plt.gca()
 
-    if coord_name is None:
-        obj = data
-    else:
-        obj = data[coord_name]
-    standard_name = obj.attrs.get('standard_name', None)
-    units = obj.attrs.get('units', None)
-    values = obj.data
+    obj = data if coord_name is None else data[coord_name]
+    m = sa.labels.measurand_from_attrs(obj.attrs, getattr(obj, 'name', None))
+    values = [_python_scalar(v) for v in np.atleast_1d(obj.to_numpy())]
+    p = sw.units.si_prefix(_numbers(values), m.units)
 
-    if standard_name is not None and units is not None and not tick_units:
-        standard_name = f'{standard_name} ({units})'
-    if units is not None:
-        # the formatter ignores tick_units and places the unit in every entry
-        formatter = ticker.EngFormatter(unit=units, unitInTick=True)
-        legend_data = [formatter(v) for v in values]
-    else:
-        legend_data = [str(v) for v in values]
-
-    return ax.legend(legend_data, title=standard_name)
-
-
-def label_selection(
-    sel: typing.Union[xr.DataArray, xr.Dataset],
-    ax: matplotlib.axes.Axes,
-    attrs=True,
-):
-    import matplotlib.pyplot as plt
-
-    from . import ticker
-
-    _monkeypatch_xarray_unit_labels()
-
-    if ax is None:
-        ax = plt.gca()
-    coord_names = {}
-    for name, coord in sel.coords.items():
-        if (
-            name == sa.dataarrays.CAPTURE_DIM
-            or name in sel.indexes
-            or coord.data.size == 0
-        ):
-            continue
-
-        units = coord.attrs.get('units', None)
-
-        label = coord.attrs.get('standard_name', coord.attrs.get('name', name))
-        values = np.atleast_1d(coord.data)
-        if units is not None:
-            formatter = ticker.EngFormatter(unit=units)
-            coord_names[label] = ', '.join([formatter(v) for v in values])
+    entries = []
+    for v in values:
+        if isinstance(v, str) or m.units is None:
+            entries.append(str(v))
+        elif tick_units or not isinstance(v, (int, float)):
+            entries.append(sa.labels.describe_value(v, m, prefix=p))
         else:
-            coord_names[label] = ', '.join([str(v) for v in values])
+            entries.append(sw.units.format_quantity(v, None, prefix=p))
 
-    coord_title = ', '.join(f'{k}: {v}' for k, v in coord_names.items())
-
-    if attrs:
-        attr_title = ', '.join([
-            f'{k}: {v}'
-            for k, v in sel.attrs.items()
-            if k not in ('units', 'name', 'standard_name')
-        ])
-    else:
-        attr_title = ''
-
-    if len(attr_title) > 0:
-        attr_title = f'\nAnalysis: {attr_title}'
-    ax.set_title(f'{coord_title}{attr_title}')
+    title = sa.labels.quantity_label(
+        m, short=True, with_units=not tick_units, prefix=p.symbol
+    )
+    return ax.legend(entries, title=title)

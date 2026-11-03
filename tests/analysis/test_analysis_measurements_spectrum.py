@@ -180,11 +180,10 @@ class TestSpectrogram:
         # the frequency bins are summed, not averaged, so a tone inside one bin keeps
         # the level of the finer resolution while the noise_bandwidth grows
         assert ref_metadata['noise_bandwidth'] == RES
-        assert ref_metadata['units'] == 'dBm'
-        assert ref_metadata['long_name'] == 'Power spectral density (dBm/16 kHz)'
+        assert ref_metadata['units'] == sa.units.DB_POWER
+        assert ref_metadata['long_name'] == 'Power spectral density'
         assert da.attrs['noise_bandwidth'] == frequency_bins * RES
-        assert da.attrs['units'] == 'dBm'
-        assert da.attrs['long_name'] == 'Power spectral density (dBm/64 kHz)'
+        assert da.attrs['long_name'] == 'Power spectral density'
 
         # each side has its own quantization and roundoff budget
         atol = (
@@ -369,7 +368,6 @@ def test_spectrogram_white_noise_reads_noise_bandwidth(window, window_fill):
     )
 
     assert da.attrs['noise_bandwidth'] == RES
-    assert da.attrs['units'] == 'dBm'
     windows, bins = (
         da.sizes['spectrogram_time'],
         da.sizes['spectrogram_baseband_frequency'],
@@ -412,8 +410,7 @@ def test_power_spectral_density_white_noise_reads_noise_bandwidth():
     da = psd_of(iq, capture=NOISE_CAPTURE, window='hamming', time_statistic=['mean'])
 
     assert da.attrs['noise_bandwidth'] == RES
-    assert da.attrs['units'] == 'dBm'
-    assert da.attrs['long_name'] == 'Power spectral density (dBm/16 kHz)'
+    assert da.attrs['long_name'] == 'Power spectral density'
     windows = round(NOISE_DURATION * FS / NFFT)
     assert_close(
         10 * np.log10(mean_linear_power(da)),
@@ -613,26 +610,23 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
 
 
 @pytest.mark.parametrize(
-    'integration_bandwidth,noise_bandwidth,long_name',
-    [
-        (None, 50e3, 'Spectrogram bin power (dBm/50 kHz)'),
-        (100e3, 100e3, 'Spectrogram bin power (dBm/100 kHz)'),
-    ],
+    'integration_bandwidth,noise_bandwidth',
+    [(None, 50e3), (100e3, 100e3)],
     ids=['no_integration', 'integrate_100kHz'],
 )
-def test_spectrogram_histogram_bin_coordinate(
-    integration_bandwidth, noise_bandwidth, long_name
-):
+def test_spectrogram_histogram_bin_coordinate(integration_bandwidth, noise_bandwidth):
     """the bin coordinate is the shared power grid. The `noise_bandwidth` attr of the
     coordinate equals that of the histogram variable."""
-    iq = sa.testing.tone(HIST_DURATION, HIST_FS)
+    iq = sa.AcquiredIQ(
+        sa.testing.tone(HIST_DURATION, HIST_FS), HIST_CAPTURE, power_units='mW'
+    )
 
     da = spectrogram_histogram_of(iq, integration_bandwidth=integration_bandwidth)
 
     coord_attrs = da.spectrogram_power_bin.attrs
     assert coord_attrs['units'] == 'dBm'
     assert coord_attrs['noise_bandwidth'] == noise_bandwidth
-    assert coord_attrs['long_name'] == long_name
+    assert coord_attrs['long_name'] == 'Spectrogram bin power'
     assert da.attrs['noise_bandwidth'] == noise_bandwidth
     assert 'long_name' not in da.attrs
 

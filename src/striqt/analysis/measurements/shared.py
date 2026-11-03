@@ -54,23 +54,20 @@ def bandwidth_attrs(
 
     Args:
         noise_bandwidth: in Hz
-        units: the unit of the output values, ``'dBm'`` or ``'√mW'``
-        quantity: the name of the output, which begins `long_name`
+        units: the power form of the output, `striqt.waveform.units.DB_POWER` or
+            `AMPLITUDE`, resolved into the power unit of the acquisition
+        quantity: the `long_name` of the output, a noun phrase without units
         resolution_bandwidth: the equivalent noise bandwidth (in Hz) of the analysis
             window, which sets the output level of a CW tone; None omits the key
 
     Returns:
-        a dict with ``'units'``, ``'noise_bandwidth'``, ``'long_name'`` as
-        ``'<quantity> (<units>/<bandwidth>)'`` such as
-        ``'Power spectral density (dBm/360 kHz)'``, and ``'resolution_bandwidth'``
-        when not None
+        a dict with ``'units'``, ``'noise_bandwidth'`` in Hz, ``'long_name'`` equal to
+        `quantity`, and ``'resolution_bandwidth'`` when not None
     """
-    from ..lib.dataarrays import format_units
-
     attrs: dict[str, Any] = {
         'units': units,
         'noise_bandwidth': float(noise_bandwidth),
-        'long_name': f'{quantity} ({units}/{format_units(noise_bandwidth, "Hz")})',
+        'long_name': quantity,
     }
     if resolution_bandwidth is not None:
         attrs['resolution_bandwidth'] = float(resolution_bandwidth)

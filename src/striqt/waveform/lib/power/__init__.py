@@ -17,11 +17,6 @@ from .convert import (
     powtodB,
     roundtrip_dB_tol,
     roundtrip_power_rtol,
-    unit_dB_to_linear,
-    unit_dB_to_wave,
-    unit_linear_to_dB,
-    unit_wave_to_dB,
-    unit_wave_to_linear,
 )
 from .detect import (
     bin_power_rms,

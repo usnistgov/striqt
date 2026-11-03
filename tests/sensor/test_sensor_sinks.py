@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import FAKE_SOAPY_SPEC
 from numeric_checks import assert_close, elementwise_rtol
 from sweep_strategies import make_cellular_sweep
 from synthetic_sources import (
@@ -184,6 +185,39 @@ def test_zarr_capture_sink_allocates_the_store_at_open(tmp_path):
             assert chunk_files == []
             # an unwritten store is trimmed to zero rows at close
     assert sa.load(sweep.sink.path).sizes['capture'] == 0
+
+
+def test_zarr_capture_sink_template_units_follow_the_source(fake_soapy_ext, tmp_path):
+    """an uncalibrated SoapySDR source is in full scale: the `units` attrs of the power
+    variable and the power bin coordinate are dBFS in the template allocated at open,
+    in the appended rows, and in the written store"""
+    spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
+    histogram = {
+        'detector_period': 1e-4,
+        'power_low': -120,
+        'power_high': 0,
+        'power_resolution': 1,
+    }
+    analysis = type(spec.analysis).from_dict({
+        'channel_power_time_series': {'detector_period': 1e-4},
+        'channel_power_histogram': histogram,
+    })
+    sweep = spec.replace(
+        captures=(spec.captures[1].replace(duration=1e-3),),
+        analysis=analysis,
+        sink=spec.sink.replace(path=str(tmp_path / 'fake_soapy.zarr')),
+    )
+    names = ('channel_power_time_series', 'channel_power_bin')
+
+    with ss.open_resources(sweep, FAKE_SOAPY_SPEC, test_only=True) as res:
+        template = sa.load(sweep.sink.path, consolidated=False)
+        template_units = {name: template[name].attrs['units'] for name in names}
+        results = materialize(dd for dd in ss.iterate_sweep(res) if dd is not None)
+
+    stored = sa.load(sweep.sink.path)
+    assert template_units == dict.fromkeys(names, 'dBFS')
+    assert {name: stored[name].attrs['units'] for name in names} == template_units
+    assert {name: results[0][name].attrs['units'] for name in names} == template_units
 
 
 @pytest.mark.parametrize('store', ['directory', 'zip'], ids=['directory', 'zip'])
