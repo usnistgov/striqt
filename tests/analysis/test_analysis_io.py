@@ -343,6 +343,66 @@ def test_repair_legacy_attrs_keeps_spectral_densities_and_current_stores():
     assert after == before
 
 
+def test_repair_legacy_attrs_keeps_the_full_scale_and_arbitrary_families():
+    """units of the FS and a.u. families match no repair condition: no bandwidth
+    suffix, no ``'√mW'`` correlator, and a bin coordinate that already names its
+    `noise_bandwidth`"""
+    import numpy as np
+    import xarray as xr
+
+    bins = np.array([-np.inf, -100.0, -99.0, np.inf])
+    ds = xr.Dataset(
+        {
+            'channel_power_time_series': (
+                ('capture', 'time_elapsed'),
+                np.zeros((2, 3), 'float32'),
+                {'standard_name': 'Channel power', 'units': 'dBFS'},
+            ),
+            'iq_waveform': (
+                ('capture', 'iq_index'),
+                np.zeros((2, 3), 'complex64'),
+                {'standard_name': 'IQ waveform', 'units': '√FS'},
+            ),
+            'cellular_cyclic_autocorrelation': (
+                ('capture', 'cyclic_sample_lag'),
+                np.zeros((2, 3), 'float32'),
+                {'standard_name': 'Cyclic Autocovariance', 'units': 'a.u.'},
+            ),
+            'spectrogram': (
+                ('capture', 'spectrogram_time'),
+                np.zeros((2, 3), 'float32'),
+                {
+                    'long_name': 'Power spectral density',
+                    'units': 'dB(a.u.)',
+                    'noise_bandwidth': 360e3,
+                },
+            ),
+            'spectrogram_histogram': (
+                ('capture', 'spectrogram_power_bin'),
+                np.zeros((2, 4), 'float32'),
+                {'standard_name': 'Fraction of counts', 'noise_bandwidth': 360e3},
+            ),
+        },
+        coords={
+            'spectrogram_power_bin': (
+                'spectrogram_power_bin',
+                bins,
+                {
+                    'long_name': 'Spectrogram bin power',
+                    'units': 'dBFS',
+                    'noise_bandwidth': 360e3,
+                },
+            )
+        },
+    )
+    before = {name: dict(ds[name].attrs) for name in ds.variables}
+
+    sa.lib.io.repair_legacy_attrs(ds)
+
+    after = {name: dict(ds[name].attrs) for name in ds.variables}
+    assert after == before
+
+
 def test_load_repairs_legacy_attrs(tmp_path):
     ds = legacy_store_dataset()
     path = tmp_path / 'legacy.zarr'

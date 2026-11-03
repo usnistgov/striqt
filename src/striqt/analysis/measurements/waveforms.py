@@ -105,8 +105,10 @@ def iq_waveform(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
 
     The input is the IQ after the `analysis_bandwidth` filter and trigger alignment.
     Per capture, the output has the dimension ``(iq_index,)`` of sample indexes into
-    the capture. The values are complex64 in √mW. The squared magnitude ``|iq|**2``
-    is power in mW. A None time bound selects the start or the end of the capture.
+    the capture. The values are complex64 in the square root of the power unit of
+    the acquisition (`AcquiredIQ.power_units`), √mW when calibrated. The squared
+    magnitude ``|iq|**2`` is power in that unit. A None time bound selects the start
+    or the end of the capture.
     A bound outside the capture is clamped to the capture. The output has no
     `noise_bandwidth` attr. The noise bandwidth of each capture is the
     `analysis_bandwidth` coordinate, or `sample_rate` where `analysis_bandwidth` is

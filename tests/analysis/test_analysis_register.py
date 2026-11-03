@@ -26,6 +26,7 @@ from analysis_strategies import (
 from hypothesis import given, settings, strategies as st
 
 import striqt.analysis as sa
+import striqt.waveform as sw
 from striqt.analysis.lib import dataarrays, register
 from striqt.analysis.specs.helpers import SpecValidationError
 
@@ -125,7 +126,7 @@ def test_the_wrapper_hands_the_body_the_preprocessed_array():
         prefer_filtered=False, prefer_aligned=True
     )
     x = np.arange(8, dtype='complex64').reshape(1, 8)
-    iq = RecordingIQ(x=x, capture=CAPTURE)
+    iq = RecordingIQ(x=x, capture=CAPTURE, power_units='a.u.')
 
     toy(iq, CAPTURE, as_xarray=False)
 
@@ -561,12 +562,13 @@ SPEC_IDS = [type(spec).__name__ for spec in CONTRACT_SPECS]
 
 def measure(spec, as_xarray):
     """run the measurement registered for `type(spec)` on a unit tone over
-    `CONTRACT_CAPTURE` and return the registration with the result."""
+    `CONTRACT_CAPTURE`, acquired in mW, and return the registration with the result."""
     info = sa.registry[type(spec)]
     ports = 2 if isinstance(spec, sa.specs.SpectrogramHistogramRatio) else 1
-    iq = sa.testing.tone(
+    x = sa.testing.tone(
         CONTRACT_CAPTURE.duration, CONTRACT_CAPTURE.sample_rate, ports=ports
     )
+    iq = sa.AcquiredIQ(x, CONTRACT_CAPTURE, power_units='mW')
     return info, info.func(iq, CONTRACT_CAPTURE, as_xarray=as_xarray, **spec.to_dict())
 
 
@@ -606,16 +608,13 @@ def test_measurement_attrs(spec):
         assert da.attrs[name] == value
 
 
-ABSOLUTE_POWER_UNITS = ('dBm', '√mW')
-
-
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
-    """every output and power-bin coordinate in absolute power units has a
-    `noise_bandwidth` (Hz), `units` without a bandwidth, and `long_name` and
-    `standard_name` without a parenthesized suffix. The outputs with the per-capture
-    `analysis_bandwidth` as noise bandwidth set no `noise_bandwidth`. Ratios in dB set
-    no `noise_bandwidth`."""
+    """every output and power-bin coordinate in a power family (`power_family` is not
+    None) has a `noise_bandwidth` (Hz), `units` without a bandwidth, and `long_name`
+    and `standard_name` without a parenthesized suffix. The outputs with the
+    per-capture `analysis_bandwidth` as noise bandwidth set no `noise_bandwidth`.
+    Ratios in dB set no `noise_bandwidth`."""
     info, da = measure(spec, as_xarray=True)
 
     def check(attrs, what):
@@ -623,7 +622,7 @@ def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
         if str(what) in sa.lib.io._CAPTURE_BANDWIDTH_NAMES:
             assert 'noise_bandwidth' not in attrs, what
             assert '/' not in str(attrs.get('long_name', '')), what
-        elif units in ABSOLUTE_POWER_UNITS:
+        elif isinstance(units, str) and sw.units.power_family(units) is not None:
             assert isinstance(attrs.get('noise_bandwidth'), float), what
             assert attrs['noise_bandwidth'] > 0, what
             assert 'dBm/' not in units, what

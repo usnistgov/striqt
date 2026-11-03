@@ -54,7 +54,7 @@ def bandwidth_attrs(
 
     Args:
         noise_bandwidth: in Hz
-        units: the unit of the stored values, ``'dBm'`` or ``'√mW'``
+        units: the unit of the stored values in the mW family, ``'dBm'`` or ``'√mW'``
         quantity: the `long_name` of the output, a noun phrase without units
         resolution_bandwidth: the equivalent noise bandwidth (in Hz) of the analysis
             window, which sets the output level of a CW tone; None omits the key

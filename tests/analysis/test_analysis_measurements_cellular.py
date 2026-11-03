@@ -355,7 +355,6 @@ def test_ssb_spectrogram_white_noise_reads_one_subcarrier():
     periods = 10
     da = ssb_of(periods * SSB_SPECTROGRAM_PERIODICITY)
 
-    assert da.attrs['units'] == 'dBm'
     assert da.attrs['noise_bandwidth'] == SSB_SPECTROGRAM_SCS
     _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
     nfft = round(2 * SSB_SPECTROGRAM_FS / SSB_SPECTROGRAM_SCS)
@@ -400,7 +399,8 @@ RTOL = elementwise_rtol(np.float32)
 
 
 def resource_histogram(*, frame_slots, **kwargs):
-    iq = sa.testing.tone(RESOURCE_GRID_DURATION, RESOURCE_GRID_FS)
+    x = sa.testing.tone(RESOURCE_GRID_DURATION, RESOURCE_GRID_FS)
+    iq = sa.AcquiredIQ(x, RESOURCE_GRID_CAPTURE, power_units='mW')
     return sa.measurements.cellular_resource_power_histogram(
         iq,
         RESOURCE_GRID_CAPTURE,

@@ -418,14 +418,16 @@ def spectrogram(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     runs from the start of the capture at the STFT hop, which `fractional_overlap`
     and `frequency_resolution` set. `spectrogram_baseband_frequency` in Hz is the
     FFT grid at `frequency_resolution`, truncated to the `analysis_bandwidth` about
-    DC when `trim_stopband` is set and the bandwidth is finite. Values are power in
-    dBm per noise bandwidth, which is `frequency_resolution` or, when set,
-    `integration_bandwidth`. The `noise_bandwidth` attr is that bandwidth in Hz, and
-    the `units` attr is ``'dBm'``. White noise with power spectral density N0 has a
-    mean of ``N0 * noise_bandwidth`` in every bin for every `window`. A CW tone has
-    ``frequency_resolution / resolution_bandwidth`` of the tone power in one bin,
-    where the `resolution_bandwidth` attr is the equivalent noise bandwidth (in Hz)
-    of the zero-padded window. Values are rounded to 2 decimals and stored as float16.
+    DC when `trim_stopband` is set and the bandwidth is finite. Values are power per
+    noise bandwidth in dB of the power unit of the acquisition
+    (`AcquiredIQ.power_units`), dBm when calibrated. The noise bandwidth is
+    `frequency_resolution` or, when set, `integration_bandwidth`. The
+    `noise_bandwidth` attr is that bandwidth in Hz. White noise with power spectral
+    density N0 has a mean of ``N0 * noise_bandwidth`` in every bin for every
+    `window`. A CW tone has ``frequency_resolution / resolution_bandwidth`` of the
+    tone power in one bin, where the `resolution_bandwidth` attr is the equivalent
+    noise bandwidth (in Hz) of the zero-padded window. Values are rounded to 2
+    decimals and stored as float16.
 
     Args:
     {args}
@@ -507,9 +509,10 @@ def power_spectral_density(
     STFT fields (linear power, unrounded) over the STFT windows at each frequency
     bin. ``'mean'`` is the Welch estimate (Welch, 1967). A float in ``[0, 1]`` is a
     quantile. Per capture, the output has dimensions
-    ``(time_statistic, baseband_frequency)`` in dBm per noise bandwidth as float32.
-    The `noise_bandwidth` attr is that bandwidth in Hz. A power spectral density in
-    dBm/Hz is the output minus ``10 * log10(noise_bandwidth)``.
+    ``(time_statistic, baseband_frequency)`` as float32, in dB of the power unit of
+    the acquisition (`AcquiredIQ.power_units`) per noise bandwidth, dBm when
+    calibrated. The `noise_bandwidth` attr is that bandwidth in Hz. A power spectral
+    density per Hz is the output minus ``10 * log10(noise_bandwidth)``.
 
     References:
         P. D. Welch, "The use of fast Fourier transform for the estimation of power
@@ -584,7 +587,7 @@ def spectrogram_power_bin(
     """return the `spectrogram_power_bin` coordinate values and attrs.
 
     Returns:
-        the bin centers of `power.make_power_bins` in dBm, with ``-inf`` and ``inf``
+        the bin centers of `power.make_power_bins` in dB, with ``-inf`` and ``inf``
         catch-all bins, and the attrs of `shared.bandwidth_attrs` for the
         spectrogram: ``'units'`` of ``'dBm'``, `long_name` as the quantity without
         units, and `noise_bandwidth` and `resolution_bandwidth` in Hz
@@ -625,7 +628,8 @@ def spectrogram_histogram(
     alignment. The pixels are those of the `spectrogram` output with the same STFT
     fields (float32, unrounded), flattened over time and frequency. Per capture, the
     output has the dimension ``(spectrogram_power_bin,)`` as float32 and sums to 1.
-    `spectrogram_power_bin` is the bin centers in dBm per noise bandwidth. The
+    `spectrogram_power_bin` is the bin centers per noise bandwidth in dB of the power
+    unit of the acquisition (`AcquiredIQ.power_units`), dBm when calibrated. The
     ``-inf`` and ``inf`` entries collect the pixels more than half a bin below
     `power_low` or above `power_high`. The `noise_bandwidth` attr (in Hz) is set on
     the output and on the bin coordinate.

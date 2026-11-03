@@ -183,7 +183,6 @@ class TestSpectrogram:
         assert ref_metadata['units'] == 'dBm'
         assert ref_metadata['long_name'] == 'Power spectral density'
         assert da.attrs['noise_bandwidth'] == frequency_bins * RES
-        assert da.attrs['units'] == 'dBm'
         assert da.attrs['long_name'] == 'Power spectral density'
 
         # each side has its own quantization and roundoff budget
@@ -369,7 +368,6 @@ def test_spectrogram_white_noise_reads_noise_bandwidth(window, window_fill):
     )
 
     assert da.attrs['noise_bandwidth'] == RES
-    assert da.attrs['units'] == 'dBm'
     windows, bins = (
         da.sizes['spectrogram_time'],
         da.sizes['spectrogram_baseband_frequency'],
@@ -412,7 +410,6 @@ def test_power_spectral_density_white_noise_reads_noise_bandwidth():
     da = psd_of(iq, capture=NOISE_CAPTURE, window='hamming', time_statistic=['mean'])
 
     assert da.attrs['noise_bandwidth'] == RES
-    assert da.attrs['units'] == 'dBm'
     assert da.attrs['long_name'] == 'Power spectral density'
     windows = round(NOISE_DURATION * FS / NFFT)
     assert_close(
@@ -620,7 +617,9 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
 def test_spectrogram_histogram_bin_coordinate(integration_bandwidth, noise_bandwidth):
     """the bin coordinate is the shared power grid. The `noise_bandwidth` attr of the
     coordinate equals that of the histogram variable."""
-    iq = sa.testing.tone(HIST_DURATION, HIST_FS)
+    iq = sa.AcquiredIQ(
+        sa.testing.tone(HIST_DURATION, HIST_FS), HIST_CAPTURE, power_units='mW'
+    )
 
     da = spectrogram_histogram_of(iq, integration_bandwidth=integration_bandwidth)
 

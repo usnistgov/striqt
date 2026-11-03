@@ -169,13 +169,14 @@ def channel_power_time_series(
     The input is the IQ after the `analysis_bandwidth` filter and trigger alignment.
     Each detector reduces the instantaneous power ``|iq|**2`` over consecutive blocks
     of `detector_period`: ``'rms'`` is the mean and ``'peak'`` the maximum. Per
-    capture, the output has dimensions ``(power_detector, time_elapsed)`` in dBm as
-    float32. `time_elapsed` is in s from the start of the capture in steps of
-    `detector_period`. The capture `duration` must be a whole number of detector
-    periods. `detector_period` must be a whole number of samples at `sample_rate`.
-    The output has no `noise_bandwidth` attr. The noise bandwidth of each capture is
-    the `analysis_bandwidth` coordinate, or `sample_rate` where `analysis_bandwidth`
-    is infinite.
+    capture, the output has dimensions ``(power_detector, time_elapsed)`` as
+    float32, in dB of the power unit of the acquisition (`AcquiredIQ.power_units`),
+    dBm when calibrated. `time_elapsed` is in s from the start of the capture in
+    steps of `detector_period`. The capture `duration` must be a whole number of
+    detector periods. `detector_period` must be a whole number of samples at
+    `sample_rate`. The output has no `noise_bandwidth` attr. The noise bandwidth of
+    each capture is the `analysis_bandwidth` coordinate, or `sample_rate` where
+    `analysis_bandwidth` is infinite.
 
     Args:
     {args}
@@ -266,7 +267,7 @@ def channel_power_bin(
     """return the `channel_power_bin` coordinate values and attrs.
 
     Returns:
-        the bin centers of `make_power_bins` in dBm, with ``-inf`` and ``inf``
+        the bin centers of `make_power_bins` in dB, with ``-inf`` and ``inf``
         catch-all bins at each end, and an empty attrs dict
     """
     bins = make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
@@ -292,8 +293,9 @@ def channel_power_histogram(
     The readings are those of `channel_power_time_series` with the same detector
     fields. Per capture, the output has dimensions
     ``(power_detector, channel_power_bin)`` as float32 and sums to 1 over the bins
-    of each detector. `channel_power_bin` is the bin centers in dBm. The ``-inf`` and
-    ``inf`` entries collect the readings more than half a bin below `power_low` or
+    of each detector. `channel_power_bin` is the bin centers in dB of the power unit
+    of the acquisition (`AcquiredIQ.power_units`), dBm when calibrated. The ``-inf``
+    and ``inf`` entries collect the readings more than half a bin below `power_low` or
     above `power_high`. Neither the output nor the bin coordinate has a
     `noise_bandwidth` attr. The noise bandwidth of each capture is the
     `analysis_bandwidth` coordinate, or `sample_rate` where `analysis_bandwidth` is
@@ -458,7 +460,8 @@ def cyclic_channel_power(
     Each power detector bins the capture on `detector_period`. The binned series is
     folded into cycles of `cyclic_period`. Each cyclic statistic reduces across the
     cycles (Kuester et al.). Per capture, the output has dimensions
-    ``(power_detector, cyclic_statistic, cyclic_lag)`` in dBm as float32. The
+    ``(power_detector, cyclic_statistic, cyclic_lag)`` as float32, in dB of the power
+    unit of the acquisition (`AcquiredIQ.power_units`), dBm when calibrated. The
     `cyclic_lag` coordinate in s starts at 0 and spans one `cyclic_period` in steps
     of `detector_period`. Those 2 fields alone set the trace length, independent of
     the capture `duration`.
@@ -470,7 +473,7 @@ def cyclic_channel_power(
     occupy disjoint lag windows. Occupancy with an incommensurate period smears
     across all lags.
 
-    Statistics are evaluated in linear power and converted to dBm afterward. The
+    Statistics are evaluated in linear power and converted to dB afterward. The
     capture `duration` must be a whole number of cycles. `cyclic_period` must be a
     whole number of detector periods, and `detector_period` a whole number of
     samples at `sample_rate`. A `detector_period` written as a fraction
