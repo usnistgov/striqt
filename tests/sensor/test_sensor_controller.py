@@ -7,6 +7,7 @@ from __future__ import annotations
 import gc
 import logging
 import weakref
+from queue import Full
 from threading import Event
 
 import numpy as np
@@ -381,13 +382,13 @@ def record_ns(ctrl, capture) -> int:
     return round(1e9 * record / design['fs_sdr'])
 
 
-def start_deltas_ns(members) -> list[int]:
-    starts = [m.info.start_time.value for m in members]
+def start_deltas_ns(segments) -> list[int]:
+    starts = [m.info.start_time.value for m in segments]
     return [b - a for a, b in zip(starts, starts[1:])]
 
 
-def burst_indexes(members) -> list[int]:
-    return [m.info.burst_index for m in members]
+def burst_indexes(segments) -> list[int]:
+    return [m.info.burst_index for m in segments]
 
 
 class TestBurst:
@@ -395,16 +396,16 @@ class TestBurst:
     def test_members_are_stamped_one_record_apart(
         self, via, fake_soapy, fake_controller
     ):
-        """the start time of each member follows the previous start by one record,
+        """the start time of each segment follows the previous start by one record,
         although the carried-over samples begin one lead overlap before that. The
-        stream is enabled once, and the later members read one record each with no
+        stream is enabled once, and the later segments read one record each with no
         transient holdoff."""
         with fake_controller(time_sync_at='open', receive_retries=0) as ctrl:
             ctrl._arm_spec(BURST_CAPTURE)
             if via == 'acquire':
-                members = [ctrl.acquire(burst_index=k) for k in range(3)]
+                segments = [ctrl.acquire(burst_index=k) for k in range(3)]
             else:
-                members = ctrl.acquire_burst()
+                segments = ctrl.acquire_burst()
             lead, _ = ss.lib.compute.get_correction_overlaps(
                 BURST_CAPTURE, ctrl.source_spec
             )
@@ -416,33 +417,33 @@ class TestBurst:
             device = fake_soapy.devices[0]
 
         assert lead > 0, 'the capture must have a lead overlap to be discriminating'
-        assert burst_indexes(members) == [0, 1, 2]
-        assert start_deltas_ns(members) == [period, period]
+        assert burst_indexes(segments) == [0, 1, 2]
+        assert start_deltas_ns(segments) == [period, period]
         assert len(device.calls_named('activateStream')) == 1
         sizes = [c[1] for c in device.calls_named('readStream')]
-        assert sizes[0] == members[0].x.shape[1]
-        assert sizes[-2:] == [record, record], 'members 1 and 2 read one record each'
-        assert stashed is None, 'the carryover is cleared after the last member'
+        assert sizes[0] == segments[0].x.shape[1]
+        assert sizes[-2:] == [record, record], 'segments 1 and 2 read one record each'
+        assert stashed is None, 'the carryover is cleared after the last segment'
 
     def test_members_under_a_dividing_strobe_stay_contiguous(
         self, fake_soapy, fake_controller
     ):
         """with a strobe that divides the duration, the next edge falls at the end of
-        the previous record, so the members are one record apart with one enable"""
+        the previous record, so the segments are one record apart with one enable"""
         strobe = BURST_CAPTURE.duration / 2
         with fake_controller(
             time_sync_at='open', receive_retries=0, trigger_strobe=strobe
         ) as ctrl:
             ctrl._arm_spec(BURST_CAPTURE)
-            members = ctrl.acquire_burst()
+            segments = ctrl.acquire_burst()
             period = record_ns(ctrl, BURST_CAPTURE)
             device = fake_soapy.devices[0]
-        assert start_deltas_ns(members) == [period, period]
+        assert start_deltas_ns(segments) == [period, period]
         assert len(device.calls_named('activateStream')) == 1
         # the holdoff is rounded to whole source samples, so the record start is on
         # the strobe grid to within one sample period
         sample_ns = 1e9 / ctrl.get_resampler()['fs_sdr']
-        residual = members[0].info.start_time.value % round(strobe * 1e9)
+        residual = segments[0].info.start_time.value % round(strobe * 1e9)
         assert min(residual, round(strobe * 1e9) - residual) < sample_ns
 
     def test_a_strobe_with_a_remainder_is_rejected(self, fake_controller):
@@ -453,8 +454,8 @@ class TestBurst:
                 ctrl.acquire_burst()
 
     def test_later_members_keep_no_holdoff_pad(self, fake_controller):
-        """member 0 is copied with the transient and strobe holdoff ahead of the
-        record; the later members, which read no holdoff, are copied without it"""
+        """segment 0 is copied with the transient and strobe holdoff ahead of the
+        record; the later segments, which read no holdoff, are copied without it"""
         strobe = BURST_CAPTURE.duration / 2
         with fake_controller(
             time_sync_at='open', receive_retries=0, trigger_strobe=strobe
@@ -463,7 +464,7 @@ class TestBurst:
             overlaps = ss.lib.compute.get_correction_overlaps(
                 BURST_CAPTURE, ctrl.source_spec
             )
-            members = ctrl.acquire_burst()
+            segments = ctrl.acquire_burst()
             padded, bare = (
                 ss.lib.sources.buffers.get_read_count(
                     BURST_CAPTURE,
@@ -474,12 +475,12 @@ class TestBurst:
                 for flag in (True, False)
             )
         assert padded > bare
-        assert members[0].x.base.shape[1] == padded
-        assert [m.x.base.shape[1] for m in members[1:]] == [bare, bare]
-        assert [m.x.shape[1] for m in members] == [bare] * 3
+        assert segments[0].x.base.shape[1] == padded
+        assert [m.x.base.shape[1] for m in segments[1:]] == [bare, bare]
+        assert [m.x.shape[1] for m in segments] == [bare] * 3
 
-    def test_carryover_is_kept_between_members(self, fake_soapy, fake_controller):
-        """members 1 and 2 read once each, with no transient-holdoff read"""
+    def test_carryover_is_kept_between_segments(self, fake_soapy, fake_controller):
+        """segments 1 and 2 read once each, with no transient-holdoff read"""
         with fake_controller(time_sync_at='open', receive_retries=0) as ctrl:
             device = fake_soapy.devices[0]
             ctrl._arm_spec(BURST_CAPTURE)
@@ -504,9 +505,9 @@ class TestBurst:
 
     @pytest.mark.parametrize('on_gap', ['skip', 'except'])
     def test_full_queue_delivers_member_0_only(self, on_gap, fake_controller, caplog):
-        """with one buffer and no consumer, member 0 fills the queue. Under skip the
-        other 2 members are dropped with one warning each; under except the second
-        member raises."""
+        """with one buffer and no consumer, segment 0 fills the queue. Under skip the
+        other 2 segments are dropped with one warning each; under except the second
+        segment raises."""
         bursts = ss.specs.BurstOptions(on_gap=on_gap, buffers=1)
         queue = AcquisitionQueue(bursts.buffers)
         with (
@@ -527,10 +528,10 @@ class TestBurst:
 
     @pytest.mark.parametrize('on_gap', ['skip', 'except'])
     def test_overflow_at_member_1_is_retried(self, on_gap, fake_soapy, fake_controller):
-        """an overflow at member 1 re-triggers the stream. Under skip member 1 is
-        read again and members 1 and 2 are contiguous; under except the burst
-        restarts and the queued member 0 is replaced. The finalizer of member 0
-        queues the fault for the first read of member 1."""
+        """an overflow at segment 1 re-triggers the stream. Under skip segment 1 is
+        read again and segments 1 and 2 are contiguous; under except the burst
+        restarts and the queued segment 0 is replaced. The finalizer of segment 0
+        queues the fault for the first read of segment 1."""
         bursts = ss.specs.BurstOptions(on_gap=on_gap, buffers=3)
         queue = AcquisitionQueue(bursts.buffers)
         finalized = []
@@ -550,18 +551,18 @@ class TestBurst:
             period = record_ns(ctrl, BURST_CAPTURE)
             retrigger_ns = device.streams[0].activate_time_ns
 
-        members = [queue.get_nowait() for _ in range(3)]
+        segments = [queue.get_nowait() for _ in range(3)]
         assert queue.qsize() == 0
-        assert burst_indexes(members) == [0, 1, 2]
+        assert burst_indexes(segments) == [0, 1, 2]
         assert len(device.calls_named('activateStream')) == 2
-        deltas = start_deltas_ns(members)
+        deltas = start_deltas_ns(segments)
         if on_gap == 'skip':
             assert finalized == [0, 1, 2]
-            assert members[1].info.start_time.value >= retrigger_ns
+            assert segments[1].info.start_time.value >= retrigger_ns
             assert deltas[1] == period
         else:
             assert finalized == [0, 0, 1, 2]
-            assert members[0].info.start_time.value >= retrigger_ns
+            assert segments[0].info.start_time.value >= retrigger_ns
             assert deltas == [period, period]
 
     def test_overflow_at_member_1_without_retries_raises(
@@ -579,22 +580,22 @@ class TestBurst:
 
 
 def test_acquisition_queue_tracks_nbytes_and_purges_one_capture():
-    def member(capture_index, count):
+    def segment(capture_index, count):
         info = ss.specs.AcquisitionInfo(capture_index=capture_index)
         x = np.zeros((1, count), dtype='complex64')
         return build_acquired_iq(x, REUSABLE, info=info)
 
     queue = AcquisitionQueue(3)
     for capture_index, count in [(0, 10), (1, 20), (0, 30)]:
-        queue.put_nowait(member(capture_index, count))
+        queue.put_nowait(segment(capture_index, count))
     assert queue.nbytes == 60 * 8
-    with pytest.raises(ss.lib.controller.queue_lib.Full):
-        queue.put_nowait(member(1, 1))
+    with pytest.raises(Full):
+        queue.put_nowait(segment(1, 1))
 
     assert queue.purge(0) == 2
     assert queue.qsize() == 1
     assert queue.nbytes == 20 * 8
-    queue.put_nowait(member(2, 5))
+    queue.put_nowait(segment(2, 5))
     assert queue.get_nowait().info.capture_index == 1
     assert queue.nbytes == 5 * 8
     queue.put_nowait(object())

@@ -205,8 +205,8 @@ def _validate_bursts(
 
     * `options.reuse_iq` must be false: the reuse cache holds one acquisition;
     * with a `source.trigger_strobe`, `duration` must be a whole number of strobe
-      periods: every member starts on the strobe grid, so a shorter remainder would
-      leave a gap between members.
+      periods: every segment starts on the strobe grid, so a shorter remainder would
+      leave a gap between segments.
 
     Raises:
         SpecValidationError: at ``$.options.reuse_iq`` or at the `duration` of the
@@ -227,7 +227,7 @@ def _validate_bursts(
         if strobe and not sw.isroundmod(capture.duration, strobe):
             raise SpecValidationError(
                 'Expected a whole number of `trigger_strobe` periods, since the '
-                'members of a burst start on the strobe grid',
+                'segments of a burst start on the strobe grid',
                 ('.duration',),
                 locations,
             )

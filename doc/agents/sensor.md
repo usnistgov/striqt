@@ -235,15 +235,15 @@ beside `confirm_labels` and `web-plotter` imports and calls from its own callbac
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in
 `actions/core.py:iterate_captures`. A dedicated acquisition thread (`striqt-acquire`)
-arms the source once per capture, acquires the `burst` members of the capture with the
+arms the source once per capture, acquires the `burst` segments of the capture with the
 stream left enabled, and puts each `AcquiredIQ` on a bounded `AcquisitionQueue` of
 `source.bursts.buffers` acquisitions. The caller's thread dequeues one acquisition per
 step, runs `compute.analyze` on the acquisition dequeued at the previous step in the
 foreground (GPU work stays on this thread), and submits the `sink.append` of the
 acquisition before that to the thread pool. N delivered acquisitions take N + 2 steps.
-The peripheral read of a capture starts with member 0 and may run until the end of the
+The peripheral read of a capture starts with segment 0 and may run until the end of the
 burst; the acquisition thread awaits it before arming the next capture, so a peripheral
-exception surfaces there. Each member refers to the read through
+exception surfaces there. Each segment refers to the read through
 `AcquiredIQ.pending_extra_data` (a `PendingExtraData`: the future and the runner
 `extra_data` as `override`), and `compute.analyze` copies the reference onto the
 `DelayedDataset`. `compute/datasets.py:resolve_extra_data` joins the dict as
@@ -260,25 +260,25 @@ the `sweep` logger and `check-sweep` prints it.
 `source.bursts.on_gap` decides what happens when a burst cannot stay contiguous. A capture
 with `burst` 1 is not a burst: the acquisition thread waits for a free queue slot, so a
 sweep without bursts keeps the one-ahead pacing of acquisition and analysis. Under
-`'skip'`, a member that finds the queue full is dropped: the time grid of the burst is
-kept, `burst_index` skips that member, and a WARNING is logged on the `source` logger. A
-stream overflow with `receive_retries` left re-triggers and resumes at the failed member.
-The earlier members stand and `start_time` has one gap at that member. Under `'except'`, a full queue
+`'skip'`, a segment that finds the queue full is dropped: the time grid of the burst is
+kept, `burst_index` skips that segment, and a WARNING is logged on the `source` logger. A
+stream overflow with `receive_retries` left re-triggers and resumes at the failed segment.
+The earlier segments stand and `start_time` has one gap at that segment. Under `'except'`, a full queue
 raises `AcquisitionOverrunError` and ends the run, and a stream overflow re-triggers and
-restarts the burst from member 0 after purging the members of that burst still in the
-queue. Members already consumed by analysis stay in the output: `(capture_index,
+restarts the burst from segment 0 after purging the segments of that burst still in the
+queue. Segments already consumed by analysis stay in the output: `(capture_index,
 burst_index)` can repeat with a later `start_time`. With `receive_retries` exhausted,
 either mode raises. `source.bursts.trigger_on` governs the signal trigger only: `'first'`
-computes the lag on the first delivered member of a burst and applies it to the rest;
-`'all'` runs the trigger on every member. The hardware clock syncs once per burst, on
-member 0.
+computes the lag on the first delivered segment of a burst and applies it to the rest;
+`'all'` runs the trigger on every segment. The hardware clock syncs once per burst, on
+segment 0.
 
 Captures are expanded from `captures:` plus `loops:` (`Range`, `List`, `Repeat`,
 `FrequencyBinRange`) by `specs.sequencing.loop_captures`. The per-source overrides from
 `adjust_captures` are then applied.
 
 Output is written by `ZarrCaptureSink` (`lib/sinks.py`) into a zarr store that the sink
-allocates at `open` from the sweep spec: one row per port per burst member of every
+allocates at `open` from the sweep spec: one row per port per burst segment of every
 expanded capture along `capture`, every data variable and coordinate at full length, and
 no data. The row count is `compute/datasets.py:sweep_row_count`; `burst` and
 `burst_index` are `capture`-dim coordinates, and `get_looped_coords` appends
@@ -295,7 +295,7 @@ key that differs between captures. Store metadata is staged in memory by
 `analysis/lib/stores.py` and flushed after every acquisition for a directory store and once
 at `close` for a `.zarr.zip`, which is written in place, so no store key is written
 twice. `close` writes the partial chunks, trims the arrays to the rows written, and
-consolidates the metadata. A row group written for a re-acquired burst member stays in
+consolidates the metadata. A row group written for a re-acquired burst segment stays in
 the store (see `on_gap` above). `ZarrSink.batched_write_count` is deprecated and ignored.
 `ZarrTimeAppendSink` instead appends along the spectrogram time axis and is reached only
 by passing an instance through `iterate_sweep(res, sink=...)`; `Zipper` remains for the
@@ -314,22 +314,22 @@ re-arm (no carryover), rounded up to the next `trigger_strobe` edge when a strob
 set. The record start time is the stamp plus the holdoff.
 
 Within a burst, `ReceiveBuffers.stash_carryover` keeps the trailing lead and tail of the
-record of member k and stamps the first carried sample one lead before the record of
-member k + 1. `apply` returns that stamp for member k + 1 in place of a source read, so
-member k + 1 starts exactly one record after member k. The carryover applies within a
+record of segment k and stamps the first carried sample one lead before the record of
+segment k + 1. `apply` returns that stamp for segment k + 1 in place of a source read, so
+segment k + 1 starts exactly one record after segment k. The carryover applies within a
 burst only: `Controller._arm_spec` clears the stash at arm, and `read_iq` clears it
-after the last member. Equal consecutive captures do not carry over; only a capture with
-`burst` above 1 is sample-contiguous. Under a `trigger_strobe`, every member starts on the
+after the last segment. Equal consecutive captures do not carry over; only a capture with
+`burst` above 1 is sample-contiguous. Under a `trigger_strobe`, every segment starts on the
 strobe grid; the `duration` of a burst capture is a whole number of strobe periods, so the
-next edge falls at the end of the previous record and the members stay contiguous.
+next edge falls at the end of the previous record and the segments stay contiguous.
 
 `sources/base.py:VirtualSource` keeps a synthetic clock. The clock is 0 at the first
 `arm`, so corrected sample 0 of the first capture is on every strobe grid. A re-arm
 continues the stream: the first read after `arm` is stamped where the previous samples
-ended, and the origin of the new capture is one new-rate lead overlap later. The members
-of a burst continue the clock without a re-arm, so member k reads the generator k
-records after member 0. `ZarrIQSource.read` stamps member k with the store's
-`start_time` less the lead, advanced by k records, so `start_time` of member 0 stays the
+ended, and the origin of the new capture is one new-rate lead overlap later. The segments
+of a burst continue the clock without a re-arm, so segment k reads the generator k
+records after segment 0. `ZarrIQSource.read` stamps segment k with the store's
+`start_time` less the lead, advanced by k records, so `start_time` of segment 0 stays the
 time of file index 0.
 
 ### The per-capture signal path

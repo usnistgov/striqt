@@ -221,12 +221,12 @@ def resident_bytes_bound(
     """return an upper bound (bytes) on the raw IQ resident during a run of `sweep`.
 
     The bound counts ``sweep.source.bursts.buffers + 2`` acquisitions: the queued
-    members, the one under analysis, and the one being written. Each acquisition is
+    segments, the one under analysis, and the one being written. Each acquisition is
     sized as the largest read over the captures of
     `specs.sequencing.repeat_captures`: the port count of the capture, times 8 bytes
     per complex64 sample, times the source samples of the record, the correction
-    overlaps, and the transient and strobe holdoff of a first burst member. The
-    later members of a burst read no holdoff, so the bound is exact for a sweep
+    overlaps, and the transient and strobe holdoff of a first burst segment. The
+    later segments of a burst read no holdoff, so the bound is exact for a sweep
     without bursts and an overestimate for a sweep with bursts. The bound covers the
     `x` arrays alone, not the resampled, filtered, or analyzed copies.
 

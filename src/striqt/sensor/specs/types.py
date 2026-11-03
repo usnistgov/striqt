@@ -155,7 +155,7 @@ BurstBuffers = Annotated[
 OnGap = Annotated[
     Literal['skip', 'except'],
     Meta(
-        "whether a burst tolerates a timing gap: 'skip' drops a member when the "
+        "whether a burst tolerates a timing gap: 'skip' drops a segment when the "
         "queue is full and resumes after a stream overflow; 'except' raises on a "
         'full queue and restarts the burst after a stream overflow'
     ),
@@ -163,8 +163,8 @@ OnGap = Annotated[
 TriggerOn = Annotated[
     Literal['first', 'all'],
     Meta(
-        "'first' runs the signal trigger on the first delivered member of a burst "
-        "and applies that lag to the rest; 'all' runs it on every member"
+        "'first' runs the signal trigger on the first delivered segment of a burst "
+        "and applies that lag to the rest; 'all' runs it on every segment"
     ),
 ]
 SweepStartTime = Annotated['pd.Timestamp', Meta('Capture acquisition start time')]

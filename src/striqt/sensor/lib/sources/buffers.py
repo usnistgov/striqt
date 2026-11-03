@@ -76,7 +76,7 @@ class ReceiveBuffers(typing.Generic[SC]):
             overlaps: the ``(lead, tail)`` overlap in source samples
             include_holdoff: True sizes the buffer for the transient and strobe
                 holdoff ahead of the record; False sizes it for the record and
-                overlaps alone, as a burst member that continues the stream reads
+                overlaps alone, as a burst segment that continues the stream reads
 
         Returns:
             the buffer with shape (ports, count) and the per-port stream views
@@ -346,7 +346,7 @@ def cast_iq(spec: specs.Source, buffer: Array, acquired_count: int) -> Array:
         xp = sw.arrays.cp
         assert xp is not None, ImportError('cupy is not installed')
         buffer = sw.arrays.pinned_array_as_cupy(buffer)
-        # the H2D copy is asynchronous, and the next member of a burst reads into
+        # the H2D copy is asynchronous, and the next segment of a burst reads into
         # the same pinned buffer 2 acquisitions later
         xp.cuda.get_current_stream().synchronize()
     else:

@@ -275,8 +275,8 @@ def test_get_looped_coords_lists_the_capture_loop_fields():
     assert compute.get_looped_coords(ds) == ['snr']
 
 
-def burst_dataset(burst: int, members=None):
-    """return the dataset of the 2-port capture of `two_port_run` as `burst` members
+def burst_dataset(burst: int, segments=None):
+    """return the dataset of the 2-port capture of `two_port_run` as `burst` segments
     stacked along ``capture``, each with its own `burst_index`"""
     import xarray as xr
 
@@ -288,7 +288,7 @@ def burst_dataset(burst: int, members=None):
                 dd, capture=capture, extra_coords=dd.extra_coords.replace(burst_index=k)
             )
         )
-        for k in range(burst if members is None else members)
+        for k in range(burst if segments is None else segments)
     ]
     return xr.concat(datasets, 'capture')
 
@@ -354,9 +354,9 @@ def test_check_coord_indexes_rejects_a_non_unique_index():
         compute.index_dataset(full_run(), ['port'])
 
 
-def test_index_dataset_selects_one_burst_member():
-    """2 members of one capture share every capture coordinate, so `burst_index` with
-    `port` selects one row: row 3 of the stacked dataset is (member 1, port 1)"""
+def test_index_dataset_selects_one_burst_segment():
+    """2 segments of one capture share every capture coordinate, so `burst_index` with
+    `port` selects one row: row 3 of the stacked dataset is (segment 1, port 1)"""
     ds = burst_dataset(2)
     indexed = compute.index_dataset(ds, ['burst_index', 'port'])
     row = indexed.iq_waveform.sel(burst_index=1, port=1)

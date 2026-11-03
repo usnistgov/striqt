@@ -222,7 +222,7 @@ def write_burst_sweep(tmp_path) -> Path:
     """write `fake_soapy-cpu.yaml` with its last capture repeated as a `burst: 3`
     capture, with the extension path made absolute, and return the path.
 
-    The queue holds every acquisition of the pass, so no member is dropped under
+    The queue holds every acquisition of the pass, so no segment is dropped under
     the ``on_gap: skip`` default when the fake source outruns analysis.
     """
     tree = yaml.safe_load(FAKE_SOAPY_SPEC.read_text())
@@ -235,9 +235,9 @@ def write_burst_sweep(tmp_path) -> Path:
 
 
 def test_cli_run_burst(fake_soapy, tmp_path, monkeypatch):
-    """a capture with `burst: 3` writes one row per port per member. The store has the
-    `sweep_row_count` rows, `burst_index` runs over the members of that capture and is
-    0 elsewhere, and `capture_index` is shared by the members."""
+    """a capture with `burst: 3` writes one row per port per segment. The store has the
+    `sweep_row_count` rows, `burst_index` runs over the segments of that capture and is
+    0 elsewhere, and `capture_index` is shared by the segments."""
     path = write_burst_sweep(tmp_path)
     # open_resources chdirs into the spec directory and does not change back
     monkeypatch.chdir(os.getcwd())

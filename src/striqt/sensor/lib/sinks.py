@@ -1,7 +1,7 @@
 """sinks that write or collect the analyzed dataset of each acquisition.
 
 Every sink is constructed from a `Sweep` and reads the `sink` block of that sweep.
-A capture with `burst` above 1 reaches the sink once per burst member.
+A capture with `burst` above 1 reaches the sink once per burst segment.
 """
 
 from __future__ import annotations as __
@@ -371,12 +371,12 @@ class ZarrCaptureSink(ZarrSinkBase):
     """write the dataset of each acquisition into a zarr store allocated for the whole sweep.
 
     `open` allocates every data variable and coordinate of the store from the sweep
-    spec, with one row per port per burst member of every expanded capture along
+    spec, with one row per port per burst segment of every expanded capture along
     ``capture`` (`sweep_row_count`), and keeps the metadata in memory until each
     `append` (directory store) or until `close` (zip store). `append` places the
     arrays of a `DelayedDataset` on the union grid of the sweep and writes every
     chunk that the acquisition completes, so each chunk is written once. A burst
-    member re-acquired after a stream overflow is a further row:
+    segment re-acquired after a stream overflow is a further row:
     ``(capture_index, burst_index)`` may repeat, with a later ``start_time``. `close`
     writes the partial chunks, trims the store to the rows written, and consolidates
     the metadata.
@@ -655,7 +655,7 @@ class ZarrTimeAppendSink(ZarrSinkBase):
 
     The acquisitions of one write batch share one `capture` index, and each batch is
     appended along `capture`. A batch holds at least `batch_size` acquisitions,
-    counting each burst member. The store is written without compression.
+    counting each burst segment. The store is written without compression.
 
     Raises:
         ValueError: if `sweep_spec.analysis` has no `spectrogram`, or if the sink

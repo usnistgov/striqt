@@ -144,7 +144,7 @@ def count_acquisitions(
 ) -> int:
     """return the number of acquisitions that one run of `sweep` produces.
 
-    Each capture of `repeat_captures` contributes `burst` acquisitions. A member
+    Each capture of `repeat_captures` contributes `burst` acquisitions. A segment
     dropped at run time under ``bursts.on_gap='skip'`` is still counted, so the
     result is the upper bound of the acquisitions delivered.
 

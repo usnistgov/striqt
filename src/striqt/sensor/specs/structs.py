@@ -105,11 +105,11 @@ class FileCapture(SensorCapture, frozen=True, kw_only=True):
 
 
 class BurstOptions(SpecBase, frozen=True, kw_only=True):
-    """the `bursts` block of a `Source`: the policy for the members of a capture burst.
+    """the `bursts` block of a `Source`: the policy for the segments of a capture burst.
 
-    A capture with `burst` above 1 is acquired as that many back-to-back members
-    with the stream left enabled, so the members are sample-contiguous. `buffers`
-    bounds the acquisitions held ahead of analysis, `on_gap` says whether a member
+    A capture with `burst` above 1 is acquired as that many back-to-back segments
+    with the stream left enabled, so the segments are sample-contiguous. `buffers`
+    bounds the acquisitions held ahead of analysis, `on_gap` says whether a segment
     may be dropped or re-triggered when analysis falls behind or the stream
     overflows, and `trigger_on` says how often the signal trigger runs within one
     burst. The hardware clock syncs once per burst. A capture with `burst` 1 waits

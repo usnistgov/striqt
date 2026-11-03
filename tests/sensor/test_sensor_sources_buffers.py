@@ -376,7 +376,7 @@ def test_alloc_shape_is_ports_by_read_count_with_one_stream_buffer_per_port():
 
 
 def test_alloc_without_holdoff_is_the_bare_read_count():
-    """a member that continues the stream reads no holdoff, so its buffer is the
+    """a segment that continues the stream reads no holdoff, so its buffer is the
     record plus overlaps; a padded prior serves that request without reallocation"""
     capture = _TWO_PORT
     source = source_spec(transient_holdoff_time=1e-3, trigger_strobe=0.5e-3)

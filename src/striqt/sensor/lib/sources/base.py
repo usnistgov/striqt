@@ -23,7 +23,7 @@ class ReceiveStreamError(IOError):
 
 
 class AcquisitionOverrunError(RuntimeError):
-    """a burst member had no free slot in the acquisition queue under
+    """a burst segment had no free slot in the acquisition queue under
     ``bursts.on_gap='except'``."""
 
 

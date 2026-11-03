@@ -46,7 +46,7 @@ def index_values(datasets, name) -> list[int]:
 
 def burst_sweep(offsets, *, burst, analysis=IQ_ONLY, source=SOURCE, **bursts):
     """return a `single_tone` sweep over `tone_captures(offsets)` with `burst`
-    members each and the `bursts` policy of `source` replaced by `bursts`"""
+    segments each and the `bursts` policy of `source` replaced by `bursts`"""
     if bursts:
         source = source.replace(bursts=ss.specs.BurstOptions(**bursts))
     return preset_sweep(
@@ -189,8 +189,8 @@ class SlowPeripherals(TaggingPeripherals):
 
 def test_a_peripheral_read_may_last_the_whole_burst(caplog):
     """the acquisition thread never waits for the peripheral inside a burst, so a
-    read longer than the burst drops no member under a 1-slot queue, and every
-    member carries the peripheral data once the read resolves"""
+    read longer than the burst drops no segment under a 1-slot queue, and every
+    segment carries the peripheral data once the read resolves"""
     burst = 4
     sweep = burst_sweep(OFFSETS[:1], burst=burst, buffers=1)
     with (
@@ -427,8 +427,8 @@ class RecordingSource(BINDINGS['single_tone'].sensor.source_cls):
         )
 
 
-def test_one_arm_per_capture_and_one_read_per_member(monkeypatch, isolated_lookup):
-    """the function source has no transient holdoff, so each member is one read"""
+def test_one_arm_per_capture_and_one_read_per_segment(monkeypatch, isolated_lookup):
+    """the function source has no transient holdoff, so each segment is one read"""
     monkeypatch.setattr(BINDINGS['single_tone'].sensor, 'source_cls', RecordingSource)
     monkeypatch.setattr(RecordingSource, 'events', [])
     sweep = burst_sweep(OFFSETS[:2], burst=3)
@@ -442,9 +442,9 @@ def test_one_arm_per_capture_and_one_read_per_member(monkeypatch, isolated_looku
 
 @pytest.mark.parametrize('on_gap', ['skip', 'except'])
 def test_slow_analysis_overruns_a_one_buffer_burst(on_gap, caplog):
-    """with one buffer, a member acquired while the previous one waits in the queue
-    is dropped under skip, with one warning per dropped member, or raises under
-    except. The delivered members keep their burst indexes."""
+    """with one buffer, a segment acquired while the previous one waits in the queue
+    is dropped under skip, with one warning per dropped segment, or raises under
+    except. The delivered segments keep their burst indexes."""
     burst = 4
     sweep = burst_sweep(OFFSETS[:1], burst=burst, on_gap=on_gap, buffers=1)
     on_analyzed = lambda dd: time.sleep(0.05)
@@ -464,7 +464,7 @@ def test_slow_analysis_overruns_a_one_buffer_burst(on_gap, caplog):
     datasets = [ss.lib.compute.from_delayed(r) for r in results]
     indexes = index_values(datasets, 'burst_index')
     assert 0 < len(indexes) < burst
-    assert indexes == sorted(set(indexes)), 'the delivered members are in order'
+    assert indexes == sorted(set(indexes)), 'the delivered segments are in order'
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == burst - len(indexes)
 
@@ -483,8 +483,8 @@ class CountingTrigger(FakeTrigger):
 def test_trigger_on_selects_the_members_that_run_the_trigger(
     trigger_on, calls_per_burst, monkeypatch
 ):
-    """under first the trigger runs on the first member and the shifts apply to
-    the others; under all it runs on every member"""
+    """under first the trigger runs on the first segment and the shifts apply to
+    the others; under all it runs on every segment"""
     trigger = CountingTrigger(0.0)
     monkeypatch.setattr(CountingTrigger, 'calls', 0)
     # the controller reads the package attribute and `analyze` the module global
@@ -508,8 +508,8 @@ def test_trigger_on_selects_the_members_that_run_the_trigger(
 
 
 def test_indexer_advances_once_per_capture():
-    """`capture_index` advances after the last member of a capture, and
-    `sweep_start_time` is the start time of member 0 of capture 0 of each sweep"""
+    """`capture_index` advances after the last segment of a capture, and
+    `sweep_start_time` is the start time of segment 0 of capture 0 of each sweep"""
     burst_capture, single = tone_captures(OFFSETS[:2])
     burst_capture = burst_capture.replace(burst=3)
     indexer = core.AcquisitionIndexer(2)

@@ -4,10 +4,10 @@ import contextlib
 import dataclasses
 import functools
 import inspect
-from queue import Full, Queue
 import weakref
 from collections import defaultdict, deque
 from collections.abc import Generator
+from queue import Full, Queue
 from threading import Event, RLock
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, cast
 
@@ -253,7 +253,7 @@ class AcquisitionQueue(_QueueBase):
 
     nbytes: int
     """the total `x.nbytes` of the `AcquiredIQ` items in the queue; the holdoff
-    samples ahead of the record of a first member are not counted"""
+    samples ahead of the record of a first segment are not counted"""
 
     def __init__(self, buffers: int):
         """create an empty queue that holds up to `buffers` items."""
@@ -596,19 +596,19 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         burst_index: int = 0,
         resume: bool = False,
     ) -> tuple[Array, int | None]:
-        """read the IQ of one burst member of the armed capture.
+        """read the IQ of one burst segment of the armed capture.
 
-        Member 0, and a member read with `resume`, triggers the backend and applies
-        the transient holdoff. A later member continues the enabled stream from the
-        samples carried over after the previous member. The carryover is kept for
-        the next member and cleared after the last member of the burst.
+        Segment 0, and a segment read with `resume`, triggers the backend and applies
+        the transient holdoff. A later segment continues the enabled stream from the
+        samples carried over after the previous segment. The carryover is kept for
+        the next segment and cleared after the last segment of the burst.
 
         Args:
             overlaps: the ``(lead, tail)`` overlap in source samples around the
                 record
-            burst_index: the index of the member within the burst of the armed
+            burst_index: the index of the segment within the burst of the armed
                 capture, from 0 to ``capture.burst - 1``
-            resume: True reads member `burst_index` as the first member after a
+            resume: True reads segment `burst_index` as the first segment after a
                 stream error, with no carryover
 
         Returns:
@@ -617,8 +617,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
 
         Raises:
             ValueError: if `overlaps` is not 2 non-negative integers
-            OverflowError: on a stream overflow after the first read of a member, or
-                at any read of a member that continues the stream
+            OverflowError: on a stream overflow after the first read of a segment, or
+                at any read of a segment that continues the stream
             MemoryError: if the backend reports more samples than requested
         """
         assert self._capture is not None, 'source must be armed to read IQ'
@@ -658,7 +658,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         )
 
         # the total number of samples to acquire per channel
-        # a member that continues the stream consumes no holdoff, so the read, the
+        # a segment that continues the stream consumes no holdoff, so the read, the
         # copy, and the queued memory are bounded by the record and overlaps
         buffer_count = buffers.get_read_count(
             self.capture_spec,
@@ -747,18 +747,18 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         burst_index: int = 0,
         resume: bool = False,
     ) -> specs.AcquiredIQ:
-        """acquire one burst member of the armed capture.
+        """acquire one burst segment of the armed capture.
 
-        The read of member 0, or of a member with `resume`, is repeated up to
+        The read of segment 0, or of a segment with `resume`, is repeated up to
         ``source_info.retries`` times on a stream error or overflow. A stream error
-        at a later member is raised to the caller, which owns the burst.
+        at a later segment is raised to the caller, which owns the burst.
 
         Args:
             overlaps: the ``(lead, tail)`` overlap in source samples, or None to
                 derive the overlap from the capture and the analysis target
-            burst_index: the index of the member within the burst, stamped on
+            burst_index: the index of the segment within the burst, stamped on
                 ``info.burst_index``
-            resume: True reads member `burst_index` as the first member after a
+            resume: True reads segment `burst_index` as the first segment after a
                 stream error
 
         Returns:
@@ -844,29 +844,29 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         queue: AcquisitionQueue | None = None,
         finalize: Callable[[specs.AcquiredIQ], specs.AcquiredIQ] | None = None,
     ) -> list[specs.AcquiredIQ]:
-        """acquire the ``capture.burst`` members of the armed capture.
+        """acquire the ``capture.burst`` segments of the armed capture.
 
-        The members are read back to back with the stream enabled. A stream error
-        or overflow at member `k` is retried up to ``source_info.retries`` times in
+        The segments are read back to back with the stream enabled. A stream error
+        or overflow at segment `k` is retried up to ``source_info.retries`` times in
         total per burst, after `prepare_retrigger` on the backend: under
-        ``bursts.on_gap='skip'`` member `k` is read again as a first member; under
-        ``'except'`` the members of the burst still in `queue` are removed and the
-        burst restarts at member 0. With no retries the error is raised.
+        ``bursts.on_gap='skip'`` segment `k` is read again as a first segment; under
+        ``'except'`` the segments of the burst still in `queue` are removed and the
+        burst restarts at segment 0. With no retries the error is raised.
 
-        Each member passes through `finalize` before it is queued or returned. A
-        member that finds `queue` full is dropped with a WARNING on the ``source``
+        Each segment passes through `finalize` before it is queued or returned. A
+        segment that finds `queue` full is dropped with a WARNING on the ``source``
         logger under ``'skip'``, and raises under ``'except'``. The acquisition of a
         capture with `burst` 1 waits for a free slot instead.
 
         Args:
             overlaps: the ``(lead, tail)`` overlap in source samples, or None to
                 derive the overlap from the capture and the analysis target
-            queue: the queue that receives each member, or None to return the
-                members
-            finalize: a function applied to each member before the queue put
+            queue: the queue that receives each segment, or None to return the
+                segments
+            finalize: a function applied to each segment before the queue put
 
         Returns:
-            the members in order when `queue` is None, otherwise an empty list
+            the segments in order when `queue` is None, otherwise an empty list
 
         Raises:
             ValueError: if `burst` is above 1 and `capture.duration` is not a whole
@@ -927,12 +927,12 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                 except Full:
                     if bursts.on_gap == 'skip':
                         sa.util.get_logger('source').warning(
-                            f'dropped burst member {k} of capture '
+                            f'dropped burst segment {k} of capture '
                             f'{iq.info.capture_index}: the acquisition queue is full'
                         )
                     else:
                         raise base.AcquisitionOverrunError(
-                            f'no free acquisition queue slot for burst member {k} '
+                            f'no free acquisition queue slot for burst segment {k} '
                             f'of capture {iq.info.capture_index}'
                         ) from None
 

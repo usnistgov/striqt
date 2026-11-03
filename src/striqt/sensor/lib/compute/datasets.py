@@ -493,7 +493,7 @@ def drop_conflicts(attrs_list: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def sweep_row_count(sweep: specs.Sweep, source_id: str) -> int:
-    """return the row count of a store of `sweep`: one per port per burst member.
+    """return the row count of a store of `sweep`: one per port per burst segment.
 
     The captures are those of `specs.sequencing.repeat_captures`, so a leading
     `Repeat` loop multiplies the count. Each capture contributes `burst`

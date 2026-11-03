@@ -147,7 +147,7 @@ def two_port_sweep(buffers: int):
     return sweep.replace(source=sweep.source.replace(bursts=bursts))
 
 
-def test_resident_bytes_bound_counts_queued_analyzed_and_written_members():
+def test_resident_bytes_bound_counts_queued_analyzed_and_written_segments():
     """`buffers + 2` copies of the largest read: 2 ports of complex64 over the
     record of the 2 ms capture and its correction overlaps"""
     buffers = 3
@@ -164,8 +164,8 @@ def test_resident_bytes_bound_counts_queued_analyzed_and_written_members():
     assert one == 3 * 2 * 8 * samples
 
 
-def test_resident_bytes_bound_includes_the_holdoff_of_a_first_member():
-    """a strobe pads the read of a first member by 2 strobe periods per port"""
+def test_resident_bytes_bound_includes_the_holdoff_of_a_first_segment():
+    """a strobe pads the read of a first segment by 2 strobe periods per port"""
     buffers = 1
     strobe = 0.25e-3
     sweep = two_port_sweep(buffers)

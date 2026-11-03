@@ -208,8 +208,8 @@ def expected_raw(
         source: the function source spec
         overlaps: the (lead, tail) overlap sample counts at `fs_sdr`; `None` selects
             the correction overlaps of `capture` under `source`
-        burst_index: the burst member; the generator starts
-            ``burst_index * source_count`` samples after member 0
+        burst_index: the burst segment; the generator starts
+            ``burst_index * source_count`` samples after segment 0
         xp: the array namespace of the result
 
     Returns:

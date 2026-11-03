@@ -137,7 +137,7 @@ def iterate_captures(
     """run the captures of ``resources['sweep_spec']`` through the acquire, analyze, and
     sink pipeline.
 
-    An acquisition thread arms each capture and acquires the `burst` members of the
+    An acquisition thread arms each capture and acquires the `burst` segments of the
     capture into a queue of ``source.bursts.buffers`` acquisitions. The calling
     thread takes one acquisition per step, and the N delivered acquisitions take
     N + 2 steps. Each step ends with one yield:
@@ -156,10 +156,10 @@ def iterate_captures(
     False, the generator yields nothing. The attrs of each result are the fields of
     ``resources['action_spec']``.
 
-    A burst member acquired while the queue is full is dropped under
+    A burst segment acquired while the queue is full is dropped under
     ``source.bursts.on_gap='skip'`` and raises `AcquisitionOverrunError` under
     ``'except'``. Under ``bursts.trigger_on='first'``, the signal trigger runs on
-    the first delivered member of each burst and the shifts apply to the rest.
+    the first delivered segment of each burst and the shifts apply to the rest.
 
     The captures are the loop expansion of the sweep for the open source. A `Repeat`
     first in `loops` runs the expanded captures `count` times. One `indexer` shared
@@ -188,7 +188,7 @@ def iterate_captures(
         ends after step N + 1, or never when `loop` is True.
 
     Raises:
-        AcquisitionOverrunError: if a burst member finds the queue full under
+        AcquisitionOverrunError: if a burst segment finds the queue full under
             ``source.bursts.on_gap='except'``
     """
 
@@ -341,11 +341,11 @@ def _drain(queue: AcquisitionQueue) -> None:
 
 
 class _BurstShifts:
-    """the alignment shifts shared by the members of the burst under analysis.
+    """the alignment shifts shared by the segments of the burst under analysis.
 
     Under ``trigger_on='first'``, `apply` runs the trigger on the first delivered
-    member of a burst with `burst` above 1 and sets `trigger_shifts` on every
-    member of that burst. Under ``'all'`` nothing is set.
+    segment of a burst with `burst` above 1 and sets `trigger_shifts` on every
+    segment of that burst. Under ``'all'`` nothing is set.
     """
 
     def __init__(self, trigger_on: str):
@@ -379,21 +379,21 @@ def acquisition_worker(
 ) -> None:
     """arm and acquire `captures` in order into `queue`.
 
-    Each capture is armed on the source and the peripherals, and the `burst` members
+    Each capture is armed on the source and the peripherals, and the `burst` segments
     are acquired with `Controller.acquire_burst`. The peripherals acquire once per
-    capture, from member 0 until the end of the burst, and the read is awaited before
-    the next capture is armed. Each member refers to the read through
+    capture, from segment 0 until the end of the burst, and the read is awaited before
+    the next capture is armed. Each segment refers to the read through
     `pending_extra_data`, with the entries of `extra_data` as the `override`, so a
     sink joins the peripheral dict under the runner entries. `indexer` stamps each
-    member. After the last capture the source is disarmed and `END` is put. An
+    segment. After the last capture the source is disarmed and `END` is put. An
     exception ends the acquisitions and is put in place of `END`.
 
     Args:
         resources: the open resources
         captures: the captures to acquire, finite or endless
-        queue: the queue that receives the members, `END`, or the exception
-        indexer: the counter applied to the `info` of each member
-        extra_data: entries merged into every member, or None
+        queue: the queue that receives the segments, `END`, or the exception
+        indexer: the counter applied to the `info` of each segment
+        extra_data: entries merged into every segment, or None
         stop: set by the consumer to end the acquisitions after the current capture
         acquisition_count: the total number of acquisitions in the progress fields
             of the ``source`` logger, or ``inf`` for endless captures
@@ -431,7 +431,7 @@ def _acquire_capture(
     """arm `capture` and acquire its burst into `queue`.
 
     Returns:
-        `ordinal` advanced by the number of members that passed through the
+        `ordinal` advanced by the number of segments that passed through the
         finalizer
     """
     source = resources['source']
@@ -476,7 +476,7 @@ class AcquisitionIndexer:
     """the counter that stamps `capture_index` and `sweep_index` on the acquisitions
     of one sweep.
 
-    `capture_index` advances after the last burst member of a capture and wraps to
+    `capture_index` advances after the last burst segment of a capture and wraps to
     0 at `captures_per_sweep`, where `sweep_index` advances. `apply` is not
     thread-safe and must run once per acquisition, in order.
     """
@@ -499,8 +499,8 @@ class AcquisitionIndexer:
         """return a copy of `info` with `sweep_index` and `capture_index` set.
 
         The counter advances by one capture when ``info.burst_index`` is the last
-        member of `capture`. On a `SoapyAcquisitionInfo`, `sweep_start_time` is set
-        to the `start_time` of the first member of the first capture of the current
+        segment of `capture`. On a `SoapyAcquisitionInfo`, `sweep_start_time` is set
+        to the `start_time` of the first segment of the first capture of the current
         sweep.
         """
         result = info.replace(
