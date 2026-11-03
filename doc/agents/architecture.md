@@ -76,7 +76,15 @@ wraps the function so that the wrapper accepts the fields of the spec as keyword
 arguments, validates the fields, and returns a `DelayedDataArray`
 (`analysis/lib/dataarrays.py`). The `@hint_keywords(spec_type)` stacked above the
 registration is an identity at runtime that gives the type checker the fields of the
-spec as keyword parameters.
+spec as keyword parameters. The docstring of the measurement carries three
+placeholders that the decorator fills at registration: `{args}` with the `Meta`
+field metadata of the spec, `{dtype}` with the registered dtype, `{dims}` with the dimension names of the returned
+`DataArray` (`port` first), `{coords}` with one bullet per coordinate factory
+built from the registered dtype and units and the first paragraph of the docstring
+of the factory, and `{attrs}` with the registered attrs other than `standard_name`.
+Attrs returned by the measurement body are hand-written bullets after `{attrs}`. The
+template and the rules are under **Measurement docstrings** and **Coordinate factory
+docstrings** in `AGENTS.md`.
 
 A registration names its output with the `standard_name=` keyword and its unit with
 `units=`; those two are the registered attrs, and every other attr is returned by the

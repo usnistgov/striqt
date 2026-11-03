@@ -393,9 +393,13 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         with `x` an array of shape (port, sample), and returns an array with axes
         `dims` or an ``(array, attrs)`` tuple. The returned wrapper is called as
         ``wrapper(iq, capture, as_xarray=True, **kwargs)`` with the fields of
-        `spec_type` as keywords. The `__signature__` of the wrapper and the
-        ``{args}`` placeholder in the docstring are filled from `spec_type`. An
-        array `iq` is passed to the function as `x`. From an `AcquiredIQ`,
+        `spec_type` as keywords. The `__signature__` of the wrapper is filled from
+        `spec_type`. The docstring placeholders are filled at registration:
+        ``{args}`` from the fields of `spec_type`, ``{dtype}`` from `dtype`,
+        ``{dims}`` with the dimension names of the output (``port`` first),
+        ``{coords}`` with one bullet per `coord_factories` entry, and ``{attrs}``
+        with one bullet per registered attr other than `standard_name`. An array
+        `iq` is passed to the function as `x`. From an `AcquiredIQ`,
         `AcquiredIQ.preprocess` selects `x` as `prefer_filtered` and
         `prefer_aligned` request. `validate` runs before the IQ is read and raises
         `specs.helpers.SpecValidationError` on a rejected combination. The wrapper
@@ -576,14 +580,14 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
 
             # ty rejects assignment to `__signature__` on the wrapper type
             setattr(wrapped, '__signature__', _make_measurement_signature(spec_type))  # noqa: B010
-            arg_doc = _make_measurement_docstring(spec_type)
-            if func.__doc__ is None:
-                doc = arg_doc
-            elif '{args}' in func.__doc__:
-                doc = func.__doc__.format(args=arg_doc)
-            else:
-                doc = func.__doc__
-            wrapped.__doc__ = doc
+            wrapped.__doc__ = _fill_measurement_docstring(
+                func.__doc__,
+                args=_make_measurement_docstring(spec_type),
+                dtype=_dtype_name(dtype),
+                dims=_dims_docstring(('port',) + _output_dims(self, self[spec_type])),
+                coords=_coords_docstring(self, info_kws['coord_factories']),
+                attrs=_attrs_docstring(self[spec_type]),
+            )
 
             # one runtime def with `as_xarray: bool | Literal['delayed']` cannot
             # satisfy the 3-overload WrappedAnalysis Protocol, so name the type
@@ -894,6 +898,152 @@ def _make_measurement_signature(spec_cls):
     ]
 
     return inspect.Signature(parameters + list(kw_parameters.values()))
+
+
+def coordinate_dims(
+    registry: AnalysisRegistry, coord_factories: Iterable[CoordFunc]
+) -> tuple[str, ...]:
+    """return the dimension names that `coord_factories` declare, in order.
+
+    A dimension is placed at the first factory that declares the dimension, in the
+    order of the dims of that factory.
+    """
+    dims: dict[str, None] = {}
+    for func in coord_factories:
+        dims.update(dict.fromkeys(registry.coordinates[func].dims))
+    return tuple(dims)
+
+
+def _output_dims(registry: AnalysisRegistry, info: AnalysisInfo) -> tuple[str, ...]:
+    if info.dims is None or info.dims == ():
+        return coordinate_dims(registry, info.coord_factories)
+    return info.dims
+
+
+def _fill_measurement_docstring(doc: str | None, **fields: str) -> str:
+    """return `doc` with each ``{name}`` placeholder in `fields` replaced by its text.
+
+    A placeholder is replaced where the placeholder stands in `doc`. Each line of the
+    text after the first is indented to the column of the placeholder. Braces other
+    than the placeholders are left as written. A `doc` of None is the `args` text
+    under an ``Args:`` header.
+    """
+    if doc is None:
+        return 'Args:\n' + fields['args']
+    for name, text in fields.items():
+        placeholder = '{' + name + '}'
+        lines = doc.split('\n')
+        for i, line in enumerate(lines):
+            if placeholder not in line:
+                continue
+            indent = line[: len(line) - len(line.lstrip())]
+            first, *rest = text.split('\n')
+            indented = first + ''.join(
+                '\n' + (indent + part if part else '') for part in rest
+            )
+            filled = line.replace(placeholder, indented)
+            lines[i] = '\n'.join(part.rstrip(' ') for part in filled.split('\n'))
+        doc = '\n'.join(lines)
+    return doc
+
+
+def _dims_docstring(dims: tuple[str, ...]) -> str:
+    """return `dims` as a comma-separated list of backticked names."""
+    return ', '.join(f'`{dim}`' for dim in dims)
+
+
+def _dtype_name(dtype: DTypeLike) -> str:
+    if isinstance(dtype, str):
+        return dtype
+    return getattr(dtype, '__name__', str(dtype))
+
+
+def _has_power_form(units: str) -> bool:
+    from striqt.waveform.lib import units as _units
+
+    return _units.has_power_form(units)
+
+
+def _units_docstring(units: str | None) -> str | None:
+    """return `units` as docstring text, a power form as the calibrated unit."""
+    from striqt.waveform.lib import units as _units
+
+    if units is None:
+        return None
+    if _units.has_power_form(units):
+        return f'{_units.resolve_power_units(units, "mW")} when calibrated'
+    return units
+
+
+def _coord_description(func: CoordFunc, info: CoordInfo) -> str:
+    """return the first paragraph of the docstring of `func`, or its `standard_name`."""
+    doc = inspect.getdoc(func)
+    if doc is None:
+        return info.attrs['standard_name']
+    paragraph = doc.split('\n\n', 1)[0]
+    return ' '.join(paragraph.split()).rstrip('.')
+
+
+def _nested_list_docstring(entries: list[str]) -> str:
+    """return `entries` as a nested bullet list that continues a ``- name:`` bullet.
+
+    The text starts with a blank line and indents each ``*`` item 2 spaces under the
+    placeholder. With no entries, the text is the line break alone, and hand-written
+    items on the following lines form the nested list.
+    """
+    if not entries:
+        return '\n'
+    return '\n\n' + '\n'.join(f'  * {entry}' for entry in entries)
+
+
+def _coords_docstring(
+    registry: AnalysisRegistry, coord_factories: tuple[CoordFunc, ...]
+) -> str:
+    """return a nested list with one ``* `name` (dtype, units): description`` item
+    per coordinate factory.
+
+    The description is the first paragraph of the docstring of the factory, with
+    whitespace collapsed, or the registered `standard_name` for a factory without a
+    docstring. The dims of a coordinate with dims other than the coordinate name
+    are appended. The text is ``none`` when `coord_factories` is empty.
+    """
+    entries = []
+    for func in coord_factories:
+        info = registry.coordinates[func]
+        qualifiers = [_dtype_name(info.dtype)]
+        units = _units_docstring(info.attrs.get('units'))
+        if units is not None:
+            qualifiers.append(units)
+        entry = (
+            f'`{info.name}` ({", ".join(qualifiers)}): {_coord_description(func, info)}'
+        )
+        if info.dims != (info.name,):
+            entry += f', along {_dims_docstring(info.dims)}'
+        entries.append(entry)
+    if not entries:
+        return 'none'
+    return _nested_list_docstring(entries)
+
+
+def _attrs_docstring(info: AnalysisInfo) -> str:
+    """return a nested list of the registered attrs other than `standard_name`.
+
+    A `units` with a power form renders as power units based on the acquisition,
+    with the calibrated unit in parentheses. A literal `units` renders as written.
+    Any other registered attr renders as its value.
+    """
+    entries = []
+    for key, value in info.attrs.items():
+        if key == 'standard_name':
+            continue
+        if key == 'units' and _has_power_form(value):
+            text = f'power units based on acquisition ({_units_docstring(value)})'
+        elif key == 'units':
+            text = _units_docstring(value)
+        else:
+            text = value
+        entries.append(f'`{key}`: {text}')
+    return _nested_list_docstring(entries)
 
 
 def _make_measurement_docstring(spec_cls):

@@ -80,9 +80,7 @@ def make_dataset(attr_missing: bool = False, system_noise: bool = True) -> xr.Da
     if attr_missing:
         bin_attrs = {'standard_name': 'Spectrogram bin power', 'units': 'dBm/10 kHz'}
     else:
-        bin_attrs = sa.measurements.shared.bandwidth_attrs(
-            HISTOGRAM_BANDWIDTH, 'dBm', 'Spectrogram bin power'
-        )
+        bin_attrs = sa.measurements.shared.bandwidth_attrs(HISTOGRAM_BANDWIDTH, 'dBm')
 
     ds = xr.Dataset(
         {

@@ -9,6 +9,7 @@ live registry would leak into every other test module.
 
 from __future__ import annotations
 
+import re
 import weakref
 from fractions import Fraction
 from functools import cached_property
@@ -637,8 +638,8 @@ def test_registered_power_units_are_form_tokens(spec):
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
     """every output and power-bin coordinate in a power family (`power_family` is not
-    None) has a `noise_bandwidth` (Hz), `units` without a bandwidth, and `long_name`
-    and `standard_name` without a parenthesized suffix. The outputs with the
+    None) has a `noise_bandwidth` (Hz), `units` without a bandwidth, and a
+    `standard_name` without a parenthesized suffix. The outputs with the
     per-capture `analysis_bandwidth` as noise bandwidth set no `noise_bandwidth`.
     Ratios in dB set no `noise_bandwidth`."""
     info, da = measure(spec, as_xarray=True)
@@ -647,12 +648,10 @@ def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
         units = attrs.get('units')
         if str(what) in sa.lib.io._CAPTURE_BANDWIDTH_NAMES:
             assert 'noise_bandwidth' not in attrs, what
-            assert '/' not in str(attrs.get('long_name', '')), what
         elif isinstance(units, str) and sw.units.power_family(units) is not None:
             assert isinstance(attrs.get('noise_bandwidth'), float), what
             assert attrs['noise_bandwidth'] > 0, what
             assert 'dBm/' not in units, what
-            assert '(' not in attrs.get('long_name', ''), what
             assert '(' not in attrs.get('standard_name', ''), what
         elif units == 'dB':
             assert 'noise_bandwidth' not in attrs, what
@@ -980,3 +979,158 @@ def test_coordinate_registration_names_itself_and_keeps_its_units():
     assert info.attrs == {'standard_name': 'Toy lag', 'units': 's'}
     with pytest.raises(KeyError):
         coords(dtype='float64', standard_name='Again')(toy_lag)
+
+
+# %% generated docstrings
+
+MEASUREMENT_DOC_TEMPLATE = """summary.
+
+    Output:
+        - Array dtype: {dtype}
+        - Dimensions: {dims}
+        - Coordinates: {coords}
+        - Attributes: {attrs}
+          * `noise_bandwidth`: a hand-written item after the generated ones
+
+    A literal {dB} form field survives.
+
+    Args:
+    {args}
+    """
+
+
+def test_measurement_docstring_fills_dims_and_coords_in_place():
+    registry = register.AnalysisRegistry()
+
+    @registry.coordinates(dtype='float64', standard_name='Toy lag', units='s')
+    def toy_lag(capture, spec):
+        """time from the start,
+        in steps of `period`.
+
+        Returns:
+            attrs that the registry does not render
+        """
+        return np.arange(2.0)
+
+    @registry.coordinates(
+        dtype='float32', standard_name='Bare axis', units=sa.units.DB_POWER
+    )
+    def bare(capture, spec):
+        return np.arange(2.0, dtype='float32')
+
+    def toy(iq, capture, **kwargs):
+        return np.zeros((1, 2, 2), dtype='float32')
+
+    toy.__doc__ = MEASUREMENT_DOC_TEMPLATE
+    wrapped = registry.measurement(
+        ToySpec,
+        dtype='float32',
+        standard_name='Toy',
+        units=sa.units.DB_POWER,
+        coord_factories=[toy_lag, bare],
+    )(toy)
+    doc = wrapped.__doc__
+
+    for placeholder in ('{dtype}', '{dims}', '{coords}', '{attrs}', '{args}'):
+        assert placeholder not in doc
+    assert '- Array dtype: float32\n' in doc
+    assert '- Dimensions: `port`, `toy_lag`, `bare`' in doc
+    # the generated list continues the bullet after a blank line, with no trailing
+    # whitespace on the bullet line
+    assert '        - Coordinates:\n\n          * `toy_lag`' in doc
+    assert (
+        '        - Attributes:\n\n          * `units`: power units based on acquisition (dBm when calibrated)\n'
+        '          * `noise_bandwidth`: a hand-written item after the generated ones\n'
+    ) in doc
+    # the first paragraph of the factory docstring, whitespace collapsed
+    assert (
+        '          * `toy_lag` (float64, s): time from the start, in steps of `period`\n'
+        in doc
+    )
+    # an undocumented factory falls back to its standard_name; a power form is
+    # rendered as the calibrated unit
+    assert '          * `bare` (float32, dBm when calibrated): Bare axis\n' in doc
+    assert 'attrs that the registry does not render' not in doc
+    assert 'A literal {dB} form field survives.' in doc
+    assert '\n    Args:\n        iq (Array or AcquiredIQ)' in doc
+    assert '\n\n        nfft (int)' in doc
+
+
+def test_measurement_docstring_with_explicit_dims_and_no_factories():
+    registry = register.AnalysisRegistry()
+
+    def toy(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    toy.__doc__ = (
+        'summary.\n\n    - Dimensions: {dims}\n    - Coordinates: {coords}\n'
+        '    - Attributes: {attrs}\n'
+    )
+    wrapped = registry.measurement(
+        ToySpec, dtype='float32', standard_name='Toy', dims=('toy',)
+    )(toy)
+
+    assert '- Dimensions: `port`, `toy`\n' in wrapped.__doc__
+    assert '- Coordinates: none\n' in wrapped.__doc__
+    # no units registered: the bullet keeps the blank line that nests hand-written
+    # items written on the following lines
+    assert wrapped.__doc__.endswith('    - Attributes:\n\n')
+
+
+def test_measurement_without_a_docstring_gets_the_args_section():
+    registry = register.AnalysisRegistry()
+
+    @registry.measurement(ToySpec, dtype='float32', standard_name='Toy', dims=('toy',))
+    def toy(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    assert toy.__doc__.startswith('Args:\n    iq (Array or AcquiredIQ)')
+    assert '\n    nfft (int)' in toy.__doc__
+
+
+@pytest.mark.parametrize(
+    'info', list(sa.registry.values()), ids=[info.name for info in sa.registry.values()]
+)
+def test_registered_measurement_docstring_lists_its_dims_and_coords(info):
+    """every builtin measurement writes the `Output:` section with the placeholders,
+    and the registry renders every dimension and coordinate factory into it."""
+    doc = info.func.__doc__
+
+    assert doc is not None
+    assert 'Output:' in doc
+    for placeholder in ('{args}', '{dtype}', '{dims}', '{coords}', '{attrs}'):
+        assert placeholder not in doc
+    assert f'- Array dtype: {info.dtype}\n' in doc
+    dims = ('port',) + dataarrays.measurement_dims(info)
+    assert '- Dimensions: ' + ', '.join(f'`{dim}`' for dim in dims) + '\n' in doc
+    for factory in info.coord_factories:
+        name = sa.registry.coordinates[factory].name
+        assert f'* `{name}` (' in doc
+    if not info.coord_factories:
+        assert '- Coordinates:' not in doc
+    if 'units' in info.attrs:
+        assert '- Attributes:\n\n' in doc
+        assert '* `units`: ' in doc
+    if '- Attributes:' in doc:
+        # an Attributes bullet renders at least one item
+        assert re.search(r'- Attributes:\n\n +\* ', doc)
+    # the prose names no attr: every attr fact is an Attributes item
+    prose = doc[: doc.index('Output:')]
+    assert ' attr ' not in prose and ' attrs ' not in prose
+
+
+@pytest.mark.parametrize(
+    'factory',
+    list(sa.registry.coordinates),
+    ids=[info.name for info in sa.registry.coordinates.values()],
+)
+def test_registered_coordinate_factory_has_a_docstring(factory):
+    """the first paragraph of the factory docstring is the description of the
+    coordinate in every measurement docstring that lists the coordinate"""
+    import inspect
+
+    doc = inspect.getdoc(factory)
+
+    assert doc, f'{factory.__name__} has no docstring'
+    first = doc.split('\n\n', 1)[0]
+    assert not first.lower().startswith(('return ', 'returns '))

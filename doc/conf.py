@@ -112,6 +112,10 @@ autodoc_mock_imports = []
 # render the docstring of an __init__ that has one; autodoc drops it otherwise
 napoleon_include_init_with_doc = True
 
+# the `Output:` section of a measurement docstring, rendered as a rubric with its
+# bullet list; the registry fills the {dims} and {coords} placeholders in that list
+napoleon_custom_sections = ['Output']
+
 autodoc_default_options = {
     'imported-members': True,
     'members': True,

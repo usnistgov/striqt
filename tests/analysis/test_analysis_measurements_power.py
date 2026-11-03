@@ -489,7 +489,7 @@ def test_channel_power_histogram_shares_the_time_series_validator():
 
 def test_channel_power_outputs_set_no_noise_bandwidth():
     """the time series, cyclic power, histogram, and the histogram bin coordinate set
-    no `noise_bandwidth` attr and no bandwidth in `long_name`. The noise bandwidth of
+    no `noise_bandwidth` attr. The noise bandwidth of
     these outputs is the per-capture `analysis_bandwidth`. One attr on a store
     variable cannot represent a per-capture value."""
     cap = sa.specs.Capture(
@@ -506,7 +506,6 @@ def test_channel_power_outputs_set_no_noise_bandwidth():
 
     for da in (series, cyclic_power, histogram, histogram.channel_power_bin):
         assert 'noise_bandwidth' not in da.attrs
-        assert '/' not in str(da.attrs.get('long_name', ''))
     for da in (series, cyclic_power, histogram.channel_power_bin):
         assert da.attrs['units'] == 'dBm'
 

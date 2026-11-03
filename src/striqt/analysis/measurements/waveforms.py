@@ -89,6 +89,8 @@ def iq_waveform_tolerance(
 @registry.coordinates(dtype='uint64', standard_name='Sample index')
 @specs.helpers.lru_cache_on_converted(specs.Capture)
 def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[int]:
+    """index of each sample in the capture, from `start_time_sec` to `stop_time_sec`
+    at `sample_rate`"""
     start, stop = _get_start_stop_index(capture, spec, allow_none=False)
     return pd.RangeIndex(start, stop, name=iq_index.__name__)
 
@@ -107,15 +109,17 @@ def iq_waveform(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     """return the IQ samples between `start_time_sec` and `stop_time_sec`.
 
     The input is the IQ after the `analysis_bandwidth` filter and trigger alignment.
-    Per capture, the output has the dimension ``(iq_index,)`` of sample indexes into
-    the capture. The values are complex64 in the square root of the power unit of
-    the acquisition (`AcquiredIQ.power_units`), √mW when calibrated. The squared
-    magnitude ``|iq|**2`` is power in that unit. A None time bound selects the start
-    or the end of the capture.
-    A bound outside the capture is clamped to the capture. The output has no
-    `noise_bandwidth` attr. The noise bandwidth of each capture is the
-    `analysis_bandwidth` coordinate, or `sample_rate` where `analysis_bandwidth` is
-    infinite.
+    The squared magnitude ``|iq|**2`` is power in the power unit of the acquisition.
+    A None time bound selects the start or the end of the capture. A bound outside
+    the capture is clamped to the capture. The noise bandwidth of the values is the
+    `analysis_bandwidth` of the capture, or `sample_rate` where `analysis_bandwidth`
+    is infinite.
+
+    Output:
+        - Array dtype: {dtype}
+        - Dimensions: {dims}
+        - Coordinates: {coords}
+        - Attributes: {attrs}
 
     Args:
     {args}

@@ -400,21 +400,7 @@ def build_dataarray(
 
 @util.lru_cache()
 def _infer_coord_dims(coord_factories: tuple[CoordFunc, ...]) -> tuple[str, ...]:
-    """return the dimension names that `coord_factories` declare, in order.
-
-    A dimension is placed at the first factory that declares the dimension, in the
-    order of the dims of that factory.
-    """
-
-    # build an ordered list of unique coordinates
-    coord_dims = {}
-    for func in coord_factories:
-        coord = register.registry.coordinates[func]
-        if coord is None:
-            continue
-        empty_coords = dict.fromkeys(coord.dims or {}, None)
-        coord_dims.update(empty_coords)
-    return tuple(coord_dims.keys())
+    return register.coordinate_dims(register.registry, coord_factories)
 
 
 def _validate_delayed_ndim(delayed: DelayedDataArray) -> None:
