@@ -80,10 +80,6 @@ Gain = Annotated[
     Union[GainScalar, tuple[GainScalar, ...]],
     Meta('Gain setting for each channel', 'dB'),
 ]
-GaplessRepeat = Annotated[
-    bool,
-    Meta('whether to raise an exception on overflows between identical captures'),
-]
 ImpliedLoops = Annotated[
     tuple[str, ...],
     Meta(standard_name='List of looped fields embedded in the capture list'),
@@ -144,6 +140,32 @@ ChunkBytes = Annotated[
 ]
 BatchedWriteCount = Annotated[
     int, Meta('Ignored; accepted for compatibility until the next release')
+]
+BurstCount = Annotated[
+    int,
+    Meta(
+        'number of back-to-back acquisitions of the capture with the stream left '
+        'enabled',
+        ge=1,
+    ),
+]
+BurstBuffers = Annotated[
+    int, Meta('maximum number of acquisitions queued ahead of analysis', ge=1)
+]
+OnGap = Annotated[
+    Literal['skip', 'except'],
+    Meta(
+        "whether a burst tolerates a timing gap: 'skip' drops a segment when the "
+        "queue is full and resumes after a stream overflow; 'except' raises on a "
+        'full queue and restarts the burst after a stream overflow'
+    ),
+]
+TriggerOn = Annotated[
+    Literal['first', 'all'],
+    Meta(
+        "'first' runs the signal trigger on the first delivered segment of a burst "
+        "and applies that lag to the rest; 'all' runs it on every segment"
+    ),
 ]
 SweepStartTime = Annotated['pd.Timestamp', Meta('Capture acquisition start time')]
 SyncSource = Annotated[

@@ -1,8 +1,9 @@
 """the runner contract and the capture pipeline that every action runs.
 
-The acquisition of the next capture and the sink write of the previous one run in
-`util.threadpool` while the analysis of the current capture runs in the calling
-thread. Exceptions from the 3 stages of one step are collected in an
+A dedicated thread acquires the captures and feeds a bounded `AcquisitionQueue`.
+The calling thread takes one acquisition per step, analyzes the acquisition taken
+in the previous step, and submits the sink write of the analysis before that to
+`util.threadpool`. Exceptions from the 3 stages of one step are collected in an
 `ExceptionStack` and raised together at the end of that step.
 """
 
@@ -10,17 +11,24 @@ from __future__ import annotations as __
 
 import contextlib
 import itertools
-from collections.abc import Generator, Mapping
-from typing import Any, Protocol
+import threading
+from collections.abc import Generator, Iterable, Mapping
+from queue import Empty
+from typing import TYPE_CHECKING, Any, Protocol
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import pd, xr
 
 from ... import specs
 from .. import compute, util
+from ..compute import corrections
+from ..controller import AcquisitionQueue
 from ..resources import AnyResources, Resources
 from ..sinks import SinkBase
 from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
+
+if TYPE_CHECKING:
+    from ..typing import Array
 
 
 class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
@@ -75,10 +83,10 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
             loop: True cycles through the captures from the first after the last
 
         Yields:
-            the return value of ``sink.append`` for each capture, or None at the
-            steps before the first sink write; with `yield_values` False, None at
-            every step or nothing as `always_yield` selects. The iteration never
-            ends when `loop` is True.
+            the return value of ``sink.append`` for each delivered acquisition, or
+            None at the steps before the first sink write; with `yield_values`
+            False, None at every step or nothing as `always_yield` selects. The
+            iteration never ends when `loop` is True.
         """
         ...
 
@@ -102,10 +110,10 @@ def iterate_sweep(
         **replace: entries that replace those of `resources` for this run
 
     Yields:
-        the return value of ``sink.append`` for each capture, or None at the steps
-        before the first sink write; with `yield_values` False, None at every step
-        or nothing as `always_yield` selects. The iteration never ends when `loop`
-        is True.
+        the return value of ``sink.append`` for each delivered acquisition, or None
+        at the steps before the first sink write; with `yield_values` False, None at
+        every step or nothing as `always_yield` selects. The iteration never ends
+        when `loop` is True.
     """
     runner = resources['runner']
     return runner.iterate(
@@ -129,30 +137,38 @@ def iterate_captures(
     """run the captures of ``resources['sweep_spec']`` through the acquire, analyze, and
     sink pipeline.
 
-    Acquisition, analysis, and the sink write of 3 consecutive captures run
-    concurrently. The N captures of the sweep take N + 2 steps, and each step ends
-    with one yield:
+    An acquisition thread arms each capture and acquires the `burst` segments of the
+    capture into a queue of ``source.bursts.buffers`` acquisitions. The calling
+    thread takes one acquisition per step, and the N delivered acquisitions take
+    N + 2 steps. Each step ends with one yield:
 
     ```
-    0. `(Acquire 0)` ➔ yield `None`
-    1. `Concurrent (Acquire 1, Analyze 0)` ➔ yield `None`
-    2. `Concurrent (Acquire 2, Analyze 1, Sink 0)` ➔ yield `(Result 0)`
+    0. `(Take 0)` ➔ yield `None`
+    1. `Concurrent (Take 1, Analyze 0)` ➔ yield `None`
+    2. `Concurrent (Take 2, Analyze 1, Sink 0)` ➔ yield `(Result 0)`
     (...)
     N. `Concurrent (Analyze N-1, Sink N-2)` ➔ yield `(Result N-2)`
     N+1. `(Sink N-1)` ➔ yield `(Result N-1)`
     ```
 
-    `Result i` is the return value of ``sink.append`` for capture `i`. With
+    `Result i` is the return value of ``sink.append`` for acquisition `i`. With
     `yield_values` False and `always_yield` True, every step yields None. With both
     False, the generator yields nothing. The attrs of each result are the fields of
     ``resources['action_spec']``.
+
+    A burst segment acquired while the queue is full is dropped under
+    ``source.bursts.on_gap='skip'`` and raises `AcquisitionOverrunError` under
+    ``'except'``. Under ``bursts.trigger_on='first'``, the signal trigger runs on
+    the first delivered segment of each burst and the shifts apply to the rest.
 
     The captures are the loop expansion of the sweep for the open source. A `Repeat`
     first in `loops` runs the expanded captures `count` times. One `indexer` shared
     by several calls numbers the captures of all of those calls consecutively.
 
     The `on_analyzed` and `on_sink_cached` hooks of ``resources['callbacks']`` run in
-    the calling thread. An exception from a hook ends the pipeline.
+    the calling thread. An exception from a hook ends the pipeline. The `extra_data`
+    of the dataset given to `on_analyzed` has the source and runner entries; the
+    peripheral entries join when a sink resolves `pending_extra_data`.
 
     Args:
         resources: the open resources of `open_resources`
@@ -170,6 +186,10 @@ def iterate_captures(
         None at steps 0 and 1 and then `Result i` at step ``i + 2``; or None at every
         step; or nothing, as `yield_values` and `always_yield` select. The iteration
         ends after step N + 1, or never when `loop` is True.
+
+    Raises:
+        AcquisitionOverrunError: if a burst segment finds the queue full under
+            ``source.bursts.on_gap='except'``
     """
 
     resources = Resources(resources, **replace)
@@ -187,6 +207,7 @@ def iterate_captures(
             on_sink_cached(resources, cache, capture, result, **kws)
 
     spec = resources['sweep_spec']
+    sink = resources['sink']
 
     compute_opts = compute.EvaluationOptions(
         sweep_spec=spec,
@@ -197,8 +218,6 @@ def iterate_captures(
         block_each=True,  # data corruption has been observed otherwise
     )
 
-    iq = None
-    analysis = None
     source_id = resources['source'].source_id
     captures = specs.sequencing.repeat_captures(spec, source_id=source_id)
     if indexer is None:
@@ -206,99 +225,260 @@ def iterate_captures(
         plan = specs.sequencing.loop_captures(spec, source_id=source_id)
         indexer = AcquisitionIndexer(len(plan))
 
+    if len(captures) == 0:
+        return
+
+    capture_iter: Iterable[SC]
+    count: float
     if loop:
         capture_iter = itertools.cycle(captures)
         count = float('inf')
     else:
         capture_iter = captures
-        count = len(captures)
+        count = specs.sequencing.count_acquisitions(spec, source_id)
 
-    if count == 0:
-        return
-
-    # iterate across (previous-1, previous, current, next) captures to support concurrency
-    offset_captures = util.zip_offsets(capture_iter, (-2, -1, 0, 1), fill=None)
-    exc = util.ExceptionStack('threaded failure')
-
-    for i, (_, _, this, next_) in enumerate(offset_captures):
-        with _log_progress_contexts(i, count), exc:
-            if this is None:
-                acquire = None  # last 2 iterations
-            else:
-                acquire = util.threadpool.submit(
-                    _acquire_both, resources, this, next_, indexer, extra_data
-                )
-
-            if analysis is None:
-                sink = None  # first 2 iterations
-            else:
-                sink = util.threadpool.submit(resources['sink'].append, analysis)
-
-            with exc.defer():
-                if iq is None:
-                    analysis = None  # first and last iterations
-                else:
-                    # cupy/cuda analysis must run in the foreground thread
-                    analysis = compute.analyze(iq, compute_opts)
-                    assert isinstance(analysis, compute.DelayedDataset)
-                    if on_analyzed is not None:
-                        on_analyzed(analysis)
-
-            with exc.defer():
-                if acquire is not None:
-                    iq = acquire.result()
-                    assert isinstance(iq, specs.AcquiredIQ)
-                else:
-                    iq = None
-
-            with exc.defer():
-                if sink is not None:
-                    sink = sink.result()
-
-        if yield_values:
-            yield sink
-        elif always_yield:
-            yield None
-
-        util.propagate_thread_interrupts()
-
-
-@contextlib.contextmanager
-def _log_progress_contexts(index, count):
-    """set the log context information for reporting progress"""
-
-    contexts = (
-        util.log_capture_context('source', capture_index=index, capture_count=count),
-        util.log_capture_context(
-            'analysis',
-            capture_index=index - 1,
-            capture_count=count,
-        ),
-        util.log_capture_context(
-            'sink',
-            capture_index=index - 2,
-            capture_count=count,
-        ),
+    queue = AcquisitionQueue(spec.source.bursts.buffers)
+    stop = threading.Event()
+    worker = threading.Thread(
+        target=acquisition_worker,
+        args=(resources, capture_iter, queue, indexer, extra_data, stop),
+        kwargs={'acquisition_count': count},
+        name='striqt-acquire',
+        daemon=True,
     )
 
-    cm = contextlib.ExitStack()
+    def sink_append(analysis: compute.DelayedDataset, index: int) -> Any:
+        with util.log_capture_context('sink', capture_index=index, capture_count=count):
+            return sink.append(analysis)
 
-    with cm:
+    shifts = _BurstShifts(spec.source.bursts.trigger_on)
+    exc = util.ExceptionStack('threaded failure')
+    iq: specs.AcquiredIQ | None = None
+    analysis: compute.DelayedDataset | None = None
+    ended = False
+
+    worker.start()
+    try:
+        for i in itertools.count():
+            with exc:
+                if analysis is None:
+                    sink_future = None  # first 2 iterations
+                else:
+                    sink_future = util.threadpool.submit(sink_append, analysis, i - 2)
+
+                with exc.defer():
+                    if iq is None:
+                        analysis = None  # first and last iterations
+                    else:
+                        # cupy/cuda analysis must run in the foreground thread
+                        with util.log_capture_context(
+                            'analysis', capture_index=i - 1, capture_count=count
+                        ):
+                            analysis = compute.analyze(iq, compute_opts)
+                            assert isinstance(analysis, compute.DelayedDataset)
+                            if on_analyzed is not None:
+                                on_analyzed(analysis)
+
+                with exc.defer():
+                    if ended:
+                        iq = None
+                    else:
+                        iq = _take(queue)
+                        if iq is None:
+                            ended = True
+                        else:
+                            shifts.apply(iq)
+
+                sink_result = None
+                with exc.defer():
+                    if sink_future is not None:
+                        sink_result = sink_future.result()
+
+            if yield_values:
+                yield sink_result
+            elif always_yield:
+                yield None
+
+            util.propagate_thread_interrupts()
+
+            if ended and iq is None and analysis is None:
+                break
+    finally:
+        stop.set()
+        while worker.is_alive():
+            _drain(queue)
+            worker.join(timeout=0.05)
+
+
+class _End:
+    """the item that the acquisition thread puts after the last acquisition"""
+
+
+END = _End()
+
+
+def _take(queue: AcquisitionQueue) -> specs.AcquiredIQ | None:
+    """return the next acquisition, or None at the end of the acquisitions.
+
+    Raises:
+        BaseException: the exception that ended the acquisition thread
+    """
+    item = queue.get()
+    if isinstance(item, _End):
+        return None
+    if isinstance(item, BaseException):
+        raise item
+    assert isinstance(item, specs.AcquiredIQ)
+    return item
+
+
+def _drain(queue: AcquisitionQueue) -> None:
+    while True:
         try:
-            for ctx in contexts:
-                cm.enter_context(ctx)
-            yield cm
-        except:
-            cm.close()
-            raise
+            queue.get_nowait()
+        except Empty:
+            return
+
+
+class _BurstShifts:
+    """the alignment shifts shared by the segments of the burst under analysis.
+
+    Under ``trigger_on='first'``, `apply` runs the trigger on the first delivered
+    segment of a burst with `burst` above 1 and sets `trigger_shifts` on every
+    segment of that burst. Under ``'all'`` nothing is set.
+    """
+
+    def __init__(self, trigger_on: str):
+        self.trigger_on = trigger_on
+        self.key: tuple[int, int] | None = None
+        self.shifts: Array | None = None
+
+    def apply(self, iq: specs.AcquiredIQ) -> None:
+        if self.trigger_on != 'first':
+            return
+        if not isinstance(iq.capture, specs.SensorCapture) or iq.capture.burst == 1:
+            return
+        if corrections._trigger_of(iq) is None:
+            return
+        key = (iq.info.sweep_index, iq.info.capture_index)
+        if key != self.key or iq.info.burst_index == 0:
+            self.key = key
+            self.shifts = corrections.trigger_shifts(iq)
+        iq.trigger_shifts = self.shifts
+
+
+def acquisition_worker(
+    resources: Resources[SS, SP, SC, SA, PS, PC],
+    captures: Iterable[SC],
+    queue: AcquisitionQueue,
+    indexer: AcquisitionIndexer,
+    extra_data: Mapping[str, Any] | None,
+    stop: threading.Event,
+    *,
+    acquisition_count: float = float('inf'),
+) -> None:
+    """arm and acquire `captures` in order into `queue`.
+
+    Each capture is armed on the source and the peripherals, and the `burst` segments
+    are acquired with `Controller.acquire_burst`. The peripherals acquire once per
+    capture, from segment 0 until the end of the burst, and the read is awaited before
+    the next capture is armed. Each segment refers to the read through
+    `pending_extra_data`, with the entries of `extra_data` as the `override`, so a
+    sink joins the peripheral dict under the runner entries. `indexer` stamps each
+    segment. After the last capture the source is disarmed and `END` is put. An
+    exception ends the acquisitions and is put in place of `END`.
+
+    Args:
+        resources: the open resources
+        captures: the captures to acquire, finite or endless
+        queue: the queue that receives the segments, `END`, or the exception
+        indexer: the counter applied to the `info` of each segment
+        extra_data: entries merged into every segment, or None
+        stop: set by the consumer to end the acquisitions after the current capture
+        acquisition_count: the total number of acquisitions in the progress fields
+            of the ``source`` logger, or ``inf`` for endless captures
+    """
+    ordinal = 0
+    try:
+        for capture in captures:
+            if stop.is_set():
+                break
+            util.propagate_thread_interrupts()
+            ordinal = _acquire_capture(
+                resources,
+                capture,
+                queue,
+                indexer,
+                extra_data,
+                ordinal,
+                acquisition_count,
+            )
+        resources['source'].disarm()
+        queue.put(END)
+    except BaseException as ex:
+        queue.put(ex)
+
+
+def _acquire_capture(
+    resources: Resources[SS, SP, SC, SA, PS, PC],
+    capture: SC,
+    queue: AcquisitionQueue,
+    indexer: AcquisitionIndexer,
+    extra_data: Mapping[str, Any] | None,
+    ordinal: int,
+    acquisition_count: float,
+) -> int:
+    """arm `capture` and acquire its burst into `queue`.
+
+    Returns:
+        `ordinal` advanced by the number of segments that passed through the
+        finalizer
+    """
+    source = resources['source']
+    peripherals = resources['peripherals']
+
+    def log_context() -> contextlib.AbstractContextManager[None]:
+        return util.log_capture_context(
+            'source', capture_index=ordinal, capture_count=acquisition_count
+        )
+
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(log_context())
+        arm = [
+            util.threadpool.submit(source._arm_spec, capture),
+            util.threadpool.submit(peripherals.arm, capture),
+        ]
+        util.await_and_ignore(arm, 'arm sensor')
+        override = {} if extra_data is None else dict(extra_data)
+        pending = specs.PendingExtraData(
+            util.threadpool.submit(peripherals.acquire, capture), override
+        )
+
+        def finalize(iq: specs.AcquiredIQ) -> specs.AcquiredIQ:
+            nonlocal ordinal
+            iq.info = indexer.apply(iq.info, capture)
+            iq.extra_data = iq.extra_data | override
+            iq.pending_extra_data = pending
+            ordinal += 1
+            stack.close()
+            stack.enter_context(log_context())
+            return iq
+
+        source.acquire_burst(queue=queue, finalize=finalize)
+        # the stream is idle between bursts, so the read is awaited here rather than
+        # inside the burst, where the wait would overflow the receive stream
+        compute.datasets.peripheral_result(pending)
+
+    return ordinal
 
 
 class AcquisitionIndexer:
     """the counter that stamps `capture_index` and `sweep_index` on the acquisitions
     of one sweep.
 
-    `capture_index` wraps to 0 at `captures_per_sweep`, and `sweep_index` then
-    advances. `apply` is not thread-safe and must run once per acquisition, in order.
+    `capture_index` advances after the last burst segment of a capture and wraps to
+    0 at `captures_per_sweep`, where `sweep_index` advances. `apply` is not
+    thread-safe and must run once per acquisition, in order.
     """
 
     def __init__(self, captures_per_sweep: int):
@@ -313,22 +493,28 @@ class AcquisitionIndexer:
         self.capture_index: int = 0
         self.sweep_start_time: pd.Timestamp | None = None
 
-    def apply(self, info: specs.AcquisitionInfo) -> specs.AcquisitionInfo:
+    def apply(
+        self, info: specs.AcquisitionInfo, capture: specs.SensorCapture
+    ) -> specs.AcquisitionInfo:
         """return a copy of `info` with `sweep_index` and `capture_index` set.
 
-        The counter advances by one capture. On a `SoapyAcquisitionInfo`,
-        `sweep_start_time` is set to the `start_time` of the first capture of the
-        current sweep.
+        The counter advances by one capture when ``info.burst_index`` is the last
+        segment of `capture`. On a `SoapyAcquisitionInfo`, `sweep_start_time` is set
+        to the `start_time` of the first segment of the first capture of the current
+        sweep.
         """
         result = info.replace(
             sweep_index=self.sweep_index, capture_index=self.capture_index
         )
 
         if isinstance(info, specs.SoapyAcquisitionInfo):
-            if self.capture_index == 0:
+            if self.capture_index == 0 and info.burst_index == 0:
                 self.sweep_start_time = info.start_time
 
             result = result.replace(sweep_start_time=self.sweep_start_time)
+
+        if info.burst_index != capture.burst - 1:
+            return result
 
         self.capture_index += 1
 
@@ -337,60 +523,3 @@ class AcquisitionIndexer:
             self.sweep_index += 1
 
         return result
-
-
-@sa.util.stopwatch('acquire', 'sweep', threshold=0.25)
-def _acquire_both(
-    res: Resources[Any, Any, SC, SA, PS, PC],
-    this: SC,
-    next_: SC | None,
-    indexer: AcquisitionIndexer,
-    extra_data: Mapping[str, Any] | None = None,
-) -> specs.AcquiredIQ:
-    """arm and acquire from the source and peripherals.
-
-    The `extra_data` of the result merges the entries of the acquisition, of the
-    peripherals, and of `extra_data`; a later source overrides an earlier one on a
-    shared key.
-    """
-
-    assert this is not None
-
-    def arm_both(c: SC | None):
-        if c is None:
-            return
-
-        source = util.threadpool.submit(res['source']._arm_spec, c)
-        peripherals = util.threadpool.submit(res['peripherals'].arm, c)
-        util.await_and_ignore([source, peripherals], 'arm sensor')
-
-    # the previous call armed `this` as its `next_`; re-arm only for the first capture
-    # of a run, or when another run left a different capture armed
-    try:
-        armed = res['source'].capture_spec
-    except AttributeError:
-        armed = None
-    if armed != this:
-        arm_both(this)
-
-    iq = util.threadpool.submit(res['source'].acquire)
-    ext_data = util.threadpool.submit(res['peripherals'].acquire, this)
-
-    with util.ExceptionStack('failed to acquire data') as exc:
-        with exc.defer():
-            iq = iq.result()
-        with exc.defer():
-            ext_data = ext_data.result()
-
-    if not isinstance(ext_data, dict):
-        raise TypeError(f'peripheral acquire() returned {type(ext_data)!r}, not dict')
-    if not isinstance(iq, specs.AcquiredIQ):
-        raise TypeError(f'source acquire() returned {type(iq)!r}, not AcquiredIQ')
-
-    arm_both(next_)
-
-    iq.info = indexer.apply(iq.info)
-    iq.extra_data = iq.extra_data | ext_data
-    if extra_data is not None:
-        iq.extra_data = iq.extra_data | dict(extra_data)
-    return iq

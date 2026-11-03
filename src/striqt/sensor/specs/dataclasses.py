@@ -11,6 +11,8 @@ from ..lib.typing import PC, PS, SA, SC, SP, SS
 from . import paths, structs
 
 if TYPE_CHECKING:
+    from concurrent.futures import Future
+
     from ..lib.compute import corrections
 
 
@@ -48,6 +50,21 @@ class Schema(Generic[SS, SP, SC, SA, PS, PC]):
 
 
 @dataclasses.dataclass
+class PendingExtraData:
+    """the peripheral read of a capture that is still running when an acquisition is
+    handed to analysis.
+
+    The result joins the `extra_data` of the acquisition when a sink resolves the
+    read.
+    """
+
+    peripherals: Future[dict[str, Any]]
+    """the running peripheral read of the capture; the result is one dict"""
+    override: dict[str, Any]
+    """entries that win over the peripheral dict on a shared key"""
+
+
+@dataclasses.dataclass
 class AcquiredIQ(sa.AcquiredIQ):
     """an acquisition from a sensor source with the metadata and conditioning of the capture.
 
@@ -68,6 +85,12 @@ class AcquiredIQ(sa.AcquiredIQ):
     `info.signal_trigger`"""
     overwrite_x: bool = False
     """True permits the resampling stage to overwrite `x`"""
+    trigger_shifts: sw.typing.Array | None = None
+    """one shift per port (samples at `capture.sample_rate`) that the alignment stage
+    applies in place of running the trigger; None runs the trigger"""
+    pending_extra_data: PendingExtraData | None = None
+    """the peripheral read of the capture when still running; None when `extra_data`
+    is complete"""
 
     @util.cached_property
     def preprocess(self) -> corrections.Preprocessor:

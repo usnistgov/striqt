@@ -16,10 +16,18 @@ import math
 import os
 import re
 from fractions import Fraction
+from pathlib import Path
 
 import numpy as np
 import pytest
-from conftest import FAKE_SOAPY_CELLULAR_SPEC, SITE_CELLULAR_SPEC, SITE_DIR, SWEEP_DIR
+import yaml
+from conftest import (
+    FAKE_SOAPY_CELLULAR_SPEC,
+    FAKE_SOAPY_SPEC,
+    SITE_CELLULAR_SPEC,
+    SITE_DIR,
+    SWEEP_DIR,
+)
 from numeric_checks import COLA_LEVEL_DB, COLA_RIPPLE_DB, assert_close, cross_backend
 from site_strategies import RADIO_ID
 from sweep_strategies import SOURCE
@@ -207,6 +215,57 @@ def test_cli_run(name, tmp_path, monkeypatch, subtests):
         check_site(ds)
 
 
+BURST = 3
+
+
+def write_burst_sweep(tmp_path) -> Path:
+    """write `fake_soapy-cpu.yaml` with its last capture repeated as a `burst: 3`
+    capture, with the extension path made absolute, and return the path.
+
+    The queue holds every acquisition of the pass, so no segment is dropped under
+    the ``on_gap: skip`` default when the fake source outruns analysis.
+    """
+    tree = yaml.safe_load(FAKE_SOAPY_SPEC.read_text())
+    tree['extensions']['import_path'] = str(FAKE_SOAPY_SPEC.parent / 'src')
+    tree['captures'].append({**tree['captures'][-1], 'burst': BURST})
+    tree['source']['bursts'] = {'buffers': len(tree['captures']) - 1 + BURST}
+    path = tmp_path / 'fake_soapy-burst.yaml'
+    path.write_text(yaml.safe_dump(tree))
+    return path
+
+
+def test_cli_run_burst(fake_soapy, tmp_path, monkeypatch):
+    """a capture with `burst: 3` writes one row per port per segment. The store has the
+    `sweep_row_count` rows, `burst_index` runs over the segments of that capture and is
+    0 elsewhere, and `capture_index` is shared by the segments."""
+    path = write_burst_sweep(tmp_path)
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+    out_path = tmp_path / 'out.zarr.zip'
+
+    sensor_sweep.run(str(path), output_path=str(out_path))
+
+    spec = ss.read_yaml_spec(path, output_path=str(out_path))
+    assert [c.burst for c in spec.captures] == [1, 1, BURST]
+    ds = sa.load(out_path)
+    source_id = str(ds.source_id.values[0])
+
+    rows = [
+        (i, k, p)
+        for i, c in enumerate(spec.captures)
+        for k in range(c.burst)
+        for p in ports_of(c.port)
+    ]
+    assert ds.sizes['capture'] == ss.lib.compute.datasets.sweep_row_count(
+        spec, source_id
+    )
+    assert ds.sizes['capture'] == len(rows)
+    assert ds.capture_index.values.tolist() == [i for i, _, _ in rows]
+    assert ds.burst_index.values.tolist() == [k for _, k, _ in rows]
+    assert ds.port.values.tolist() == [p for _, _, p in rows]
+    assert ds.burst.values.tolist() == [spec.captures[i].burst for i, _, _ in rows]
+
+
 def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
     path = SWEEP_DIR / 'synthetic.yaml'
     # open_resources chdirs into the spec directory and does not change back
@@ -216,6 +275,12 @@ def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
 
     out = capsys.readouterr().out
     assert 'Numerical tolerance' in out
+    spec = ss.read_yaml_spec(path)
+    source_id = ast.literal_eval(re.search(r'^source_id: (.*)$', out, re.MULTILINE)[1])
+    count = ss.specs.sequencing.count_acquisitions(spec, source_id)
+    bound = ss.lib.resources.resident_bytes_bound(spec, source_id)
+    assert f'acquisitions per pass: {count}' in out
+    assert f'resident IQ bound: {bound} bytes' in out
     # the block is the title, a rule, the column header, and one row per product
     block = out.split('Numerical tolerance')[1].split('\n\n')[0]
     groups, header, *rows = block.splitlines()[2:]

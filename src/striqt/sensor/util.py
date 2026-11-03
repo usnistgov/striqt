@@ -11,7 +11,6 @@ from .lib.util import (
     retry,
     share_thread_interrupts,
     threadpool,
-    zip_offsets,
 )
 
 for obj in list(locals().values()):

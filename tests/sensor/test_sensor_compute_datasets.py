@@ -7,6 +7,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import logging
+from concurrent.futures import Future
 
 import numpy as np
 import pytest
@@ -117,6 +118,50 @@ def test_from_delayed_broadcasts_extra_data_over_the_rows():
     assert ds.per_port.values.tolist() == [1.0, 2.0]
 
 
+def test_from_delayed_joins_a_pending_peripheral_read():
+    future: Future = Future()
+    future.set_result({'temperature': 21.5})
+    dd = dataclasses.replace(
+        two_port_run()[0],
+        pending_extra_data=ss.specs.PendingExtraData(future, {}),
+    )
+    ds = compute.from_delayed(dd)
+    assert ds.temperature.values.tolist() == [21.5, 21.5]
+
+
+# %% resolve_extra_data
+
+
+def test_resolve_extra_data_without_a_pending_read_is_the_extra_data():
+    dd = dataclasses.replace(two_port_run()[0], pending_extra_data=None)
+    assert datasets.resolve_extra_data(dd) is dd.extra_data
+
+
+def test_resolve_extra_data_precedence_is_source_then_peripheral_then_override():
+    future: Future = Future()
+    future.set_result({'a': 'peripheral', 'b': 'peripheral', 'c': 'peripheral'})
+    dd = dataclasses.replace(
+        two_port_run()[0],
+        extra_data={'a': 'source', 'b': 'source'},
+        pending_extra_data=ss.specs.PendingExtraData(future, {'a': 'runner'}),
+    )
+    assert datasets.resolve_extra_data(dd) == {
+        'a': 'runner',
+        'b': 'peripheral',
+        'c': 'peripheral',
+    }
+
+
+def test_resolve_extra_data_rejects_a_non_dict_peripheral_result():
+    future: Future = Future()
+    future.set_result(['not', 'a', 'dict'])
+    dd = dataclasses.replace(
+        two_port_run()[0], pending_extra_data=ss.specs.PendingExtraData(future, {})
+    )
+    with pytest.raises(TypeError, match='not dict'):
+        datasets.resolve_extra_data(dd)
+
+
 def test_from_delayed_rejects_extra_data_of_the_wrong_length():
     dd = dataclasses.replace(two_port_run()[0], extra_data={'bad': np.zeros(3)})
     with pytest.raises(ValueError, match='"bad"'):
@@ -150,6 +195,20 @@ def test_build_capture_coords_splits_tuple_fields_per_port():
     assert coords['source_id'].values.tolist() == ['beef'] * 2
     assert coords['sweep_index'].values.tolist() == [3, 3]
     assert coords['capture_index'].values.tolist() == [7, 7]
+
+
+def test_build_capture_coords_carries_burst_and_burst_index():
+    """`burst` is a capture field and `burst_index` an acquisition info field, so both
+    are ``capture`` coordinates. `burst` takes the `Meta` description of the field as
+    its ``standard_name``; `burst_index` has no `Meta` and no attrs."""
+    capture = two_port_captures(burst=3)[0]
+    info = ss.specs.AcquisitionInfo(burst_index=2)
+    coords = datasets.build_capture_coords(capture, info, ())
+    assert coords['burst'].values.tolist() == [3, 3]
+    assert coords['burst_index'].values.tolist() == [2, 2]
+    (meta,) = ss.specs.types.BurstCount.__metadata__
+    assert coords['burst'].attrs == {'standard_name': meta.description}
+    assert coords['burst_index'].attrs == {}
 
 
 def test_build_capture_coords_adds_an_analysis_loop_coordinate():
@@ -216,6 +275,37 @@ def test_get_looped_coords_lists_the_capture_loop_fields():
     assert compute.get_looped_coords(ds) == ['snr']
 
 
+def burst_dataset(burst: int, segments=None):
+    """return the dataset of the 2-port capture of `two_port_run` as `burst` segments
+    stacked along ``capture``, each with its own `burst_index`"""
+    import xarray as xr
+
+    dd = two_port_run()[0]
+    capture = dd.capture.replace(burst=burst)
+    datasets = [
+        compute.from_delayed(
+            dataclasses.replace(
+                dd, capture=capture, extra_coords=dd.extra_coords.replace(burst_index=k)
+            )
+        )
+        for k in range(burst if segments is None else segments)
+    ]
+    return xr.concat(datasets, 'capture')
+
+
+def test_get_looped_coords_adds_burst_index_only_with_bursts():
+    """a dataset of `burst=1` rows lists the loop fields alone; a dataset with any
+    `burst` above 1 appends `burst_index`, so the index over the loop fields and
+    `port` stays unique"""
+    assert compute.get_looped_coords(burst_dataset(1)) == ['snr']
+    assert compute.get_looped_coords(burst_dataset(2)) == ['snr', 'burst_index']
+    assert compute.get_looped_coords(burst_dataset(2), include_repeats=True) == [
+        None,
+        'snr',
+        'burst_index',
+    ]
+
+
 def test_get_looped_coords_include_repeats():
     """current behavior, not a contract: a Repeat has no field and is listed as None"""
     ds = compute.from_delayed(two_port_run()[0])
@@ -262,6 +352,23 @@ def test_check_coord_indexes_rejects_a_non_unique_index():
         pytest.skip('xarray is too old to validate coord indexes')
     with pytest.raises(ValueError, match='insufficient'):
         compute.index_dataset(full_run(), ['port'])
+
+
+def test_index_dataset_selects_one_burst_segment():
+    """2 segments of one capture share every capture coordinate, so `burst_index` with
+    `port` selects one row: row 3 of the stacked dataset is (segment 1, port 1)"""
+    ds = burst_dataset(2)
+    indexed = compute.index_dataset(ds, ['burst_index', 'port'])
+    row = indexed.iq_waveform.sel(burst_index=1, port=1)
+    assert np.array_equal(row.values, ds.iq_waveform.values[3])
+
+
+def test_check_coord_indexes_suggests_burst_index():
+    """the rows of a burst differ only in `burst_index`, which the error names"""
+    if datasets._xarray_version() < (2024, 9, 0):
+        pytest.skip('xarray is too old to validate coord indexes')
+    with pytest.raises(ValueError, match='burst_index'):
+        compute.index_dataset(burst_dataset(2), ['port'])
 
 
 def test_check_coord_indexes_warns_on_old_xarray(monkeypatch, caplog):

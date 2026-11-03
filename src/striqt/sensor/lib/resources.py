@@ -19,9 +19,10 @@ import typing_extensions
 import striqt.analysis as sa
 
 from .. import specs
-from . import bindings, controller, io, util
+from . import bindings, compute, controller, io, util
 from .peripherals import NoPeripherals
 from .sinks import SinkBase
+from .sources import buffers
 from .typing import PC, PS, SA, SC, SP, SS, Peripherals
 
 if TYPE_CHECKING:
@@ -51,8 +52,9 @@ class SweepCallbacks:
     """hook run once with ``(sweep, source_id)`` in a worker thread after the source
     opens and before the first capture"""
     on_analyzed: AnalyzedCallback | None = None
-    """hook run with the `DelayedDataset` of each capture before the sink receives
-    the dataset"""
+    """hook run with the `DelayedDataset` of each acquisition before the sink
+    receives the dataset; the `extra_data` of the dataset lacks the peripheral
+    entries, which the sink joins"""
     on_sink_cached: CachedCallback | None = None
     """hook run with ``(resources, cache, capture, result, **kwargs)`` each time a
     measurement fills a `KwArgCache`"""
@@ -213,10 +215,53 @@ def _open_devices(
     peripherals.setup(spec.captures, spec.loops)
 
 
+def resident_bytes_bound(
+    sweep: specs.Sweep[Any, Any, Any, Any], source_id: str | None = None
+) -> int:
+    """return an upper bound (bytes) on the raw IQ resident during a run of `sweep`.
+
+    The bound counts ``sweep.source.bursts.buffers + 2`` acquisitions: the queued
+    segments, the one under analysis, and the one being written. Each acquisition is
+    sized as the largest read over the captures of
+    `specs.sequencing.repeat_captures`: the port count of the capture, times 8 bytes
+    per complex64 sample, times the source samples of the record, the correction
+    overlaps, and the transient and strobe holdoff of a first burst segment. The
+    later segments of a burst read no holdoff, so the bound is exact for a sweep
+    without bursts and an overestimate for a sweep with bursts. The bound covers the
+    `x` arrays alone, not the resampled, filtered, or analyzed copies.
+
+    Args:
+        sweep: the sweep to size, with the `bursts` policy of its source
+        source_id: as `specs.sequencing.repeat_captures`
+    """
+    captures = specs.sequencing.repeat_captures(sweep, source_id)
+    largest = 0
+    for capture in captures:
+        analysis = specs.sequencing.adjust_analysis(
+            sweep.analysis, capture.adjust_analysis
+        )
+        overlaps = compute.get_correction_overlaps(capture, sweep.source, analysis)
+        count = buffers.get_read_count(
+            capture, sweep.source, include_holdoff=True, overlap=sum(overlaps)
+        )
+        ports = len(specs.captures.split_capture_ports(capture))
+        largest = max(largest, ports * 8 * count)
+    return (sweep.source.bursts.buffers + 2) * largest
+
+
 def _prepare_sweep(spec: specs.Sweep, callbacks: SweepCallbacks) -> None:
-    """list the capture adjustments of `spec`, then run `callbacks.on_source_opened`"""
+    """list the capture adjustments of `spec`, then run `callbacks.on_source_opened`.
+
+    The `resident_bytes_bound` of `spec` is logged at INFO on the ``sweep`` logger.
+    """
     source_id = controller.lookup.id(spec.source)
     specs.sequencing.list_capture_adjustments(spec, source_id=source_id)
+
+    bound = resident_bytes_bound(spec, source_id)
+    sa.util.get_logger('sweep').info(
+        f'resident IQ bound: {bound} bytes ({bound / 1e6:.1f} MB) over '
+        f'{spec.source.bursts.buffers} queued acquisitions'
+    )
 
     if callbacks.on_source_opened is not None:
         callbacks.on_source_opened(spec, source_id)
@@ -249,7 +294,8 @@ def open_resources(
         on_source_opened: hook run once with ``(sweep, source_id)`` in a worker
             thread after the source opens and before the first capture
         on_analyzed: hook run in the analysis thread with the `DelayedDataset` of
-            each capture, before the sink receives the dataset
+            each acquisition, before the sink receives the dataset; the `extra_data`
+            of the dataset lacks the peripheral entries, which the sink joins
         on_sink_cached: hook run in the analysis thread with ``(resources, cache,
             capture, result, **kwargs)`` each time a measurement fills a `KwArgCache`
 

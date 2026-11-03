@@ -19,7 +19,11 @@ if TYPE_CHECKING:
 
 
 class ReceiveBuffers(typing.Generic[SC]):
-    """remember unused samples from the previous IQ capture"""
+    """the receive buffers of a controller and the carryover between acquisitions.
+
+    An instance keeps the unused tail of an acquisition from `stash_carryover` until
+    `clear`. `apply` copies that tail into the head of the next receive buffer.
+    """
 
     carryover_samples: np.ndarray | None
     start_time_ns: int | None
@@ -32,19 +36,24 @@ class ReceiveBuffers(typing.Generic[SC]):
         self.clear()
 
     def apply(self, samples: np.ndarray) -> tuple[int | None, int]:
-        """carry over samples into `samples` from the previous capture.
+        """copy the stashed carryover into the head of `samples`.
+
+        Args:
+            samples: the receive buffer of the next acquisition, shape (ports, count)
 
         Returns:
-            (start_time_ns, number of samples)
+            the stashed time (ns) of ``samples[:, 0]``, or `None` without a stash,
+            and the number of carried-over samples, 0 without a stash
+
+        Raises:
+            ValueError: a stash is present without its timestamp
         """
         if self.start_time_ns is None and self.carryover_samples is not None:
             raise ValueError(
                 'carryover time information present, but missing timestamp'
             )
 
-        if not self.controller.source_spec.gapless:
-            return None, 0
-        elif self.carryover_samples is None:
+        if self.carryover_samples is None:
             return self.start_time_ns, 0
 
         carryover = self.carryover_samples.shape[1]
@@ -54,14 +63,33 @@ class ReceiveBuffers(typing.Generic[SC]):
         return self.start_time_ns, carryover
 
     def get_next(
-        self, capture: SC, overlaps: tuple[int, int] = (0, 0)
+        self,
+        capture: SC,
+        overlaps: tuple[int, int] = (0, 0),
+        *,
+        include_holdoff: bool = True,
     ) -> tuple[np.ndarray, list[np.ndarray]]:
-        """swap the buffers, and reallocate if needed"""
+        """swap the buffers and return the next one, reallocated when too small.
+
+        Args:
+            capture: the armed capture, which sets the port count and the read count
+            overlaps: the ``(lead, tail)`` overlap in source samples
+            include_holdoff: True sizes the buffer for the transient and strobe
+                holdoff ahead of the record; False sizes it for the record and
+                overlaps alone, as a burst segment that continues the stream reads
+
+        Returns:
+            the buffer with shape (ports, count) and the per-port stream views
+        """
 
         if not self._hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
         self.buffers[0], ret = _alloc_empty_iq(
-            self.controller, capture, self.buffers[0], overlaps=overlaps
+            self.controller,
+            capture,
+            self.buffers[0],
+            overlaps=overlaps,
+            include_holdoff=include_holdoff,
         )
         self._hold_buffer_swap = False
         return ret
@@ -77,11 +105,10 @@ class ReceiveBuffers(typing.Generic[SC]):
         capture: specs.SensorCapture,
         start_overlap: int = 0,
     ) -> None:
-        """stash the unused tail of `samples` to carry over into the next capture.
+        """stash the unused tail of `samples` for the head of the next acquisition.
 
-        The stashed `start_time_ns` is the time of the first carried-over sample.
-        `apply` returns that time as the time of the first sample of the next buffer.
-        A source that is not gapless stashes nothing.
+        The stashed `start_time_ns` is the time of the first carried-over sample. The
+        stash replaces any earlier one and persists until `clear`.
 
         Args:
             samples: the source-rate samples returned for the capture, with shape
@@ -95,9 +122,6 @@ class ReceiveBuffers(typing.Generic[SC]):
             start_overlap: the lead overlap (in source-rate samples) that precedes
                 the record in `samples`
         """
-        if not self.controller.source_spec.gapless:
-            return
-
         from ..compute import design_resampler
 
         carryover_count = unused_sample_count
@@ -111,7 +135,8 @@ class ReceiveBuffers(typing.Generic[SC]):
             1e9 * (carryover_index - start_overlap) / fs
         )
 
-    def clear(self):
+    def clear(self) -> None:
+        """drop the stashed carryover and its timestamp"""
         self.carryover_samples = None
         self.start_time_ns = None
 
@@ -181,8 +206,18 @@ def _alloc_empty_iq(
     capture: specs.SensorCapture,
     prior: np.ndarray | None = None,
     overlaps: tuple[int, int] = (0, 0),
+    *,
+    include_holdoff: bool = True,
 ) -> tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]:
-    """allocate a buffer of IQ return values.
+    """allocate a buffer of IQ return values, or reuse `prior` when it is large enough.
+
+    Args:
+        controller: the controller with the armed capture and the source spec
+        capture: the capture that sets the port rows
+        prior: a buffer to reuse when it has one row per port and at least the read
+            count of columns
+        overlaps: the ``(lead, tail)`` overlap in source samples
+        include_holdoff: True adds the transient and strobe holdoff to the read count
 
     Returns:
         The buffer and the list of buffer references for streaming.
@@ -190,7 +225,7 @@ def _alloc_empty_iq(
     count = get_read_count(
         controller.capture_spec,
         controller.source_spec,
-        include_holdoff=True,
+        include_holdoff=include_holdoff,
         overlap=sum(overlaps),
     )
 
@@ -289,14 +324,31 @@ def find_trigger_holdoff(
 
 
 def cast_iq(spec: specs.Source, buffer: Array, acquired_count: int) -> Array:
-    """cast the buffer to floating point, if necessary"""
+    """return the first `acquired_count` samples per port of `buffer` as complex64.
+
+    The result is a copy in the namespace of ``spec.array_backend``, so the receive
+    buffer is free for the next read. A buffer wider than `acquired_count` columns
+    contributes nothing beyond that width to the copy.
+
+    Args:
+        spec: the source spec, for `transport_dtype` and `array_backend`
+        buffer: the receive buffer with shape (ports, width) of complex64 slots;
+            under an int16 transport the interleaved (I, Q) pairs occupy the head
+        acquired_count: the number of complex samples per port to keep
+    """
     # array_namespace categorizes cupy pinned memory as numpy
     dtype_in = np.dtype(spec.transport_dtype)
+    # the slice bounds the copy, and so the memory of a queued acquisition, to the
+    # samples read; each port row of the slice stays contiguous
+    buffer = buffer[:, :acquired_count]
 
     if spec.array_backend == 'cupy':
         xp = sw.arrays.cp
         assert xp is not None, ImportError('cupy is not installed')
         buffer = sw.arrays.pinned_array_as_cupy(buffer)
+        # the H2D copy is asynchronous, and the next segment of a burst reads into
+        # the same pinned buffer 2 acquisitions later
+        xp.cuda.get_current_stream().synchronize()
     else:
         xp = np
         buffer = xp.array(buffer)

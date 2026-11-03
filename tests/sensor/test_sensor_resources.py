@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from pathlib import Path
 
 import pytest
 import yaml
 from conftest import FAKE_SOAPY_SPEC, assert_source_released
-from synthetic_sources import tone_sweep
+from synthetic_sources import SCALE_ONLY, preset_capture, preset_sweep, tone_sweep
 
 import striqt.analysis as sa
 import striqt.sensor as ss
@@ -129,6 +130,71 @@ def test_log_path_records_a_json_array_at_the_log_level(tmp_path):
     by_message = {r['message']: r for r in records}
     assert by_message['marker record']['level'] == 'INFO'
     assert 'below the log level' not in by_message
+
+
+# %% resident_bytes_bound
+
+
+def two_port_sweep(buffers: int):
+    """return a sweep of 2 scale-only 2-port captures of 1 ms and 2 ms with `buffers`
+    acquisitions queued ahead of analysis"""
+    captures = (
+        preset_capture('single_tone', **SCALE_ONLY),
+        preset_capture('single_tone', **{**SCALE_ONLY, 'duration': 2e-3}),
+    )
+    sweep = preset_sweep('single_tone', captures)
+    bursts = sweep.source.bursts.replace(buffers=buffers)
+    return sweep.replace(source=sweep.source.replace(bursts=bursts))
+
+
+def test_resident_bytes_bound_counts_queued_analyzed_and_written_segments():
+    """`buffers + 2` copies of the largest read: 2 ports of complex64 over the
+    record of the 2 ms capture and its correction overlaps"""
+    buffers = 3
+    sweep = two_port_sweep(buffers)
+    longest = sweep.captures[1]
+    overlaps = ss.lib.compute.get_correction_overlaps(
+        longest, sweep.source, sweep.analysis
+    )
+    samples = round(longest.sample_rate * longest.duration) + sum(overlaps)
+    expected = (buffers + 2) * 2 * 8 * samples
+
+    assert ss.lib.resources.resident_bytes_bound(sweep, None) == expected
+    one = ss.lib.resources.resident_bytes_bound(two_port_sweep(1), None)
+    assert one == 3 * 2 * 8 * samples
+
+
+def test_resident_bytes_bound_includes_the_holdoff_of_a_first_segment():
+    """a strobe pads the read of a first segment by 2 strobe periods per port"""
+    buffers = 1
+    strobe = 0.25e-3
+    sweep = two_port_sweep(buffers)
+    strobed = sweep.replace(source=sweep.source.replace(trigger_strobe=strobe))
+    longest = sweep.captures[1]
+    fs = ss.lib.compute.design_resampler(longest, sweep.source.master_clock_rate)[
+        'fs_sdr'
+    ]
+    pad = math.ceil(fs * 2 * strobe)
+    plain = ss.lib.resources.resident_bytes_bound(sweep, None)
+    assert (
+        ss.lib.resources.resident_bytes_bound(strobed, None) == plain + 3 * 2 * 8 * pad
+    )
+
+
+def test_open_resources_logs_the_resident_bound_once(caplog):
+    sweep = two_port_sweep(2)
+    bound = ss.lib.resources.resident_bytes_bound(sweep, None)
+    with (
+        caplog.at_level(logging.INFO, logger='striqt.sweep'),
+        ss.open_resources(sweep, None),
+    ):
+        pass
+    records = [
+        r
+        for r in caplog.records
+        if r.levelno == logging.INFO and str(bound) in r.getMessage()
+    ]
+    assert len(records) == 1
 
 
 # %% callbacks

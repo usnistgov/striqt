@@ -21,6 +21,7 @@ def run(yaml_path: str):
     import pandas as pd
 
     import striqt.sensor as ss
+    from striqt.sensor.lib.resources import resident_bytes_bound
 
     spec = ss.read_yaml_spec(yaml_path)
     print(f'Opened a bound specification for {type(spec).__name__!r} bindings')
@@ -97,6 +98,14 @@ def run(yaml_path: str):
             typing.cast('typing.Iterable[tuple[str, str]]', table.columns)
         )
         print(table.to_string(float_format='{:.4g}'.format))
+
+        print('\n\nAcquisitions and resident IQ memory:')
+        print(80 * '▀')
+        sweep_spec = res['sweep_spec']
+        count = ss.specs.sequencing.count_acquisitions(sweep_spec, source_id)
+        bound = resident_bytes_bound(sweep_spec, source_id)
+        print(f'acquisitions per pass: {count}')
+        print(f'resident IQ bound: {bound} bytes ({bound / 1e6:.1f} MB)')
 
         print('\n\nUnique capture field coordinates in output:')
         labels = ss.specs.sequencing.list_capture_adjustments(

@@ -37,6 +37,38 @@ class DelayedDataset:
     extra_coords: specs.AcquisitionInfo
     extra_data: dict[str, Any]
     config: EvaluationOptions
+    pending_extra_data: specs.PendingExtraData | None = None
+    """the peripheral read of the capture when still running; None when `extra_data`
+    is complete"""
+
+
+def peripheral_result(pending: specs.PendingExtraData) -> dict[str, Any]:
+    """return the dict of the peripheral read of `pending`, waiting for the read.
+
+    Raises:
+        TypeError: if the peripheral read returned an object other than a dict
+        Exception: the exception of the peripheral read
+    """
+    result = pending.peripherals.result()
+    if not isinstance(result, dict):
+        raise TypeError(f'peripheral acquire() returned {type(result)!r}, not dict')
+    return result
+
+
+def resolve_extra_data(dd: DelayedDataset) -> dict[str, Any]:
+    """return the complete `extra_data` of `dd`, waiting for a pending peripheral read.
+
+    A peripheral entry overrides an entry of `dd.extra_data` with the same key, and an
+    `override` entry of the pending read overrides the peripheral entry.
+
+    Raises:
+        TypeError: if the peripheral read returned an object other than a dict
+        Exception: the exception of the peripheral read
+    """
+    pending = dd.pending_extra_data
+    if pending is None:
+        return dd.extra_data
+    return dd.extra_data | peripheral_result(pending) | pending.override
 
 
 def from_delayed(dd: DelayedDataset) -> xr.Dataset:
@@ -44,12 +76,14 @@ def from_delayed(dd: DelayedDataset) -> xr.Dataset:
 
     The dataset has one ``capture`` entry per port of `dd.capture`, a coordinate per
     capture field and per acquisition info field, one variable per measurement and
-    per `dd.extra_data` entry, and the attrs ``dd.config.extra_attrs``. Timings log
-    at DEBUG on the ``analysis`` logger.
+    per entry of `resolve_extra_data`, and the attrs ``dd.config.extra_attrs``. The
+    call blocks until a pending peripheral read completes. Timings log at DEBUG on
+    the ``analysis`` logger.
 
     Raises:
         ValueError: if the first axis of an `extra_data` array has a size other
             than 0, 1, or the port count
+        TypeError: if the peripheral read returned an object other than a dict
     """
 
     with sa.util.stopwatch(
@@ -87,9 +121,10 @@ def from_delayed(dd: DelayedDataset) -> xr.Dataset:
         threshold=10e-3,
         logger_level=logging.DEBUG,
     ):
-        if dd.extra_data is not None:
+        extra_data = resolve_extra_data(dd)
+        if extra_data:
             analysis = analysis.assign(
-                extra_data_arrays(dd.extra_data, analysis.capture.size)
+                extra_data_arrays(extra_data, analysis.capture.size)
             )
 
     return analysis
@@ -206,15 +241,34 @@ def build_capture_coords(
     return coords
 
 
-def get_looped_coords(ds: xr.Dataset, include_repeats=False) -> list[str]:
-    """return a list of coordinates that were looped"""
+def get_looped_coords(ds: xr.Dataset, include_repeats: bool = False) -> list[str]:
+    """return the names of the coordinates of `ds` that distinguish its rows.
+
+    The list is the `field` of each loop in the ``loops`` attr of `ds`, in loop
+    order, followed by ``'burst_index'`` when the ``burst`` coordinate of `ds` is
+    above 1 on any row.
+
+    Args:
+        ds: a sensor dataset with the ``loops`` attr of a sweep
+        include_repeats: if True, keep the `Repeat` loops, listed as None
+
+    Raises:
+        AttributeError: if `ds` has no ``loops`` attr
+    """
     if 'loops' not in ds.attrs:
         raise AttributeError('no loops metadata in data attributes')
-    return [
+    names = [
         l['field']
         for l in ds.attrs['loops']
         if include_repeats or l['kind'] != 'repeat'
     ]
+    if _has_bursts(ds):
+        names.append('burst_index')
+    return names
+
+
+def _has_bursts(ds: xr.Dataset) -> bool:
+    return 'burst' in ds.coords and ds['burst'].size > 0 and int(ds['burst'].max()) > 1
 
 
 def index_dataset(
@@ -338,7 +392,7 @@ def _coords_template(
     return xr.Coordinates(coord_vars)
 
 
-def _check_coord_indexes(ds, index_coords: list[str]):
+def _check_coord_indexes(ds: xr.Dataset, index_coords: list[str]) -> None:
     if _xarray_version() < (2024, 9, 0):
         sa.util.get_logger('analysis').warning(
             'xarray is too old to to validate coord indexes'
@@ -359,13 +413,15 @@ def _check_coord_indexes(ds, index_coords: list[str]):
     # suggest coordinates that would make the index unique
     counts = {n: np.unique(da).tolist() for n, da in sub.data_vars.items()}
     counts = {n: c for n, c in counts.items() if len(c) == sub.sizes['capture']}
+    suggest = set(counts.keys())
+    if _has_bursts(ds) and 'burst_index' not in index_coords:
+        suggest.add('burst_index')
 
-    if len(counts) == 0:
+    if len(suggest) == 0:
         raise ValueError(
             f'coords {index_coords} are insufficient to unstack and least two more may be needed'
         )
     else:
-        suggest = set(counts.keys())
         raise ValueError(
             f'coords {index_coords} are insufficient to unstack. consider adding one of {suggest}'
         )
@@ -437,13 +493,14 @@ def drop_conflicts(attrs_list: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def sweep_row_count(sweep: specs.Sweep, source_id: str) -> int:
-    """return the row count of a store of `sweep`: one per port of every expanded capture.
+    """return the row count of a store of `sweep`: one per port per burst segment.
 
     The captures are those of `specs.sequencing.repeat_captures`, so a leading
-    `Repeat` loop multiplies the count.
+    `Repeat` loop multiplies the count. Each capture contributes `burst`
+    acquisitions.
     """
     captures = specs.sequencing.repeat_captures(sweep, source_id)
-    return sum(len(specs.captures.split_capture_ports(c)) for c in captures)
+    return sum(len(specs.captures.split_capture_ports(c)) * c.burst for c in captures)
 
 
 def _distinct_analyses(

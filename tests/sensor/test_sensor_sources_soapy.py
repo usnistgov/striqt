@@ -714,6 +714,41 @@ class TestSoapySourceArm:
         assert fake_soapy.devices[0].streams[-1].channels == (1,)
 
 
+class TestSoapySourceDisarm:
+    def _enabled_source(self, fake_soapy):
+        source = _source()
+        source.setup(rx_ports=(0,))
+        source.arm(soapy_capture())
+        source.trigger()
+        assert source.rx_stream.is_enabled
+        return source, fake_soapy.devices[-1]
+
+    def test_disarm_deactivates_and_keeps_the_stream(self, fake_soapy):
+        source, device = self._enabled_source(fake_soapy)
+        stream = source.rx_stream.stream
+
+        source.disarm()
+
+        assert not source.rx_stream.is_enabled
+        assert not stream.active
+        assert source.rx_stream.stream is stream
+        assert device.streams == [stream]
+        assert call_names(device, 'deactivateStream', 'closeStream') == [
+            'deactivateStream'
+        ]
+
+    def test_prepare_retrigger_issues_the_disarm_calls(self, fake_soapy):
+        recorded = []
+        for method in ('disarm', 'prepare_retrigger'):
+            source, device = self._enabled_source(fake_soapy)
+            start = len(device.calls)
+            getattr(source, method)()
+            recorded.append(device.calls[start:])
+            assert not source.rx_stream.is_enabled
+
+        assert recorded[0] == recorded[1] == [('deactivateStream',)]
+
+
 class TestSoapySourceAcquire:
     def _acquire(self, source, capture, count):
         source.arm(capture)

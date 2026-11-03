@@ -1,6 +1,7 @@
-"""sinks that write or collect the analyzed dataset of each capture.
+"""sinks that write or collect the analyzed dataset of each acquisition.
 
 Every sink is constructed from a `Sweep` and reads the `sink` block of that sweep.
+A capture with `burst` above 1 reaches the sink once per burst segment.
 """
 
 from __future__ import annotations as __
@@ -8,6 +9,7 @@ from __future__ import annotations as __
 import itertools as itertools
 import math
 import os
+from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Generic, cast
 
@@ -31,6 +33,8 @@ else:
 
 
 class _BatchTracker:
+    """the write batch sizes of a time-append sink, one entry of `captures` per append"""
+
     size: int
     total_size: int
 
@@ -125,7 +129,7 @@ class Zipper:
 
 
 class SinkBase(Generic[specs.SC]):
-    """base sink that accepts the analyzed dataset of one capture at a time.
+    """base sink that accepts the analyzed dataset of one acquisition at a time.
 
     A sink is constructed from a `Sweep`, reads the `sink` block of that sweep, and
     is entered as a context manager before the first `append`. Writes run on 1
@@ -142,7 +146,7 @@ class SinkBase(Generic[specs.SC]):
         from concurrent.futures import ThreadPoolExecutor
 
         self._spec = sweep_spec.sink
-        self.captures_elapsed = 0
+        self.acquisitions_elapsed = 0
         self._format_path = format_path
 
         self.store = None
@@ -154,7 +158,7 @@ class SinkBase(Generic[specs.SC]):
     def pop(self) -> list[xr.Dataset]:
         result = self._pending_data
         self._pending_data = []
-        self.captures_elapsed += len(result)
+        self.acquisitions_elapsed += len(result)
         return result
 
     def submit(self, func, *args, **kws):
@@ -178,6 +182,10 @@ class SinkBase(Generic[specs.SC]):
     def append(
         self, capture_result: compute.DelayedDataset
     ) -> xr.Dataset | compute.DelayedDataset:
+        """materialize `capture_result` and keep the dataset for `pop`.
+
+        The call blocks until a pending peripheral read of the acquisition completes.
+        """
         from . import compute
 
         if capture_result is None:
@@ -208,14 +216,14 @@ class NoSink(SinkBase):
         pass
 
     def flush(self):
-        count = self.captures_elapsed
+        count = self.acquisitions_elapsed
         with util.log_capture_context(
             'sink', capture_index=count - 1, capture_count=count
         ):
             sa.util.get_logger('sink').info('done')
 
     def append(self, capture_result) -> compute.DelayedDataset:
-        self.captures_elapsed += 1
+        self.acquisitions_elapsed += 1
         return capture_result
 
     def wait(self):
@@ -223,7 +231,7 @@ class NoSink(SinkBase):
 
 
 class MemoryCacheSink(SinkBase):
-    """collect the dataset of every capture in memory until `pop` is called.
+    """collect the dataset of every acquisition in memory until `pop` is called.
 
     Nothing is written. `close` leaves the collected datasets in place.
     """
@@ -297,7 +305,7 @@ def chunk_shape(
 ) -> tuple[int, ...]:
     """return a chunk shape of at most `budget` bytes for an array of `rows` rows.
 
-    A row is one port of one capture with shape `row_shape`. When a row fits in
+    A row is one port of one acquisition with shape `row_shape`. When a row fits in
     `budget`, the chunk is as many whole rows as fit, and at least 1. Otherwise the
     chunk is one row, cut along the leading axes until the trailing block fits.
     """
@@ -360,15 +368,18 @@ def _json_value(value: Any) -> Any:
 
 
 class ZarrCaptureSink(ZarrSinkBase):
-    """write the dataset of each capture into a zarr store allocated for the whole sweep.
+    """write the dataset of each acquisition into a zarr store allocated for the whole sweep.
 
     `open` allocates every data variable and coordinate of the store from the sweep
-    spec, with one row per port of every expanded capture along ``capture``, and
-    keeps the metadata in memory until each `append` (directory store) or until
-    `close` (zip store). `append` places the arrays of a `DelayedDataset` on the
-    union grid of the sweep and writes every chunk that the capture completes, so
-    each chunk is written once. `close` writes the partial chunks, trims the store
-    to the rows written, and consolidates the metadata.
+    spec, with one row per port per burst segment of every expanded capture along
+    ``capture`` (`sweep_row_count`), and keeps the metadata in memory until each
+    `append` (directory store) or until `close` (zip store). `append` places the
+    arrays of a `DelayedDataset` on the union grid of the sweep and writes every
+    chunk that the acquisition completes, so each chunk is written once. A burst
+    segment re-acquired after a stream overflow is a further row:
+    ``(capture_index, burst_index)`` may repeat, with a later ``start_time``. `close`
+    writes the partial chunks, trims the store to the rows written, and consolidates
+    the metadata.
     """
 
     def __init__(
@@ -406,6 +417,7 @@ class ZarrCaptureSink(ZarrSinkBase):
         self._dropped_attrs: dict[str, set[str]] = {}
         self._root_attrs: dict[str, Any] = {}
         self._flush_each = True
+        self._deferred: deque[compute.DelayedDataset] = deque()
 
     @property
     def rows_written(self) -> int:
@@ -554,7 +566,44 @@ class ZarrCaptureSink(ZarrSinkBase):
             cast('StagedMetadataStore', self.store).flush_metadata()
 
     def append(self, capture_result: compute.DelayedDataset) -> compute.DelayedDataset:
-        dd = capture_result
+        """queue the rows of `capture_result` and write every queued row that is ready.
+
+        A row is ready when the acquisition has no pending peripheral read or the read
+        has completed. The rows behind a pending row wait, so the store keeps the
+        acquisition order.
+        """
+        self._deferred.append(capture_result)
+        self._write_ready(block=False)
+        return capture_result
+
+    def _write_ready(self, block: bool) -> None:
+        """write the queued rows from the head while the head is ready, or all with `block`.
+
+        A pending read that failed is written without the peripheral entries, with a
+        WARNING on the ``sink`` logger.
+        """
+        while self._deferred:
+            dd = self._deferred[0]
+            pending = dd.pending_extra_data
+            if pending is None:
+                extra_data = dd.extra_data
+            elif not block and not pending.peripherals.done():
+                return
+            elif pending.peripherals.exception() is None:
+                extra_data = compute.datasets.resolve_extra_data(dd)
+            else:
+                sa.util.get_logger('sink').warning(
+                    'the peripheral read of capture '
+                    f'{dd.extra_coords.capture_index} failed; writing the rows '
+                    'without the peripheral data'
+                )
+                extra_data = dd.extra_data | pending.override
+            self._deferred.popleft()
+            self._write_rows(dd, extra_data)
+
+    def _write_rows(
+        self, dd: compute.DelayedDataset, extra_data: dict[str, Any]
+    ) -> None:
         ports = len(specs.captures.split_capture_ports(dd.capture))
         if self._row + ports > self._rows_total:
             self._grow(self._row + ports)
@@ -575,22 +624,24 @@ class ZarrCaptureSink(ZarrSinkBase):
             for name in self._coord_names:
                 self._push(name, self._encoders[name](coords[name].values))
 
-        if dd.extra_data:
-            extra = compute.datasets.extra_data_arrays(dd.extra_data, ports)
+        if extra_data:
+            extra = compute.datasets.extra_data_arrays(extra_data, ports)
             self._add_extra_data(extra)
             for name, var in extra.items():
                 self._push(name, self._encoders[name](var.values))
 
         self._row += ports
-        self.captures_elapsed += 1
+        self.acquisitions_elapsed += 1
         self._flush()
 
-        with util.log_capture_context('sink', capture_index=self.captures_elapsed - 1):
+        with util.log_capture_context(
+            'sink', capture_index=self.acquisitions_elapsed - 1
+        ):
             sa.util.get_logger('sink').info('💾')
-        return dd
 
     def close(self, *exc_info):
         if self.store is not None and self._arrays:
+            self._write_ready(block=True)
             for name in self._arrays:
                 self._drain(name, final=True)
             self._trim()
@@ -600,10 +651,11 @@ class ZarrCaptureSink(ZarrSinkBase):
 
 
 class ZarrTimeAppendSink(ZarrSinkBase):
-    """append the spectrogram of each capture along the spectrogram time axis.
+    """append the spectrogram of each acquisition along the spectrogram time axis.
 
-    The captures of one write batch share one `capture` index, and each batch is
-    appended along `capture`. The store is written without compression.
+    The acquisitions of one write batch share one `capture` index, and each batch is
+    appended along `capture`. A batch holds at least `batch_size` acquisitions,
+    counting each burst segment. The store is written without compression.
 
     Raises:
         ValueError: if `sweep_spec.analysis` has no `spectrogram`, or if the sink
@@ -633,7 +685,8 @@ class ZarrTimeAppendSink(ZarrSinkBase):
             batch_size = sweep_spec.sink.batched_write_count
         source_id = controller.lookup.id(sweep_spec.source)
         captures = specs.sequencing.repeat_captures(sweep_spec, source_id)
-        self._batch = _BatchTracker(captures, min_size=batch_size)
+        acquisitions = specs.sequencing.expand_bursts(captures)
+        self._batch = _BatchTracker(acquisitions, min_size=batch_size)
 
     def append(self, capture_result):
         ret = super().append(capture_result)
@@ -657,7 +710,7 @@ class ZarrTimeAppendSink(ZarrSinkBase):
             by_spectrogram = compute.concat_time_dim(data_list, 'spectrogram_time')
 
         path = self.get_root_path()
-        count = self.captures_elapsed
+        count = self.acquisitions_elapsed
         logger = sa.util.get_logger('sink')
 
         with (

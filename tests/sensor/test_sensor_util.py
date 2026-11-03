@@ -12,7 +12,6 @@ import time
 import exceptiongroup
 import pytest
 import yaml
-from hypothesis import given, strategies as st
 
 import striqt.analysis as sa
 from striqt.sensor.lib import util
@@ -58,35 +57,6 @@ def run_in_thread(func):
     thread.start()
     thread.join()
     return outcome[0]
-
-
-# %% zip_offsets
-def zip_offsets_reference(seq, shifts, fill):
-    n = len(seq) - min(shifts)
-    return [
-        tuple(seq[k + s] if 0 <= k + s < len(seq) else fill for s in shifts)
-        for k in range(n)
-    ]
-
-
-class TestZipOffsets:
-    # the shift range covers (-2, -1, 0, 1), the (previous-1, previous, current,
-    # next) stages of the sweep pipeline
-    @given(
-        seq=st.lists(st.integers(), max_size=8),
-        shifts=st.lists(st.integers(-3, 3), min_size=2, max_size=4),
-    )
-    def test_matches_reference(self, seq, shifts):
-        result = list(util.zip_offsets(iter(seq), tuple(shifts), fill=None))
-        assert result == zip_offsets_reference(seq, shifts, None)
-
-    def test_single_shift_squeeze(self):
-        assert list(util.zip_offsets([1, 2, 3], (1,), fill=0)) == [2, 3]
-        assert list(util.zip_offsets([1, 2, 3], (1,), fill=0, squeeze=False)) == [
-            (2,),
-            (3,),
-        ]
-        assert list(util.zip_offsets([1, 2], (-1,), fill=0)) == [0, 1, 2]
 
 
 # %% thread interrupts and the thread pool

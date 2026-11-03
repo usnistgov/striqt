@@ -52,8 +52,6 @@ TRIGGERS = ('cellular_5g_pss_sync', 'cellular_5g_sss_sync')
 SCALAR_GAIN_MSG = 'gain must be a single number unless multiple ports are specified'
 GAIN_COUNT_MSG = 'gain, when specified as a tuple, must match port count'
 FILE_RATE_MSG = 'backend_sample_rate is fixed by the file source'
-SYNC_MSG = 'time_sync_at must be "open" when gapless'
-RETRIES_MSG = 'receive_retries must be 0 when gapless is enabled'
 TRIGGER_MSG = 'signal_trigger must be one of'
 REPEAT_MSG = re.escape('Expected a `repeat` loop only as the outermost (first) entry')
 DUPLICATE_MSG = 'Expected at most one loop over field'
@@ -172,41 +170,81 @@ class TestExtensionCapture:
             SiteCaptureCls.from_dict(make_site_capture_kws(analysis_bandwidth=None))
 
 
-# %% SoapySource
+# %% Bursts
 
 
-class TestGapless:
+class TestBursts:
+    def test_capture_burst_defaults_to_one_acquisition(self):
+        for capture in construct_both(SoapyCapture, port=0, gain=0, **BASE):
+            assert capture.burst == 1
+
+    @pytest.mark.parametrize('burst', [0, -1])
+    def test_capture_burst_below_one_is_rejected_on_convert(self, burst):
+        kws = {'port': 0, 'gain': 0, **BASE}
+        with pytest.raises(msgspec.ValidationError, match=r'>= 1 - at `\$.burst`'):
+            SoapyCapture.from_dict({**kws, 'burst': burst})
+        with pytest.raises(msgspec.ValidationError, match=r'>= 1'):
+            SoapyCapture(**kws).replace(burst=burst)
+
+    def test_source_bursts_block_defaults(self):
+        """the defaults tolerate a gap, hold one acquisition ahead of analysis, and
+        run the signal trigger once per burst"""
+        for source in construct_both(SoapySource, **MCR):
+            assert source.bursts == ss.specs.BurstOptions(
+                on_gap='skip', buffers=1, trigger_on='first'
+            )
+
+    def test_source_bursts_block_from_dict(self):
+        source = SoapySource.from_dict({
+            **MCR,
+            'bursts': {'on_gap': 'except', 'buffers': 4, 'trigger_on': 'all'},
+        })
+        assert source.bursts.on_gap == 'except'
+        assert source.bursts.buffers == 4
+        assert source.bursts.trigger_on == 'all'
+
     @pytest.mark.parametrize(
-        'kws',
+        'field, value, match',
         [
-            {'gapless': False, 'time_sync_at': 'acquire', 'receive_retries': 3},
-            {'gapless': True, 'time_sync_at': 'open', 'receive_retries': 0},
+            ('on_gap', 'drop', r'Invalid enum value .drop. - at .\$\.on_gap'),
+            ('buffers', 0, r'>= 1'),
+            ('trigger_on', 'last', r'Invalid enum value .last. - at .\$\.trigger_on'),
         ],
-        ids=['non_gapless_any_sync_and_retries', 'gapless_open_zero_retries'],
+        ids=['on_gap', 'buffers', 'trigger_on'],
     )
-    def test_consistent_gapless_settings_accepted(self, kws):
-        source = SoapySource(**kws, **MCR)
-        for name, value in kws.items():
-            assert getattr(source, name) == value
+    def test_source_bursts_block_rejects_values_outside_the_contract(
+        self, field, value, match
+    ):
+        with pytest.raises(msgspec.ValidationError, match=match):
+            ss.specs.BurstOptions.from_dict({field: value})
+        with pytest.raises(msgspec.ValidationError, match=match):
+            ss.specs.BurstOptions().replace(**{field: value})
 
-    def test_gapless_requires_open_time_sync(self):
-        raises_on_both_paths(SoapySource, ValueError, SYNC_MSG, gapless=True, **MCR)
-
-    def test_gapless_requires_zero_retries(self):
-        raises_on_both_paths(
-            SoapySource,
-            ValueError,
-            RETRIES_MSG,
-            gapless=True,
-            time_sync_at='open',
+    def test_time_sync_and_retries_are_independent_of_bursts(self):
+        """the downstream source fragments pair `time_sync_at: acquire` with
+        `receive_retries: 3`; a burst policy may not reject them"""
+        source = SoapySource(
+            time_sync_at='acquire',
             receive_retries=3,
+            bursts=ss.specs.BurstOptions(on_gap='except'),
             **MCR,
         )
+        assert source.receive_retries == 3
 
-    def test_air7101b_nonzero_default_retries_forbid_gapless(self):
-        with pytest.raises(ValueError, match=RETRIES_MSG):
-            Air7101BSource(gapless=True, time_sync_at='open')
-        assert Air7101BSource(gapless=True, time_sync_at='open', receive_retries=0)
+    def test_source_accepts_the_bursts_block_as_a_dict(self):
+        """the binding call form of a controller passes the fields of `to_dict`"""
+        source = SoapySource(bursts={'buffers': 2}, **MCR)
+        assert source.bursts == ss.specs.BurstOptions(buffers=2)
+        assert hash(source) == hash(SoapySource(**source.to_dict()))
+
+    def test_acquisition_info_burst_index_defaults_to_zero(self):
+        assert ss.specs.AcquisitionInfo().burst_index == 0
+        assert ss.specs.AcquisitionInfo(burst_index=2).burst_index == 2
+
+    def test_calibration_rejects_a_capture_burst(self):
+        match = re.escape('$.captures[0].burst: Expected 1')
+        with pytest.raises(msgspec.ValidationError, match=match):
+            make_calibration_sweep(captures=(make_calibration_capture(burst=2),))
 
 
 class TestSignalTrigger:

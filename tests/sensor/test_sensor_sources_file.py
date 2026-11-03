@@ -187,6 +187,24 @@ def test_zarr_read_timestamps(zarr_iq_file, lead):
     assert later_ns == 0
 
 
+def test_zarr_reads_after_one_arm_are_stamped_one_read_apart(zarr_iq_file):
+    """a second read at buffer position 0 after one `arm` is stamped the samples of
+    the first read after it, with `start_time` of the store still at file index 0"""
+    lead = 512
+    count = 8
+    source = ss.lib.sources.ZarrIQSource(zarr_spec(zarr_iq_file, capture_index=0))
+    source.setup()
+    source.arm(file_capture())
+    source.trigger((lead, 0))
+    bufs = [np.empty(count, dtype='complex64') for _ in range(2)]
+
+    _, first_ns = source.read(bufs, 0, count)
+    _, second_ns = source.read(bufs, 0, count)
+
+    assert first_ns == int(START_TIME.astype('int64')) - round(lead * 1e9 / FS)
+    assert second_ns - first_ns == round(count * 1e9 / FS)
+
+
 def test_zarr_acquisition_info(zarr_iq_file):
     """`arm` fills the acquisition metadata from the coordinates of the store"""
     source = zarr_spec(zarr_iq_file, capture_index=1)

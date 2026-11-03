@@ -11,7 +11,6 @@ source:
   receive_retries: 3
   adc_overload_limit: -3.0
   if_overload_limit: -14.0
-  gapless: false
 captures:
 - duration: 10e-3
   sample_rate: 107520000.0

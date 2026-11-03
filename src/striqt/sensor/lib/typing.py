@@ -135,6 +135,12 @@ class SourceBackend(Protocol[_SS, SC]):
     def prepare_retrigger(self):
         pass
 
+    def disarm(self) -> None:
+        """stop streaming until the next `trigger`; the tuning of `arm` is kept.
+
+        The base implementation does nothing.
+        """
+
     def package_iq(
         self,
         iq: specs.AcquiredIQ,

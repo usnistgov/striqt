@@ -22,6 +22,11 @@ class ReceiveStreamError(IOError):
     pass
 
 
+class AcquisitionOverrunError(RuntimeError):
+    """a burst segment had no free slot in the acquisition queue under
+    ``bursts.on_gap='except'``."""
+
+
 def acquisition_info_cls(
     source_cls: type[SourceBackend[Any, Any]] | None,
 ) -> type[specs.AcquisitionInfo]:

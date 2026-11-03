@@ -135,6 +135,47 @@ def test_a_looped_capture_is_located_by_its_loop_point():
         make_sweep(captures=(capture,), loops=loops)
 
 
+def test_reuse_iq_rejects_a_capture_burst():
+    """the reuse cache holds one acquisition, so a burst is located at the capture
+    that asks for several"""
+    loops = (ss.specs.List(field='burst', values=(1, 3)),)
+    match = (
+        re.escape('$.options.reuse_iq: Expected false')
+        + '.*'
+        + re.escape("at $.loops: {'burst': 3} on $.captures[0]")
+    )
+    with pytest.raises(SpecValidationError, match=match):
+        make_sweep(
+            captures=(make_capture(),),
+            loops=loops,
+            options=ss.specs.SweepOptions(reuse_iq=True),
+        )
+    assert make_sweep(captures=(make_capture(),), loops=loops)
+
+
+@pytest.mark.parametrize(
+    'strobe, accepted',
+    [(0.5e-3, True), (0.3e-3, False), (None, True)],
+    ids=['divides', 'remainder', 'no_strobe'],
+)
+def test_a_burst_capture_duration_is_a_whole_number_of_strobe_periods(strobe, accepted):
+    """a burst capture with a 1 ms duration passes a 0.5 ms strobe and fails a 0.3 ms
+    strobe, located at the capture; a capture with burst 1 is not checked"""
+    source = SOURCE.replace(trigger_strobe=strobe)
+    burst = make_capture(burst=3)
+    if accepted:
+        assert make_sweep(captures=(burst,), source=source)
+        return
+    match = (
+        re.escape('$.duration: Expected a whole number of `trigger_strobe` periods')
+        + '.*'
+        + re.escape('at $.captures[0]')
+    )
+    with pytest.raises(SpecValidationError, match=match):
+        make_sweep(captures=(burst,), source=source)
+    assert make_sweep(captures=(make_capture(),), source=source)
+
+
 def test_a_trigger_without_its_measurement_is_rejected_at_the_source():
     source = SOURCE.replace(signal_trigger='cellular_5g_pss_sync')
     match = re.escape('$.source.signal_trigger: signal_trigger')

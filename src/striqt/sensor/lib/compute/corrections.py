@@ -266,15 +266,36 @@ def _filtered_stage(pp: Preprocessor) -> Array:
     return z
 
 
+def trigger_shifts(iq: specs.AcquiredIQ) -> Array:
+    """return the per-port alignment shift of `iq`, in samples at the capture rate.
+
+    `iq.trigger_shifts` is returned when set. Otherwise the trigger of the
+    acquisition runs on `iq.preprocess`, and the result is memoized there.
+
+    Raises:
+        TypeError: if `iq.capture` is not a `SensorCapture`
+        ValueError: if the acquisition has no trigger
+    """
+    if iq.trigger_shifts is not None:
+        return iq.trigger_shifts
+    if _trigger_of(iq) is None:
+        raise ValueError('the acquisition has no signal trigger')
+    return _trigger_shifts(iq.preprocess)
+
+
 def _trigger_shifts(pp: Preprocessor) -> Array:
     """return the per-port shift, in samples, from the trigger of the acquisition.
 
-    `aligning` is set while the trigger measurement runs on the acquisition.
+    `trigger_shifts` of the acquisition is returned when set. `aligning` is set
+    while the trigger measurement runs on the acquisition.
     """
     if pp.shifts is not None:
         return pp.shifts
 
     iq = pp.iq
+    if iq.trigger_shifts is not None:
+        pp.shifts = iq.trigger_shifts
+        return pp.shifts
     capture = _sensor_capture(iq)
     trigger = _trigger_of(iq)
     assert trigger is not None

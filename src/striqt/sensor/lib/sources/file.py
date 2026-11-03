@@ -275,13 +275,15 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
         on_overflow: specs.types.OnOverflow = 'except',
     ) -> tuple[int, int]:
         assert self._waveform is not None
+        start_index = self._samples_elapsed - self._overlaps[0]
         iq, _ = super().read(
             buffers, offset, count, timeout_sec=timeout_sec, on_overflow=on_overflow
         )
 
         if offset == 0:
+            # `start_time` of the store is the time of file index 0
             start_time_ns = int(self._waveform.start_time[0].data)
-            time_ns = start_time_ns + self._sample_time_ns(-self._overlaps[0])
+            time_ns = start_time_ns + self._sample_time_ns(start_index)
         else:
             time_ns = 0
 

@@ -520,3 +520,27 @@ class TestCupyHelpers:
 
         assert isinstance(device, cp.ndarray)
         assert_array_equal(device.get(), host)
+
+    def test_pinned_copy_of_a_column_slice_copies_each_row(self, cupy_available):
+        """the receive buffer is sliced to the samples read before the device copy,
+        which leaves the rows contiguous but not the array"""
+        import cupyx
+
+        cp = cupy_available
+        host = cupyx.zeros_pinned((2, 8), dtype=np.complex64)
+        host[:] = np.arange(16, dtype=np.float32).reshape(2, 8) * (1 + 1j)
+        view = host[:, :5]
+        assert not view.flags.c_contiguous
+
+        device = arrays.pinned_array_as_cupy(view)
+        cp.cuda.get_current_stream().synchronize()
+
+        assert device.shape == (2, 5)
+        assert_array_equal(device.get(), view)
+
+    def test_pinned_copy_rejects_strided_rows(self, cupy_available):
+        import cupyx
+
+        host = cupyx.zeros_pinned((4, 4), dtype=np.float32)
+        with pytest.raises(ValueError, match='contiguous'):
+            arrays.pinned_array_as_cupy(host[::2, ::2])

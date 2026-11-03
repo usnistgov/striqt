@@ -525,6 +525,33 @@ def test_repeat_captures_repeats_every_pass_in_order(synthetic_sweep, count):
         assert repeated[i * len(once) : (i + 1) * len(once)] == once
 
 
+# %% count_acquisitions
+
+
+def test_count_acquisitions_sums_the_bursts_of_every_repeated_pass(synthetic_sweep):
+    repeat, *others = synthetic_sweep.loops
+    assert isinstance(repeat, ss.specs.Repeat)
+    captures = tuple(
+        c.replace(burst=i + 1) for i, c in enumerate(synthetic_sweep.captures)
+    )
+    sweep = synthetic_sweep.replace(
+        captures=captures, loops=(ss.specs.Repeat(count=2), *others)
+    )
+    expected = sum(c.burst for c in S.repeat_captures(sweep))
+    assert S.count_acquisitions(sweep) == expected
+    assert expected > 2 * len(S.loop_captures(sweep))
+
+
+def test_count_acquisitions_is_unbounded_when_looping(synthetic_sweep):
+    assert S.count_acquisitions(synthetic_sweep, loop=True) == -1
+
+
+def test_expand_bursts_repeats_each_capture_in_place():
+    captures = (make_capture(burst=2), make_capture(burst=1, lo_shift='left'))
+    expanded = S.expand_bursts(captures)
+    assert expanded == (captures[0], captures[0], captures[1])
+
+
 # %% loop_capture_origins
 
 

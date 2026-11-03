@@ -43,16 +43,13 @@ def stub_controller(
     )
 
 
-GAPLESS_SOURCE = source_spec(gapless=True, time_sync_at='open')
+SOAPY_SOURCE = source_spec()
 
 
 def receive_buffers(
-    capture: ss.specs.SensorCapture, source: ss.specs.Source = GAPLESS_SOURCE
+    capture: ss.specs.SensorCapture, source: ss.specs.Source = SOAPY_SOURCE
 ) -> buffers.ReceiveBuffers:
-    """return a `ReceiveBuffers` over ``stub_controller(capture, source)``.
-
-    The carryover path requires the gapless default.
-    """
+    """return a `ReceiveBuffers` over ``stub_controller(capture, source)``"""
     return buffers.ReceiveBuffers(stub_controller(capture, source))
 
 
@@ -178,6 +175,29 @@ def test_cast_iq_int16_interleaved_pairs_become_unscaled_complex64():
     np.testing.assert_array_equal(out, expected.astype('complex64'))
 
 
+@pytest.mark.parametrize('transport', ['complex64', 'int16'])
+def test_cast_iq_copies_only_the_acquired_columns(transport):
+    """a receive buffer wider than the read, as a reused or holdoff-padded buffer is,
+    adds nothing to the copy that the acquisition keeps"""
+    source = source_spec(transport_dtype=transport)
+    ports, acquired, width = 2, 300, 500
+    buffer = np.zeros((ports, width), dtype='complex64')
+    if transport == 'int16':
+        pairs = np.arange(ports * 2 * acquired).reshape(ports, 2 * acquired)
+        buffer.view('int16')[:, : 2 * acquired] = pairs.astype('int16')
+        expected = pairs[:, 0::2] + 1j * pairs[:, 1::2]
+    else:
+        buffer[:, :acquired] = np.arange(ports * acquired).reshape(ports, acquired)
+        expected = buffer[:, :acquired].copy()
+
+    out = buffers.cast_iq(source, buffer, acquired)
+
+    assert out.shape == (ports, acquired)
+    assert out.base.shape[1] == acquired, 'the copy is bounded by the read'
+    assert not np.shares_memory(out, buffer)
+    np.testing.assert_array_equal(out, expected.astype('complex64'))
+
+
 @pytest.mark.namespaces('cupy')
 def test_cast_iq_cupy_returns_a_device_array(xp):
     source = SOURCE.replace(array_backend='cupy')
@@ -272,7 +292,7 @@ def test_carryover_round_trip_copies_the_tail_into_the_next_head():
     samples = np.full((2, 40), -1 - 1j, dtype='complex64')
     start_ns, count = rb.apply(samples)
 
-    fs = fs_sdr(capture, GAPLESS_SOURCE)
+    fs = fs_sdr(capture, SOAPY_SOURCE)
     assert count == unused
     assert start_ns == t0 + round(1e9 * (40 - unused - lead) / fs)
     np.testing.assert_array_equal(samples[:, :unused], tail)
@@ -283,8 +303,8 @@ def test_carryover_is_stamped_one_lead_before_the_next_record():
     """the stashed time is that of the first carried-over sample, which is the lead
     overlap that precedes the record of the next capture"""
     capture = soapy_capture(duration=1e-3, sample_rate=MCR / 2)
-    design = ss.lib.compute.design_resampler(capture, GAPLESS_SOURCE.master_clock_rate)
-    lead, tail = ss.lib.compute.get_correction_overlaps(capture, GAPLESS_SOURCE)
+    design = ss.lib.compute.design_resampler(capture, SOAPY_SOURCE.master_clock_rate)
+    lead, tail = ss.lib.compute.get_correction_overlaps(capture, SOAPY_SOURCE)
     record = ss.lib.compute.source_record_size(capture, design)
     assert lead > 0, 'the capture must have a lead overlap to be discriminating'
 
@@ -304,18 +324,6 @@ def test_carryover_without_a_stash_returns_the_timestamp_only():
     assert rb.apply(samples) == (None, 0)
     rb.start_time_ns = 55
     assert rb.apply(samples) == (55, 0)
-
-
-def test_carryover_is_disabled_when_not_gapless():
-    capture = soapy_capture()
-    rb = receive_buffers(capture, source_spec())
-    previous = np.ones((1, 20), dtype='complex64')
-    rb.stash_carryover(previous, 0, unused_sample_count=5, capture=capture)
-
-    samples = np.zeros((1, 20), dtype='complex64')
-    assert rb.carryover_samples is None
-    assert rb.apply(samples) == (None, 0)
-    assert not samples.any()
 
 
 def test_carryover_without_a_timestamp_is_an_error():
@@ -365,6 +373,25 @@ def test_alloc_shape_is_ports_by_read_count_with_one_stream_buffer_per_port():
     assert len(streams) == 2
     for i, stream in enumerate(streams):
         assert np.shares_memory(stream, samples[i])
+
+
+def test_alloc_without_holdoff_is_the_bare_read_count():
+    """a segment that continues the stream reads no holdoff, so its buffer is the
+    record plus overlaps; a padded prior serves that request without reallocation"""
+    capture = _TWO_PORT
+    source = source_spec(transient_holdoff_time=1e-3, trigger_strobe=0.5e-3)
+    ctrl = stub_controller(capture, source)
+    bare = buffers.get_read_count(capture, source, include_holdoff=False)
+    padded = buffers.get_read_count(capture, source, include_holdoff=True)
+    assert padded > bare
+
+    _, (samples, _) = buffers._alloc_empty_iq(ctrl, capture, include_holdoff=False)
+    assert samples.shape == (2, bare)
+
+    prior, _ = buffers._alloc_empty_iq(ctrl, capture, include_holdoff=True)
+    assert prior.shape == (2, padded)
+    reused, _ = buffers._alloc_empty_iq(ctrl, capture, prior, include_holdoff=False)
+    assert reused is prior
 
 
 def test_alloc_overlaps_extend_the_read_count():

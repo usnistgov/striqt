@@ -190,15 +190,40 @@ def source_count(capture, source=SOURCE) -> int:
     return math.floor(exact + Fraction(1, 2))
 
 
-def expected_raw(binding: str, capture, source=SOURCE, *, overlaps=None, xp=np):
+def expected_raw(
+    binding: str,
+    capture,
+    source=SOURCE,
+    *,
+    overlaps=None,
+    burst_index: int = 0,
+    xp=np,
+):
     """return the acquisition buffer ``[lead overlap | source_count | tail overlap]`` as
-    one generator call at `fs_sdr` starting at index ``-lead``"""
+    one generator call at `fs_sdr`.
+
+    Args:
+        binding: a key of `BINDINGS`
+        capture: the capture spec of the acquisition
+        source: the function source spec
+        overlaps: the (lead, tail) overlap sample counts at `fs_sdr`; `None` selects
+            the correction overlaps of `capture` under `source`
+        burst_index: the burst segment; the generator starts
+            ``burst_index * source_count`` samples after segment 0
+        xp: the array namespace of the result
+
+    Returns:
+        the generator from index ``burst_index * source_count - lead``, shape
+        ``(ports, lead + source_count + tail)``
+    """
     if overlaps is None:
         overlaps = ss.lib.compute.get_correction_overlaps(capture, source, None)
     fs = fs_sdr(capture, source)
-    count = overlaps[0] + source_count(capture, source) + overlaps[1]
+    record = source_count(capture, source)
+    count = overlaps[0] + record + overlaps[1]
+    start_index = burst_index * record - overlaps[0]
     return generator(
-        binding, capture, sample_rate=fs, start_index=-overlaps[0], count=count, xp=xp
+        binding, capture, sample_rate=fs, start_index=start_index, count=count, xp=xp
     )
 
 

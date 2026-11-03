@@ -652,8 +652,6 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
     def arm(self, capture: specs.SoapyCapture) -> specs.SoapyCapture | None:
         if self.rx_stream is None:
             return  # not connected
-        if capture == self._capture and self.spec.gapless:
-            return  # the stream stays enabled only for a gapless repeat of a capture
 
         self.rx_stream.enable(self.device, False)
 
@@ -685,6 +683,9 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
 
     # %% triggering
     def prepare_retrigger(self):
+        self.disarm()
+
+    def disarm(self) -> None:
         self.rx_stream.enable(self.device, False)
 
     @sa.util.stopwatch('enable stream', 'source')
