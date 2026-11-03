@@ -11,7 +11,7 @@ from __future__ import annotations as __
 import dataclasses
 import math
 from collections.abc import Iterable
-from typing import Literal, Union
+from typing import Literal, Union, cast
 
 from .util import lru_cache
 
@@ -23,13 +23,25 @@ PREFIXES: dict[int, str] = dict(
 )
 """the SI prefix symbol of each decimal exponent, from femto to peta"""
 
+PowerUnits = Literal['mW', 'FS', 'a.u.']
+"""the unit of the squared magnitude of an IQ waveform: calibrated milliwatts, full
+scale, or arbitrary units"""
+
 _EXPONENTS = {symbol: exponent for exponent, symbol in PREFIXES.items()} | {'u': -6}
 _WAVE = '√'
-_DB_TO_LINEAR = {'dBm': 'mW', 'dBW': 'W', 'dB': 'unitless'}
+# 'FS' is capitalized so that it cannot read as femtoseconds
+_DB_TO_LINEAR = {
+    'dBm': 'mW',
+    'dBW': 'W',
+    'dB': 'unitless',
+    'dBFS': 'FS',
+    'dB(a.u.)': 'a.u.',
+}
 _TO_DB = {v: k for k, v in _DB_TO_LINEAR.items()}
 _TO_LINEAR = {**_DB_TO_LINEAR, **{v: v for v in _DB_TO_LINEAR.values()}}
 _TO_WAVE = {k: _WAVE + v for k, v in _TO_LINEAR.items()}
-_UNPREFIXED = frozenset({'mW', 'unitless'})
+_UNPREFIXED = frozenset({'mW', 'unitless', 'FS', 'a.u.'})
+_POWER_FAMILIES: frozenset[str] = frozenset({'mW', 'FS', 'a.u.'})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -119,6 +131,38 @@ def to_wave(units: str) -> str:
     string without a known base is returned unchanged.
     """
     return _rewrite_base(units, _TO_WAVE)
+
+
+def power_family(units: str) -> Union[PowerUnits, None]:
+    """return the power unit that the dB, linear, or amplitude `units` string refers to.
+
+    ``'dBm'``, ``'mW'``, and ``'√mW/Hz'`` give ``'mW'``; ``'dBFS'`` gives ``'FS'``;
+    ``'dB(a.u.)'`` gives ``'a.u.'``. A ratio (``'dB'``) or a unit of another kind
+    gives None.
+    """
+    base = parse_units(to_linear(units)).base
+    if base in _POWER_FAMILIES:
+        return cast('PowerUnits', base)
+    return None
+
+
+def with_power_units(units: str, power_units: PowerUnits) -> str:
+    """return `units` with its power unit replaced by `power_units` in the same form.
+
+    The dB, linear, or amplitude form and the denominator are kept: ``'dBm/Hz'`` with
+    ``'FS'`` gives ``'dBFS/Hz'``, and ``'√mW'`` with ``'a.u.'`` gives ``'√a.u.'``. A
+    string that `power_family` does not recognize is returned unchanged.
+    """
+    if power_family(units) is None:
+        return units
+    parsed = parse_units(units)
+    if parsed.base.startswith(_WAVE):
+        base = _WAVE + power_units
+    elif parsed.base.startswith('dB'):
+        base = _TO_DB[power_units]
+    else:
+        base = power_units
+    return str(dataclasses.replace(parsed, base=base))
 
 
 def _floor3(value: float) -> int:

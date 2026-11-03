@@ -514,6 +514,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                     spec=spec,
                     attrs=more_attrs,
                     info=self[spec_type],
+                    power_units=getattr(iq, 'power_units', 'a.u.'),
                 )
 
                 if as_xarray == 'delayed':

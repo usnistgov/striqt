@@ -112,7 +112,7 @@ def registry_probe() -> str:
         func = f'{info.func.__module__}.{info.name}'
         fields = msgspec.structs.fields(spec_type)
         required = [f.name for f in fields if f.required]
-        acquired = 'sa.AcquiredIQ(x=iq, capture=cap)'
+        acquired = "sa.AcquiredIQ(x=iq, capture=cap, power_units='mW')"
         lines += [
             f'    assert_type({measurement_call(func, required)}, xr.DataArray)',
             '    assert_type(',

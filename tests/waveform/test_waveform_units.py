@@ -45,7 +45,11 @@ def test_parse_units_splits_at_the_first_slash(text, base, per):
         ('dB', False),
         ('dBm/Hz', False),
         ('dB power', False),
-        ('dBfs', False),
+        ('dBFS', False),
+        ('dB(a.u.)', False),
+        ('FS', False),
+        ('a.u.', False),
+        ('√a.u.', False),
         ('mW', False),
         ('√mW', False),
         ('unitless', False),
@@ -65,8 +69,17 @@ UNIT_PAIRS = [
     ('dB', 'unitless'),
     ('dBm/Hz', 'mW/Hz'),
     ('dBW/Hz', 'W/Hz'),
+    ('dBFS', 'FS'),
+    ('dB(a.u.)', 'a.u.'),
+    ('dBFS/Hz', 'FS/Hz'),
 ]
-WAVE_PAIRS = [('dBm', '√mW'), ('dBW', '√W'), ('dB', '√unitless')]
+WAVE_PAIRS = [
+    ('dBm', '√mW'),
+    ('dBW', '√W'),
+    ('dB', '√unitless'),
+    ('dBFS', '√FS'),
+    ('dB(a.u.)', '√a.u.'),
+]
 
 
 @pytest.mark.parametrize('dB_unit, linear_unit', UNIT_PAIRS)
@@ -95,6 +108,52 @@ def test_conversions_are_idempotent_on_their_own_form():
 def test_unknown_units_pass_through(convert):
     assert convert('counts') == 'counts'
     assert convert('counts/s') == 'counts/s'
+
+
+# %% power_family / with_power_units
+
+
+@pytest.mark.parametrize(
+    'units, family',
+    [
+        ('dBm', 'mW'),
+        ('mW', 'mW'),
+        ('√mW/Hz', 'mW'),
+        ('dBm/Hz', 'mW'),
+        ('dBFS', 'FS'),
+        ('√FS', 'FS'),
+        ('dB(a.u.)', 'a.u.'),
+        ('a.u.', 'a.u.'),
+        ('dB', None),
+        ('dBW', None),
+        ('Hz', None),
+        ('s', None),
+        ('', None),
+    ],
+)
+def test_power_family(units, family):
+    assert U.power_family(units) == family
+
+
+@pytest.mark.parametrize(
+    'units, target, expected',
+    [
+        ('dBm', 'FS', 'dBFS'),
+        ('dBm/Hz', 'FS', 'dBFS/Hz'),
+        ('mW', 'a.u.', 'a.u.'),
+        ('√mW', 'a.u.', '√a.u.'),
+        ('√mW/30 kHz', 'FS', '√FS/30 kHz'),
+        ('dBFS', 'mW', 'dBm'),
+        ('dB(a.u.)', 'mW', 'dBm'),
+        ('dBm', 'mW', 'dBm'),
+        ('dB', 'FS', 'dB'),
+        ('Hz', 'FS', 'Hz'),
+        ('dBW', 'FS', 'dBW'),
+    ],
+)
+def test_with_power_units(units, target, expected):
+    assert U.with_power_units(units, target) == expected
+    assert U.with_power_units(expected, target) == expected
 
 
 # %% si_prefix

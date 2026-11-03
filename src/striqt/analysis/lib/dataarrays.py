@@ -77,6 +77,9 @@ class AcquiredIQ:
     """the acquired waveform with shape (port, sample)"""
     capture: specs.Capture | None
     """the acquisition parameters of `x`, or None when not known"""
+    power_units: sw.units.PowerUnits
+    """the unit of the squared magnitude of `x`: ``'mW'`` when calibrated, ``'FS'``
+    for full scale, ``'a.u.'`` for arbitrary units"""
 
     @cached_property
     def preprocess(self) -> Preprocessor:
@@ -344,10 +347,27 @@ def build_dataarray(
                 name=qualname,
             )
 
-        da[factory_info.name] = coord.assign_attrs(attrs)
+        da[factory_info.name] = coord.assign_attrs(
+            _in_power_units(attrs, delayed.power_units)
+        )
 
     spec_attrs = delayed.spec.to_dict()
-    return da.assign_attrs(delayed.info.attrs | spec_attrs | delayed.attrs)
+    attrs = delayed.info.attrs | spec_attrs | delayed.attrs
+    return da.assign_attrs(_in_power_units(attrs, delayed.power_units))
+
+
+def _in_power_units(
+    attrs: dict[str, typing.Any], power_units: sw.units.PowerUnits
+) -> dict[str, typing.Any]:
+    """return `attrs` with a power `units` entry rewritten into `power_units`.
+
+    The measurement registry declares every power output in the mW family; the
+    acquisition selects the family that the stored values are in.
+    """
+    units = attrs.get('units', None)
+    if not isinstance(units, str):
+        return attrs
+    return {**attrs, 'units': sw.units.with_power_units(units, power_units)}
 
 
 @util.lru_cache()
@@ -398,6 +418,9 @@ class DelayedDataArray(collections.UserDict):
     result: Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]
     info: register.AnalysisInfo
     attrs: dict
+    power_units: sw.units.PowerUnits = 'a.u.'
+    """the power unit of the acquisition, which `to_xarray` writes into the `units`
+    attrs of the power outputs and coordinates"""
 
     def compute(self) -> DelayedDataArray:
         """return a copy with `result` materialized to numpy.
@@ -418,6 +441,7 @@ class DelayedDataArray(collections.UserDict):
             result=_results_as_arrays(self.result),
             info=self.info,
             attrs=self.attrs,
+            power_units=self.power_units,
         )
 
     def to_xarray(self, expand_dims=None) -> xr.DataArray:

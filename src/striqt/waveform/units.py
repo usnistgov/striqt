@@ -1,12 +1,15 @@
 from .lib.units import (
     PREFIXES,
+    PowerUnits,
     SIPrefix,
     Units,
     format_quantity,
     is_prefixable,
     parse_units,
+    power_family,
     si_prefix,
     to_dB,
     to_linear,
     to_wave,
+    with_power_units,
 )

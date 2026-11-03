@@ -141,6 +141,13 @@ class SourceBackend(Protocol[_SS, SC]):
         The base implementation does nothing.
         """
 
+    def power_units(self) -> sw.units.PowerUnits:
+        """return the unit of the squared magnitude of the IQ after `voltage_scale`.
+
+        The base implementation returns ``'a.u.'``.
+        """
+        return 'a.u.'
+
     def package_iq(
         self,
         iq: specs.AcquiredIQ,
