@@ -618,7 +618,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         Raises:
             ValueError: if `overlaps` is not 2 non-negative integers
             OverflowError: on a stream overflow after the first read of a segment, or
-                at any read of a segment that continues the stream
+                on any read of a segment that continues the stream
             MemoryError: if the backend reports more samples than requested
         """
         assert self._capture is not None, 'source must be armed to read IQ'
@@ -751,7 +751,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
 
         The read of segment 0, or of a segment with `resume`, is repeated up to
         ``source_info.retries`` times on a stream error or overflow. A stream error
-        at a later segment is raised to the caller, which owns the burst.
+        during a later segment is raised to the caller, which manages the burst.
 
         Args:
             overlaps: the ``(lead, tail)`` overlap in source samples, or None to
@@ -847,11 +847,11 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         """acquire the ``capture.burst`` segments of the armed capture.
 
         The segments are read back to back with the stream enabled. A stream error
-        or overflow at segment `k` is retried up to ``source_info.retries`` times in
+        or overflow during segment `k` is retried up to ``source_info.retries`` times in
         total per burst, after `prepare_retrigger` on the backend: under
         ``bursts.on_gap='skip'`` segment `k` is read again as a first segment; under
         ``'except'`` the segments of the burst still in `queue` are removed and the
-        burst restarts at segment 0. With no retries the error is raised.
+        burst restarts from segment 0. With no retries the error is raised.
 
         Each segment passes through `finalize` before it is queued or returned. A
         segment that finds `queue` full is dropped with a WARNING on the ``source``

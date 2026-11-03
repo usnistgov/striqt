@@ -528,7 +528,7 @@ class TestBurst:
 
     @pytest.mark.parametrize('on_gap', ['skip', 'except'])
     def test_overflow_at_member_1_is_retried(self, on_gap, fake_soapy, fake_controller):
-        """an overflow at segment 1 re-triggers the stream. Under skip segment 1 is
+        """an overflow during segment 1 re-triggers the stream. Under skip segment 1 is
         read again and segments 1 and 2 are contiguous; under except the burst
         restarts and the queued segment 0 is replaced. The finalizer of segment 0
         queues the fault for the first read of segment 1."""

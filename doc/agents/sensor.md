@@ -263,7 +263,7 @@ sweep without bursts keeps the one-ahead pacing of acquisition and analysis. Und
 `'skip'`, a segment that finds the queue full is dropped: the time grid of the burst is
 kept, `burst_index` skips that segment, and a WARNING is logged on the `source` logger. A
 stream overflow with `receive_retries` left re-triggers and resumes at the failed segment.
-The earlier segments stand and `start_time` has one gap at that segment. Under `'except'`, a full queue
+The earlier segments stand and `start_time` has one gap before that segment. Under `'except'`, a full queue
 raises `AcquisitionOverrunError` and ends the run, and a stream overflow re-triggers and
 restarts the burst from segment 0 after purging the segments of that burst still in the
 queue. Segments already consumed by analysis stay in the output: `(capture_index,
