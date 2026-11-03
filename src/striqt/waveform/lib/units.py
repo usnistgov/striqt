@@ -15,29 +15,21 @@ from typing import Literal, Union
 
 from .util import lru_cache
 
-PREFIXES: dict[int, str] = {
-    -15: 'f',
-    -12: 'p',
-    -9: 'n',
-    -6: '\N{MICRO SIGN}',
-    -3: 'm',
-    0: '',
-    3: 'k',
-    6: 'M',
-    9: 'G',
-    12: 'T',
-    15: 'P',
-}
+PREFIXES: dict[int, str] = dict(
+    zip(
+        range(-15, 16, 3),
+        ('f', 'p', 'n', '\N{MICRO SIGN}', 'm', '', 'k', 'M', 'G', 'T', 'P'),
+    )
+)
 """the SI prefix symbol of each decimal exponent, from femto to peta"""
 
-_EXPONENTS = {symbol: exponent for exponent, symbol in PREFIXES.items()}
-_EXPONENTS['u'] = -6
-_DB_TO_LINEAR = {'dBm': 'mW', 'dBW': 'W', 'dB': 'unitless'}
-_LINEAR_TO_DB = {linear: dB for dB, linear in _DB_TO_LINEAR.items()}
-_UNPREFIXED = frozenset({'mW', 'unitless'})
+_EXPONENTS = {symbol: exponent for exponent, symbol in PREFIXES.items()} | {'u': -6}
 _WAVE = '√'
-_MIN_EXPONENT = min(PREFIXES)
-_MAX_EXPONENT = max(PREFIXES)
+_DB_TO_LINEAR = {'dBm': 'mW', 'dBW': 'W', 'dB': 'unitless'}
+_TO_DB = {v: k for k, v in _DB_TO_LINEAR.items()}
+_TO_LINEAR = {**_DB_TO_LINEAR, **{v: v for v in _DB_TO_LINEAR.values()}}
+_TO_WAVE = {k: _WAVE + v for k, v in _TO_LINEAR.items()}
+_UNPREFIXED = frozenset({'mW', 'unitless'})
 
 
 @dataclasses.dataclass(frozen=True)
@@ -50,9 +42,7 @@ class Units:
     """the denominator right of the first ``/``, or None without one"""
 
     def __str__(self) -> str:
-        if self.per is None:
-            return self.base
-        return f'{self.base}/{self.per}'
+        return self.base if self.per is None else f'{self.base}/{self.per}'
 
 
 @dataclasses.dataclass(frozen=True)
@@ -93,13 +83,13 @@ def is_prefixable(units: Union[str, None]) -> bool:
     return not (base.startswith('dB') or base in _UNPREFIXED)
 
 
-def _rewrite_base(units: str, convert: dict[str, str], strip_wave: bool) -> str:
-    """return `units` with the base unit mapped through `convert`, else unchanged."""
+def _rewrite_base(units: str, table: dict[str, str]) -> str:
+    """return `units` with the base unit, less a ``√``, mapped through `table`."""
     parsed = parse_units(units)
-    base = parsed.base.lstrip(_WAVE) if strip_wave else parsed.base
-    if base not in convert:
+    base = parsed.base.lstrip(_WAVE)
+    if base not in table:
         return units
-    return str(dataclasses.replace(parsed, base=convert[base]))
+    return str(dataclasses.replace(parsed, base=table[base]))
 
 
 def to_dB(units: str) -> str:
@@ -109,7 +99,7 @@ def to_dB(units: str) -> str:
     ``'unitless'`` gives ``'dB'``. A string without a known linear base is returned
     unchanged.
     """
-    return _rewrite_base(units, _LINEAR_TO_DB, strip_wave=True)
+    return _rewrite_base(units, _TO_DB)
 
 
 def to_linear(units: str) -> str:
@@ -119,8 +109,7 @@ def to_linear(units: str) -> str:
     ``'dB'`` gives ``'unitless'``. A string without a known base is returned
     unchanged.
     """
-    linear = {**_DB_TO_LINEAR, **{v: v for v in _DB_TO_LINEAR.values()}}
-    return _rewrite_base(units, linear, strip_wave=True)
+    return _rewrite_base(units, _TO_LINEAR)
 
 
 def to_wave(units: str) -> str:
@@ -129,9 +118,7 @@ def to_wave(units: str) -> str:
     ``'dBm'`` and ``'mW'`` give ``'√mW'``, and ``'dB'`` gives ``'√unitless'``. A
     string without a known base is returned unchanged.
     """
-    wave = {k: _WAVE + v for k, v in _DB_TO_LINEAR.items()}
-    wave.update({v: _WAVE + v for v in _DB_TO_LINEAR.values()})
-    return _rewrite_base(units, wave, strip_wave=True)
+    return _rewrite_base(units, _TO_WAVE)
 
 
 def _floor3(value: float) -> int:
@@ -140,10 +127,11 @@ def _floor3(value: float) -> int:
 
 def _magnitude_exponent(magnitude: float, places: Union[int, None]) -> int:
     """return the exponent of `magnitude`, carried up when the mantissa rounds to 1000."""
-    exponent = max(_MIN_EXPONENT, min(_MAX_EXPONENT, _floor3(magnitude)))
+    exponent = max(min(PREFIXES), min(max(PREFIXES), _floor3(magnitude)))
     fmt = 'g' if places is None else f'.{places}f'
-    mantissa = magnitude / 10.0**exponent
-    if abs(float(format(mantissa, fmt))) >= 1000 and exponent < _MAX_EXPONENT:
+    if float(format(magnitude / 10.0**exponent, fmt)) >= 1000 and exponent < max(
+        PREFIXES
+    ):
         exponent += 3
     return exponent
 
@@ -180,29 +168,10 @@ def si_prefix(
     })
     if not magnitudes or not is_prefixable(units):
         return SIPrefix(0, '')
-
     exponent = _magnitude_exponent(magnitudes[-1], places)
     if len(magnitudes) > 1:
         step = min(b - a for a, b in zip(magnitudes, magnitudes[1:]))
-        exponent = max(min(_floor3(step), exponent), exponent - 3)
-    exponent = max(_MIN_EXPONENT, exponent)
-    return SIPrefix(exponent, PREFIXES[exponent])
-
-
-def _resolve_prefix(
-    prefix: Union[SIPrefix, str, Literal['auto']],
-    value: float,
-    units: Union[str, None],
-    places: Union[int, None],
-) -> SIPrefix:
-    if isinstance(prefix, SIPrefix):
-        return prefix
-    if prefix == 'auto':
-        return si_prefix(value, units, places=places)
-    try:
-        exponent = _EXPONENTS[prefix]
-    except KeyError:
-        raise ValueError(f'unknown SI prefix symbol {prefix!r}') from None
+        exponent = max(min(_floor3(step), exponent), exponent - 3, min(PREFIXES))
     return SIPrefix(exponent, PREFIXES[exponent])
 
 
@@ -215,9 +184,7 @@ def _format(
     sep: str,
 ) -> str:
     fmt = 'g' if places is None else f'.{places}f'
-    mantissa = value / 10.0**exponent
-    if mantissa == 0:
-        mantissa = 0.0  # one spelling for 0, -0, and 0.0
+    mantissa = value / 10.0**exponent or 0.0  # one spelling for 0, -0, and 0.0
     text = format(mantissa, fmt)
     if units is None:
         return text
@@ -258,5 +225,12 @@ def format_quantity(
     if not math.isfinite(value):
         text = 'nan' if math.isnan(value) else ('-∞' if value < 0 else '∞')
         return f'{text}{sep}{units}' if units else text
-    resolved = _resolve_prefix(prefix, value, units, places)
-    return _format(value, units, resolved.exponent, places, sep)
+    if prefix == 'auto':
+        exponent = si_prefix(value, units, places=places).exponent
+    elif isinstance(prefix, SIPrefix):
+        exponent = prefix.exponent
+    elif prefix in _EXPONENTS:
+        exponent = _EXPONENTS[prefix]
+    else:
+        raise ValueError(f'unknown SI prefix symbol {prefix!r}')
+    return _format(value, units, exponent, places, sep)
