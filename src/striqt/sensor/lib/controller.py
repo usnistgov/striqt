@@ -4,7 +4,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
-import queue as queue_lib
+from queue import Full, Queue
 import weakref
 from collections import defaultdict, deque
 from collections.abc import Generator
@@ -30,10 +30,10 @@ if TYPE_CHECKING:
     PendingSlot: TypeAlias = 'weakref.ref[Controller] | Event | BaseException'
     from . import bindings
 
-    _QueueBase = queue_lib.Queue[Any]
+    _QueueBase = Queue[Any]
 else:
     # queue.Queue is not subscriptable at runtime on python 3.9
-    _QueueBase = queue_lib.Queue
+    _QueueBase = Queue
 
 
 class lookup:
@@ -237,7 +237,7 @@ def _put_waiting(queue: AcquisitionQueue, iq: specs.AcquiredIQ) -> None:
     while True:
         try:
             queue.put(iq, timeout=0.1)
-        except queue_lib.Full:
+        except Full:
             util.propagate_thread_interrupts()
         else:
             return
@@ -924,7 +924,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                 queued_index = iq.info.capture_index
                 try:
                     queue.put_nowait(iq)
-                except queue_lib.Full:
+                except Full:
                     if bursts.on_gap == 'skip':
                         sa.util.get_logger('source').warning(
                             f'dropped burst member {k} of capture '
