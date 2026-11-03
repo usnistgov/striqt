@@ -333,7 +333,7 @@ def test_pss_correlation_noise_bandwidth_is_one_subcarrier():
 
     assert metadata['units'] == '√mW'
     assert metadata['noise_bandwidth'] == SCS
-    assert metadata['long_name'] == 'PSS cross-covariance (√mW/30 kHz)'
+    assert metadata['long_name'] == 'PSS cross-covariance'
 
     # the awgn has unit power over CELL_FS. The last lags of each block are zero
     psd = 1.0 / CELL_FS
@@ -426,7 +426,7 @@ def test_cellular_resource_power_histogram_bin_coordinate_bandwidth(
     coord_attrs = da.cellular_resource_power_bin.attrs
     assert coord_attrs['units'] == 'dBm'
     assert coord_attrs['noise_bandwidth'] == pytest.approx(bandwidth)
-    assert coord_attrs['long_name'].startswith('Cellular resource grid bin power (dBm/')
+    assert coord_attrs['long_name'] == 'Cellular resource grid bin power'
     assert da.attrs['noise_bandwidth'] == pytest.approx(bandwidth)
     assert da.attrs['resolution_bandwidth'] == coord_attrs['resolution_bandwidth']
     assert 'units' not in da.attrs

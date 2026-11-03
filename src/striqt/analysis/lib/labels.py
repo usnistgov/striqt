@@ -103,8 +103,8 @@ def quantity_label(
 ) -> str:
     """return the text that names `m`, with its units in parentheses.
 
-    The text is `m.long_name`, or `m.standard_name` when `short` is True or the long
-    name is None, or `m.name` without either.
+    The text is the first of `m.long_name`, `m.standard_name`, and `m.name` that is
+    not None. `short` puts `m.standard_name` first.
 
     Args:
         m: the measurand
@@ -113,9 +113,8 @@ def quantity_label(
             has units
         prefix: the SI prefix symbol passed to `units_label`
     """
-    text = m.standard_name if short or m.long_name is None else m.long_name
-    if text is None:
-        text = m.standard_name if m.standard_name is not None else m.name
+    names = (m.standard_name, m.long_name) if short else (m.long_name, m.standard_name)
+    text = next((n for n in names if n is not None), m.name)
     units = units_label(m, prefix=prefix) if with_units else None
     return text if units is None else f'{text} ({units})'
 

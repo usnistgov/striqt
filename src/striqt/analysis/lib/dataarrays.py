@@ -4,7 +4,6 @@ from __future__ import annotations as __
 
 import collections
 import dataclasses
-import math
 import typing
 import weakref
 
@@ -86,93 +85,6 @@ class AcquiredIQ:
         A `dataclasses.replace` copy starts with a `Preprocessor` of its own.
         """
         return Preprocessor(self)
-
-
-_ENG_PREFIXES = {
-    -15: 'f',
-    -12: 'p',
-    -9: 'n',
-    -6: '\N{MICRO SIGN}',
-    -3: 'm',
-    0: '',
-    3: 'k',
-    6: 'M',
-    9: 'G',
-    12: 'T',
-    15: 'P',
-}
-
-
-@util.lru_cache()
-def format_units(value, unit='', places=None, force_prefix=None, sep=' ') -> str:
-    """Format a number with SI unit prefixes"""
-
-    sign = 1
-    fmt = 'g' if places is None else f'.{places:d}f'
-
-    if value < 0:
-        sign = -1
-        value = -value
-
-    if unit.lower().startswith('db'):
-        pow10 = 0
-    elif force_prefix is not None:
-        remap = dict(zip(_ENG_PREFIXES.values(), _ENG_PREFIXES.keys()))
-        pow10 = remap[force_prefix]
-    elif value != 0:
-        pow10 = int(math.floor(math.log10(value) / 3) * 3)
-    else:
-        pow10 = 0
-        # Force value to zero, to avoid inconsistencies like
-        # format_eng(-0) = "0" and format_eng(0.0) = "0"
-        # but format_eng(-0.0) = "-0.0"
-        value = 0.0
-
-    pow10 = np.clip(pow10, min(_ENG_PREFIXES), max(_ENG_PREFIXES))
-
-    mant = sign * value / (10.0**pow10)
-    # a mantissa that formats as 1000 (e.g., 999.99) is carried into the next prefix,
-    # except at the largest prefix in `_ENG_PREFIXES`
-    if (
-        force_prefix is None
-        and abs(float(format(mant, fmt))) >= 1000
-        and pow10 < max(_ENG_PREFIXES)
-    ):
-        mant /= 1000
-        pow10 += 3
-
-    unit_prefix = _ENG_PREFIXES[int(pow10)]
-    if unit or unit_prefix:
-        suffix = f'{sep}{unit_prefix}{unit}'
-    else:
-        suffix = ''
-
-    return f'{mant:{fmt}}{suffix}'
-
-
-def describe_field(capture: specs.Capture, name: str, *, sep='='):
-    meta = specs.helpers.get_capture_type_attrs(type(capture))
-    attrs = meta[name]
-    value = getattr(capture, name)
-    value_str = describe_value(value, attrs)
-
-    return f'{name}{sep}{value_str}'
-
-
-def describe_value(value, attrs: dict, unit_prefix=None):
-    if value is None:
-        value_str = 'None'
-    elif attrs.get('units', None) is not None and np.isfinite(value):
-        unit_kws = {'force_prefix': unit_prefix, 'unit': attrs['units']}
-        if isinstance(value, tuple):
-            value_tup = [format_units(v, **unit_kws) for v in value]
-            value_str = f'({", ".join(value_tup)})'
-        else:
-            value_str = format_units(value, **unit_kws)
-    else:
-        value_str = repr(value)
-
-    return value_str
 
 
 def _results_as_arrays(

@@ -1155,8 +1155,8 @@ def cellular_resource_power_bin(
     Returns:
         the bin centers of `power.make_power_bins` in dBm, with ``-inf`` and ``inf``
         catch-all bins, and the attrs of `shared.bandwidth_attrs` for the resource
-        grid: ``'units'`` of dBm, `long_name`, and `noise_bandwidth` and
-        `resolution_bandwidth` in Hz
+        grid: ``'units'`` of ``'dBm'``, `long_name` as the quantity without units,
+        and `noise_bandwidth` and `resolution_bandwidth` in Hz
     """
 
     bins = power.make_power_bins(

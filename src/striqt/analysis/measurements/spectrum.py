@@ -420,8 +420,8 @@ def spectrogram(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
     FFT grid at `frequency_resolution`, truncated to the `analysis_bandwidth` about
     DC when `trim_stopband` is set and the bandwidth is finite. Values are power in
     dBm per noise bandwidth, which is `frequency_resolution` or, when set,
-    `integration_bandwidth`. The `noise_bandwidth` attr is that bandwidth in Hz.
-    `long_name` names the bandwidth. White noise with power spectral density N0 has a
+    `integration_bandwidth`. The `noise_bandwidth` attr is that bandwidth in Hz, and
+    the `units` attr is ``'dBm'``. White noise with power spectral density N0 has a
     mean of ``N0 * noise_bandwidth`` in every bin for every `window`. A CW tone has
     ``frequency_resolution / resolution_bandwidth`` of the tone power in one bin,
     where the `resolution_bandwidth` attr is the equivalent noise bandwidth (in Hz)
@@ -586,8 +586,8 @@ def spectrogram_power_bin(
     Returns:
         the bin centers of `power.make_power_bins` in dBm, with ``-inf`` and ``inf``
         catch-all bins, and the attrs of `shared.bandwidth_attrs` for the
-        spectrogram: ``'units'`` of dBm, `long_name`, and `noise_bandwidth` and
-        `resolution_bandwidth` in Hz
+        spectrogram: ``'units'`` of ``'dBm'``, `long_name` as the quantity without
+        units, and `noise_bandwidth` and `resolution_bandwidth` in Hz
     """
     bins = power.make_power_bins(
         power_low=spec.power_low,

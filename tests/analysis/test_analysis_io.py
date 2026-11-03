@@ -128,9 +128,10 @@ def test_scalar_typing(write_yaml, text, expected):
 
 
 def legacy_store_dataset():
-    """build a dataset with the bandwidth encoded in `units`, no `noise_bandwidth` on
-    the bin coordinate, the sample rate as the correlator `noise_bandwidth`, and a
-    store-wide `noise_bandwidth` on the channel power outputs."""
+    """build a dataset with the bandwidth encoded in `units`, the bandwidth as a
+    suffix of `long_name`, no `noise_bandwidth` on the bin coordinate, the sample rate
+    as the correlator `noise_bandwidth`, and a store-wide `noise_bandwidth` on the
+    channel power outputs."""
     import numpy as np
     import xarray as xr
 
@@ -145,6 +146,16 @@ def legacy_store_dataset():
                     'standard_name': 'PSD',
                     'long_name': 'Power Spectral Density',
                     'units': 'dBm/360 kHz',
+                    'noise_bandwidth': 360e3,
+                },
+            ),
+            'power_spectral_density': (
+                ('capture', 'baseband_frequency'),
+                np.zeros((2, 3), 'float32'),
+                {
+                    'standard_name': 'PSD',
+                    'long_name': 'Power spectral density (dBm/360 kHz)',
+                    'units': 'dBm',
                     'noise_bandwidth': 360e3,
                 },
             ),
@@ -233,18 +244,22 @@ def legacy_store_dataset():
 
 
 def test_repair_legacy_attrs_rewrites_bandwidth_labels():
+    """`units` of the form ``'<unit>/<bandwidth>'`` is reduced to the unit, and
+    `long_name` is unchanged. `noise_bandwidth` of a bin coordinate without one is
+    copied from the histogram on its dimension."""
     ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
 
     spg = ds.spectrogram.attrs
     assert spg['units'] == 'dBm'
     assert spg['noise_bandwidth'] == pytest.approx(360e3)
     assert spg['standard_name'] == 'PSD'
-    assert spg['long_name'] == 'Power Spectral Density (dBm/360 kHz)'
+    assert spg['long_name'] == 'Power Spectral Density'
 
     coord = ds.spectrogram_power_bin.attrs
     assert coord['units'] == 'dBm'
     assert coord['noise_bandwidth'] == pytest.approx(360e3)
-    assert coord['long_name'] == 'Spectrogram bin power (dBm/360 kHz)'
+    assert coord['standard_name'] == 'Spectrogram bin power'
+    assert 'long_name' not in coord
 
     ratio = ds.spectrogram_ratio_power_bin.attrs
     assert ratio['units'] == 'dB'
@@ -261,8 +276,39 @@ def test_repair_legacy_attrs_corrects_the_correlator_noise_bandwidth():
     attrs = ds.cellular_5g_pss_correlation.attrs
     assert attrs['noise_bandwidth'] == pytest.approx(30e3)
     assert attrs['units'] == '√mW'
-    assert attrs['long_name'] == 'PSS Cross-Covariance (√mW/30 kHz)'
+    assert attrs['standard_name'] == 'PSS Cross-Covariance'
+    assert 'long_name' not in attrs
     assert attrs['sample_rate'] == pytest.approx(7.68e6)
+
+
+def test_repair_legacy_attrs_strips_the_bandwidth_suffix_from_names():
+    """a `long_name` or `standard_name` ending in ``' (<unit>/<bandwidth>)'`` loses
+    the suffix; `units` and `noise_bandwidth` are unchanged"""
+    ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
+
+    psd = ds.power_spectral_density.attrs
+    assert psd['long_name'] == 'Power spectral density'
+    assert psd['standard_name'] == 'PSD'
+    assert psd['units'] == 'dBm'
+    assert psd['noise_bandwidth'] == pytest.approx(360e3)
+
+    ds = xr.Dataset({
+        'channel_power': (
+            ('capture',),
+            np.zeros(2, 'float32'),
+            {
+                'standard_name': 'Channel power (dBW/10 MHz)',
+                'long_name': 'Mean channel power (dBW/10 MHz)',
+                'units': 'dBW',
+                'noise_bandwidth': 10e6,
+            },
+        )
+    })
+    attrs = sa.lib.io.repair_legacy_attrs(ds).channel_power.attrs
+    assert attrs['standard_name'] == 'Channel power'
+    assert attrs['long_name'] == 'Mean channel power'
+    assert attrs['units'] == 'dBW'
+    assert attrs['noise_bandwidth'] == pytest.approx(10e6)
 
 
 def test_repair_legacy_attrs_removes_capture_bandwidth_attrs():

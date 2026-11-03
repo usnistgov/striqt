@@ -276,7 +276,7 @@ def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> xr.Dataset:
 
 
 _BANDWIDTH_UNITS = re.compile(r'^(dBm|dB|√mW)/(.+)$')
-_BANDWIDTH_SUFFIX = re.compile(r' \((dBm|dB|√mW)/[^)]+\)$')
+_BANDWIDTH_SUFFIX = re.compile(r' \((dBm|dBW|dB|√mW)/[^)]+\)$')
 _POWER_BIN_SUFFIX = '_power_bin'
 _CAPTURE_BANDWIDTH_NAMES = frozenset({
     'channel_power_time_series',
@@ -307,14 +307,18 @@ def _owner_noise_bandwidth(data: xr.Dataset, coord_name: str) -> float | None:
 def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
     """return `data` with the bandwidth attrs in the current convention.
 
-    The attrs are rewritten in place; data values and other attrs are unchanged. The
-    rewrite applies to every variable and coordinate that matches one of these
-    conditions:
+    The attrs are rewritten in place; data values and other attrs are unchanged. In
+    the current convention `units` is the unit of the stored values, `noise_bandwidth`
+    is the noise bandwidth in Hz, and `long_name` and `standard_name` are noun phrases
+    without units. The rewrite applies to every variable and coordinate that matches
+    one of these conditions:
 
     * `channel_power_time_series`, `channel_power_histogram`, `cyclic_channel_power`,
       `iq_waveform`, and the `channel_power_bin` coordinate: `noise_bandwidth` is
-      removed, and `long_name` is removed when it ends in a bandwidth. The noise
-      bandwidth of these outputs is the `analysis_bandwidth` of the capture.
+      removed, and `long_name` is removed when it ends in ``' (<unit>/<bandwidth>)'``.
+      The noise bandwidth of these outputs is the `analysis_bandwidth` of the capture.
+    * `long_name` or `standard_name` ending in ``' (<unit>/<bandwidth>)'``: the
+      suffix is removed.
     * A variable with `units` starting in ``'√mW'`` and equal `noise_bandwidth` and
       `sample_rate` attrs: `noise_bandwidth` is set to the `subcarrier_spacing` attr of
       the variable.
@@ -322,9 +326,7 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
       starting in ``'dB/'``: `noise_bandwidth` is copied from a data variable on the
       dimension of the coordinate.
     * `units` of the form ``'<unit>/<bandwidth>'`` other than ``'dBm/Hz'``: `units`
-      is set to ``'<unit>'``. For a unit other than dB, `long_name` is set to
-      ``'<long_name or standard_name> (<unit>/<bandwidth>)'`` with the bandwidth from
-      `noise_bandwidth`.
+      is set to ``'<unit>'``.
     * A data variable on a ``*_power_bin`` dimension with a coordinate in `units` of
       dB: `noise_bandwidth` is removed.
     * `system_noise` without `standard_name`: `standard_name` is set to
@@ -343,7 +345,13 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
         if isinstance(long_name, str) and _BANDWIDTH_SUFFIX.search(long_name):
             del attrs['long_name']
 
-    for name, var in data.variables.items():
+    for var in data.variables.values():
+        for key in ('long_name', 'standard_name'):
+            text = var.attrs.get(key)
+            if isinstance(text, str):
+                var.attrs[key] = _BANDWIDTH_SUFFIX.sub('', text)
+
+    for var in data.variables.values():
         attrs = var.attrs
         units = str(attrs.get('units', ''))
         is_correlator = (
@@ -366,20 +374,14 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
             if bandwidth is not None:
                 data[name].attrs['noise_bandwidth'] = bandwidth
 
-    for name, var in data.variables.items():
-        attrs = var.attrs
-        match = _BANDWIDTH_UNITS.match(str(attrs.get('units', '')))
+    for var in data.variables.values():
+        match = _BANDWIDTH_UNITS.match(str(var.attrs.get('units', '')))
         if match is None or match.group(2) == 'Hz':
             # 'dBm/Hz' denotes a spectral density and keeps its units
             continue
-        unit = match.group(1)
-        attrs['units'] = unit
-        if unit != 'dB' and 'noise_bandwidth' in attrs:
-            bandwidth = dataarrays.format_units(float(attrs['noise_bandwidth']), 'Hz')
-            quantity = attrs.get('long_name') or attrs.get('standard_name') or name
-            attrs['long_name'] = f'{quantity} ({unit}/{bandwidth})'
+        var.attrs['units'] = match.group(1)
 
-    for name, var in data.data_vars.items():
+    for var in data.data_vars.values():
         for dim in var.dims:
             if not str(dim).endswith(_POWER_BIN_SUFFIX) or dim not in data.coords:
                 continue
