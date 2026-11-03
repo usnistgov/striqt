@@ -11,6 +11,7 @@ from typing import Any, Literal
 import msgspec
 
 import striqt.analysis as sa
+import striqt.waveform as sw
 from striqt.analysis.lib.dataarrays import CAPTURE_DIM
 from striqt.analysis.lib.util import np, pd, xr
 
@@ -523,15 +524,33 @@ def _fill_value(dtype: np.dtype) -> Any:
     return 0
 
 
+def _in_power_units(
+    attrs: dict[str, Any], power_units: sw.units.PowerUnits
+) -> dict[str, Any]:
+    """return `attrs` with a power `units` entry rewritten into `power_units`."""
+    units = attrs.get('units')
+    if not isinstance(units, str):
+        return attrs
+    return {**attrs, 'units': sw.units.with_power_units(units, power_units)}
+
+
 def measurement_grids(
-    sweep: specs.Sweep, captures: Sequence[specs.SensorCapture]
+    sweep: specs.Sweep,
+    captures: Sequence[specs.SensorCapture],
+    power_units: sw.units.PowerUnits = 'mW',
 ) -> dict[str, VariableGrid]:
     """return the output geometry of each enabled measurement over `captures`.
 
     The coordinate factories of each measurement run once per distinct pair of
     capture and adjusted analysis. A dim with equal coordinate values on every pair
     keeps those values. Otherwise the coordinate is the sorted union of the values, which is
-    the outer join of `xarray.concat`, and the grid is `mixed`.
+    the outer join of `xarray.concat`, and the grid is `mixed`. A `units` attr in a
+    power family, on a variable or a coordinate, is rewritten into `power_units`.
+
+    Args:
+        sweep: the sweep with the enabled measurements in `analysis`
+        captures: the expanded captures of the sweep
+        power_units: the unit of the squared magnitude of the IQ of the source
 
     Raises:
         NotImplementedError: if a coordinate with more than one dim differs between
@@ -572,16 +591,18 @@ def measurement_grids(
             else:
                 union[dim] = np.unique(np.concatenate(arrays))
                 mixed = True
-            coord_attrs[dim] = drop_conflicts([
-                coords[dim][1] for coords, _ in per_pair
-            ])
+            coord_attrs[dim] = _in_power_units(
+                drop_conflicts([coords[dim][1] for coords, _ in per_pair]),
+                power_units,
+            )
 
         dtype = np.dtype(info.dtype)
         if mixed and dtype.kind in 'biu':
             dtype = np.promote_types(dtype, np.float32)
-        attrs = drop_conflicts([
-            {**info.attrs, **spec.to_dict()} for _, spec in per_pair
-        ])
+        attrs = _in_power_units(
+            drop_conflicts([{**info.attrs, **spec.to_dict()} for _, spec in per_pair]),
+            power_units,
+        )
         grids[name] = VariableGrid(
             name=name,
             dims=dims,
@@ -738,15 +759,24 @@ def sweep_template(
     info_cls: type[specs.AcquisitionInfo],
     *,
     attrs: Mapping[str, Any],
+    power_units: sw.units.PowerUnits = 'mW',
 ) -> tuple[
     xr.Dataset, dict[str, VariableGrid], dict[str, dict[str, Any]], dict[str, Callable]
 ]:
     """return the zero-row dataset of a sweep, built from the specs without IQ.
 
     The data variables are the enabled measurements on the union grids, with the
-    fixed coordinates and attrs of `measurement_grids`. The per-capture coordinates
-    are those of `capture_coords_template`. The dataset attrs are `attrs` over the
-    capture fields that are equal on every capture and are not coordinates.
+    fixed coordinates and attrs of `measurement_grids` in `power_units`. The
+    per-capture coordinates are those of `capture_coords_template`. The dataset attrs
+    are `attrs` over the capture fields that are equal on every capture and are not
+    coordinates.
+
+    Args:
+        sweep: the sweep to allocate
+        source_id: the id of the source that runs the sweep
+        info_cls: the `AcquisitionInfo` subclass of the source backend
+        attrs: the dataset attrs
+        power_units: the unit of the squared magnitude of the IQ of the source
 
     Returns:
         the dataset, the grid of each data variable, the xarray encoding per
@@ -757,7 +787,7 @@ def sweep_template(
         ValueError: if 2 measurements share a dim with different union coordinates
     """
     captures = specs.sequencing.loop_captures(sweep, source_id=source_id)
-    grids = measurement_grids(sweep, captures)
+    grids = measurement_grids(sweep, captures, power_units)
 
     coords: dict[str, Any] = {}
     data_vars: dict[str, Any] = {}

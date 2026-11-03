@@ -363,6 +363,18 @@ stages, in order:
 `compute/analyze.py:analyze` installs the trigger and `overwrite_x` with
 `attach_corrections`, evaluates the measurements, and packs a `DelayedDataset`.
 
+`voltage_scale` puts the squared magnitude of the corrected IQ in mW when
+`source.calibration` is set and in full scale (|x| = 1 at 0 dBFS) otherwise.
+`AcquiredIQ.power_units` records the family (`'mW'`, `'FS'`, or `'a.u.'`) from
+`SourceBackend.power_units`: `'mW'` for `SoapySource` with a calibration file and
+`'FS'` without one, `'mW'` for the synthetic sources, the `power_units` spec field for
+`MATSource` and `TDMSSource`, the power family of the `units` attr of the stored
+`iq_waveform` for `ZarrIQSource`, and `'a.u.'` for `NoSource`. `build_dataarray`
+rewrites every power `units` attr of a result and its coordinates into that family.
+`ZarrCaptureSink` allocates the zarr template through
+`sweep_template(..., power_units=Controller.power_units)`, and the allocated `units`
+attrs equal the attrs of the appended rows.
+
 ### Warmup
 
 `prepare_compute(sweep)` runs `actions/warmup.py:warmup_sweep_for`. The result is `None`

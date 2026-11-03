@@ -589,6 +589,11 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             raise ConnectionError('backend is closed')
         return self.backend.get_info()
 
+    @property
+    def power_units(self) -> sw.units.PowerUnits:
+        """the unit of the squared magnitude of the IQ that `acquire` returns"""
+        return self.backend.power_units()
+
     def read_iq(
         self,
         overlaps: tuple[int, int] = (0, 0),
@@ -814,6 +819,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                 format_path=self._config.format_path,
                 x=samples,
                 capture=self.capture_spec,
+                power_units=self.backend.power_units(),
                 info=info,
                 extra_data={},
                 source_spec=self.source_spec,

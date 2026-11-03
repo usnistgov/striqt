@@ -195,3 +195,8 @@ def test_no_source_read_leaves_the_buffers_alone():
 
     assert count == COUNT
     assert np.isnan(np.stack(buffers)).all()
+
+
+def test_no_source_power_units_are_arbitrary():
+    source, _ = _no_source()
+    assert source.power_units() == 'a.u.'

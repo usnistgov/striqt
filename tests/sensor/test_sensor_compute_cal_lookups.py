@@ -442,6 +442,7 @@ class TestFakeMeasurementSweep:
         noise_dBm = _expected_dBm(1, 40e6)
         expected = [tone_dBm, noise_dBm, tone_dBm]
         assert _rms_dBm(ds).values == pytest.approx(expected + gain_dB, abs=0.1)
+        assert ds.channel_power_time_series.attrs['units'] == 'dBFS'
         assert 'system_noise' not in ds
 
     def test_calibrated_power_recovers_the_input(
@@ -456,6 +457,7 @@ class TestFakeMeasurementSweep:
         ).results
 
         rms = _rms_dBm(ds).values
+        assert ds.channel_power_time_series.attrs['units'] == 'dBm'
         assert rms[0] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
         assert rms[2] == pytest.approx(_expected_dBm(0, 40e6, tone_mW=1e-6), abs=0.05)
         # a wider tolerance for the noise-only port, where the FIR passband is not

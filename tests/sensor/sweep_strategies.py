@@ -383,7 +383,7 @@ def make_yfactor_dataset(
     pvt = pvt.assign_coords(power_detector=['rms', 'peak'])
     pvt = pvt.expand_dims(time_elapsed=np.arange(time_count) * 1e-3)
     pvt = pvt.transpose(*fields.dims, 'power_detector', 'time_elapsed')
-    pvt.attrs = {'units': 'dBfs'}
+    pvt.attrs = {'units': 'dBFS'}
     capture_index = template.copy(data=np.arange(template.size).reshape(template.shape))
 
     return xr.Dataset({

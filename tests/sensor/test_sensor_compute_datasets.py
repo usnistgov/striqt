@@ -475,6 +475,18 @@ def test_sweep_template_attrs_hold_the_shared_capture_fields_and_the_given_attrs
     assert 'sample_rate' not in template.attrs
 
 
+def test_sweep_template_power_units_follow_the_source():
+    """a full-scale source labels the template in the FS family: the dB and amplitude
+    forms are kept, and non-power units are untouched"""
+    template, *_ = datasets.sweep_template(
+        mixed_rate_sweep(), 'x', ss.specs.AcquisitionInfo, attrs={}, power_units='FS'
+    )
+    assert template.iq_waveform.attrs['units'] == '√FS'
+    assert template.channel_power_time_series.attrs['units'] == 'dBFS'
+    assert template.baseband_frequency.attrs['units'] == 'Hz'
+    assert template.time_elapsed.attrs['units'] == 's'
+
+
 def test_row_index_and_scatter_rows_reproduce_the_outer_join_fill():
     """a capture's rows land where `xarray.align(join='outer')` puts them, with NaN
     where the capture has no value"""

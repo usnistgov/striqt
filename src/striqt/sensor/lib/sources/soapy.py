@@ -594,6 +594,10 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
         self._info = probe_soapy_info(self.device, retries=self.spec.receive_retries)
         return self._info
 
+    def power_units(self) -> sw.units.PowerUnits:
+        """return ``'FS'`` without a `calibration` file in the spec and ``'mW'`` with one."""
+        return 'FS' if self.spec.calibration is None else 'mW'
+
     @sa.util.stopwatch('setup radio', 'source', threshold=1)
     def setup(self, *, rx_ports: tuple[int, ...] | None = None):
         for p in range(self.get_info().num_rx_ports):

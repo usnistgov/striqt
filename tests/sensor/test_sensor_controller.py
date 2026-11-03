@@ -755,6 +755,22 @@ class TestControllerAcquire:
             expected, abs=sw.power_analysis.level_tolerance_dB(sigma, power=True)
         )
 
+    @pytest.mark.parametrize(
+        'calibrated, expected',
+        [(False, 'FS'), (True, 'mW')],
+        ids=['uncalibrated', 'calibrated'],
+    )
+    def test_power_units_follow_the_calibration(
+        self, fake_controller, calibration_nc, calibrated, expected
+    ):
+        """without a calibration file the IQ is in full scale; with one, in mW"""
+        kws = {'calibration': calibration_nc} if calibrated else {}
+        with fake_controller(**kws) as ctrl:
+            assert ctrl.power_units == expected
+            ctrl._arm_spec(soapy_capture(gain=-10, duration=1e-3))
+            iq = ctrl.acquire()
+        assert iq.power_units == expected
+
     def test_stale_first_timestamp_is_a_stream_error(self, fake_soapy, fake_controller):
         with fake_controller(receive_retries=0) as ctrl:
             ctrl._arm_spec(soapy_capture(duration=1e-3))

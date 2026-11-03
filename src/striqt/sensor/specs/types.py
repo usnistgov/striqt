@@ -3,6 +3,7 @@ from __future__ import annotations as __
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, Optional, Union
 
+import striqt.waveform as sw
 from striqt.analysis.lib.util import pd
 from striqt.analysis.specs.types import *
 
@@ -113,7 +114,14 @@ Port = Annotated[
     Meta('Input port indices'),
 ]
 PSD = Annotated[float, Meta('noise total channel power', 'mW/Hz', ge=0)]
-Power = Annotated[float, Meta('peak power level', 'dB')]
+Power = Annotated[float, Meta('peak power level', 'dBm')]
+PowerUnits = Annotated[
+    sw.units.PowerUnits,
+    Meta(
+        'unit of the squared magnitude of the stored IQ: calibrated milliwatts, full '
+        'scale, or arbitrary units'
+    ),
+]
 Period = Annotated[float, Meta('waveform period', 's', ge=0)]
 ReceiveRetries = Annotated[
     int, Meta('number of acquisition retry attempts on stream error', ge=0)
@@ -190,7 +198,7 @@ ADCOverloadLimit = Optional[
         float,
         Meta(
             'dataset adc_overload=True when the peak ADC level exceeds this threshold',
-            'dBfs',
+            'dBFS',
             le=0,
         ),
     ]
@@ -200,7 +208,7 @@ IFOverloadLimit = Optional[
         float,
         Meta(
             'the maximum level at maximum gain before IF/baseband overload',
-            'dBfs',
+            'dBFS',
         ),
     ]
 ]

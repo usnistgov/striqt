@@ -210,18 +210,23 @@ def test_headroom_has_one_int8_entry_per_port(limit, xp):
 # %% _assign_iq_calibration
 
 
-def _acquired_iq(capture, source):
+def _acquired_iq(capture, source, power_units='mW'):
     info = ss.specs.SoapyAcquisitionInfo(start_time=None, backend_sample_rate=MCR)
     x = np.zeros((1, 16), dtype='complex64')
-    return build_acquired_iq(x, capture, source, info=info)
+    return build_acquired_iq(x, capture, source, info=info, power_units=power_units)
 
 
-def test_assign_iq_calibration_scales_voltage_and_adds_system_noise(calibration_nc):
-    source = source_spec(calibration=calibration_nc)
-    iq = _acquired_iq(soapy_capture(gain=-10), source)
+def test_assign_iq_calibration_scales_voltage_and_adds_system_noise(
+    calibration_nc, fake_soapy
+):
+    source = _source(calibration=calibration_nc)
+    iq = _acquired_iq(
+        soapy_capture(gain=-10), source.spec, power_units=source.power_units()
+    )
 
     soapy._assign_iq_calibration(iq)
 
+    assert iq.power_units == 'mW'
     expected_scale = np.sqrt(1 / receiver_gain(-10))
     assert iq.voltage_scale == pytest.approx(expected_scale, rel=1e-6)
     noise = iq.extra_data['system_noise']
@@ -230,11 +235,13 @@ def test_assign_iq_calibration_scales_voltage_and_adds_system_noise(calibration_
     assert noise.item() == pytest.approx(5.0 + 10 * np.log10(BOLTZMANN_MW * 290))
 
 
-def test_assign_iq_calibration_without_a_file_leaves_iq_alone():
-    iq = _acquired_iq(soapy_capture(), source_spec(calibration=None))
+def test_assign_iq_calibration_without_a_file_leaves_iq_alone(fake_soapy):
+    source = _source(calibration=None)
+    iq = _acquired_iq(soapy_capture(), source.spec, power_units=source.power_units())
 
     soapy._assign_iq_calibration(iq)
 
+    assert iq.power_units == 'FS'
     assert iq.voltage_scale == 1
     assert iq.extra_data == {}
 
@@ -803,6 +810,7 @@ class TestSoapySourceAcquire:
         iq = ss.specs.AcquiredIQ(
             x=samples,
             capture=capture,
+            power_units='FS',
             info=ss.specs.AcquisitionInfo(source_id='x'),
             extra_data={},
             source_spec=source.spec,

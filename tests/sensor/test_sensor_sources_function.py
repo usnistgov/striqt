@@ -112,6 +112,13 @@ def test_get_waveform_is_the_generator_at_the_absolute_index(binding, start_inde
         assert np.array_equal(row, expected[port : port + 1])
 
 
+@pytest.mark.parametrize('binding', list(BINDINGS))
+def test_power_units_are_milliwatts(binding):
+    """the generators are written to a squared magnitude of 1 at 1 mW"""
+    source = BINDINGS[binding].sensor.source_cls(SOURCE)
+    assert source.power_units() == 'mW'
+
+
 def test_host_resampled_capture_generates_at_the_source_rate():
     """the source runs at the radio rate: the smallest integer division of the master
     clock at or above the capture rate (125 MHz / 20 for 6 MS/s)"""

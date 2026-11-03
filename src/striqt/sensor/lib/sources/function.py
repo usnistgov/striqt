@@ -14,6 +14,7 @@ from . import base
 if TYPE_CHECKING:
     from types import ModuleType
 
+    import striqt.waveform as sw
     from striqt.waveform.lib.typing import DTypeLike
 
     from ..typing import Array
@@ -32,6 +33,10 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
 
     def get_info(self):
         return specs.SourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
+
+    def power_units(self) -> sw.units.PowerUnits:
+        """return ``'mW'``: the generators produce a squared magnitude of 1 at 1 mW."""
+        return 'mW'
 
     def _generator_kws(
         self, count: int, start_index: int, xp: ModuleType

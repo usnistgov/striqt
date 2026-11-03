@@ -63,6 +63,9 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
     def get_info(self) -> specs.SourceInfo:
         return specs.structs.SourceInfo(num_rx_ports=1)
 
+    def power_units(self) -> sw.units.PowerUnits:
+        return self.setup_spec.power_units
+
     def get_waveform(
         self,
         count: int,
@@ -154,6 +157,9 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
     def get_id(self):
         return str(self.setup_spec.path)
 
+    def power_units(self) -> sw.units.PowerUnits:
+        return self.setup_spec.power_units
+
     def arm(self, capture):
         super().arm(capture)
         if self.setup_spec.loop:
@@ -240,6 +246,15 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
 
     def get_info(self):
         return specs.structs.SourceInfo(num_rx_ports=self._waveform.shape[0])
+
+    def power_units(self) -> sw.units.PowerUnits:
+        """return the power family of the `units` attr of the stored `iq_waveform`.
+
+        A store without a `units` attr, or with units outside the power families,
+        gives ``'a.u.'``.
+        """
+        units = str(self._waveform.attrs.get('units', ''))
+        return sw.units.power_family(units) or 'a.u.'
 
     def close(self) -> None:
         pass
