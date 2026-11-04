@@ -129,6 +129,17 @@ shim is `striqt.waveform.fourier`.
 - `sync_5gnr.py`: `index_pss_symbols` encodes the SSB cases of 3GPP TS 38.213
   §4.1. `correlate_sync_sequence` returns a grid over (coarse lag, fine lag), with
   the axes named by `COARSE_LAG_DIM` and `FINE_LAG_DIM`.
+- `get_5g_ssb_spans` cuts the first `corr_size` samples of each synchronization
+  block, with a one-slot margin at each end, and recenters and resamples every port
+  and block in one `resample` call. The cellular measurements use it; `get_5g_ssb_iq`
+  resamples the whole record, of which the correlator reads 10%.
+- `correlate_sync_spans` is the correlator core: one zero-padded FFT per span, shared
+  across cell IDs; template spectra memoized on the identity of the template array
+  (`_TemplateSpectra`, registered with `clear_caches`); cell IDs in chunks bounded by
+  `max_chunk_bytes`; the FFT size from `_correlation_fft_size`, `next_fast_len` on
+  numpy and the next power of 2 on cupy, which cuFFT runs faster than the smooth
+  size. `correlate_sync_sequence` cuts the spans from a whole-frame record and calls
+  the core.
 
 The tests validate the synchronization path at 30 kHz subcarrier spacing only. The
 cyclic prefix model at 15 kHz and 60 kHz is known wrong. The defect is recorded as
