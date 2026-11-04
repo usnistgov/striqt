@@ -739,11 +739,12 @@ def correlate_sync_sequence(
     Rperslot = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
     R = Rperslot.reshape(R.shape[:-1] + (-1,))
 
-    # final dims (port index, cell Nid, sync block index, beam index, IQ sample index)
-    start_inds = xp.array(params.symbol_indexes) * params.short_symbol_size
-
-    Rwins = arrays.sliding_window_view(R, params.lag_count, axis=-1)
-    result = Rwins[..., start_inds, :]
+    # final dims (port index, cell Nid, sync block index, beam index, IQ sample index).
+    # Slices rather than a sliding window view over the lags: that view has one window
+    # per sample, above 2**31 elements for 2 ports and 5 blocks at 15.36 MS/s, and
+    # cupy 12 returns wrong values for the second port from a fancy index on it
+    starts = [i * params.short_symbol_size for i in params.symbol_indexes]
+    result = xp.stack([R[..., s : s + params.lag_count] for s in starts], axis=-2)
     if params.min_cp_size:
         result[..., -params.min_cp_size :] = 0
     return result
