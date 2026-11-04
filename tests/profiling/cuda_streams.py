@@ -225,6 +225,8 @@ def build_raw(setup: Setup, xp: Any) -> ss.specs.AcquiredIQ:
         info=ss.specs.AcquisitionInfo(),
         extra_data={},
         source_spec=setup.source,
+        # the air7201b source without a calibration file
+        power_units='FS',
         resampler=ss.lib.compute.design_resampler(
             setup.capture, setup.source.master_clock_rate
         ),
