@@ -323,21 +323,16 @@ class TestGet5gSsbIq:
     def _ssb_iq(self, iq, **kws):
         return get_ssb_iq(iq, fs_in=self.FS_IN, **kws)
 
-    @given(
-        oaresample=st.booleans(),
-        f0_bins=st.integers(-8, 8),
-        offset_bins=st.sampled_from([0, 3, -3]),
-    )
+    @given(f0_bins=st.integers(-8, 8), offset_bins=st.sampled_from([0, 3, -3]))
     @settings(max_examples=20)
-    def test_recenters_and_downsamples(self, oaresample, f0_bins, offset_bins):
+    def test_recenters_and_downsamples(self, f0_bins, offset_bins):
         """a tone at frequency_offset + f0 in the capture comes out at f0"""
-        # the overlap-add path needs the offset on the grid fs_in/(3 * up)
-        grid = 160e3 if oaresample else self.FS_IN / self.SIZE
+        grid = self.FS_IN / self.SIZE
         f0 = f0_bins * 100e3
         frequency_offset = offset_bins * grid
 
         iq = self._tones(f0 + frequency_offset)
-        out = self._ssb_iq(iq, frequency_offset=frequency_offset, oaresample=oaresample)
+        out = self._ssb_iq(iq, frequency_offset=frequency_offset)
 
         assert out.shape == (2, round(self.SIZE * FS / self.FS_IN))
         assert out.dtype == iq.dtype
@@ -362,17 +357,16 @@ class TestGet5gSsbIq:
         assert f_est == pytest.approx(f0, abs=grid / 2 + FS / mid.shape[1])
         assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
 
-    @pytest.mark.parametrize('oaresample', [False, True])
-    def test_block_count_and_delay_crop_the_input(self, oaresample):
+    def test_block_count_and_delay_crop_the_input(self):
         iq = self._tones(1e6)
         blocks = {'discovery_periodicity': 1e-3, 'max_block_count': 2}
         delay = 0.5e-3
-        out = self._ssb_iq(iq, delay=delay, oaresample=oaresample, **blocks)
+        out = self._ssb_iq(iq, delay=delay, **blocks)
 
         offs = round(delay * self.FS_IN)
         crop_duration = blocks['max_block_count'] * blocks['discovery_periodicity']
         size_in = round(crop_duration * self.FS_IN)
-        expected = self._ssb_iq(iq[:, offs : offs + size_in], oaresample=oaresample)
+        expected = self._ssb_iq(iq[:, offs : offs + size_in])
         assert out.shape == (2, round(size_in * FS / self.FS_IN))
         assert_array_equal(out, expected)
 

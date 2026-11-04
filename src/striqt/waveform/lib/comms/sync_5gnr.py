@@ -559,13 +559,14 @@ def get_5g_ssb_iq(
     discovery_periodicity: float,
     fs_out: float,
     fs_in: float,
-    subcarrier_spacing: float,
     frequency_offset: float = 0,
     delay: float = 0,
     max_block_count: int | None = None,
-    oaresample: bool = False,
 ) -> Array:
     """return the SSB band of `iq`, recentered to baseband and resampled to `fs_out`.
+
+    Each port is resampled by one FFT over the kept span. The frequency shift is a
+    whole number of bins of ``fs_in / size`` for the `size` of that span.
 
     Args:
         iq: waveform of shape ``(port, sample)`` at `fs_in`
@@ -573,14 +574,11 @@ def get_5g_ssb_iq(
             span with `max_block_count`
         fs_out: the output sample rate (in S/s)
         fs_in: the sample rate (in S/s) of `iq`
-        subcarrier_spacing: the SSB subcarrier spacing (in Hz)
         frequency_offset: the offset (in Hz) of the SSB center from the center of
             `iq`
         delay: the time (in s) into `iq` at which the kept span begins
         max_block_count: the number of SSB periods kept from `delay`; None keeps
             the rest of `iq`
-        oaresample: True resamples by overlap-add with a Blackman window; False
-            resamples by a single FFT
 
     Returns:
         the baseband SSB waveform of shape ``(port, sample)`` at `fs_out`, in the
@@ -590,52 +588,20 @@ def get_5g_ssb_iq(
     xp = arrays.array_namespace(iq)
 
     offs = round(delay * fs_in)
-
-    if oaresample:
-        down = round(fs_in / subcarrier_spacing / 8)
-        up = round(down * (fs_out / fs_in))
-
-        if up % 3 > 0:
-            # ensure compatibility with the blackman window overlap of 2/3
-            down = down * 3
-            up = up * 3
-
-        if max_block_count is not None:
-            size_in = round(max_block_count * discovery_periodicity * fs_in)
-            iq = iq[..., offs : offs + size_in]
-        else:
-            size_in = iq.shape[-1]
-
-        size_out = round(up / down * size_in)
-
-        out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-
-        for i in range(out.shape[0]):
-            out[i] = fourier.resamplers.oaresample(
-                iq[i],
-                fs=fs_in,
-                up=up,
-                down=down,
-                axis=0,
-                window='blackman',
-                frequency_shift=frequency_offset,
-            )
-
+    if max_block_count is not None:
+        size_in = round(max_block_count * discovery_periodicity * fs_in)
+        iq = iq[..., offs : offs + size_in]
     else:
-        if max_block_count is not None:
-            size_in = round(max_block_count * discovery_periodicity * fs_in)
-            iq = iq[..., offs : offs + size_in]
-        else:
-            size_in = iq.shape[-1]
+        size_in = iq.shape[-1]
 
-        size_out = round(size_in * fs_out / fs_in)
-        out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-        shift = round(iq.shape[1] * frequency_offset / fs_in)
+    size_out = round(size_in * fs_out / fs_in)
+    out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
+    shift = round(iq.shape[1] * frequency_offset / fs_in)
 
-        for i in range(out.shape[0]):
-            out[i] = fourier.resamplers.resample(
-                iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
-            )
+    for i in range(out.shape[0]):
+        out[i] = fourier.resamplers.resample(
+            iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
+        )
 
     return out
 
