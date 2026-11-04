@@ -26,6 +26,7 @@ from numeric_checks import (
 from numpy.testing import assert_array_equal
 from waveform_strategies import (
     FS,
+    cross_backend_sigma,
     embed_pss_ports,
     embed_symbol,
     get_ssb_iq,
@@ -572,3 +573,31 @@ class TestCupy:
             cupy_available, sync_5gnr.choose_ssb_offset, R_np, params
         )
         assert offset_np[0] == offset_cp[0] == 77
+
+    def test_multiport_multiblock_correlation(self, cupy_available):
+        """2 ports and 5 blocks of noise at 15.36 MS/s: a sliding window over the lags
+        of the correlation grid would span more than 2**31 elements, and the cupy
+        result must match numpy on both ports"""
+        params, phy, pss, bodies = pss_setup(fs=15.36e6)
+        iq = silent_block(params, n_blocks=5, ports=2)
+        iq += testing.circular_awgn(
+            None,
+            params.sample_rate,
+            power=1e-2 * reference_power(bodies[0]).mean(),
+            ports=2,
+            count=iq.shape[1],
+        )
+        embeds = [(0, 2, 100), (1, 4, 300)]
+        for port, (n_id2, beam, delay) in enumerate(embeds):
+            symbol = params.symbol_indexes[beam]
+            embed_symbol(iq, phy, bodies[n_id2], symbol, delay, port=port)
+
+        R_np, R_cp = numpy_and_cupy(
+            cupy_available, sync_5gnr.correlate_sync_sequence, iq, pss, params=params
+        )
+        full_size = params.corr_size + pss.shape[1] - 1
+        sigma = cross_backend_sigma(iq.dtype, (full_size, full_size), n_elementwise=2)
+        assert_close(R_cp, R_np, sigma=sigma)
+        for port, (n_id2, beam, delay) in enumerate(embeds):
+            mag = np.abs(R_cp[port])
+            assert np.unravel_index(mag.argmax(), mag.shape) == (n_id2, 0, beam, delay)
