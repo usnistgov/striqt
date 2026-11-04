@@ -377,6 +377,79 @@ class TestGet5gSsbIq:
         assert_array_equal(out, expected)
 
 
+class TestGet5gSsbSpans:
+    """the correlated span of each synchronization block, cut from a capture at
+    15.36 MS/s into the 7.68 MS/s synchronization parameters of `sync_params`"""
+
+    FS_IN = 15.36e6
+
+    def _tones(self, params, f, scales=(1.0, 2.0), n_blocks=2):
+        block_in = params.frame_size * params.frames_per_sync * round(self.FS_IN / FS)
+        x = testing.tone(
+            None, self.FS_IN, frequency=f, count=n_blocks * block_in, dtype=np.complex64
+        )[0]
+        return np.stack([s * x for s in scales]).astype(np.complex64)
+
+    @pytest.mark.parametrize(
+        'f0, frequency_offset',
+        [(0.0, 0.0), (500e3, 480e3), (-700e3, -480e3)],
+        ids=['centered', 'above', 'below'],
+    )
+    def test_recenters_every_span(self, f0, frequency_offset):
+        """a tone at frequency_offset + f0 in the capture comes out at f0, at its
+        level, in every span"""
+        params = sync_params()
+        iq = self._tones(params, f0 + frequency_offset)
+        spans = sync_5gnr.get_5g_ssb_spans(
+            iq, params=params, fs_in=self.FS_IN, frequency_offset=frequency_offset
+        )
+        assert spans.shape == (2, 2, params.corr_size)
+        assert spans.dtype == iq.dtype
+        for block in range(2):
+            mid = interior(spans[:, block], 500, axis=1)
+            f_est = tone_frequency(mid[0], FS)
+            assert f_est == pytest.approx(f0, abs=FS / mid.shape[1])
+            assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
+
+    def test_delay_moves_the_block_grid(self):
+        """a delay of one block makes the first span the second span of the
+        undelayed call, margins included"""
+        params = sync_params()
+        iq = self._tones(params, 1e6)
+        block_in = params.frame_size * params.frames_per_sync * round(self.FS_IN / FS)
+        spans = sync_5gnr.get_5g_ssb_spans(iq, params=params, fs_in=self.FS_IN)
+        delayed = sync_5gnr.get_5g_ssb_spans(
+            iq,
+            params=params,
+            fs_in=self.FS_IN,
+            delay=block_in / self.FS_IN,
+            max_block_count=1,
+        )
+        assert delayed.shape == (2, 1, params.corr_size)
+        assert_array_equal(delayed[:, 0], spans[:, 1])
+
+    def test_rejects_a_fractional_block(self):
+        params = sync_params()
+        iq = self._tones(params, 1e6, n_blocks=1)
+        with pytest.raises(ValueError, match='whole number of samples'):
+            sync_5gnr.get_5g_ssb_spans(iq, params=params, fs_in=FS * 11 / 7)
+
+    def test_one_frame_is_one_block(self):
+        """a record of one 10 ms frame with a 20 ms discovery period yields the span
+        of one block, as the whole-record path does"""
+        params = sync_params()
+        frame_in = params.frame_size * round(self.FS_IN / FS)
+        iq = self._tones(params, 1e6, n_blocks=1)[:, :frame_in]
+        spans = sync_5gnr.get_5g_ssb_spans(iq, params=params, fs_in=self.FS_IN)
+        assert spans.shape == (2, 1, params.corr_size)
+
+    def test_rejects_a_partial_frame(self):
+        params = sync_params()
+        iq = self._tones(params, 1e6, n_blocks=1)[:, :-1]
+        with pytest.raises(ValueError, match='whole number of 10 ms frames'):
+            sync_5gnr.get_5g_ssb_spans(iq, params=params, fs_in=self.FS_IN)
+
+
 class TestCorrelateSyncSequence:
     """a PSS symbol embedded in an otherwise silent synchronization block"""
 
@@ -425,6 +498,35 @@ class TestCorrelateSyncSequence:
             with subtests.test(port=port):
                 mag = np.abs(R[port])
                 assert np.unravel_index(mag.argmax(), mag.shape) == expected
+
+    def test_spans_equal_the_whole_record(self):
+        """`correlate_sync_spans` on the spans that the whole-record call cuts from
+        each block returns the same grid"""
+        params, pss, iq = embed_pss_ports([(1, 2, 11), (2, 6, 23)], n_blocks=2)
+        blocks = iq.reshape(iq.shape[0], -1, params.frame_size)
+        spans = blocks[:, :: params.frames_per_sync, : params.corr_size]
+
+        R = sync_5gnr.correlate_sync_sequence(iq, pss, params=params)
+        assert_array_equal(sync_5gnr.correlate_sync_spans(spans, pss, params=params), R)
+
+    def test_cell_id_chunks_do_not_change_the_result(self):
+        """a product buffer too small for 2 templates splits the 3 cell IDs into
+        chunks of one"""
+        params, pss, iq = embed_pss_ports([(1, 2, 11)])
+        spans = iq.reshape(1, -1, params.frame_size)[:, :: params.frames_per_sync]
+        spans = spans[..., : params.corr_size]
+
+        whole = sync_5gnr.correlate_sync_spans(spans, pss, params=params)
+        chunked = sync_5gnr.correlate_sync_spans(
+            spans, pss, params=params, max_chunk_bytes=1
+        )
+        assert_array_equal(chunked, whole)
+
+    def test_rejects_a_span_of_the_wrong_length(self):
+        params, pss, iq = embed_pss_ports([(1, 2, 11)])
+        spans = iq[:, np.newaxis, : params.corr_size - 1]
+        with pytest.raises(ValueError, match='corr_size'):
+            sync_5gnr.correlate_sync_spans(spans, pss, params=params)
 
     def test_mixed_excess_cp_rejected(self):
         params, _, pss, _ = pss_setup()

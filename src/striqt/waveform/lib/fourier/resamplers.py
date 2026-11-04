@@ -374,6 +374,10 @@ def resample(
         # downsample by trimming frequency
         bounds = _find_downsample_copy_range(nfft_in, nfft_out, edge_low, edge_high)[1]
         y = axis_slice(y, *bounds, axis=axis)
+        if not y.flags.c_contiguous:
+            # the cupy `out=` path of `ifft` needs a contiguous buffer. The slice is
+            # contiguous only for a 1-D `x`
+            y = xp.ascontiguousarray(y)
 
     elif nfft_out > nfft_in:
         # upsample by zero-padding frequency, which allocates a copy
