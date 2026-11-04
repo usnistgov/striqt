@@ -28,9 +28,9 @@ Paths:
   of each block discarded.
 
 Usage:
-    pixi run -e test39 python chores/tests/profile_pss_oaconvolve.py --backend numpy
-    pixi run -e cupy python chores/tests/profile_pss_oaconvolve.py
-    pixi run -e cupy python chores/tests/profile_pss_oaconvolve.py --block-sizes 2048 5120 --repeat 20
+    pixi run -e test39 python tests/profiling/pss_oaconvolve.py --backend numpy
+    pixi run -e cupy python tests/profiling/pss_oaconvolve.py
+    pixi run -e cupy python tests/profiling/pss_oaconvolve.py --block-sizes 2048 5120 --repeat 20
 
 Run with its own cache directory beside a test session or another striqt script
 (``STRIQT_CACHE_DIR=$(mktemp -d)``): two processes sharing the window shelf corrupt it on
@@ -82,7 +82,7 @@ from striqt.waveform.lib.fourier.stft import _unstack_stft_windows
 
 cp: Any = None
 
-# the cellular analysis of the ADA 3750 MHz capture (profile_cuda_streams.ANALYSIS)
+# the cellular analysis of the ADA 3750 MHz capture (cuda_streams.ANALYSIS)
 SAMPLE_RATE = 15.36e6
 SUBCARRIER_SPACING = 30e3
 DISCOVERY_PERIODICITY = 20e-3

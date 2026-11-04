@@ -44,6 +44,18 @@ repository.
   and the `site*` sweep directories; the papers the cyclic-power and sync tests derive their
   expectations from are under `_training_material/papers/` (untracked; locate with a search).
 
+## Profiling scripts
+
+`tests/profiling/` holds the profiling and comparison scripts (`cuda_streams.py`,
+`zarr_sink.py`, `log_scaling.py`, `pss_oaconvolve.py`, `ssb_extraction.py`). They are
+not tests: pytest collects `test_*.py` only, and each script runs on its own
+(`pixi run -e cupy python tests/profiling/cuda_streams.py`; see the module docstring for
+the usage and how to read the output). The basenames share the `tests/` namespace, so a
+script imports a sibling by bare name (`from cuda_streams import CAPTURE`) and no name
+repeats elsewhere under `tests/`. The scripts pass `ruff check` with the rest of
+`tests/`. A script that reads or writes the window shelf runs with its own
+`STRIQT_CACHE_DIR` beside a test session.
+
 ## Shared setup has one owner
 
 The suite is flat and every helper is imported by bare name, so a second definition of the

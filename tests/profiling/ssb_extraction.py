@@ -28,9 +28,9 @@ Paths:
   measurements, placed into the correlator input like the ``span`` paths.
 
 Usage:
-    pixi run -e test39 python chores/tests/profile_ssb_extraction.py --backend numpy
-    pixi run -e cupy python chores/tests/profile_ssb_extraction.py
-    pixi run -e cupy python chores/tests/profile_ssb_extraction.py --window hann --block-sizes 14336 43008
+    pixi run -e test39 python tests/profiling/ssb_extraction.py --backend numpy
+    pixi run -e cupy python tests/profiling/ssb_extraction.py
+    pixi run -e cupy python tests/profiling/ssb_extraction.py --window hann --block-sizes 14336 43008
 
 Run with its own cache directory beside a test session or another striqt script
 (``STRIQT_CACHE_DIR=$(mktemp -d)``): two processes sharing the window shelf corrupt it on
@@ -88,7 +88,7 @@ from striqt.waveform.lib.fourier.filters import _COLA_WINDOW_SIZE_DIVISOR
 
 cp: Any = None
 
-# the cellular analysis of the ADA 3750 MHz capture (profile_cuda_streams.CAPTURE)
+# the cellular analysis of the ADA 3750 MHz capture (cuda_streams.CAPTURE)
 FS_OUT = 15.36e6
 SUBCARRIER_SPACING = 30e3
 DISCOVERY_PERIODICITY = 20e-3

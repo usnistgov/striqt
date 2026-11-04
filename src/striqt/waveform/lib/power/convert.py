@@ -48,7 +48,7 @@ warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
 # backends and take no array namespace. The dB conversions evaluate
 # `scale_ln*log(x)` rather than `scale*log10(x)`. On the Jetson TX2i (glibc 2.27) that
 # is 0.55-0.65x the numexpr time in float32 and 0.82x in float64, neutral on the GPU,
-# and more accurate in float64 (chores/tests/profile_log_scaling.py, 2026-10-19).
+# and more accurate in float64 (tests/profiling/log_scaling.py, 2026-10-19).
 # Measured with chores/tests/measure_db_accuracy.py and that script, in spacing ulps
 # (up to twice the `2u*k` factor): libm log 1.8 (float32, Apple and glibc) and 1.0
 # (float64, glibc); CUDA libdevice on the TX2i logf 2.0, log 1.0, powf 5
