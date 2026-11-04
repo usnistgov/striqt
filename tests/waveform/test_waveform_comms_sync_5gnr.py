@@ -37,6 +37,7 @@ from waveform_strategies import (
 )
 
 from striqt.analysis import testing
+from striqt.waveform.fourier import on_peak_roundoff
 from striqt.waveform.lib.comms import sync_5gnr
 from striqt.waveform.lib.comms.sync_5gnr import (
     _pss_m_sequence,
@@ -597,7 +598,10 @@ class TestCupy:
         )
         full_size = params.corr_size + pss.shape[1] - 1
         sigma = cross_backend_sigma(iq.dtype, (full_size, full_size), n_elementwise=2)
-        assert_close(R_cp, R_np, sigma=sigma)
+        # the rows with the embedded symbol carry the structured roundoff of a matched
+        # filter, relative to the peak rather than to the rms of the noise rows
+        peak_atol = on_peak_roundoff(iq.dtype) * np.abs(R_np).max()
+        assert_close(R_cp, R_np, sigma=sigma, atol=peak_atol)
         for port, (n_id2, beam, delay) in enumerate(embeds):
             mag = np.abs(R_cp[port])
             assert np.unravel_index(mag.argmax(), mag.shape) == (n_id2, 0, beam, delay)
