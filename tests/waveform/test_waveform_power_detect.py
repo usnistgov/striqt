@@ -148,19 +148,23 @@ def bin_power_bound(dtype, size, outputs, n_impl=1, kind='mean'):
 
 
 class TestIqToBinPower:
+    @pytest.mark.namespaces('numpy', 'cupy')
+    @pytest.mark.parametrize('kind', ['mean', 'max'])
     @pytest.mark.parametrize('size', [2**14, 2**17])
-    def test_mean_over_a_long_bin_stays_within_the_reduction_model(self, size):
+    def test_long_bin_statistics_stay_within_the_reduction_model(self, xp, size, kind):
         """a mean over 1e5 float32 samples rounds a few units, where the n*u bound of
-        recursive summation would have allowed 1e-2"""
+        recursive summation would have allowed 1e-2; a max over the bin is exact"""
         rng = np.random.default_rng(size)
         iq = rng.standard_normal((4, size)) + 1j * rng.standard_normal((4, size))
         iq = (iq / np.sqrt(2)).astype(np.complex64)
-        result = iq_to_bin_power(iq, Ts=1, Tbin=size, kind='mean', axis=1)[:, 0]
-        assert_close(
-            result,
-            reference_power(iq, axis=1),
-            rtol=bin_power_bound(np.float32, size, outputs=result.size),
-        )
+        power = reference_power(iq)
+        expected = power.mean(axis=1) if kind == 'mean' else power.max(axis=1)
+
+        result = iq_to_bin_power(xp.asarray(iq), Ts=1, Tbin=size, kind=kind, axis=1)
+
+        assert result.dtype == np.float32
+        rtol = bin_power_bound(np.float32, size, outputs=result.size, kind=kind)
+        assert_close(result[:, 0], expected, rtol=rtol)
 
     def test_quantile_of_a_long_heavy_tailed_bin_is_exact_on_every_numpy(self):
         """numpy < 2.3 casts a scalar q to float32 (numpy.lib._function_base_impl,
@@ -514,25 +518,6 @@ class TestNumpyCupyCrossComparison:
         assert result_cp.dtype == result_np.dtype
         rtol = bin_power_bound(float_dtype_like(iq), size, result_np.size, 2, kind)
         assert_close(result_cp, result_np, rtol=rtol)
-
-    @pytest.mark.parametrize('kind', ['mean', 'max'])
-    def test_iq_to_bin_power_over_a_long_bin(self, cupy_available, kind):
-        """the one-pass cupy reduction over 2**17-sample bins stays within the model"""
-        size = 2**17
-        rng = np.random.default_rng(size)
-        shape = (2, 4 * size)
-        iq = rng.standard_normal(shape) + 1j * rng.standard_normal(shape)
-        iq = (iq / np.sqrt(2)).astype(np.complex64)
-
-        result = iq_to_bin_power(
-            cupy_available.asarray(iq), Ts=1, Tbin=size, kind=kind, axis=1
-        )
-        blocks = reference_power(iq).reshape(2, 4, size)
-        expected = blocks.mean(axis=2) if kind == 'mean' else blocks.max(axis=2)
-
-        assert result.dtype == np.float32
-        rtol = bin_power_bound(np.float32, size, expected.size, kind=kind)
-        assert_close(result, expected, rtol=rtol)
 
     @given(case=cyclic_power_cases(channels=(2,)))
     def test_iq_to_cyclic_power(self, cupy_available, case):

@@ -11,6 +11,7 @@ from conftest import iq_waveforms
 from hypothesis import strategies as st
 from numeric_checks import cross_backend
 
+from striqt.analysis import testing
 from striqt.waveform.lib.comms import cp, phy_3gpp, sync_5gnr
 from striqt.waveform.lib.fourier.fft import fft_tolerance_rms
 
@@ -45,6 +46,21 @@ def sync_params(scs=30e3, fs=FS, **kws):
     defaults to True at 30 kHz."""
     kws.setdefault('shared_spectrum', round(scs) == 30_000)
     return sync_5gnr.pss_params(sample_rate=fs, subcarrier_spacing=scs, **kws)
+
+
+def window_cut(params):
+    """return ``(head, offs, nfft)`` of the correlation of `params` against the 30 kHz
+    PSS templates at `FS`: the lags before the roll of the lag window, the roll offset
+    (in samples), and the correlation FFT size."""
+    # mirrors the `nfft`, `offs`, and `head` assignments of `correlate_sync_spans`
+    template_size = sync_5gnr.pss_5g_nr(FS, 30e3).shape[1]
+    full_size = params.corr_size + template_size - 1
+    nfft = sync_5gnr._correlation_fft_size(full_size, np)
+    offs = (
+        round(params.sample_rate / params.subcarrier_spacing) + 2 * params.min_cp_size
+    )
+    head = min(params.corr_size, full_size - offs)
+    return head, offs, nfft
 
 
 def ofdm_slots(phy, n_slots, seed=0, dtype=np.complex64):
@@ -137,6 +153,14 @@ def noise_waveforms(min_size=64, max_size=2048, dtype=None):
     return iq_waveforms(
         min_size, max_size, multiple_of=2, dtype=dtype, log_power=(-13, 3)
     )
+
+
+def tiled_tone(fs, f0, count, channels=None):
+    """return a unit-amplitude complex64 tone at `f0` (in Hz) sampled at `fs` (in Hz)
+    over `count` samples, tiled to shape ``(channels, count)``; `channels=None`
+    returns the 1-D tone."""
+    x = testing.tone(None, fs, frequency=f0, count=count)[0]
+    return x if channels is None else np.tile(x, (channels, 1))
 
 
 @st.composite

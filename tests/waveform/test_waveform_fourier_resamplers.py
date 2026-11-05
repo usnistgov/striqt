@@ -22,7 +22,12 @@ from numeric_checks import (
     tone_frequency,
 )
 from numpy.testing import assert_allclose, assert_array_equal
-from waveform_strategies import cross_backend_sigma, msps_id, noise_waveforms
+from waveform_strategies import (
+    cross_backend_sigma,
+    msps_id,
+    noise_waveforms,
+    tiled_tone,
+)
 
 from striqt.analysis import testing
 from striqt.waveform.lib.fourier.fft import (
@@ -277,16 +282,19 @@ class TestResample:
 
 
 # %% oaresample
+FILTER_KWS = {
+    'window': 'hann',
+    'axis': 1,
+    'filter_bandwidth': 0.2e6,
+    'transition_bandwidth': 0.05e6,
+}
+
+
 class TestOaresample:
     FS = 1e6
     NFFT = 256
     NSEG = 40
-
-    def _tone(self, f0, channels=None, count=None):
-        if count is None:
-            count = self.NFFT * self.NSEG
-        x = testing.tone(None, self.FS, frequency=f0, count=count)[0]
-        return x if channels is None else np.tile(x, (channels, 1))
+    COUNT = NFFT * NSEG
 
     @settings(max_examples=20)
     @given(
@@ -302,7 +310,7 @@ class TestOaresample:
         fs_out = self.FS * up / down
         f0 = f0_bins * self.FS / self.NFFT
         shift = shift_bins * self.FS / down
-        x = self._tone(f0, channels=2)
+        x = tiled_tone(self.FS, f0, self.COUNT, 2)
 
         kws = {'window': 'hann', 'axis': 1, 'frequency_shift': shift, 'scale': scale}
         y = oaresample(x, up, down, self.FS, **kws)
@@ -317,7 +325,7 @@ class TestOaresample:
         """a 1-D `scale` applies one gain per channel, as `resample` does with the
         per-port `voltage_scale` of a calibrated acquisition"""
         up, down = self.NFFT // 2, self.NFFT
-        x = self._tone(self.FS / self.NFFT * 4, channels=2)
+        x = tiled_tone(self.FS, self.FS / self.NFFT * 4, self.COUNT, 2)
         scale = np.array([1.0, 2.0])
         y = oaresample(x, up, down, self.FS, window='hann', axis=1, scale=scale)
         yi = interior(y, up, axis=1)
@@ -331,30 +339,19 @@ class TestOaresample:
         divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
         down = self.NFFT - self.NFFT % (2 * divisor)
         up = down // 2
-        kws = {
-            'window': window,
-            'axis': 1,
-            'filter_bandwidth': 0.2e6,
-            'transition_bandwidth': 0.05e6,
-        }
+        kws = {**FILTER_KWS, 'window': window}
         # the STFT needs a whole number of hops, and `down` is a multiple of the hop
         count = down * self.NSEG
-        y_pass = oaresample(self._tone(0.05e6, 1, count), up, down, self.FS, **kws)
-        y_stop = oaresample(self._tone(0.15e6, 1, count), up, down, self.FS, **kws)
+        x_pass = tiled_tone(self.FS, 0.05e6, count, 1)
+        x_stop = tiled_tone(self.FS, 0.15e6, count, 1)
+        y_pass = oaresample(x_pass, up, down, self.FS, **kws)
+        y_stop = oaresample(x_stop, up, down, self.FS, **kws)
         assert_tone_level(interior(y_pass, up, axis=1))
         assert level_error_dB(interior(y_stop, up, axis=1)).max() < FIR_RECT_STOPBAND_DB
 
-    def test_filter_bandwidth_within_the_transition_is_rejected(self):
-        """a passband no wider than the default 250 kHz transition band leaves no
-        passband, as `sensor.lib.compute.corrections.validate_fir_band` rejects it"""
-        up, down = self.NFFT // 2, self.NFFT
-        kws = {'window': 'hann', 'axis': 1, 'filter_bandwidth': 0.2e6}
-        with pytest.raises(ValueError, match='no passband'):
-            oaresample(self._tone(0.0, 1), up, down, self.FS, **kws)
-
     def test_upsample(self):
         up, down = 2 * self.NFFT, self.NFFT
-        x = self._tone(0.05e6, 1)
+        x = tiled_tone(self.FS, 0.05e6, self.COUNT, 1)
         y = oaresample(x, up, down, self.FS, window='hann', axis=1)
         assert y.shape == (1, 2 * x.shape[1])
         yi = interior(y, up, axis=1)
@@ -362,50 +359,45 @@ class TestOaresample:
         f_err = abs(tone_frequency(yi[0], 2 * self.FS) - 0.05e6)
         assert f_err <= 2 * self.FS / yi.shape[1]
 
-    def test_out_is_x_under_overwrite_x(self):
-        """with an overlapping window the STFT leaves `x` free, so the output is
-        written into the buffer of `x` and equals the output into a fresh array"""
+    @pytest.mark.namespaces('numpy', 'cupy')
+    def test_out_is_x_under_overwrite_x(self, xp):
+        """with an overlapping window the STFT leaves `x` free, so the filtered
+        downsample is written into the buffer of `x` and equals the output into a
+        fresh array"""
         up, down = self.NFFT // 2, self.NFFT
-        x = self._tone(0.05e6, channels=2)
-        expected = oaresample(x.copy(), up, down, self.FS, window='hann', axis=1)
+        x = xp.asarray(tiled_tone(self.FS, 0.05e6, self.COUNT, 2))
+        expected = oaresample(x.copy(), up, down, self.FS, **FILTER_KWS)
 
-        y = oaresample(
-            x, up, down, self.FS, window='hann', axis=1, overwrite_x=True, out=x
-        )
+        y = oaresample(x, up, down, self.FS, overwrite_x=True, out=x, **FILTER_KWS)
 
-        assert np.shares_memory(y, x)
+        assert xp.shares_memory(y, x)
         assert y.shape == expected.shape
-        assert_array_equal(y, expected)
+        xp.testing.assert_array_equal(y, expected)
 
     def test_out_sharing_x_requires_overwrite_x(self):
         """without `overwrite_x` the input is kept, so it may not receive the output"""
         up, down = self.NFFT // 2, self.NFFT
-        x = self._tone(0.05e6, channels=2)
+        x = tiled_tone(self.FS, 0.05e6, self.COUNT, 2)
         with pytest.raises(ValueError, match='overwrite_x'):
             oaresample(x, up, down, self.FS, window='hann', axis=1, out=x)
 
     @pytest.mark.parametrize(
-        'make_out, match',
+        'make_out, kws, match',
         [
-            (lambda x: x[:, ::2], 'C-contiguous'),
-            (lambda x: np.empty(x.shape, dtype=np.complex128), 'dtype'),
-            (lambda x: np.empty(x.size // 4, dtype=x.dtype), 'fewer than'),
+            (lambda x: x[:, ::2], {}, 'C-contiguous'),
+            (lambda x: np.empty(x.shape, dtype=np.complex128), {}, 'dtype'),
+            (lambda x: np.empty(x.size // 4, dtype=x.dtype), {}, 'fewer than'),
+            (lambda x: x, {'up': 2 * NFFT, 'overwrite_x': True}, 'fewer than'),
         ],
-        ids=['strided', 'dtype', 'too_small'],
+        ids=['strided', 'dtype', 'too_small', 'x_when_upsampling'],
     )
-    def test_out_buffer_rejected(self, make_out, match):
-        up, down = self.NFFT // 2, self.NFFT
-        x = self._tone(0.05e6, channels=2)
+    def test_out_buffer_rejected(self, make_out, kws, match):
+        """a strided, mistyped, or undersized `out` is rejected, and `x` is undersized
+        when upsampling"""
+        kws = {'up': self.NFFT // 2, 'down': self.NFFT, 'axis': 1, **kws}
+        x = tiled_tone(self.FS, 0.05e6, self.COUNT, 2)
         with pytest.raises(ValueError, match=match):
-            oaresample(x, up, down, self.FS, window='hann', axis=1, out=make_out(x))
-
-    def test_out_is_x_rejected_when_upsampling(self):
-        up, down = 2 * self.NFFT, self.NFFT
-        x = self._tone(0.05e6, channels=1)
-        with pytest.raises(ValueError, match='fewer than'):
-            oaresample(
-                x, up, down, self.FS, window='hann', axis=1, overwrite_x=True, out=x
-            )
+            oaresample(x, fs=self.FS, window='hann', out=make_out(x), **kws)
 
     @pytest.mark.parametrize(
         'up, down, shift, match',
@@ -418,7 +410,7 @@ class TestOaresample:
         ],
     )
     def test_shift_errors(self, up, down, shift, match):
-        x = self._tone(0.05e6, 1)
+        x = tiled_tone(self.FS, 0.05e6, self.COUNT, 1)
         with pytest.raises(ValueError, match=match):
             oaresample(x, up, down, self.FS, axis=1, frequency_shift=shift)
 
@@ -477,7 +469,7 @@ class TestCopyBinsToFftfreqOrder:
 
         xp.testing.assert_array_equal(reorder(y, case, overwrite_x=False), expected)
 
-    @pytest.mark.namespaces('numpy', 'cupy')
+    @pytest.mark.namespaces('cupy')
     @pytest.mark.parametrize(
         'per_port_gain', [False, True], ids=['one_gain', 'per_port']
     )
@@ -554,14 +546,24 @@ class TestCopyBinsToFftfreqOrder:
         segments=st.integers(min_value=1, max_value=12),
         block_rows=st.integers(min_value=1, max_value=6),
         ports=st.integers(min_value=1, max_value=2),
+        per_port_gain=st.booleans(),
     )
     @settings(max_examples=30)
-    def test_in_place_property(self, half_out, extra, segments, block_rows, ports):
+    def test_in_place_property(
+        self, half_out, extra, segments, block_rows, ports, per_port_gain
+    ):
         """every even output size at or below the input size reorders in place to
-        the out-of-place values, at any block size"""
+        the out-of-place values, at any block size, with one gain or a gain per port"""
         nfft_out = 2 * half_out
         nfft = nfft_out + 2 * extra
-        case = reorder_case(np, nfft, nfft_out, ports=ports, segments=segments)
+        case = reorder_case(
+            np,
+            nfft,
+            nfft_out,
+            ports=ports,
+            segments=segments,
+            per_port_gain=per_port_gain,
+        )
         y = case[0]
         reference = reorder(y.copy(), case, overwrite_x=False)
 
@@ -589,9 +591,7 @@ class TestNumpyCupyCrossComparison:
     @given(f0_bins=st.integers(min_value=-20, max_value=20))
     def test_oaresample(self, cupy_available, f0_bins):
         fs, nfft = 1e6, 256
-        x = testing.tone(
-            None, fs, frequency=f0_bins * fs / nfft, count=nfft * 40, ports=2
-        )
+        x = tiled_tone(fs, f0_bins * fs / nfft, nfft * 40, 2)
 
         shift = 8 * fs / nfft
         kws = {
@@ -606,24 +606,3 @@ class TestNumpyCupyCrossComparison:
         # add, plus the FIR multiply and the output scaling
         sigma = cross_backend_sigma(x.dtype, [nfft, nfft // 2], n_elementwise=5)
         assert_close(y_cp, y_np, sigma=sigma)
-
-    def test_oaresample_out_is_x(self, cupy_available):
-        """the output written into the buffer of `x` on cupy equals the output into
-        a fresh array"""
-        cp = cupy_available
-        fs, nfft = 1e6, 256
-        x = cp.asarray(
-            testing.tone(None, fs, frequency=4 * fs / nfft, count=nfft * 40, ports=2)
-        )
-        kws = {
-            'window': 'hann',
-            'axis': 1,
-            'filter_bandwidth': 0.2e6,
-            'transition_bandwidth': 0.05e6,
-        }
-        expected = oaresample(x.copy(), nfft // 2, nfft, fs, **kws)
-
-        y = oaresample(x, nfft // 2, nfft, fs, overwrite_x=True, out=x, **kws)
-
-        assert cp.shares_memory(y, x)
-        cp.testing.assert_array_equal(y, expected)

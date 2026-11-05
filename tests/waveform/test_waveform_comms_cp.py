@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from conftest import as_xp, gaussian_iq, iq_waveforms
-from hypothesis import given, strategies as st
+from hypothesis import example, given, strategies as st
 from numeric_checks import assert_close, numpy_and_cupy, reference_power
 from waveform_strategies import corr_atol_for, cp_case
 
@@ -40,14 +40,12 @@ def corr_reference(inds, x, nfft, ncp, norm):
     return out
 
 
-def corr_cases(
-    min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False, sorted_inds=False
-):
+def corr_cases(min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False):
     """draw (inds, x, nfft, ncp, norm) arguments with arbitrary index sets.
 
     The waveform length is drawn so that some examples run index pairs past the end of
-    `x`. The indices are in arbitrary order unless `sorted_inds`, so an out-of-range
-    pair may precede a valid one. With `ncp_from_inds`, `ncp` is the index count, as
+    `x`. The indices are in arbitrary order, so an out-of-range pair may precede a
+    valid one. With `ncp_from_inds`, `ncp` is the index count, as
     `cp.correlate_cyclic_shift` infers from the last axis of `inds`.
     """
 
@@ -61,7 +59,7 @@ def corr_cases(
             ncp = draw(st.integers(min_value=4, max_value=nfft // 4))
         positions = st.integers(min_value=0, max_value=2 * nfft)
         inds = draw(st.lists(positions, min_size=n_inds, max_size=n_inds, unique=True))
-        inds = np.asarray(sorted(inds) if sorted_inds else inds, dtype=np.int64)
+        inds = np.asarray(inds, dtype=np.int64)
         # every lag keeps at least one valid pair (from the smallest index) so the
         # correlation is defined. Larger indexes may still run past the end of x
         min_size = int(inds.min()) + 2 * nfft + ncp
@@ -103,6 +101,15 @@ def runs_cases():
     return _case()
 
 
+def out_of_range_before_valid(norm):
+    """return a `corr_cases` tuple in which the first index runs past the end of `x`
+    at every lag and the second index stays inside `x` at every lag"""
+    nfft, ncp = 32, 2
+    x = gaussian_iq(3 * nfft, seed=0)
+    inds = np.array([2 * nfft, 0], dtype=np.int64)
+    return inds, x, nfft, ncp, norm
+
+
 def assert_matches_reference(out, inds, x, nfft, ncp, norm):
     expected = corr_reference(inds, x, nfft, ncp, norm)
     assert_close(out, expected, atol=corr_atol_for(x, inds.size, norm))
@@ -111,28 +118,26 @@ def assert_matches_reference(out, inds, x, nfft, ncp, norm):
 class TestCorrelateCyclicShiftDispatcher:
     """cp.correlate_cyclic_shift on each array namespace against the numpy reference."""
 
-    @given(case=corr_cases(ncp_from_inds=True, sorted_inds=True))
-    def test_sizes_out_from_inds(self, xp, case):
+    @example(case=out_of_range_before_valid(norm=False))
+    @example(case=out_of_range_before_valid(norm=True))
+    @given(case=corr_cases(ncp_from_inds=True))
+    def test_arbitrary_index_order(self, xp, case):
+        """the correlation over indices in any order, some past the end of `x`, has
+        ``nfft + ncp`` lags of the input dtype, matches the reference, and is written
+        into `out` when given"""
         inds, x, nfft, ncp, norm = case
-        inds_2d, x_xp = as_xp(xp, inds[np.newaxis, :], x)
+        inds_xp, x_xp = as_xp(xp, inds[np.newaxis, :], x)
 
-        out = cp.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm)
+        out = cp.correlate_cyclic_shift(inds_xp, x_xp, nfft, norm=norm)
         assert isinstance(out, xp.ndarray)
         assert out.shape == (nfft + ncp,)
         assert out.dtype == x.dtype
         assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
         buffer = xp.empty(nfft + ncp, dtype=x.dtype)
-        ret = cp.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm, out=buffer)
+        ret = cp.correlate_cyclic_shift(inds_xp, x_xp, nfft, norm=norm, out=buffer)
         assert ret is buffer
         assert_matches_reference(ret, inds, x, nfft, ncp, norm)
-
-    @given(case=corr_cases(ncp_from_inds=True))
-    def test_arbitrary_index_order(self, xp, case):
-        inds, x, nfft, ncp, norm = case
-        inds_xp, x_xp = as_xp(xp, inds[np.newaxis, :], x)
-        out = cp.correlate_cyclic_shift(inds_xp, x_xp, nfft, norm=norm)
-        assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
     @given(case=runs_cases())
     def test_consecutive_prefix_runs(self, xp, case):
@@ -140,16 +145,6 @@ class TestCorrelateCyclicShiftDispatcher:
         inds_xp, x_xp = as_xp(xp, inds, x)
         out = cp.correlate_cyclic_shift(inds_xp, x_xp, nfft, norm=norm)
         assert out.shape == (nfft + ncp,)
-        assert_matches_reference(out, inds, x, nfft, ncp, norm)
-
-    @pytest.mark.parametrize('norm', [False, True])
-    def test_valid_index_after_out_of_range(self, xp, norm):
-        nfft, ncp = 32, 4
-        x = gaussian_iq(3 * nfft, seed=0)
-        # the first prefix runs past the end of x at every lag; the second never does
-        inds = np.array([2 * nfft, 0], dtype=np.int64)[:, np.newaxis] + np.arange(ncp)
-        inds_xp, x_xp = as_xp(xp, inds, x)
-        out = cp.correlate_cyclic_shift(inds_xp, x_xp, nfft, norm=norm)
         assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
 

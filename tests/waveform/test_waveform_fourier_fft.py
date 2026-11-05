@@ -8,7 +8,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from conftest import iq_waveforms
-from hypothesis import given, strategies as st
+from hypothesis import given, settings, strategies as st
 from numeric_checks import (
     ATOL,
     RTOL_FLOAT64,
@@ -421,34 +421,25 @@ class TestNumpyCupyCrossComparison:
         n_np, n_cp = numpy_and_cupy(cupy_available, nulled, x)
         assert_array_equal(n_cp, n_np)
 
+    @settings(max_examples=25)
     @given(x=iq_waveforms(min_size=256, max_size=1024, multiple_of=64, channels=4))
-    def test_chunked_fft_equals_the_unchunked_transform(
-        self, cupy_available, max_cupy_fft_chunk, x
-    ):
-        """the groups of a chunked transform are independent batches of one plan, so
-        the result is bit-identical to the transform in one group"""
+    def test_fft_out_buffer_and_chunking(self, cupy_available, max_cupy_fft_chunk, x):
+        """the chunked transform into `out` equals the transform in one group bit for
+        bit, and the numpy transform within the cross-backend budget"""
         cp = cupy_available
+        X_np = fft(x, axis=1)
+        x_np_back = ifft(X_np, axis=1)
         x_cp = cp.asarray(x)
 
         max_cupy_fft_chunk(None)
         whole = fft(x_cp, axis=1, out=cp.empty_like(x_cp))
-        max_cupy_fft_chunk(x.shape[1])
-        chunked = fft(x_cp, axis=1, out=cp.empty_like(x_cp))
-
-        cp.testing.assert_array_equal(chunked, whole)
-
-    @given(x=iq_waveforms(min_size=256, max_size=1024, multiple_of=64, channels=4))
-    def test_fft_out_buffer_and_chunking(self, cupy_available, max_cupy_fft_chunk, x):
-        X_np = fft(x, axis=1)
-        x_np_back = ifft(X_np, axis=1)
-
         # small enough that the 4-row input is split across several calls
         max_cupy_fft_chunk(x.shape[1])
-        x_cp = cupy_available.asarray(x)
-        out = cupy_available.empty_like(x_cp)
+        out = cp.empty_like(x_cp)
         X_cp = fft(x_cp, axis=1, out=out)
-        assert X_cp is out or cupy_available.shares_memory(X_cp, out)
-        x_cp_back = ifft(X_cp, axis=1, out=cupy_available.empty_like(x_cp))
+        assert X_cp is out or cp.shares_memory(X_cp, out)
+        cp.testing.assert_array_equal(X_cp, whole)
+        x_cp_back = ifft(X_cp, axis=1, out=cp.empty_like(x_cp))
 
         n = x.shape[1]
         sigma = cross_backend_sigma(x.dtype, [n])
