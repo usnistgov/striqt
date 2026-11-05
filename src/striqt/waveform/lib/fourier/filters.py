@@ -84,16 +84,50 @@ def design_oafilter(
 @util.lru_cache()
 @util.persistent_cache()
 def design_fir_lpf(
-    bw, fs, *, numtaps=4001, transition_bw=250e3, dtype='float32', xp=None
-):
+    bw: float,
+    fs: float,
+    *,
+    numtaps: int = 4001,
+    transition_bw: float = 250e3,
+    dtype: DTypeLike = 'float32',
+    xp: XpType = None,
+) -> Array:
+    """return the taps of a least-squares linear-phase FIR low-pass of width `bw`.
+
+    The gain falls linearly from 1 at ``bw/2 - transition_bw/2`` to 0 at
+    ``bw/2 + transition_bw/2``, so the gain at ``bw/2`` is 1/2. The transition band
+    must lie strictly inside ``(0, fs/2)``.
+
+    Args:
+        bw: the passband width (in Hz), centered on 0 Hz
+        fs: the sample rate (in S/s)
+        numtaps: the number of taps, odd for a type I design
+        transition_bw: the width (in Hz) of the transition band
+        dtype: the dtype of the taps
+        xp: unused; the taps are a numpy array
+
+    Returns:
+        the `numtaps` taps as a 1-D numpy array of `dtype`
+
+    Raises:
+        ValueError: if the transition band reaches 0 Hz or ``fs/2``
+    """
     from scipy import signal
 
-    edges = [
-        0,
-        bw / 2 - transition_bw / 2,
-        bw / 2 + transition_bw / 2,
-        fs / 2,
-    ]
+    lower = bw / 2 - transition_bw / 2
+    upper = bw / 2 + transition_bw / 2
+    if lower <= 0:
+        raise ValueError(
+            f'the {transition_bw} Hz transition band leaves no passband below it for '
+            f'bw={bw} Hz'
+        )
+    if upper >= fs / 2:
+        raise ValueError(
+            f'the {transition_bw} Hz transition band reaches fs/2 for bw={bw} Hz at '
+            f'fs={fs} S/s'
+        )
+
+    edges = [0, lower, upper, fs / 2]
     bands = list(zip(edges[:-1], edges[1:]))
     desired = [1, 1, 1, 0, 0, 0]
 
@@ -134,6 +168,9 @@ def _fir_lowpass_fft(
 
     Returns:
         a 1-D array of `size` samples
+
+    Raises:
+        ValueError: if the transition band reaches 0 Hz, which leaves no passband
     """
 
     if xp is None:
@@ -145,10 +182,16 @@ def _fir_lowpass_fft(
 
     from scipy import signal
 
-    # firwin2 requires a nondecreasing grid that ends at nyquist, so a transition
-    # band that runs past it is cut short there
-    lower = max(cutoff - transition / 2, 0.0)
+    lower = cutoff - transition / 2
     upper = cutoff + transition / 2
+    if lower <= 0:
+        raise ValueError(
+            f'the {transition} Hz transition band leaves no passband below it for '
+            f'cutoff={cutoff} Hz'
+        )
+
+    # firwin2 requires a grid that rises from 0 to nyquist, so a transition band that
+    # runs past nyquist is cut short there
     if upper < nyquist:
         freqs = [0, lower, upper, nyquist]
         gains = [1.0, 1.0, 0.0, 0.0]

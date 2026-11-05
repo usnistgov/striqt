@@ -344,6 +344,14 @@ class TestOaresample:
         assert_tone_level(interior(y_pass, up, axis=1))
         assert level_error_dB(interior(y_stop, up, axis=1)).max() < FIR_RECT_STOPBAND_DB
 
+    def test_filter_bandwidth_within_the_transition_is_rejected(self):
+        """a passband no wider than the default 250 kHz transition band leaves no
+        passband, as `sensor.lib.compute.corrections.validate_fir_band` rejects it"""
+        up, down = self.NFFT // 2, self.NFFT
+        kws = {'window': 'hann', 'axis': 1, 'filter_bandwidth': 0.2e6}
+        with pytest.raises(ValueError, match='no passband'):
+            oaresample(self._tone(0.0, 1), up, down, self.FS, **kws)
+
     def test_upsample(self):
         up, down = 2 * self.NFFT, self.NFFT
         x = self._tone(0.05e6, 1)
@@ -586,7 +594,12 @@ class TestNumpyCupyCrossComparison:
         )
 
         shift = 8 * fs / nfft
-        kws = {'window': 'hann', 'axis': 1, 'filter_bandwidth': 0.2e6}
+        kws = {
+            'window': 'hann',
+            'axis': 1,
+            'filter_bandwidth': 0.2e6,
+            'transition_bandwidth': 0.05e6,
+        }
         resampler = functools.partial(oaresample, frequency_shift=shift, **kws)
         y_np, y_cp = numpy_and_cupy(cupy_available, resampler, x, nfft // 2, nfft, fs)
         # window multiply, fft(nfft), zeroing, ifft(nfft), window multiply, overlap
@@ -602,7 +615,12 @@ class TestNumpyCupyCrossComparison:
         x = cp.asarray(
             testing.tone(None, fs, frequency=4 * fs / nfft, count=nfft * 40, ports=2)
         )
-        kws = {'window': 'hann', 'axis': 1, 'filter_bandwidth': 0.2e6}
+        kws = {
+            'window': 'hann',
+            'axis': 1,
+            'filter_bandwidth': 0.2e6,
+            'transition_bandwidth': 0.05e6,
+        }
         expected = oaresample(x.copy(), nfft // 2, nfft, fs, **kws)
 
         y = oaresample(x, nfft // 2, nfft, fs, overwrite_x=True, out=x, **kws)

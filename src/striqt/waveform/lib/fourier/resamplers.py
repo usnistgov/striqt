@@ -455,10 +455,11 @@ def oaresample(
         ValueError: if `frequency_shift` is nonzero while upsampling, is not a
             multiple of ``fs / down`` times the frames per hop, or moves the output
             band past an edge of the input band; if `up` or `down` is odd or not a
-            multiple of the COLA divisor; if `window` has no COLA divisor; or if
-            `out` is not C-contiguous, has another dtype, has fewer than
-            ``x.size * up // down`` elements, or shares memory with `x` without
-            `overwrite_x`
+            multiple of the COLA divisor; if `window` has no COLA divisor; if
+            `filter_bandwidth` is finite and at most `transition_bandwidth`, which
+            leaves no passband; or if `out` is not C-contiguous, has another dtype,
+            has fewer than ``x.size * up // down`` elements, or shares memory with
+            `x` without `overwrite_x`
     """
 
     nfft = down

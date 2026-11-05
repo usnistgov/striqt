@@ -141,6 +141,22 @@ class TestFilterDesign:
         # firwin2 constrains an even-length (type II) design to zero gain at nyquist
         assert np.abs(H[np.argmin(freqs)]) < FIR_LEAKAGE
 
+    @pytest.mark.parametrize('cutoff', [0.1, 0.15], ids=['crossing', 'touching'])
+    def test_fir_lowpass_fft_rejects_a_transition_reaching_dc(self, cutoff):
+        """a transition band at least twice as wide as the cutoff leaves no passband,
+        as `sensor.lib.compute.corrections.validate_fir_band` rejects it"""
+        with pytest.raises(ValueError, match='no passband'):
+            _fir_lowpass_fft(256, 1.0, cutoff=cutoff, transition=0.3)
+
+    @pytest.mark.parametrize(
+        'bw, match',
+        [(0.2e6, 'no passband'), (0.25e6, 'no passband'), (0.75e6, 'fs/2')],
+        ids=['below_the_transition', 'equal_to_the_transition', 'reaching_nyquist'],
+    )
+    def test_design_fir_lpf_rejects_a_transition_reaching_an_edge(self, bw, match):
+        with pytest.raises(ValueError, match=match):
+            design_fir_lpf(bw, 1e6, numtaps=401, transition_bw=250e3)
+
 
 # %% oaconvolve
 class TestOaconvolve:
