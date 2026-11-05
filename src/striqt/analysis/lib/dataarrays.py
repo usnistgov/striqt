@@ -91,20 +91,22 @@ class AcquiredIQ:
 
 
 def _results_as_arrays(
-    obj: tuple | list | dict | Array,
-) -> Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]:
-    """convert an array, or a container of arrays, into a numpy array (or container of numpy arrays)"""
+    obj: Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray],
+) -> Array:
+    """return `obj` as a numpy array; a cupy or torch array is transferred from the device.
 
+    Raises:
+        TypeError: if `obj` is not a numpy, cupy, or torch array
+    """
+    # the array predicates narrow the type only when the backend is importable
+    array: typing.Any = obj
     if array_api_compat.is_torch_array(obj):
-        array = obj.cpu()
+        return array.cpu()
     elif sw.is_cupy_array(obj):
-        array = obj.get()
+        return array.get()
     elif array_api_compat.is_numpy_array(obj):
         return obj
-    else:
-        raise TypeError(f'obj type {type(obj)} is unrecognized')
-
-    return array
+    raise TypeError(f'obj type {type(obj)} is unrecognized')
 
 
 def _empty_stub(dims, dtype, attrs: dict[str, typing.Any] | None = None):

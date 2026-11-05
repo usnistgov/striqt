@@ -58,14 +58,14 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
     Raises:
         ValueError: if `target` is not a string, `Path`, or store
     """
-    import zarr.storage
-
+    # the zarr 2 and zarr 3 stubs each lack the names of the other version
+    storage: typing.Any = importlib.import_module('zarr.storage')
     if _zarr_version() < (3, 0, 0):
-        StoreBase = zarr.storage.Store  # type: ignore
-        DirectoryStore = zarr.storage.DirectoryStore  # type: ignore
+        StoreBase = storage.Store
+        DirectoryStore = storage.DirectoryStore
     else:
-        StoreBase = zarr.abc.store.Store  # type: ignore
-        DirectoryStore = zarr.storage.LocalStore
+        StoreBase = importlib.import_module('zarr.abc.store').Store
+        DirectoryStore = storage.LocalStore
 
     if isinstance(target, StoreBase):
         store = target
@@ -83,7 +83,7 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
         fs, _ = fsspec.url_to_fs(target, asynchronous=True, **kws)
         return fs.get_mapper('')
     elif str(target).endswith('.zip'):
-        store = zarr.storage.ZipStore(target, mode=mode, compression=0)
+        store = storage.ZipStore(target, mode=mode, compression=0)
     else:
         store = DirectoryStore(target)
 
@@ -264,7 +264,8 @@ def load(path: str | Path, chunks: ChunksSize = None, **kwargs) -> xr.Dataset:
         The opened dataset object.
     """
 
-    store = open_store(path, mode='r')
+    # the xarray annotation does not admit the store objects of the zarr engine
+    store: typing.Any = open_store(path, mode='r')
 
     result = xr.open_dataset(store, chunks=chunks, engine='zarr', **kwargs)
     result = repair_legacy_attrs(result)
@@ -923,11 +924,12 @@ def _choose_chunk_sizes(
 def _build_encodings_zarr_v3(
     data, registry: register.AnalysisRegistry, compression=True
 ):
-    if isinstance(compression, zarr.core.codec_pipeline.Codec):
+    # zarr 3 modules, absent from the zarr 2 stubs
+    codec_pipeline: typing.Any = importlib.import_module('zarr.core.codec_pipeline')
+    if isinstance(compression, codec_pipeline.Codec):
         compressors = [compression]
     elif compression:
-        from zarr import codecs
-
+        codecs: typing.Any = importlib.import_module('zarr.codecs')
         compressors = [codecs.BloscCodec(cname='zstd', clevel=1, shuffle='shuffle')]
     else:
         compressors = None

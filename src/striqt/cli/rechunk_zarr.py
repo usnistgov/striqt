@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
+from typing import Any
+
 import click
 
 
@@ -57,11 +60,11 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
     store = sa.open_store(path_out, mode='w')
     print(f'rechunking input into {path_out!s}')
 
+    c: Any
     if compression > 1:
         try:
-            from zarr import codecs
-
             # compatibility: zarr v3
+            codecs: Any = importlib.import_module('zarr.codecs')
             c = codecs.BloscCodec(cname='zstd', clevel=compression, shuffle='shuffle')
         except (ImportError, AttributeError):
             # compatibility: zarr v2
@@ -71,21 +74,17 @@ def run(zarr_input: str, zarr_output: str | None, chunk_size, compression):
     else:
         c = compression
 
-    sa.dump(
-        store,
-        data,
-        chunk_bytes=1_000_000 * chunk_size,
-        compression=c,  # type: ignore
-    )
+    sa.dump(store, data, chunk_bytes=1_000_000 * chunk_size, compression=c)
 
 
 def choose_zarr_pipeline(support_zip: bool):
-    import zarr
+    # `zarr.config` is a zarr 3 attribute, absent from the zarr 2 stubs
+    zarr: Any = importlib.import_module('zarr')
 
     if not support_zip:
         try:
             # compatibility: optional zarrs package
-            import zarrs  # type: ignore  # noqa: F401
+            importlib.import_module('zarrs')
         except ImportError:
             pass
         else:
@@ -94,7 +93,7 @@ def choose_zarr_pipeline(support_zip: bool):
 
     try:
         # compatibility: zarr-python >= 3.3 package
-        from zarr.core import codec_pipeline  # noqa: F401
+        importlib.import_module('zarr.core.codec_pipeline')
     except ImportError:
         pass
     else:
