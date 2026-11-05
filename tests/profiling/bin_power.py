@@ -24,7 +24,10 @@ Variants of one detector over the ``(port, bin, samples)`` view:
 The measurement table then times `channel_power_time_series` as the pipeline reaches
 it, on a conditioned acquisition of the ADA capture: the resampling stage, the
 filtered and aligned stage the measurement selects, the measurement body on that
-stage, and the registry call with the stages memoized and from cold.
+stage, and the registry call with the stages memoized and from cold. The indented
+rows split the resampling stage: `sw.oaresample` with the arguments of the stage,
+the same without the low-pass response, and the STFT alone at the block size of
+the design, which is the analysis half of the resampler.
 
 Usage:
     pixi run -e cupy python tests/profiling/bin_power.py
@@ -60,7 +63,7 @@ import statistics
 import sys
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -257,7 +260,45 @@ def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> 
         return time.perf_counter() - start
 
     x = iq.preprocess(prefer_filtered=True, prefer_aligned=True)
+
+    # the resample stage is `sw.oaresample` with the design of the acquisition plus
+    # the conjugation and 2 slices; these rows split the resampler itself
+    design = cast(Any, raw.resampler)
+    oaresample_kws: dict[str, Any] = {
+        'up': design['nfft_out'],
+        'down': design['nfft'],
+        'fs': design['fs_sdr'],
+        'window': design['window'],
+        'axis': 1,
+        'frequency_shift': design['lo_offset'],
+        'transition_bandwidth': ss.lib.compute.corrections.FIR_TRANSITION_BW,
+    }
+    nfft = design['nfft']
+
+    def oaresample_production() -> Any:
+        return sw.oaresample(
+            raw.x, filter_bandwidth=capture.analysis_bandwidth, **oaresample_kws
+        )
+
+    def oaresample_no_lowpass() -> Any:
+        return sw.oaresample(raw.x, filter_bandwidth=None, **oaresample_kws)
+
+    def stft_only() -> Any:
+        return sw.stft(
+            raw.x,
+            fs=design['fs_sdr'],
+            window=design['window'],
+            nperseg=nfft,
+            noverlap=nfft // 2,
+            axis=1,
+            truncate=False,
+            return_axis_arrays=False,
+        )
+
     layers += [
+        ('  sw.oaresample, production args', oaresample_production),
+        ('  sw.oaresample, no low-pass', oaresample_no_lowpass),
+        ('  sw.stft at the design block', stft_only),
         (
             'body on the stage',
             lambda: power.evaluate_channel_power_time_series(x, capture, spec),
