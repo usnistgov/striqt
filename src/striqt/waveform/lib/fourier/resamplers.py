@@ -413,6 +413,7 @@ def oaresample(
     filter_bandwidth: float | None = None,
     transition_bandwidth: float = 250e3,
     scale: Array | float = 1.0,
+    out: Array | None = None,
 ):
     """resample `x` by ``up / down`` through STFT overlap-add.
 
@@ -430,7 +431,8 @@ def oaresample(
             divisor of `window`
         fs: the sample rate (in S/s) of `x`
         window: the COLA window of the STFT, a key of the divisor table
-        overwrite_x: True permits the STFT to consume the buffer of `x`
+        overwrite_x: True permits the STFT to consume the buffer of `x`; `x` holds
+            no meaningful data after the call
         axis: the time axis of `x`
         frequency_shift: the frequency (in Hz) moved to the output DC, a multiple of
             ``fs / down`` times the frames per hop of `window`; 0 keeps the center
@@ -440,16 +442,23 @@ def oaresample(
         transition_bandwidth: the width (in Hz) of the low-pass transition band
         scale: a voltage gain, a scalar or one value per entry of the axis before
             `axis`
+        out: a C-contiguous buffer of at least ``x.size * up // down`` elements in
+            the dtype of `x` that receives the output; `x` itself is accepted when
+            `overwrite_x` is True, since the STFT leaves the buffer of `x` free
 
     Returns:
         the waveform at ``fs * up / down`` on `axis`, of ``x.shape[axis] * up //
-        down`` samples, in the dtype and array namespace of `x`
+        down`` samples, in the dtype and array namespace of `x`; a view of `out`
+        when `out` is given
 
     Raises:
         ValueError: if `frequency_shift` is nonzero while upsampling, is not a
             multiple of ``fs / down`` times the frames per hop, or moves the output
-            band past an edge of the input band; if `up` or `down` is odd or not a multiple of the COLA
-            divisor; or if `window` has no COLA divisor
+            band past an edge of the input band; if `up` or `down` is odd or not a
+            multiple of the COLA divisor; if `window` has no COLA divisor; or if
+            `out` is not C-contiguous, has another dtype, has fewer than
+            ``x.size * up // down`` elements, or shares memory with `x` without
+            `overwrite_x`
     """
 
     nfft = down
@@ -489,6 +498,24 @@ def oaresample(
         raise ValueError('frequency_shift must be a multiple of fs/down')
 
     xp = array_namespace(x)
+    noverlap_in = round(nfft * overlap_scale)
+    if out is not None:
+        if out.dtype != x.dtype:
+            raise ValueError(f'out has dtype {out.dtype}, expected {x.dtype}')
+        if not out.flags.c_contiguous:
+            raise ValueError('out must be C-contiguous')
+        if out.size < x.size * nfft_out // nfft:
+            raise ValueError(
+                f'out has {out.size} elements, fewer than the {x.size * nfft_out // nfft} '
+                'of the output'
+            )
+        # without overlap the STFT frames would be `x` itself, and the overlap-add
+        # would read the memory it writes
+        if xp.may_share_memory(out, x) and not (overwrite_x and noverlap_in > 0):
+            raise ValueError(
+                'out may share the buffer of x only when overwrite_x is True'
+            )
+
     y = typing.cast(
         'Array',
         stft(
@@ -496,7 +523,7 @@ def oaresample(
             fs=fs,
             window=window,
             nperseg=nfft,
-            noverlap=round(nfft * overlap_scale),
+            noverlap=noverlap_in,
             axis=axis,
             truncate=False,
             overwrite_x=overwrite_x,
@@ -546,7 +573,13 @@ def oaresample(
     )
 
     return istft(
-        y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True, fftshift=False
+        y,
+        nfft=nfft_out,
+        noverlap=noverlap,
+        axis=axis,
+        out=out,
+        overwrite_x=True,
+        fftshift=False,
     )
 
 

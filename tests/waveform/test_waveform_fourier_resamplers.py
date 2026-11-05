@@ -354,6 +354,51 @@ class TestOaresample:
         f_err = abs(tone_frequency(yi[0], 2 * self.FS) - 0.05e6)
         assert f_err <= 2 * self.FS / yi.shape[1]
 
+    def test_out_is_x_under_overwrite_x(self):
+        """with an overlapping window the STFT leaves `x` free, so the output is
+        written into the buffer of `x` and equals the output into a fresh array"""
+        up, down = self.NFFT // 2, self.NFFT
+        x = self._tone(0.05e6, channels=2)
+        expected = oaresample(x.copy(), up, down, self.FS, window='hann', axis=1)
+
+        y = oaresample(
+            x, up, down, self.FS, window='hann', axis=1, overwrite_x=True, out=x
+        )
+
+        assert np.shares_memory(y, x)
+        assert y.shape == expected.shape
+        assert_array_equal(y, expected)
+
+    def test_out_sharing_x_requires_overwrite_x(self):
+        """without `overwrite_x` the input is kept, so it may not receive the output"""
+        up, down = self.NFFT // 2, self.NFFT
+        x = self._tone(0.05e6, channels=2)
+        with pytest.raises(ValueError, match='overwrite_x'):
+            oaresample(x, up, down, self.FS, window='hann', axis=1, out=x)
+
+    @pytest.mark.parametrize(
+        'make_out, match',
+        [
+            (lambda x: x[:, ::2], 'C-contiguous'),
+            (lambda x: np.empty(x.shape, dtype=np.complex128), 'dtype'),
+            (lambda x: np.empty(x.size // 4, dtype=x.dtype), 'fewer than'),
+        ],
+        ids=['strided', 'dtype', 'too_small'],
+    )
+    def test_out_buffer_rejected(self, make_out, match):
+        up, down = self.NFFT // 2, self.NFFT
+        x = self._tone(0.05e6, channels=2)
+        with pytest.raises(ValueError, match=match):
+            oaresample(x, up, down, self.FS, window='hann', axis=1, out=make_out(x))
+
+    def test_out_is_x_rejected_when_upsampling(self):
+        up, down = 2 * self.NFFT, self.NFFT
+        x = self._tone(0.05e6, channels=1)
+        with pytest.raises(ValueError, match='fewer than'):
+            oaresample(
+                x, up, down, self.FS, window='hann', axis=1, overwrite_x=True, out=x
+            )
+
     @pytest.mark.parametrize(
         'up, down, shift, match',
         [
@@ -548,3 +593,19 @@ class TestNumpyCupyCrossComparison:
         # add, plus the FIR multiply and the output scaling
         sigma = cross_backend_sigma(x.dtype, [nfft, nfft // 2], n_elementwise=5)
         assert_close(y_cp, y_np, sigma=sigma)
+
+    def test_oaresample_out_is_x(self, cupy_available):
+        """the output written into the buffer of `x` on cupy equals the output into
+        a fresh array"""
+        cp = cupy_available
+        fs, nfft = 1e6, 256
+        x = cp.asarray(
+            testing.tone(None, fs, frequency=4 * fs / nfft, count=nfft * 40, ports=2)
+        )
+        kws = {'window': 'hann', 'axis': 1, 'filter_bandwidth': 0.2e6}
+        expected = oaresample(x.copy(), nfft // 2, nfft, fs, **kws)
+
+        y = oaresample(x, nfft // 2, nfft, fs, overwrite_x=True, out=x, **kws)
+
+        assert cp.shares_memory(y, x)
+        cp.testing.assert_array_equal(y, expected)
