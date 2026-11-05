@@ -16,7 +16,9 @@ Variants:
 - ``block-each``: `actions.core.BLOCK_EACH` 1, the production setting. Each
   measurement result is copied to the host as soon as it returns.
 - ``deferred``: `BLOCK_EACH` 0. The copies run at the end of the capture, and the
-  memory pool is freed after each capture, as `evaluate_by_spec` does on that path.
+  memory pool is freed after each capture, as `evaluate_by_spec` does on that path;
+  ``--no-pool-free`` keeps the pool instead, to separate the cost of that free from
+  the deferred copies.
 
 Usage:
     pixi run -e cupy python tests/profiling/pipeline_sync.py
@@ -71,6 +73,7 @@ from cuda_streams import ANALYSIS, CAPTURE, StopwatchCollector, nvtx_range
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+import striqt.waveform as sw
 from striqt.sensor.lib.actions import core
 
 cp: Any = None
@@ -293,6 +296,11 @@ def main() -> int:
         action='store_true',
         help='open the resources once for every run instead of once per run',
     )
+    parser.add_argument(
+        '--no-pool-free',
+        action='store_true',
+        help='keep the cupy memory pool between captures on the deferred path too',
+    )
     args = parser.parse_args()
 
     global cp
@@ -326,6 +334,10 @@ def main() -> int:
     )
 
     quiet_sweep_loggers()
+    if args.no_pool_free:
+        # evaluate_by_spec frees the pool after each capture when block_each is off;
+        # the production path never frees it
+        sw.arrays.free_cupy_mempool = lambda: None
     collector = StopwatchCollector()
     analysis_logger = sa.util.get_logger('analysis').logger
     analysis_logger.setLevel(min(analysis_logger.level, sa.util.PERFORMANCE_DETAIL))
