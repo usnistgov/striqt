@@ -144,9 +144,8 @@ def evaluate_channel_power_time_series(
         results.append(power)
 
     xp = sw.array_namespace(iq)
-    results = xp.array(results)
-    results = xp.moveaxis(results, 0, 1)
-    results = sw.powtodB(results).astype('float32')
+    results = xp.stack(results, axis=1)
+    results = sw.powtodB(results).astype('float32', copy=False)
 
     return results
 
@@ -511,11 +510,10 @@ def cyclic_channel_power(
         axis=1,
     )
 
-    # pull arrays from the returned nested dict and combine into one ndarray
-    x = xp.array([list(d.values()) for d in nested_ret.values()])
-
-    # move the capture axis to the front
-    x = xp.moveaxis(x, -2, 0)
+    # (port, detector, statistic, lag) from the nested dict of (port, lag) arrays
+    x = xp.stack(
+        [xp.stack(list(d.values()), axis=1) for d in nested_ret.values()], axis=1
+    )
 
     # no noise_bandwidth attr; see channel_power_time_series
-    return sw.powtodB(x).astype('float32')
+    return sw.powtodB(x).astype('float32', copy=False)
