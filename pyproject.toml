@@ -49,7 +49,7 @@ build-backend = "hatchling.build"
 dev = [
     "jupyter",
     "ruff",
-    "ty==0.0.84"
+    "ty==0.0.98"
 ]
 doc = [
     "sphinx",

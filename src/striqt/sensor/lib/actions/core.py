@@ -447,7 +447,7 @@ def _acquire_capture(
     with contextlib.ExitStack() as stack:
         stack.enter_context(log_context())
         arm = [
-            util.threadpool.submit(source._arm_spec, capture),
+            util.threadpool.submit(lambda: source._arm_spec(capture)),
             util.threadpool.submit(peripherals.arm, capture),
         ]
         util.await_and_ignore(arm, 'arm sensor')
