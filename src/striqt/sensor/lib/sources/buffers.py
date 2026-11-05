@@ -28,11 +28,13 @@ class ReceiveBuffers(typing.Generic[SC]):
     carryover_samples: np.ndarray | None
     start_time_ns: int | None
     buffers: list
+    extra: np.ndarray | None
     _hold_buffer_swap = False
 
     def __init__(self, controller: Controller):
         self.controller = controller
         self.buffers = [None, None]
+        self.extra = None
         self.clear()
 
     def apply(self, samples: np.ndarray) -> tuple[int | None, int]:
@@ -84,12 +86,13 @@ class ReceiveBuffers(typing.Generic[SC]):
 
         if not self._hold_buffer_swap:
             self.buffers = [self.buffers[1], self.buffers[0]]
-        self.buffers[0], ret = _alloc_empty_iq(
+        self.buffers[0], ret, self.extra = _alloc_empty_iq(
             self.controller,
             capture,
             self.buffers[0],
             overlaps=overlaps,
             include_holdoff=include_holdoff,
+            prior_extra=self.extra,
         )
         self._hold_buffer_swap = False
         return ret
@@ -143,6 +146,7 @@ class ReceiveBuffers(typing.Generic[SC]):
     def __del__(self):
         self.clear()
         self.buffers = [None, None]
+        self.extra = None
 
 
 def get_array_namespace(array_backend: specs.types.ArrayBackend) -> types.ModuleType:
@@ -208,7 +212,8 @@ def _alloc_empty_iq(
     overlaps: tuple[int, int] = (0, 0),
     *,
     include_holdoff: bool = True,
-) -> tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]]]:
+    prior_extra: np.ndarray | None = None,
+) -> tuple[np.ndarray, tuple[np.ndarray, list[np.ndarray]], np.ndarray | None]:
     """allocate a buffer of IQ return values, or reuse `prior` when it is large enough.
 
     Args:
@@ -218,9 +223,12 @@ def _alloc_empty_iq(
             count of columns
         overlaps: the ``(lead, tail)`` overlap in source samples
         include_holdoff: True adds the transient and strobe holdoff to the read count
+        prior_extra: a throwaway buffer to reuse for the RX ports outside the capture
+            when it is at least the read count in the transport dtype
 
     Returns:
-        The buffer and the list of buffer references for streaming.
+        The buffer, the ``(samples, buffers)`` pair for streaming, and the throwaway
+        buffer for the RX ports outside the capture (None when none is streamed).
     """
     count = get_read_count(
         controller.capture_spec,
@@ -265,11 +273,16 @@ def _alloc_empty_iq(
         else:
             extra_count = 2 * count
 
-        extra = empty(extra_count, dtype=buf_dtype)
+        if (
+            prior_extra is None
+            or prior_extra.dtype != buf_dtype
+            or prior_extra.size < extra_count
+        ):
+            extra = empty(extra_count, dtype=buf_dtype)
+        else:
+            extra = prior_extra
     else:
         extra = None
-
-    extra = cast(np.ndarray, extra)
 
     buffers = []
     i = 0
@@ -281,7 +294,7 @@ def _alloc_empty_iq(
             assert extra is not None
             buffers.append(extra)
 
-    return all_samples, (samples, buffers)
+    return all_samples, (samples, buffers), extra
 
 
 def find_trigger_holdoff(

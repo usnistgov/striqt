@@ -392,7 +392,7 @@ def _read_count(capture):
 
 def test_alloc_shape_is_ports_by_read_count_with_one_stream_buffer_per_port():
     capture = _TWO_PORT
-    all_samples, (samples, streams) = buffers._alloc_empty_iq(
+    all_samples, (samples, streams), _ = buffers._alloc_empty_iq(
         stub_controller(capture), capture
     )
     count = _read_count(capture)
@@ -402,6 +402,46 @@ def test_alloc_shape_is_ports_by_read_count_with_one_stream_buffer_per_port():
     assert len(streams) == 2
     for i, stream in enumerate(streams):
         assert np.shares_memory(stream, samples[i])
+
+
+def test_alloc_reuses_the_throwaway_port_buffer():
+    """under `stream_all_rx_ports`, the RX port outside a one-port capture streams into
+    a throwaway buffer. A prior one of the transport dtype and at least the read count
+    is reused; a smaller one is replaced."""
+    capture = _ONE_PORT
+    ctrl = SimpleNamespace(
+        capture_spec=capture,
+        source_spec=source_spec(stream_all_rx_ports=True),
+        source_info=ss.specs.SourceInfo(num_rx_ports=2),
+    )
+
+    _, (samples, streams), extra = buffers._alloc_empty_iq(ctrl, capture)
+    assert extra is not None
+    assert len(streams) == 2
+    assert streams[1] is extra
+    assert not np.shares_memory(extra, samples)
+
+    _, (_, streams), reused = buffers._alloc_empty_iq(ctrl, capture, prior_extra=extra)
+    assert reused is extra
+    assert streams[1] is extra
+
+    small = np.empty(1, dtype=extra.dtype)
+    _, _, replaced = buffers._alloc_empty_iq(ctrl, capture, prior_extra=small)
+    assert replaced is not small
+    assert replaced.size >= extra.size
+
+
+def test_get_next_keeps_the_throwaway_port_buffer_between_reads():
+    capture = _ONE_PORT
+    ctrl = SimpleNamespace(
+        capture_spec=capture,
+        source_spec=source_spec(stream_all_rx_ports=True),
+        source_info=ss.specs.SourceInfo(num_rx_ports=2),
+    )
+    rb = buffers.ReceiveBuffers(ctrl)
+    _, first = rb.get_next(capture)
+    _, second = rb.get_next(capture)
+    assert first[1] is second[1] is rb.extra
 
 
 def test_alloc_without_holdoff_is_the_bare_read_count():
@@ -414,18 +454,18 @@ def test_alloc_without_holdoff_is_the_bare_read_count():
     padded = buffers.get_read_count(capture, source, include_holdoff=True)
     assert padded > bare
 
-    _, (samples, _) = buffers._alloc_empty_iq(ctrl, capture, include_holdoff=False)
+    _, (samples, _), _ = buffers._alloc_empty_iq(ctrl, capture, include_holdoff=False)
     assert samples.shape == (2, bare)
 
-    prior, _ = buffers._alloc_empty_iq(ctrl, capture, include_holdoff=True)
+    prior, _, _ = buffers._alloc_empty_iq(ctrl, capture, include_holdoff=True)
     assert prior.shape == (2, padded)
-    reused, _ = buffers._alloc_empty_iq(ctrl, capture, prior, include_holdoff=False)
+    reused, _, _ = buffers._alloc_empty_iq(ctrl, capture, prior, include_holdoff=False)
     assert reused is prior
 
 
 def test_alloc_overlaps_extend_the_read_count():
     capture = _TWO_PORT
-    _, (samples, _) = buffers._alloc_empty_iq(
+    _, (samples, _), _ = buffers._alloc_empty_iq(
         stub_controller(capture), capture, overlaps=(100, 200)
     )
     assert samples.shape[1] == _read_count(capture) + 300
@@ -434,7 +474,7 @@ def test_alloc_overlaps_extend_the_read_count():
 def test_alloc_reuses_a_prior_buffer_that_is_large_enough():
     ctrl = stub_controller(_TWO_PORT)
     prior = np.empty((2, _read_count(_LONG)), dtype='complex64')
-    all_samples, (samples, _) = buffers._alloc_empty_iq(ctrl, _TWO_PORT, prior)
+    all_samples, (samples, _), _ = buffers._alloc_empty_iq(ctrl, _TWO_PORT, prior)
     assert all_samples is prior
     assert np.shares_memory(samples, prior)
     assert samples.shape[0] == 2
@@ -461,7 +501,7 @@ def test_alloc_does_not_reuse_a_prior_buffer_of_the_wrong_shape(prior_capture, c
     one row per port and at least the read count of columns."""
     prior = np.empty((2, _read_count(prior_capture)), dtype='complex64')
     ports = _port_count(capture)
-    _, (samples, streams) = buffers._alloc_empty_iq(
+    _, (samples, streams), _ = buffers._alloc_empty_iq(
         stub_controller(capture), capture, prior
     )
     assert samples.shape[0] == ports
@@ -474,7 +514,9 @@ def test_alloc_does_not_reuse_a_prior_buffer_of_the_wrong_shape(prior_capture, c
 def test_alloc_for_cupy_is_pinned_host_memory(xp):
     source = SOURCE.replace(array_backend='cupy')
     capture = _TWO_PORT
-    all_samples, _ = buffers._alloc_empty_iq(stub_controller(capture, source), capture)
+    all_samples, _, _ = buffers._alloc_empty_iq(
+        stub_controller(capture, source), capture
+    )
     assert isinstance(all_samples, np.ndarray)
     assert isinstance(all_samples.base, xp.cuda.PinnedMemoryPointer)
 
