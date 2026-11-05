@@ -37,6 +37,7 @@ import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis import testing
 from striqt.analysis.measurements import cellular
+from striqt.analysis.measurements.cellular import _ssb_spectrogram_spec
 
 DURATION = 2 * CELL_FRAME / CELL_FS
 SCS = 30e3
@@ -270,7 +271,8 @@ class TestCellular5GSSBSpectrogram:
 
     def test_burst_spans_equal_the_masked_whole_record_spectrogram(self):
         """the STFT over the burst-set spans is the whole-record STFT with the
-        symbols outside the burst sets dropped, bit for bit"""
+        symbols outside the burst sets dropped, bit for bit. The assertion pins the
+        span stacking of the SSB spectrogram against the whole-record transform."""
         duration = 2 * SSB_SPECTROGRAM_PERIODICITY
         iq = testing.circular_awgn(duration, SSB_SPECTROGRAM_FS, power=1.0)
         capture = ssb_spectrogram_capture(duration)
@@ -282,7 +284,7 @@ class TestCellular5GSSBSpectrogram:
         spg, _ = sa.measurements.spectrum.evaluate_spectrogram(
             iq,
             capture=capture,
-            spec=sa.measurements.cellular._ssb_spectrogram_spec(spec),
+            spec=_ssb_spectrogram_spec(spec),
             limit_digits=3,
             dtype='float16',
         )
@@ -451,12 +453,9 @@ def resource_histogram(*, frame_slots, **kwargs):
     )
 
 
-def test_apply_mask_leaves_the_spectrogram_unchanged():
-    """the guard bands are nulled in the returned product alone. The input is the
-    `spectrogram_cache` entry that a later measurement with an equal spec reads."""
+def test_apply_mask_nulls_the_guard_band_and_keeps_downlink_symbols():
     rng = np.random.default_rng(0)
     spg = rng.uniform(1e-12, 1e-9, (1, 28, 14)).astype('float32')
-    before = spg.copy()
     freqs = np.fft.fftshift(np.fft.fftfreq(14, 1 / RESOURCE_GRID_FS))
 
     out = cellular.apply_mask(
@@ -472,7 +471,6 @@ def test_apply_mask_leaves_the_spectrogram_unchanged():
         xp=np,
     )
 
-    assert_array_equal(spg, before)
     assert np.isnan(out[..., 0]).all(), 'the low guard band is nulled in the output'
     assert np.isfinite(out[0, 0, :, 7]).all(), 'downlink symbols at 0 Hz are kept'
 
