@@ -235,15 +235,18 @@ def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> 
     def conditioned() -> Any:
         return ss.lib.compute.attach_corrections(raw, signal_trigger=None)
 
+    # the preprocessor holds its acquisition weakly, so each fresh acquisition stays
+    # bound to a local for the duration of the call
+    def resample_stage() -> Any:
+        fresh = conditioned()
+        return fresh.preprocess(prefer_filtered=False, prefer_aligned=False)
+
+    def registry_cold() -> Any:
+        fresh = conditioned()
+        return info.func(iq=fresh, capture=capture, as_xarray=False, **kws)
+
     iq = conditioned()
-    layers: list[tuple[str, Callable[[], Any]]] = [
-        (
-            'resample stage',
-            lambda: conditioned().preprocess(
-                prefer_filtered=False, prefer_aligned=False
-            ),
-        ),
-    ]
+    layers: list[tuple[str, Callable[[], Any]]] = [('resample stage', resample_stage)]
     iq.preprocess(prefer_filtered=False, prefer_aligned=False)
 
     def filtered_aligned_stage() -> Any:
@@ -263,12 +266,7 @@ def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> 
             'registry call, stages memoized',
             lambda: info.func(iq=iq, capture=capture, as_xarray=False, **kws),
         ),
-        (
-            'registry call, cold',
-            lambda: info.func(
-                iq=conditioned(), capture=capture, as_xarray=False, **kws
-            ),
-        ),
+        ('registry call, cold', registry_cold),
     ]
 
     print(
