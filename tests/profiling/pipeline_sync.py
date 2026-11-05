@@ -13,9 +13,9 @@ buffer pair and the burst re-read that `cast_iq` synchronizes against.
 
 Variants:
 
-- ``block-each``: `actions.core.BLOCK_EACH` 1, the production setting. Each
+- ``block-each``: `actions.core.BLOCK_EACH` True, the production setting. Each
   measurement result is copied to the host as soon as it returns.
-- ``deferred``: `BLOCK_EACH` 0. The copies run at the end of the capture.
+- ``deferred``: `BLOCK_EACH` False. The copies run at the end of the capture.
 
 Usage:
     pixi run -e cupy python tests/profiling/pipeline_sync.py
@@ -182,7 +182,7 @@ def run_sweep(
 
     `resources` are open resources to run on; None opens and closes a set for the run.
     """
-    core.BLOCK_EACH = 1 if variant == 'block-each' else 0
+    core.BLOCK_EACH = variant == 'block-each'
     collector.times.clear()
     pool_before = pool_bytes()
     datasets = []
@@ -318,8 +318,7 @@ def main() -> int:
     print(
         f'{args.captures} captures of {args.duration} s at '
         f'{sample_rate / 1e6:g} MS/s, 2 ports, trigger {trigger}, '
-        f'buffers {args.buffers}, burst {args.burst}, '
-        f'STRIQT_BLOCK_EACH default {core.BLOCK_EACH}'
+        f'buffers {args.buffers}, burst {args.burst}'
     )
 
     quiet_sweep_loggers()

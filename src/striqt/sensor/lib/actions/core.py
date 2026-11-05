@@ -11,7 +11,6 @@ from __future__ import annotations as __
 
 import contextlib
 import itertools
-import os
 import threading
 from collections.abc import Generator, Iterable, Mapping
 from queue import Empty
@@ -28,10 +27,9 @@ from ..resources import AnyResources, Resources
 from ..sinks import SinkBase
 from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
-# 1 copies each measurement result to the host as soon as it returns, 0 defers the
-# copies to the end of the capture. The default is the setting under which the
-# pipeline has run in production; tests/profiling/pipeline_sync.py measures both
-BLOCK_EACH = int(os.environ.get('STRIQT_BLOCK_EACH', '1'))
+# True copies each measurement result to the host as soon as it returns, False defers
+# the copies to the end of the capture; tests/profiling/pipeline_sync.py measures both
+BLOCK_EACH = True
 
 if TYPE_CHECKING:
     from ..typing import Array
@@ -221,7 +219,7 @@ def iterate_captures(
         extra_attrs=resources['action_spec'].to_dict(True, allow_tuple_keys=False),
         cache_callback=cache_callback,
         as_xarray='delayed',
-        block_each=bool(BLOCK_EACH),
+        block_each=BLOCK_EACH,
     )
 
     source_id = resources['source'].source_id
