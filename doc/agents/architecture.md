@@ -134,9 +134,13 @@ field set. The spec in that field then wins over the sweep analysis.
 
 Three registry features matter when reading a measurement module.
 
-- **`caches=`.** `KwArgCache` is a single-element cache keyed on the capture plus
-  the listed kwargs. A cache lets several measurements share one expensive
-  intermediate. Every spectrogram-derived measurement reuses `spectrogram_cache` and
+- **`caches=`.** `KwArgCache` is a memo of up to `maxsize` (4) results of one
+  function per capture, keyed on the capture plus the listed kwargs, the oldest
+  evicted first. A cache lets several measurements share one expensive intermediate,
+  and measurements with different specs through the same cache (the SSB spectrogram
+  beside the spectrogram family) hold their entries side by side, so the field order
+  of the analysis group does not decide whether a shared intermediate survives.
+  Every spectrogram-derived measurement reuses `spectrogram_cache` and
   `_cached_spectrogram` in `measurements/spectrum.py`, and the PSS and SSS
   measurements share `ssb_iq_cache`. Caches are scoped by
   `registry.cache_context(capture)`, which the sensor wraps around each capture.
@@ -155,8 +159,9 @@ Three registry features matter when reading a measurement module.
   `iq_waveform` take the defaults. A `signal_trigger` measurement must register
   `prefer_aligned=False`; `registry.signal_trigger` rejects a `prefer_aligned=True`
   registration at import.
-  `KwArgCache` keys on the identity of the selected array as well as the capture and
-  kwargs. Measurements that share a cache must register the same preferences.
+  `KwArgCache` keys each entry on the identity of the selected array as well as the
+  capture and kwargs. Measurements that share an intermediate through a cache must
+  register the same preferences.
 - **`registry.signal_trigger`** (`AlignmentSourceRegistry`). The decorator registers
   a measurement as a start-of-waveform detector. `Trigger` runs the measurement
   with `as_xarray=False`. The sensor uses the returned lags to align captures when a

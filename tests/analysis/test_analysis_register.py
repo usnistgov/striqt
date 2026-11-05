@@ -811,10 +811,10 @@ def test_trigger_registry_and_any_signal_trigger_agree():
 # %% KwArgCache
 
 
-def build_counting_cache():
+def build_counting_cache(maxsize=4):
     """return a `KwArgCache` keyed on `nfft`, the wrapped function, and the list of
     ``(id(iq), nfft)`` calls the function records."""
-    cache = register.KwArgCache(['nfft'])
+    cache = register.KwArgCache(['nfft'], maxsize=maxsize)
     calls = []
 
     @cache.apply
@@ -860,6 +860,31 @@ def test_kwargcache_holds_the_array_until_exit():
         assert ref() is not None
 
     assert ref() is None
+
+
+def test_kwargcache_holds_several_keyword_values():
+    """results for 2 keyword values alternate without recomputation"""
+    cache, helper, calls = build_counting_cache()
+    x = np.ones((1, 4))
+
+    with cache:
+        first = helper(x, CAPTURE, nfft=8)
+        helper(x, CAPTURE, nfft=16)
+        assert helper(x, CAPTURE, nfft=8) is first
+
+    assert [nfft for _, nfft in calls] == [8, 16]
+
+
+def test_kwargcache_maxsize_evicts_the_oldest_entry():
+    cache, helper, calls = build_counting_cache(maxsize=1)
+    x = np.ones((1, 4))
+
+    with cache:
+        helper(x, CAPTURE, nfft=8)
+        helper(x, CAPTURE, nfft=16)
+        helper(x, CAPTURE, nfft=8)
+
+    assert [nfft for _, nfft in calls] == [8, 16, 8]
 
 
 # %% check_group_registered

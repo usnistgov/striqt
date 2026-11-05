@@ -42,24 +42,24 @@ else:
 
 
 class KwArgCache:
-    """a single-element cache of a measurement result keyed on input, capture, and keywords.
+    """a memo of the results of one measurement function within one capture.
 
-    The key is the identity of the input array, the capture, and the values of the
-    `fields` named at construction. The cache is disabled until entered as a context
-    manager, and exit clears the entry and the callback. The cache keeps a reference
-    to the input array until the entry is cleared.
+    An entry is keyed on the identity of the input array, the capture, and the values
+    of the `fields` named at construction, and up to `maxsize` entries are held at
+    once, the oldest evicted first. The cache is disabled until entered as a context
+    manager, and exit clears the entries and the callback. Each entry keeps a
+    reference to its input array until it is cleared or evicted.
     """
 
-    _key: frozenset | None = None
-    _key_iq: Array | None = None
-    _value = None
     enabled = False
     _callback = None
     _callback_capture = None
 
-    def __init__(self, fields: list[str]):
+    def __init__(self, fields: list[str], maxsize: int = 4):
         self.name = None
         self._fields = fields
+        self._maxsize = maxsize
+        self._entries: dict[tuple[int, frozenset], tuple[Array, Any]] = {}
         self._callback = None
 
     def kw_key(self, kws: dict[str, Any]):
@@ -71,25 +71,24 @@ class KwArgCache:
         return frozenset(kws.items())
 
     def clear(self):
-        self._key = None
-        self._key_iq = None
-        self._value = None
+        self._entries.clear()
 
     def lookup(self, iq: Array, kws: dict):
-        if self._key is None or not self.enabled:
+        if not self.enabled:
             return None
 
-        if iq is self._key_iq and self.kw_key(kws) == self._key:
-            return self._value
+        entry = self._entries.get((id(iq), self.kw_key(kws)))
+        if entry is not None and entry[0] is iq:
+            return entry[1]
         else:
             return None
 
     def update(self, iq: Array, kws: dict, value):
         if not self.enabled:
             return
-        self._key = self.kw_key(kws)
-        self._key_iq = iq
-        self._value = value
+        while len(self._entries) >= self._maxsize:
+            self._entries.pop(next(iter(self._entries)))
+        self._entries[(id(iq), self.kw_key(kws))] = (iq, value)
 
     def apply(self, func: AnalysisFunc[P, RM]) -> AnalysisFunc[P, RM]:
         """wrap `func` to return the cached result on a repeated call.
@@ -100,9 +99,10 @@ class KwArgCache:
         Returns:
             a wrapper with the signature of `func`. While the cache is enabled, a
             call with the same `x` object, the same `capture`, and the same values of
-            the `fields` named at construction returns the cached result. Any other
-            call runs `func`, stores the result, and invokes the callback set by
-            `set_callback` with the cache, the capture, the result, and the keywords.
+            the `fields` named at construction returns the stored result of that
+            call. Any other call runs `func`, stores the result, and invokes the
+            callback set by `set_callback` with the cache, the capture, the result,
+            and the keywords.
         """
 
         @functools.wraps(func)
@@ -146,7 +146,7 @@ class KwArgCache:
         return self
 
     def __exit__(self, *exc_info):
-        """disable the cache and clear the entry and the callback."""
+        """disable the cache and clear the entries and the callback."""
         self.enabled = False
         self._callback = None
         self.clear()
