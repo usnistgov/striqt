@@ -45,16 +45,25 @@ repository.
 
 ## Profiling scripts
 
-`tests/profiling/` holds the profiling and comparison scripts (`cuda_streams.py`,
-`pipeline_sync.py`, `bin_power.py`, `zarr_sink.py`, `log_scaling.py`,
-`pss_oaconvolve.py`, `ssb_extraction.py`). They are
-not tests: pytest collects `test_*.py` only, and each script runs on its own
-(`pixi run -e cupy python tests/profiling/cuda_streams.py`; see the module docstring for
-the usage and how to read the output). The basenames share the `tests/` namespace, so a
-script imports a sibling by bare name (`from cuda_streams import CAPTURE`) and no name
-repeats elsewhere under `tests/`. The scripts pass `ruff check` with the rest of
-`tests/`. A script that reads or writes the window shelf runs with its own
-`STRIQT_CACHE_DIR` beside a test session.
+`tests/profiling/` holds the profiling scripts: `cuda_streams.py` (the per-measurement
+breakdown of one ADA capture), `pipeline_sync.py` (the sweep pipeline end to end, with a
+bit-for-bit comparison across runs), `contiguity.py` (the stage table of record-sized
+copies, the resampler, and the per-capture layers), `fft_chunking.py` (the
+`MAX_CUPY_FFT_SAMPLES` sweep, run on hardware changes), `bin_power.py` (the binned
+power detector against its tolerance model), and `log_scaling.py`. The ADA fixtures
+(`CAPTURE`, `ANALYSIS`, `build_setup`, `build_raw`, `oaresample_kws`), the cupy gate
+(`select_backend`), and the timing and pool helpers are in `profiling_tools.py`, and
+every script imports them from there. The scripts are not tests: pytest collects
+`test_*.py` only, and each script runs on its own (`pixi run -e cupy python
+tests/profiling/cuda_streams.py`; see the module docstring for the usage and how to read
+the output). The basenames share the `tests/` namespace, so a script imports a sibling
+by bare name (`from profiling_tools import CAPTURE`) and no name repeats elsewhere under
+`tests/`. The scripts pass `ruff check` with the rest of `tests/`. The 4 maintained
+scripts and `profiling_tools.py` carry full type hints, and `pixi run -e test314 ty check`
+over those files reports nothing. A script that reads or writes the window shelf runs with its own
+`STRIQT_CACHE_DIR` beside a test session. Each script runs end to end on `--backend
+numpy` (`--duration 0.02 --repeat 1`) as the local check; the cupy columns are verified
+on the Jetson.
 
 ## Shared setup has one owner
 

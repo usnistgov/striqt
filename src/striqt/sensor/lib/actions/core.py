@@ -27,10 +27,6 @@ from ..resources import AnyResources, Resources
 from ..sinks import SinkBase
 from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
-# True copies each measurement result to the host as soon as it returns, False defers
-# the copies to the end of the capture; tests/profiling/pipeline_sync.py measures both
-BLOCK_EACH = True
-
 if TYPE_CHECKING:
     from ..typing import Array
 
@@ -219,7 +215,9 @@ def iterate_captures(
         extra_attrs=resources['action_spec'].to_dict(True, allow_tuple_keys=False),
         cache_callback=cache_callback,
         as_xarray='delayed',
-        block_each=BLOCK_EACH,
+        # a measurement launched before the previous result reached the host has
+        # produced wrong data on the Tegra X2
+        block_each=True,
     )
 
     source_id = resources['source'].source_id

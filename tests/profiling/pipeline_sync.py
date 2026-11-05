@@ -1,54 +1,43 @@
 #!/usr/bin/env python3
-"""Run the sweep pipeline end to end on a synthetic source with the per-measurement
-device synchronization on and off, time both, and compare every result bit for bit.
+"""Run the sweep pipeline end to end on a synthetic source, time each run, and compare
+the results of the runs bit for bit.
 
 The sweep is the production path: `open_resources` and `iterate_sweep` over the
 ``single_tone`` function-generator source with the acquisition thread, the analysis in
 the foreground thread, and the sink in the thread pool, through `NoSink`. The captures
-are the ADA 3750 MHz cellular capture (``cuda_streams.CAPTURE``) with the ``cellular``
-analysis (``cuda_streams.ANALYSIS``), each capture carrying a tone at its own frequency,
-so a result read from a stale or half-copied receive buffer differs from the result of
-the right capture. ``--buffers`` and ``--burst`` exercise the 2-deep pinned receive
-buffer pair and the burst re-read that `cast_iq` synchronizes against.
-
-Variants:
-
-- ``block-each``: `actions.core.BLOCK_EACH` True, the production setting. Each
-  measurement result is copied to the host as soon as it returns.
-- ``deferred``: `BLOCK_EACH` False. The copies run at the end of the capture.
+are the ADA 3750 MHz cellular capture (`profiling_tools.CAPTURE`) with the ``cellular``
+analysis (`profiling_tools.ANALYSIS`), with a tone at a distinct frequency in each
+capture, so a result read from a stale or half-copied receive buffer differs from the
+result of the right capture. ``--buffers`` and ``--burst`` exercise the 2-deep pinned
+receive buffer pair and the burst re-read that `cast_iq` synchronizes against.
 
 Usage:
     pixi run -e cupy python tests/profiling/pipeline_sync.py
-    pixi run -e cupy python tests/profiling/pipeline_sync.py --buffers 2 --burst 4 --stress 20
+    pixi run -e cupy python tests/profiling/pipeline_sync.py --buffers 2 --burst 4 --repeat 20
     pixi run -e cupy python tests/profiling/pipeline_sync.py --no-trigger --captures 8
     pixi run -e test39 python tests/profiling/pipeline_sync.py --backend numpy --captures 2 --duration 0.02
-    nsys profile -t cuda,nvtx,osrt -o pipeline pixi run -e cupy python tests/profiling/pipeline_sync.py --captures 4 --stress 1
+    nsys profile -t cuda,nvtx,osrt -o pipeline pixi run -e cupy python tests/profiling/pipeline_sync.py --captures 4 --repeat 1
 
-Run with its own cache directory beside a test session or another striqt script
+Run with a separate cache directory beside a test session or another striqt script
 (``STRIQT_CACHE_DIR=$(mktemp -d)``): two processes sharing the window shelf corrupt it on
 macOS Python 3.9.
 
 Reading the output:
-    One row per sweep run: the variant, the wall time per capture of the whole
-    pipeline (the time of `iterate_sweep` over all captures divided by the capture
-    count, after one untimed warmup run), ``x dur`` (that time over the capture
-    duration; the pipeline keeps up with acquisition below 1), the growth of the cupy
-    memory pool over the run in MB (the pool is never freed, so the growth is its
-    high-water mark), the resident set of the process
-    after the run and a garbage collection (``RSS MB``; a rise from run to run is a
-    host-side leak, and ``--keep-open`` runs every repetition on one set of open
-    resources to tell a leak per `open_resources` from one per capture; the synthetic
-    source then continues its sample index across runs, so their results are not
-    compared), and ``mismatch``: the data variables
-    of any capture that differ from the first ``block-each`` run, with the capture
-    index and the largest difference, or ``-``. The kernels are the same in both
-    variants, so any mismatch is a race, and a mismatch between two ``block-each``
-    runs is nondeterminism in the pipeline itself. ``--stress`` sets how many
-    ``deferred`` runs are compared. The breakdown table is the `stopwatch` time of
-    each measurement per capture in each variant: on ``block-each`` a measurement's
-    time ends at its device copy and is its device time; on ``deferred`` it ends at
-    the launch and is the host time of the launch. The exit status is 1 on any
-    mismatch.
+    One row per sweep run after one untimed warmup run. ``ms/capture`` is the time of
+    `iterate_sweep` over all captures divided by the capture count. ``x dur`` is that
+    time over the capture duration; the pipeline keeps up with acquisition below 1.
+    ``pool MB`` is the growth of the cupy memory pool over the run; the pool is never
+    freed, so the growth of the first run is its high-water mark. ``RSS MB`` is the
+    resident set of the process after the run and a garbage collection. A rise in
+    ``RSS MB`` from run to run is a host-side leak; ``--keep-open`` runs every
+    repetition on one set of open resources to tell a leak per `open_resources` from
+    one per capture. The synthetic source then continues the sample index across
+    runs, so the results of those runs are not compared. ``mismatch`` lists the data
+    variables of any capture that differ from the first run, with the capture index
+    and the largest difference, or ``-``. The kernels are the same in every run, so a
+    mismatch is nondeterminism in the pipeline. The breakdown table is the `stopwatch`
+    time of each measurement per capture; the time of a measurement ends at the
+    device copy of the result. The exit status is 1 on any mismatch.
 """
 
 from __future__ import annotations
@@ -58,26 +47,30 @@ import contextlib
 import dataclasses
 import gc
 import logging
-import platform
-import resource
 import statistics
 import sys
 import time
 from typing import Any, Literal, cast
 
 import numpy as np
-from cuda_streams import ANALYSIS, CAPTURE, StopwatchCollector, nvtx_range
+from profiling_tools import (
+    ANALYSIS,
+    CAPTURE,
+    StopwatchCollector,
+    attach_stopwatch_collector,
+    device_synchronize,
+    nvtx_range,
+    pool_total_bytes,
+    rss_bytes,
+    select_backend,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-from striqt.sensor.lib.actions import core
-
-cp: Any = None
 
 MASTER_CLOCK_RATE = 125e6
 TONE_OFFSET_START = -30e6
 TONE_OFFSET_STEP = 7e6
-VARIANTS = ('block-each', 'deferred')
 
 
 # %% The sweep
@@ -129,8 +122,6 @@ def build_sweep(
 # %% One run
 @dataclasses.dataclass
 class Run:
-    variant: str
-    """the variant name"""
     wall_s: float
     """the time of `iterate_sweep` over every capture"""
     capture_count: int
@@ -145,46 +136,17 @@ class Run:
     """the variables that differ from the reference, with capture index and difference"""
 
 
-def pool_bytes() -> int:
-    if cp is None:
-        return 0
-    return int(cp.get_default_memory_pool().total_bytes())
-
-
-def device_synchronize() -> None:
-    if cp is not None:
-        cp.cuda.Device().synchronize()
-
-
-def rss_bytes() -> int:
-    """return the resident set of the process (in bytes).
-
-    Linux reads the current value from ``/proc/self/statm``; elsewhere the value is
-    the high-water mark that `resource.getrusage` reports.
-    """
-    try:
-        with open('/proc/self/statm') as fd:
-            pages = int(fd.read().split()[1])
-        return pages * resource.getpagesize()
-    except (OSError, IndexError, ValueError):
-        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        # ru_maxrss is in kilobytes on Linux and in bytes on macOS
-        return usage if sys.platform == 'darwin' else usage * 1024
-
-
 def run_sweep(
     sweep: Any,
-    variant: str,
     collector: StopwatchCollector,
     resources: Any = None,
 ) -> tuple[Run, list]:
-    """run `sweep` once under `variant` and return the timing and the datasets.
+    """run `sweep` once and return the timing and the datasets.
 
     `resources` are open resources to run on; None opens and closes a set for the run.
     """
-    core.BLOCK_EACH = variant == 'block-each'
     collector.times.clear()
-    pool_before = pool_bytes()
+    pool_before = pool_total_bytes()
     datasets = []
     if resources is None:
         opened: Any = ss.open_resources(sweep, None)
@@ -194,7 +156,7 @@ def run_sweep(
         device_synchronize()
         collector.enabled = True
         t0 = time.perf_counter()
-        with nvtx_range(variant):
+        with nvtx_range('sweep'):
             results = ss.iterate_sweep(res, sink=ss.sinks.NoSink(sweep))
             for dd in results:
                 if isinstance(dd, ss.lib.compute.DelayedDataset):
@@ -206,10 +168,9 @@ def run_sweep(
         collector.enabled = False
     gc.collect()
     run = Run(
-        variant=variant,
         wall_s=wall,
         capture_count=len(datasets),
-        pool_growth_bytes=pool_bytes() - pool_before,
+        pool_growth_bytes=pool_total_bytes() - pool_before,
         rss_bytes=rss_bytes(),
         stopwatch=dict(collector.times),
     )
@@ -238,7 +199,7 @@ def compare(reference: list, datasets: list) -> list[str]:
 # %% Reporting
 def print_header() -> None:
     print(
-        f'\n{"variant":<11} {"run":>4} {"ms/capture":>11} {"x dur":>6} {"pool MB":>8} '
+        f'\n{"run":>4} {"ms/capture":>11} {"x dur":>6} {"pool MB":>8} '
         f'{"RSS MB":>7}  mismatch'
     )
 
@@ -249,24 +210,19 @@ def print_run(run: Run, index: int, duration: float) -> None:
     if len(run.mismatches) > 6:
         bad += f', ... ({len(run.mismatches)} total)'
     print(
-        f'{run.variant:<11} {index:4d} {per_capture * 1e3:11.1f} {per_capture / duration:6.2f} '
+        f'{index:4d} {per_capture * 1e3:11.1f} {per_capture / duration:6.2f} '
         f'{run.pool_growth_bytes / 2**20:8.0f} {run.rss_bytes / 2**20:7.0f}  {bad or "-"}',
         flush=True,
     )
 
 
-def print_breakdown(runs: dict[str, list[Run]], names: list[str]) -> None:
+def print_breakdown(runs: list[Run], names: list[str]) -> None:
     print('\nstopwatch per capture (ms), mean over the timed runs')
-    print(f'{"measurement":<36} ' + ' '.join(f'{v:>11}' for v in runs))
+    print(f'{"measurement":<36} {"ms":>11}')
     for name in names:
-        cells = []
-        for variant_runs in runs.values():
-            per = [
-                r.stopwatch.get(name, 0.0) / max(r.capture_count, 1)
-                for r in variant_runs
-            ]
-            cells.append(f'{statistics.mean(per) * 1e3:11.2f}' if per else f'{"-":>11}')
-        print(f'{name:<36} ' + ' '.join(cells))
+        per = [r.stopwatch.get(name, 0.0) / max(r.capture_count, 1) for r in runs]
+        cell = f'{statistics.mean(per) * 1e3:11.2f}' if per else f'{"-":>11}'
+        print(f'{name:<36} {cell}')
 
 
 def quiet_sweep_loggers() -> None:
@@ -282,11 +238,7 @@ def main() -> int:
     parser.add_argument('--buffers', type=int, default=1)
     parser.add_argument('--burst', type=int, default=1)
     parser.add_argument('--no-trigger', action='store_true')
-    parser.add_argument('--repeat', type=int, default=3, help='timed block-each runs')
-    parser.add_argument('--stress', type=int, default=10, help='deferred runs compared')
-    parser.add_argument(
-        '--variants', nargs='+', choices=VARIANTS, default=list(VARIANTS)
-    )
+    parser.add_argument('--repeat', type=int, default=3, help='timed runs compared')
     parser.add_argument(
         '--keep-open',
         action='store_true',
@@ -294,21 +246,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    global cp
-    if args.backend == 'cupy':
-        import cuda_streams
-        import cupy  # ty: ignore[unresolved-import]
-
-        cp = cupy
-        cuda_streams.cp = cupy
-        device = cp.cuda.runtime.getDeviceProperties(0)['name'].decode()
-    else:
-        device = 'none'
-    print(
-        f'{platform.machine()} numpy {np.__version__} '
-        f'cupy {getattr(cp, "__version__", "-")} device: {device}'
-    )
-
+    select_backend(args.backend)
     trigger = not args.no_trigger
     backend = cast("Literal['numpy', 'cupy']", args.backend)
     sample_rate = float(cast(float, CAPTURE['sample_rate']))
@@ -322,41 +260,33 @@ def main() -> int:
     )
 
     quiet_sweep_loggers()
-    collector = StopwatchCollector()
-    analysis_logger = sa.util.get_logger('analysis').logger
-    analysis_logger.setLevel(min(analysis_logger.level, sa.util.PERFORMANCE_DETAIL))
-    analysis_logger.addHandler(collector)
+    collector = attach_stopwatch_collector()
 
     # the warmup run compiles the kernels, designs the windows, and fills the caches
-    run_sweep(sweep, 'block-each', collector)
+    run_sweep(sweep, collector)
 
     print_header()
-    runs: dict[str, list[Run]] = {v: [] for v in args.variants}
+    runs: list[Run] = []
     reference: list | None = None
     failed = False
-    schedule = []
-    if 'block-each' in args.variants:
-        schedule += [('block-each', i) for i in range(args.repeat)]
-    if 'deferred' in args.variants:
-        schedule += [('deferred', i) for i in range(args.stress)]
     shared: Any = ss.open_resources(sweep, None) if args.keep_open else None
     with shared if shared is not None else contextlib.nullcontext() as resources:
-        for variant, index in schedule:
-            run, datasets = run_sweep(sweep, variant, collector, resources)
+        for index in range(args.repeat):
+            run, datasets = run_sweep(sweep, collector, resources)
             if reference is None:
                 reference = datasets
             elif args.keep_open:
-                # the synthetic source continues its sample index across runs on one
+                # the synthetic source continues the sample index across runs on one
                 # open source, so the results of later runs differ by design
                 run.mismatches = ['not compared']
             else:
                 run.mismatches = compare(reference, datasets)
                 failed |= bool(run.mismatches)
-            runs[variant].append(run)
+            runs.append(run)
             print_run(run, index, args.duration)
 
     names = [name for name, kws in ANALYSIS.items() if kws]
-    print_breakdown({v: r for v, r in runs.items() if r}, names)
+    print_breakdown(runs, names)
     if failed:
         print('\nFAIL: results differ between runs')
         return 1

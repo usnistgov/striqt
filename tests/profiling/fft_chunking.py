@@ -3,13 +3,13 @@
 and the difference from the unchunked result.
 
 On cupy, `fft` and `ifft` with an ``out=`` buffer run the batched transform in groups
-of at most `MAX_CUPY_FFT_SAMPLES` samples along the leading axes
-(`fourier.fft._cupy_fftn_helper`). cuFFT allocates a work area of about the size of
-each batch for a transform length such as 25000 that is not a power of 2, so the
-group size bounds that allocation. The default is None, one group. The input is the
-ADA 3750 MHz acquisition of `cuda_streams.build_raw` (2 ports, 0.1 s at 107.52 MS/s
-from the 125 MHz master clock). Nothing under ``src/`` is modified on disk; the knob
-is set through `set_max_cupy_fft_chunk` for each row and restored to None at exit.
+of at most `MAX_CUPY_FFT_SAMPLES` samples along the leading axes. cuFFT allocates a
+work area of about the size of each batch for a transform length such as 25000 that is
+not a power of 2, so the group size bounds that allocation. The default is 2**23. The
+input is the ADA 3750 MHz acquisition of `profiling_tools.build_raw` (2 ports, 0.1 s at
+107.52 MS/s from the 125 MHz master clock). Nothing under ``src/`` is modified on disk;
+the knob is set through `set_max_cupy_fft_chunk` for each row and restored to the
+default at exit.
 
 Columns, one row per value of the knob:
 
@@ -19,16 +19,10 @@ Columns, one row per value of the knob:
 - ``oaresample ms`` and ``oaresample peak``: the whole resampling stage with the
   production arguments, consuming the input in place as the pipeline does.
 - ``max |diff|``: the largest absolute difference of the resampled record from the
-  unchunked row, and ``equal`` when the arrays are identical.
-
-``--skip-self-copy`` replaces `fourier.fft._cupy_fftn_helper` for the run with a copy
-that omits the ``out_view[:] = ...`` assignment after each chunked transform, which
-rewrites a result that `_fftn` has already written into ``out_view``. The ``max |diff|``
-column then checks that the transform still lands in the buffer.
+  first row, and ``equal`` when the arrays are identical.
 
 Usage:
     pixi run -e cupy python tests/profiling/fft_chunking.py
-    pixi run -e cupy python tests/profiling/fft_chunking.py --skip-self-copy
     pixi run -e cupy python tests/profiling/fft_chunking.py --chunks 0 33554432 8388608 --repeat 3
     pixi run -e test39 python tests/profiling/fft_chunking.py --backend numpy --duration 0.02
 
@@ -40,116 +34,24 @@ from __future__ import annotations
 
 import argparse
 import math
-import platform
-import statistics
-import time
-from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
-import numpy as np
+from profiling_tools import (
+    build_raw,
+    build_setup,
+    free_pool,
+    oaresample_kws,
+    peak_pool_bytes,
+    repeat_call,
+    select_backend,
+)
 
 import striqt.sensor as ss
 import striqt.waveform as sw
-from striqt.waveform.lib.arrays import (
-    grouped_slices_along_axis,
-    grouped_views_along_axis,
-)
+from striqt.waveform.lib.arrays import grouped_slices_along_axis
 from striqt.waveform.lib.fourier import fft as fft_module
 
-cp: Any = None
-
 DEFAULT_CHUNKS = (0, 2**26, 2**25, 2**24, 2**23, 2**22)
-
-
-# %% Timing
-def device_synchronize() -> None:
-    if cp is not None:
-        cp.cuda.Device().synchronize()
-
-
-def time_call(func: Callable[[], Any]) -> tuple[float, Any]:
-    """return the device duration (in s) of one call and the value it returns; the
-    host wall time on numpy."""
-    if cp is None:
-        t0 = time.perf_counter()
-        ret = func()
-        return time.perf_counter() - t0, ret
-    start, end = cp.cuda.Event(), cp.cuda.Event()
-    device_synchronize()
-    start.record()
-    ret = func()
-    end.record()
-    end.synchronize()
-    return float(cp.cuda.get_elapsed_time(start, end)) / 1e3, ret
-
-
-def repeat_call(func: Callable[[], Any], repeat: int, warmup: int) -> tuple[float, Any]:
-    """return the median device duration (in s) and the last returned value."""
-    for _ in range(warmup):
-        func()
-    durations = []
-    ret = None
-    for _ in range(repeat):
-        dt, ret = time_call(func)
-        durations.append(dt)
-    return statistics.median(durations), ret
-
-
-def peak_pool_bytes(func: Callable[[], Any]) -> int:
-    """return the high-water mark (in bytes) of the cupy pool during `func`, above the
-    bytes in use before the call; 0 on numpy."""
-    if cp is None:
-        func()
-        return 0
-    pool = cp.get_default_memory_pool()
-    base = pool.used_bytes()
-    peak = [base]
-
-    class Hook(cp.cuda.MemoryHook):
-        name = 'fft-chunking-peak'
-
-        def malloc_postprocess(self, **_: Any) -> None:
-            peak[0] = max(peak[0], pool.used_bytes())
-
-    with Hook():
-        func()
-    device_synchronize()
-    return peak[0] - base
-
-
-# %% The sweep
-def cupy_fftn_without_self_copy(
-    x: Any,
-    n: Any,
-    axis: int,
-    direction: Any,
-    out: Any = None,
-    overwrite_x: bool = False,
-    plan: Any = None,
-) -> Any:
-    """`fourier.fft._cupy_fftn_helper` without the assignment of each chunked result
-    onto the buffer that `_fftn` has already written."""
-    from cupy.fft import _fft  # ty: ignore[unresolved-import]
-
-    if n is not None:
-        raise NotImplementedError('implement n here')
-
-    kws = {'overwrite_x': overwrite_x, 'plan': plan, 'order': 'C'}
-    args = (None,), (axis,), None, direction
-
-    if out is None:
-        return _fft._fftn(x, *args, out=out, **kws)
-    out = out.reshape(x.shape)
-
-    chunk = fft_module.get_max_cupy_fft_chunk()
-    if chunk is None:
-        return _fft._fftn(x, *args, out=out, **kws)
-
-    x_views = grouped_views_along_axis(x, chunk, axis=axis)
-    out_views = grouped_views_along_axis(out, chunk, axis=axis)
-    for x_view, out_view in zip(x_views, out_views):
-        _fft._fftn(x_view, *args, out=out_view, **kws)
-    return out
 
 
 def group_count(shape: tuple[int, ...], chunk: int | None, axis: int) -> int:
@@ -162,20 +64,10 @@ def group_count(shape: tuple[int, ...], chunk: int | None, axis: int) -> int:
 def sweep(
     raw: ss.specs.AcquiredIQ, chunks: list[int | None], repeat: int, warmup: int
 ) -> None:
-    design = cast(Any, raw.resampler)
-    capture = cast(Any, raw.capture)
+    design: Any = raw.resampler
     xp = sw.array_namespace(raw.x)
     nfft = design['nfft']
-    kws: dict[str, Any] = {
-        'up': design['nfft_out'],
-        'down': nfft,
-        'fs': design['fs_sdr'],
-        'window': design['window'],
-        'axis': 1,
-        'frequency_shift': design['lo_offset'],
-        'filter_bandwidth': capture.analysis_bandwidth,
-        'transition_bandwidth': ss.lib.compute.corrections.FIR_TRANSITION_BW,
-    }
+    kws = oaresample_kws(raw)
 
     def stft_only() -> Any:
         return sw.stft(
@@ -208,15 +100,15 @@ def sweep(
         fft_module.set_max_cupy_fft_chunk(chunk)
         groups = group_count(frames_shape, chunk, axis=2)
 
-        sw.arrays.free_cupy_mempool()
+        free_pool()
         stft_peak = peak_pool_bytes(stft_only)
-        stft_s, frames = repeat_call(stft_only, repeat, warmup)
+        _, stft_s, frames = repeat_call(stft_only, repeat, warmup)
         del frames
         raw.x[:] = 1
 
-        sw.arrays.free_cupy_mempool()
+        free_pool()
         resample_peak = peak_pool_bytes(resample)
-        resample_s, out = repeat_call(resample, repeat, warmup)
+        _, resample_s, out = repeat_call(resample, repeat, warmup)
 
         if reference is None:
             reference = out
@@ -230,9 +122,10 @@ def sweep(
         print(
             f'{label:>14} {groups:>6} {stft_s * 1e3:8.1f} '
             f'{stft_peak / 2**20:7.0f} MB {resample_s * 1e3:13.1f} '
-            f'{resample_peak / 2**20:12.0f} MB {diff:>11}'
+            f'{resample_peak / 2**20:12.0f} MB {diff:>11}',
+            flush=True,
         )
-        sw.arrays.free_cupy_mempool()
+        free_pool()
 
 
 def main() -> None:
@@ -241,11 +134,6 @@ def main() -> None:
     parser.add_argument('--duration', type=float, default=0.1)
     parser.add_argument('--repeat', type=int, default=5)
     parser.add_argument('--warmup', type=int, default=1)
-    parser.add_argument(
-        '--skip-self-copy',
-        action='store_true',
-        help='run with a cupy FFT helper that omits the per-chunk self-assignment',
-    )
     parser.add_argument(
         '--chunks',
         type=int,
@@ -256,38 +144,16 @@ def main() -> None:
     args = parser.parse_args()
     chunks: list[int | None] = [None if c == 0 else c for c in args.chunks]
 
-    import cuda_streams
-
-    global cp
-    if args.backend == 'cupy':
-        import cupy  # ty: ignore[unresolved-import]
-
-        cp = cupy
-        sw.arrays.configure_cupy()
-        xp: Any = cp
-        device = cp.cuda.runtime.getDeviceProperties(0)['name'].decode()
-    else:
-        xp = np
-        device = 'none'
-    cuda_streams.cp = cp
-    print(
-        f'{platform.machine()} numpy {np.__version__} '
-        f'cupy {getattr(cp, "__version__", "-")} device: {device}'
-    )
+    xp, _ = select_backend(args.backend)
     print(f'median of {args.repeat} calls after {args.warmup} warmup')
 
-    original_helper = fft_module._cupy_fftn_helper
-    if args.skip_self_copy:
-        setattr(fft_module, '_cupy_fftn_helper', cupy_fftn_without_self_copy)  # noqa: B010
-        print('cupy FFT helper: chunked results not reassigned onto the buffer')
-
-    setup = cuda_streams.build_setup(args.duration, args.backend, trigger=False)
-    raw = cuda_streams.build_raw(setup, xp)
+    setup = build_setup(args.duration, args.backend, trigger=False)
+    raw = build_raw(setup, xp)
+    default_chunk = fft_module.get_max_cupy_fft_chunk()
     try:
         sweep(raw, chunks, args.repeat, args.warmup)
     finally:
-        fft_module.set_max_cupy_fft_chunk(None)
-        setattr(fft_module, '_cupy_fftn_helper', original_helper)  # noqa: B010
+        fft_module.set_max_cupy_fft_chunk(default_chunk)
 
 
 if __name__ == '__main__':

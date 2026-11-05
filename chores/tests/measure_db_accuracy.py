@@ -38,9 +38,8 @@ Columns (binned power quantile, float32, `iq_to_bin_power(kind=q)` over complex6
 samples whose |x|**2 is log-normal with sigma 3, against a float64 `np.quantile` of the
 exact powers):
     max/u, rms/u  relative error in units of u = 2**-24 as above, worst over the draws
-    model/u       `stat_rtol(float32, q)` (or `bin_power_rtol` when it is not shipped
-                  yet): squaring the envelope plus one rounding of the interpolation
-                  between the two neighboring order statistics
+    model/u       `stat_rtol(float32, q)`: squaring the envelope plus one rounding of
+                  the interpolation between the two neighboring order statistics
 The heavy tail makes that neighbor gap large at q=0.999. A max/u far above model/u on
 one backend means its `quantile` interpolates in float32 (numpy < 2.3 casts a Python
 float q to the array dtype, which errs by about n*2**-25 of the gap); the fix passes
@@ -217,13 +216,6 @@ def _bin_power_quantile_errors(xp, iq, q):
 def report_binned_power_quantile(backends, rng, draws=3):
     from striqt.waveform.lib import power as pa
 
-    # stat_rtol is the intended model; bin_power_rtol is its predecessor
-    stat_rtol = getattr(pa, 'stat_rtol', None)
-    if stat_rtol is None:
-
-        def stat_rtol(dtype, kind):
-            return pa.bin_power_rtol(dtype, kind=kind)
-
     u = _u(np.float32)
     hdr = ' '.join(f'{b + " max/u":>10} {b + " rms/u":>10}' for b in backends)
     print(
@@ -242,7 +234,7 @@ def report_binned_power_quantile(backends, rng, draws=3):
                     cell[0] = max(cell[0], rel.max())
                     cell[1] = max(cell[1], math.sqrt(np.mean(rel**2)))
         for q in QUANTILES:
-            model = stat_rtol(np.float32, q) / u
+            model = pa.stat_rtol(np.float32, q) / u
             cells = ' '.join(
                 f'{worst[b, q][0]:10.2f} {worst[b, q][1]:10.2f}' for b in backends
             )
@@ -272,9 +264,9 @@ def main():
                 f'cupy routine accelerators {cp._core.get_routine_accelerators()},'
                 f' reduction accelerators {cp._core.get_reduction_accelerators()}'
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f'cupy accelerators unknown ({exc!r})')
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f'cupy unavailable ({exc!r}); measuring the CPU backend only')
 
     rng = np.random.default_rng(0)
