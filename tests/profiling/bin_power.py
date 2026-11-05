@@ -23,15 +23,22 @@ Variants of one detector over the ``(port, bin, samples)`` view:
 
 The measurement table then times `channel_power_time_series` as the pipeline reaches
 it, on a conditioned acquisition of the ADA capture: the resampling stage, the
-filtered and aligned stage the measurement selects, the measurement body on that
-stage, and the registry call with the stages memoized and from cold. The indented
-rows split the resampling stage: `sw.oaresample` with the arguments of the stage,
-the same without the low-pass response, and the STFT alone at the block size of
-the design, which is the analysis half of the resampler.
+aligned stage the measurement selects on top of the resampled waveform, the
+measurement body on that stage, and the registry call with the stages memoized and
+from cold. The indented rows split the resampling stage: `sw.oaresample` with the
+arguments of the stage, the same without the low-pass response, and the STFT alone
+at the block size of the design, which is the analysis half of the resampler. Two
+flags reproduce the conditions of the pipeline. ``--trigger`` conditions the
+acquisition with the ``cellular_5g_pss_sync`` trigger of the production source. The
+aligned stage then runs the trigger measurement and shifts each port to the trigger.
+``--overwrite-x`` lets the resampling stage consume the raw waveform in place. Each
+fresh conditioning then first refills the raw waveform with ones. The ``refill
+raw.x`` row times that refill alone.
 
 Usage:
     pixi run -e cupy python tests/profiling/bin_power.py
     pixi run -e cupy python tests/profiling/bin_power.py --skip-variants
+    pixi run -e cupy python tests/profiling/bin_power.py --skip-variants --trigger --overwrite-x
     pixi run -e cupy python tests/profiling/bin_power.py --periods 0.01 --repeat 20
     pixi run -e test39 python tests/profiling/bin_power.py --backend numpy --duration 0.02
 
@@ -47,7 +54,11 @@ Reading the output:
     call blocks the host. A path that passes the tolerance and runs near the bandwidth
     is the candidate for `iq_to_bin_power`. In the measurement table, a registry
     call far above the body is time in the wrapper or the stage it selects, and a
-    stage row names which. The exit status is 1 when a variant
+    stage row names which. The ``aligned stage`` row is the cost of the aligned
+    preprocess after the resampling stage: with ``--trigger`` the trigger measurement
+    and the port shifts, without the flag a view. With ``--overwrite-x`` the
+    ``resample stage`` and ``registry call, cold`` rows include the ``refill raw.x``
+    time. The ``aligned stage`` row does not. The exit status is 1 when a variant
     exceeds its tolerance, which the ``library`` row itself does on numpy 2.0 (arm64)
     for million-sample bins: the float32 mean over one long contiguous axis
     accumulates above the pairwise model of `accum_rms`, where the two-stage and
@@ -218,8 +229,42 @@ def to_numpy(a: Array) -> np.ndarray:
     return np.asarray(a)
 
 
-def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> None:
-    """print the time of the channel power measurement layer by layer."""
+@dataclasses.dataclass
+class Layer:
+    label: str
+    """the row label of the measurement table"""
+    func: Callable[[], Any]
+    """the timed call"""
+    prepare: Callable[[], None] | None = None
+    """untimed setup that runs before each call of `func`; None for no setup"""
+
+
+def profile_measurement(
+    duration: float,
+    backend: str,
+    xp: Any,
+    repeat: int,
+    trigger: bool,
+    overwrite_x: bool,
+) -> None:
+    """print the time of the channel power measurement layer by layer.
+
+    Args:
+        duration: the capture duration (in s)
+        backend: the array backend of the source spec, ``'numpy'`` or ``'cupy'``
+        xp: the array namespace of the raw waveform
+        repeat: the number of timed calls per row; the table prints the median
+        trigger: True to condition the acquisition with the ``cellular_5g_pss_sync``
+            trigger of the production source
+        overwrite_x: True to let the resampling stage consume the raw waveform in
+            place, as the pipeline does
+
+    With `overwrite_x`, each fresh conditioning refills the raw waveform with ones
+    before the stage consumes it. The ``refill raw.x`` row times that refill alone.
+    The rows that condition a fresh acquisition inside the timed call (``resample
+    stage``, ``registry call, cold``) include the refill. The ``aligned stage`` row
+    conditions and resamples before the timed call and excludes the refill.
+    """
     import cuda_streams
 
     import striqt.analysis as sa
@@ -227,7 +272,7 @@ def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> 
     from striqt.analysis.measurements import power
 
     cuda_streams.cp = cp
-    setup = cuda_streams.build_setup(duration, backend, False)
+    setup = cuda_streams.build_setup(duration, backend, trigger)
     raw = cuda_streams.build_raw(setup, xp)
     name = 'channel_power_time_series'
     spec = getattr(setup.analysis, name)
@@ -235,11 +280,18 @@ def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> 
     kws = setup.analysis.to_dict()[name]
     capture = setup.capture
 
+    def refill() -> None:
+        raw.x[:] = 1
+
     def conditioned() -> Any:
-        return ss.lib.compute.attach_corrections(raw, signal_trigger=None)
+        if overwrite_x:
+            refill()
+        return ss.lib.compute.attach_corrections(
+            raw, signal_trigger=setup.trigger, overwrite_x=overwrite_x
+        )
 
     # the preprocessor holds its acquisition weakly, so each fresh acquisition stays
-    # bound to a local for the duration of the call
+    # bound to a local, or to `pending`, for the duration of the call
     def resample_stage() -> Any:
         fresh = conditioned()
         return fresh.preprocess(prefer_filtered=False, prefer_aligned=False)
@@ -248,17 +300,22 @@ def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> 
         fresh = conditioned()
         return info.func(iq=fresh, capture=capture, as_xarray=False, **kws)
 
-    iq = conditioned()
-    layers: list[tuple[str, Callable[[], Any]]] = [('resample stage', resample_stage)]
-    iq.preprocess(prefer_filtered=False, prefer_aligned=False)
+    pending: list[Any] = []
 
-    def filtered_aligned_stage() -> Any:
+    def prepare_aligned() -> None:
         fresh = conditioned()
         fresh.preprocess(prefer_filtered=False, prefer_aligned=False)
-        start = time.perf_counter()
-        fresh.preprocess(prefer_filtered=True, prefer_aligned=True)
-        return time.perf_counter() - start
+        pending[:] = [fresh]
 
+    def aligned_stage() -> Any:
+        return pending[0].preprocess(prefer_filtered=True, prefer_aligned=True)
+
+    iq = conditioned()
+    layers: list[Layer] = []
+    if overwrite_x:
+        layers.append(Layer('refill raw.x', refill))
+    layers.append(Layer('resample stage', resample_stage))
+    iq.preprocess(prefer_filtered=False, prefer_aligned=False)
     x = iq.preprocess(prefer_filtered=True, prefer_aligned=True)
 
     # the resample stage is `sw.oaresample` with the design of the acquisition plus
@@ -296,38 +353,43 @@ def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> 
         )
 
     layers += [
-        ('  sw.oaresample, production args', oaresample_production),
-        ('  sw.oaresample, no low-pass', oaresample_no_lowpass),
-        ('  sw.stft at the design block', stft_only),
-        (
+        Layer('  sw.oaresample, production args', oaresample_production),
+        Layer('  sw.oaresample, no low-pass', oaresample_no_lowpass),
+        Layer('  sw.stft at the design block', stft_only),
+        Layer('aligned stage', aligned_stage, prepare_aligned),
+        Layer(
             'body on the stage',
             lambda: power.evaluate_channel_power_time_series(x, capture, spec),
         ),
-        (
+        Layer(
             'registry call, stages memoized',
             lambda: info.func(iq=iq, capture=capture, as_xarray=False, **kws),
         ),
-        ('registry call, cold', registry_cold),
+        Layer('registry call, cold', registry_cold),
     ]
 
+    def timed(layer: Layer) -> tuple[float, float]:
+        if layer.prepare is not None:
+            layer.prepare()
+            device_synchronize()
+        return time_call(layer.func)
+
+    flags = ', '.join(
+        f'{label} {"on" if value else "off"}'
+        for label, value in (('trigger', trigger), ('overwrite_x', overwrite_x))
+    )
     print(
         f'\nchannel_power_time_series on the ADA capture ({duration} s, '
-        f'{raw.x.shape[0]} ports), median of {repeat}'
+        f'{raw.x.shape[0]} ports), median of {repeat}; {flags}'
     )
     print(f'{"layer":<32} {"host ms":>8} {"dev ms":>8}')
-    for label, func in layers:
-        func()
-        device_synchronize()
-        times = [time_call(func) for _ in range(repeat)]
+    for layer in layers:
+        timed(layer)
+        times = [timed(layer) for _ in range(repeat)]
         host = statistics.median(t[0] for t in times)
         dev = statistics.median(t[1] for t in times)
-        print(f'{label:<32} {host * 1e3:8.2f} {dev * 1e3:8.2f}', flush=True)
-    # the incremental stage is the difference of 2 preprocess calls, timed on the host
-    stage = [filtered_aligned_stage() for _ in range(repeat)]
-    device_synchronize()
-    print(
-        f'{"filtered+aligned stage (host)":<32} {statistics.median(stage) * 1e3:8.2f} {"-":>8}'
-    )
+        print(f'{layer.label:<32} {host * 1e3:8.2f} {dev * 1e3:8.2f}', flush=True)
+    pending.clear()
     sw.arrays.free_cupy_mempool()
 
 
@@ -359,6 +421,16 @@ def main() -> int:
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--skip-variants', action='store_true')
     parser.add_argument('--skip-measurement', action='store_true')
+    parser.add_argument(
+        '--trigger',
+        action='store_true',
+        help='condition the acquisition with the cellular_5g_pss_sync trigger',
+    )
+    parser.add_argument(
+        '--overwrite-x',
+        action='store_true',
+        help='let the resampling stage consume the raw waveform in place',
+    )
     args = parser.parse_args()
 
     global cp
@@ -395,7 +467,14 @@ def main() -> int:
 
     rows: list[Row] = []
     if not args.skip_measurement:
-        profile_measurement(args.duration, args.backend, xp, args.repeat)
+        profile_measurement(
+            args.duration,
+            args.backend,
+            xp,
+            args.repeat,
+            args.trigger,
+            args.overwrite_x,
+        )
     periods = [] if args.skip_variants else args.periods
     print(
         f'\n{"period s":>9} {"bins":>5} {"kind":<5} {"variant":<24} {"host ms":>8} '
