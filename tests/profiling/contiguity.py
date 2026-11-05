@@ -20,14 +20,17 @@ Rows:
   `_alloc_empty_iq` makes on every read under ``stream_all_rx_ports``.
 - ``correlate pss`` and ``correlate sss``: `correlate_sync_spans` at 15.36 MS/s, 30 kHz
   subcarrier spacing (SSB case C), 2 ports, and 5 synchronization blocks, for the 3 PSS templates
-  and for ``--cells`` of the 1008 SSS templates. ``pool growth`` is the memory the
-  cupy pool acquires during the call, which bounds the peak allocation of the call.
+  and for ``--cells`` of the 1008 SSS templates. ``pool peak`` is the high-water mark
+  of the cupy pool during one call above the bytes in use before it, sampled by a
+  memory hook at every allocation. The 8 GB Tegra X2 is killed by the kernel at the
+  full 1008 cells, so the default is 252; the same count before and after a change
+  is the comparison.
 - ``histogram flatten`` and ``histogram ravel``: `xp.histogram` over one port of a
   spectrogram at the ADA shape, from a copy and from a view.
 
 Usage:
     pixi run -e cupy python tests/profiling/contiguity.py
-    pixi run -e cupy python tests/profiling/contiguity.py --cells 1008 --repeat 3
+    pixi run -e cupy python tests/profiling/contiguity.py --cells 504 --repeat 3
     pixi run -e test39 python tests/profiling/contiguity.py --backend numpy
 
 Reading the output:
@@ -83,6 +86,7 @@ SYNC_SCS = 30e3
 SYNC_CASE = 'c'
 SYNC_BLOCKS = 5
 SSS_CELL_COUNT = 1008
+DEFAULT_SSS_CELLS = 252
 
 
 # %% Timing
@@ -113,10 +117,26 @@ def time_call(func: Callable[[], Any]) -> tuple[float, float, Any]:
     return host, float(cp.cuda.get_elapsed_time(start, end)) / 1e3, ret
 
 
-def pool_bytes() -> int:
+def peak_pool_bytes(func: Callable[[], Any]) -> int:
+    """return the high-water mark (in bytes) of the cupy pool during `func`, above the
+    bytes in use before the call; 0 on numpy."""
     if cp is None:
+        func()
         return 0
-    return int(cp.get_default_memory_pool().total_bytes())
+    pool = cp.get_default_memory_pool()
+    base = pool.used_bytes()
+    peak = [base]
+
+    class Hook(cp.cuda.MemoryHook):
+        name = 'contiguity-peak'
+
+        def malloc_postprocess(self, **kwargs: Any) -> None:
+            peak[0] = max(peak[0], pool.used_bytes())
+
+    with Hook():
+        func()
+    device_synchronize()
+    return peak[0] - base
 
 
 def repeat_call(
@@ -245,8 +265,8 @@ def profile_correlator(xp: Any, cells: int, repeat: int, warmup: int) -> None:
             return sw.comms_5gnr.correlate_sync_spans(spans, templates, params=params)
 
         sw.arrays.free_cupy_mempool()
-        before = pool_bytes()
         try:
+            peak = peak_pool_bytes(run)
             host, device, out = repeat_call(run, repeat, warmup)
         except Exception as ex:
             if 'OutOfMemory' not in type(ex).__name__:
@@ -254,10 +274,9 @@ def profile_correlator(xp: Any, cells: int, repeat: int, warmup: int) -> None:
             print(f'{name:<26} {"-":>9} {"-":>9} {"-":>9}  out of device memory')
             sw.arrays.free_cupy_mempool()
             continue
-        growth = pool_bytes() - before
         label = f'{templates.shape[0]} cells'
         if cp is not None:
-            label += f', pool growth {growth / 2**20:.0f} MB'
+            label += f', pool peak {peak / 2**20:.0f} MB'
         print_row(name, host, device, out.nbytes, label)
         del out, spans
         sw.arrays.free_cupy_mempool()
@@ -300,8 +319,8 @@ def main() -> None:
     parser.add_argument(
         '--cells',
         type=int,
-        default=SSS_CELL_COUNT,
-        help='number of SSS templates to correlate (1008 is the full set)',
+        default=DEFAULT_SSS_CELLS,
+        help=f'number of SSS templates to correlate ({SSS_CELL_COUNT} is the full set)',
     )
     args = parser.parse_args()
 
