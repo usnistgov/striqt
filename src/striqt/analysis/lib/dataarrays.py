@@ -581,9 +581,6 @@ def evaluate_by_spec(
         assert isinstance(res, DelayedDataArray)
         results[name] = res.compute()
 
-    if sw.is_cupy_array(_raw_array(iq)):
-        sw.arrays.free_cupy_mempool()
-
     return results
 
 

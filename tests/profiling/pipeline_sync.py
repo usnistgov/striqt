@@ -15,10 +15,7 @@ Variants:
 
 - ``block-each``: `actions.core.BLOCK_EACH` 1, the production setting. Each
   measurement result is copied to the host as soon as it returns.
-- ``deferred``: `BLOCK_EACH` 0. The copies run at the end of the capture, and the
-  memory pool is freed after each capture, as `evaluate_by_spec` does on that path;
-  ``--no-pool-free`` keeps the pool instead, to separate the cost of that free from
-  the deferred copies.
+- ``deferred``: `BLOCK_EACH` 0. The copies run at the end of the capture.
 
 Usage:
     pixi run -e cupy python tests/profiling/pipeline_sync.py
@@ -36,8 +33,8 @@ Reading the output:
     pipeline (the time of `iterate_sweep` over all captures divided by the capture
     count, after one untimed warmup run), ``x dur`` (that time over the capture
     duration; the pipeline keeps up with acquisition below 1), the growth of the cupy
-    memory pool over the run in MB (the pool is never freed on the ``block-each``
-    path, so the growth is its high-water mark), the resident set of the process
+    memory pool over the run in MB (the pool is never freed, so the growth is its
+    high-water mark), the resident set of the process
     after the run and a garbage collection (``RSS MB``; a rise from run to run is a
     host-side leak, and ``--keep-open`` runs every repetition on one set of open
     resources to tell a leak per `open_resources` from one per capture; the synthetic
@@ -73,7 +70,6 @@ from cuda_streams import ANALYSIS, CAPTURE, StopwatchCollector, nvtx_range
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-import striqt.waveform as sw
 from striqt.sensor.lib.actions import core
 
 cp: Any = None
@@ -273,10 +269,6 @@ def print_breakdown(runs: dict[str, list[Run]], names: list[str]) -> None:
         print(f'{name:<36} ' + ' '.join(cells))
 
 
-def keep_pool() -> None:
-    """leave the cupy memory pool as it is, in place of `free_cupy_mempool`."""
-
-
 def quiet_sweep_loggers() -> None:
     for name in ('sweep', 'source', 'sink', 'periph'):
         sa.util.get_logger(name).logger.setLevel(logging.WARNING)
@@ -299,11 +291,6 @@ def main() -> int:
         '--keep-open',
         action='store_true',
         help='open the resources once for every run instead of once per run',
-    )
-    parser.add_argument(
-        '--no-pool-free',
-        action='store_true',
-        help='keep the cupy memory pool between captures on the deferred path too',
     )
     args = parser.parse_args()
 
@@ -338,10 +325,6 @@ def main() -> int:
     )
 
     quiet_sweep_loggers()
-    if args.no_pool_free:
-        # evaluate_by_spec frees the pool after each capture when block_each is off;
-        # the production path never frees it
-        setattr(sw.arrays, 'free_cupy_mempool', keep_pool)  # noqa: B010
     collector = StopwatchCollector()
     analysis_logger = sa.util.get_logger('analysis').logger
     analysis_logger.setLevel(min(analysis_logger.level, sa.util.PERFORMANCE_DETAIL))

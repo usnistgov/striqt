@@ -100,8 +100,9 @@ never mutated. A literal unit such as the ratio `'dB'` is left as written.
 
 Materialization to xarray is deferred so that the GPU can queue several measurements
 before anything is pulled back to the CPU. `evaluate_by_spec` runs every measurement
-in the `analysis:` block under a `stopwatch`, then calls
-`sw.arrays.free_cupy_mempool()` when the input was a cupy array.
+in the `analysis:` block under a `stopwatch`. The cupy memory pool is never freed on
+either path: the pool reaches its high-water mark on the first capture and reuses the
+blocks after that.
 
 ### Analysis groups
 
