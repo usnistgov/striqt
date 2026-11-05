@@ -21,8 +21,14 @@ Variants of one detector over the ``(port, bin, samples)`` view:
 - ``fused``: one `cupy.ReductionKernel` that squares the complex samples and reduces in
   the same pass, with no float32 buffer.
 
+The measurement table then times `channel_power_time_series` as the pipeline reaches
+it, on a conditioned acquisition of the ADA capture: the resampling stage, the
+filtered and aligned stage the measurement selects, the measurement body on that
+stage, and the registry call with the stages memoized and from cold.
+
 Usage:
     pixi run -e cupy python tests/profiling/bin_power.py
+    pixi run -e cupy python tests/profiling/bin_power.py --skip-variants
     pixi run -e cupy python tests/profiling/bin_power.py --periods 0.01 --repeat 20
     pixi run -e test39 python tests/profiling/bin_power.py --backend numpy --duration 0.02
 
@@ -36,7 +42,9 @@ Reading the output:
     `bin_power_rms` for the mean; a stage that stops before the reduction has no
     result to compare and shows ``-``. A host time equal to the device time means the
     call blocks the host. A path that passes the tolerance and runs near the bandwidth
-    is the candidate for `iq_to_bin_power`. The exit status is 1 when a variant
+    is the candidate for `iq_to_bin_power`. In the measurement table, a registry
+    call far above the body is time in the wrapper or the stage it selects, and a
+    stage row names which. The exit status is 1 when a variant
     exceeds its tolerance, which the ``library`` row itself does on numpy 2.0 (arm64)
     for million-sample bins: the float32 mean over one long contiguous axis
     accumulates above the pairwise model of `accum_rms`, where the two-stage and
@@ -170,7 +178,7 @@ def make_variants(
                 'float32 y',
                 'x.real() * x.real() + x.imag() * x.imag()',
                 'a + b',
-                'y = a / _in_ind.size()',
+                'y = a / (_in_ind.size() / _out_ind.size())',
                 '0',
                 'striqt_profile_mean_power',
             )
@@ -207,6 +215,83 @@ def to_numpy(a: Array) -> np.ndarray:
     return np.asarray(a)
 
 
+def profile_measurement(duration: float, backend: str, xp: Any, repeat: int) -> None:
+    """print the time of the channel power measurement layer by layer."""
+    import cuda_streams
+
+    import striqt.analysis as sa
+    import striqt.sensor as ss
+    from striqt.analysis.measurements import power
+
+    cuda_streams.cp = cp
+    setup = cuda_streams.build_setup(duration, backend, False)
+    raw = cuda_streams.build_raw(setup, xp)
+    name = 'channel_power_time_series'
+    spec = getattr(setup.analysis, name)
+    info = sa.registry[type(spec)]
+    kws = setup.analysis.to_dict()[name]
+    capture = setup.capture
+
+    def conditioned() -> Any:
+        return ss.lib.compute.attach_corrections(raw, signal_trigger=None)
+
+    iq = conditioned()
+    layers: list[tuple[str, Callable[[], Any]]] = [
+        (
+            'resample stage',
+            lambda: conditioned().preprocess(
+                prefer_filtered=False, prefer_aligned=False
+            ),
+        ),
+    ]
+    iq.preprocess(prefer_filtered=False, prefer_aligned=False)
+
+    def filtered_aligned_stage() -> Any:
+        fresh = conditioned()
+        fresh.preprocess(prefer_filtered=False, prefer_aligned=False)
+        start = time.perf_counter()
+        fresh.preprocess(prefer_filtered=True, prefer_aligned=True)
+        return time.perf_counter() - start
+
+    x = iq.preprocess(prefer_filtered=True, prefer_aligned=True)
+    layers += [
+        (
+            'body on the stage',
+            lambda: power.evaluate_channel_power_time_series(x, capture, spec),
+        ),
+        (
+            'registry call, stages memoized',
+            lambda: info.func(iq=iq, capture=capture, as_xarray=False, **kws),
+        ),
+        (
+            'registry call, cold',
+            lambda: info.func(
+                iq=conditioned(), capture=capture, as_xarray=False, **kws
+            ),
+        ),
+    ]
+
+    print(
+        f'\nchannel_power_time_series on the ADA capture ({duration} s, '
+        f'{raw.x.shape[0]} ports), median of {repeat}'
+    )
+    print(f'{"layer":<32} {"host ms":>8} {"dev ms":>8}')
+    for label, func in layers:
+        func()
+        device_synchronize()
+        times = [time_call(func) for _ in range(repeat)]
+        host = statistics.median(t[0] for t in times)
+        dev = statistics.median(t[1] for t in times)
+        print(f'{label:<32} {host * 1e3:8.2f} {dev * 1e3:8.2f}', flush=True)
+    # the incremental stage is the difference of 2 preprocess calls, timed on the host
+    stage = [filtered_aligned_stage() for _ in range(repeat)]
+    device_synchronize()
+    print(
+        f'{"filtered+aligned stage (host)":<32} {statistics.median(stage) * 1e3:8.2f} {"-":>8}'
+    )
+    sw.arrays.free_cupy_mempool()
+
+
 @dataclasses.dataclass
 class Row:
     period: float
@@ -233,6 +318,8 @@ def main() -> int:
     parser.add_argument('--repeat', type=int, default=10)
     parser.add_argument('--warmup', type=int, default=2)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--skip-variants', action='store_true')
+    parser.add_argument('--skip-measurement', action='store_true')
     args = parser.parse_args()
 
     global cp
@@ -268,11 +355,14 @@ def main() -> int:
     )
 
     rows: list[Row] = []
+    if not args.skip_measurement:
+        profile_measurement(args.duration, args.backend, xp, args.repeat)
+    periods = [] if args.skip_variants else args.periods
     print(
         f'\n{"period s":>9} {"bins":>5} {"kind":<5} {"variant":<24} {"host ms":>8} '
         f'{"dev ms":>8} {"GB/s":>6} {"rel err":>9} {"tol":>9}  check'
     )
-    for period in args.periods:
+    for period in periods:
         count = round(period * SAMPLE_RATE)
         if size % count:
             parser.error(f'period {period} is not a whole number of bins of {size}')
