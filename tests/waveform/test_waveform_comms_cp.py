@@ -1,32 +1,25 @@
-"""striqt.waveform.lib.comms.cp and the numba kernels in
-striqt.waveform.lib.comms.cp_cpu_jit and striqt.waveform.lib.comms.cp_cuda_jit: the
-cyclic-prefix correlation against a numpy reference and on a synthetic OFDM waveform.
+"""striqt.waveform.lib.comms.cp: the cyclic-prefix correlation against a float64
+numpy reference and on a synthetic OFDM waveform, on numpy and cupy.
 
-The CUDA tests skip when cupy is not available. The `cupy.fuse` dB kernels are
-defined in `lib/power/cuda_jit.py` and are covered through the public dispatcher in
-test_waveform_power_convert.py.
+The cupy cases skip when cupy is not available.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pytest
-from conftest import gaussian_iq, iq_waveforms
+from conftest import as_xp, gaussian_iq, iq_waveforms
 from hypothesis import given, strategies as st
 from numeric_checks import assert_close, numpy_and_cupy, reference_power
 from waveform_strategies import corr_atol_for, cp_case
 
 from striqt.waveform.lib.comms import cp
 
-# thread block sizing from cp.correlate_cyclic_shift
-THREADS_PER_BLOCK = 32
-
 
 def corr_reference(inds, x, nfft, ncp, norm):
-    """return the float64 cyclic-prefix correlation that `_corr_at_indices` computes.
+    """return the float64 cyclic-prefix correlation of `cp.correlate_cyclic_shift`.
 
-    Index pairs that run past the end of `x` are dropped, as the zero-fill of the CPU
-    kernel does for any index order.
+    Index pairs that run past the end of `x` are dropped.
     """
     xc = np.asarray(x).astype(np.complex128)
     inds = np.asarray(inds)
@@ -41,7 +34,7 @@ def corr_reference(inds, x, nfft, ncp, norm):
         if norm:
             corr /= np.sqrt(np.sum(np.abs(a) ** 2) * np.sum(np.abs(b) ** 2))
         else:
-            corr /= inds.shape[0]
+            corr /= inds.size
         out[j] = corr
 
     return out
@@ -50,13 +43,12 @@ def corr_reference(inds, x, nfft, ncp, norm):
 def corr_cases(
     min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False, sorted_inds=False
 ):
-    """draw (inds, x, nfft, ncp, norm) kernel arguments.
+    """draw (inds, x, nfft, ncp, norm) arguments with arbitrary index sets.
 
     The waveform length is drawn so that some examples run index pairs past the end of
-    `x` and reach the out-of-range branches of the kernels. The indices are in
-    arbitrary order unless `sorted_inds`, so an out-of-range pair may precede a valid
-    one. With `ncp_from_inds`, `ncp` is the index count, as `cp.correlate_cyclic_shift`
-    infers from the last axis of `inds`.
+    `x`. The indices are in arbitrary order unless `sorted_inds`, so an out-of-range
+    pair may precede a valid one. With `ncp_from_inds`, `ncp` is the index count, as
+    `cp.correlate_cyclic_shift` infers from the last axis of `inds`.
     """
 
     @st.composite
@@ -82,67 +74,47 @@ def corr_cases(
     return _case()
 
 
+def runs_cases():
+    """draw (inds, x, nfft, ncp, norm) arguments with 3GPP-style index sets.
+
+    `inds` has shape ``(n_symbols, ncp)``, with each row the ``ncp`` consecutive
+    samples from a symbol start. The starts are sorted and at least ``nfft + ncp``
+    apart. The waveform length is drawn as in `corr_cases`: some examples run the
+    pairs of the last symbols past the end of `x`.
+    """
+
+    @st.composite
+    def _case(draw):
+        nfft = draw(st.sampled_from([32, 64, 128]))
+        ncp = draw(st.integers(min_value=4, max_value=nfft // 4))
+        n_symbols = draw(st.integers(min_value=1, max_value=6))
+        first = draw(st.integers(min_value=0, max_value=nfft))
+        gaps = st.integers(min_value=nfft + ncp, max_value=2 * nfft)
+        steps = draw(st.lists(gaps, min_size=n_symbols - 1, max_size=n_symbols - 1))
+        starts = first + np.cumsum([0, *steps], dtype=np.int64)
+        inds = starts[:, np.newaxis] + np.arange(ncp, dtype=np.int64)
+        min_size = int(starts.min()) + 2 * nfft + ncp
+        full_size = int(starts.max()) + 2 * nfft + ncp
+        size = draw(st.integers(min_value=min_size, max_value=full_size))
+        x = draw(iq_waveforms(min_size=size, max_size=size))
+        norm = draw(st.booleans())
+        return inds, x, nfft, ncp, norm
+
+    return _case()
+
+
 def assert_matches_reference(out, inds, x, nfft, ncp, norm):
     expected = corr_reference(inds, x, nfft, ncp, norm)
     assert_close(out, expected, atol=corr_atol_for(x, inds.size, norm))
 
 
-class TestCorrAtIndicesKernels:
-    """the numba kernels called directly, against the numpy reference"""
-
-    @given(case=corr_cases())
-    def test_cpu(self, case):
-        from striqt.waveform.lib.comms.cp_cpu_jit import _corr_at_indices
-
-        inds, x, nfft, ncp, norm = case
-        out = np.empty(nfft + ncp, dtype=x.dtype)
-        _corr_at_indices(inds, x, nfft, ncp, norm, out)
-        assert_matches_reference(out, inds, x, nfft, ncp, norm)
-
-    @staticmethod
-    def _run_cuda(cp, inds, x, nfft, ncp, norm):
-        from striqt.waveform.lib.comms.cp_cuda_jit import _corr_at_indices
-
-        x_cp = cp.asarray(x)
-        out = cp.empty(nfft + ncp, dtype=x.dtype)
-        bpg = max((x_cp.size + THREADS_PER_BLOCK - 1) // THREADS_PER_BLOCK, 1)
-        _corr_at_indices[bpg, THREADS_PER_BLOCK](
-            cp.asarray(inds), x_cp, nfft, ncp, norm, out
-        )
-        cp.cuda.Device().synchronize()
-        return out
-
-    # the CUDA kernel stops at the first out-of-range pair, which only matches the
-    # reference for sorted indices. test_cuda_unsorted_indices covers the rest
-    @given(case=corr_cases(sorted_inds=True))
-    def test_cuda(self, cupy_available, case):
-        inds, x, nfft, ncp, norm = case
-        out = self._run_cuda(cupy_available, inds, x, nfft, ncp, norm)
-        assert_matches_reference(out, inds, x, nfft, ncp, norm)
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason='the CUDA _corr_at_indices breaks out of the index loop at the first '
-        'out-of-range pair (comms/cp_cuda_jit.py:28-29) instead of skipping it like the CPU '
-        'kernel, so a valid index after an out-of-range one is dropped',
-    )
-    def test_cuda_unsorted_indices(self, cupy_available):
-        nfft, ncp = 32, 4
-        x = gaussian_iq(3 * nfft, seed=0)
-        # the first index runs past the end of x at every lag; the second never does
-        inds = np.array([2 * nfft, 0], dtype=np.int64)
-        out = self._run_cuda(cupy_available, inds, x, nfft, ncp, False)
-        assert_matches_reference(out, inds, x, nfft, ncp, False)
-
-
 class TestCorrelateCyclicShiftDispatcher:
-    """cp.correlate_cyclic_shift selects the kernel for the array namespace."""
+    """cp.correlate_cyclic_shift on each array namespace against the numpy reference."""
 
     @given(case=corr_cases(ncp_from_inds=True, sorted_inds=True))
     def test_sizes_out_from_inds(self, xp, case):
         inds, x, nfft, ncp, norm = case
-        inds_2d = xp.asarray(inds[np.newaxis, :])
-        x_xp = xp.asarray(x)
+        inds_2d, x_xp = as_xp(xp, inds[np.newaxis, :], x)
 
         out = cp.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm)
         assert isinstance(out, xp.ndarray)
@@ -154,6 +126,31 @@ class TestCorrelateCyclicShiftDispatcher:
         ret = cp.correlate_cyclic_shift(inds_2d, x_xp, nfft, norm=norm, out=buffer)
         assert ret is buffer
         assert_matches_reference(ret, inds, x, nfft, ncp, norm)
+
+    @given(case=corr_cases(ncp_from_inds=True))
+    def test_arbitrary_index_order(self, xp, case):
+        inds, x, nfft, ncp, norm = case
+        inds_xp, x_xp = as_xp(xp, inds[np.newaxis, :], x)
+        out = cp.correlate_cyclic_shift(inds_xp, x_xp, nfft, norm=norm)
+        assert_matches_reference(out, inds, x, nfft, ncp, norm)
+
+    @given(case=runs_cases())
+    def test_consecutive_prefix_runs(self, xp, case):
+        inds, x, nfft, ncp, norm = case
+        inds_xp, x_xp = as_xp(xp, inds, x)
+        out = cp.correlate_cyclic_shift(inds_xp, x_xp, nfft, norm=norm)
+        assert out.shape == (nfft + ncp,)
+        assert_matches_reference(out, inds, x, nfft, ncp, norm)
+
+    @pytest.mark.parametrize('norm', [False, True])
+    def test_valid_index_after_out_of_range(self, xp, norm):
+        nfft, ncp = 32, 4
+        x = gaussian_iq(3 * nfft, seed=0)
+        # the first prefix runs past the end of x at every lag; the second never does
+        inds = np.array([2 * nfft, 0], dtype=np.int64)[:, np.newaxis] + np.arange(ncp)
+        inds_xp, x_xp = as_xp(xp, inds, x)
+        out = cp.correlate_cyclic_shift(inds_xp, x_xp, nfft, norm=norm)
+        assert_matches_reference(out, inds, x, nfft, ncp, norm)
 
 
 class TestCorrelateCyclicShift:

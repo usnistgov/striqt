@@ -1,12 +1,11 @@
-"""Cyclic-prefix correlation at index sets, evaluated by numba kernels (CPU for numpy
-arrays, CUDA for cupy arrays)."""
+"""Cyclic-prefix correlation of a waveform against a delayed copy of itself at
+selected index sets, in the array namespace of the waveform."""
 
 from __future__ import annotations as __
 
 import typing
 
 from ..arrays import ROUNDOFF_SAFETY, array_namespace, unit_roundoff
-from ..util import array_api_compat
 
 if typing.TYPE_CHECKING:
     from ..typing import Array, DTypeLike
@@ -18,7 +17,10 @@ def correlate_cyclic_shift(
     """correlate `x` with a copy of `x` delayed `nfft` samples at the index sets `inds`.
 
     At lag ``j``, the result sums ``x[i + j] * conj(x[i + j + nfft])`` over every
-    index ``i`` in `inds`. Index pairs that run past the end of `x` contribute zero.
+    index ``i`` in `inds`. Index pairs that run past the end of `x` contribute zero
+    to the sum and to the powers of the normalization. The sum accumulates in
+    complex128 and is rounded once into the dtype of `x`. With ``norm=True``, a lag
+    at which every pair runs past the end of `x` is ``nan``.
 
     Args:
         inds: integer sample indices into `x` of cyclic-prefix samples, in the array
@@ -37,25 +39,50 @@ def correlate_cyclic_shift(
     xp = array_namespace(x)
     assert xp is array_namespace(inds)
 
-    # the number of waveform samples per cyclic prefix
+    nfft = int(nfft)
     ncp = inds.shape[-1]
-    flat_inds = inds.flatten()
+    n_lags = nfft + ncp
+    rows = inds.reshape(-1, ncp)
+
+    # rows of consecutive samples are gathered once from the first index of each row
+    # and window-summed over the run length. The gathered array is then
+    # (rows, run + lags) instead of (indices, lags)
+    if bool(xp.all(rows == rows[:, :1] + xp.arange(ncp))):
+        starts, run = rows[:, 0], ncp
+    else:
+        starts, run = inds.reshape(-1), 1
+
+    lo = int(starts.min())
+    span = int(starts.max()) - lo + run + n_lags - 1
+    seg = x[lo : min(lo + span + nfft, x.shape[0])].astype(xp.complex128)
+    n_valid = max(seg.shape[0] - nfft, 0)
+    a = seg[:n_valid]
+    b = seg[nfft : nfft + n_valid]
+
+    # the window sum over the run reads run - 1 lags past the last output lag
+    start_gather = (starts - lo)[:, None] + xp.arange(run + n_lags - 1)[None, :]
+    run_gather = xp.arange(run)[:, None] + xp.arange(n_lags)[None, :]
+
+    def sum_over_pairs(values: Array) -> Array:
+        padded = xp.zeros(span, dtype=values.dtype)
+        padded[:n_valid] = values
+        by_lag = padded[start_gather].sum(axis=0)
+        if run == 1:
+            return by_lag
+        return by_lag[run_gather].sum(axis=0)
+
+    corr = sum_over_pairs(a * xp.conj(b))
+
+    if norm:
+        power_a = sum_over_pairs(xp.abs(a) ** 2)
+        power_b = sum_over_pairs(xp.abs(b) ** 2)
+        corr /= xp.sqrt(power_a * power_b)
+    else:
+        corr /= inds.size
 
     if out is None:
-        out = xp.empty(nfft + ncp, dtype=x.dtype)
-
-    if array_api_compat.is_numpy_array(x):
-        from .cp_cpu_jit import _corr_at_indices as func
-    else:
-        from .cp_cuda_jit import _corr_at_indices
-
-        tpb = 32
-        bpg = max((x.size + (tpb - 1)) // tpb, 1)
-
-        func = _corr_at_indices[bpg, tpb]
-
-    func(flat_inds, x, int(nfft), int(ncp), bool(norm), out)
-
+        out = xp.empty(n_lags, dtype=x.dtype)
+    out[:] = corr
     return out
 
 

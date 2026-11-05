@@ -258,21 +258,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
   overlaps; the raw path is exposed through the public `stft`.
 - **Fix.** Decide which scale is the contract and apply it on both paths.
 
-### 67. The CUDA `_corr_at_indices` stops at the first out-of-range index
-
-`tests/waveform/test_waveform_comms_cp.py::TestCorrAtIndicesKernels::test_cuda_unsorted_indices`
-
-- **Mechanism.** `comms/cp_cuda_jit.py:28-29` `break`s at the first out-of-range
-  index pair, while `comms/cp_cpu_jit.py:27-32` zero-fills it and continues.
-  `comms.correlate_cyclic_shift` flattens the (symbol, slot, frame, cp) meshgrid built
-  by `_get_3gpp_index_cyclic_prefix` (`comms/phy_3gpp.py:78`), which is not monotonic, so the kernels disagree whenever a
-  valid index follows an invalid one (IQ shorter than the requested frames).
-- **Why the test is right.** The two backends must agree (AGENTS.md,
-  lockstep requirement). The test could not be run here (cupy skips); the
-  mechanism was checked by replaying both loops in plain Python. Needs a
-  Jetson run to confirm the strict marker.
-- **Fix.** Replace `break` with `continue` after zero-filling. Trivial.
-
 ### 59. `_probe_channel` indexes a sensor `ArgInfo`
 
 `tests/sensor/test_sensor_sources_soapy.py::test_probe_soapy_info_with_a_channel_sensor`
