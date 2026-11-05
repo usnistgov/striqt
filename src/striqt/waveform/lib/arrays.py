@@ -17,7 +17,7 @@ _TC = TypeVar('_TC', bound=Callable)
 if TYPE_CHECKING:
     from types import ModuleType
 
-    import cupy  # ty: ignore[unresolved-import]
+    import cupy  # ty: ignore[import-not-found]
 
     from .typing import _AT, Array, ArrayLike, DTypeLike, TypeIsCupy
 
@@ -620,7 +620,7 @@ def sync_if_cupy(x: Array):
 @functools.cache
 def configure_cupy():
     if cp is not None:
-        from cupy import fft  # ty: ignore[unresolved-import]
+        from cupy import fft  # ty: ignore[import-not-found]
 
         # the FFT plan cache allocates large buffers that striqt does not reuse
         fft.config.get_plan_cache().set_size(0)

@@ -35,7 +35,7 @@ def cli() -> None:
     click.echo('  cyclic-prefix correlation (numpy, complex64) run')
 
     try:
-        import cupy as cp  # ty: ignore[unresolved-import]
+        import cupy as cp  # ty: ignore[import-not-found]
 
         x_gpu = cp.asarray(x)
         inds_gpu = cp.asarray(inds)

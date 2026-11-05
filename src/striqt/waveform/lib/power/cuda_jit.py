@@ -7,7 +7,7 @@ from __future__ import annotations as __
 
 import typing
 
-import cupy  # ty: ignore[unresolved-import]
+import cupy  # ty: ignore[import-not-found]
 import numpy as np
 
 if typing.TYPE_CHECKING:

@@ -224,12 +224,12 @@ def read_retries(source: Controller) -> Generator[None]:
 
     initial = source.read_iq
     retry = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retrigger)
-    source.read_iq = retry(source.read_iq)  # ty: ignore[invalid-assignment]
+    source.read_iq = retry(source.read_iq)
 
     try:
         yield
     finally:
-        source.read_iq = initial  # ty: ignore[invalid-assignment]
+        source.read_iq = initial
 
 
 def _put_waiting(queue: AcquisitionQueue, iq: specs.AcquiredIQ) -> None:
