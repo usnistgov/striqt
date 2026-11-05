@@ -28,9 +28,8 @@ repository.
   (`make_dataset`, `predicted_levels_dBm`, `occupied_bins`), with the expected levels and
   bin supports from the dataset construction; the one plotting test runs headless through
   `MPLBACKEND=agg`, set in the root conftest before any third-party import. The same block
-  sets `STRIQT_CACHE_DIR` to a directory of the session (removed at exit), keeps
-  `NUMBA_CACHE_DIR` in the user cache so compiled kernels persist, and sets `MPLCONFIGDIR`
-  to `platformdirs.user_cache_dir('striqt')/matplotlib` because a sandbox that cannot write
+  sets `STRIQT_CACHE_DIR` to a directory of the session (removed at exit) and sets
+  `MPLCONFIGDIR` to `platformdirs.user_cache_dir('striqt')/matplotlib` because a sandbox that cannot write
   `~/.matplotlib` rebuilds the matplotlib font cache on every run (12 s per process). The
   block also replaces the `persistent_cache` shelf with an in-memory dict at import time,
   not in a fixture: `site_strategies.py` reads a site YAML at import, which validates the

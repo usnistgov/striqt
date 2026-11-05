@@ -18,19 +18,14 @@ _user_cache_dir = Path(platformdirs.user_cache_dir('striqt'))
 
 # the striqt on-disk caches go to a directory of this session. The collection-time
 # spec validation below, and a shelf fault that deletes the cache files, then touch no
-# cache of the developer or of a concurrent test run. The numba kernel cache stays in
-# the user cache directory because its files are per Python version and a recompile
-# takes minutes on the Jetson
+# cache of the developer or of a concurrent test run
 _session_cache_dir = None
 if not os.environ.get('STRIQT_CACHE_DIR'):
     _session_cache_dir = tempfile.mkdtemp(prefix='striqt-tests-')
     os.environ['STRIQT_CACHE_DIR'] = _session_cache_dir
-if not os.environ.get('NUMBA_CACHE_DIR'):
-    (_user_cache_dir / 'numba').mkdir(parents=True, exist_ok=True)
-    os.environ['NUMBA_CACHE_DIR'] = str(_user_cache_dir / 'numba')
 
 # matplotlib reads the backend and config dir on first import. The figures tests plot
-# headless. The font cache goes beside the numba cache because a sandbox without
+# headless. The font cache goes in the user cache directory because a sandbox without
 # write access to ~/.matplotlib rebuilds the cache on every run otherwise
 os.environ.setdefault('MPLBACKEND', 'agg')
 if not os.environ.get('MPLCONFIGDIR'):
@@ -99,11 +94,6 @@ def _get_cupy():
         return None
 
     try:
-        try:
-            # importing numba.cuda before cupy avoids a linking error on the py39 Jetson
-            import numba.cuda  # noqa: F401
-        except ImportError:
-            pass
         import cupy as cp  # type: ignore
         import pandas  # noqa: F401
         import scipy  # noqa: F401

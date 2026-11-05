@@ -296,10 +296,8 @@ def main() -> int:
 
     global cp
     if args.backend == 'cupy':
-        # numba.cuda must be imported before cupy (numba issue 6131)
-        import numba.cuda  # noqa: F401, I001
-        import cupy  # ty: ignore[unresolved-import]
         import cuda_streams
+        import cupy  # ty: ignore[unresolved-import]
 
         cp = cupy
         cuda_streams.cp = cupy

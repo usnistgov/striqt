@@ -21,7 +21,6 @@ float. Paths below are relative to `src/striqt/waveform/` unless qualified.
 - `comms.correlate_cyclic_shift` evaluates the cyclic-prefix correlation on the
   array API, on numpy and cupy alike: the delayed product is gathered at the symbol
   starts and lags, then summed over the prefix samples, with complex128 accumulation.
-  The package contains no numba code.
 - coverage.py excludes the fused bodies through `exclude_also` in the
   `[tool.coverage.report]` table of `pyproject.toml`.
 
