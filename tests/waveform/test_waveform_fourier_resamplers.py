@@ -25,19 +25,26 @@ from numpy.testing import assert_allclose, assert_array_equal
 from waveform_strategies import cross_backend_sigma, msps_id, noise_waveforms
 
 from striqt.analysis import testing
-from striqt.waveform.lib.fourier.fft import fft, fft_tolerance_rms, time_fftshift
+from striqt.waveform.lib.fourier.fft import (
+    _broadcast_onto,
+    fft,
+    fft_tolerance_rms,
+    time_fftshift,
+)
 from striqt.waveform.lib.fourier.filters import (
     _COLA_WINDOW_SIZE_DIVISOR,
     design_oafilter,
 )
 from striqt.waveform.lib.fourier.resamplers import (
     OLA_MAX_FFT_SIZE,
+    _copy_bins_to_fftfreq_order,
     design_cola_resampler,
     design_fir_resampler,
     oaresample,
     resample,
     resample_edges,
 )
+from striqt.waveform.lib.fourier.stft import _find_downsample_copy_range
 
 # %% design_cola_resampler and design_fir_resampler
 
@@ -361,6 +368,154 @@ class TestOaresample:
         x = self._tone(0.05e6, 1)
         with pytest.raises(ValueError, match=match):
             oaresample(x, up, down, self.FS, axis=1, frequency_shift=shift)
+
+
+# %% _copy_bins_to_fftfreq_order
+def reorder_case(
+    xp,
+    nfft: int,
+    nfft_out: int,
+    *,
+    ports: int = 2,
+    segments: int = 40,
+    edges: tuple[int | None, int | None] = (None, None),
+    per_port_gain: bool = False,
+):
+    """return ``(y, bounds_in, bounds_out, gain)`` for a reorder of `nfft` bins to
+    `nfft_out` with the bounds that `oaresample` derives, and a gain distinct per bin
+    (and per port when `per_port_gain`)."""
+    y = xp.asarray(gaussian_iq((ports, segments, nfft)))
+    if nfft_out <= nfft:
+        bounds_out, bounds_in, _ = _find_downsample_copy_range(nfft, nfft_out, *edges)
+    else:
+        pad_left = (nfft_out - nfft) // 2
+        bounds_in, bounds_out = (0, nfft), (pad_left, pad_left + nfft)
+    gain = _broadcast_onto(xp.linspace(0.5, 1.5, nfft_out), y, axis=2)
+    if per_port_gain:
+        gain = gain * xp.arange(1, ports + 1).reshape(ports, 1, 1)
+    return y, bounds_in, bounds_out, gain.astype(y.dtype)
+
+
+def reorder(y, case, **kws):
+    _, bounds_in, bounds_out, gain = case
+    return _copy_bins_to_fftfreq_order(
+        y, gain.shape[-1], bounds_in, bounds_out, gain=gain, axis=1, **kws
+    )
+
+
+class TestCopyBinsToFftfreqOrder:
+    @pytest.mark.namespaces('numpy', 'cupy')
+    @pytest.mark.parametrize(
+        'nfft,nfft_out,edges',
+        [(100, 86, (None, None)), (100, 86, (20, 100)), (64, 64, (None, None))],
+        ids=['downsample', 'zeros_both_sides_of_dc', 'equal_sizes'],
+    )
+    def test_matches_ifftshift_of_cropped_bins(self, xp, nfft, nfft_out, edges):
+        """the output is the gained passband placed at `bounds_out` of an otherwise
+        zero ascending-order spectrum, rotated into `fftfreq` order"""
+        case = reorder_case(xp, nfft, nfft_out, edges=edges)
+        y, (bi0, bi1), (bo0, bo1), gain = case
+        if edges != (None, None):
+            assert bo0 > 0 and bo1 < nfft_out, 'zero bins on both sides of DC'
+
+        expected = xp.zeros(y.shape[:2] + (nfft_out,), dtype=y.dtype)
+        expected[..., bo0:bo1] = y[..., bi0:bi1] * gain[..., bo0:bo1]
+        expected = xp.fft.ifftshift(expected, axes=-1)
+
+        xp.testing.assert_array_equal(reorder(y, case, overwrite_x=False), expected)
+
+    @pytest.mark.namespaces('numpy', 'cupy')
+    @pytest.mark.parametrize(
+        'per_port_gain', [False, True], ids=['one_gain', 'per_port']
+    )
+    @pytest.mark.parametrize(
+        'nfft,nfft_out,segments,block_rows',
+        [(100, 86, 40, 3), (100, 100, 40, 3), (64, 32, 17, 5), (100, 86, 1, 1)],
+        ids=[
+            'scratch_then_direct_with_partial_block',
+            'equal_sizes_all_scratch',
+            'halving_one_scratch_block',
+            'single_segment',
+        ],
+    )
+    def test_in_place_equals_out_of_place(
+        self, xp, nfft, nfft_out, segments, block_rows, per_port_gain
+    ):
+        """the in-place reorder writes the same values as the out-of-place one into
+        the head of the buffer of `y`. Small blocks force both the scratch and the
+        direct regime and a partial final block; the cupy case is the one an ordering
+        error fails, since numpy buffers overlapping ufunc operands on its own."""
+        case = reorder_case(
+            xp, nfft, nfft_out, segments=segments, per_port_gain=per_port_gain
+        )
+        y = case[0]
+        reference = reorder(y.copy(), case, overwrite_x=False)
+
+        result = reorder(y, case, overwrite_x=True, block_rows=block_rows)
+
+        assert result.shape == (2, segments, nfft_out)
+        assert result.flags.c_contiguous
+        assert xp.shares_memory(result, y)
+        xp.testing.assert_array_equal(result, reference)
+
+    @pytest.mark.namespaces('numpy', 'cupy')
+    @pytest.mark.parametrize(
+        'reason',
+        ['upsampling', 'non_contiguous', 'bin_axis_not_last', 'overwrite_x_false'],
+    )
+    def test_falls_back_to_a_copy_when_unsafe(self, xp, reason):
+        """an output wider than the input, a strided `y`, or bins off the last axis
+        take the out-of-place path"""
+        overwrite_x = reason != 'overwrite_x_false'
+        if reason == 'upsampling':
+            case = reorder_case(xp, 64, 86)
+            y = case[0]
+        elif reason == 'non_contiguous':
+            case = reorder_case(xp, 100, 86)
+            wide = xp.asarray(gaussian_iq((2, 40, 120), seed=1))
+            y = wide[:, :, :100]
+        elif reason == 'bin_axis_not_last':
+            case = reorder_case(xp, 100, 86)
+            y = xp.asarray(gaussian_iq((2, 40, 100, 3), seed=1))
+        else:
+            case = reorder_case(xp, 100, 86)
+            y = case[0]
+        _, bounds_in, bounds_out, gain = case
+        if reason == 'bin_axis_not_last':
+            gain = gain[..., xp.newaxis]
+        kws = {'gain': gain, 'axis': 1}
+
+        reference = _copy_bins_to_fftfreq_order(
+            y.copy(), gain.shape[2], bounds_in, bounds_out, **kws
+        )
+        result = _copy_bins_to_fftfreq_order(
+            y, gain.shape[2], bounds_in, bounds_out, overwrite_x=overwrite_x, **kws
+        )
+
+        assert not xp.shares_memory(result, y)
+        xp.testing.assert_array_equal(result, reference)
+
+    @given(
+        half_out=st.integers(min_value=2, max_value=24),
+        extra=st.integers(min_value=0, max_value=12),
+        segments=st.integers(min_value=1, max_value=12),
+        block_rows=st.integers(min_value=1, max_value=6),
+        ports=st.integers(min_value=1, max_value=2),
+    )
+    @settings(max_examples=30)
+    def test_in_place_property(self, half_out, extra, segments, block_rows, ports):
+        """every even output size at or below the input size reorders in place to
+        the out-of-place values, at any block size"""
+        nfft_out = 2 * half_out
+        nfft = nfft_out + 2 * extra
+        case = reorder_case(np, nfft, nfft_out, ports=ports, segments=segments)
+        y = case[0]
+        reference = reorder(y.copy(), case, overwrite_x=False)
+
+        result = reorder(y, case, overwrite_x=True, block_rows=block_rows)
+
+        assert np.shares_memory(result, y)
+        assert_array_equal(result, reference)
 
 
 # %% numpy vs cupy

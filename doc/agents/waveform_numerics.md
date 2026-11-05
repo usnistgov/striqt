@@ -84,10 +84,13 @@ shim is `striqt.waveform.fourier`.
   analysis low-pass as the block-length `firwin2` response of `_fir_lowpass_fft`,
   with the transition band centered on the cutoff (the band edges of
   `design_fir_lpf`). The response, the `nfft_out / nfft` rate scale, and the caller's
-  `scale` are one multiplier applied while the bins of each block are copied into a
-  contiguous `nfft_out`-bin buffer in `fftfreq` order (`_copy_bins_to_fftfreq_order`),
-  so `istft` runs the inverse FFT in place with ``fftshift=False`` and no time-domain
-  shift multiply. The overlap-add in `_unstack_stft_windows` adds each strided group
+  `scale` are one multiplier applied while the bins of each block are reordered into
+  `fftfreq` order in the head of the frames buffer (`_copy_bins_to_fftfreq_order`), so
+  `istft` runs the inverse FFT in place with ``fftshift=False`` and no time-domain
+  shift multiply. The reorder runs in forward blocks of segments: a block is written
+  directly when it ends before its first unread source row, and through an 8 MiB
+  scratch otherwise, since cupy does not detect overlap. The peak of `oaresample` is
+  the frames, the cuFFT work area, and the output. The overlap-add in `_unstack_stft_windows` adds each strided group
   of windows into the output span viewed as ``(windows, nfft)`` without a copy. On
   the TX2i these stages are memory-bound at about 60 GB/s, so each avoided pass over
   the stacked frames is a measurable fraction of the call.

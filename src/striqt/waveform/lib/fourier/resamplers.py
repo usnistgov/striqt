@@ -19,10 +19,15 @@ from .filters import _COLA_WINDOW_SIZE_DIVISOR, _fir_lowpass_fft, design_oafilte
 from .stft import _find_downsample_copy_range, istft, stft
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from ..typing import _AT, Array, ShiftType
 
 
 OLA_MAX_FFT_SIZE = 128 * 1024
+
+# the scratch of the in-place bin reorder; larger blocks mean fewer kernel launches
+_REORDER_SCRATCH_BYTES = 8 * 2**20
 
 
 def _next_smooth_size(n: int) -> int:
@@ -531,7 +536,13 @@ def oaresample(
         gain = gain * scale
 
     y = _copy_bins_to_fftfreq_order(
-        y, nfft_out, bounds_in, bounds_out, gain=gain.astype(y.dtype), axis=axis
+        y,
+        nfft_out,
+        bounds_in,
+        bounds_out,
+        gain=gain.astype(y.dtype),
+        axis=axis,
+        overwrite_x=True,
     )
 
     return istft(
@@ -547,14 +558,16 @@ def _copy_bins_to_fftfreq_order(
     *,
     gain: Array,
     axis: int,
+    overwrite_x: bool = False,
+    block_rows: int | None = None,
 ) -> Array:
     """return the `bounds_in` bins of each STFT segment of `y` as `nfft_out` bins in
     `fftfreq` order.
 
     `y` has segments on `axis` and bins in ascending frequency order on ``axis + 1``.
     The copied bins occupy the ascending-order range `bounds_out` of the output, and
-    the other output bins are zero. The output is a new contiguous array of `nfft_out`
-    bins on ``axis + 1`` and the dtype of `y`.
+    the other output bins are zero. The output has `nfft_out` bins on ``axis + 1`` and
+    the dtype of `y`.
 
     Args:
         y: the STFT
@@ -565,34 +578,80 @@ def _copy_bins_to_fftfreq_order(
         gain: the multiplier of the copied bins, in ascending order on ``axis + 1``
             and broadcastable onto the output
         axis: the segment axis of `y`
+        overwrite_x: True writes the output into the head of the buffer of `y` when
+            `nfft_out` is at most the bin count of `y`, the bins are the last axis of
+            `y`, and `y` is C-contiguous; `y` then holds no meaningful data after the
+            call
+        block_rows: the segments reordered per block in place; None selects a block
+            of about 8 MiB
+
+    Returns:
+        a new C-contiguous array, or under `overwrite_x` a C-contiguous view of the
+        buffer of `y`
     """
     xp = array_namespace(y)
-    shape = list(y.shape)
-    shape[axis + 1] = nfft_out
-    out = xp.empty(shape, dtype=y.dtype)
-
-    half = nfft_out // 2
     bin_axis = axis + 1
+    nfft = y.shape[bin_axis]
+    out_shape = y.shape[:bin_axis] + (nfft_out,) + y.shape[bin_axis + 1 :]
+    half = nfft_out // 2
+    offset = bounds_in[0] - bounds_out[0]
 
-    def fftfreq_order_chunks(start: int, stop: int):
+    def fftfreq_order_chunks(start: int, stop: int) -> Iterator[tuple[int, int, int]]:
         # split an ascending-order range at the DC bin, since each half maps onto one
         # contiguous range of fftfreq-order bins
         for a, b in ((start, min(stop, half)), (max(start, half), stop)):
             if b > a:
                 yield a, b, (a + half) % nfft_out
 
-    for a, b, dest in (
-        *fftfreq_order_chunks(0, bounds_out[0]),
-        *fftfreq_order_chunks(bounds_out[1], nfft_out),
-    ):
-        xp.copyto(axis_slice(out, dest, dest + b - a, axis=bin_axis), 0)
+    def fill(target: Array, source: Array, g: Array, bin_axis: int) -> None:
+        for a, b, dest in (
+            *fftfreq_order_chunks(0, bounds_out[0]),
+            *fftfreq_order_chunks(bounds_out[1], nfft_out),
+        ):
+            xp.copyto(axis_slice(target, dest, dest + b - a, axis=bin_axis), 0)
+        for a, b, dest in fftfreq_order_chunks(*bounds_out):
+            xp.multiply(
+                axis_slice(source, a + offset, b + offset, axis=bin_axis),
+                axis_slice(g, a, b, axis=bin_axis),
+                out=axis_slice(target, dest, dest + b - a, axis=bin_axis),
+            )
 
-    offset = bounds_in[0] - bounds_out[0]
-    for a, b, dest in fftfreq_order_chunks(*bounds_out):
-        xp.multiply(
-            axis_slice(y, a + offset, b + offset, axis=bin_axis),
-            axis_slice(gain, a, b, axis=bin_axis),
-            out=axis_slice(out, dest, dest + b - a, axis=bin_axis),
-        )
+    in_place = (
+        overwrite_x
+        and nfft_out <= nfft
+        and bin_axis == y.ndim - 1
+        and y.flags.c_contiguous
+    )
+    if not in_place:
+        out = xp.empty(out_shape, dtype=y.dtype)
+        fill(out, y, gain, bin_axis)
+        return out
+
+    # the output rows are written into the head of the buffer of `y` in increasing
+    # row order. Output row k lies at or before input row k, so a block of rows is
+    # written directly when it ends before its first unread input row, and through
+    # the scratch otherwise. cupy does not detect overlap, so this order is what
+    # keeps the copy exact
+    segments = y.shape[-2]
+    rows = math.prod(y.shape[:-1])
+    flat = y.reshape(-1)
+    src = flat.reshape(rows, nfft)
+    out = flat[: rows * nfft_out].reshape(out_shape)
+    dst = out.reshape(rows, nfft_out)
+    gain_b = xp.broadcast_to(gain, out_shape)
+    if block_rows is None:
+        block_rows = max(1, _REORDER_SCRATCH_BYTES // (nfft_out * y.dtype.itemsize))
+    scratch = xp.empty((min(block_rows, segments), nfft_out), dtype=y.dtype)
+
+    for base, index in zip(range(0, rows, segments), np.ndindex(y.shape[:-2])):
+        for w0 in range(0, segments, block_rows):
+            w1 = min(w0 + block_rows, segments)
+            k0, k1 = base + w0, base + w1
+            g = gain_b[index][w0:w1]
+            if k1 * nfft_out <= k0 * nfft:
+                fill(dst[k0:k1], src[k0:k1], g, -1)
+            else:
+                fill(scratch[: k1 - k0], src[k0:k1], g, -1)
+                xp.copyto(dst[k0:k1], scratch[: k1 - k0])
 
     return out
