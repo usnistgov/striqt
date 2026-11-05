@@ -147,7 +147,10 @@ combine-as-imports = true
 keep-runtime-typing = true
 
 [tool.ruff.lint.extend-per-file-ignores]
-"tests/**" = ["RUF069"]  # exact float equality on attrs copied from literals is the assertion
+"tests/**" = [
+    "RUF069",  # exact float equality on attrs copied from literals is the assertion
+    "shared-clock-mock",  # tests patch the clock of the module under test on purpose; the suite runs its timed code in the test thread
+]
 "**/__init__.py" = [ "F401", "F403", "E402"]
 # the lib/typing.py modules re-export aliases and TypedDicts under TYPE_CHECKING
 "**/typing.py" = ["F401"]
