@@ -210,6 +210,35 @@ def test_cast_iq_cupy_returns_a_device_array(xp):
     assert_close(out, buffer)
 
 
+@pytest.mark.namespaces('cupy')
+@pytest.mark.parametrize('seed', range(3))
+def test_cast_iq_cupy_int16_widening_is_exact_across_many_thread_blocks(xp, seed):
+    """the device cast widens int16 pairs to float32 in place, so each row is read
+    at its head while the whole row is written. Millions of samples per port spread
+    that copy over many thread blocks, and a buffer wider than the read takes the
+    row-by-row pinned copy."""
+    import cupyx
+
+    source = source_spec(transport_dtype='int16', array_backend='cupy')
+    ports, acquired = 2, 1 << 21
+    width = acquired + 4096
+    rng = np.random.default_rng(seed)
+    pairs = rng.integers(-32768, 32768, size=(ports, 2 * acquired), dtype='int16')
+
+    buffer = cupyx.empty_pinned((ports, width), dtype='complex64')
+    buffer.view('int16')[:, : 2 * acquired] = pairs
+
+    out = buffers.cast_iq(source, buffer, acquired)
+    xp.cuda.get_current_stream().synchronize()
+
+    expected = pairs[:, 0::2].astype('float32') + 1j * pairs[:, 1::2].astype('float32')
+    assert sw.is_cupy_array(out)
+    assert out.dtype == np.complex64
+    assert out.shape == (ports, acquired)
+    assert out.flags.c_contiguous
+    np.testing.assert_array_equal(out.get(), expected.astype('complex64'))
+
+
 # %% get_dtype_scale
 
 
