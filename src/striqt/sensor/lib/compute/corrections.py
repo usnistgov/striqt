@@ -3,8 +3,8 @@ from __future__ import annotations as __
 import dataclasses
 import os
 import warnings
-from math import ceil, gcd, isfinite
-from typing import TYPE_CHECKING, cast
+from math import ceil, gcd, isfinite, prod
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import striqt.analysis as sa
 
@@ -58,7 +58,8 @@ def attach_corrections(
     Args:
         signal_trigger: the trigger that `preprocess` runs for alignment; None
             selects `iq.info.signal_trigger`
-        overwrite_x: True to let the resampling stage consume `iq.x` in place
+        overwrite_x: True to let the resampling stage consume `iq.x` in place; `x`
+            of the copy is a `ConsumedBuffer` after the stage
 
     Raises:
         TypeError: if `iq.capture` is not a `SensorCapture`
@@ -67,6 +68,57 @@ def attach_corrections(
     return dataclasses.replace(
         iq, signal_trigger=signal_trigger, overwrite_x=overwrite_x
     )
+
+
+_CONSUMED_MESSAGE = (
+    'the acquisition buffer was consumed by the resampling stage under overwrite_x; '
+    'read the waveform from preprocess()'
+)
+
+
+@dataclasses.dataclass(frozen=True)
+class ConsumedBuffer:
+    """the stand-in for `x` of an acquisition after the resampling stage has consumed
+    the buffer under `overwrite_x`.
+
+    The size attributes of the buffer stay readable. Every read of the samples raises
+    `RuntimeError`.
+    """
+
+    shape: tuple[int, ...]
+    """the shape of the consumed buffer"""
+    dtype: Any
+    """the dtype of the consumed buffer"""
+    nbytes: int
+    """the size (in bytes) of the consumed buffer"""
+
+    @property
+    def ndim(self) -> int:
+        return len(self.shape)
+
+    @property
+    def size(self) -> int:
+        return prod(self.shape)
+
+    def __array__(self, dtype: Any = None, copy: Any = None) -> NoReturn:
+        raise RuntimeError(_CONSUMED_MESSAGE)
+
+    def __array_namespace__(self, api_version: Any = None) -> NoReturn:
+        raise RuntimeError(_CONSUMED_MESSAGE)
+
+    def __getitem__(self, key: Any) -> NoReturn:
+        raise RuntimeError(_CONSUMED_MESSAGE)
+
+    def __len__(self) -> NoReturn:
+        raise RuntimeError(_CONSUMED_MESSAGE)
+
+    def __iter__(self) -> NoReturn:
+        raise RuntimeError(_CONSUMED_MESSAGE)
+
+
+def consumed_buffer(x: Array) -> ConsumedBuffer:
+    """return the `ConsumedBuffer` with the shape, dtype, and byte size of `x`."""
+    return ConsumedBuffer(tuple(x.shape), x.dtype, int(x.nbytes))
 
 
 class Preprocessor(sa.Preprocessor):
@@ -180,13 +232,16 @@ def _resampled_stage(pp: Preprocessor) -> tuple[Array, int | None]:
     """return ``(y, lead)``: `x` scaled, resampled, and conjugated, and the lead pad in
     output samples.
 
-    No other stage reads `x` of the acquisition. The stage modifies that `x` in
-    place when `overwrite_x` of the acquisition is set.
+    No other stage reads `x` of the acquisition. When `overwrite_x` of the
+    acquisition is set, the stage consumes that `x` in place, and when the output is
+    another array than `x` the stage replaces `x` of the acquisition with a
+    `ConsumedBuffer`.
     """
     if pp.resampled is not None:
         return pp.resampled
 
     iq = pp.iq
+    x = iq.x
     capture = _sensor_capture(iq)
     max_lag = _get_max_trigger_lag(iq.source_spec, capture, _trigger_of(iq))
     resample_kws = {
@@ -213,6 +268,9 @@ def _resampled_stage(pp: Preprocessor) -> tuple[Array, int | None]:
             y = _apply_conj(
                 y, iq.conjugate, overwrite_x=iq.overwrite_x or y is not iq.x
             )
+
+    if iq.overwrite_x and y is not x:
+        iq.x = cast('Array', consumed_buffer(x))
 
     pp.resampled = (y, offs)
     return pp.resampled
@@ -640,7 +698,9 @@ def _oaresample(
     The returned waveform begins with the lead pad and ends with the resampled tail
     pad, at `capture.sample_rate`. The waveform is low-passed to `analysis_bandwidth`
     when finite and shifted by the `lo_offset` of the resampler design. `iq.x` is
-    consumed in place when `overwrite_x` is set.
+    consumed in place when `overwrite_x` is set, and the returned waveform is then a
+    view of the buffer of `iq.x` when the design downsamples and `iq.x` is
+    C-contiguous.
 
     Raises:
         ValueError: if the acquisition is shorter than the capture plus the pads of
@@ -665,6 +725,8 @@ def _oaresample(
             f'to resample {capture.duration} s with ({lead}, {tail}) overlaps'
         )
 
+    downsamples = design['nfft_out'] <= design['nfft']
+    reuse_buffer = overwrite_x and downsamples and bool(x.flags.c_contiguous)
     y = sw.oaresample(
         x,
         up=design['nfft_out'],
@@ -677,6 +739,7 @@ def _oaresample(
         filter_bandwidth=capture.analysis_bandwidth,
         transition_bandwidth=FIR_TRANSITION_BW,
         scale=1 if iq.voltage_scale is None else iq.voltage_scale,
+        out=x if reuse_buffer else None,
     )
 
     return y, round(lead * design['nfft_out'] / design['nfft'])

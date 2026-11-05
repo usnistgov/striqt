@@ -347,7 +347,10 @@ stages, in order:
 1. Resample to `sample_rate`: `_scale_only` when no resampling is needed, otherwise
    `_oaresample`, or `_resample` when `STRIQT_USE_OARESAMPLE=0`. This is the only
    stage that reads `x`, and the one that may consume `x` in place under
-   `overwrite_x`.
+   `overwrite_x`. `_oaresample` then writes the resampled waveform into the buffer
+   of `x`, and the stage replaces `x` of the acquisition with a `ConsumedBuffer`
+   (`compute/corrections.py`), so a later read of `x` raises instead of returning
+   the aliased samples.
 2. Conjugate for a high-side LO. `STRIQT_IGNORE_HIGHSIDE_LO` disables the conjugation.
 3. Low-pass to `analysis_bandwidth`: the response on the STFT bins inside
    `_oaresample`, or the 4001-tap FIR when `STRIQT_USE_OARESAMPLE=0` or the capture
