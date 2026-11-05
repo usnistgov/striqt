@@ -451,6 +451,59 @@ def resource_histogram(*, frame_slots, **kwargs):
     )
 
 
+def test_apply_mask_leaves_the_spectrogram_unchanged():
+    """the guard bands are nulled in the returned product alone. The input is the
+    `spectrogram_cache` entry that a later measurement with an equal spec reads."""
+    rng = np.random.default_rng(0)
+    spg = rng.uniform(1e-12, 1e-9, (1, 28, 14)).astype('float32')
+    before = spg.copy()
+    freqs = np.fft.fftshift(np.fft.fftfreq(14, 1 / RESOURCE_GRID_FS))
+
+    out = cellular.apply_mask(
+        spg,
+        freqs,
+        subcarrier_spacing=RESOURCE_GRID_SCS,
+        link_direction=('downlink', 'uplink'),
+        channel_bandwidth=150e3,
+        frame_slots='dddddddddd',
+        special_symbols=None,
+        guard_left=RESOURCE_GRID_SCS,
+        guard_right=RESOURCE_GRID_SCS,
+        xp=np,
+    )
+
+    assert_array_equal(spg, before)
+    assert np.isnan(out[..., 0]).all(), 'the low guard band is nulled in the output'
+    assert np.isfinite(out[0, 0, :, 7]).all(), 'downlink symbols at 0 Hz are kept'
+
+
+def test_cellular_resource_power_histogram_leaves_the_cached_spectrogram_intact():
+    """a `spectrogram` measurement with the sizing's spectrogram spec reads the same
+    cache entry after the histogram, so that entry must stay free of guard-band NaN"""
+    x = sa.testing.tone(RESOURCE_GRID_DURATION, RESOURCE_GRID_FS)
+    spec = sa.specs.CellularResourcePowerHistogram(
+        frame_slots='dddddddddd',
+        guard_bandwidths=(RESOURCE_GRID_SCS, RESOURCE_GRID_SCS),
+        **RESOURCE_GRID_KWS,
+    )
+    sizing = cellular.validated_resource_grid_sizing(RESOURCE_GRID_CAPTURE, spec)
+
+    with cellular.spectrum.spectrogram_cache:
+        cached, _ = cellular.spectrum.evaluate_spectrogram(
+            x, RESOURCE_GRID_CAPTURE, sizing.spectrogram, dtype='float32', dB=False
+        )
+        before = cached.copy()
+        sa.measurements.cellular_resource_power_histogram(
+            x, RESOURCE_GRID_CAPTURE, **spec.to_dict()
+        )
+        after, _ = cellular.spectrum.evaluate_spectrogram(
+            x, RESOURCE_GRID_CAPTURE, sizing.spectrogram, dtype='float32', dB=False
+        )
+
+    assert after is cached, 'the measurement and this test share one cache entry'
+    assert_array_equal(after, before)
+
+
 @pytest.mark.parametrize(
     'average_rbs,resource_blocks', [(False, 1 / 12), ('half', 1 / 2)]
 )
