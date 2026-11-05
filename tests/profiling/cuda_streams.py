@@ -26,7 +26,7 @@ Usage:
     pixi run -e cupy python tests/profiling/cuda_streams.py
     pixi run -e cupy python tests/profiling/cuda_streams.py --no-trigger --repeat 10
     pixi run -e cupy python tests/profiling/cuda_streams.py --non-blocking
-    pixi run -e cupy python tests/profiling/cuda_streams.py --variants serial --no-pool-free
+    pixi run -e cupy python tests/profiling/cuda_streams.py --variants serial --pool-free
     pixi run -e test39 python tests/profiling/cuda_streams.py --backend numpy --duration 0.02
     nsys profile -t cuda,nvtx pixi run -e cupy python tests/profiling/cuda_streams.py --variants streams --repeat 2
 
@@ -36,10 +36,11 @@ Reading the output:
     acquisition bound only when ``x dur`` is below 1. ``gpu U`` and ``gpu F`` are the
     event-timed spans of the unfiltered and filtered streams. A sum of the two above
     ``wall`` means the streams overlapped on the device. ``pool`` is the high-water
-    mark of the cupy memory pool sampled between phases. The pool is freed after
-    every repetition unless ``--no-pool-free``, so the first measurement of a
-    repetition allocates the conditioned waveform and its intermediates from the
-    driver; production keeps the pool under ``block_each``. ``mismatch`` names the
+    mark of the cupy memory pool sampled between phases. The pool is kept between
+    repetitions, as production keeps it under ``block_each``. With ``--pool-free``
+    the first measurement of each repetition allocates the conditioned waveform
+    and its intermediates from the driver, about 70 ms on the Tegra X2 for a 0.1 s
+    capture. ``mismatch`` names the
     measurements that differ from ``serial`` beyond ``allclose``. A mismatch on
     ``streams`` without one on ``deferred`` is a cross-stream read of a memoized stage.
     The breakdown table is the `stopwatch` time of each measurement in the ``serial``
@@ -518,14 +519,14 @@ def evaluate(
     raw: ss.specs.AcquiredIQ,
     setup: Setup,
     non_blocking: bool,
-    free_pool: bool = True,
+    free_pool: bool = False,
 ) -> tuple[dict[str, np.ndarray], Timing]:
     """run one repetition of `variant` on a fresh conditioning of `raw`.
 
     Args:
-        free_pool: True frees the cupy memory pool after the repetition, so the next
-            repetition allocates its buffers from the driver; False keeps the pool,
-            as the production path does under ``block_each``
+        free_pool: False keeps the cupy memory pool, as the production path does
+            under ``block_each``; True frees the pool after the repetition, so the
+            next repetition allocates its buffers from the driver
     """
     raw.x[:] = 1
     device_synchronize()
@@ -649,9 +650,9 @@ def main() -> None:
         help='streams that do not synchronize with the legacy default stream',
     )
     parser.add_argument(
-        '--no-pool-free',
+        '--pool-free',
         action='store_true',
-        help='keep the cupy memory pool between repetitions, as production does',
+        help='free the cupy memory pool after every repetition',
     )
     args = parser.parse_args()
 
@@ -696,12 +697,12 @@ def main() -> None:
     reference: dict[str, np.ndarray] | None = None
     for variant in args.variants:
         for _ in range(args.warmup):
-            evaluate(variant, raw, setup, args.non_blocking, not args.no_pool_free)
+            evaluate(variant, raw, setup, args.non_blocking, args.pool_free)
         collector.enabled = variant == 'serial'
         timings = []
         for _ in range(args.repeat):
             arrays, timing = evaluate(
-                variant, raw, setup, args.non_blocking, not args.no_pool_free
+                variant, raw, setup, args.non_blocking, args.pool_free
             )
             timings.append(timing)
         collector.enabled = False
