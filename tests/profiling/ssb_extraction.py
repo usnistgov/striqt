@@ -3,7 +3,7 @@
 against overlap-add resampling at several block sizes, each on the whole capture or on
 the correlated span of each synchronization block alone.
 
-The input reproduces the operand of `get_5g_ssb_iq` in the ADA 3750 MHz capture: a
+The input reproduces the operand of the SSB extraction in the ADA 3750 MHz capture: a
 ``(port, sample)`` waveform at 107.52 MS/s with the SSB centered 40.08 MHz below the
 capture center, resampled to 15.36 MS/s for 30 kHz synchronization blocks every 20 ms.
 The waveform is complex gaussian noise with one PSS symbol per port embedded in the
@@ -13,14 +13,15 @@ Nothing under ``src/`` is modified.
 
 Paths:
 
-- ``fft``: `get_5g_ssb_iq` as the measurements call it, one brick-wall FFT per port over
-  the whole record. The reference for the ratios and the peak comparison.
+- ``fft``: one brick-wall FFT per port over the whole record, the extraction the
+  measurements ran before `get_5g_ssb_spans`. The reference for the ratios and the
+  peak comparison.
 - ``fft:span``: the same resampler on the correlated span of each synchronization block
   with a margin at each end, trimmed to ``corr_size`` samples per block. The correlator
   reads only that span, so this path measures the work the whole-record path spends on
   samples the correlator never reads.
 - ``oa:<down>``: `oaresample` per port with input blocks of ``down`` samples, as the
-  ``oaresample=True`` branch of `get_5g_ssb_iq` calls it. The library sizes the block as
+  former overlap-add branch of the extraction called it. That branch sized the block as
   ``3 * fs_in / subcarrier_spacing / 8``, 1344 here; the larger sizes give a finer grid
   for `frequency_offset`, which must be a multiple of ``frames_per_hop * fs_in / down``.
 - ``oa:<down>:span``: the same on the correlated spans.
@@ -403,15 +404,12 @@ def span_bounds(g: Geometry, block: int, margin_in: int) -> tuple[int, int, int]
 
 def fft_path(g: Geometry) -> Path:
     def run(inputs: Inputs, xp: Any) -> Array:
-        return sw.comms_5gnr.get_5g_ssb_iq(
-            inputs.x,
-            discovery_periodicity=DISCOVERY_PERIODICITY,
-            fs_out=g.fs_out,
-            fs_in=g.fs_in,
-            subcarrier_spacing=SUBCARRIER_SPACING,
-            frequency_offset=g.frequency_offset,
-            oaresample=False,
-        )
+        size_out = round(inputs.x.shape[1] * g.fs_out / g.fs_in)
+        shift = round(inputs.x.shape[1] * g.frequency_offset / g.fs_in)
+        out = xp.empty((g.ports, size_out), dtype=inputs.x.dtype)
+        for i in range(g.ports):
+            out[i] = sw.resample(inputs.x[i], num=size_out, axis=0, shift=shift)
+        return out
 
     def footprint(g: Geometry) -> dict[str, int]:
         return {

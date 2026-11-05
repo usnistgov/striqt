@@ -553,59 +553,6 @@ def sss_params(
     )
 
 
-def get_5g_ssb_iq(
-    iq: Array,
-    *,
-    discovery_periodicity: float,
-    fs_out: float,
-    fs_in: float,
-    frequency_offset: float = 0,
-    delay: float = 0,
-    max_block_count: int | None = None,
-) -> Array:
-    """return the SSB band of `iq`, recentered to baseband and resampled to `fs_out`.
-
-    Each port is resampled by one FFT over the kept span. The frequency shift is a
-    whole number of bins of ``fs_in / size`` for the `size` of that span.
-
-    Args:
-        iq: waveform of shape ``(port, sample)`` at `fs_in`
-        discovery_periodicity: the SSB burst period (in s), which sizes the kept
-            span with `max_block_count`
-        fs_out: the output sample rate (in S/s)
-        fs_in: the sample rate (in S/s) of `iq`
-        frequency_offset: the offset (in Hz) of the SSB center from the center of
-            `iq`
-        delay: the time (in s) into `iq` at which the kept span begins
-        max_block_count: the number of SSB periods kept from `delay`; None keeps
-            the rest of `iq`
-
-    Returns:
-        the baseband SSB waveform of shape ``(port, sample)`` at `fs_out`, in the
-        dtype and array namespace of `iq`
-    """
-
-    xp = arrays.array_namespace(iq)
-
-    offs = round(delay * fs_in)
-    if max_block_count is not None:
-        size_in = round(max_block_count * discovery_periodicity * fs_in)
-        iq = iq[..., offs : offs + size_in]
-    else:
-        size_in = iq.shape[-1]
-
-    size_out = round(size_in * fs_out / fs_in)
-    out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-    shift = round(iq.shape[1] * frequency_offset / fs_in)
-
-    for i in range(out.shape[0]):
-        out[i] = fourier.resamplers.resample(
-            iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
-        )
-
-    return out
-
-
 def sync_frame_count(sample_count: int, params: SyncParams) -> int:
     """count the 10 ms frames in a synchronization block of `sample_count` samples.
 

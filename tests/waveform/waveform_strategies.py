@@ -110,16 +110,9 @@ def embed_pss_ports(embeds, scales=None, n_blocks=1):
     return params, pss, iq
 
 
-def get_ssb_iq(iq, fs_in=FS, **kws):
-    """run `get_5g_ssb_iq` with the 30 kHz, 20 ms discovery defaults of the
-    measurements."""
-    kws = {
-        'discovery_periodicity': 20e-3,
-        'fs_out': FS,
-        'fs_in': fs_in,
-        **kws,
-    }
-    return sync_5gnr.get_5g_ssb_iq(iq, **kws)
+def get_ssb_spans(iq, params, fs_in=FS, **kws):
+    """run `get_5g_ssb_spans` for `params` on a waveform at `fs_in`."""
+    return sync_5gnr.get_5g_ssb_spans(iq, params=params, fs_in=fs_in, **kws)
 
 
 # %% fourier strategies

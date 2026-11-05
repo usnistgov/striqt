@@ -135,8 +135,7 @@ shim is `striqt.waveform.fourier`.
   the axes named by `COARSE_LAG_DIM` and `FINE_LAG_DIM`.
 - `get_5g_ssb_spans` cuts the first `corr_size` samples of each synchronization
   block, with a one-slot margin at each end, and recenters and resamples every port
-  and block in one `resample` call. The cellular measurements use it; `get_5g_ssb_iq`
-  resamples the whole record, of which the correlator reads 10%.
+  and block in one `resample` call. The cellular measurements use it.
 - `correlate_sync_spans` is the correlator core: one zero-padded FFT per span, shared
   across cell IDs; template spectra memoized on the identity of the template array
   (`_TemplateSpectra`, registered with `clear_caches`); cell IDs in chunks bounded by

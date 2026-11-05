@@ -75,7 +75,7 @@ same thing is invisible until the two drift. Look here before writing setup:
   `elementwise_rtol`, `levels`, `populated`. No waveform builders and no tolerance formulas
   of its own.
 - `tests/waveform/waveform_strategies.py`: the comms builders (`FS`, `phy_5g`, `sync_params`,
-  `cp_case`, `embed_pss_ports`, `get_ssb_iq`, …) shared by the `test_waveform_comms_*`
+  `cp_case`, `embed_pss_ports`, `get_ssb_spans`, …) shared by the `test_waveform_comms_*`
   modules, and the fourier strategies (`noise_waveforms`, `sample_rates`,
   `stft_parameters`, `cross_backend_sigma`) shared by the `test_waveform_fourier_*` modules.
 - `tests/analysis/analysis_strategies.py`: analysis spec factories and constants

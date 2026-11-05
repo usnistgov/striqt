@@ -29,7 +29,7 @@ from waveform_strategies import (
     cross_backend_sigma,
     embed_pss_ports,
     embed_symbol,
-    get_ssb_iq,
+    get_ssb_spans,
     phy_5g,
     pss_setup,
     silent_block,
@@ -312,65 +312,6 @@ class TestSyncParams:
             sync_params(**kws)
 
 
-class TestGet5gSsbIq:
-    FS_IN = 15.36e6
-    SIZE = round(4e-3 * 15.36e6)
-
-    def _tones(self, f, scales=(1.0, 2.0), dtype=np.complex64):
-        x = testing.tone(None, self.FS_IN, frequency=f, count=self.SIZE, dtype=dtype)[0]
-        return np.stack([s * x for s in scales]).astype(dtype)
-
-    def _ssb_iq(self, iq, **kws):
-        return get_ssb_iq(iq, fs_in=self.FS_IN, **kws)
-
-    @given(f0_bins=st.integers(-8, 8), offset_bins=st.sampled_from([0, 3, -3]))
-    @settings(max_examples=20)
-    def test_recenters_and_downsamples(self, f0_bins, offset_bins):
-        """a tone at frequency_offset + f0 in the capture comes out at f0"""
-        grid = self.FS_IN / self.SIZE
-        f0 = f0_bins * 100e3
-        frequency_offset = offset_bins * grid
-
-        iq = self._tones(f0 + frequency_offset)
-        out = self._ssb_iq(iq, frequency_offset=frequency_offset)
-
-        assert out.shape == (2, round(self.SIZE * FS / self.FS_IN))
-        assert out.dtype == iq.dtype
-        mid = interior(out, 2000, axis=1)
-        f_est = tone_frequency(mid[0], FS)
-        assert f_est == pytest.approx(f0, abs=FS / mid.shape[1])
-        assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
-
-    def test_off_grid_frequency_offset(self):
-        """a frequency_offset between input FFT bins still recenters the tone"""
-        grid = self.FS_IN / self.SIZE
-        f0 = 300e3
-        frequency_offset = 3.4 * grid
-
-        iq = self._tones(f0 + frequency_offset)
-        out = self._ssb_iq(iq, frequency_offset=frequency_offset)
-
-        mid = interior(out, 2000, axis=1)
-        # the shift is applied in whole input bins, so the bound adds half a bin of
-        # quantization to the resolution of the estimator
-        f_est = tone_frequency(mid[0], FS)
-        assert f_est == pytest.approx(f0, abs=grid / 2 + FS / mid.shape[1])
-        assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
-
-    def test_block_count_and_delay_crop_the_input(self):
-        iq = self._tones(1e6)
-        blocks = {'discovery_periodicity': 1e-3, 'max_block_count': 2}
-        delay = 0.5e-3
-        out = self._ssb_iq(iq, delay=delay, **blocks)
-
-        offs = round(delay * self.FS_IN)
-        crop_duration = blocks['max_block_count'] * blocks['discovery_periodicity']
-        size_in = round(crop_duration * self.FS_IN)
-        expected = self._ssb_iq(iq[:, offs : offs + size_in])
-        assert out.shape == (2, round(size_in * FS / self.FS_IN))
-        assert_array_equal(out, expected)
-
-
 class TestGet5gSsbSpans:
     """the correlated span of each synchronization block, cut from a capture at
     15.36 MS/s into the 7.68 MS/s synchronization parameters of `sync_params`"""
@@ -631,8 +572,8 @@ class TestChooseSsbOffset:
         iq = silent_block(params, n_blocks=2)
         embed_symbol(iq, phy_in, bodies_in[2], params.symbol_indexes[5], delay_in)
 
-        ssb_iq = get_ssb_iq(iq, fs_in=fs_in)
-        R = sync_5gnr.correlate_sync_sequence(ssb_iq, pss, params=params)
+        spans = get_ssb_spans(iq, params, fs_in=fs_in)
+        R = sync_5gnr.correlate_sync_spans(spans, pss, params=params)
         mag = np.abs(R[0])
         n_id2, _, beam, lag = np.unravel_index(mag.argmax(), mag.shape)
         assert (n_id2, beam) == (2, 5)
@@ -654,12 +595,12 @@ class TestCupy:
     def test_detection_pipeline(self, cupy_available):
         params, pss, iq = embed_pss_ports([(1, 3, 77)])
 
-        ssb_np, ssb_cp = numpy_and_cupy(cupy_available, get_ssb_iq, iq)
+        ssb_np, ssb_cp = numpy_and_cupy(cupy_available, get_ssb_spans, iq, params)
         assert_close(ssb_cp, ssb_np, atol=1e-5)
 
         R_np, R_cp = numpy_and_cupy(
             cupy_available,
-            sync_5gnr.correlate_sync_sequence,
+            sync_5gnr.correlate_sync_spans,
             ssb_np,
             pss,
             params=params,
