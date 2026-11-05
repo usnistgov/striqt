@@ -1,7 +1,8 @@
-"""warm the numba JIT cache for the current platform.
+"""run the first-use compilation of the GPU kernels for the current platform.
 
-The cache persists in the user cache directory across runs. The first run on a
-Jetson TX2i takes about 2 minutes.
+The `cupy.fuse` and `ReductionKernel` detector kernels compile on first call, and
+cupy caches the compiled kernels on disk across runs. Without cupy, the command
+exercises the cyclic-prefix correlation on numpy and compiles nothing.
 """
 
 import click
@@ -10,39 +11,45 @@ import numpy as np
 
 @click.command()
 def cli() -> None:
-    """warm the numba JIT caches of the CPU and CUDA `_corr_at_indices` kernels.
+    """compile the cupy detector and dB kernels, when cupy is importable.
 
-    The CPU kernel is compiled for complex64 input. The CUDA kernel is compiled when
-    `cupy` is importable. Progress is echoed to stdout. A failure in the CUDA step
-    is echoed instead of raised.
+    The cyclic-prefix correlation runs on a small complex64 waveform on numpy. When
+    `cupy` is importable, the correlation runs again on cupy arrays, and the
+    ``'mean'`` and ``'max'`` binned power detectors and the dB conversion compile
+    on a small complex64 cupy waveform. Progress is echoed to stdout. A failure
+    in the cupy step is echoed instead of raised.
     """
-    import striqt.waveform.lib.jit  # noqa: F401  triggers NUMBA_CACHE_DIR setup + stamp patch
-
-    # isort: split
-    from striqt.waveform.lib.comms.cp_cpu_jit import _corr_at_indices
+    import striqt.waveform as sw
 
     nfft, ncp = 64, 16
-    inds = np.arange(4, dtype=np.int64)
+    inds = (
+        np.arange(ncp, dtype=np.int64)[np.newaxis, :]
+        + (nfft + ncp) * np.arange(4, dtype=np.int64)[:, np.newaxis]
+    )
+    rng = np.random.default_rng(0)
+    x = rng.standard_normal((4 * (nfft + ncp) + nfft, 2)).view(np.complex128)
+    x = x[:, 0].astype(np.complex64)
 
-    for dtype in (np.complex64,):
-        x = np.zeros(nfft + ncp + 128, dtype=dtype)
-        out = np.empty(nfft + ncp, dtype=dtype)
-        _corr_at_indices(inds, x, nfft, ncp, True, out)
-        _corr_at_indices(inds, x, nfft, ncp, False, out)
-        click.echo(f'  CPU kernel ({np.dtype(dtype).name}) warmed')
+    sw.comms_5gnr.correlate_cyclic_shift(inds, x, nfft, norm=True)
+    sw.comms_5gnr.correlate_cyclic_shift(inds, x, nfft, norm=False)
+    click.echo('  cyclic-prefix correlation (numpy, complex64) run')
 
     try:
         import cupy as cp  # ty: ignore[unresolved-import]
 
-        from striqt.waveform.lib.comms.cp_cuda_jit import _corr_at_indices as _cuda_corr
-
-        x_gpu = cp.zeros(nfft + ncp + 128, dtype=np.complex64)
+        x_gpu = cp.asarray(x)
         inds_gpu = cp.asarray(inds)
-        out_gpu = cp.empty(nfft + ncp, dtype=np.complex64)
-        tpb = 32
-        bpg = max((x_gpu.size + tpb - 1) // tpb, 1)
-        _cuda_corr[bpg, tpb](inds_gpu, x_gpu, nfft, ncp, True, out_gpu)
+        sw.comms_5gnr.correlate_cyclic_shift(inds_gpu, x_gpu, nfft, norm=True)
+        sw.comms_5gnr.correlate_cyclic_shift(inds_gpu, x_gpu, nfft, norm=False)
+        click.echo('  cyclic-prefix correlation (cupy, complex64) run')
+
+        for kind in ('mean', 'max'):
+            sw.power_analysis.iq_to_bin_power(x_gpu, Ts=1.0, Tbin=float(ncp), kind=kind)
+            click.echo(f'  {kind!r} power detector kernel compiled')
+
+        sw.powtodB(cp.abs(x_gpu) ** 2 + 1)
+        click.echo('  dB conversion kernel compiled')
+
         cp.cuda.Device().synchronize()
-        click.echo('  CUDA kernel warmed')
-    except (ImportError, Exception) as exc:
-        click.echo(f'  CUDA kernel skipped ({exc})')
+    except Exception as exc:
+        click.echo(f'  cupy step skipped ({exc})')

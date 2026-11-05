@@ -1108,6 +1108,18 @@ def validated_autocorrelation_lag_count(
     )
 
 
+@util.lru_cache()
+def _max_cp_index(
+    phy: sw.comms_5gnr.Phy3GPP,
+    frames: tuple[int, ...],
+    symbols: tuple[int, ...] | Literal['all'],
+    slots: tuple[int, ...] | Literal['all'],
+) -> int:
+    """return the largest sample index of the selected cyclic prefixes of `phy`."""
+    cp_inds = phy.index_cyclic_prefix(frames=frames, symbols=symbols, slots=slots)
+    return int(cp_inds.max())
+
+
 @hint_keywords(specs.CellularCyclicAutocorrelator)
 @registry.measurement(
     coord_factories=[link_direction, subcarrier_spacing, cyclic_sample_lag],
@@ -1172,10 +1184,11 @@ def cellular_cyclic_autocorrelation(
         cp_inds = phy.index_cyclic_prefix(
             frames=frame_range, symbols=symbol_range, slots=slots
         )
-        # the kernel zero-fills reads past the end rather than raising
-        if int(cp_inds.max()) >= x.shape[-1]:
+        # the correlation zero-fills reads past the end rather than raising
+        max_index = _max_cp_index(phy, frame_range, symbol_range, slots)
+        if max_index >= x.shape[-1]:
             raise ValueError(
-                f'cyclic prefix index {int(cp_inds.max())} lies past the '
+                f'cyclic prefix index {max_index} lies past the '
                 f'{x.shape[-1]} samples of the waveform'
             )
         return sw.comms_5gnr.correlate_cyclic_shift(cp_inds, x, phy.nfft, norm=False)

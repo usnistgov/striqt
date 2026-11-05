@@ -186,9 +186,6 @@ def prepare_compute(
         `always_yield` set, and nothing when the warmup sweep has no captures
     """
     if spec.source.array_backend == 'cupy':
-        # imported for the side effect of initializing the CUDA driver
-        import numba.cuda  # noqa: F401
-
         with sa.util.stopwatch('configure cupy', 'sweep', 1):
             sw.arrays.configure_cupy()
 
