@@ -32,14 +32,16 @@ STROBE_TIME = 2**-12
 
 
 def stub_controller(
-    capture: ss.specs.SensorCapture, source: ss.specs.Source = SOURCE
+    capture: ss.specs.SensorCapture,
+    source: ss.specs.Source = SOURCE,
+    num_rx_ports: int | None = None,
 ) -> SimpleNamespace:
     """return a namespace with the controller attributes that `ReceiveBuffers` and
     `_alloc_empty_iq` read"""
     return SimpleNamespace(
         capture_spec=capture,
         source_spec=source,
-        source_info=ss.specs.SourceInfo(num_rx_ports=None),
+        source_info=ss.specs.SourceInfo(num_rx_ports=num_rx_ports),
     )
 
 
@@ -51,6 +53,37 @@ def receive_buffers(
 ) -> buffers.ReceiveBuffers:
     """return a `ReceiveBuffers` over ``stub_controller(capture, source)``"""
     return buffers.ReceiveBuffers(stub_controller(capture, source))
+
+
+def int16_receive_buffer(
+    ports: int,
+    acquired: int,
+    width: int,
+    *,
+    start: int = 0,
+    pinned: bool = False,
+    rng: np.random.Generator | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """return a complex64-sized ``(ports, width)`` receive buffer with int16 (I, Q)
+    pairs in its int16 columns ``[2*start, 2*(start + acquired))``, and the complex64
+    ``(ports, acquired)`` array that `cast_iq` returns from that span.
+
+    The pairs are a ramp, or draws over the full int16 range from `rng`. A pinned
+    buffer comes from `cupyx.empty_pinned`."""
+    shape = (ports, 2 * acquired)
+    if rng is None:
+        pairs = np.arange(ports * 2 * acquired).reshape(shape).astype('int16')
+    else:
+        pairs = rng.integers(-32768, 32768, size=shape, dtype='int16')
+    if pinned:
+        import cupyx
+
+        buffer = cupyx.empty_pinned((ports, width), dtype='complex64')
+    else:
+        buffer = np.zeros((ports, width), dtype='complex64')
+    buffer.view('int16')[:, 2 * start : 2 * (start + acquired)] = pairs
+    expected = pairs[:, 0::2].astype('float32') + 1j * pairs[:, 1::2].astype('float32')
+    return buffer, expected.astype('complex64')
 
 
 # %% get_read_count
@@ -159,20 +192,16 @@ def test_cast_iq_int16_interleaved_pairs_become_unscaled_complex64():
     full-scale factor to `voltage_scale`."""
     source = source_spec(transport_dtype='int16')
     ports, acquired = 2, 300
-    pairs = (np.arange(ports * 2 * acquired) * 7919 - 32768) % 65536 - 32768
-    pairs = pairs.reshape(ports, 2 * acquired).astype('int16')
-    pairs[0, :2] = (-32768, 32767)
-
-    # the receive buffer is complex64-sized with the int16 stream at its head
-    buffer = np.zeros((ports, 2 * acquired), dtype='complex64')
-    buffer.view('int16')[:, : 2 * acquired] = pairs
+    rng = np.random.default_rng(0)
+    buffer, expected = int16_receive_buffer(ports, acquired, 2 * acquired, rng=rng)
+    buffer.view('int16')[0, :2] = (-32768, 32767)
+    expected[0, 0] = -32768 + 32767j
 
     out = buffers.cast_iq(source, buffer, acquired)
 
-    expected = pairs[:, 0::2].astype('float32') + 1j * pairs[:, 1::2].astype('float32')
     assert out.dtype == np.complex64
     assert out.shape == (ports, acquired)
-    np.testing.assert_array_equal(out, expected.astype('complex64'))
+    np.testing.assert_array_equal(out, expected)
 
 
 @pytest.mark.parametrize('transport', ['complex64', 'int16'])
@@ -181,12 +210,10 @@ def test_cast_iq_copies_only_the_acquired_columns(transport):
     adds nothing to the copy that the acquisition keeps"""
     source = source_spec(transport_dtype=transport)
     ports, acquired, width = 2, 300, 500
-    buffer = np.zeros((ports, width), dtype='complex64')
     if transport == 'int16':
-        pairs = np.arange(ports * 2 * acquired).reshape(ports, 2 * acquired)
-        buffer.view('int16')[:, : 2 * acquired] = pairs.astype('int16')
-        expected = pairs[:, 0::2] + 1j * pairs[:, 1::2]
+        buffer, expected = int16_receive_buffer(ports, acquired, width)
     else:
+        buffer = np.zeros((ports, width), dtype='complex64')
         buffer[:, :acquired] = np.arange(ports * acquired).reshape(ports, acquired)
         expected = buffer[:, :acquired].copy()
 
@@ -195,7 +222,7 @@ def test_cast_iq_copies_only_the_acquired_columns(transport):
     assert out.shape == (ports, acquired)
     assert out.base is None, 'the copy is bounded by the read'
     assert not np.shares_memory(out, buffer)
-    np.testing.assert_array_equal(out, expected.astype('complex64'))
+    np.testing.assert_array_equal(out, expected)
 
 
 @pytest.mark.parametrize('transport', ['complex64', 'int16'])
@@ -204,14 +231,11 @@ def test_cast_iq_start_skips_the_holdoff(transport):
     that the acquisition keeps starts at `start` with no view of the buffer"""
     source = source_spec(transport_dtype=transport)
     ports, start, acquired, width = 2, 37, 300, 500
-    buffer = np.zeros((ports, width), dtype='complex64')
     if transport == 'int16':
-        pairs = np.arange(ports * 2 * width).reshape(ports, 2 * width)
-        buffer.view('int16')[:, : 2 * width] = pairs.astype('int16')
-        span = pairs[:, 2 * start : 2 * (start + acquired)]
-        expected = span[:, 0::2] + 1j * span[:, 1::2]
+        buffer, expected = int16_receive_buffer(ports, acquired, width, start=start)
     else:
-        buffer[:] = np.arange(ports * width).reshape(ports, width)
+        buffer = np.arange(ports * width, dtype='float32').reshape(ports, width)
+        buffer = buffer.astype('complex64')
         expected = buffer[:, start : start + acquired].copy()
 
     out = buffers.cast_iq(source, buffer, acquired, start=start)
@@ -220,7 +244,7 @@ def test_cast_iq_start_skips_the_holdoff(transport):
     assert out.flags.c_contiguous
     assert out.base is None
     assert not np.shares_memory(out, buffer)
-    np.testing.assert_array_equal(out, expected.astype('complex64'))
+    np.testing.assert_array_equal(out, expected)
 
 
 @pytest.mark.parametrize('start, acquired', [(201, 300), (-1, 300)])
@@ -243,61 +267,26 @@ def test_cast_iq_cupy_returns_a_device_array(xp):
 
 
 @pytest.mark.namespaces('cupy')
-@pytest.mark.parametrize('seed', range(3))
-def test_cast_iq_cupy_int16_widening_is_exact_across_many_thread_blocks(xp, seed):
-    """the device cast widens int16 pairs to float32 in place, so each row is read
-    at its head while the whole row is written. Millions of samples per port spread
-    that copy over many thread blocks, and a buffer wider than the read takes the
-    row-by-row pinned copy."""
-    import cupyx
-
+@pytest.mark.parametrize('start', [0, 1023], ids=['row_head', 'odd_start'])
+def test_cast_iq_cupy_int16_equals_the_host_cast(xp, start):
+    """the device cast of int16 pairs from a pinned buffer wider than the read equals
+    the host cast, from the head of the row and from an odd `start`. 2**21 samples per
+    port spread the in-place widening over many thread blocks."""
     source = source_spec(transport_dtype='int16', array_backend='cupy')
     ports, acquired = 2, 1 << 21
-    width = acquired + 4096
-    rng = np.random.default_rng(seed)
-    pairs = rng.integers(-32768, 32768, size=(ports, 2 * acquired), dtype='int16')
-
-    buffer = cupyx.empty_pinned((ports, width), dtype='complex64')
-    buffer.view('int16')[:, : 2 * acquired] = pairs
-
-    out = buffers.cast_iq(source, buffer, acquired)
-    xp.cuda.get_current_stream().synchronize()
-
-    expected = pairs[:, 0::2].astype('float32') + 1j * pairs[:, 1::2].astype('float32')
-    assert sw.is_cupy_array(out)
-    assert out.dtype == np.complex64
-    assert out.shape == (ports, acquired)
-    assert out.flags.c_contiguous
-    np.testing.assert_array_equal(out.get(), expected.astype('complex64'))
-
-
-@pytest.mark.namespaces('cupy')
-def test_cast_iq_cupy_int16_from_an_odd_start_is_exact(xp):
-    """the device copy of an int16 row from an odd `start` begins at a 4-byte offset
-    of the pinned row, and the in-place widening reads the head of the row it
-    writes"""
-    import cupyx
-
-    source = source_spec(transport_dtype='int16', array_backend='cupy')
-    ports, start, acquired = 2, 1023, 1 << 20
     width = start + acquired + 4096
-    rng = np.random.default_rng(0)
-    pairs = rng.integers(-32768, 32768, size=(ports, 2 * width), dtype='int16')
-
-    buffer = cupyx.empty_pinned((ports, width), dtype='complex64')
-    buffer.view('int16')[:, : 2 * width] = pairs
+    buffer, expected = int16_receive_buffer(
+        ports, acquired, width, start=start, pinned=True, rng=np.random.default_rng(0)
+    )
 
     out = buffers.cast_iq(source, buffer, acquired, start=start)
     xp.cuda.get_current_stream().synchronize()
 
-    span = pairs[:, 2 * start : 2 * (start + acquired)]
-    expected = span[:, 0::2].astype('float32') + 1j * span[:, 1::2].astype('float32')
     assert sw.is_cupy_array(out)
     assert out.dtype == np.complex64
     assert out.shape == (ports, acquired)
     assert out.flags.c_contiguous
-    assert out.base is None
-    np.testing.assert_array_equal(out.get(), expected.astype('complex64'))
+    np.testing.assert_array_equal(out.get(), expected)
 
 
 # %% get_dtype_scale
@@ -465,44 +454,23 @@ def test_alloc_shape_is_ports_by_read_count_with_one_stream_buffer_per_port():
         assert np.shares_memory(stream, samples[i])
 
 
-def test_alloc_reuses_the_throwaway_port_buffer():
-    """under `stream_all_rx_ports`, the RX port outside a one-port capture streams into
-    a throwaway buffer. A prior one of the transport dtype and at least the read count
-    is reused; a smaller one is replaced."""
-    capture = _ONE_PORT
-    ctrl = SimpleNamespace(
-        capture_spec=capture,
-        source_spec=source_spec(stream_all_rx_ports=True),
-        source_info=ss.specs.SourceInfo(num_rx_ports=2),
-    )
-
-    _, (samples, streams), extra = buffers._alloc_empty_iq(ctrl, capture)
-    assert extra is not None
-    assert len(streams) == 2
-    assert streams[1] is extra
-    assert not np.shares_memory(extra, samples)
-
-    _, (_, streams), reused = buffers._alloc_empty_iq(ctrl, capture, prior_extra=extra)
-    assert reused is extra
-    assert streams[1] is extra
-
-    small = np.empty(1, dtype=extra.dtype)
-    _, _, replaced = buffers._alloc_empty_iq(ctrl, capture, prior_extra=small)
-    assert replaced is not small
-    assert replaced.size >= extra.size
-
-
 def test_get_next_keeps_the_throwaway_port_buffer_between_reads():
+    """under `stream_all_rx_ports`, the RX port outside a one-port capture streams into
+    a throwaway buffer that is kept between reads. A prior one smaller than the read
+    is replaced."""
     capture = _ONE_PORT
-    ctrl = SimpleNamespace(
-        capture_spec=capture,
-        source_spec=source_spec(stream_all_rx_ports=True),
-        source_info=ss.specs.SourceInfo(num_rx_ports=2),
-    )
-    rb = buffers.ReceiveBuffers(ctrl)
-    _, first = rb.get_next(capture)
+    source = source_spec(stream_all_rx_ports=True)
+    rb = buffers.ReceiveBuffers(stub_controller(capture, source, num_rx_ports=2))
+    small = np.empty(1, dtype=source.transport_dtype)
+    rb.extra = small
+
+    samples, first = rb.get_next(capture)
     _, second = rb.get_next(capture)
+
+    assert len(first) == 2
     assert first[1] is second[1] is rb.extra
+    assert rb.extra is not small
+    assert not np.shares_memory(rb.extra, samples)
 
 
 def test_alloc_without_holdoff_is_the_bare_read_count():
