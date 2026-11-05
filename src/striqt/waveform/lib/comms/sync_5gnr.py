@@ -7,9 +7,12 @@ follow the cell search cases of TS 38.213 §4.1.
 from __future__ import annotations as __
 
 import dataclasses
+import math
 import typing
 from fractions import Fraction
 from math import ceil, isclose
+
+import array_api_compat
 
 from .. import arrays, fourier, power, util
 from ..arrays import array_namespace, is_cupy_array, isroundmod, pad_along_axis
@@ -19,6 +22,8 @@ from .phy_3gpp import get_3gpp_phy, slot_period
 from .sequences import m_sequence
 
 if typing.TYPE_CHECKING:
+    from types import ModuleType
+
     from ..typing import Array, WindowSpecType
 
 
@@ -554,13 +559,14 @@ def get_5g_ssb_iq(
     discovery_periodicity: float,
     fs_out: float,
     fs_in: float,
-    subcarrier_spacing: float,
     frequency_offset: float = 0,
     delay: float = 0,
     max_block_count: int | None = None,
-    oaresample: bool = False,
 ) -> Array:
     """return the SSB band of `iq`, recentered to baseband and resampled to `fs_out`.
+
+    Each port is resampled by one FFT over the kept span. The frequency shift is a
+    whole number of bins of ``fs_in / size`` for the `size` of that span.
 
     Args:
         iq: waveform of shape ``(port, sample)`` at `fs_in`
@@ -568,14 +574,11 @@ def get_5g_ssb_iq(
             span with `max_block_count`
         fs_out: the output sample rate (in S/s)
         fs_in: the sample rate (in S/s) of `iq`
-        subcarrier_spacing: the SSB subcarrier spacing (in Hz)
         frequency_offset: the offset (in Hz) of the SSB center from the center of
             `iq`
         delay: the time (in s) into `iq` at which the kept span begins
         max_block_count: the number of SSB periods kept from `delay`; None keeps
             the rest of `iq`
-        oaresample: True resamples by overlap-add with a Blackman window; False
-            resamples by a single FFT
 
     Returns:
         the baseband SSB waveform of shape ``(port, sample)`` at `fs_out`, in the
@@ -585,52 +588,20 @@ def get_5g_ssb_iq(
     xp = arrays.array_namespace(iq)
 
     offs = round(delay * fs_in)
-
-    if oaresample:
-        down = round(fs_in / subcarrier_spacing / 8)
-        up = round(down * (fs_out / fs_in))
-
-        if up % 3 > 0:
-            # ensure compatibility with the blackman window overlap of 2/3
-            down = down * 3
-            up = up * 3
-
-        if max_block_count is not None:
-            size_in = round(max_block_count * discovery_periodicity * fs_in)
-            iq = iq[..., offs : offs + size_in]
-        else:
-            size_in = iq.shape[-1]
-
-        size_out = round(up / down * size_in)
-
-        out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-
-        for i in range(out.shape[0]):
-            out[i] = fourier.resamplers.oaresample(
-                iq[i],
-                fs=fs_in,
-                up=up,
-                down=down,
-                axis=0,
-                window='blackman',
-                frequency_shift=frequency_offset,
-            )
-
+    if max_block_count is not None:
+        size_in = round(max_block_count * discovery_periodicity * fs_in)
+        iq = iq[..., offs : offs + size_in]
     else:
-        if max_block_count is not None:
-            size_in = round(max_block_count * discovery_periodicity * fs_in)
-            iq = iq[..., offs : offs + size_in]
-        else:
-            size_in = iq.shape[-1]
+        size_in = iq.shape[-1]
 
-        size_out = round(size_in * fs_out / fs_in)
-        out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-        shift = round(iq.shape[1] * frequency_offset / fs_in)
+    size_out = round(size_in * fs_out / fs_in)
+    out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
+    shift = round(iq.shape[1] * frequency_offset / fs_in)
 
-        for i in range(out.shape[0]):
-            out[i] = fourier.resamplers.resample(
-                iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
-            )
+    for i in range(out.shape[0]):
+        out[i] = fourier.resamplers.resample(
+            iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
+        )
 
     return out
 
@@ -675,10 +646,241 @@ def sync_frame_count(sample_count: int, params: SyncParams) -> int:
     return frame_count
 
 
+def get_5g_ssb_spans(
+    iq: Array,
+    *,
+    params: SyncParams,
+    fs_in: float,
+    frequency_offset: float = 0,
+    delay: float = 0,
+    max_block_count: int | None = None,
+    margin: int | None = None,
+) -> Array:
+    """return the correlated span of each synchronization block of `iq` at baseband.
+
+    A synchronization block begins every ``params.frames_per_sync`` frames of
+    ``params.frame_size`` samples at ``params.sample_rate``, and a span is the first
+    ``params.corr_size`` samples of a block, the samples that `correlate_sync_spans`
+    reads. Each span is cut from `iq` with `margin` input samples at each end, shifted
+    and resampled by FFT in one batch over the ports and blocks, and trimmed to the
+    span. The margin absorbs the edge ringing of the FFT resampler. Where the record
+    ends inside a margin, the missing samples are zero. The frequency shift is a whole
+    number of bins of ``fs_in / (span + 2 * margin)``.
+
+    Args:
+        iq: the waveform of shape ``(port, sample)`` at `fs_in`
+        params: the synchronization parameters from `pss_params` or `sss_params`,
+            with the output sample rate in ``sample_rate``
+        fs_in: the sample rate (in S/s) of `iq`
+        frequency_offset: the offset (in Hz) of the SSB center from the center of `iq`
+        delay: the time (in s) into `iq` at which the first block begins
+        max_block_count: the number of blocks kept from `delay`; None keeps every
+            block that begins in `iq`
+        margin: the input samples kept at each end of a span before the trim; None
+            selects one slot, rounded up to a whole number of output samples
+
+    Returns:
+        the spans of shape ``(port, sync block, corr_size)`` in the dtype and array
+        namespace of `iq`
+
+    Raises:
+        ValueError: if a frame or a span is not a whole number of samples at `fs_in`,
+            or if `iq` after `delay` is not a whole, nonzero number of frames
+    """
+    xp = array_namespace(iq)
+    fs_out = params.sample_rate
+    ratio = Fraction(fs_in / fs_out).limit_denominator(10**6)
+    p, q = ratio.numerator, ratio.denominator
+
+    frame_in = Fraction(params.frame_size) * ratio
+    corr_in = Fraction(params.corr_size) * ratio
+    if frame_in.denominator != 1 or corr_in.denominator != 1:
+        raise ValueError(
+            f'a frame of {params.frame_size} samples at {fs_out!r} S/s is not a whole '
+            f'number of samples at {fs_in!r} S/s'
+        )
+    frame_in, corr_in = int(frame_in), int(corr_in)
+    block_in = frame_in * params.frames_per_sync
+
+    # the margin is an even input count and a whole number of output samples: the
+    # trim lands on output samples and `resample` takes an even span
+    step = math.lcm(2, p)
+    if margin is None:
+        margin = round(slot_period(params.subcarrier_spacing) * fs_in)
+    margin_in = -(-margin // step) * step
+    margin_out = margin_in * q // p
+    span_in = corr_in + 2 * margin_in
+    span_out = span_in * q // p
+
+    offs = round(delay * fs_in)
+    frames, remainder = divmod(iq.shape[-1] - offs, frame_in)
+    if remainder != 0 or frames <= 0:
+        raise ValueError(
+            f'the record ({iq.shape[-1]} samples less a delay of {offs}) must hold a '
+            f'whole number of 10 ms frames ({frame_in} samples each at {fs_in!r} S/s)'
+        )
+    block_count = -(-frames // params.frames_per_sync)
+    if max_block_count is not None:
+        block_count = min(block_count, max_block_count)
+
+    spans = xp.zeros((iq.shape[0], block_count, span_in), dtype=iq.dtype)
+    for block in range(block_count):
+        lo = offs + block * block_in - margin_in
+        hi = lo + span_in
+        src_lo, src_hi = max(lo, 0), min(hi, iq.shape[-1])
+        dst_lo = src_lo - lo
+        spans[:, block, dst_lo : dst_lo + src_hi - src_lo] = iq[:, src_lo:src_hi]
+
+    shift = round(span_in * frequency_offset / fs_in)
+    y = fourier.resamplers.resample(
+        spans, num=span_out, axis=2, overwrite_x=True, shift=shift
+    )
+    return y[..., margin_out : margin_out + params.corr_size]
+
+
+def _correlation_fft_size(size: int, xp: ModuleType) -> int:
+    """return the FFT length at or above `size` for the correlator on `xp`."""
+    if array_api_compat.is_cupy_namespace(xp):
+        # cuFFT runs a power of 2 faster than the nearest 2·3·5·7-smooth size
+        # (32768 against 31360 on a Tegra X2); pocketfft runs the smooth size faster
+        return 1 << (size - 1).bit_length()
+    return int(util.scipy.fft.next_fast_len(size, real=False))
+
+
+class _TemplateSpectra:
+    """a memo of template spectra keyed on the identity of the template array"""
+
+    MAX_BYTES = 16 * 2**20
+    MAX_ENTRIES = 4
+
+    def __init__(self) -> None:
+        self._entries: dict[tuple, tuple[Array, Array]] = {}
+
+    def __call__(self, sync_seq: Array, nfft: int) -> Array:
+        xp = array_namespace(sync_seq)
+        key = (id(sync_seq), sync_seq.shape, nfft, xp.__name__)
+        hit = self._entries.get(key)
+        if hit is not None and hit[0] is sync_seq:
+            return hit[1]
+
+        buf = xp.zeros((sync_seq.shape[0], nfft), dtype=sync_seq.dtype)
+        buf[:, : sync_seq.shape[1]] = sync_seq
+        spectra = fourier.fft.fft(buf, axis=-1, out=buf, overwrite_x=True)
+
+        if spectra.nbytes <= self.MAX_BYTES:
+            while len(self._entries) >= self.MAX_ENTRIES:
+                self._entries.pop(next(iter(self._entries)))
+            # the array reference keeps the id valid for the life of the entry
+            self._entries[key] = (sync_seq, spectra)
+        return spectra
+
+    def cache_clear(self) -> None:
+        self._entries.clear()
+
+
+_sync_template_spectra = _TemplateSpectra()
+util._caches[_sync_template_spectra] = _sync_template_spectra
+
+
+def correlate_sync_spans(
+    spans: Array,
+    sync_seq: Array,
+    *,
+    params: SyncParams,
+    max_chunk_bytes: int = 64 * 2**20,
+) -> Array:
+    """correlate the span of each synchronization block against synchronization templates.
+
+    The correlation is a linear convolution by FFT. The spectrum of the spans is
+    computed once and multiplied by the spectrum of every template, in chunks of cell
+    IDs of at most `max_chunk_bytes`. The template spectra are memoized on the
+    identity of `sync_seq` in a cache that `clear_caches` empties. `pss_5g_nr` and
+    `sss_5g_nr` return one array object per argument set, so the memo applies to the
+    templates from either.
+
+    Args:
+        spans: the waveform of shape ``(port, sync block, corr_size)`` at
+            ``params.sample_rate``, as `get_5g_ssb_spans` returns
+        sync_seq: the templates of shape ``(cell id, sample)`` from `pss_5g_nr` or
+            `sss_5g_nr` at the same sample rate
+        params: the synchronization parameters from `pss_params` or `sss_params`
+        max_chunk_bytes: the size of the product buffer that bounds the cell IDs
+            correlated at once
+
+    Returns:
+        complex64 correlation of shape ``(port, cell id, sync block, beam, lag)``
+        with ``params.lag_count`` lags; the last ``params.min_cp_size`` lags are
+        zero
+
+    Raises:
+        ValueError: if the last axis of `spans` is not ``params.corr_size``, or if
+            the symbols in ``params.symbol_indexes`` do not share one excess
+            cyclic-prefix length
+    """
+    xp = array_namespace(spans)
+
+    ports, sync_count, corr_size = spans.shape
+    if corr_size != params.corr_size:
+        raise ValueError(
+            f'spans hold {corr_size} samples, not the corr_size {params.corr_size} '
+            'of params'
+        )
+    excess_cp = [params.cp_offsets[i % 14] for i in params.symbol_indexes]
+    if len(set(excess_cp)) != 1:
+        raise ValueError('expect all 5G sync symbols to have the same excess CP')
+
+    cell_count, template_size = sync_seq.shape
+    full_size = corr_size + template_size - 1
+    nfft = _correlation_fft_size(full_size, xp)
+
+    X = xp.zeros((ports, sync_count, nfft), dtype=spans.dtype)
+    X[..., :corr_size] = spans
+    X = fourier.fft.fft(X, axis=-1, out=X, overwrite_x=True)
+    H = _sync_template_spectra(sync_seq, nfft)
+
+    # the single offset is specific to the 5G NR prefix layout and does not cover
+    # 4G LTE
+    offs = (
+        round(params.sample_rate / params.subcarrier_spacing) + 2 * params.min_cp_size
+    )
+    # the lag window is the full convolution rolled by -offs and cut to corr_size.
+    # The roll wraps the tail of the window onto the first lags of the convolution
+    head = min(corr_size, full_size - offs)
+
+    R = xp.empty((ports, cell_count, sync_count, corr_size), dtype='complex64')
+    chunk = max(1, max_chunk_bytes // (ports * sync_count * nfft * X.dtype.itemsize))
+    for start in range(0, cell_count, chunk):
+        stop = min(start + chunk, cell_count)
+        prod = xp.empty((ports, stop - start, sync_count, nfft), dtype=X.dtype)
+        xp.multiply(
+            X[:, xp.newaxis], H[xp.newaxis, start:stop, xp.newaxis, :], out=prod
+        )
+        y = fourier.fft.ifft(prod, axis=-1, out=prod, overwrite_x=True)
+        R[:, start:stop, :, :head] = y[..., offs : offs + head]
+        R[:, start:stop, :, head:] = y[..., : corr_size - head]
+
+    # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
+    Rperslot = R.reshape(R.shape[:-1] + (params.slot_count, -1))[..., excess_cp[0] :]
+    R = Rperslot.reshape(R.shape[:-1] + (-1,))
+
+    # final dims (port index, cell Nid, sync block index, beam index, IQ sample index).
+    # Slices rather than a sliding window view over the lags: that view has one window
+    # per sample, above 2**31 elements for 2 ports and 5 blocks at 15.36 MS/s, and
+    # cupy 12 returns wrong values for the second port from a fancy index on it
+    starts = [i * params.short_symbol_size for i in params.symbol_indexes]
+    result = xp.stack([R[..., s : s + params.lag_count] for s in starts], axis=-2)
+    if params.min_cp_size:
+        result[..., -params.min_cp_size :] = 0
+    return result
+
+
 def correlate_sync_sequence(
     ssb_iq: Array, sync_seq: Array, *, params: SyncParams, cell_id_split: int | None = 1
 ) -> Array:
     """correlate the IQ of a synchronization block against synchronization templates.
+
+    The first ``params.corr_size`` samples of every ``params.frames_per_sync`` frames
+    are correlated by `correlate_sync_spans`.
 
     Args:
         ssb_iq: the SSB-band waveform of shape ``(port, sample)`` at
@@ -698,56 +900,11 @@ def correlate_sync_sequence(
             symbols in ``params.symbol_indexes`` do not share one excess
             cyclic-prefix length
     """
-    xp = array_namespace(ssb_iq)
-
     sync_frame_count(ssb_iq.shape[-1], params)
 
-    slot_count = params.slot_count
-    corr_size = params.corr_size
-    frames_per_sync = params.frames_per_sync
-
-    # set up broadcasting on dimensions:
-    # (port index, cell Nid, sync block index, IQ sample index)
-    iq_bcast = ssb_iq.reshape((ssb_iq.shape[0], -1, params.frame_size))
-    iq_bcast = iq_bcast[:, xp.newaxis, ::frames_per_sync, :corr_size]
-
-    template_bcast = sync_seq[xp.newaxis, :, xp.newaxis, :]
-    # pad_size = template_bcast.shape[-1]
-    # template_bcast  = iqwaveform.util.pad_along_axis(template_bcast, [[0,pad_size]], axis=3)
-
-    # the single offset is specific to the 5G NR prefix layout and does not cover
-    # 4G LTE
-    offs = (
-        round(params.sample_rate / params.subcarrier_spacing) + 2 * params.min_cp_size
-    )
-
-    R_shape = [max(a, b) for a, b in zip(iq_bcast.shape, template_bcast.shape)]
-    R_shape[-1] = iq_bcast.shape[-1] + template_bcast.shape[-1] - 1
-    R = xp.empty(tuple(R_shape), dtype='complex64')
-
-    for cell_id in range(template_bcast.shape[1]):
-        R[:, cell_id] = fourier.filters.oaconvolve(
-            iq_bcast[:, 0], template_bcast[:, cell_id], axes=2, mode='full'
-        )
-    R = xp.roll(R, -offs, axis=-1)[..., :corr_size]
-
-    # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
-    excess_cp = [params.cp_offsets[i % 14] for i in params.symbol_indexes]
-    if len(set(excess_cp)) != 1:
-        raise ValueError('expect all 5G sync symbols to have the same excess CP')
-
-    Rperslot = R.reshape(R.shape[:-1] + (slot_count, -1))[..., excess_cp[0] :]
-    R = Rperslot.reshape(R.shape[:-1] + (-1,))
-
-    # final dims (port index, cell Nid, sync block index, beam index, IQ sample index).
-    # Slices rather than a sliding window view over the lags: that view has one window
-    # per sample, above 2**31 elements for 2 ports and 5 blocks at 15.36 MS/s, and
-    # cupy 12 returns wrong values for the second port from a fancy index on it
-    starts = [i * params.short_symbol_size for i in params.symbol_indexes]
-    result = xp.stack([R[..., s : s + params.lag_count] for s in starts], axis=-2)
-    if params.min_cp_size:
-        result[..., -params.min_cp_size :] = 0
-    return result
+    blocks = ssb_iq.reshape((ssb_iq.shape[0], -1, params.frame_size))
+    spans = blocks[:, :: params.frames_per_sync, : params.corr_size]
+    return correlate_sync_spans(spans, sync_seq, params=params)
 
 
 COARSE_LAG_DIM = -2

@@ -190,42 +190,40 @@ def validated_5g_ssb_sync_params(
     return params
 
 
-ssb_iq_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
+ssb_iq_cache = register.KwArgCache([CAPTURE_DIM, 'spec', 'kind'])
 
 
 @ssb_iq_cache.apply
-def get_5g_ssb_iq(
+def get_5g_ssb_spans(
     iq: Array,
     capture: specs.Capture,
     spec: _Cellular5GNRSSBCorrelator,
-    oaresample=False,
+    kind: Literal['pss', 'sss'],
 ) -> Array:
-    """return the sync block IQ shifted to baseband and resampled to `spec.sample_rate`.
+    """return the correlated span of each sync block, at baseband and `spec.sample_rate`.
 
     The band centered at `frequency_offset` (in Hz from the capture center) is
-    shifted to 0 Hz and resampled from `capture.sample_rate` to `sample_rate`. Inside
-    a `registry.cache_context`, `ssb_iq_cache` returns the stored result for the
-    same `iq` object, `capture`, and `spec`.
+    shifted to 0 Hz and resampled from `capture.sample_rate` to `sample_rate` over
+    the first ``corr_size`` samples of each synchronization block. The correlator of
+    `kind` reads those samples alone. Inside a `registry.cache_context`,
+    `ssb_iq_cache` returns the stored result for the same `iq` object, `capture`,
+    `spec`, and `kind`.
 
     Args:
         iq: shape (port, sample), at `capture.sample_rate`
-        oaresample: True resamples by overlap-add of short blocks instead of one FFT
-            over the whole capture
+        kind: the sync signal, ``'pss'`` or ``'sss'``, which sets the span
 
     Returns:
-        shape (port, sample) at `sample_rate`, in the array namespace of `iq`
+        shape (port, sync block, corr_size) at `sample_rate`, in the array namespace
+        of `iq`
     """
 
-    return sw.comms_5gnr.get_5g_ssb_iq(
+    return sw.comms_5gnr.get_5g_ssb_spans(
         iq,
-        discovery_periodicity=spec.discovery_periodicity,
-        fs_out=spec.sample_rate,
+        params=sync_params(capture, spec, kind),
         fs_in=capture.sample_rate,
-        subcarrier_spacing=spec.subcarrier_spacing,
         frequency_offset=spec.frequency_offset,
         delay=spec.delay,
-        # max_block_count=spec.max_block_count,
-        oaresample=oaresample,
     )
 
 
@@ -266,14 +264,12 @@ def correlate_5g_pss(
 ) -> Array:
     xp = sw.array_namespace(iq)
 
-    ssb_iq = get_5g_ssb_iq(iq, capture=capture, spec=spec)
+    spans = get_5g_ssb_spans(iq, capture=capture, spec=spec, kind='pss')
 
     params = sync_params(capture, spec, 'pss')
     pss_seq = sw.comms_5gnr.pss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
-    return sw.comms_5gnr.correlate_sync_sequence(
-        ssb_iq, pss_seq, params=params, cell_id_split=1
-    )
+    return sw.comms_5gnr.correlate_sync_spans(spans, pss_seq, params=params)
 
 
 _pss_sync_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])
@@ -409,14 +405,12 @@ def correlate_5g_sss(
 ) -> Array:
     xp = sw.array_namespace(iq)
 
-    ssb_iq = get_5g_ssb_iq(iq, capture=capture, spec=spec)
+    spans = get_5g_ssb_spans(iq, capture=capture, spec=spec, kind='sss')
 
     params = sync_params(capture, spec, 'sss')
     sss_seq = sw.comms_5gnr.sss_5g_nr(spec.sample_rate, spec.subcarrier_spacing, xp=xp)
 
-    return sw.comms_5gnr.correlate_sync_sequence(
-        ssb_iq, sss_seq, params=params, cell_id_split=None
-    )
+    return sw.comms_5gnr.correlate_sync_spans(spans, sss_seq, params=params)
 
 
 _sss_sync_cache = register.KwArgCache([CAPTURE_DIM, 'spec'])

@@ -56,7 +56,8 @@ from striqt.sensor.lib.compute import corrections
 
 cp: Any = None
 
-# the ADA denver-3750 capture (profile_cuda_streams.CAPTURE) and the air7201b clock
+# the ADA denver-3750 capture (tests/profiling/cuda_streams.py CAPTURE) and the
+# air7201b clock
 MASTER_CLOCK_RATE = 125e6
 SAMPLE_RATE = 107.52e6
 ANALYSIS_BANDWIDTH = 100e6

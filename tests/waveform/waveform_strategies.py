@@ -117,7 +117,6 @@ def get_ssb_iq(iq, fs_in=FS, **kws):
         'discovery_periodicity': 20e-3,
         'fs_out': FS,
         'fs_in': fs_in,
-        'subcarrier_spacing': 30e3,
         **kws,
     }
     return sync_5gnr.get_5g_ssb_iq(iq, **kws)

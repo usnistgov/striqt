@@ -20,7 +20,7 @@ pixi run -e test314 pyright src                                   # advisory; ac
 pixi run -e test314 pyrefly check                                 # advisory; accepted count in Conventions → Typing
 pixi run -e doc sphinx-build -E -a -b html doc doc/html          # docs (see chores/push-docs.sh to deploy)
 pixi run -e cupy pytest                                          # GPU path, Jetson only
-STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python chores/tests/profile_zarr_sink.py  # own disk caches
+STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/zarr_sink.py  # own disk caches
 ```
 
 The on-disk caches (the `persistent_cache` window shelf, the numba kernel cache) live in

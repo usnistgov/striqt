@@ -7,8 +7,8 @@ ratio to the ``ten*log10`` form with the same abs/eps shape, and the max error a
 a reference evaluated in the widest float the platform offers.
 
 Usage:
-    pixi run -e cupy python chores/tests/profile_log_scaling.py [--sizes 18 24]
-    pixi run -e test39 python chores/tests/profile_log_scaling.py   # CPU only
+    pixi run -e cupy python tests/profiling/log_scaling.py [--sizes 18 24]
+    pixi run -e test39 python tests/profiling/log_scaling.py   # CPU only
 
 Reading the output:
     ratio < 1 means the ``c*log`` form is faster than ``ten*log10``. numexpr rows with
