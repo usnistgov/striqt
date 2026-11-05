@@ -422,6 +422,22 @@ class TestNumpyCupyCrossComparison:
         assert_array_equal(n_cp, n_np)
 
     @given(x=iq_waveforms(min_size=256, max_size=1024, multiple_of=64, channels=4))
+    def test_chunked_fft_equals_the_unchunked_transform(
+        self, cupy_available, max_cupy_fft_chunk, x
+    ):
+        """the groups of a chunked transform are independent batches of one plan, so
+        the result is bit-identical to the transform in one group"""
+        cp = cupy_available
+        x_cp = cp.asarray(x)
+
+        max_cupy_fft_chunk(None)
+        whole = fft(x_cp, axis=1, out=cp.empty_like(x_cp))
+        max_cupy_fft_chunk(x.shape[1])
+        chunked = fft(x_cp, axis=1, out=cp.empty_like(x_cp))
+
+        cp.testing.assert_array_equal(chunked, whole)
+
+    @given(x=iq_waveforms(min_size=256, max_size=1024, multiple_of=64, channels=4))
     def test_fft_out_buffer_and_chunking(self, cupy_available, max_cupy_fft_chunk, x):
         X_np = fft(x, axis=1)
         x_np_back = ifft(X_np, axis=1)

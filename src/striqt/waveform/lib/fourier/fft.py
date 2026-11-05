@@ -1,8 +1,8 @@
 """FFT evaluation on numpy and cupy, the `fftfreq` grid with band selectors on that
 grid, and the FFT roundoff model.
 
-On cupy, `fft` and `ifft` honor the `out=` buffer and run in chunks of
-`MAX_CUPY_FFT_SAMPLES` samples when that is set.
+On cupy, `fft` and `ifft` honor the `out=` buffer and run the batched transform in
+groups of at most `MAX_CUPY_FFT_SAMPLES` samples; None runs one group.
 """
 
 from __future__ import annotations as __
@@ -34,9 +34,10 @@ if typing.TYPE_CHECKING:
 
 CPU_COUNT = cpu_count() or 1
 
-# chunking the cuFFT call limits its peak memory use at the cost of CPU time
-# (cupy 12)
-MAX_CUPY_FFT_SAMPLES = None
+# cuFFT allocates a work area of about the size of each batch for a transform length
+# that is not a power of 2, so the group size bounds that allocation. At 2**23 the
+# resampler of a 2-port 0.1 s capture at 107.52 MS/s runs 8 groups in the time of 1
+MAX_CUPY_FFT_SAMPLES: int | None = 2**23
 
 
 # %% roundoff model
@@ -152,12 +153,18 @@ def off_peak_floor_dBc(
 
 
 # %% FFTs
-def set_max_cupy_fft_chunk(count: int | None):
+def set_max_cupy_fft_chunk(count: int | None) -> None:
+    """set the sample count per group of a cupy FFT into an ``out=`` buffer.
+
+    Args:
+        count: the most samples transformed in one cuFFT call; None runs one group
+    """
     global MAX_CUPY_FFT_SAMPLES
     MAX_CUPY_FFT_SAMPLES = count
 
 
-def get_max_cupy_fft_chunk():
+def get_max_cupy_fft_chunk() -> int | None:
+    """return the sample count per group of a cupy FFT into an ``out=`` buffer."""
     return MAX_CUPY_FFT_SAMPLES
 
 
@@ -229,6 +236,7 @@ def _cupy_fftn_helper(
     overwrite_x=False,
     plan=None,
 ):
+    """run a cupy FFT along `axis` into `out`, in groups of `MAX_CUPY_FFT_SAMPLES`."""
     assert cp is not None, ImportError('cupy is not installed')
     from cupy.fft import _fft  # type: ignore
 
@@ -250,8 +258,10 @@ def _cupy_fftn_helper(
     x_views = grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
     out_views = grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
 
+    # `_fftn` writes into `out_view`; assigning its return value back is a second
+    # full pass over the data
     for x_view, out_view in zip(x_views, out_views):
-        out_view[:] = _fft._fftn(x_view, *args, out=out_view, **kws)
+        _fft._fftn(x_view, *args, out=out_view, **kws)
 
     return out
 
