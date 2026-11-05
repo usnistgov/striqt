@@ -47,7 +47,8 @@ repository.
 ## Profiling scripts
 
 `tests/profiling/` holds the profiling and comparison scripts (`cuda_streams.py`,
-`zarr_sink.py`, `log_scaling.py`, `pss_oaconvolve.py`, `ssb_extraction.py`). They are
+`pipeline_sync.py`, `zarr_sink.py`, `log_scaling.py`, `pss_oaconvolve.py`,
+`ssb_extraction.py`). They are
 not tests: pytest collects `test_*.py` only, and each script runs on its own
 (`pixi run -e cupy python tests/profiling/cuda_streams.py`; see the module docstring for
 the usage and how to read the output). The basenames share the `tests/` namespace, so a
