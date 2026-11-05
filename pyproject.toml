@@ -60,7 +60,6 @@ doc = [
 ]
 gpu = [
     "cupy >= 12.2",
-    "cython",
 ]
 test = [
     "coverage[toml]",

@@ -657,12 +657,12 @@ def validated_ssb_spectrogram_sizing(
     return sizing
 
 
-def ssb_burst_spans(
+def _ssb_burst_spans(
     capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
 ) -> tuple[int, int, int]:
     """return ``(block_count, block_size, span_size)`` of the burst-set spans in samples.
 
-    `block_count` is the number of burst sets the capture holds, `block_size` the
+    `block_count` is the number of burst sets in the capture, `block_size` the
     samples of one `discovery_periodicity`, and `span_size` the samples that the STFT
     of one burst set reads: the hops of its symbols and the last window.
     """
@@ -749,7 +749,7 @@ def cellular_5g_ssb_spectrogram(
     xp = sw.array_namespace(x)
 
     symbol_count = _burst_symbol_count(spec)
-    block_count, block_size, span_size = ssb_burst_spans(capture, spec)
+    block_count, block_size, span_size = _ssb_burst_spans(capture, spec)
 
     # the STFT of one burst set reads the span at the start of each discovery
     # period, so the spans are stacked as rows before the transform

@@ -627,13 +627,6 @@ def configure_cupy():
         cp.cuda.set_pinned_memory_allocator(None)
 
 
-def free_cupy_mempool():
-    if cp is not None:
-        mempool = cp.get_default_memory_pool()
-        if mempool is not None:
-            mempool.free_all_blocks()
-
-
 @util.lru_cache()
 def set_cuda_mem_limit(fraction=0.75):
     if cp is None:

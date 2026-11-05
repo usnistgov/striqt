@@ -19,7 +19,6 @@ msgspec = "~=0.19"
 
 # numerical
 array-api-compat = "*"
-cython = "*"
 dask = "*"
 numcodecs = "*"
 numexpr = ">=2.8"

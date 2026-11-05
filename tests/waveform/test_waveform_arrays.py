@@ -493,7 +493,6 @@ class TestCupyHelpers:
         reason='with a device, set_cuda_mem_limit(1.0) caps the pool for the session',
     )
     def test_memory_helpers_run_without_a_device(self):
-        assert arrays.free_cupy_mempool() is None
         assert arrays.configure_cupy() is None
         assert arrays.set_cuda_mem_limit(fraction=1.0) is None
 
