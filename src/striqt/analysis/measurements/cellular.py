@@ -1253,9 +1253,9 @@ def apply_mask(
 ) -> Array:
     """split a spectrogram into TDD link directions, masking the rest with NaN.
 
-    The guard bands are NaN-filled in `spectrogram` in place. The returned array has
-    one copy of `spectrogram` per link direction, with the symbols of the other link
-    directions set to NaN (`build_tdd_link_symbol_masks`).
+    The returned array has one copy of `spectrogram` per link direction, with the
+    guard bands and the symbols of the other link directions set to NaN
+    (`build_tdd_link_symbol_masks`). `spectrogram` is not modified.
 
     Args:
         spectrogram: shape (port, symbol, frequency), in linear power, with one STFT
@@ -1295,15 +1295,6 @@ def apply_mask(
             'only "downlink" or "uplink" are valid values for link_direction tuple'
         )
 
-    # null frequencies in the guard interval
-    eps = 1e-6
-    ilo = xp.searchsorted(freqs, xp.asarray(-channel_bandwidth / 2 + guard_left + eps))
-    ihi = xp.searchsorted(freqs, xp.asarray(channel_bandwidth / 2 - guard_right - eps))
-    spg_left = sw.axis_slice(spectrogram, 0, ilo, axis=-1)
-    spg_right = sw.axis_slice(spectrogram, ihi, None, axis=-1)
-    xp.copyto(spg_left, float('nan'))
-    xp.copyto(spg_right, float('nan'))
-
     # null in time to select each of the {down,up} links
     masks = build_tdd_link_symbol_masks(
         subcarrier_spacing=subcarrier_spacing,
@@ -1317,7 +1308,16 @@ def apply_mask(
     )
 
     # broadcast into dimensions (input channel, link direction, symbols elapsed, frequency)
-    return masks[np.newaxis, :, :, np.newaxis] * spectrogram[:, np.newaxis, :, :]
+    out = masks[np.newaxis, :, :, np.newaxis] * spectrogram[:, np.newaxis, :, :]
+
+    # null frequencies in the guard interval. `spectrogram` may be a shared cache entry
+    eps = 1e-6
+    ilo = xp.searchsorted(freqs, xp.asarray(-channel_bandwidth / 2 + guard_left + eps))
+    ihi = xp.searchsorted(freqs, xp.asarray(channel_bandwidth / 2 - guard_right - eps))
+    xp.copyto(sw.axis_slice(out, 0, ilo, axis=-1), float('nan'))
+    xp.copyto(sw.axis_slice(out, ihi, None, axis=-1), float('nan'))
+
+    return out
 
 
 @util.lru_cache()
