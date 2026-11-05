@@ -18,15 +18,11 @@ float. Paths below are relative to `src/striqt/waveform/` unless qualified.
   `ReductionKernel` of `cuda_jit.py` squares and reduces in one pass with no buffer of
   the size of the waveform; on numpy `envtopow` fills that buffer and the reduction
   follows. The two must agree within `bin_power_rtol` plus `bin_power_rms`.
-- `comms.correlate_cyclic_shift` dispatches the same way, between
-  `lib/comms/cp_cpu_jit.py` (numba `njit`) and `lib/comms/cp_cuda_jit.py`
-  (`numba.cuda.jit`).
-- `lib/jit.py` sets `NUMBA_CACHE_DIR` to the `numba` subdirectory of
-  `lib/util.py` `cache_dir()` (`STRIQT_CACHE_DIR`, else the platformdirs user cache
-  directory) when the variable is unset, and stamps numba caches by content hash so that a reinstall
-  does not invalidate the caches. The two kernel modules import `lib/jit.py` before
-  numba so that the setting takes effect.
-- coverage.py excludes the jitted and fused bodies through `exclude_also` in the
+- `comms.correlate_cyclic_shift` evaluates the cyclic-prefix correlation on the
+  array API, on numpy and cupy alike: the delayed product is gathered at the symbol
+  starts and lags, then summed over the prefix samples, with complex128 accumulation.
+  The package contains no numba code.
+- coverage.py excludes the fused bodies through `exclude_also` in the
   `[tool.coverage.report]` table of `pyproject.toml`.
 
 ## Fourier package

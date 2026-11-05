@@ -23,7 +23,7 @@ pixi run -e cupy pytest                                          # GPU path, Jet
 STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/zarr_sink.py  # own disk caches
 ```
 
-The on-disk caches (the `persistent_cache` window shelf, the numba kernel cache) live in
+The on-disk cache (the `persistent_cache` window shelf) lives in
 the platformdirs user cache directory unless `STRIQT_CACHE_DIR` names another one. Two
 striqt processes that share the window shelf corrupt it on macOS Python 3.9, so a script
 run beside a test session or another script sets its own directory. The test suite does
@@ -54,7 +54,7 @@ Four packages under `src/striqt/`, stacked bottom-up: `striqt.waveform` → `str
 The architecture guide is in `doc/agents/`, written primarily for ingest by coding agents. Read the page for an area before changing code in that area:
 
 - `doc/agents/architecture.md`: package layout and the re-export shims, spec structs as the YAML/JSON/zarr schema, and the measurement registry (caches, `prefer_filtered`/`prefer_aligned`, signal triggers, the `BuiltinAnalyses` group).
-- `doc/agents/waveform_numerics.md`: numpy/cupy dispatch, the Fourier package, STFT layout, resampling, the window and numba caches, and the OFDM and 5G NR synchronization models.
+- `doc/agents/waveform_numerics.md`: numpy/cupy dispatch, the Fourier package, STFT layout, resampling, the window cache, and the OFDM and 5G NR synchronization models.
 - `doc/agents/sensor.md`: sensor bindings, actions and runners (sweep, Y-factor calibration, cellular sweep), extensions and the downstream project, sweep execution and the per-capture signal path, and logging and concurrency.
 
 ### Known gaps are recorded as strict xfails
