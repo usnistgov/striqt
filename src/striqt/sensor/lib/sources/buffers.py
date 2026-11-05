@@ -336,53 +336,69 @@ def find_trigger_holdoff(
     return holdoff
 
 
-def cast_iq(spec: specs.Source, buffer: Array, acquired_count: int) -> Array:
-    """return the first `acquired_count` samples per port of `buffer` as complex64.
+def cast_iq(
+    spec: specs.Source, buffer: Array, acquired_count: int, *, start: int = 0
+) -> Array:
+    """return `acquired_count` samples per port of `buffer` from column `start` as complex64.
 
-    The result is a copy in the namespace of ``spec.array_backend``, so the receive
-    buffer is free for the next read. A buffer wider than `acquired_count` columns
-    contributes nothing beyond that width to the copy.
+    The result is a copy, and the receive buffer is free for the next read when the
+    call returns. The columns of `buffer` outside the span contribute nothing to the
+    copy.
 
     Args:
         spec: the source spec, for `transport_dtype` and `array_backend`
         buffer: the receive buffer with shape (ports, width) of complex64 slots;
             under an int16 transport the interleaved (I, Q) pairs occupy the head
+            of each row
         acquired_count: the number of complex samples per port to keep
-    """
-    # array_namespace categorizes cupy pinned memory as numpy
-    dtype_in = np.dtype(spec.transport_dtype)
-    # the slice bounds the copy, and so the memory of a queued acquisition, to the
-    # samples read; each port row of the slice stays contiguous
-    buffer = buffer[:, :acquired_count]
+        start: the first complex sample of each port to keep
 
+    Returns:
+        a C-contiguous complex64 array with shape (ports, acquired_count) in the
+        namespace of ``spec.array_backend``
+
+    Raises:
+        ValueError: if `start` is negative or ``start + acquired_count`` exceeds the
+            width of `buffer`
+    """
+    ports, width = buffer.shape
+    if start < 0 or start + acquired_count > width:
+        raise ValueError(
+            f'the span [{start}, {start + acquired_count}) exceeds the buffer '
+            f'width {width}'
+        )
+
+    dtype_in = np.dtype(spec.transport_dtype)
+    if dtype_in.kind == 'i':
+        # the int16 pairs of complex sample k are at int16 index 2k of the row
+        src = buffer.view('int16')[:, 2 * start : 2 * (start + acquired_count)]
+    else:
+        src = buffer[:, start : start + acquired_count]
+
+    # array_namespace categorizes cupy pinned memory as numpy
     if spec.array_backend == 'cupy':
         xp = sw.arrays.cp
         assert xp is not None, ImportError('cupy is not installed')
-        buffer = sw.arrays.pinned_array_as_cupy(buffer)
+        out = xp.empty((ports, acquired_count), dtype='complex64')
+        sw.arrays.pinned_array_as_cupy(src, out=out)
         # the H2D copy is asynchronous, and the next segment of a burst reads into
         # the same pinned buffer 2 acquisitions later
         xp.cuda.get_current_stream().synchronize()
+        if dtype_in.kind == 'i':
+            # the int16 pairs are at the head of each row of `out`, and the widening
+            # cast in place avoids a second device allocation and copy
+            xp.copyto(
+                out.view('float32'),
+                out.view('int16')[:, : 2 * acquired_count],
+                casting='unsafe',
+            )
+    elif dtype_in.kind == 'i':
+        out = np.empty((ports, acquired_count), dtype='complex64')
+        np.copyto(out.view('float32'), src, casting='unsafe')
     else:
-        xp = np
-        buffer = xp.array(buffer)
-    assert xp is not None
+        out = np.array(src)
 
-    # the views below cast in place to avoid a second allocation and copy
-    if dtype_in.kind == 'i':
-        # the same memory buffer, interpreted as int16 without casting
-        buffer_int16 = buffer.view('int16')[:, : 2 * acquired_count]
-        buffer_float32 = buffer.view('float32')[:, : 2 * acquired_count]
-
-        # in-place cast from the int16 samples, filling the extra allocation in `buffer`
-        xp.copyto(buffer_float32, buffer_int16, casting='unsafe')
-
-        # re-interpret the interleaved (float32 I, float32 Q) values as a complex value
-        buffer_out = buffer_float32.view('complex64')
-
-    else:
-        buffer_out = buffer[:, : 2 * acquired_count]
-
-    return buffer_out
+    return out
 
 
 def get_dtype_scale(transport_dtype: specs.types.TransportDType) -> float:

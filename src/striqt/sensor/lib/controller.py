@@ -617,8 +617,10 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                 stream error, with no carryover
 
         Returns:
-            ``(samples, start_time_ns)``: the samples with shape (ports, count), and
-            the time of the first record sample or None without a time stamp
+            ``(samples, start_time_ns)``: the samples as a C-contiguous complex64
+            array with shape (ports, count) in the namespace of the source
+            `array_backend`, and the time of the first record sample or None
+            without a time stamp
 
         Raises:
             ValueError: if `overlaps` is not 2 non-negative integers
@@ -740,9 +742,11 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         else:
             self._buffers.clear()
 
-        samples = buffers.cast_iq(self.source_spec, samples, buffer_count)
+        samples = buffers.cast_iq(
+            self.source_spec, samples, output_count, start=sample_offs
+        )
 
-        return samples[:, sample_span], start_ns
+        return samples, start_ns
 
     @sa.util.stopwatch('acquire', 'source')
     def acquire(

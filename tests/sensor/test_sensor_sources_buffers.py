@@ -193,9 +193,41 @@ def test_cast_iq_copies_only_the_acquired_columns(transport):
     out = buffers.cast_iq(source, buffer, acquired)
 
     assert out.shape == (ports, acquired)
-    assert out.base.shape[1] == acquired, 'the copy is bounded by the read'
+    assert out.base is None, 'the copy is bounded by the read'
     assert not np.shares_memory(out, buffer)
     np.testing.assert_array_equal(out, expected.astype('complex64'))
+
+
+@pytest.mark.parametrize('transport', ['complex64', 'int16'])
+def test_cast_iq_start_skips_the_holdoff(transport):
+    """the holdoff ahead of the record is dropped from the host buffer, and the copy
+    that the acquisition keeps starts at `start` with no view of the buffer"""
+    source = source_spec(transport_dtype=transport)
+    ports, start, acquired, width = 2, 37, 300, 500
+    buffer = np.zeros((ports, width), dtype='complex64')
+    if transport == 'int16':
+        pairs = np.arange(ports * 2 * width).reshape(ports, 2 * width)
+        buffer.view('int16')[:, : 2 * width] = pairs.astype('int16')
+        span = pairs[:, 2 * start : 2 * (start + acquired)]
+        expected = span[:, 0::2] + 1j * span[:, 1::2]
+    else:
+        buffer[:] = np.arange(ports * width).reshape(ports, width)
+        expected = buffer[:, start : start + acquired].copy()
+
+    out = buffers.cast_iq(source, buffer, acquired, start=start)
+
+    assert out.shape == (ports, acquired)
+    assert out.flags.c_contiguous
+    assert out.base is None
+    assert not np.shares_memory(out, buffer)
+    np.testing.assert_array_equal(out, expected.astype('complex64'))
+
+
+@pytest.mark.parametrize('start, acquired', [(201, 300), (-1, 300)])
+def test_cast_iq_rejects_a_span_past_the_buffer(start, acquired):
+    buffer = np.zeros((2, 500), dtype='complex64')
+    with pytest.raises(ValueError, match='buffer'):
+        buffers.cast_iq(SOURCE, buffer, acquired, start=start)
 
 
 @pytest.mark.namespaces('cupy')
@@ -236,6 +268,35 @@ def test_cast_iq_cupy_int16_widening_is_exact_across_many_thread_blocks(xp, seed
     assert out.dtype == np.complex64
     assert out.shape == (ports, acquired)
     assert out.flags.c_contiguous
+    np.testing.assert_array_equal(out.get(), expected.astype('complex64'))
+
+
+@pytest.mark.namespaces('cupy')
+def test_cast_iq_cupy_int16_from_an_odd_start_is_exact(xp):
+    """the device copy of an int16 row from an odd `start` begins at a 4-byte offset
+    of the pinned row, and the in-place widening reads the head of the row it
+    writes"""
+    import cupyx
+
+    source = source_spec(transport_dtype='int16', array_backend='cupy')
+    ports, start, acquired = 2, 1023, 1 << 20
+    width = start + acquired + 4096
+    rng = np.random.default_rng(0)
+    pairs = rng.integers(-32768, 32768, size=(ports, 2 * width), dtype='int16')
+
+    buffer = cupyx.empty_pinned((ports, width), dtype='complex64')
+    buffer.view('int16')[:, : 2 * width] = pairs
+
+    out = buffers.cast_iq(source, buffer, acquired, start=start)
+    xp.cuda.get_current_stream().synchronize()
+
+    span = pairs[:, 2 * start : 2 * (start + acquired)]
+    expected = span[:, 0::2].astype('float32') + 1j * span[:, 1::2].astype('float32')
+    assert sw.is_cupy_array(out)
+    assert out.dtype == np.complex64
+    assert out.shape == (ports, acquired)
+    assert out.flags.c_contiguous
+    assert out.base is None
     np.testing.assert_array_equal(out.get(), expected.astype('complex64'))
 
 

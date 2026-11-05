@@ -544,3 +544,26 @@ class TestCupyHelpers:
         host = cupyx.zeros_pinned((4, 4), dtype=np.float32)
         with pytest.raises(ValueError, match='contiguous'):
             arrays.pinned_array_as_cupy(host[::2, ::2])
+
+    def test_pinned_copy_into_out_fills_the_head_of_each_row(self, cupy_available):
+        import cupyx
+
+        cp = cupy_available
+        host = cupyx.zeros_pinned((2, 6), dtype=np.int16)
+        host[:] = np.arange(12, dtype=np.int16).reshape(2, 6)
+        out = cp.zeros((2, 8), dtype=np.int16)
+
+        returned = arrays.pinned_array_as_cupy(host, out=out)
+        cp.cuda.get_current_stream().synchronize()
+
+        assert returned is out
+        assert_array_equal(out.get()[:, :6], host)
+        assert_array_equal(out.get()[:, 6:], 0)
+
+    def test_pinned_copy_into_out_rejects_short_rows(self, cupy_available):
+        import cupyx
+
+        cp = cupy_available
+        host = cupyx.zeros_pinned((2, 6), dtype=np.int16)
+        with pytest.raises(ValueError, match='row'):
+            arrays.pinned_array_as_cupy(host, out=cp.zeros((2, 5), dtype=np.int16))

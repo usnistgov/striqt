@@ -311,7 +311,9 @@ corrected sample 0 by `lead / fs_sdr`.
 `sources/buffers.py:find_trigger_holdoff`, which returns the number of source samples
 dropped before the record: at least the lead, plus `transient_holdoff_time` after a
 re-arm (no carryover), rounded up to the next `trigger_strobe` edge when a strobe is
-set. The record start time is the stamp plus the holdoff.
+set. The record start time is the stamp plus the holdoff. `sources/buffers.py:cast_iq`
+copies the record and overlaps out of the host buffer from the end of the holdoff. The
+`x` of the acquisition is C-contiguous and contains no holdoff sample.
 
 Within a burst, `ReceiveBuffers.stash_carryover` keeps the trailing lead and tail of the
 record of segment k and stamps the first carried sample one lead before the record of

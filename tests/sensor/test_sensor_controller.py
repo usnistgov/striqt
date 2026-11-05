@@ -23,11 +23,14 @@ from synthetic_sources import (
     build_acquired_iq,
     expected_raw,
     filtered,
+    fs_sdr,
+    generator,
     preset_capture,
 )
 
 import striqt.sensor as ss
 import striqt.waveform as sw
+from striqt.sensor.lib.sources import buffers
 
 TONE = ss.bindings.single_tone
 
@@ -453,9 +456,10 @@ class TestBurst:
             with pytest.raises(ValueError, match='whole number of trigger_strobe'):
                 ctrl.acquire_burst()
 
-    def test_later_members_keep_no_holdoff_pad(self, fake_controller):
-        """segment 0 is copied with the transient and strobe holdoff ahead of the
-        record; the later segments, which read no holdoff, are copied without it"""
+    def test_no_member_keeps_the_holdoff_pad(self, fake_controller):
+        """segment 0 reads the transient and strobe holdoff ahead of the record and
+        the later segments read none; every segment keeps a copy of the record and
+        overlaps alone"""
         strobe = BURST_CAPTURE.duration / 2
         with fake_controller(
             time_sync_at='open', receive_retries=0, trigger_strobe=strobe
@@ -475,8 +479,9 @@ class TestBurst:
                 for flag in (True, False)
             )
         assert padded > bare
-        assert segments[0].x.base.shape[1] == padded
-        assert [m.x.base.shape[1] for m in segments[1:]] == [bare, bare]
+        assert [m.x.shape[1] for m in segments] == [bare] * 3
+        assert all(m.x.base is None for m in segments)
+        assert all(m.x.flags.c_contiguous for m in segments)
         assert [m.x.shape[1] for m in segments] == [bare] * 3
 
     def test_carryover_is_kept_between_segments(self, fake_soapy, fake_controller):
@@ -697,6 +702,54 @@ def test_acquire_before_arming_is_an_error(isolated_lookup):
     raises = pytest.raises(AttributeError, match='armed')
     with TONE.from_source_spec(SOURCE) as ctrl, raises:
         ctrl.acquire()
+
+
+def test_acquire_returns_a_contiguous_copy_without_the_holdoff(isolated_lookup):
+    """the receive buffer of a first segment is padded for the transient and strobe
+    holdoff; the acquisition keeps a copy of the record and overlaps alone"""
+    source = SOURCE.replace(trigger_strobe=0.25e-3)
+    capture = preset_capture('sawtooth', **SCALE_ONLY)
+    overlaps = ss.lib.compute.get_correction_overlaps(capture, source, None)
+    count = buffers.get_read_count(
+        capture, source, include_holdoff=False, overlap=sum(overlaps)
+    )
+    ports = len(capture.port)
+
+    iq = open_and_acquire('sawtooth', capture, source)
+
+    assert iq.x.flags.c_contiguous
+    assert iq.x.base is None
+    assert iq.x.nbytes == ports * count * 8
+    assert_close(iq.x, expected_raw('sawtooth', capture, source))
+
+
+def test_read_iq_after_a_rearm_drops_the_strobe_holdoff(isolated_lookup):
+    """the tail overlap of the first capture leaves the stream off the strobe grid,
+    so the re-armed read waits out a nonzero holdoff ahead of the record"""
+    source = SOURCE.replace(trigger_strobe=0.25e-3)
+    capture = preset_capture('sawtooth', **SCALE_ONLY)
+    overlaps = ss.lib.compute.get_correction_overlaps(capture, source, None)
+    fs = fs_sdr(capture, source)
+    count = buffers.get_read_count(
+        capture, source, include_holdoff=False, overlap=sum(overlaps)
+    )
+    with BINDINGS['sawtooth'].from_source_spec(source) as ctrl:
+        ctrl._arm_spec(capture)
+        ctrl.read_iq(overlaps)
+        ctrl._arm_spec(capture)
+        x, start_ns = ctrl.read_iq(overlaps)
+
+    strobe_ns = round(0.25e-3 * 1e9)
+    assert start_ns % strobe_ns == 0
+    assert start_ns > round(capture.duration * 1e9)
+    start_index = round(start_ns * fs / 1e9) - overlaps[0]
+    expected = generator(
+        'sawtooth', capture, sample_rate=fs, start_index=start_index, count=count
+    )
+    assert x.flags.c_contiguous
+    assert x.base is None
+    assert x.shape == (len(capture.port), count)
+    assert_close(x, expected)
 
 
 # %% acquire through the fake_soapy binding
