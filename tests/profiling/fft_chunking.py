@@ -21,8 +21,14 @@ Columns, one row per value of the knob:
 - ``max |diff|``: the largest absolute difference of the resampled record from the
   unchunked row, and ``equal`` when the arrays are identical.
 
+``--skip-self-copy`` replaces `fourier.fft._cupy_fftn_helper` for the run with a copy
+that omits the ``out_view[:] = ...`` assignment after each chunked transform, which
+rewrites a result that `_fftn` has already written into ``out_view``. The ``max |diff|``
+column then checks that the transform still lands in the buffer.
+
 Usage:
     pixi run -e cupy python tests/profiling/fft_chunking.py
+    pixi run -e cupy python tests/profiling/fft_chunking.py --skip-self-copy
     pixi run -e cupy python tests/profiling/fft_chunking.py --chunks 0 33554432 8388608 --repeat 3
     pixi run -e test39 python tests/profiling/fft_chunking.py --backend numpy --duration 0.02
 
@@ -44,7 +50,10 @@ import numpy as np
 
 import striqt.sensor as ss
 import striqt.waveform as sw
-from striqt.waveform.lib.arrays import grouped_slices_along_axis
+from striqt.waveform.lib.arrays import (
+    grouped_slices_along_axis,
+    grouped_views_along_axis,
+)
 from striqt.waveform.lib.fourier import fft as fft_module
 
 cp: Any = None
@@ -109,6 +118,40 @@ def peak_pool_bytes(func: Callable[[], Any]) -> int:
 
 
 # %% The sweep
+def cupy_fftn_without_self_copy(
+    x: Any,
+    n: Any,
+    axis: int,
+    direction: Any,
+    out: Any = None,
+    overwrite_x: bool = False,
+    plan: Any = None,
+) -> Any:
+    """`fourier.fft._cupy_fftn_helper` without the assignment of each chunked result
+    onto the buffer that `_fftn` has already written."""
+    from cupy.fft import _fft  # ty: ignore[unresolved-import]
+
+    if n is not None:
+        raise NotImplementedError('implement n here')
+
+    kws = {'overwrite_x': overwrite_x, 'plan': plan, 'order': 'C'}
+    args = (None,), (axis,), None, direction
+
+    if out is None:
+        return _fft._fftn(x, *args, out=out, **kws)
+    out = out.reshape(x.shape)
+
+    chunk = fft_module.get_max_cupy_fft_chunk()
+    if chunk is None:
+        return _fft._fftn(x, *args, out=out, **kws)
+
+    x_views = grouped_views_along_axis(x, chunk, axis=axis)
+    out_views = grouped_views_along_axis(out, chunk, axis=axis)
+    for x_view, out_view in zip(x_views, out_views):
+        _fft._fftn(x_view, *args, out=out_view, **kws)
+    return out
+
+
 def group_count(shape: tuple[int, ...], chunk: int | None, axis: int) -> int:
     if chunk is None:
         return 1
@@ -199,6 +242,11 @@ def main() -> None:
     parser.add_argument('--repeat', type=int, default=5)
     parser.add_argument('--warmup', type=int, default=1)
     parser.add_argument(
+        '--skip-self-copy',
+        action='store_true',
+        help='run with a cupy FFT helper that omits the per-chunk self-assignment',
+    )
+    parser.add_argument(
         '--chunks',
         type=int,
         nargs='+',
@@ -228,12 +276,18 @@ def main() -> None:
     )
     print(f'median of {args.repeat} calls after {args.warmup} warmup')
 
+    original_helper = fft_module._cupy_fftn_helper
+    if args.skip_self_copy:
+        setattr(fft_module, '_cupy_fftn_helper', cupy_fftn_without_self_copy)  # noqa: B010
+        print('cupy FFT helper: chunked results not reassigned onto the buffer')
+
     setup = cuda_streams.build_setup(args.duration, args.backend, trigger=False)
     raw = cuda_streams.build_raw(setup, xp)
     try:
         sweep(raw, chunks, args.repeat, args.warmup)
     finally:
         fft_module.set_max_cupy_fft_chunk(None)
+        setattr(fft_module, '_cupy_fftn_helper', original_helper)  # noqa: B010
 
 
 if __name__ == '__main__':
