@@ -86,8 +86,8 @@ class AcquiredIQ(sa.AcquiredIQ):
     """the trigger that `preprocess` runs for alignment; None selects
     `info.signal_trigger`"""
     overwrite_x: bool = False
-    """True permits the resampling stage to consume `x`, after which `x` is a
-    `ConsumedBuffer`"""
+    """True permits the resampling stage to consume `x`; `x` is a `ConsumedBuffer`
+    when the stage returns another array"""
     trigger_shifts: sw.typing.Array | None = None
     """one shift per port (samples at `capture.sample_rate`) that the alignment stage
     applies in place of running the trigger; None runs the trigger"""

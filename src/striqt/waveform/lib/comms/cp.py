@@ -46,7 +46,7 @@ def correlate_cyclic_shift(
 
     # rows of consecutive samples are gathered once from the first index of each row
     # and window-summed over the run length. The gathered array is then
-    # (rows, run + lags) instead of (indices, lags)
+    # (rows, run + lags)
     if bool(xp.all(rows == rows[:, :1] + xp.arange(ncp))):
         starts, run = rows[:, 0], ncp
     else:

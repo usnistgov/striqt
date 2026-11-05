@@ -59,7 +59,7 @@ def attach_corrections(
         signal_trigger: the trigger that `preprocess` runs for alignment; None
             selects `iq.info.signal_trigger`
         overwrite_x: True to let the resampling stage consume `iq.x` in place; `x`
-            of the copy is a `ConsumedBuffer` after the stage
+            of the copy is a `ConsumedBuffer` when the stage returns another array
 
     Raises:
         TypeError: if `iq.capture` is not a `SensorCapture`

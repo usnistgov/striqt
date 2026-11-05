@@ -32,7 +32,10 @@ float. Paths below are relative to `src/striqt/waveform/` unless qualified.
   (`find_window_param_from_enbw`), and the extra scipy-style windows.
 - `fft.py`: `fft` and `ifft` with the cupy `out=` path, the exact `fftfreq` grid,
   `slice_freqs`, `truncate_freqs`, `null_lo`, `time_fftshift`, and the roundoff
-  model `fft_tolerance_rms`, `on_peak_roundoff`, and `off_peak_floor_dBc`.
+  model `fft_tolerance_rms`, `on_peak_roundoff`, and `off_peak_floor_dBc`. A cupy
+  FFT called with an `out=` buffer runs in groups of at most `MAX_CUPY_FFT_SAMPLES`
+  samples, `2**23` by default. `set_max_cupy_fft_chunk` changes the limit, and
+  `None` selects one group.
 - `stft.py`: `stft` and `istft`, the stacking helpers, `zero_stft_by_freq`, and
   `downsample_stft`.
 - `spectrum.py`: `spectrogram`.
@@ -89,11 +92,12 @@ shim is `striqt.waveform.fourier`.
   `istft` runs the inverse FFT in place with ``fftshift=False`` and no time-domain
   shift multiply. The reorder runs in forward blocks of segments: a block is written
   directly when it ends before its first unread source row, and through an 8 MiB
-  scratch otherwise, since cupy does not detect overlap. The peak of `oaresample` is
-  the frames, the cuFFT work area, and the output. The overlap-add in `_unstack_stft_windows` adds each strided group
-  of windows into the output span viewed as ``(windows, nfft)`` without a copy. On
-  the TX2i these stages are memory-bound at about 60 GB/s, so each avoided pass over
-  the stacked frames is a measurable fraction of the call.
+  scratch otherwise. cupy does not detect overlap between the source and the
+  destination of a copy. The peak of `oaresample` is the frames, the cuFFT work
+  area, and the output. The overlap-add in `_unstack_stft_windows` adds each strided
+  group of windows into the output span viewed as ``(windows, nfft)`` without a
+  copy. On the TX2i these stages are memory-bound at about 60 GB/s, so each avoided
+  pass over the stacked frames is a measurable fraction of the call.
 - `resample` fftshifts in the time domain (`time_fftshift`) so that downsampling
   becomes a slice of the frequency axis.
 

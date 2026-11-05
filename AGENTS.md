@@ -6,7 +6,7 @@ This file is the guidance for coding agents and new contributors working in this
 
 Access the environment through `pixi`. The `test39` and `test314` environments carry the
 test and dev tooling (pytest, ruff, ty) on Python 3.9 and 3.14; `doc` carries sphinx;
-`cupy` exists only on Linux (the Jetson):
+`cupy` is defined for `linux-aarch64` (the Jetson), `linux-64`, and `win-64`, not macOS:
 
 ```sh
 pixi run -e test39 pytest                                        # full suite, py39
@@ -20,7 +20,7 @@ pixi run -e test314 pyright src                                   # advisory; ac
 pixi run -e test314 pyrefly check                                 # advisory; accepted count in Conventions → Typing
 pixi run -e doc sphinx-build -E -a -b html doc doc/html          # docs (see chores/push-docs.sh to deploy)
 pixi run -e cupy pytest                                          # GPU path, Jetson only
-STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/zarr_sink.py  # own disk caches
+STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/pipeline_sync.py --buffers 2  # own disk caches
 ```
 
 The on-disk cache (the `persistent_cache` window shelf) lives in

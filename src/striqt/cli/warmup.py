@@ -13,11 +13,11 @@ import numpy as np
 def cli() -> None:
     """compile the cupy detector and dB kernels, when cupy is importable.
 
-    The cyclic-prefix correlation runs on a small complex64 waveform on numpy. When
-    `cupy` is importable, the correlation runs again on cupy arrays, and the
-    ``'mean'`` and ``'max'`` binned power detectors and the dB conversion compile
-    on a small complex64 cupy waveform. Progress is echoed to stdout. A failure
-    in the cupy step is echoed instead of raised.
+    The cyclic-prefix correlation runs on a small complex64 waveform on numpy. With
+    cupy importable, the correlation, the ``'mean'`` and ``'max'`` binned power
+    detectors, and the dB conversion run on the same waveform as a cupy array.
+    Progress is echoed to stdout. A failure in the cupy step is echoed instead of
+    raised.
     """
     import striqt.waveform as sw
 

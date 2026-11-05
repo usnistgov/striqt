@@ -36,7 +36,11 @@ saved corrections (48). Items 22 and 86 were fixed on 2026-10-22 by replacing th
 `Source.signal_trigger` is annotated with the trigger bundle, `SoapySource.__post_init__`
 accepts it when exactly one trigger is enabled, and `striqt.analysis.measurements` checks
 at import that the registry and the bundles agree (`xfailed` 43 to 41 on both
-interpreters; 35 to 33 markers). Items are listed in priority order, not numeric order.
+interpreters; 35 to 33 markers). Item 67 was retired on 2026-11-05. The cyclic-prefix
+correlation moved onto the array API (735aa631), which deleted the numba CUDA kernel
+`comms/cp_cuda_jit.py:_corr_at_indices` and the test class of item 67 (33 to 32
+markers). Items are
+listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -97,7 +101,6 @@ item is open.
 | 16 | `test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys` | High | B | trivial |
 | 62 | `test_three_deep_adjust_analysis_is_hashable` | High | B | small |
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
-| 67 | `test_cuda_unsorted_indices` | High | B (GPU, unverified) | trivial |
 | 59 | `test_probe_soapy_info_with_a_channel_sensor` | High | B (latent) | trivial |
 | 10 | `test_chained_remap_declared_before_its_key_resolves` | Medium | B | moderate |
 | 45 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]` | Medium | B | easy |
@@ -581,9 +584,9 @@ it was standing in for is enabled.
 
 - **`cast_iq` widens int16 in place over overlapping memory.** The cupy branch of
   `buffers.py:cast_iq` copies the int16 view into a float32 view of the same
-  device buffer with `xp.copyto`. Verified exact on the Jetson 2026-11-05 by
-  `test_cast_iq_cupy_int16_widening_is_exact_across_many_thread_blocks` (2 ports x
-  2**21 pairs, 3 seeds). The numpy branch casts into a fresh array.
+  device buffer with `xp.copyto`. No corruption observed on the Jetson 2026-11-05
+  in `test_cast_iq_cupy_int16_widening_is_exact_across_many_thread_blocks` (2 ports
+  x 2**21 pairs, 3 seeds). The numpy branch casts into a fresh array.
 
 - **`read_iq`'s silent `break` is unreachable today.** `controller.py:501-504`
   drops the tail of the buffer if `received + request > buffer_count`. With the

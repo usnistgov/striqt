@@ -100,9 +100,9 @@ never mutated. A literal unit such as the ratio `'dB'` is left as written.
 
 Materialization to xarray is deferred so that the GPU can queue several measurements
 before anything is pulled back to the CPU. `evaluate_by_spec` runs every measurement
-in the `analysis:` block under a `stopwatch`. The cupy memory pool is never freed on
-either path: the pool reaches its high-water mark on the first capture and reuses the
-blocks after that.
+in the `analysis:` block under a `stopwatch`. The cupy memory pool is not freed
+between captures. The pool reaches its high-water mark on the first capture and
+reuses the blocks after that.
 
 ### Analysis groups
 
@@ -139,8 +139,9 @@ Three registry features matter when reading a measurement module.
   function per capture, keyed on the capture plus the listed kwargs, the oldest
   evicted first. A cache lets several measurements share one expensive intermediate,
   and measurements with different specs through the same cache (the SSB spectrogram
-  beside the spectrogram family) hold their entries side by side, so the field order
-  of the analysis group does not decide whether a shared intermediate survives.
+  beside the spectrogram family) keep one entry per spec in the same cache, so the
+  field order of the analysis group does not decide whether a shared intermediate
+  survives.
   Every spectrogram-derived measurement reuses `spectrogram_cache` and
   `_cached_spectrogram` in `measurements/spectrum.py`, and the PSS and SSS
   measurements share `ssb_iq_cache`. Caches are scoped by

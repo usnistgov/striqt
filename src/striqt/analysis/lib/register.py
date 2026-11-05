@@ -48,7 +48,7 @@ class KwArgCache:
     of the `fields` named at construction, and up to `maxsize` entries are held at
     once, the oldest evicted first. The cache is disabled until entered as a context
     manager, and exit clears the entries and the callback. Each entry keeps a
-    reference to its input array until it is cleared or evicted.
+    reference to the input array until the entry is cleared or evicted.
     """
 
     enabled = False

@@ -377,9 +377,10 @@ def resample(
 
     in_place = True
     if nfft_out < nfft_in:
-        # downsample by trimming frequency. The slice has strided rows for an N-D `x`:
-        # pocketfft reads them as they are, and the cupy path copies into a contiguous
-        # buffer of its own before an in-place transform
+        # downsample by trimming frequency. The slice has strided rows for an N-D `x`.
+        # pocketfft transforms the strided rows without a copy, and the cupy path
+        # copies the rows into a contiguous buffer of its own before an in-place
+        # transform
         bounds = _find_downsample_copy_range(nfft_in, nfft_out, edge_low, edge_high)[1]
         y = axis_slice(y, *bounds, axis=axis)
         in_place = False
@@ -431,8 +432,8 @@ def oaresample(
             divisor of `window`
         fs: the sample rate (in S/s) of `x`
         window: the COLA window of the STFT, a key of the divisor table
-        overwrite_x: True permits the STFT to consume the buffer of `x`; `x` holds
-            no meaningful data after the call
+        overwrite_x: True permits the STFT to consume the buffer of `x`; the
+            contents of `x` are undefined after the call
         axis: the time axis of `x`
         frequency_shift: the frequency (in Hz) moved to the output DC, a multiple of
             ``fs / down`` times the frames per hop of `window`; 0 keeps the center
@@ -444,7 +445,7 @@ def oaresample(
             `axis`
         out: a C-contiguous buffer of at least ``x.size * up // down`` elements in
             the dtype of `x` that receives the output; `x` itself is accepted when
-            `overwrite_x` is True, since the STFT leaves the buffer of `x` free
+            `overwrite_x` is True
 
     Returns:
         the waveform at ``fs * up / down`` on `axis`, of ``x.shape[axis] * up //
@@ -614,14 +615,15 @@ def _copy_bins_to_fftfreq_order(
         axis: the segment axis of `y`
         overwrite_x: True writes the output into the head of the buffer of `y` when
             `nfft_out` is at most the bin count of `y`, the bins are the last axis of
-            `y`, and `y` is C-contiguous; `y` then holds no meaningful data after the
-            call
+            `y`, and `y` is C-contiguous; the contents of `y` are then undefined
+            after the call
         block_rows: the segments reordered per block in place; None selects a block
-            of about 8 MiB
+            of about 8 MiB. The tests pass a few rows to force the scratch path on
+            an STFT smaller than one default block.
 
     Returns:
-        a new C-contiguous array, or under `overwrite_x` a C-contiguous view of the
-        buffer of `y`
+        a C-contiguous array allocated by the call, or under `overwrite_x` a
+        C-contiguous view of the buffer of `y`
     """
     xp = array_namespace(y)
     bin_axis = axis + 1
