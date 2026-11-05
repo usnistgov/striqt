@@ -197,7 +197,7 @@ def iq_to_bin_power(
     detector = stat_ufunc_from_shorthand(kind, xp=xp, axis=axis + 1)
     power_bins = envtopow(iq_blocks)
 
-    return detector(power_bins).astype(float_dtype_like(iq))
+    return detector(power_bins).astype(float_dtype_like(iq), copy=False)
 
 
 def iq_to_cyclic_power(

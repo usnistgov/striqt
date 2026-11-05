@@ -370,13 +370,14 @@ def resample(
 
     del x
 
+    in_place = True
     if nfft_out < nfft_in:
-        # downsample by trimming frequency
+        # downsample by trimming frequency. The slice has strided rows for an N-D `x`:
+        # pocketfft reads them as they are, and the cupy path copies into a contiguous
+        # buffer of its own before an in-place transform
         bounds = _find_downsample_copy_range(nfft_in, nfft_out, edge_low, edge_high)[1]
         y = axis_slice(y, *bounds, axis=axis)
-        # the cupy `out=` path of `ifft` needs a contiguous buffer; the slice is one
-        # only for a 1-D `x`, and the call returns a contiguous `y` unchanged
-        y = xp.ascontiguousarray(y)
+        in_place = False
 
     elif nfft_out > nfft_in:
         # upsample by zero-padding frequency, which allocates a copy
@@ -385,7 +386,10 @@ def resample(
         y = pad_along_axis(y, [[pad_left, pad_right]], axis=axis)
 
     # Inverse transform
-    xout = ifft(y, axis=axis, overwrite_x=True, out=y)
+    if in_place:
+        xout = ifft(y, axis=axis, overwrite_x=True, out=y)
+    else:
+        xout = ifft(y, axis=axis)
 
     return time_ifftshift(xout, overwrite_x=True, axis=axis)
 

@@ -319,7 +319,7 @@ def time_fftshift(x, scale: Array | float | None = None, overwrite_x=False, axis
     if overwrite_x:
         out = x
     else:
-        out = xp.empty_like(x)
+        out = xp.empty(x.shape, dtype=x.dtype)
 
     if np.ndim(scale) > 1:
         raise ValueError('scale must be 1-D or scalar')
