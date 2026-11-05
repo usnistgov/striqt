@@ -273,6 +273,10 @@ def print_breakdown(runs: dict[str, list[Run]], names: list[str]) -> None:
         print(f'{name:<36} ' + ' '.join(cells))
 
 
+def keep_pool() -> None:
+    """leave the cupy memory pool as it is, in place of `free_cupy_mempool`."""
+
+
 def quiet_sweep_loggers() -> None:
     for name in ('sweep', 'source', 'sink', 'periph'):
         sa.util.get_logger(name).logger.setLevel(logging.WARNING)
@@ -337,7 +341,7 @@ def main() -> int:
     if args.no_pool_free:
         # evaluate_by_spec frees the pool after each capture when block_each is off;
         # the production path never frees it
-        sw.arrays.free_cupy_mempool = lambda: None
+        setattr(sw.arrays, 'free_cupy_mempool', keep_pool)  # noqa: B010
     collector = StopwatchCollector()
     analysis_logger = sa.util.get_logger('analysis').logger
     analysis_logger.setLevel(min(analysis_logger.level, sa.util.PERFORMANCE_DETAIL))
