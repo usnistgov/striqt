@@ -247,11 +247,16 @@ def test_build_capture_coords_rejects_an_unregistered_analysis_loop():
 
 
 def test_concat_time_dim_places_the_frames_back_to_back():
-    first, second = spectrogram_run()
+    first, second = (ds.copy(deep=True) for ds in spectrogram_run())
     frames, hop_period = spectrogram_frames(
         two_port_captures()[0], SPECTROGRAM.spectrogram
     )
     assert first.sizes['spectrogram_time'] == frames
+    assert first.sizes['capture'] == 2, 'one capture row per port'
+    # the synthetic tone is the same on both ports; offset the second row so that a
+    # join of the first row alone is distinguishable
+    first['spectrogram'].values[1] += 1
+    second['spectrogram'].values[1] += 2
 
     joined = compute.concat_time_dim([first, second], 'spectrogram_time')
 
@@ -259,12 +264,13 @@ def test_concat_time_dim_places_the_frames_back_to_back():
     assert joined.sizes['capture'] == first.sizes['capture']
     time = joined.spectrogram_time.values.astype('float64')
     assert_close(np.diff(time), hop_period, rtol=elementwise_rtol(np.float32))
-    assert np.array_equal(
-        joined.spectrogram.values[0, :frames], first.spectrogram.values[0]
-    )
-    assert np.array_equal(
-        joined.spectrogram.values[0, frames:], second.spectrogram.values[0]
-    )
+    for row in range(first.sizes['capture']):
+        assert np.array_equal(
+            joined.spectrogram.values[row, :frames], first.spectrogram.values[row]
+        )
+        assert np.array_equal(
+            joined.spectrogram.values[row, frames:], second.spectrogram.values[row]
+        )
 
 
 # %% get_looped_coords
