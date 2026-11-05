@@ -15,6 +15,7 @@ from ..arrays import (
     axis_slice,
     axis_to_blocks,
     float_dtype_like,
+    is_cupy_array,
     isroundmod,
     unit_roundoff,
 )
@@ -93,9 +94,9 @@ def bin_power_rtol(
 ) -> float:
     """return the pre-accumulation rtol of the `kind` statistic of ``|x|**2``.
 
-    The bound covers squaring the envelope of complex samples and `stat_rtol` for the
-    `kind` shorthand of `stat_ufunc_from_shorthand`; the mean's accumulation roundoff
-    is `bin_power_rms`.
+    The bound covers the squared magnitude of complex samples and `stat_rtol` for
+    the `kind` shorthand of `stat_ufunc_from_shorthand`; the mean's accumulation
+    roundoff is `bin_power_rms`.
     """
     envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
     return envelope + stat_rtol(dtype, kind, n_impl)
@@ -115,6 +116,15 @@ def bin_power_rms(
     return 0.0
 
 
+# the statistics that the cupy reduction kernels of `cuda_jit` evaluate in one pass
+_FUSED_KINDS: dict[str, typing.Literal['mean', 'max']] = {
+    'mean': 'mean',
+    'rms': 'mean',
+    'max': 'max',
+    'peak': 'max',
+}
+
+
 def iq_to_bin_power(
     iq: Array,
     Ts: float,
@@ -124,15 +134,32 @@ def iq_to_bin_power(
     truncate=False,
     axis=0,
 ):
-    """computes power along the rows of `iq` (time axis) on bins of duration Tbin.
+    """return a statistic of the power of `iq` in bins of `Tbin` along `axis`.
+
+    On cupy, the statistics ``'mean'``, ``'rms'``, ``'max'``, and ``'peak'`` of
+    contiguous bins are evaluated without a buffer of the size of `iq`.
 
     Args:
-        iq: complex-valued input waveform samples
-        Ts: sample period of the input waveform
-        Tbin: time duration of the bin size
-        randomize: if True, randomize the start locations of the bins; otherwise, bins are contiguous
-        kind: a named statistic ('max', 'mean', 'median', 'min', 'peak', 'rms'), a quantile, or a callable ufunc
-        truncate: if True, truncate the last samples of `iq` to an integer number of bins
+        iq: the waveform, complex or real, with time on `axis`
+        Ts: the sample period (in s) of `iq`
+        Tbin: the bin duration (in s); a whole multiple of `Ts` unless `truncate`
+        randomize: True draws the bin start samples at random instead of tiling the
+            axis; supported for ``axis=0`` only
+        kind: a statistic of the samples in a bin: ``'max'``, ``'mean'``, ``'median'``,
+            ``'min'``, ``'peak'`` (max), ``'rms'`` (mean), a quantile in [0, 1], or a
+            callable with an ``axis`` keyword
+        truncate: True drops the trailing samples that do not fill a bin and rounds
+            `Tbin` to whole samples; False raises on either
+        axis: the time axis of `iq`
+
+    Returns:
+        the statistic of ``|iq|**2`` per bin, in the real dtype of `iq`, with the bins
+        on `axis` in place of the samples
+
+    Raises:
+        ValueError: if `Tbin` is not a whole multiple of `Ts` without `truncate`, if
+            `randomize` is set with an `axis` other than 0, or if `kind` is not a
+            supported statistic
     """
 
     xp = array_namespace(iq)
@@ -158,6 +185,14 @@ def iq_to_bin_power(
         iq_blocks = iq[starts[:, np.newaxis] + offsets[np.newaxis, :]]
     else:
         iq_blocks = axis_to_blocks(iq, N, axis=axis, truncate=truncate)
+
+        if isinstance(kind, str) and kind in _FUSED_KINDS and is_cupy_array(iq):
+            from . import cuda_jit
+
+            kernel = cuda_jit.bin_power_kernel(
+                _FUSED_KINDS[kind], iq.dtype.kind == 'c', float_dtype_like(iq)
+            )
+            return kernel(iq_blocks, axis=axis + 1)
 
     detector = stat_ufunc_from_shorthand(kind, xp=xp, axis=axis + 1)
     power_bins = envtopow(iq_blocks)

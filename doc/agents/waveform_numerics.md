@@ -13,7 +13,11 @@ float. Paths below are relative to `src/striqt/waveform/` unless qualified.
 - The elementwise dB conversions in `lib/power/convert.py` evaluate with numexpr on
   numpy and with the `cupy.fuse` kernels in `lib/power/cuda_jit.py` on cupy. The
   two paths must stay in lockstep, including the `out=` handling through
-  `_arraylike_with_buffer`.
+  `_arraylike_with_buffer`. The binned power detectors of `lib/power/detect.py`
+  dispatch the same way for `mean`, `rms`, `max`, and `peak`: on cupy a
+  `ReductionKernel` of `cuda_jit.py` squares and reduces in one pass with no buffer of
+  the size of the waveform; on numpy `envtopow` fills that buffer and the reduction
+  follows. The two must agree within `bin_power_rtol` plus `bin_power_rms`.
 - `comms.correlate_cyclic_shift` dispatches the same way, between
   `lib/comms/cp_cpu_jit.py` (numba `njit`) and `lib/comms/cp_cuda_jit.py`
   (`numba.cuda.jit`).
