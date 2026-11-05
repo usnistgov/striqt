@@ -141,8 +141,10 @@ shim is `striqt.waveform.fourier`.
   (`_TemplateSpectra`, registered with `clear_caches`); cell IDs in chunks bounded by
   `max_chunk_bytes`; the FFT size from `_correlation_fft_size`, `next_fast_len` on
   numpy and the next power of 2 on cupy, which cuFFT runs faster than the smooth
-  size. `correlate_sync_sequence` cuts the spans from a whole-frame record and calls
-  the core.
+  size. The lag windows are copied from the inverse FFT of each chunk straight into
+  the result through the slice pairs of `_lag_window_pieces`. The product buffer is
+  allocated once at the full chunk shape. `correlate_sync_sequence` cuts the spans
+  from a whole-frame record and calls the core.
 
 The tests validate the synchronization path at 30 kHz subcarrier spacing only. The
 cyclic prefix model at 15 kHz and 60 kHz is known wrong. The defect is recorded as
