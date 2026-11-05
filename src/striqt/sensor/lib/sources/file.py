@@ -93,7 +93,7 @@ class TDMSSource(base.VirtualSource[specs.TDMSSource, specs.FileCapture]):
 
         float_dtype = np.finfo(np.dtype(dtype)).dtype
 
-        return (iq * float_dtype.type(scale)).view(dtype).copy()
+        return (iq * float_dtype.type(scale)).view(dtype)
 
     def package_iq(
         self,
@@ -189,7 +189,7 @@ class MATSource(base.VirtualSource[specs.MATSource, specs.FileCapture]):
                 f'requested channel exceeds data channel count of {ret.shape[0]}'
             )
 
-        ret = ret[[port], :file_count]
+        ret = ret[port : port + 1, :file_count]
 
         if fill == 0:
             return ret.copy()

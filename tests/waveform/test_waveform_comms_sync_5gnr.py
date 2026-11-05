@@ -29,11 +29,13 @@ from waveform_strategies import (
     cross_backend_sigma,
     embed_pss_ports,
     embed_symbol,
-    get_ssb_iq,
+    get_ssb_spans,
     phy_5g,
     pss_setup,
     silent_block,
     sync_params,
+    tiled_tone,
+    window_cut,
 )
 
 from striqt.analysis import testing
@@ -312,65 +314,6 @@ class TestSyncParams:
             sync_params(**kws)
 
 
-class TestGet5gSsbIq:
-    FS_IN = 15.36e6
-    SIZE = round(4e-3 * 15.36e6)
-
-    def _tones(self, f, scales=(1.0, 2.0), dtype=np.complex64):
-        x = testing.tone(None, self.FS_IN, frequency=f, count=self.SIZE, dtype=dtype)[0]
-        return np.stack([s * x for s in scales]).astype(dtype)
-
-    def _ssb_iq(self, iq, **kws):
-        return get_ssb_iq(iq, fs_in=self.FS_IN, **kws)
-
-    @given(f0_bins=st.integers(-8, 8), offset_bins=st.sampled_from([0, 3, -3]))
-    @settings(max_examples=20)
-    def test_recenters_and_downsamples(self, f0_bins, offset_bins):
-        """a tone at frequency_offset + f0 in the capture comes out at f0"""
-        grid = self.FS_IN / self.SIZE
-        f0 = f0_bins * 100e3
-        frequency_offset = offset_bins * grid
-
-        iq = self._tones(f0 + frequency_offset)
-        out = self._ssb_iq(iq, frequency_offset=frequency_offset)
-
-        assert out.shape == (2, round(self.SIZE * FS / self.FS_IN))
-        assert out.dtype == iq.dtype
-        mid = interior(out, 2000, axis=1)
-        f_est = tone_frequency(mid[0], FS)
-        assert f_est == pytest.approx(f0, abs=FS / mid.shape[1])
-        assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
-
-    def test_off_grid_frequency_offset(self):
-        """a frequency_offset between input FFT bins still recenters the tone"""
-        grid = self.FS_IN / self.SIZE
-        f0 = 300e3
-        frequency_offset = 3.4 * grid
-
-        iq = self._tones(f0 + frequency_offset)
-        out = self._ssb_iq(iq, frequency_offset=frequency_offset)
-
-        mid = interior(out, 2000, axis=1)
-        # the shift is applied in whole input bins, so the bound adds half a bin of
-        # quantization to the resolution of the estimator
-        f_est = tone_frequency(mid[0], FS)
-        assert f_est == pytest.approx(f0, abs=grid / 2 + FS / mid.shape[1])
-        assert_close(rms(mid, axis=1), [1.0, 2.0], rtol=1e-3)
-
-    def test_block_count_and_delay_crop_the_input(self):
-        iq = self._tones(1e6)
-        blocks = {'discovery_periodicity': 1e-3, 'max_block_count': 2}
-        delay = 0.5e-3
-        out = self._ssb_iq(iq, delay=delay, **blocks)
-
-        offs = round(delay * self.FS_IN)
-        crop_duration = blocks['max_block_count'] * blocks['discovery_periodicity']
-        size_in = round(crop_duration * self.FS_IN)
-        expected = self._ssb_iq(iq[:, offs : offs + size_in])
-        assert out.shape == (2, round(size_in * FS / self.FS_IN))
-        assert_array_equal(out, expected)
-
-
 class TestGet5gSsbSpans:
     """the correlated span of each synchronization block, cut from a capture at
     15.36 MS/s into the 7.68 MS/s synchronization parameters of `sync_params`"""
@@ -379,10 +322,8 @@ class TestGet5gSsbSpans:
 
     def _tones(self, params, f, scales=(1.0, 2.0), n_blocks=2):
         block_in = params.frame_size * params.frames_per_sync * round(self.FS_IN / FS)
-        x = testing.tone(
-            None, self.FS_IN, frequency=f, count=n_blocks * block_in, dtype=np.complex64
-        )[0]
-        return np.stack([s * x for s in scales]).astype(np.complex64)
+        x = tiled_tone(self.FS_IN, f, n_blocks * block_in, len(scales))
+        return (x * np.asarray(scales)[:, np.newaxis]).astype(np.complex64)
 
     @pytest.mark.parametrize(
         'f0, frequency_offset',
@@ -503,16 +444,22 @@ class TestCorrelateSyncSequence:
         R = sync_5gnr.correlate_sync_sequence(iq, pss, params=params)
         assert_array_equal(sync_5gnr.correlate_sync_spans(spans, pss, params=params), R)
 
-    def test_cell_id_chunks_do_not_change_the_result(self):
-        """a product buffer too small for 2 templates splits the 3 cell IDs into
-        chunks of one"""
-        params, pss, iq = embed_pss_ports([(1, 2, 11)])
-        spans = iq.reshape(1, -1, params.frame_size)[:, :: params.frames_per_sync]
+    @pytest.mark.parametrize('cells', [0, 2], ids=['one_byte', 'two_cells'])
+    def test_cell_id_chunks_do_not_change_the_result(self, cells):
+        """the result does not depend on the chunking of the cell IDs"""
+        params, pss, iq = embed_pss_ports([(1, 2, 11), (2, 6, 23)])
+        spans = iq.reshape(2, -1, params.frame_size)[:, :: params.frames_per_sync]
         spans = spans[..., : params.corr_size]
+        ports, sync_count, _ = spans.shape
+        nfft = sync_5gnr._correlation_fft_size(params.corr_size + pss.shape[1] - 1, np)
+        # 1 byte splits the 3 cell IDs into chunks of one; a product buffer of
+        # exactly 2 cells splits the cell IDs into chunks of 2 and 1
+        one_cell = ports * sync_count * nfft * np.dtype(np.complex64).itemsize
+        max_chunk_bytes = max(1, cells * one_cell)
 
         whole = sync_5gnr.correlate_sync_spans(spans, pss, params=params)
         chunked = sync_5gnr.correlate_sync_spans(
-            spans, pss, params=params, max_chunk_bytes=1
+            spans, pss, params=params, max_chunk_bytes=max_chunk_bytes
         )
         assert_array_equal(chunked, whole)
 
@@ -631,8 +578,8 @@ class TestChooseSsbOffset:
         iq = silent_block(params, n_blocks=2)
         embed_symbol(iq, phy_in, bodies_in[2], params.symbol_indexes[5], delay_in)
 
-        ssb_iq = get_ssb_iq(iq, fs_in=fs_in)
-        R = sync_5gnr.correlate_sync_sequence(ssb_iq, pss, params=params)
+        spans = get_ssb_spans(iq, params, fs_in=fs_in)
+        R = sync_5gnr.correlate_sync_spans(spans, pss, params=params)
         mag = np.abs(R[0])
         n_id2, _, beam, lag = np.unravel_index(mag.argmax(), mag.shape)
         assert (n_id2, beam) == (2, 5)
@@ -654,12 +601,12 @@ class TestCupy:
     def test_detection_pipeline(self, cupy_available):
         params, pss, iq = embed_pss_ports([(1, 3, 77)])
 
-        ssb_np, ssb_cp = numpy_and_cupy(cupy_available, get_ssb_iq, iq)
+        ssb_np, ssb_cp = numpy_and_cupy(cupy_available, get_ssb_spans, iq, params)
         assert_close(ssb_cp, ssb_np, atol=1e-5)
 
         R_np, R_cp = numpy_and_cupy(
             cupy_available,
-            sync_5gnr.correlate_sync_sequence,
+            sync_5gnr.correlate_sync_spans,
             ssb_np,
             pss,
             params=params,
@@ -701,3 +648,65 @@ class TestCupy:
         for port, (n_id2, beam, delay) in enumerate(embeds):
             mag = np.abs(R_cp[port])
             assert np.unravel_index(mag.argmax(), mag.shape) == (n_id2, 0, beam, delay)
+
+
+# %% _lag_window_pieces
+def _window_params():
+    """return the 3 lag window shapes as parametrize cases. In the default 10-slot
+    span each of the 20 windows lies inside one slot. With `symbol_indexes=(12, 23)`
+    in a 3-slot span, the window of symbol 12 crosses the slot boundary at 3836
+    samples and the window of symbol 23 ends on the next boundary. In a 1-slot span,
+    the window of symbol 9 crosses the roll boundary at ``head = 3821`` with 19 lags
+    left."""
+    single = sync_params()
+    across_slot = sync_params(symbol_indexes=(12, 23))
+    across_roll = dataclasses.replace(
+        single, slot_count=1, corr_size=3840, symbol_indexes=[9], lag_count=5 * 274
+    )
+    return [
+        pytest.param(single, id='within_one_slot'),
+        pytest.param(across_slot, id='across_slot_boundary'),
+        pytest.param(across_roll, id='across_roll_boundary'),
+    ]
+
+
+@pytest.mark.parametrize('params', _window_params())
+def test_pieces_match_the_rolled_and_trimmed_index_map(params):
+    """assembling the pieces from an index ramp equals the lag window cut from the
+    ramp rolled by -offs, split into slots, trimmed of the excess CP and merged; every
+    source slice lies inside the inverse FFT"""
+    head, offs, nfft = window_cut(params)
+    pieces = sync_5gnr._lag_window_pieces(params, head, offs)
+
+    y = np.arange(nfft)
+    rolled = np.empty(params.corr_size, dtype=int)
+    rolled[:head] = y[offs : offs + head]
+    rolled[head:] = y[: params.corr_size - head]
+    excess = params.cp_offsets[params.symbol_indexes[0] % 14]
+    trimmed = rolled.reshape(params.slot_count, -1)[:, excess:].reshape(-1)
+
+    for symbol, window in zip(params.symbol_indexes, pieces):
+        start = symbol * params.short_symbol_size
+        assembled = np.empty(params.lag_count, dtype=int)
+        for dst, src in window:
+            assert 0 <= src.start < src.stop <= nfft
+            assembled[dst] = y[src]
+        assert_array_equal(assembled, trimmed[start : start + params.lag_count])
+
+
+def test_pieces_reject_a_window_past_the_span():
+    """symbol 9 at 274 samples per symbol needs lags 2466 to 3836 of a 3836-sample
+    trimmed slot; one more lag ends past the span"""
+    params = dataclasses.replace(
+        sync_params(), slot_count=1, corr_size=3840, symbol_indexes=[9], lag_count=1371
+    )
+    head, offs, _ = window_cut(params)
+    with pytest.raises(ValueError, match='ends at 3837, past the 3836'):
+        sync_5gnr._lag_window_pieces(params, head, offs)
+
+
+def test_pieces_reject_a_corr_size_off_the_slot_grid():
+    params = dataclasses.replace(sync_params(), corr_size=38401)
+    head, offs, _ = window_cut(params)
+    with pytest.raises(ValueError, match='not a multiple of the slot_count'):
+        sync_5gnr._lag_window_pieces(params, head, offs)

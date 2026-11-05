@@ -553,59 +553,6 @@ def sss_params(
     )
 
 
-def get_5g_ssb_iq(
-    iq: Array,
-    *,
-    discovery_periodicity: float,
-    fs_out: float,
-    fs_in: float,
-    frequency_offset: float = 0,
-    delay: float = 0,
-    max_block_count: int | None = None,
-) -> Array:
-    """return the SSB band of `iq`, recentered to baseband and resampled to `fs_out`.
-
-    Each port is resampled by one FFT over the kept span. The frequency shift is a
-    whole number of bins of ``fs_in / size`` for the `size` of that span.
-
-    Args:
-        iq: waveform of shape ``(port, sample)`` at `fs_in`
-        discovery_periodicity: the SSB burst period (in s), which sizes the kept
-            span with `max_block_count`
-        fs_out: the output sample rate (in S/s)
-        fs_in: the sample rate (in S/s) of `iq`
-        frequency_offset: the offset (in Hz) of the SSB center from the center of
-            `iq`
-        delay: the time (in s) into `iq` at which the kept span begins
-        max_block_count: the number of SSB periods kept from `delay`; None keeps
-            the rest of `iq`
-
-    Returns:
-        the baseband SSB waveform of shape ``(port, sample)`` at `fs_out`, in the
-        dtype and array namespace of `iq`
-    """
-
-    xp = arrays.array_namespace(iq)
-
-    offs = round(delay * fs_in)
-    if max_block_count is not None:
-        size_in = round(max_block_count * discovery_periodicity * fs_in)
-        iq = iq[..., offs : offs + size_in]
-    else:
-        size_in = iq.shape[-1]
-
-    size_out = round(size_in * fs_out / fs_in)
-    out = xp.empty((iq.shape[0], size_out), dtype=iq.dtype)
-    shift = round(iq.shape[1] * frequency_offset / fs_in)
-
-    for i in range(out.shape[0]):
-        out[i] = fourier.resamplers.resample(
-            iq[i], num=size_out, axis=0, overwrite_x=False, shift=shift
-        )
-
-    return out
-
-
 def sync_frame_count(sample_count: int, params: SyncParams) -> int:
     """count the 10 ms frames in a synchronization block of `sample_count` samples.
 
@@ -782,6 +729,68 @@ _sync_template_spectra = _TemplateSpectra()
 util._caches[_sync_template_spectra] = _sync_template_spectra
 
 
+def _lag_window_pieces(
+    params: SyncParams, head: int, offs: int
+) -> list[list[tuple[slice, slice]]]:
+    """return the slice pairs that copy each lag window out of the inverse FFT.
+
+    The correlation of one span is the full linear convolution rolled by ``-offs`` and
+    cut to ``params.corr_size``, with the excess cyclic-prefix samples of each slot
+    removed. A lag window starts at ``symbol * params.short_symbol_size`` in that
+    trimmed sequence and runs for ``params.lag_count`` lags. A window splits into a
+    new piece at each slot boundary and at the roll boundary within the window.
+
+    Args:
+        params: the synchronization parameters from `pss_params` or `sss_params`
+        head: the number of lags read from the convolution starting at index `offs`;
+            the remaining ``params.corr_size - head`` lags are read starting at index 0
+        offs: the index in the convolution of the first lag
+
+    Returns:
+        one list per entry of ``params.symbol_indexes``, each a list of ``(dst, src)``
+        slice pairs: `dst` indexes the lag axis of the window and `src` the last
+        axis of the inverse FFT
+
+    Raises:
+        ValueError: if ``params.corr_size`` is not a multiple of ``params.slot_count``,
+            or if a lag window ends past the trimmed sequence
+    """
+    per_slot, rem = divmod(params.corr_size, params.slot_count)
+    if rem != 0:
+        raise ValueError(
+            f'corr_size {params.corr_size} is not a multiple of the slot_count '
+            f'{params.slot_count}'
+        )
+    excess = int(params.cp_offsets[params.symbol_indexes[0] % 14])
+    trimmed = per_slot - excess
+    span = params.slot_count * trimmed
+
+    pieces = []
+    for sym in params.symbol_indexes:
+        t0 = sym * params.short_symbol_size
+        t1 = t0 + params.lag_count
+        if t1 > span:
+            raise ValueError(
+                f'the lag window of symbol {sym} ends at {t1}, past the {span} '
+                'correlation samples that remain after the excess CP is removed'
+            )
+        window = []
+        t = t0
+        while t < t1:
+            k, i = divmod(t, trimmed)
+            n = min(t1, (k + 1) * trimmed) - t
+            r = k * per_slot + excess + i
+            if r < head:
+                n = min(n, head - r)
+                src0 = offs + r
+            else:
+                src0 = r - head
+            window.append((slice(t - t0, t - t0 + n), slice(src0, src0 + n)))
+            t += n
+        pieces.append(window)
+    return pieces
+
+
 def correlate_sync_spans(
     spans: Array,
     sync_seq: Array,
@@ -813,9 +822,11 @@ def correlate_sync_spans(
         zero
 
     Raises:
-        ValueError: if the last axis of `spans` is not ``params.corr_size``, or if
+        ValueError: if the last axis of `spans` is not ``params.corr_size``, if
             the symbols in ``params.symbol_indexes`` do not share one excess
-            cyclic-prefix length
+            cyclic-prefix length, if ``params.corr_size`` is not a multiple of
+            ``params.slot_count``, or if a lag window ends past the correlation
+            samples that remain after the excess cyclic prefix is removed
     """
     xp = array_namespace(spans)
 
@@ -847,28 +858,29 @@ def correlate_sync_spans(
     # The roll wraps the tail of the window onto the first lags of the convolution
     head = min(corr_size, full_size - offs)
 
-    R = xp.empty((ports, cell_count, sync_count, corr_size), dtype='complex64')
-    chunk = max(1, max_chunk_bytes // (ports * sync_count * nfft * X.dtype.itemsize))
-    for start in range(0, cell_count, chunk):
-        stop = min(start + chunk, cell_count)
-        prod = xp.empty((ports, stop - start, sync_count, nfft), dtype=X.dtype)
-        xp.multiply(
-            X[:, xp.newaxis], H[xp.newaxis, start:stop, xp.newaxis, :], out=prod
-        )
-        y = fourier.fft.ifft(prod, axis=-1, out=prod, overwrite_x=True)
-        R[:, start:stop, :, :head] = y[..., offs : offs + head]
-        R[:, start:stop, :, head:] = y[..., : corr_size - head]
+    pieces = _lag_window_pieces(params, head, offs)
 
-    # add slot index dimension: -> (port index, cell Nid, sync block index, slot index, IQ sample index)
-    Rperslot = R.reshape(R.shape[:-1] + (params.slot_count, -1))[..., excess_cp[0] :]
-    R = Rperslot.reshape(R.shape[:-1] + (-1,))
-
-    # final dims (port index, cell Nid, sync block index, beam index, IQ sample index).
     # Slices rather than a sliding window view over the lags: that view has one window
     # per sample, above 2**31 elements for 2 ports and 5 blocks at 15.36 MS/s, and
     # cupy 12 returns wrong values for the second port from a fancy index on it
-    starts = [i * params.short_symbol_size for i in params.symbol_indexes]
-    result = xp.stack([R[..., s : s + params.lag_count] for s in starts], axis=-2)
+    result = xp.empty(
+        (ports, cell_count, sync_count, len(params.symbol_indexes), params.lag_count),
+        dtype='complex64',
+    )
+    chunk = max(1, max_chunk_bytes // (ports * sync_count * nfft * X.dtype.itemsize))
+    chunk = min(chunk, cell_count)
+    prod = xp.empty((ports, chunk, sync_count, nfft), dtype=X.dtype)
+    for start in range(0, cell_count, chunk):
+        stop = min(start + chunk, cell_count)
+        shape = (ports, stop - start, sync_count, nfft)
+        # the FFT requires a C-contiguous buffer, which prod[:, :n] is not for ports > 1
+        buf = prod.reshape(-1)[: math.prod(shape)].reshape(shape)
+        xp.multiply(X[:, xp.newaxis], H[xp.newaxis, start:stop, xp.newaxis, :], out=buf)
+        y = fourier.fft.ifft(buf, axis=-1, out=buf, overwrite_x=True)
+        for j, window in enumerate(pieces):
+            for dst, src in window:
+                result[:, start:stop, :, j, dst] = y[..., src]
+
     if params.min_cp_size:
         result[..., -params.min_cp_size :] = 0
     return result

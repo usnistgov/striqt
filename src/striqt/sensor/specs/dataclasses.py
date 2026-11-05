@@ -68,7 +68,9 @@ class PendingExtraData:
 class AcquiredIQ(sa.AcquiredIQ):
     """an acquisition from a sensor source with the metadata and conditioning of the capture.
 
-    `x` must not change after the first access of `preprocess`.
+    `x` must not change after the first access of `preprocess`, except that the
+    resampling stage replaces `x` with a `ConsumedBuffer` when `overwrite_x` lets the
+    stage consume the buffer.
     """
 
     info: structs.AcquisitionInfo
@@ -84,7 +86,8 @@ class AcquiredIQ(sa.AcquiredIQ):
     """the trigger that `preprocess` runs for alignment; None selects
     `info.signal_trigger`"""
     overwrite_x: bool = False
-    """True permits the resampling stage to overwrite `x`"""
+    """True permits the resampling stage to consume `x`; `x` is a `ConsumedBuffer`
+    when the stage returns another array"""
     trigger_shifts: sw.typing.Array | None = None
     """one shift per port (samples at `capture.sample_rate`) that the alignment stage
     applies in place of running the trigger; None runs the trigger"""

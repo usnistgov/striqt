@@ -22,6 +22,7 @@ from .fourier import (
     oaconvolve,
     oaresample,
     resample,
+    set_max_cupy_fft_chunk,
     spectrogram,
     stft,
 )

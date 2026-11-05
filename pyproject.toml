@@ -8,7 +8,6 @@ dependencies = [
     "array-api-compat>=1.6",
     "dask",
     "netCDF4",
-    "numba",
     "numexpr~=2.8",
     "numpy>=1.23.5,<3",
     "pandas>=1.5",
@@ -50,7 +49,7 @@ build-backend = "hatchling.build"
 dev = [
     "jupyter",
     "ruff",
-    "ty==0.0.84"
+    "ty==0.0.98"
 ]
 doc = [
     "sphinx",
@@ -61,7 +60,6 @@ doc = [
 ]
 gpu = [
     "cupy >= 12.2",
-    "cython",
 ]
 test = [
     "coverage[toml]",
@@ -122,13 +120,10 @@ norecursedirs = [
 ]
 
 [tool.coverage.report]
-# numba compiles and cupy fuses the decorated python into device/machine code, so the
-# interpreter never executes those bodies and coverage.py reports them as missed; an
-# excluded decorator line excludes the whole function
+# cupy fuses the decorated python into device code, so the interpreter never executes
+# those bodies and coverage.py reports them as missed; an excluded decorator line
+# excludes the whole function
 exclude_also = [
-    "^\\s*@(nb|numba)\\.(njit|jit|vectorize|guvectorize)\\b",
-    "^\\s*@(numba\\.)?cuda\\.jit\\b",
-    "^\\s*@(njit|jit|vectorize|guvectorize)\\b",
     "^\\s*@cupy\\.fuse\\b",
 ]
 
@@ -152,7 +147,10 @@ combine-as-imports = true
 keep-runtime-typing = true
 
 [tool.ruff.lint.extend-per-file-ignores]
-"tests/**" = ["RUF069"]  # exact float equality on attrs copied from literals is the assertion
+"tests/**" = [
+    "RUF069",  # exact float equality on attrs copied from literals is the assertion
+    "shared-clock-mock",  # tests patch the clock of the module under test on purpose; the suite runs its timed code in the test thread
+]
 "**/__init__.py" = [ "F401", "F403", "E402"]
 # the lib/typing.py modules re-export aliases and TypedDicts under TYPE_CHECKING
 "**/typing.py" = ["F401"]

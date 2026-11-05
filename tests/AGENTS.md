@@ -28,9 +28,8 @@ repository.
   (`make_dataset`, `predicted_levels_dBm`, `occupied_bins`), with the expected levels and
   bin supports from the dataset construction; the one plotting test runs headless through
   `MPLBACKEND=agg`, set in the root conftest before any third-party import. The same block
-  sets `STRIQT_CACHE_DIR` to a directory of the session (removed at exit), keeps
-  `NUMBA_CACHE_DIR` in the user cache so compiled kernels persist, and sets `MPLCONFIGDIR`
-  to `platformdirs.user_cache_dir('striqt')/matplotlib` because a sandbox that cannot write
+  sets `STRIQT_CACHE_DIR` to a directory of the session (removed at exit) and sets
+  `MPLCONFIGDIR` to `platformdirs.user_cache_dir('striqt')/matplotlib` because a sandbox that cannot write
   `~/.matplotlib` rebuilds the matplotlib font cache on every run (12 s per process). The
   block also replaces the `persistent_cache` shelf with an in-memory dict at import time,
   not in a fixture: `site_strategies.py` reads a site YAML at import, which validates the
@@ -46,15 +45,25 @@ repository.
 
 ## Profiling scripts
 
-`tests/profiling/` holds the profiling and comparison scripts (`cuda_streams.py`,
-`zarr_sink.py`, `log_scaling.py`, `pss_oaconvolve.py`, `ssb_extraction.py`). They are
-not tests: pytest collects `test_*.py` only, and each script runs on its own
-(`pixi run -e cupy python tests/profiling/cuda_streams.py`; see the module docstring for
-the usage and how to read the output). The basenames share the `tests/` namespace, so a
-script imports a sibling by bare name (`from cuda_streams import CAPTURE`) and no name
-repeats elsewhere under `tests/`. The scripts pass `ruff check` with the rest of
-`tests/`. A script that reads or writes the window shelf runs with its own
-`STRIQT_CACHE_DIR` beside a test session.
+`tests/profiling/` holds the profiling scripts: `cuda_streams.py` (the per-measurement
+breakdown of one ADA capture), `pipeline_sync.py` (the sweep pipeline end to end, with a
+bit-for-bit comparison across runs), `contiguity.py` (the stage table of record-sized
+copies, the resampler, and the per-capture layers), `fft_chunking.py` (the
+`MAX_CUPY_FFT_SAMPLES` sweep, run on hardware changes), `bin_power.py` (the binned
+power detector against its tolerance model), and `log_scaling.py`. The ADA fixtures
+(`CAPTURE`, `ANALYSIS`, `build_setup`, `build_raw`, `oaresample_kws`), the cupy gate
+(`select_backend`), and the timing and pool helpers are in `profiling_tools.py`, and
+every script imports them from there. The scripts are not tests: pytest collects
+`test_*.py` only, and each script runs on its own (`pixi run -e cupy python
+tests/profiling/cuda_streams.py`; see the module docstring for the usage and how to read
+the output). The basenames share the `tests/` namespace, so a script imports a sibling
+by bare name (`from profiling_tools import CAPTURE`) and no name repeats elsewhere under
+`tests/`. The scripts pass `ruff check` with the rest of `tests/`. The 4 maintained
+scripts and `profiling_tools.py` carry full type hints, and `pixi run -e test314 ty check`
+over those files reports nothing. A script that reads or writes the window shelf runs with its own
+`STRIQT_CACHE_DIR` beside a test session. Each script runs end to end on `--backend
+numpy` (`--duration 0.02 --repeat 1`) as the local check; the cupy columns are verified
+on the Jetson.
 
 ## Shared setup has one owner
 
@@ -74,7 +83,7 @@ same thing is invisible until the two drift. Look here before writing setup:
   `elementwise_rtol`, `levels`, `populated`. No waveform builders and no tolerance formulas
   of its own.
 - `tests/waveform/waveform_strategies.py`: the comms builders (`FS`, `phy_5g`, `sync_params`,
-  `cp_case`, `embed_pss_ports`, `get_ssb_iq`, …) shared by the `test_waveform_comms_*`
+  `cp_case`, `embed_pss_ports`, `get_ssb_spans`, …) shared by the `test_waveform_comms_*`
   modules, and the fourier strategies (`noise_waveforms`, `sample_rates`,
   `stft_parameters`, `cross_backend_sigma`) shared by the `test_waveform_fourier_*` modules.
 - `tests/analysis/analysis_strategies.py`: analysis spec factories and constants

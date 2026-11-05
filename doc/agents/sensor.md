@@ -311,7 +311,9 @@ corrected sample 0 by `lead / fs_sdr`.
 `sources/buffers.py:find_trigger_holdoff`, which returns the number of source samples
 dropped before the record: at least the lead, plus `transient_holdoff_time` after a
 re-arm (no carryover), rounded up to the next `trigger_strobe` edge when a strobe is
-set. The record start time is the stamp plus the holdoff.
+set. The record start time is the stamp plus the holdoff. `sources/buffers.py:cast_iq`
+copies the record and overlaps out of the host buffer from the end of the holdoff. The
+`x` of the acquisition is C-contiguous and contains no holdoff sample.
 
 Within a burst, `ReceiveBuffers.stash_carryover` keeps the trailing lead and tail of the
 record of segment k and stamps the first carried sample one lead before the record of
@@ -345,7 +347,11 @@ stages, in order:
 1. Resample to `sample_rate`: `_scale_only` when no resampling is needed, otherwise
    `_oaresample`, or `_resample` when `STRIQT_USE_OARESAMPLE=0`. This is the only
    stage that reads `x`, and the one that may consume `x` in place under
-   `overwrite_x`.
+   `overwrite_x`. `_oaresample` writes the output into the buffer of `x` when
+   `overwrite_x` is set, the design downsamples, and `x` is C-contiguous. When the
+   stage output is an array other than `x`, the stage replaces `x` of the
+   acquisition with a `ConsumedBuffer` (`compute/corrections.py`), so a later read
+   of `x` raises.
 2. Conjugate for a high-side LO. `STRIQT_IGNORE_HIGHSIDE_LO` disables the conjugation.
 3. Low-pass to `analysis_bandwidth`: the response on the STFT bins inside
    `_oaresample`, or the 4001-tap FIR when `STRIQT_USE_OARESAMPLE=0` or the capture
@@ -383,8 +389,8 @@ Otherwise the result is a one-capture `NoSource` `Sweep` derived by
 `actions/warmup.py:derive_warmup_sweep`. The warmup sweep is bound per origin through
 `warmup_binding`, so that the captures of the warmup sweep keep the capture type of the
 origin. `open_warmup_resources` opens the `NoSource`, `NoPeripherals`, and `NoSink`
-resources, and a `SweepRunner` runs the warmup sweep, paying the JIT and import costs
-before the real captures.
+resources, and a `SweepRunner` runs the warmup sweep, paying the kernel compilation
+and import costs before the real captures.
 
 ## Logging and concurrency
 

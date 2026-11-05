@@ -676,7 +676,7 @@ def spectrogram_histogram(
 
     count_dtype = xp.finfo(x.dtype).dtype
     counts = xp.asarray(
-        [xp.histogram(spg[i].flatten(), bin_edges)[0] for i in range(spg.shape[0])],
+        [xp.histogram(spg[i].ravel(), bin_edges)[0] for i in range(spg.shape[0])],
         dtype=count_dtype,
     )
 
@@ -757,14 +757,15 @@ def spectrogram_ratio_histogram(
             'ratio histograms are only supported for 2-channel measurements'
         )
 
-    spg[0], spg[1] = spg[0] - spg[1], spg[1] - spg[0]
+    xp = sw.array_namespace(x)
+    xp.subtract(spg[0], spg[1], out=spg[0])
+    xp.negative(spg[0], out=spg[1])
 
     # a ratio of powers has no unit or bandwidth
     metadata = dict(metadata)
     for key in ('units', 'noise_bandwidth', 'resolution_bandwidth'):
         metadata.pop(key)
 
-    xp = sw.array_namespace(x)
     bin_edges = power.make_power_histogram_bin_edges(
         power_low=spec.power_low,
         power_high=spec.power_high,
@@ -774,7 +775,7 @@ def spectrogram_ratio_histogram(
 
     count_dtype = xp.finfo(x.dtype).dtype
     counts = xp.asarray(
-        [xp.histogram(spg[i].flatten(), bin_edges)[0] for i in range(spg.shape[0])],
+        [xp.histogram(spg[i].ravel(), bin_edges)[0] for i in range(spg.shape[0])],
         dtype=count_dtype,
     )
 

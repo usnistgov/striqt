@@ -17,7 +17,7 @@ if typing.TYPE_CHECKING:
     # the cupy import is confined to TYPE_CHECKING: at runtime, a failed cupy import
     # would lengthen the import of striqt.waveform
     try:
-        import cupy as cp  # ty: ignore[unresolved-import]
+        import cupy as cp  # ty: ignore[import-not-found]
 
         TypeIsCupy = TypeIs[cp.ndarray]
     except ModuleNotFoundError:

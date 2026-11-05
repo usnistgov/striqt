@@ -31,11 +31,13 @@ from analysis_strategies import (
     ssb_spectrogram_capture,
 )
 from numeric_checks import RTOL_FLOAT64, assert_close, elementwise_rtol, levels
+from numpy.testing import assert_array_equal
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis import testing
 from striqt.analysis.measurements import cellular
+from striqt.analysis.measurements.cellular import _ssb_spectrogram_spec
 
 DURATION = 2 * CELL_FRAME / CELL_FS
 SCS = 30e3
@@ -267,6 +269,36 @@ class TestCellular5GSSBSpectrogram:
         peak = spg[..., expected]
         assert peak.max() == peak.min()
 
+    def test_burst_spans_equal_the_masked_whole_record_spectrogram(self):
+        """the STFT over the burst-set spans is the whole-record STFT with the
+        symbols outside the burst sets dropped, bit for bit. The assertion pins the
+        span stacking of the SSB spectrogram against the whole-record transform."""
+        duration = 2 * SSB_SPECTROGRAM_PERIODICITY
+        iq = testing.circular_awgn(duration, SSB_SPECTROGRAM_FS, power=1.0)
+        capture = ssb_spectrogram_capture(duration)
+        spec = SSB_SPECTROGRAM_SPEC
+        da = sa.measurements.cellular_5g_ssb_spectrogram(
+            iq, capture, as_xarray=True, **spec.to_dict()
+        )
+
+        spg, _ = sa.measurements.spectrum.evaluate_spectrogram(
+            iq,
+            capture=capture,
+            spec=_ssb_spectrogram_spec(spec),
+            limit_digits=3,
+            dtype='float16',
+        )
+        symbol_period = sw.comms_5gnr.slot_period(spec.subcarrier_spacing) / 14
+        discovery_symbols = round(spec.discovery_periodicity / symbol_period)
+        symbols = np.arange(spg.shape[1])
+        spg = spg[:, (symbols % discovery_symbols) < SSB_SYMBOLS]
+        nfft = round(SSB_SPECTROGRAM_FS / spec.subcarrier_spacing)
+        spg = sw.fourier.truncate_freqs(
+            spg, nfft, SSB_SPECTROGRAM_FS, spec.sample_rate, axis=2
+        )
+        expected = spg.reshape(1, 2, SSB_SYMBOLS, -1)
+        assert_array_equal(da.values, expected)
+
     def test_tone_level_sums_the_tone_bin_with_its_leaking_neighbor(self):
         duration = 2 * SSB_SPECTROGRAM_PERIODICITY
         da = ssb_of(duration, frequency=SSB_SPECTROGRAM_SCS)
@@ -303,11 +335,22 @@ class TestCellular5GSSBSpectrogram:
                 {},
                 'duration must end on a whole discovery_periodicity or after a complete burst set of 56 symbols',
             ),
+            (
+                # a discovery period of one slot is shorter than the 2 ms burst set
+                SSB_SPECTROGRAM_PERIODICITY,
+                {
+                    'discovery_periodicity': sw.comms_5gnr.slot_period(
+                        SSB_SPECTROGRAM_SCS
+                    )
+                },
+                'discovery_periodicity must span the burst set of 56 symbols',
+            ),
         ],
         ids=[
             'frequency_offset_off_the_subcarrier_grid',
             'sample_rate_above_capture',
             'partial_burst_set',
+            'discovery_period_shorter_than_the_burst_set',
         ],
     )
     def test_incompatible_burst_layout_is_rejected(self, duration, kwargs, message):
@@ -408,6 +451,55 @@ def resource_histogram(*, frame_slots, **kwargs):
         **RESOURCE_GRID_KWS,
         **kwargs,
     )
+
+
+def test_apply_mask_nulls_the_guard_band_and_keeps_downlink_symbols():
+    rng = np.random.default_rng(0)
+    spg = rng.uniform(1e-12, 1e-9, (1, 28, 14)).astype('float32')
+    freqs = np.fft.fftshift(np.fft.fftfreq(14, 1 / RESOURCE_GRID_FS))
+
+    out = cellular.apply_mask(
+        spg,
+        freqs,
+        subcarrier_spacing=RESOURCE_GRID_SCS,
+        link_direction=('downlink', 'uplink'),
+        channel_bandwidth=150e3,
+        frame_slots='dddddddddd',
+        special_symbols=None,
+        guard_left=RESOURCE_GRID_SCS,
+        guard_right=RESOURCE_GRID_SCS,
+        xp=np,
+    )
+
+    assert np.isnan(out[..., 0]).all(), 'the low guard band is nulled in the output'
+    assert np.isfinite(out[0, 0, :, 7]).all(), 'downlink symbols at 0 Hz are kept'
+
+
+def test_cellular_resource_power_histogram_leaves_the_cached_spectrogram_intact():
+    """a `spectrogram` measurement with the sizing's spectrogram spec reads the same
+    cache entry after the histogram, so that entry must stay free of guard-band NaN"""
+    x = sa.testing.tone(RESOURCE_GRID_DURATION, RESOURCE_GRID_FS)
+    spec = sa.specs.CellularResourcePowerHistogram(
+        frame_slots='dddddddddd',
+        guard_bandwidths=(RESOURCE_GRID_SCS, RESOURCE_GRID_SCS),
+        **RESOURCE_GRID_KWS,
+    )
+    sizing = cellular.validated_resource_grid_sizing(RESOURCE_GRID_CAPTURE, spec)
+
+    with cellular.spectrum.spectrogram_cache:
+        cached, _ = cellular.spectrum.evaluate_spectrogram(
+            x, RESOURCE_GRID_CAPTURE, sizing.spectrogram, dtype='float32', dB=False
+        )
+        before = cached.copy()
+        sa.measurements.cellular_resource_power_histogram(
+            x, RESOURCE_GRID_CAPTURE, **spec.to_dict()
+        )
+        after, _ = cellular.spectrum.evaluate_spectrogram(
+            x, RESOURCE_GRID_CAPTURE, sizing.spectrogram, dtype='float32', dB=False
+        )
+
+    assert after is cached, 'the measurement and this test share one cache entry'
+    assert_array_equal(after, before)
 
 
 @pytest.mark.parametrize(

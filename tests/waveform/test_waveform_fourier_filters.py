@@ -21,9 +21,8 @@ from numeric_checks import (
     tone_frequency,
 )
 from numpy.testing import assert_allclose, assert_array_equal
-from waveform_strategies import cross_backend_sigma, noise_waveforms
+from waveform_strategies import cross_backend_sigma, noise_waveforms, tiled_tone
 
-from striqt.analysis import testing
 from striqt.waveform.lib.fourier.fft import fftfreq
 from striqt.waveform.lib.fourier.filters import (
     _fir_lowpass_fft,
@@ -141,6 +140,22 @@ class TestFilterDesign:
         # firwin2 constrains an even-length (type II) design to zero gain at nyquist
         assert np.abs(H[np.argmin(freqs)]) < FIR_LEAKAGE
 
+    def test_fir_lowpass_fft_rejects_a_transition_reaching_dc(self):
+        """a lower band edge below 0 Hz leaves no passband"""
+        with pytest.raises(ValueError, match='no passband'):
+            _fir_lowpass_fft(256, 1.0, cutoff=0.1, transition=0.3)
+
+    @pytest.mark.parametrize(
+        'bw, match',
+        [(0.2e6, 'no passband'), (0.75e6, 'fs/2')],
+        ids=['reaching_dc', 'reaching_nyquist'],
+    )
+    def test_design_fir_lpf_rejects_a_transition_reaching_an_edge(self, bw, match):
+        """a lower band edge at or below 0 Hz leaves no passband, and an upper band
+        edge past Nyquist is rejected"""
+        with pytest.raises(ValueError, match=match):
+            design_fir_lpf(bw, 1e6, numtaps=401, transition_bw=250e3)
+
 
 # %% oaconvolve
 class TestOaconvolve:
@@ -165,7 +180,7 @@ class TestOafilter:
     PASSBAND = (-0.2e6, 0.2e6)
 
     def _tone(self, f0):
-        return testing.tone(None, self.FS, frequency=f0, count=self.NFFT * self.NSEG)[0]
+        return tiled_tone(self.FS, f0, self.NFFT * self.NSEG)
 
     def _oafilter(self, x, **kws):
         kws = {'window': 'hann', 'passband': self.PASSBAND, **kws}
@@ -223,7 +238,7 @@ class TestNumpyCupyCrossComparison:
     @given(f0_bins=st.integers(min_value=-20, max_value=20))
     def test_oafilter(self, cupy_available, f0_bins):
         fs, nfft = 1e6, 256
-        x = testing.tone(None, fs, frequency=f0_bins * fs / nfft, count=nfft * 40)[0]
+        x = tiled_tone(fs, f0_bins * fs / nfft, nfft * 40)
 
         kws = {'fs': fs, 'nfft': nfft, 'window': 'hann', 'passband': (-0.2e6, 0.2e6)}
         y_np, y_cp = numpy_and_cupy(cupy_available, oafilter, x, **kws)

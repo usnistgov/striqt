@@ -130,14 +130,13 @@ def stft(
         xstack = axis_to_blocks(x, nfft, axis=axis, truncate=truncate)
         wstack = _broadcast_onto(w / nfft, xstack, axis=axis + 1)
 
-        if out is None and overwrite_x:
+        if overwrite_x:
             out = xstack
+        elif out is None:
+            # C order regardless of the layout of `x`, so the FFT axis is contiguous
+            out = xp.empty(xstack.shape, dtype=xstack.dtype)
 
-        xstack = xp.multiply(
-            xstack,
-            wstack.astype(xstack.dtype),
-            out=xstack if overwrite_x else out,
-        )
+        xstack = xp.multiply(xstack, wstack.astype(xstack.dtype), out=out)
 
     else:
         hop = nperseg - noverlap

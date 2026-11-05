@@ -127,7 +127,7 @@ if TYPE_CHECKING:
     from .typing import LRUWrapped, P, R
 
     try:
-        import cupy as cp  # ty: ignore[unresolved-import]
+        import cupy as cp  # ty: ignore[import-not-found]
     except ModuleNotFoundError:
         cp = None
 
@@ -246,7 +246,7 @@ def _get_cache_shelf():
         shelf = shelve.open(filename, writeback=True)  # noqa: SIM115
 
     # sync is forced on each operation already
-    shelf.__del__ = lambda: None  # ty: ignore[invalid-assignment]
+    shelf.__del__ = lambda: None
     return shelf, cache_lock
 
 

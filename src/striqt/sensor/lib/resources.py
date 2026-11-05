@@ -226,8 +226,9 @@ def resident_bytes_bound(
     `specs.sequencing.repeat_captures`: the port count of the capture, times 8 bytes
     per complex64 sample, times the source samples of the record, the correction
     overlaps, and the transient and strobe holdoff of a first burst segment. The
-    later segments of a burst read no holdoff, so the bound is exact for a sweep
-    without bursts and an overestimate for a sweep with bursts. The bound covers the
+    holdoff of a first segment is read into the receive buffer and dropped from the
+    acquisition. The later segments of a burst read no holdoff. The bound exceeds the
+    resident bytes by at least the holdoff of each acquisition. The bound covers the
     `x` arrays alone, not the resampled, filtered, or analyzed copies.
 
     Args:

@@ -148,19 +148,23 @@ def bin_power_bound(dtype, size, outputs, n_impl=1, kind='mean'):
 
 
 class TestIqToBinPower:
+    @pytest.mark.namespaces('numpy', 'cupy')
+    @pytest.mark.parametrize('kind', ['mean', 'max'])
     @pytest.mark.parametrize('size', [2**14, 2**17])
-    def test_mean_over_a_long_bin_stays_within_the_reduction_model(self, size):
+    def test_long_bin_statistics_stay_within_the_reduction_model(self, xp, size, kind):
         """a mean over 1e5 float32 samples rounds a few units, where the n*u bound of
-        recursive summation would have allowed 1e-2"""
+        recursive summation would have allowed 1e-2; a max over the bin is exact"""
         rng = np.random.default_rng(size)
         iq = rng.standard_normal((4, size)) + 1j * rng.standard_normal((4, size))
         iq = (iq / np.sqrt(2)).astype(np.complex64)
-        result = iq_to_bin_power(iq, Ts=1, Tbin=size, kind='mean', axis=1)[:, 0]
-        assert_close(
-            result,
-            reference_power(iq, axis=1),
-            rtol=bin_power_bound(np.float32, size, outputs=result.size),
-        )
+        power = reference_power(iq)
+        expected = power.mean(axis=1) if kind == 'mean' else power.max(axis=1)
+
+        result = iq_to_bin_power(xp.asarray(iq), Ts=1, Tbin=size, kind=kind, axis=1)
+
+        assert result.dtype == np.float32
+        rtol = bin_power_bound(np.float32, size, outputs=result.size, kind=kind)
+        assert_close(result[:, 0], expected, rtol=rtol)
 
     def test_quantile_of_a_long_heavy_tailed_bin_is_exact_on_every_numpy(self):
         """numpy < 2.3 casts a scalar q to float32 (numpy.lib._function_base_impl,

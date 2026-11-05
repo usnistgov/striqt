@@ -13,16 +13,15 @@ float. Paths below are relative to `src/striqt/waveform/` unless qualified.
 - The elementwise dB conversions in `lib/power/convert.py` evaluate with numexpr on
   numpy and with the `cupy.fuse` kernels in `lib/power/cuda_jit.py` on cupy. The
   two paths must stay in lockstep, including the `out=` handling through
-  `_arraylike_with_buffer`.
-- `comms.correlate_cyclic_shift` dispatches the same way, between
-  `lib/comms/cp_cpu_jit.py` (numba `njit`) and `lib/comms/cp_cuda_jit.py`
-  (`numba.cuda.jit`).
-- `lib/jit.py` sets `NUMBA_CACHE_DIR` to the `numba` subdirectory of
-  `lib/util.py` `cache_dir()` (`STRIQT_CACHE_DIR`, else the platformdirs user cache
-  directory) when the variable is unset, and stamps numba caches by content hash so that a reinstall
-  does not invalidate the caches. The two kernel modules import `lib/jit.py` before
-  numba so that the setting takes effect.
-- coverage.py excludes the jitted and fused bodies through `exclude_also` in the
+  `_arraylike_with_buffer`. The binned power detectors of `lib/power/detect.py`
+  dispatch the same way for `mean`, `rms`, `max`, and `peak`: on cupy a
+  `ReductionKernel` of `cuda_jit.py` squares and reduces in one pass with no buffer of
+  the size of the waveform; on numpy `envtopow` fills that buffer and the reduction
+  follows. The two must agree within `bin_power_rtol` plus `bin_power_rms`.
+- `comms.correlate_cyclic_shift` evaluates the cyclic-prefix correlation on the
+  array API, on numpy and cupy alike: the delayed product is gathered at the symbol
+  starts and lags, then summed over the prefix samples, with complex128 accumulation.
+- coverage.py excludes the fused bodies through `exclude_also` in the
   `[tool.coverage.report]` table of `pyproject.toml`.
 
 ## Fourier package
@@ -33,7 +32,10 @@ float. Paths below are relative to `src/striqt/waveform/` unless qualified.
   (`find_window_param_from_enbw`), and the extra scipy-style windows.
 - `fft.py`: `fft` and `ifft` with the cupy `out=` path, the exact `fftfreq` grid,
   `slice_freqs`, `truncate_freqs`, `null_lo`, `time_fftshift`, and the roundoff
-  model `fft_tolerance_rms`, `on_peak_roundoff`, and `off_peak_floor_dBc`.
+  model `fft_tolerance_rms`, `on_peak_roundoff`, and `off_peak_floor_dBc`. A cupy
+  FFT called with an `out=` buffer runs in groups of at most `MAX_CUPY_FFT_SAMPLES`
+  samples, `2**23` by default. `set_max_cupy_fft_chunk` changes the limit, and
+  `None` selects one group.
 - `stft.py`: `stft` and `istft`, the stacking helpers, `zero_stft_by_freq`, and
   `downsample_stft`.
 - `spectrum.py`: `spectrogram`.
@@ -85,13 +87,17 @@ shim is `striqt.waveform.fourier`.
   analysis low-pass as the block-length `firwin2` response of `_fir_lowpass_fft`,
   with the transition band centered on the cutoff (the band edges of
   `design_fir_lpf`). The response, the `nfft_out / nfft` rate scale, and the caller's
-  `scale` are one multiplier applied while the bins of each block are copied into a
-  contiguous `nfft_out`-bin buffer in `fftfreq` order (`_copy_bins_to_fftfreq_order`),
-  so `istft` runs the inverse FFT in place with ``fftshift=False`` and no time-domain
-  shift multiply. The overlap-add in `_unstack_stft_windows` adds each strided group
-  of windows into the output span viewed as ``(windows, nfft)`` without a copy. On
-  the TX2i these stages are memory-bound at about 60 GB/s, so each avoided pass over
-  the stacked frames is a measurable fraction of the call.
+  `scale` are one multiplier applied while the bins of each block are reordered into
+  `fftfreq` order in the head of the frames buffer (`_copy_bins_to_fftfreq_order`), so
+  `istft` runs the inverse FFT in place with ``fftshift=False`` and no time-domain
+  shift multiply. The reorder runs in forward blocks of segments: a block is written
+  directly when it ends before its first unread source row, and through an 8 MiB
+  scratch otherwise. cupy does not detect overlap between the source and the
+  destination of a copy. The peak of `oaresample` is the frames, the cuFFT work
+  area, and the output. The overlap-add in `_unstack_stft_windows` adds each strided
+  group of windows into the output span viewed as ``(windows, nfft)`` without a
+  copy. On the TX2i these stages are memory-bound at about 60 GB/s, so each avoided
+  pass over the stacked frames is a measurable fraction of the call.
 - `resample` fftshifts in the time domain (`time_fftshift`) so that downsampling
   becomes a slice of the frequency axis.
 
@@ -131,15 +137,16 @@ shim is `striqt.waveform.fourier`.
   the axes named by `COARSE_LAG_DIM` and `FINE_LAG_DIM`.
 - `get_5g_ssb_spans` cuts the first `corr_size` samples of each synchronization
   block, with a one-slot margin at each end, and recenters and resamples every port
-  and block in one `resample` call. The cellular measurements use it; `get_5g_ssb_iq`
-  resamples the whole record, of which the correlator reads 10%.
+  and block in one `resample` call. The cellular measurements use it.
 - `correlate_sync_spans` is the correlator core: one zero-padded FFT per span, shared
   across cell IDs; template spectra memoized on the identity of the template array
   (`_TemplateSpectra`, registered with `clear_caches`); cell IDs in chunks bounded by
   `max_chunk_bytes`; the FFT size from `_correlation_fft_size`, `next_fast_len` on
   numpy and the next power of 2 on cupy, which cuFFT runs faster than the smooth
-  size. `correlate_sync_sequence` cuts the spans from a whole-frame record and calls
-  the core.
+  size. The lag windows are copied from the inverse FFT of each chunk straight into
+  the result through the slice pairs of `_lag_window_pieces`. The product buffer is
+  allocated once at the full chunk shape. `correlate_sync_sequence` cuts the spans
+  from a whole-frame record and calls the core.
 
 The tests validate the synchronization path at 30 kHz subcarrier spacing only. The
 cyclic prefix model at 15 kHz and 60 kHz is known wrong. The defect is recorded as

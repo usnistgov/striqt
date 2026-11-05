@@ -36,7 +36,11 @@ saved corrections (48). Items 22 and 86 were fixed on 2026-10-22 by replacing th
 `Source.signal_trigger` is annotated with the trigger bundle, `SoapySource.__post_init__`
 accepts it when exactly one trigger is enabled, and `striqt.analysis.measurements` checks
 at import that the registry and the bundles agree (`xfailed` 43 to 41 on both
-interpreters; 35 to 33 markers). Items are listed in priority order, not numeric order.
+interpreters; 35 to 33 markers). Item 67 was retired on 2026-11-05. The cyclic-prefix
+correlation moved onto the array API (735aa631), which deleted the numba CUDA kernel
+`comms/cp_cuda_jit.py:_corr_at_indices` and the test class of item 67 (33 to 32
+markers). Items are
+listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -97,7 +101,6 @@ item is open.
 | 16 | `test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys` | High | B | trivial |
 | 62 | `test_three_deep_adjust_analysis_is_hashable` | High | B | small |
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
-| 67 | `test_cuda_unsorted_indices` | High | B (GPU, unverified) | trivial |
 | 59 | `test_probe_soapy_info_with_a_channel_sensor` | High | B (latent) | trivial |
 | 10 | `test_chained_remap_declared_before_its_key_resolves` | Medium | B | moderate |
 | 45 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[calibration_without_a_lo_shift_loop]` | Medium | B | easy |
@@ -257,21 +260,6 @@ tables draw their marks from the module's `scs_cp_layout` builder
 - **Impact.** Measurements use `norm='power'`, which is consistent across
   overlaps; the raw path is exposed through the public `stft`.
 - **Fix.** Decide which scale is the contract and apply it on both paths.
-
-### 67. The CUDA `_corr_at_indices` stops at the first out-of-range index
-
-`tests/waveform/test_waveform_comms_cp.py::TestCorrAtIndicesKernels::test_cuda_unsorted_indices`
-
-- **Mechanism.** `comms/cp_cuda_jit.py:28-29` `break`s at the first out-of-range
-  index pair, while `comms/cp_cpu_jit.py:27-32` zero-fills it and continues.
-  `comms.correlate_cyclic_shift` flattens the (symbol, slot, frame, cp) meshgrid built
-  by `_get_3gpp_index_cyclic_prefix` (`comms/phy_3gpp.py:78`), which is not monotonic, so the kernels disagree whenever a
-  valid index follows an invalid one (IQ shorter than the requested frames).
-- **Why the test is right.** The two backends must agree (AGENTS.md,
-  lockstep requirement). The test could not be run here (cupy skips); the
-  mechanism was checked by replaying both loops in plain Python. Needs a
-  Jetson run to confirm the strict marker.
-- **Fix.** Replace `break` with `continue` after zero-filling. Trivial.
 
 ### 59. `_probe_channel` indexes a sensor `ArgInfo`
 
@@ -594,11 +582,11 @@ it was standing in for is enabled.
   the value is the mistake is a judgment call, so the xfail that recorded it
   (item 47) was withdrawn; the mismatch itself remains.
 
-- **`cast_iq` widens int16 in place over overlapping memory.** `buffers.py:286-295`
-  copies the int16 view into a float32 view of the same buffer with
-  `xp.copyto`. numpy detects the overlap and buffers; cupy does not, so on the
-  Jetson with `transport_dtype='int16'` this looks like a data race. Unverified
-  here; needs a hardware check.
+- **`cast_iq` widens int16 in place over overlapping memory.** The cupy branch of
+  `buffers.py:cast_iq` copies the int16 view into a float32 view of the same
+  device buffer with `xp.copyto`. No corruption observed on the Jetson 2026-11-05
+  in `test_cast_iq_cupy_int16_widening_is_exact_across_many_thread_blocks` (2 ports
+  x 2**21 pairs, 3 seeds). The numpy branch casts into a fresh array.
 
 - **`read_iq`'s silent `break` is unreachable today.** `controller.py:501-504`
   drops the tail of the buffer if `received + request > buffer_count`. With the
@@ -611,11 +599,6 @@ it was standing in for is enabled.
   one extra period (up to `min_holdoff + 2*strobe`). Pinned as current
   behavior in `test_sensor_sources_buffers.py`; alignment within one sample and
   the lower bound are the asserted contract.
-
-- **`cast_iq` slices `2*acquired_count` complex samples.** `buffers.py` on the
-  float32/complex64 path slices `buffer[:, :2*acquired_count]`, a leftover from
-  a float32 view, while the int16 path yields exactly `acquired_count`. Harmless
-  while `read_iq` passes the full buffer width; tested only at full width.
 
 - **`mock_binding(register=False)` extended the tagged union** until 2026-10-21.
   `bind_sensor` now adds a tagged class to `tagged_sweeps` only when it registers

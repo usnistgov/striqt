@@ -56,7 +56,7 @@ from striqt.sensor.lib.compute import corrections
 
 cp: Any = None
 
-# the ADA denver-3750 capture (tests/profiling/cuda_streams.py CAPTURE) and the
+# the ADA denver-3750 capture (tests/profiling/profiling_tools.py CAPTURE) and the
 # air7201b clock
 MASTER_CLOCK_RATE = 125e6
 SAMPLE_RATE = 107.52e6
@@ -413,8 +413,6 @@ def main() -> None:
 
     global cp
     if args.backend == 'cupy':
-        # numba.cuda must be imported before cupy (numba issue 6131)
-        import numba.cuda  # noqa: F401, I001
         import cupy  # ty: ignore[unresolved-import]
 
         cp = cupy

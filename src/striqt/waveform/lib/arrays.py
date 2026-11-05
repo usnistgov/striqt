@@ -17,7 +17,7 @@ _TC = TypeVar('_TC', bound=Callable)
 if TYPE_CHECKING:
     from types import ModuleType
 
-    import cupy  # ty: ignore[unresolved-import]
+    import cupy  # ty: ignore[import-not-found]
 
     from .typing import _AT, Array, ArrayLike, DTypeLike, TypeIsCupy
 
@@ -556,25 +556,54 @@ def pad_along_axis(
 
 
 # %% cupy configuration and memory management
-def pinned_array_as_cupy(x: np.ndarray, stream: Any = None) -> Array:
+def pinned_array_as_cupy(
+    x: np.ndarray, stream: Any = None, *, out: cupy.ndarray | None = None
+) -> cupy.ndarray:
     """return a device copy of the pinned host array `x`, started on `stream`.
 
     The copy is asynchronous: synchronize `stream` (the current stream when None)
-    before `x` is rewritten. `x` is C-contiguous, or a 2-D array with contiguous rows
-    such as a column slice, which is copied one row at a time.
+    before `x` is rewritten or `out` is read. `x` is C-contiguous, or a 2-D array with
+    contiguous rows such as a column slice, which is copied one row at a time. A
+    C-contiguous `x` of the `nbytes` of `out` fills `out`. Otherwise a 2-D `x` requires
+    a 2-D `out` with the same row count, contiguous rows, and a row pitch of at least
+    the row bytes of `x`. The bytes of each row of `x` are written at the head of the
+    row of `out`.
+
+    Args:
+        x: the pinned host array
+        stream: the cupy stream of the copy; `None` selects the current stream
+        out: the device array to fill; `None` allocates one shaped like `x`
+
+    Returns:
+        `out`, or the allocated device array
 
     Raises:
         ValueError: if `x` is neither C-contiguous nor 2-D with contiguous rows
+        ValueError: if `out` does not fit the copy of `x`
     """
     assert cp is not None
-    out = cp.empty_like(x)
-    if x.flags.c_contiguous:
+    if out is None:
+        out = cp.empty_like(x)
+
+    if x.flags.c_contiguous and out.flags.c_contiguous and out.nbytes == x.nbytes:
         out.data.copy_from_host_async(x.ctypes.data, x.nbytes, stream=stream)
     elif x.ndim == 2 and x.strides[1] == x.itemsize:
-        for row_out, row in zip(out, x):
-            row_out.data.copy_from_host_async(
-                row.ctypes.data, row.nbytes, stream=stream
+        row_bytes = x.shape[1] * x.itemsize
+        row_fits = (
+            out.ndim == 2
+            and out.shape[0] == x.shape[0]
+            and out.strides[1] == out.itemsize
+            and out.shape[1] * out.itemsize >= row_bytes
+        )
+        if not row_fits:
+            raise ValueError(
+                'out must be 2-D with the row count of x, contiguous rows, '
+                'and rows of at least the row bytes of x'
             )
+        for row_out, row in zip(out, x):
+            row_out.data.copy_from_host_async(row.ctypes.data, row_bytes, stream=stream)
+    elif x.flags.c_contiguous:
+        raise ValueError('out must be C-contiguous with the nbytes of x')
     else:
         raise ValueError(
             'the host array must be C-contiguous or 2-D with contiguous rows'
@@ -591,18 +620,11 @@ def sync_if_cupy(x: Array):
 @functools.cache
 def configure_cupy():
     if cp is not None:
-        from cupy import fft  # ty: ignore[unresolved-import]
+        from cupy import fft  # ty: ignore[import-not-found]
 
         # the FFT plan cache allocates large buffers that striqt does not reuse
         fft.config.get_plan_cache().set_size(0)
         cp.cuda.set_pinned_memory_allocator(None)
-
-
-def free_cupy_mempool():
-    if cp is not None:
-        mempool = cp.get_default_memory_pool()
-        if mempool is not None:
-            mempool.free_all_blocks()
 
 
 @util.lru_cache()

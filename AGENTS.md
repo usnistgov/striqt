@@ -6,7 +6,7 @@ This file is the guidance for coding agents and new contributors working in this
 
 Access the environment through `pixi`. The `test39` and `test314` environments carry the
 test and dev tooling (pytest, ruff, ty) on Python 3.9 and 3.14; `doc` carries sphinx;
-`cupy` exists only on Linux (the Jetson):
+`cupy` is defined for `linux-aarch64` (the Jetson), `linux-64`, and `win-64`, not macOS:
 
 ```sh
 pixi run -e test39 pytest                                        # full suite, py39
@@ -15,15 +15,15 @@ pixi run -e test39 pytest tests/waveform/test_waveform_fourier_stft.py -q   # on
 pixi run -e test39 pytest -k test_stft_linearity                 # one test by name
 pixi run -e test39 ruff format src tests                         # format (single quotes, 88 cols)
 pixi run -e test39 ruff check src tests
-pixi run -e test314 ty check src                                  # type check (must pass; py39 has a known baseline)
+pixi run -e test314 ty check src                                  # type check (must pass on test39 and test314)
 pixi run -e test314 pyright src                                   # advisory; accepted count in Conventions → Typing
 pixi run -e test314 pyrefly check                                 # advisory; accepted count in Conventions → Typing
 pixi run -e doc sphinx-build -E -a -b html doc doc/html          # docs (see chores/push-docs.sh to deploy)
 pixi run -e cupy pytest                                          # GPU path, Jetson only
-STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/zarr_sink.py  # own disk caches
+STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/pipeline_sync.py --buffers 2  # own disk caches
 ```
 
-The on-disk caches (the `persistent_cache` window shelf, the numba kernel cache) live in
+The on-disk cache (the `persistent_cache` window shelf) lives in
 the platformdirs user cache directory unless `STRIQT_CACHE_DIR` names another one. Two
 striqt processes that share the window shelf corrupt it on macOS Python 3.9, so a script
 run beside a test session or another script sets its own directory. The test suite does
@@ -54,7 +54,7 @@ Four packages under `src/striqt/`, stacked bottom-up: `striqt.waveform` → `str
 The architecture guide is in `doc/agents/`, written primarily for ingest by coding agents. Read the page for an area before changing code in that area:
 
 - `doc/agents/architecture.md`: package layout and the re-export shims, spec structs as the YAML/JSON/zarr schema, and the measurement registry (caches, `prefer_filtered`/`prefer_aligned`, signal triggers, the `BuiltinAnalyses` group).
-- `doc/agents/waveform_numerics.md`: numpy/cupy dispatch, the Fourier package, STFT layout, resampling, the window and numba caches, and the OFDM and 5G NR synchronization models.
+- `doc/agents/waveform_numerics.md`: numpy/cupy dispatch, the Fourier package, STFT layout, resampling, the window cache, and the OFDM and 5G NR synchronization models.
 - `doc/agents/sensor.md`: sensor bindings, actions and runners (sweep, Y-factor calibration, cellular sweep), extensions and the downstream project, sweep execution and the per-capture signal path, and logging and concurrency.
 
 ### Known gaps are recorded as strict xfails
@@ -74,7 +74,7 @@ Library defects that need a design decision rather than a local fix are written 
 - **Typing.** Every new or edited function, method and closure carries hints for all parameters and the return; only `self`/`cls` and lambdas are exempt. Wrapper catch-alls are `*args: P.args, **kwargs: P.kwargs`. Reuse the aliases in `striqt.waveform.lib.typing` (`Array`, `ArrayLike`, `XpType`, `ArrayBackend`, `WindowType`, `DTypeLike`, `LRUWrapped`), `striqt.analysis.lib.typing` (`Measurement`, `AnalysisFunc`, `WrappedAnalysis`, `CoordFunc`, `ZarrStore`) and `striqt.sensor.lib.typing` (`PS`/`PC`, `ResamplerKws`, `PassThroughWrapper`); `xp` is `ModuleType` when required and `XpType` when `None` means "infer"; `dtype` is `DTypeLike`. A decorator that returns a wrapper names its type variables in the return annotation (`-> CoordFuncWrapper[TC, TM, R]`, not the bare alias), otherwise ty erases the wrapped signature to `Unknown`.
   - `**kwargs` forwarded to a fixed target are `**kwargs: Unpack[<Name>Kws]` with the `TypedDict` defined in that package's `lib/typing.py` (`ResamplerKws` is the model); anything else is `**kwargs: Any`. `TypedDict` is for keyword sets only; structured return values stay `dataclasses`/`msgspec.Struct`. ty 0.0.81 does not flag unknown keywords through `Unpack` (strict xfail in `tests/test_typing.py`).
   - Measurement signatures are typed through `@hint_keywords(spec_type)`; a measurement body is `(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement`. `tests/test_typing.py` runs ty over probes generated from `sa.registry` and asserts that every registered measurement exposes its spec fields statically, and over hand-written probes for the other keyword-unpacking sites.
-  - `pixi run -e test314 ty check src` must report no diagnostics. `pixi run -e test39 ty check src` carries a baseline from its older dependency stubs (zarr 2, IPython 8, matplotlib 3.9, pandas 2) that must not grow; ty applies the 3.9 rules in both (`[tool.ty.environment]` in `pyproject.toml`). `tests/test_typing.py` enforces the test314 gate.
+  - `pixi run -e test314 ty check src` and `pixi run -e test39 ty check src` must both report no diagnostics; ty applies the 3.9 rules in both (`[tool.ty.environment]` in `pyproject.toml`). The two environments carry different dependency stubs (zarr 2, IPython 8, matplotlib 3.9, and pandas 2 on test39), so a name that exists in one version only is reached through a module bound to `typing.Any` (`storage: typing.Any = importlib.import_module('zarr.storage')`) rather than through an ignore comment, which the other environment reports as unused. `tests/test_typing.py` enforces the test314 gate.
   - Suppress with `# ty: ignore[rule-name]` on the offending line, never a blanket `# ty: ignore` or `# type: ignore`. An ignore that is unused in one environment is a warning there, so on version-gated branches (zarr 2/3) suppress only what the test314 stubs reject.
   - pyright and pyrefly run in advisory mode, pinned to 3.9 like ty (`[tool.pyright]`, `[tool.pyrefly]` in `pyproject.toml`). Their remaining diagnostics are checker gaps, not hint problems: pyright 53 errors and pyrefly 40 errors on `src/` as of 2026-09-24 (numpy stubs without `normalize_axis_tuple`, the zarr 2/3 `hasattr` gate, `dict`-subclass `__hash__`, optional `cupy` imports, `TypeIs` to uninstalled torch/cupy, msgspec runtime-valued annotations in bound sweeps, deliberate protocol deviations, the `for k in list(locals())… del k` re-export loops, and a few flagged defects). Do not add `# pyright: ignore` or `# pyrefly: ignore` comments (ty never honored them and they hide more than they explain): fix a new diagnostic with a better hint, or leave it in that count. Write `Union`/`Optional` rather than `X | Y` inside the `TYPE_CHECKING` alias blocks of the `lib/typing.py` modules, since pyright evaluates those under 3.9.
 - **Comments:** only write one if a competent engineer or agent reading the code cold would be surprised or misled without it. Worth writing: a non-obvious *why* (constraint, workaround, domain rule, performance trade-off); something that looks wrong but is intentional; external context that can't be inferred from the code (section from a technical standard, peer-reviewed publication, government report, public documentation, upstream bug/issue number); an invariant or precondition the types don't enforce. Do not write:

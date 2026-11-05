@@ -14,7 +14,6 @@ from .lib.comms.sync_5gnr import (
     choose_ssb_offset,
     correlate_sync_sequence,
     correlate_sync_spans,
-    get_5g_ssb_iq,
     get_5g_ssb_spans,
     index_pss_symbols,
     pss_5g_nr,

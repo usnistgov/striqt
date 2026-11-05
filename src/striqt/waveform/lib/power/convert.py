@@ -490,8 +490,8 @@ def dBlinsum(
     """
 
     x_lin = dBtopow(x_dB, overwrite_x=overwrite_x, min_dtype=min_dtype)
-    x_sum = x_lin.sum(axis)  # type: ignore
-    return powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype)  # type: ignore
+    x_sum = x_lin.sum(axis)  # ty: ignore[invalid-argument-type, no-matching-overload]
+    return typing.cast('_ALD', powtodB(x_sum, overwrite_x=True, min_dtype=min_dtype))
 
 
 # %% module-local helper functions
@@ -610,10 +610,10 @@ def _repackage_arraylike(
     elif isinstance(obj, pd.DataFrame):
         return pd.DataFrame(values, index=obj.index, columns=obj.columns)  # type: ignore
     elif isinstance(obj, xr.DataArray):
-        ret = obj.copy(deep=False, data=values)
+        ret = typing.cast('xr.DataArray', obj.copy(deep=False, data=values))
         units = ret.attrs.get('units', None)
         if units is not None and unit_transform is not None:
             ret.attrs['units'] = unit_transform(units)
-        return ret
+        return typing.cast('_ALN', ret)
     else:
         raise TypeError(f'unrecognized input type {type(obj)}')

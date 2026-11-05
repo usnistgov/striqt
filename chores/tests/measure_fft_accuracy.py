@@ -174,7 +174,7 @@ def main():
         print(
             f'cupy {cp.__version__} on {cp.cuda.runtime.getDeviceProperties(0)["name"].decode()}'
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f'cupy unavailable ({exc!r}); measuring the CPU backend only')
     print(f'scipy {scipy.__version__}, numpy {np.__version__}')
 

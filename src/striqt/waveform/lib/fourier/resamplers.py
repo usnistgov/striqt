@@ -19,10 +19,15 @@ from .filters import _COLA_WINDOW_SIZE_DIVISOR, _fir_lowpass_fft, design_oafilte
 from .stft import _find_downsample_copy_range, istft, stft
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from ..typing import _AT, Array, ShiftType
 
 
 OLA_MAX_FFT_SIZE = 128 * 1024
+
+# the scratch of the in-place bin reorder; larger blocks mean fewer kernel launches
+_REORDER_SCRATCH_BYTES = 8 * 2**20
 
 
 def _next_smooth_size(n: int) -> int:
@@ -370,13 +375,15 @@ def resample(
 
     del x
 
+    in_place = True
     if nfft_out < nfft_in:
-        # downsample by trimming frequency
+        # downsample by trimming frequency. The slice has strided rows for an N-D `x`.
+        # pocketfft transforms the strided rows without a copy, and the cupy path
+        # copies the rows into a contiguous buffer of its own before an in-place
+        # transform
         bounds = _find_downsample_copy_range(nfft_in, nfft_out, edge_low, edge_high)[1]
         y = axis_slice(y, *bounds, axis=axis)
-        # the cupy `out=` path of `ifft` needs a contiguous buffer; the slice is one
-        # only for a 1-D `x`, and the call returns a contiguous `y` unchanged
-        y = xp.ascontiguousarray(y)
+        in_place = False
 
     elif nfft_out > nfft_in:
         # upsample by zero-padding frequency, which allocates a copy
@@ -385,7 +392,10 @@ def resample(
         y = pad_along_axis(y, [[pad_left, pad_right]], axis=axis)
 
     # Inverse transform
-    xout = ifft(y, axis=axis, overwrite_x=True, out=y)
+    if in_place:
+        xout = ifft(y, axis=axis, overwrite_x=True, out=y)
+    else:
+        xout = ifft(y, axis=axis)
 
     return time_ifftshift(xout, overwrite_x=True, axis=axis)
 
@@ -404,6 +414,7 @@ def oaresample(
     filter_bandwidth: float | None = None,
     transition_bandwidth: float = 250e3,
     scale: Array | float = 1.0,
+    out: Array | None = None,
 ):
     """resample `x` by ``up / down`` through STFT overlap-add.
 
@@ -421,7 +432,8 @@ def oaresample(
             divisor of `window`
         fs: the sample rate (in S/s) of `x`
         window: the COLA window of the STFT, a key of the divisor table
-        overwrite_x: True permits the STFT to consume the buffer of `x`
+        overwrite_x: True permits the STFT to consume the buffer of `x`; the
+            contents of `x` are undefined after the call
         axis: the time axis of `x`
         frequency_shift: the frequency (in Hz) moved to the output DC, a multiple of
             ``fs / down`` times the frames per hop of `window`; 0 keeps the center
@@ -431,16 +443,24 @@ def oaresample(
         transition_bandwidth: the width (in Hz) of the low-pass transition band
         scale: a voltage gain, a scalar or one value per entry of the axis before
             `axis`
+        out: a C-contiguous buffer of at least ``x.size * up // down`` elements in
+            the dtype of `x` that receives the output; `x` itself is accepted when
+            `overwrite_x` is True
 
     Returns:
         the waveform at ``fs * up / down`` on `axis`, of ``x.shape[axis] * up //
-        down`` samples, in the dtype and array namespace of `x`
+        down`` samples, in the dtype and array namespace of `x`; a view of `out`
+        when `out` is given
 
     Raises:
         ValueError: if `frequency_shift` is nonzero while upsampling, is not a
             multiple of ``fs / down`` times the frames per hop, or moves the output
-            band past an edge of the input band; if `up` or `down` is odd or not a multiple of the COLA
-            divisor; or if `window` has no COLA divisor
+            band past an edge of the input band; if `up` or `down` is odd or not a
+            multiple of the COLA divisor; if `window` has no COLA divisor; if
+            `filter_bandwidth` is finite and at most `transition_bandwidth`, which
+            leaves no passband; or if `out` is not C-contiguous, has another dtype,
+            has fewer than ``x.size * up // down`` elements, or shares memory with
+            `x` without `overwrite_x`
     """
 
     nfft = down
@@ -480,6 +500,24 @@ def oaresample(
         raise ValueError('frequency_shift must be a multiple of fs/down')
 
     xp = array_namespace(x)
+    noverlap_in = round(nfft * overlap_scale)
+    if out is not None:
+        if out.dtype != x.dtype:
+            raise ValueError(f'out has dtype {out.dtype}, expected {x.dtype}')
+        if not out.flags.c_contiguous:
+            raise ValueError('out must be C-contiguous')
+        if out.size < x.size * nfft_out // nfft:
+            raise ValueError(
+                f'out has {out.size} elements, fewer than the {x.size * nfft_out // nfft} '
+                'of the output'
+            )
+        # without overlap the STFT frames would be `x` itself, and the overlap-add
+        # would read the memory it writes
+        if xp.may_share_memory(out, x) and not (overwrite_x and noverlap_in > 0):
+            raise ValueError(
+                'out may share the buffer of x only when overwrite_x is True'
+            )
+
     y = typing.cast(
         'Array',
         stft(
@@ -487,7 +525,7 @@ def oaresample(
             fs=fs,
             window=window,
             nperseg=nfft,
-            noverlap=round(nfft * overlap_scale),
+            noverlap=noverlap_in,
             axis=axis,
             truncate=False,
             overwrite_x=overwrite_x,
@@ -527,11 +565,23 @@ def oaresample(
         gain = gain * scale
 
     y = _copy_bins_to_fftfreq_order(
-        y, nfft_out, bounds_in, bounds_out, gain=gain.astype(y.dtype), axis=axis
+        y,
+        nfft_out,
+        bounds_in,
+        bounds_out,
+        gain=gain.astype(y.dtype),
+        axis=axis,
+        overwrite_x=True,
     )
 
     return istft(
-        y, nfft=nfft_out, noverlap=noverlap, axis=axis, overwrite_x=True, fftshift=False
+        y,
+        nfft=nfft_out,
+        noverlap=noverlap,
+        axis=axis,
+        out=out,
+        overwrite_x=True,
+        fftshift=False,
     )
 
 
@@ -543,14 +593,16 @@ def _copy_bins_to_fftfreq_order(
     *,
     gain: Array,
     axis: int,
+    overwrite_x: bool = False,
+    block_rows: int | None = None,
 ) -> Array:
     """return the `bounds_in` bins of each STFT segment of `y` as `nfft_out` bins in
     `fftfreq` order.
 
     `y` has segments on `axis` and bins in ascending frequency order on ``axis + 1``.
     The copied bins occupy the ascending-order range `bounds_out` of the output, and
-    the other output bins are zero. The output is a new contiguous array of `nfft_out`
-    bins on ``axis + 1`` and the dtype of `y`.
+    the other output bins are zero. The output has `nfft_out` bins on ``axis + 1`` and
+    the dtype of `y`.
 
     Args:
         y: the STFT
@@ -561,34 +613,81 @@ def _copy_bins_to_fftfreq_order(
         gain: the multiplier of the copied bins, in ascending order on ``axis + 1``
             and broadcastable onto the output
         axis: the segment axis of `y`
+        overwrite_x: True writes the output into the head of the buffer of `y` when
+            `nfft_out` is at most the bin count of `y`, the bins are the last axis of
+            `y`, and `y` is C-contiguous; the contents of `y` are then undefined
+            after the call
+        block_rows: the segments reordered per block in place; None selects a block
+            of about 8 MiB. The tests pass a few rows to force the scratch path on
+            an STFT smaller than one default block.
+
+    Returns:
+        a C-contiguous array allocated by the call, or under `overwrite_x` a
+        C-contiguous view of the buffer of `y`
     """
     xp = array_namespace(y)
-    shape = list(y.shape)
-    shape[axis + 1] = nfft_out
-    out = xp.empty(shape, dtype=y.dtype)
-
-    half = nfft_out // 2
     bin_axis = axis + 1
+    nfft = y.shape[bin_axis]
+    out_shape = y.shape[:bin_axis] + (nfft_out,) + y.shape[bin_axis + 1 :]
+    half = nfft_out // 2
+    offset = bounds_in[0] - bounds_out[0]
 
-    def fftfreq_order_chunks(start: int, stop: int):
+    def fftfreq_order_chunks(start: int, stop: int) -> Iterator[tuple[int, int, int]]:
         # split an ascending-order range at the DC bin, since each half maps onto one
         # contiguous range of fftfreq-order bins
         for a, b in ((start, min(stop, half)), (max(start, half), stop)):
             if b > a:
                 yield a, b, (a + half) % nfft_out
 
-    for a, b, dest in (
-        *fftfreq_order_chunks(0, bounds_out[0]),
-        *fftfreq_order_chunks(bounds_out[1], nfft_out),
-    ):
-        xp.copyto(axis_slice(out, dest, dest + b - a, axis=bin_axis), 0)
+    def fill(target: Array, source: Array, g: Array, bin_axis: int) -> None:
+        for a, b, dest in (
+            *fftfreq_order_chunks(0, bounds_out[0]),
+            *fftfreq_order_chunks(bounds_out[1], nfft_out),
+        ):
+            xp.copyto(axis_slice(target, dest, dest + b - a, axis=bin_axis), 0)
+        for a, b, dest in fftfreq_order_chunks(*bounds_out):
+            xp.multiply(
+                axis_slice(source, a + offset, b + offset, axis=bin_axis),
+                axis_slice(g, a, b, axis=bin_axis),
+                out=axis_slice(target, dest, dest + b - a, axis=bin_axis),
+            )
 
-    offset = bounds_in[0] - bounds_out[0]
-    for a, b, dest in fftfreq_order_chunks(*bounds_out):
-        xp.multiply(
-            axis_slice(y, a + offset, b + offset, axis=bin_axis),
-            axis_slice(gain, a, b, axis=bin_axis),
-            out=axis_slice(out, dest, dest + b - a, axis=bin_axis),
-        )
+    in_place = (
+        overwrite_x
+        and nfft_out <= nfft
+        and bin_axis == y.ndim - 1
+        and y.flags.c_contiguous
+    )
+    if not in_place:
+        out = xp.empty(out_shape, dtype=y.dtype)
+        fill(out, y, gain, bin_axis)
+        return out
+
+    # the output rows are written into the head of the buffer of `y` in increasing
+    # row order. Output row k lies at or before input row k, so a block of rows is
+    # written directly when it ends before its first unread input row, and through
+    # the scratch otherwise. cupy does not detect overlap, so this order is what
+    # keeps the copy exact
+    segments = y.shape[-2]
+    rows = math.prod(y.shape[:-1])
+    flat = y.reshape(-1)
+    src = flat.reshape(rows, nfft)
+    out = flat[: rows * nfft_out].reshape(out_shape)
+    dst = out.reshape(rows, nfft_out)
+    gain_b = xp.broadcast_to(gain, out_shape)
+    if block_rows is None:
+        block_rows = max(1, _REORDER_SCRATCH_BYTES // (nfft_out * y.dtype.itemsize))
+    scratch = xp.empty((min(block_rows, segments), nfft_out), dtype=y.dtype)
+
+    for base, index in zip(range(0, rows, segments), np.ndindex(y.shape[:-2])):
+        for w0 in range(0, segments, block_rows):
+            w1 = min(w0 + block_rows, segments)
+            k0, k1 = base + w0, base + w1
+            g = gain_b[index][w0:w1]
+            if k1 * nfft_out <= k0 * nfft:
+                fill(dst[k0:k1], src[k0:k1], g, -1)
+            else:
+                fill(scratch[: k1 - k0], src[k0:k1], g, -1)
+                xp.copyto(dst[k0:k1], scratch[: k1 - k0])
 
     return out

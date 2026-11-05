@@ -35,7 +35,7 @@ worker_ctx: WorkerData | None = None
 @click.option(
     '--interactive/',
     '-i',
-    type=click.Choice([None, 'sixel', 'kitty']),
+    type=click.Choice(['sixel', 'kitty']),
     default=None,
     show_default=True,
     help='',

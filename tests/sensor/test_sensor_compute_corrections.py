@@ -392,6 +392,48 @@ def test_overwrite_x_decides_whether_the_scaling_consumes_x(overwrite_x):
     assert np.array_equal(iq.x, before) != overwrite_x
 
 
+@pytest.mark.parametrize('overwrite_x', [False, True], ids=['copy', 'in_place'])
+def test_overwrite_x_decides_whether_resampling_consumes_x(
+    overwrite_x, corrections_flags
+):
+    """on the oaresample path the resampled waveform is written into the acquisition
+    buffer under `overwrite_x`, and `x` of the conditioned copy becomes a
+    `ConsumedBuffer` that raises on a read; without it the buffer is intact and the
+    output is a fresh array with the same values"""
+    corrections_flags(use_oaresample=True)
+    capture = preset_capture(
+        'single_tone', **RESAMPLE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
+    )
+    raw = acquire_corrected('single_tone', capture).raw
+    buffer = raw.x
+    before = buffer.copy()
+    iq = attach_corrections(raw, overwrite_x=overwrite_x)
+
+    out = unfiltered(iq)
+
+    assert np.shares_memory(out, buffer) == overwrite_x
+    assert raw.x is buffer, 'the acquisition the controller holds keeps its array'
+    if not overwrite_x:
+        assert iq.x is buffer
+        assert np.array_equal(buffer, before)
+        return
+
+    assert isinstance(iq.x, corrections.ConsumedBuffer)
+    assert (iq.x.shape, iq.x.dtype, iq.x.nbytes) == (
+        buffer.shape,
+        buffer.dtype,
+        buffer.nbytes,
+    )
+    with pytest.raises(RuntimeError, match='consumed'):
+        np.asarray(iq.x)
+    with pytest.raises(RuntimeError, match='consumed'):
+        iq.x[0]
+    fresh = unfiltered(
+        attach_corrections(dataclasses.replace(raw, x=before), overwrite_x=False)
+    )
+    assert np.array_equal(out, fresh)
+
+
 def test_replace_starts_with_empty_stages(subtests):
     capture = preset_capture(
         'single_tone', **SCALE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None

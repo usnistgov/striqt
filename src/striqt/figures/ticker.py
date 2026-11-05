@@ -144,7 +144,6 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
     """The ticker locator for linearized gamma-distributed survival functions"""
 
     _nbins: int
-    axis: _axis.Axis
 
     # avoid removing these quantiles when selecting ticks
     PREFER_TICKS: typing.ClassVar[list[float]] = [
@@ -177,9 +176,22 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
         super().__init__(nbins)
 
     def __call__(self) -> typing.Sequence[float]:
-        dmin, dmax = self.axis.get_data_interval()
-        vmin, vmax = self.axis.get_view_interval()
+        axis = self._bound_axis()
+        dmin, dmax = axis.get_data_interval()
+        vmin, vmax = axis.get_view_interval()
         return self.tick_values(max(vmin, dmin), min(vmax, dmax))
+
+    def _bound_axis(self) -> _axis.Axis:
+        """return the axis the locator is attached to.
+
+        Raises:
+            RuntimeError: if no axis has been set on the locator
+        """
+        if self.axis is None:
+            raise RuntimeError('the locator is not attached to an axis')
+        # the locator is set on an `Axis` through `set_major_locator`, never on the
+        # dummy axis that matplotlib uses for stand-alone locator calls
+        return typing.cast('_axis.Axis', self.axis)
 
     def tick_values(self, vmin, vmax) -> typing.Sequence[float]:
         vmin, vmax = min((vmin, vmax)), max((vmin, vmax))
@@ -225,7 +237,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
             1.0 - minpos if vmax >= 1 - minpos else vmax,
         )
 
-        self.axis.set_view_interval(ret[1], ret[0], True)
+        self._bound_axis().set_view_interval(ret[1], ret[0], True)
         return ret
 
     def view_limits(self, dmin: float, dmax: float) -> tuple[float, float]:

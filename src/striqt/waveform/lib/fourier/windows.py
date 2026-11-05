@@ -3,6 +3,7 @@ functions not included in `scipy.signal`."""
 
 from __future__ import annotations as __
 
+import importlib
 import typing
 
 from .. import util
@@ -140,12 +141,12 @@ def register_extra_windows():
     The registration modifies the window table of `scipy.signal.get_window` for the
     process.
     """
-    from scipy.signal.windows import _windows
-
-    if hasattr(_windows, '_win_equiv'):
-        registry: dict[str, typing.Callable] = _windows._win_equiv
+    # the private table is named by scipy version
+    windows: typing.Any = importlib.import_module('scipy.signal.windows._windows')
+    if hasattr(windows, '_win_equiv'):
+        registry: dict[str, typing.Any] = windows._win_equiv
     else:
-        registry: dict[str, typing.Callable] = _windows._WIN_FUNCS  # type: ignore
+        registry = windows._WIN_FUNCS
     registry['acg'] = acg
     registry['cosh'] = cosh
     registry['modified_bessel'] = modified_bessel

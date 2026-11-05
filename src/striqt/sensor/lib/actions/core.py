@@ -215,7 +215,9 @@ def iterate_captures(
         extra_attrs=resources['action_spec'].to_dict(True, allow_tuple_keys=False),
         cache_callback=cache_callback,
         as_xarray='delayed',
-        block_each=True,  # data corruption has been observed otherwise
+        # a measurement launched before the previous result reached the host has
+        # produced wrong data on the Tegra X2
+        block_each=True,
     )
 
     source_id = resources['source'].source_id
@@ -445,7 +447,7 @@ def _acquire_capture(
     with contextlib.ExitStack() as stack:
         stack.enter_context(log_context())
         arm = [
-            util.threadpool.submit(source._arm_spec, capture),
+            util.threadpool.submit(lambda: source._arm_spec(capture)),
             util.threadpool.submit(peripherals.arm, capture),
         ]
         util.await_and_ignore(arm, 'arm sensor')

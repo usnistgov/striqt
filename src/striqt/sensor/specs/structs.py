@@ -185,14 +185,14 @@ class SoapySource(Source, frozen=True, kw_only=True):
 class FunctionSource(Source, kw_only=True, frozen=True):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
-    stream_all_rx_ports: ClassVar[bool] = False
+    stream_all_rx_ports: ClassVar[Union[bool, None]] = False
     transport_dtype: ClassVar[types.TransportDType] = 'complex64'
 
 
 class NoSource(Source, frozen=True, kw_only=True):
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
-    stream_all_rx_ports: ClassVar[bool] = False
+    stream_all_rx_ports: ClassVar[Union[bool, None]] = False
 
 
 class MATSource(Source, kw_only=True, frozen=True):

@@ -43,6 +43,19 @@ class TestStft:
         _, _, X2 = stft((scale * x).astype(np.complex128), **kws)
         assert_allclose(X2, scale * X1, rtol=1e-6)
 
+    @pytest.mark.parametrize('noverlap', [0, 32])
+    def test_transposed_input_gives_a_c_contiguous_result(self, noverlap):
+        """the layout of a Fortran-ordered record does not reach the result, whose
+        frequency axis the consumers read as contiguous"""
+        x = gaussian_iq(2 * 512, dtype=np.complex64, seed=1).reshape(2, 512)
+        kws = {'fs': 1e6, 'window': 'hamming', 'nperseg': 64, 'noverlap': noverlap}
+
+        _, _, X = stft(np.asfortranarray(x), axis=1, truncate=True, **kws)
+        _, _, X_c = stft(np.ascontiguousarray(x), axis=1, truncate=True, **kws)
+
+        assert X.flags.c_contiguous
+        assert_array_equal(X, X_c)
+
     @settings(max_examples=50)
     @given(x=noise_waveforms(min_size=256, max_size=512), params=stft_parameters())
     def test_output_shape(self, x, params):

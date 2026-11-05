@@ -10,6 +10,7 @@ from .lib.fourier.fft import (
     on_peak_roundoff,
     peak_factor,
     rms_tolerance_dBc,
+    set_max_cupy_fft_chunk,
     slice_freqs,
     truncate_freqs,
 )

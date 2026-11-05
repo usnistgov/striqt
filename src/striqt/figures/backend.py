@@ -445,10 +445,10 @@ class PlotBackend:
                 if cbar is None:
                     raise TypeError('no colorbar on facet grid')
 
-                if _matplotlib_version() >= (3, 10):
-                    long_axis = cbar.long_axis
-                else:
+                if cbar.orientation == 'vertical':
                     long_axis = cbar.ax.yaxis
+                else:
+                    long_axis = cbar.ax.xaxis
 
                 meanloc = noise.values.mean()
                 for i, n in enumerate(noise.values.tolist()):
@@ -523,8 +523,3 @@ def _select_dpi(grid, x_data, y_data: xr.DataArray | None, min_=0, max_=300):
         return min_
     else:
         return dpi
-
-
-@functools.cache
-def _matplotlib_version():
-    return tuple(int(n) for n in mpl.__version__.split('.', 2))

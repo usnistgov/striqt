@@ -640,7 +640,7 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             # the soapy module is partially torn down after some exceptions
             return
 
-        self.device.__del__ = lambda: None  # type: ignore
+        self.device.__del__ = lambda: None
         device = getattr(self, '_device', None)
         rx_stream = getattr(self, '_rx_stream', None)
 
