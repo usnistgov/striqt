@@ -95,6 +95,13 @@ def device_synchronize() -> None:
         cp.cuda.Device().synchronize()
 
 
+def free_pool() -> None:
+    """release the unused blocks of the cupy memory pool, so a row starts from an empty
+    pool; nothing on numpy."""
+    if cp is not None:
+        cp.get_default_memory_pool().free_all_blocks()
+
+
 def time_call(func: Callable[[], Any]) -> tuple[float, float, Any]:
     """return the (host, device) duration (in s) of one call and the value it returns.
 
@@ -264,7 +271,7 @@ def profile_correlator(xp: Any, cells: int, repeat: int, warmup: int) -> None:
         ) -> Any:
             return sw.comms_5gnr.correlate_sync_spans(spans, templates, params=params)
 
-        sw.arrays.free_cupy_mempool()
+        free_pool()
         try:
             peak = peak_pool_bytes(run)
             host, device, out = repeat_call(run, repeat, warmup)
@@ -272,14 +279,14 @@ def profile_correlator(xp: Any, cells: int, repeat: int, warmup: int) -> None:
             if 'OutOfMemory' not in type(ex).__name__:
                 raise
             print(f'{name:<26} {"-":>9} {"-":>9} {"-":>9}  out of device memory')
-            sw.arrays.free_cupy_mempool()
+            free_pool()
             continue
         label = f'{templates.shape[0]} cells'
         if cp is not None:
             label += f', pool peak {peak / 2**20:.0f} MB'
         print_row(name, host, device, out.nbytes, label)
         del out, spans
-        sw.arrays.free_cupy_mempool()
+        free_pool()
 
 
 def profile_histogram(xp: Any, repeat: int, warmup: int) -> None:

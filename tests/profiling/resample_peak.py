@@ -11,10 +11,11 @@ resampled record) are not counted. ``bytes`` is the size of the array the call r
 
 Rows:
 
-- ``oaresample, fresh output`` and ``oaresample, overwrite_x``: `sw.oaresample` with
-  the arguments of the resampling stage, with the input kept and with the input
-  consumed in place as the pipeline runs it. The peak is the stacked STFT frames, the
-  reordered bins buffer, and the output together.
+- ``oaresample, fresh output``, ``oaresample, overwrite_x``, and ``oaresample, out=x``:
+  `sw.oaresample` with the arguments of the resampling stage, with the input kept,
+  with the input consumed in place, and with the output written into the buffer of the
+  input as the sensor stage runs it. The peak is the stacked STFT frames, the FFT work
+  area, and whatever the variant allocates beyond them.
 - ``stft, stage block size``: the analysis half of the resampler alone, so the peak
   of the row above splits into the frames and the rest.
 - ``D2H contiguous``: `.get()` of the whole resampled record.
@@ -56,6 +57,13 @@ cp: Any = None
 def device_synchronize() -> None:
     if cp is not None:
         cp.cuda.Device().synchronize()
+
+
+def free_pool() -> None:
+    """release the unused blocks of the cupy memory pool, so a row starts from an empty
+    pool; nothing on numpy."""
+    if cp is not None:
+        cp.get_default_memory_pool().free_all_blocks()
 
 
 def time_call(func: Callable[[], Any]) -> tuple[float, float, Any]:
@@ -156,6 +164,10 @@ def profile_resampler(raw: ss.specs.AcquiredIQ, repeat: int, warmup: int) -> Any
         raw.x[:] = 1
         return sw.oaresample(raw.x, overwrite_x=True, **kws)
 
+    def into_x() -> Any:
+        raw.x[:] = 1
+        return sw.oaresample(raw.x, overwrite_x=True, out=raw.x, **kws)
+
     def stft_only() -> Any:
         return sw.stft(
             raw.x,
@@ -171,17 +183,18 @@ def profile_resampler(raw: ss.specs.AcquiredIQ, repeat: int, warmup: int) -> Any
     for name, func in [
         ('oaresample, fresh output', fresh_output),
         ('oaresample, overwrite_x', in_place),
+        ('oaresample, out=x', into_x),
         ('stft, stage block size', stft_only),
     ]:
-        sw.arrays.free_cupy_mempool()
+        free_pool()
         peak = peak_pool_bytes(func)
         host, device, out = repeat_call(func, repeat, warmup)
-        if name.startswith('oaresample') and resampled is None:
+        if name == 'oaresample, fresh output':
             resampled = out
         print_row(name, host, device, nbytes_of(out), peak)
         del out
         raw.x[:] = 1
-    sw.arrays.free_cupy_mempool()
+    free_pool()
     assert resampled is not None
     return xp.asarray(resampled)
 
@@ -215,7 +228,7 @@ def profile_d2h(resampled: Any, capture: Any, repeat: int, warmup: int) -> None:
         ('D2H column slice', to_host(sliced)),
         ('D2H row by row', row_by_row),
     ]:
-        sw.arrays.free_cupy_mempool()
+        free_pool()
         peak = peak_pool_bytes(func)
         host, device, out = repeat_call(func, repeat, warmup)
         print_row(name, host, device, nbytes_of(out), peak)
