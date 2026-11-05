@@ -31,6 +31,7 @@ from analysis_strategies import (
     ssb_spectrogram_capture,
 )
 from numeric_checks import RTOL_FLOAT64, assert_close, elementwise_rtol, levels
+from numpy.testing import assert_array_equal
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -267,6 +268,35 @@ class TestCellular5GSSBSpectrogram:
         peak = spg[..., expected]
         assert peak.max() == peak.min()
 
+    def test_burst_spans_equal_the_masked_whole_record_spectrogram(self):
+        """the STFT over the burst-set spans is the whole-record STFT with the
+        symbols outside the burst sets dropped, bit for bit"""
+        duration = 2 * SSB_SPECTROGRAM_PERIODICITY
+        iq = testing.circular_awgn(duration, SSB_SPECTROGRAM_FS, power=1.0)
+        capture = ssb_spectrogram_capture(duration)
+        spec = SSB_SPECTROGRAM_SPEC
+        da = sa.measurements.cellular_5g_ssb_spectrogram(
+            iq, capture, as_xarray=True, **spec.to_dict()
+        )
+
+        spg, _ = sa.measurements.spectrum.evaluate_spectrogram(
+            iq,
+            capture=capture,
+            spec=sa.measurements.cellular._ssb_spectrogram_spec(spec),
+            limit_digits=3,
+            dtype='float16',
+        )
+        symbol_period = sw.comms_5gnr.slot_period(spec.subcarrier_spacing) / 14
+        discovery_symbols = round(spec.discovery_periodicity / symbol_period)
+        symbols = np.arange(spg.shape[1])
+        spg = spg[:, (symbols % discovery_symbols) < SSB_SYMBOLS]
+        nfft = round(SSB_SPECTROGRAM_FS / spec.subcarrier_spacing)
+        spg = sw.fourier.truncate_freqs(
+            spg, nfft, SSB_SPECTROGRAM_FS, spec.sample_rate, axis=2
+        )
+        expected = spg.reshape(1, 2, SSB_SYMBOLS, -1)
+        assert_array_equal(da.values, expected)
+
     def test_tone_level_sums_the_tone_bin_with_its_leaking_neighbor(self):
         duration = 2 * SSB_SPECTROGRAM_PERIODICITY
         da = ssb_of(duration, frequency=SSB_SPECTROGRAM_SCS)
@@ -303,11 +333,22 @@ class TestCellular5GSSBSpectrogram:
                 {},
                 'duration must end on a whole discovery_periodicity or after a complete burst set of 56 symbols',
             ),
+            (
+                # a discovery period of one slot is shorter than the 2 ms burst set
+                SSB_SPECTROGRAM_PERIODICITY,
+                {
+                    'discovery_periodicity': sw.comms_5gnr.slot_period(
+                        SSB_SPECTROGRAM_SCS
+                    )
+                },
+                'discovery_periodicity must span the burst set of 56 symbols',
+            ),
         ],
         ids=[
             'frequency_offset_off_the_subcarrier_grid',
             'sample_rate_above_capture',
             'partial_burst_set',
+            'discovery_period_shorter_than_the_burst_set',
         ],
     )
     def test_incompatible_burst_layout_is_rejected(self, duration, kwargs, message):

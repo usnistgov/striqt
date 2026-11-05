@@ -617,7 +617,7 @@ def validated_ssb_spectrogram_sizing(
             `spectrum.validated_spectrogram_sizing`), if `frequency_offset` is not a
             multiple of `subcarrier_spacing`, if the `sample_rate` band about
             `frequency_offset` lies outside the capture bandwidth, if
-            `discovery_periodicity` is shorter than one OFDM symbol, or if the capture
+            `discovery_periodicity` is shorter than the burst set, or if the capture
             ends neither on a discovery period nor after a complete burst set
     """
     sizing = spectrum.validated_spectrogram_sizing(capture, _ssb_spectrogram_spec(spec))
@@ -633,10 +633,15 @@ def validated_ssb_spectrogram_sizing(
 
     symbol_count = _burst_symbol_count(spec)
     discovery_symbols = _discovery_symbol_count(spec)
+    if discovery_symbols < symbol_count:
+        raise ValueError(
+            f'discovery_periodicity must span the burst set of {symbol_count} symbols '
+            f'(discovery_periodicity: {spec.discovery_periodicity}, '
+            f'subcarrier_spacing: {spec.subcarrier_spacing})'
+        )
     window_count = spectrum.spectrogram_window_count(capture, sizing)
     full_periods, trailing = divmod(window_count, discovery_symbols)
-    kept = full_periods * min(discovery_symbols, symbol_count)
-    kept += min(trailing, symbol_count)
+    kept = full_periods * symbol_count + min(trailing, symbol_count)
     if kept == 0 or kept % symbol_count != 0:
         raise ValueError(
             'duration must end on a whole discovery_periodicity or after a complete '
@@ -650,6 +655,25 @@ def validated_ssb_spectrogram_sizing(
         )
 
     return sizing
+
+
+def ssb_burst_spans(
+    capture: specs.Capture, spec: specs.Cellular5GNRSSBSpectrogram
+) -> tuple[int, int, int]:
+    """return ``(block_count, block_size, span_size)`` of the burst-set spans in samples.
+
+    `block_count` is the number of burst sets the capture holds, `block_size` the
+    samples of one `discovery_periodicity`, and `span_size` the samples that the STFT
+    of one burst set reads: the hops of its symbols and the last window.
+    """
+    sizing = validated_ssb_spectrogram_sizing(capture, spec)
+    symbol_count = _burst_symbol_count(spec)
+    discovery_symbols = _discovery_symbol_count(spec)
+    window_count = spectrum.spectrogram_window_count(capture, sizing)
+    full_periods, trailing = divmod(window_count, discovery_symbols)
+    block_count = full_periods + (1 if trailing >= symbol_count else 0)
+    span_size = (symbol_count - 1) * sizing.hop_size + sizing.nfft
+    return block_count, discovery_symbols * sizing.hop_size, span_size
 
 
 def _burst_symbol_count(spec: specs.Cellular5GNRSSBSpectrogram) -> int:
@@ -722,22 +746,31 @@ def cellular_5g_ssb_spectrogram(
     """
 
     spec = specs.Cellular5GNRSSBSpectrogram.from_dict(kwargs).validate()
+    xp = sw.array_namespace(x)
 
     symbol_count = _burst_symbol_count(spec)
-    discovery_symbols = _discovery_symbol_count(spec)
+    block_count, block_size, span_size = ssb_burst_spans(capture, spec)
+
+    # the STFT of one burst set reads the span at the start of each discovery
+    # period, so the spans are stacked as rows before the transform
+    spans = xp.empty((x.shape[0], block_count, span_size), dtype=x.dtype)
+    for block in range(block_count):
+        start = block * block_size
+        spans[:, block] = x[:, start : start + span_size]
+    span_capture = specs.Capture(
+        duration=span_size / capture.sample_rate,
+        sample_rate=capture.sample_rate,
+        analysis_bandwidth=capture.analysis_bandwidth,
+    )
 
     spg, attrs = spectrum.evaluate_spectrogram(
-        x,
-        capture=capture,
+        spans.reshape(-1, span_size),
+        capture=span_capture,
         spec=_ssb_spectrogram_spec(spec),
         limit_digits=3,
         dtype='float16',
     )
-
-    # keep the burst set at the start of each discovery period
-    symbol_index = np.arange(spg.shape[1])
-    mask_time = (symbol_index % discovery_symbols) < symbol_count
-    spg = spg[:, mask_time]
+    assert spg.shape[1] == symbol_count
 
     # select frequency
     nfft = round(capture.sample_rate / spec.subcarrier_spacing)
@@ -751,7 +784,7 @@ def cellular_5g_ssb_spectrogram(
     )
 
     # split by synchronization block
-    spg = spg.reshape((spg.shape[0], -1, symbol_count, spg.shape[2]))
+    spg = spg.reshape((x.shape[0], block_count, symbol_count, spg.shape[2]))
 
     return spg, attrs
 
