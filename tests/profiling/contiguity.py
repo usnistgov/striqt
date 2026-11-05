@@ -9,12 +9,12 @@ before and after a change to the library is the measurement of that change.
 
 Rows:
 
-- ``cast_iq whole + view``: `cast_iq` over the whole receive buffer, then the
-  ``[:, span]`` view that `Controller.read_iq` returns. ``resident`` is the size of the
-  device buffer that the view keeps alive.
+- ``cast_iq whole + view``: `cast_iq` over the whole receive buffer, then a
+  ``[:, span]`` view of the device copy. ``resident`` is the size of the device buffer
+  that the view keeps alive.
 - ``cast_iq column slice``: `cast_iq` over the ``[:, span]`` column slice of the host
-  buffer, which is the copy path of a `cast_iq` that drops the holdoff before the
-  device copy. The difference between the 2 rows is the holdoff fraction of the H2D
+  buffer, the copy that `Controller.read_iq` makes with ``start`` at the end of the
+  holdoff. The difference between the 2 rows is the holdoff fraction of the H2D
   bytes.
 - ``pinned alloc + free``: one allocation and release of the throwaway port buffer that
   `_alloc_empty_iq` makes on every read under ``stream_all_rx_ports``.
