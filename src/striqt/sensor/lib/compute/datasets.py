@@ -173,12 +173,11 @@ def extra_data_arrays(
 
 
 def concat_time_dim(datasets: list[xr.Dataset], time_dim: str) -> xr.Dataset:
-    """concatenate captured datasets into one along a time axis.
+    """concatenate the datasets of consecutive captures along `time_dim`.
 
-    Preconditions:
-    - all datasets share the same dimension and type.
-    - time coordinates based on time_dim are uniformly spaced
-
+    Every dataset must share the dimensions and dtypes of the first and have a
+    uniformly spaced `time_dim` coordinate. The `time_dim` coordinate of the result
+    counts from 0 in the step of the first dataset.
     """
     pad_dims = {time_dim: (0, len(datasets[0][time_dim]) * (len(datasets) - 1))}
     ds = datasets[0].pad(pad_dims, constant_values=float('nan'))
@@ -186,13 +185,10 @@ def concat_time_dim(datasets: list[xr.Dataset], time_dim: str) -> xr.Dataset:
     for data_name, var in ds.data_vars.items():
         if time_dim not in var.dims:
             continue
-        else:
-            axis = var.dims[1:].index(time_dim)
-
-        values = np.concatenate(
-            [sub[data_name].isel(capture=0).data for sub in datasets], axis=axis
+        axis = var.dims.index(time_dim)
+        np.concatenate(
+            [sub[data_name].data for sub in datasets], axis=axis, out=var.data
         )
-        var.data[:] = values
 
     for coord_name, coord in ds.coords.items():
         if time_dim not in coord.dims:
