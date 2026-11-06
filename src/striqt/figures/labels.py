@@ -167,7 +167,7 @@ def label_axis(
     *,
     coord_name: typing.Optional[str] = None,
     tick_units: bool | typing.Literal['auto'] = 'auto',
-    short: bool = False,
+    short: bool = True,
     ax: typing.Optional[matplotlib.axes.Axes | list[matplotlib.axes.Axes]] = None,
     fig: typing.Optional[matplotlib.figure.Figure] = None,
 ) -> None:
@@ -190,7 +190,8 @@ def label_axis(
             instead, or None
         tick_units: True places the prefixed units in each tick label and False in
             the axis label; ``'auto'`` is True for a `units` attr of 1 or 2 characters
-        short: True labels with `standard_name` instead of `long_name`
+        short: True labels with `standard_name`; False labels with `long_name`, the
+            title of the quantity, when the attrs carry one
         ax: the axes, or list of axes, to label; None labels the current axes, or
             every axes of `fig` when `fig` is given
         fig: when given with `ax` None, an x or y label is set once as a figure

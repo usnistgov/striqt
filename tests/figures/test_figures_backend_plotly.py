@@ -249,3 +249,27 @@ def test_target_with_other_facets_raises(method: str) -> None:
 
     with pytest.raises(ValueError, match='facets'):
         call()
+
+
+# %% axis titles
+
+
+def test_axis_titles_use_the_standard_name_not_the_long_name():
+    """the attrs of the mean cyclic power carry a `long_name` title; the axes are
+    labeled by `standard_name`, and the title appears on no axis"""
+    import xarray as xr
+
+    from striqt.figures.backend import plotly as backend_module
+
+    da = xr.DataArray(
+        [[1.0, 2.0]],
+        dims=('port', 'cyclic_lag'),
+        coords={'port': [0], 'cyclic_lag': [0.0, 1.0]},
+        name='cyclic_channel_power',
+        attrs={
+            'standard_name': 'Cyclic channel power',
+            'long_name': 'Cyclic channel power over the slot',
+            'units': 'dBm',
+        },
+    )
+    assert backend_module._axis_title(da) == 'Cyclic channel power (dBm)'

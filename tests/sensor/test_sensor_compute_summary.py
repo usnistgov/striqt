@@ -320,11 +320,11 @@ def test_acquisition_fields_have_one_value_each():
 # %% analysis_labels
 
 
-def test_analysis_labels_are_the_registered_standard_names():
+def test_analysis_labels_are_the_registered_long_names():
     """the registry is keyed by spec type. The expected label of each enabled field
     is read from the registration of the type of the field value."""
     expected = {
-        name: sa.registry[type(getattr(ANALYSIS, name))].attrs['standard_name']
+        name: sa.registry[type(getattr(ANALYSIS, name))].attrs['long_name']
         for name in ANALYSIS.__struct_fields__
         if getattr(ANALYSIS, name) is not None
     }

@@ -81,14 +81,19 @@ placeholders that the decorator fills at registration: `{args}` with the `Meta`
 field metadata of the spec, `{dtype}` with the registered dtype, `{dims}` with the dimension names of the returned
 `DataArray` (`port` first), `{coords}` with one bullet per coordinate factory
 built from the registered dtype and units and the first paragraph of the docstring
-of the factory, and `{attrs}` with the registered attrs other than `standard_name`.
+of the factory, and `{attrs}` with the registered attrs other than `standard_name` and
+`long_name`.
 Attrs returned by the measurement body are hand-written bullets after `{attrs}`. The
 template and the rules are under **Measurement docstrings** and **Coordinate factory
 docstrings** in `AGENTS.md`.
 
-A registration names its output with the `standard_name=` keyword and its unit with
-`units=`; those two are the registered attrs, and every other attr is returned by the
-measurement body. A power output or power-bin coordinate declares the *form* of its unit
+A registration names its output with the `standard_name=` keyword (the axis label), its
+title with `long_name=` (the plot or menu title; `register.default_long_name` derives the
+sentence-case form of the function name, with acronyms such as `IQ` and `5G` upper-cased,
+when the keyword is omitted), and its unit with `units=`; those three are the registered
+attrs, and every other attr is returned by the measurement body. `figures.labels.label_axis`
+and the plotly axis titles label by `standard_name`; `quantity_label(short=False)` gives
+the `long_name` form. A power output or power-bin coordinate declares the *form* of its unit
 with one of `striqt.waveform.units.DB_POWER` (`'{dB}'`), `POWER` (`'{P}'`), or
 `AMPLITUDE` (`'√{P}'`), with an optional denominator. `dataarrays.measurement_attrs` and
 `dataarrays.measurement_coords` compose the attrs of an output and resolve the form into

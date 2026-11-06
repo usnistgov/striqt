@@ -740,8 +740,8 @@ def _measurand(da: xr.DataArray) -> sa.labels.Measurand:
 
 
 def _axis_title(da: xr.DataArray) -> str:
-    """return the name of `da` with its units in parentheses, from its attrs."""
-    return sa.labels.quantity_label(_measurand(da))
+    """return the `standard_name` of `da` with its units in parentheses."""
+    return sa.labels.quantity_label(_measurand(da), short=True)
 
 
 def _colorbar_title(da: xr.DataArray) -> str:

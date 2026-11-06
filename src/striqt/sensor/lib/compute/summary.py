@@ -303,25 +303,27 @@ def analysis_labels(
     analysis: sa.specs.AnalysisGroup,
     registry: sa.register.AnalysisRegistry = sa.registry,
 ) -> dict[str, str]:
-    """return a label for each enabled field of `analysis`, keyed by field name.
+    """return a title for each enabled field of `analysis`, keyed by field name.
 
     Args:
         analysis: the analysis group; a field equal to None is omitted
         registry: the registry that names the measurements
 
     Returns:
-        the `standard_name` of the `registry` entry named by the field, or the field
-        name in title case with spaces for underscores when no entry has that name
+        the `long_name` of the `registry` entry named by the field, its
+        `standard_name` when the entry has no `long_name`, or the field name in
+        title case with spaces for underscores when no entry has that name
     """
-    standard_names = {
-        info.name: str(info.attrs['standard_name']) for info in registry.values()
+    titles = {
+        info.name: str(info.attrs.get('long_name', info.attrs['standard_name']))
+        for info in registry.values()
     }
     labels: dict[str, str] = {}
     for name in analysis.__struct_fields__:
         if getattr(analysis, name) is None:
             continue
         fallback = name.replace('_', ' ').title()
-        labels[name] = standard_names.get(name, fallback)
+        labels[name] = titles.get(name, fallback)
     return labels
 
 

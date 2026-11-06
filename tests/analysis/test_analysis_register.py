@@ -963,9 +963,10 @@ def test_registration_requires_a_standard_name():
         registry.measurement(ToySpec, dtype='float32', dims=('toy',))  # ty: ignore[missing-argument]
 
 
-def test_registered_attrs_are_the_standard_name_and_units():
-    """the attrs of a registration are exactly the keywords given; `units` None is
-    absent rather than null"""
+def test_registered_attrs_are_the_names_and_units():
+    """the attrs of a registration are `standard_name`, the `long_name` defaulted
+    from the function name, and `units` when given; `units` None is absent rather
+    than null"""
     registry = register.AnalysisRegistry()
 
     @registry.measurement(ToySpec, dtype='float32', standard_name='Toy', dims=('toy',))
@@ -982,13 +983,48 @@ def test_registered_attrs_are_the_standard_name_and_units():
     def other_toy(iq, capture, **kwargs):
         return np.zeros((1, 2), dtype='float32')
 
-    assert registry[ToySpec].attrs == {'standard_name': 'Toy'}
+    assert registry[ToySpec].attrs == {'standard_name': 'Toy', 'long_name': 'Toy'}
     assert registry[OtherToySpec].attrs == {
         'standard_name': 'Other toy',
+        'long_name': 'Other toy',
         'units': sa.units.DB_POWER,
     }
     assert registry[ToySpec].name == 'toy'
     assert registry[OtherToySpec].name == 'other_toy'
+
+
+def test_an_explicit_long_name_replaces_the_default():
+    registry = register.AnalysisRegistry()
+
+    @registry.measurement(
+        ToySpec, dtype='float32', standard_name='Toy', long_name='A toy', dims=('toy',)
+    )
+    def toy(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    assert registry[ToySpec].attrs['long_name'] == 'A toy'
+
+
+@pytest.mark.parametrize(
+    'name, expected',
+    [
+        ('power_spectral_density', 'Power spectral density'),
+        ('iq_waveform', 'IQ waveform'),
+        ('cellular_5g_ssb_spectrogram', 'Cellular 5G SSB spectrogram'),
+        ('spectrogram', 'Spectrogram'),
+    ],
+)
+def test_default_long_name_is_sentence_case_with_acronyms(name, expected):
+    assert register.default_long_name(name) == expected
+
+
+def test_every_registered_long_name_is_a_sentence_case_title():
+    """a title starts with a capital letter or an acronym and contains no underscore"""
+    for info in sa.registry.values():
+        title = info.attrs['long_name']
+        assert '_' not in title, info.name
+        assert title[0].isupper() or title[0].isdigit(), info.name
+        assert title == title.strip(), info.name
 
 
 def test_coordinate_registration_names_itself_and_keeps_its_units():
