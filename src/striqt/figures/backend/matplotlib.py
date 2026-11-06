@@ -12,6 +12,7 @@ import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
 from .. import specs, util
+from .protocol import PlotBackend
 
 if typing.TYPE_CHECKING:
     from collections.abc import Generator, Iterator
@@ -113,16 +114,15 @@ def batch_term_images(
     sys.stdout.flush()
 
 
-class MatplotlibBackend:
+class MatplotlibBackend(PlotBackend['xarray.plot.FacetGrid']):
     """a plotting backend that draws with matplotlib, one `FacetGrid` per figure.
 
     Each drawing method lays out the facets from `opts` and returns the grid.
-    `finish` labels the grid, then writes and shows the figure as `output_dir` and
-    `interactive` select.
+    `finish` writes and shows the figure as `output_dir` and `interactive` select.
+    Artists with more than 10000 values and all bands are rasterized, and lines
+    drawn onto a `target` add no legend.
     """
 
-    opts: specs.SharedPlotOptions
-    """the facet layout and label formats shared by every figure"""
     output_dir: Path | None
     """the directory that `finish` writes figure files in; `None` writes no file"""
     interactive: bool | str | None
@@ -194,12 +194,6 @@ class MatplotlibBackend:
         vmax: float | None = None,
         vstep: float | None = None,
     ) -> xarray.plot.FacetGrid:
-        """draw `data` as a color image with a colorbar on each facet.
-
-        With `vstep`, the color scale has one band per `vstep` between `vmin` rounded
-        down and `vmax` rounded up to multiples of `vstep`. Images with more than
-        10000 values are rasterized.
-        """
         from matplotlib import colors
 
         rasterized = data.size > 10000
@@ -248,15 +242,6 @@ class MatplotlibBackend:
         step: StepStyle | None = None,
         target: xarray.plot.FacetGrid | None = None,
     ) -> xarray.plot.FacetGrid:
-        """draw one line per `hue` value of `data` on each facet.
-
-        Lines drawn on `target` add no legend. `yscale` and `ylim` are set on the
-        axes of a new grid and of `target`. `sharex` applies to a new grid only.
-        Lines with more than 10000 values are rasterized.
-
-        Raises:
-            ValueError: if `target` has a facet that `data` lacks
-        """
         kwargs: dict[str, typing.Any] = {'rasterized': data.size > 10000}
         if step is not None:
             kwargs['drawstyle'] = f'steps-{step}'
@@ -303,15 +288,6 @@ class MatplotlibBackend:
         step: StepStyle | None = None,
         target: xarray.plot.FacetGrid | None = None,
     ) -> xarray.plot.FacetGrid:
-        """shade the band from `low` to `high` per `hue` value on each facet.
-
-        The band of hue index `i` on a facet takes the color ``C{i}``, the color of
-        the `i`th line that `line` first draws on that facet. Bands are rasterized
-        and have no edge line.
-
-        Raises:
-            ValueError: if `target` has a facet that `low` or `high` lacks
-        """
         if target is None:
             from xarray.plot import FacetGrid
 
@@ -458,14 +434,6 @@ class MatplotlibBackend:
         low: xr.DataArray | float | None,
         high: float | None,
     ) -> None:
-        """set the x limits of each facet of `target` to (`low`, `high`).
-
-        Args:
-            target: the facet grid to limit
-            low: the lower limit, or a DataArray with one value per facet selected
-                on the facet coordinates; None leaves the lower limit unchanged
-            high: the upper limit; None leaves the upper limit unchanged
-        """
         if isinstance(low, xr.DataArray):
             lows = _facet_values(low, target)
         else:
@@ -480,24 +448,6 @@ class MatplotlibBackend:
         grid: xarray.plot.FacetGrid,
         where: typing.Literal['x', 'y', 'colorbar'],
     ) -> None:
-        """draw the system noise level (in dBm) of `var_name` on each facet of `grid`.
-
-        Nothing is drawn when `data` has no `system_noise` variable or `var_name` has
-        no noise bandwidth.
-
-        Args:
-            data: the dataset with the `system_noise` variable (dBm/Hz) and `var_name`
-            var_name: the data variable or power-bin coordinate that sets the noise
-                bandwidth
-            grid: the facet grid to draw on
-            where: ``'x'`` draws a horizontal line for power on the y axis, ``'y'`` a
-                vertical line for power on the x axis, and ``'colorbar'`` a tick on
-                the colorbar of a heatmap
-
-        Raises:
-            TypeError: if `where` is ``'colorbar'`` and `grid` has no colorbar, or if
-                `where` is none of the 3 values
-        """
         noise = util.get_system_noise(data, var_name)
 
         if noise is None:

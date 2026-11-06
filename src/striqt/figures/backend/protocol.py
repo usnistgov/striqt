@@ -137,7 +137,8 @@ class PlotBackend(typing.Protocol[T]):
             vmax: the value at the high end of the colormap; `None` selects the data
                 maximum
             vstep: when set, quantize the colormap into bands of this width in the
-                units of `data`; `None` maps colors continuously
+                units of `data`, between `vmin` rounded down and `vmax` rounded up to
+                multiples of `vstep`; `None` maps colors continuously
 
         Returns:
             a new grid
@@ -172,8 +173,9 @@ class PlotBackend(typing.Protocol[T]):
         Args:
             target: the grid to limit
             low: the lower limit, or a DataArray with one value per facet selected
-                on the facet coordinates; `None` leaves the lower limit unchanged
-            high: the upper limit; `None` leaves the upper limit unchanged
+                on the facet coordinates; `None` leaves the lower limit to the data
+                extent
+            high: the upper limit; `None` leaves the upper limit to the data extent
         """
         ...
 
@@ -187,7 +189,8 @@ class PlotBackend(typing.Protocol[T]):
         """draw the system noise level (in dBm) of `var_name` on each facet of `grid`.
 
         Nothing is drawn when `data` has no `system_noise` variable or `var_name` has
-        no noise bandwidth.
+        no noise bandwidth. The level of a facet is the `system_noise` entry at the
+        coordinate value of that facet.
 
         Args:
             data: the dataset with the `system_noise` variable (dBm/Hz) and `var_name`

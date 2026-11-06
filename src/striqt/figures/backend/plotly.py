@@ -14,6 +14,7 @@ import striqt.analysis as sa
 from striqt.analysis.lib.util import np, xr
 
 from .. import labels, specs, util
+from .protocol import PlotBackend
 
 if TYPE_CHECKING:
     from xarray.core.types import ScaleOptions
@@ -96,16 +97,14 @@ def _finite_extent(values: Any) -> tuple[float, float]:
     return float(np.nanmin(finite)), float(np.nanmax(finite))
 
 
-class PlotlyBackend:
+class PlotlyBackend(PlotBackend[dict[str, Any]]):
     """the plotting backend that emits plotly trace and layout dicts.
 
     Each drawing call appends one result dict to a pending list that `get_plot_data`
     returns and clears. The color limits of `heatmap` and the y limits of `line` only
-    widen across calls.
+    widen across calls. `line` accepts a `yscale` of ``'linear'`` or ``'log'`` and
+    raises `ValueError` for any other value, and `sharex` has no effect.
     """
-
-    opts: specs.SharedPlotOptions
-    """the facet layout and label formats shared by every figure"""
 
     def __init__(
         self,
@@ -207,26 +206,6 @@ class PlotlyBackend:
         vmax: Optional[float] = None,
         vstep: Optional[float] = None,
     ) -> dict[str, Any]:
-        """add a heatmap of `data` to the pending results.
-
-        Every subplot (one per value of the column dimension) shares one colorbar
-        scale. A `vmin` or `vmax` of None is the minimum or maximum of `data`,
-        widened by the values of earlier calls.
-
-        Args:
-            data: the 2-D array to plot, with coordinates `x` and `y`
-            x: the name of the x coordinate
-            y: the name of the y coordinate
-            cmap: a matplotlib colormap name
-            vmin: the lower color limit, or None to infer
-            vmax: the upper color limit, or None to infer
-            vstep: the spacing of quantized color levels; None selects a continuous
-                gradient
-
-        Returns:
-            a dict with keys ``type``, ``traces``, ``layout``, ``variable``,
-            ``facets``, and ``col_dim``
-        """
         traces = []
         col_dim, facets = self._facets(data)
 
@@ -405,34 +384,6 @@ class PlotlyBackend:
         step: StepStyle | None = None,
         target: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """draw one ``scattergl`` line per `hue` value of `data` on each facet.
-
-        The y limits are `ylim` where given and the finite extent of `data`
-        otherwise, widened by the values of earlier calls.
-
-        Args:
-            data: the values on the y axis, with dimensions `x`, `hue` (when set), and
-                the facet dimension of `opts`
-            x: the dimension or coordinate of `data` on the x axis
-            hue: the dimension of `data` that selects one line per value; `None`
-                draws one line per facet
-            yscale: the y axis scale, ``'linear'`` or ``'log'``
-            sharex: accepted without effect on the layout
-            ylim: the y limits; `None` in either position leaves that limit to the
-                data extent
-            step: when set, hold each value until the next sample as `StepStyle`
-                selects; `None` connects the samples
-            target: `None` builds a new result dict; a result dict returned by an
-                earlier call receives the lines, and the facet values of `data` must
-                equal those of the result
-
-        Returns:
-            the result dict drawn on
-
-        Raises:
-            ValueError: if `yscale` is neither ``'linear'`` nor ``'log'``, or if
-                `target` has facets that `data` does not have
-        """
         if yscale not in ('linear', 'log'):
             raise ValueError(f"yscale must be 'linear' or 'log', not {yscale!r}")
         if target is not None:
@@ -495,31 +446,6 @@ class PlotlyBackend:
         step: StepStyle | None = None,
         target: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """shade the band from `low` to `high` per `hue` value on each facet.
-
-        The band of hue index `i` takes the color of the `i`th line of `line` with the
-        same `hue`.
-
-        Args:
-            low: the lower edge of the band, with dimensions `x`, `hue` (when set),
-                and the facet dimension of `opts`
-            high: the upper edge of the band, with the dimensions of `low`
-            x: the dimension or coordinate of `low` and `high` on the x axis
-            hue: the dimension that selects one band per value; `None` shades one
-                band per facet
-            alpha: the opacity of the band, in [0, 1]
-            step: when set, hold each edge until the next sample as `StepStyle`
-                selects; `None` connects the samples
-            target: `None` builds a new result dict; a result dict returned by an
-                earlier call receives the bands, and the facet values of `low` must
-                equal those of the result
-
-        Returns:
-            the result dict drawn on
-
-        Raises:
-            ValueError: if `target` has facets that `low` does not have
-        """
         if target is not None:
             self._check_target(target, low)
 
@@ -786,15 +712,6 @@ class PlotlyBackend:
         low: xr.DataArray | float | None,
         high: float | None,
     ) -> None:
-        """set the x range of each facet of `target` to (`low`, `high`).
-
-        Args:
-            target: the result dict to limit
-            low: the lower limit, or a DataArray with one value per facet in facet
-                order; `None` selects the finite minimum of the x data on the facet
-            high: the upper limit; `None` selects the finite maximum of the x data
-                on the facet
-        """
         n_facets = len(target.get('facets', [None]))
         if isinstance(low, xr.DataArray):
             lows: list[float | None] = [float(v) for v in _to_numpy(low.values).flat]
@@ -828,25 +745,6 @@ class PlotlyBackend:
         grid: dict[str, Any],
         where: Literal['x', 'y', 'colorbar'],
     ) -> None:
-        """draw the system noise level (in dBm) of `var_name` on each facet of `grid`.
-
-        Nothing is drawn when `data` has no `system_noise` variable or `var_name` has
-        no noise bandwidth. The level of a facet is the `system_noise` entry at the
-        facet value recorded in `grid`.
-
-        Args:
-            data: the dataset with the `system_noise` variable (dBm/Hz) and `var_name`
-            var_name: the data variable or power-bin coordinate that sets the noise
-                bandwidth
-            grid: the result dict to draw on
-            where: ``'x'`` draws a horizontal line for power on the y axis, ``'y'`` a
-                vertical line for power on the x axis, and ``'colorbar'`` an
-                annotation beside the colorbar of a heatmap
-
-        Raises:
-            TypeError: if `where` is ``'colorbar'`` and no trace of `grid` draws a
-                colorbar, or if `where` is none of the 3 values
-        """
         noise = util.get_system_noise(data, var_name)
         if noise is None:
             return
