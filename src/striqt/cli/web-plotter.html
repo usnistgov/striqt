@@ -108,10 +108,23 @@
             flex: 1;
             min-width: 0;
             height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .plot-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.5rem 1rem;
+            background: #16213e;
+            border-radius: 8px;
+            flex-shrink: 0;
         }
         #plot-container {
             width: 100%;
-            height: 100%;
+            flex: 1;
+            min-height: 0;
             background: #16213e;
             border-radius: 8px;
         }
@@ -240,12 +253,6 @@
         <h1 id="header-title">&#x1F4E1; Striqt WebView</h1>
         <div class="controls">
             <div id="capture-controls" class="controls"></div>
-            <div class="control-group">
-                <label for="variable-select">Data Variable:</label>
-                <select id="variable-select">
-                    <option value="">Loading...</option>
-                </select>
-            </div>
             <div class="status">
                 <div class="status-dot" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
@@ -259,6 +266,14 @@
             </div>
         </div>
         <div class="plot-area">
+            <div class="plot-toolbar">
+                <div class="control-group">
+                    <label for="variable-select">Data Variable:</label>
+                    <select id="variable-select">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+            </div>
             <div id="plot-container">
                 <div class="loading">Waiting for data...</div>
             </div>
