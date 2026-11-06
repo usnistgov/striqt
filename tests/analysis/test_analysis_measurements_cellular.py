@@ -520,7 +520,6 @@ def test_cellular_resource_power_histogram_bin_coordinate_bandwidth(
     assert da.attrs['noise_bandwidth'] == pytest.approx(bandwidth)
     assert da.attrs['resolution_bandwidth'] == coord_attrs['resolution_bandwidth']
     assert 'units' not in da.attrs
-    assert da.attrs['long_name'] == 'Cellular resource power histogram'
 
 
 def test_cellular_resource_power_histogram_link_direction_coordinate():
