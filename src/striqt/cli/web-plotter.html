@@ -57,6 +57,44 @@
         select:hover {
             border-color: #e94560;
         }
+        .status, .run-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #1a1a2e;
+            padding: 0.45rem 0.9rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .status:hover, .run-button:hover:not(:disabled) {
+            border-color: #e94560;
+        }
+        .run-button:disabled {
+            color: #777;
+            cursor: default;
+        }
+        .run-button.running {
+            border-color: #4ade80;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #e94560;
+        }
+        .status-dot.connecting {
+            background: #fbbf24;
+            animation: pulse 1s ease-in-out infinite;
+        }
+        .status-dot.connected {
+            background: #4ade80;
+        }
+        @keyframes pulse {
+            50% { opacity: 0.3; }
+        }
         .main {
             padding: 1rem;
             height: calc(100vh - 70px);
@@ -274,10 +312,11 @@
     <div class="header">
         <h1 id="header-title">&#x1F4E1; Striqt WebView</h1>
         <div class="controls">
-            <div class="status">
-                <div class="status-dot" id="status-dot"></div>
+            <button type="button" id="run-button" class="run-button" disabled>Run</button>
+            <button type="button" id="status-button" class="status" title="Disconnect">
+                <div class="status-dot connecting" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
-            </div>
+            </button>
         </div>
     </div>
     <div class="main">
@@ -306,10 +345,15 @@
         const variableSelect = document.getElementById('variable-select');
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
+        const statusButton = document.getElementById('status-button');
+        const runButton = document.getElementById('run-button');
         const coordsSidebar = document.getElementById('coords-sidebar');
         const captureControls = document.getElementById('capture-controls');
 
         let ws = null;
+        // set by the status button; suppresses the automatic reconnect
+        let userDisconnected = false;
+        let running = true;
         let currentVariable = '';
         let plotInitialized = false;
         let variablesInitialized = false;
@@ -374,22 +418,51 @@
             return merged;
         }
 
+        function send(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+            }
+        }
+
+        function setConnectionState(state) {
+            statusDot.classList.remove('connecting', 'connected');
+            if (state === 'connecting') {
+                statusDot.classList.add('connecting');
+                statusText.textContent = 'Connecting...';
+                statusButton.title = 'Cancel';
+            } else if (state === 'connected') {
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Connected';
+                statusButton.title = 'Disconnect';
+            } else {
+                statusText.textContent = 'Disconnected';
+                statusButton.title = 'Connect';
+            }
+            runButton.disabled = state !== 'connected';
+        }
+
+        function updateRunButton(isRunning) {
+            running = isRunning;
+            runButton.textContent = isRunning ? 'Stop' : 'Run';
+            runButton.classList.toggle('running', isRunning);
+        }
+
         function connect() {
+            userDisconnected = false;
+            setConnectionState('connecting');
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
             ws.onopen = () => {
-                statusDot.classList.add('connected');
-                statusText.textContent = 'Connected';
-                // Request initial state
-                ws.send(JSON.stringify({ type: 'get_state' }));
+                setConnectionState('connected');
+                send({ type: 'get_state' });
             };
 
             ws.onclose = () => {
-                statusDot.classList.remove('connected');
-                statusText.textContent = 'Disconnected';
-                // Reconnect after delay
-                setTimeout(connect, 2000);
+                setConnectionState('disconnected');
+                if (!userDisconnected) {
+                    setTimeout(connect, 2000);
+                }
             };
 
             ws.onerror = (error) => {
@@ -401,6 +474,19 @@
                 handleMessage(msg);
             };
         }
+
+        statusButton.addEventListener('click', () => {
+            if (ws && ws.readyState !== WebSocket.CLOSED) {
+                userDisconnected = true;
+                ws.close();
+            } else {
+                connect();
+            }
+        });
+
+        runButton.addEventListener('click', () => {
+            send({ type: 'set_running', running: !running });
+        });
 
         function handleMessage(msg) {
             // Update header title with spec filename if provided
@@ -414,6 +500,7 @@
                     variablesInitialized = false;
                     updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
                     updateCaptureSelects(msg.capture_options, msg.capture_selection);
+                    updateRunButton(msg.running !== false);
                     if (msg.coordinates) {
                         updateCoordsTable(msg.coordinates);
                     }
@@ -614,11 +701,11 @@
                 }
                 loops.push(indexOf(select));
             }
-            ws.send(JSON.stringify({
+            send({
                 type: 'select_captures',
                 capture: indexOf(document.getElementById('capture-select')),
                 loops: loops
-            }));
+            });
         }
 
         function updateVariableSelect(variables, labels, selected) {
@@ -696,10 +783,10 @@
             if (newVariable && newVariable !== currentVariable) {
                 currentVariable = newVariable;
                 plotInitialized = false;  // Reset plot for new variable type
-                ws.send(JSON.stringify({
+                send({
                     type: 'select_variable',
                     variable: newVariable
-                }));
+                });
             }
         });
 

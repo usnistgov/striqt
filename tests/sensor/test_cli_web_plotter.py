@@ -101,6 +101,25 @@ def test_selected_captures_follows_the_selection_at_the_next_item():
         next(items)
 
 
+def test_selected_captures_waits_while_not_running():
+    sweep = looped_sweep()
+    state = preview_state(sweep)
+    items = web_plotter.selected_captures(state)
+    first = next(items)
+
+    state.running = False
+    resumed = []
+    worker = threading.Thread(target=lambda: resumed.append(next(items)))
+    worker.start()
+    worker.join(0.3)
+    assert worker.is_alive(), 'the generator yielded while paused'
+
+    state.running = True
+    worker.join(2.0)
+    assert resumed == [first]
+    state.stop.set()
+
+
 def test_selected_captures_waits_through_an_empty_selection():
     sweep = looped_sweep()
     state = preview_state(sweep)
@@ -219,6 +238,7 @@ def test_websocket_serves_the_state_the_plot_and_a_selection(analyzed, monkeypat
     monkeypatch.setattr(state, 'selected_capture', configured.selected_capture)
     monkeypatch.setattr(state, 'selected_loops', configured.selected_loops)
     monkeypatch.setattr(state, 'websockets', set())
+    monkeypatch.setattr(state, 'running', True)
     monkeypatch.setattr(state, 'stop', threading.Event())
 
     with TestClient(web_plotter.app) as client, client.websocket_connect('/ws') as ws:
@@ -227,6 +247,8 @@ def test_websocket_serves_the_state_the_plot_and_a_selection(analyzed, monkeypat
         plot = ws.receive_json()
         ws.send_json({'type': 'select_captures', 'capture': 1, 'loops': [0]})
         updated = ws.receive_json()
+        ws.send_json({'type': 'set_running', 'running': False})
+        paused = ws.receive_json()
 
     assert status['type'] == 'state'
     assert status['capture_options']['loops'][0]['field'] == 'snr'
@@ -235,7 +257,11 @@ def test_websocket_serves_the_state_the_plot_and_a_selection(analyzed, monkeypat
     assert len(plot['data']) >= 1
     assert updated['type'] == 'state'
     assert updated['capture_selection'] == {'capture': 1, 'loops': [0]}
+    assert updated['running'] is True
     assert state.selected_loops == {('capture', 'snr'): SNR_LOOP.values[0]}
+    assert paused['type'] == 'state'
+    assert paused['running'] is False
+    assert state.running is False
 
 
 # %% serving_urls

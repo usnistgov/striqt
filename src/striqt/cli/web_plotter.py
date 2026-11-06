@@ -87,6 +87,8 @@ class PreviewState:
     """True while a broadcast is in progress"""
     data_updated: bool = False
     """True when a dataset arrived during a broadcast"""
+    running: bool = True
+    """False holds the acquisition before the next capture until set True again"""
     stop: threading.Event = dataclasses.field(default_factory=threading.Event)
     """set to end the acquisition thread"""
     thread: Optional[threading.Thread] = None
@@ -138,12 +140,13 @@ def selected_captures(state: PreviewState) -> Iterator[ss.specs.SensorCapture]:
     """yield the captures of `current_plan`, wrapping, until ``state.stop`` is set.
 
     The plan is re-read before each capture. A selection change takes effect at the
-    next acquisition. An empty plan waits, polling ``state.stop``.
+    next acquisition. An empty plan, or ``state.running`` False, waits, polling
+    ``state.stop``.
     """
     i = 0
     while not state.stop.is_set():
         plan = current_plan(state)
-        if len(plan) == 0:
+        if len(plan) == 0 or not state.running:
             state.stop.wait(0.1)
             continue
         yield plan[i % len(plan)]
@@ -267,6 +270,7 @@ def state_message(state: PreviewState) -> dict[str, Any]:
         'spec_filename': state.spec_filename,
         'capture_options': capture_options(state.choices),
         'capture_selection': capture_selection(state),
+        'running': state.running,
     }
 
 
@@ -335,6 +339,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 await broadcast_plot_update()
             elif msg['type'] == 'select_captures':
                 apply_capture_selection(STATE, msg)
+                await broadcast_state()
+            elif msg['type'] == 'set_running':
+                STATE.running = bool(msg['running'])
                 await broadcast_state()
 
     except WebSocketDisconnect:
