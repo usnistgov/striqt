@@ -14,6 +14,7 @@ from typing import Any
 import numpy as np
 from conftest import scalars
 from hypothesis import strategies as st
+from numeric_checks import elementwise_rtol
 
 import striqt.analysis as sa
 from striqt.analysis.specs.helpers import frozendict
@@ -30,6 +31,23 @@ def registered_tolerance(capture, spec, **kwargs) -> sa.specs.Tolerance:
     name = sa.registry[type(spec)].name
     group = sa.specs.BuiltinAnalyses(**{name: spec})
     return sa.registry.tolerances(capture, group, **kwargs)[name]
+
+
+# %% the capture of the channel power and IQ measurement tests
+
+FS = 1e6
+DURATION = 1e-4
+RTOL = elementwise_rtol(np.float32)
+
+
+def capture(duration: float = DURATION, sample_rate: float = FS) -> sa.specs.Capture:
+    return sa.specs.Capture(duration=duration, sample_rate=sample_rate)
+
+
+def tolerance(spec, duration: float = DURATION, **kws) -> sa.specs.Tolerance:
+    """return the tolerance registered for `spec` on a capture of `duration` (s) at
+    `FS`."""
+    return registered_tolerance(capture(duration=duration), spec, **kws)
 
 
 # %% capture, delay and range domains
@@ -118,6 +136,14 @@ CELL_FS = 3.84e6
 CELL_FRAME = round(10e-3 * CELL_FS)
 TDD_20_SLOTS = 'dddsuudddddddsuudddd'
 TDD_10_SLOTS = 'dsuuuuuuuu'
+
+# the SSB spectrogram hops one STFT window per OFDM symbol at a frequency resolution
+# of half the subcarrier spacing, where one window spans 2 subcarrier periods. With the
+# normal cyclic prefix, the 14 symbols of a slot span 15 subcarrier periods (3GPP TS
+# 38.211 §5.3.1: 2048κ2^-μ per symbol, 144κ2^-μ per prefix, 16κ more on 2 symbols per
+# subframe, 30720κ2^-μ per slot), so one symbol with its prefix fills 15/14 of a
+# subcarrier period, or 15/28 of the window
+SSB_WINDOW_FILL = Fraction(15, 28)
 
 # the STFT nfft is sample_rate/(subcarrier_spacing/2) and must be a multiple of 28
 # for the 13/28 overlap and 15/28 window fill to be whole samples. 420 kHz is the
@@ -463,12 +489,6 @@ def _children(obj):
     return ()
 
 
-def container_depth(obj) -> int:
-    if isinstance(obj, (list, tuple, dict, frozendict)):
-        return 1 + max((container_depth(v) for v in _children(obj)), default=0)
-    return 0
-
-
 def has_mutable_below(obj, level: int = 0) -> bool:
     """return True if a list or dict is at nesting level `level` or deeper (the root is
     level 0)."""
@@ -482,14 +502,6 @@ def has_frozen_below(obj, level: int = 0) -> bool:
     if level <= 0 and isinstance(obj, (tuple, frozendict)):
         return True
     return any(has_frozen_below(v, level - 1) for v in _children(obj))
-
-
-def tuplify(obj):
-    if isinstance(obj, (list, tuple)):
-        return tuple(tuplify(v) for v in obj)
-    if isinstance(obj, (dict, frozendict)):
-        return frozendict({k: tuplify(v) for k, v in obj.items()})
-    return obj
 
 
 def listify(obj):

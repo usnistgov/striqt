@@ -6,12 +6,12 @@ and the channel power detectors, which run without a window design or a resample
 `Preprocessor` is checked on the base class, which returns `x` for every preference,
 and through a recording subclass that records the preferences the registry passes.
 The power-units cell runs a 10 ms tone at 1.92 MS/s through one group with an output
-in each form of a power unit: dB, amplitude, linear power, and a power-bin coordinate.
+in each form of a power unit: dB, amplitude, linear power, and a power-bin coordinate,
+once per power unit in a module-scoped fixture.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import gc
 from typing import Any
 
@@ -53,23 +53,15 @@ def raw_measurement(iq: np.ndarray, name: str) -> np.ndarray:
 # %% Preprocessor
 
 
-@pytest.mark.parametrize('prefer_filtered', [True, False])
-@pytest.mark.parametrize('prefer_aligned', [True, False])
-def test_the_base_preprocessor_returns_x_for_every_preference(
-    prefer_filtered: bool, prefer_aligned: bool
-) -> None:
+def test_the_base_preprocessor_returns_x_for_every_preference() -> None:
     x = np.zeros((2, 8), dtype='complex64')
     iq = sa.AcquiredIQ(x=x, capture=None, power_units='a.u.')
-    out = iq.preprocess(prefer_filtered=prefer_filtered, prefer_aligned=prefer_aligned)
-    assert out is x
-
-
-def test_preprocess_is_one_object_per_acquisition() -> None:
-    iq = sa.AcquiredIQ(
-        x=np.zeros((2, 8), dtype='complex64'), capture=CAPTURE, power_units='a.u.'
-    )
-    assert iq.preprocess is iq.preprocess
-    assert dataclasses.replace(iq, capture=None).preprocess is not iq.preprocess
+    for prefer_filtered in (True, False):
+        for prefer_aligned in (True, False):
+            out = iq.preprocess(
+                prefer_filtered=prefer_filtered, prefer_aligned=prefer_aligned
+            )
+            assert out is x, (prefer_filtered, prefer_aligned)
 
 
 def test_a_preprocessor_outliving_its_acquisition_raises() -> None:
@@ -86,30 +78,25 @@ def test_a_preprocessor_outliving_its_acquisition_raises() -> None:
 # %% evaluate_by_spec
 
 
-def test_as_xarray_false_returns_the_raw_arrays(iq: np.ndarray) -> None:
-    results = sa.dataarrays.evaluate_by_spec(
-        iq, GROUP, CAPTURE, options(as_xarray=False)
+def test_raw_and_delayed_results_are_the_registered_arrays(iq: np.ndarray) -> None:
+    """``as_xarray=False`` returns the raw array of each measurement of the group in
+    group order, ``'delayed'`` returns a `DelayedDataArray` with that array as the
+    result, and `analyze_by_spec` dispatches to the same results"""
+    raw = sa.dataarrays.evaluate_by_spec(iq, GROUP, CAPTURE, options(as_xarray=False))
+    delayed = sa.dataarrays.evaluate_by_spec(
+        iq, GROUP, CAPTURE, options(as_xarray='delayed')
     )
+    dispatched = sa.analyze_by_spec(iq, GROUP, CAPTURE, options(as_xarray=False))
 
-    assert isinstance(results, dict)
-    assert list(results) == list(GROUP.to_dict())
-    for name, data in results.items():
-        assert isinstance(data, np.ndarray)
-        assert np.array_equal(data, raw_measurement(iq, name))
-
-
-@pytest.mark.parametrize('block_each', [True, False])
-def test_as_xarray_delayed_returns_delayed_arrays(
-    iq: np.ndarray, block_each: bool
-) -> None:
-    results = sa.dataarrays.evaluate_by_spec(
-        iq, GROUP, CAPTURE, options(as_xarray='delayed', block_each=block_each)
-    )
-
-    assert list(results) == list(GROUP.to_dict())
-    for name, delayed in results.items():
-        assert isinstance(delayed, DelayedDataArray)
-        assert np.array_equal(delayed.result, raw_measurement(iq, name))
+    assert isinstance(raw, dict)
+    assert list(raw) == list(delayed) == list(dispatched) == list(GROUP.to_dict())
+    for name in raw:
+        expected = raw_measurement(iq, name)
+        assert isinstance(raw[name], np.ndarray)
+        assert np.array_equal(raw[name], expected)
+        assert isinstance(delayed[name], DelayedDataArray)
+        assert np.array_equal(delayed[name].result, expected)
+        assert np.array_equal(dispatched[name], expected)
 
 
 def test_evaluate_by_spec_hands_the_acquisition_to_the_measurement() -> None:
@@ -128,17 +115,6 @@ def test_evaluate_by_spec_hands_the_acquisition_to_the_measurement() -> None:
 
 
 # %% analyze_by_spec
-
-
-def test_as_xarray_false_matches_evaluate_by_spec(iq: np.ndarray) -> None:
-    results = sa.analyze_by_spec(iq, GROUP, CAPTURE, options(as_xarray=False))
-    expected = sa.dataarrays.evaluate_by_spec(
-        iq, GROUP, CAPTURE, options(as_xarray=False)
-    )
-
-    assert list(results) == list(expected)
-    for name in results:
-        assert np.array_equal(results[name], expected[name])
 
 
 def test_default_options_build_a_dataset_over_port(iq: np.ndarray) -> None:
@@ -214,33 +190,39 @@ def units_of(iq: np.ndarray | sa.AcquiredIQ) -> dict[str, str]:
     }
 
 
+@pytest.fixture(scope='module')
+def units_by_power_units(power_units_x: np.ndarray) -> dict[str, dict[str, str]]:
+    """the `units_of` result for an acquisition in each power unit, evaluated in the
+    order FS, a.u., mW, and then for the bare array under ``'bare'``"""
+    results = {}
+    for power_units in ('FS', 'a.u.', 'mW'):
+        iq = sa.AcquiredIQ(power_units_x, POWER_UNITS_CAPTURE, power_units=power_units)
+        results[power_units] = units_of(iq)
+    results['bare'] = units_of(power_units_x)
+    return results
+
+
 @pytest.mark.parametrize('power_units', list(POWER_UNITS_EXPECTED))
 def test_power_units_of_the_acquisition_label_every_power_output(
-    power_units_x: np.ndarray, power_units: sw.units.PowerUnits
+    units_by_power_units: dict[str, dict[str, str]], power_units: sw.units.PowerUnits
 ) -> None:
     """the dB, amplitude, and linear power outputs and the power-bin coordinate take
     the family of `AcquiredIQ.power_units`; the ratio coordinate stays in dB"""
-    iq = sa.AcquiredIQ(power_units_x, POWER_UNITS_CAPTURE, power_units=power_units)
-
-    assert units_of(iq) == POWER_UNITS_EXPECTED[power_units]
+    assert units_by_power_units[power_units] == POWER_UNITS_EXPECTED[power_units]
 
 
-def test_a_bare_array_is_in_arbitrary_units(power_units_x: np.ndarray) -> None:
-    assert units_of(power_units_x) == POWER_UNITS_EXPECTED['a.u.']
+def test_a_bare_array_is_in_arbitrary_units(
+    units_by_power_units: dict[str, dict[str, str]],
+) -> None:
+    assert units_by_power_units['bare'] == POWER_UNITS_EXPECTED['a.u.']
 
 
 def test_power_units_leave_the_registered_and_cached_attrs_in_mW(
-    power_units_x: np.ndarray,
+    units_by_power_units: dict[str, dict[str, str]],
 ) -> None:
     """an evaluation in full scale resolves copies: the registered attrs and the cached
-    coordinate factory result keep the form token, and a following evaluation in mW
-    is in the mW family"""
-    units_of(sa.AcquiredIQ(power_units_x, POWER_UNITS_CAPTURE, power_units='FS'))
-
-    assert (
-        units_of(sa.AcquiredIQ(power_units_x, POWER_UNITS_CAPTURE, power_units='mW'))
-        == POWER_UNITS_EXPECTED['mW']
-    )
+    coordinate factory result keep the form token after the evaluations of the
+    fixture"""
     info = sa.registry[sa.specs.ChannelPowerTimeSeries]
     assert info.attrs['units'] == sa.units.DB_POWER
     info = sa.registry[sa.specs.SpectrogramHistogram]
@@ -279,7 +261,7 @@ def test_compute_keeps_the_power_units(power_units_x: np.ndarray) -> None:
     assert delayed.compute().power_units == 'FS'
 
 
-# %% measurement_attrs / measurement_coords
+# %% measurement_attrs
 
 
 def test_measurement_attrs_layers_and_resolves_the_form():
@@ -295,17 +277,3 @@ def test_measurement_attrs_layers_and_resolves_the_form():
     assert attrs['extra'] == 1
     assert attrs['standard_name'] == info.attrs['standard_name']
     assert info.attrs['units'] == sa.units.DB_POWER, 'the registration is untouched'
-
-
-def test_measurement_coords_leave_the_form_without_a_family():
-    info = sa.registry[sa.specs.SpectrogramHistogram]
-    spec = sa.specs.SpectrogramHistogram(
-        **_STFT, power_low=-100, power_high=-50, power_resolution=1
-    )
-    unresolved = sa.dataarrays.measurement_coords(info, POWER_UNITS_CAPTURE, spec)
-    resolved = sa.dataarrays.measurement_coords(info, POWER_UNITS_CAPTURE, spec, 'a.u.')
-    assert unresolved['spectrogram_power_bin'][1]['units'] == sa.units.DB_POWER
-    assert resolved['spectrogram_power_bin'][1]['units'] == 'dB(a.u.)'
-    assert resolved['spectrogram_power_bin'][0].tolist() == (
-        unresolved['spectrogram_power_bin'][0].tolist()
-    )

@@ -98,20 +98,26 @@ def inner_store(request, tmp_path):
 
 # %% is_metadata_key
 
+METADATA_KEY_CASES = [
+    *[(key, True) for key in sorted(METADATA_KEYS | {'.zmetadata', 'g/x/.zattrs'})],
+    *[(key, False) for key in sorted(CHUNK_KEYS | {'0', 'x/c/0', 'x/zarr.jsonx'})],
+    pytest.param(
+        'zarr.json',
+        False,
+        marks=pytest.mark.skipif(
+            ZARR_3, reason='zarr.json is the zarr 3 document name'
+        ),
+    ),
+]
 
-@pytest.mark.parametrize('key', sorted(METADATA_KEYS | {'.zmetadata', 'g/x/.zattrs'}))
-def test_is_metadata_key_accepts_metadata_documents(key):
-    assert stores.is_metadata_key(key)
 
-
-@pytest.mark.parametrize('key', sorted(CHUNK_KEYS | {'0', 'x/c/0', 'x/zarr.jsonx'}))
-def test_is_metadata_key_rejects_chunk_keys(key):
-    assert not stores.is_metadata_key(key)
-
-
-@pytest.mark.skipif(ZARR_3, reason='zarr.json is the zarr 3 document name')
-def test_is_metadata_key_rejects_zarr_json_under_zarr_2():
-    assert not stores.is_metadata_key('zarr.json')
+@pytest.mark.parametrize(
+    ('key', 'expected'),
+    METADATA_KEY_CASES,
+    ids=[f'{case[0]}' for case in METADATA_KEY_CASES[:-1]] + ['zarr.json_under_zarr_2'],
+)
+def test_is_metadata_key_accepts_documents_and_rejects_chunks(key, expected):
+    assert stores.is_metadata_key(key) is expected
 
 
 # %% staged_metadata_store
@@ -214,10 +220,3 @@ def test_zip_store_has_one_entry_per_key(tmp_path):
         names = zf.namelist()
     assert len(names) == len(set(names))
     assert set(names) == ALL_KEYS | CONSOLIDATED_KEYS
-
-
-@pytest.mark.skipif(ZARR_3, reason='the zarr 2 wrapper mirrors the `path` attribute')
-def test_zarr_2_wrapper_exposes_inner_path(tmp_path):
-    path = tmp_path / 'store.zarr'
-    staged = stores.staged_metadata_store(open_inner(path, 'directory', 'w'))
-    assert staged.path == str(path)

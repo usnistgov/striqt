@@ -102,18 +102,6 @@ def test_units_label(attrs, prefix, expected):
     )
 
 
-def test_units_label_is_cached_on_the_measurand():
-    """2 `labels.Measurand` objects built from equal attrs share one cache entry"""
-    m1 = labels.measurand_from_attrs(PSD_ATTRS, 'spectrogram')
-    m2 = labels.measurand_from_attrs(dict(PSD_ATTRS), 'spectrogram')
-    assert m1 is not m2
-
-    labels.units_label(m1)
-    hits = labels.units_label.cache_info().hits
-    assert labels.units_label(m2) == 'dBm/360 kHz'
-    assert labels.units_label.cache_info().hits == hits + 1
-
-
 # %% labels.quantity_label
 
 

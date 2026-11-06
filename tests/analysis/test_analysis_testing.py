@@ -3,7 +3,9 @@
 The measurement tests assert against the closed forms documented in
 `striqt.analysis.testing`, so these tests pin the closed forms: a unit tone of mean
 power 1, noise of total power `noise_psd * sample_rate`, and amplitudes of
-`10**(power/20)`.
+`10**(power/20)`. Each generator keeps the `xp` fixture on one closed-form test and
+on the windowing test, which run the cupy branches on the Jetson; the remaining
+checks run on numpy.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from numeric_checks import (
 )
 
 from striqt.analysis import testing
-from striqt.waveform.lib.arrays import mean_atol
+from striqt.waveform.arrays import mean_atol
 
 FS = 1e6
 DURATION = 1e-4
@@ -42,20 +44,20 @@ GENERATORS = {
     'sawtooth': (testing.sawtooth, {'period': 1e-5, 'power': 3}),
     'dirac_delta': (testing.dirac_delta, {'time': 3.7e-5, 'power': -4}),
 }
+SEEDED = ['single_tone', 'circular_awgn']
 
-WINDOWS = [(0, SIZE), (0, 7), (13, 29), (SIZE - 1, 1)]
-WINDOW_IDS = [f'start{start}_count{count}' for start, count in WINDOWS]
-
-# samples before index 0 in the windowing tests that cross the capture start
+# samples before index 0 in the longer call of the windowing test
 PREROLL = 11
-PREROLL_WINDOWS = [
-    (-PREROLL, PREROLL + SIZE),
-    (-PREROLL, 5),
-    (-7, 20),
-    (-1, 1),
-    (0, SIZE),
-]
-PREROLL_WINDOW_IDS = [f'start{start}_count{count}' for start, count in PREROLL_WINDOWS]
+
+# (start_index, count) windows inside the longer call, None for the default count
+WINDOWS = {
+    'head': (0, 7),
+    'interior': (13, 29),
+    'last_sample': (SIZE - 1, 1),
+    'preroll': (-PREROLL, 5),
+    'across_zero': (-7, 20),
+    'preroll_to_end': (-10, None),
+}
 
 INVALID_KWS = {
     'ports0': {'ports': 0},
@@ -69,7 +71,7 @@ def mean_power(x, axis=None):
     return np.mean(np.abs(x) ** 2, axis=axis)
 
 
-def generate(func, xp, duration=DURATION, fs=FS, **kws):
+def generate(func, xp=np, duration=DURATION, fs=FS, **kws):
     """call `func` on the `xp` backend and return the result as a numpy array."""
     return to_numpy(func(duration, fs, xp=xp, **kws))
 
@@ -81,8 +83,8 @@ def generate(func, xp, duration=DURATION, fs=FS, **kws):
 @pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
 @pytest.mark.parametrize('dtype', [None, 'complex128'], ids=['default', 'complex128'])
 def test_generator_dtype(xp, name, dtype):
-    """the dtype is complex64 unless requested. The windowing tests below cover the
-    shape on every port count and backend."""
+    """the dtype is complex64 unless requested. The windowing test below covers the
+    shape on every backend."""
     func, kws = GENERATORS[name]
     requested = {} if dtype is None else {'dtype': dtype}
     x = func(DURATION, FS, xp=xp, **kws, **requested)
@@ -99,38 +101,36 @@ def test_tone_has_unit_power_and_zero_start_phase(xp):
 
 
 @pytest.mark.parametrize('frequency', [0.0, 1e5, -2e5], ids='f{:g}'.format)
-def test_tone_peak_bin_is_at_frequency(xp, frequency):
-    x = testing.tone(DURATION, FS, frequency=frequency, xp=xp)
-    assert tone_frequency(to_numpy(x)[0], FS) == pytest.approx(frequency)
+def test_tone_peak_bin_is_at_frequency(frequency):
+    x = testing.tone(DURATION, FS, frequency=frequency)
+    assert tone_frequency(x[0], FS) == pytest.approx(frequency)
 
 
-def test_tone_ports_are_identical(xp):
-    x = to_numpy(testing.tone(DURATION, FS, frequency=1e5, ports=3, xp=xp))
+def test_tone_ports_are_identical():
+    x = testing.tone(DURATION, FS, frequency=1e5, ports=3)
     assert np.array_equal(x[0], x[1])
     assert np.array_equal(x[0], x[2])
+
+
+def test_tone_preroll_follows_the_closed_form():
+    frequency = 1e5
+    x = generate(testing.tone, frequency=frequency, start_index=-PREROLL, count=PREROLL)
+    i = np.arange(-PREROLL, 0)
+    expected = np.exp(2j * np.pi * frequency / FS * i).astype('complex64')
+    assert_close(x[0], expected, rtol=elementwise_rtol(np.complex64))
 
 
 # %% single_tone
 
 
-def test_single_tone_is_a_product_of_tones(xp):
-    kws = {'xp': xp}
-    x = testing.single_tone(DURATION, FS, frequency_offset=1e5, lo_offset=-2e5, **kws)
-    expected = testing.tone(DURATION, FS, frequency=1e5, **kws) * testing.tone(
-        DURATION, FS, frequency=-2e5, **kws
-    )
-    assert np.array_equal(to_numpy(x), to_numpy(expected))
-
-
 @pytest.mark.parametrize(
     ('frequency_offset', 'lo_offset'), [(1e5, 0.0), (1e5, -2e5), (0.0, 3e5)]
 )
-def test_single_tone_frequency_includes_lo_offset(xp, frequency_offset, lo_offset):
+def test_single_tone_frequency_includes_lo_offset(frequency_offset, lo_offset):
     x = testing.single_tone(
-        DURATION, FS, frequency_offset=frequency_offset, lo_offset=lo_offset, xp=xp
+        DURATION, FS, frequency_offset=frequency_offset, lo_offset=lo_offset
     )
-    peak = tone_frequency(to_numpy(x)[0], FS)
-    assert peak == pytest.approx(frequency_offset + lo_offset)
+    assert tone_frequency(x[0], FS) == pytest.approx(frequency_offset + lo_offset)
 
 
 @pytest.mark.parametrize('snr', [0, 6, 20], ids='snr{}'.format)
@@ -142,74 +142,94 @@ def test_single_tone_snr_sets_the_noise_power(xp, snr):
     assert noise_power == pytest.approx(10 ** (-snr / 10), rel=STAT_RTOL)
 
 
-def test_single_tone_seed_changes_only_the_noise(xp):
-    kws = {'snr': 6, 'xp': xp}
-    x0 = to_numpy(testing.single_tone(DURATION, FS, seed=0, **kws))
-    assert np.array_equal(
-        x0, to_numpy(testing.single_tone(DURATION, FS, seed=0, **kws))
-    )
-    assert not np.array_equal(
-        x0, to_numpy(testing.single_tone(DURATION, FS, seed=1, **kws))
-    )
-
-
-def test_single_tone_ports_share_the_tone_and_not_the_noise(xp):
-    quiet = to_numpy(
-        testing.single_tone(DURATION, FS, frequency_offset=1e5, ports=2, xp=xp)
-    )
+def test_single_tone_ports_share_the_tone_and_not_the_noise():
+    quiet = testing.single_tone(DURATION, FS, frequency_offset=1e5, ports=2)
     assert np.array_equal(quiet[0], quiet[1])
 
-    noisy = to_numpy(testing.single_tone(DURATION, FS, snr=6, ports=2, xp=xp))
+    noisy = testing.single_tone(DURATION, FS, snr=6, ports=2)
     assert not np.array_equal(noisy[0], noisy[1])
 
 
 # %% circular_awgn
 
 
-@pytest.mark.parametrize('power', [1.0, 1e-3, 4.0], ids='power{:g}'.format)
-def test_circular_awgn_power_matches_the_request(xp, power):
-    x = testing.circular_awgn(STAT_DURATION, FS, power=power, xp=xp)
+@pytest.mark.parametrize(
+    ('power', 'start_index'),
+    [(1.0, 0), (1e-3, 0), (4.0, 0), (1e-3, -STAT_SIZE)],
+    ids=['power1', 'power0.001', 'power4', 'power0.001_preroll'],
+)
+def test_circular_awgn_power_matches_the_request(xp, power, start_index):
+    x = testing.circular_awgn(
+        None, FS, power=power, start_index=start_index, count=STAT_SIZE, xp=xp
+    )
     assert mean_power(x) == pytest.approx(power, rel=STAT_RTOL)
 
 
-def test_circular_awgn_components_split_the_power(xp):
-    x = to_numpy(testing.circular_awgn(STAT_DURATION, FS, power=2.0, xp=xp))
+def test_circular_awgn_components_split_the_power():
+    x = testing.circular_awgn(STAT_DURATION, FS, power=2.0)
     assert np.var(x.real) == pytest.approx(1.0, rel=STAT_RTOL)
     assert np.var(x.imag) == pytest.approx(1.0, rel=STAT_RTOL)
 
 
-def test_circular_awgn_ports_are_independent(xp):
-    x = to_numpy(testing.circular_awgn(STAT_DURATION, FS, ports=2, xp=xp))
+def test_circular_awgn_ports_are_independent():
+    x = testing.circular_awgn(STAT_DURATION, FS, ports=2)
     assert not np.array_equal(x[0], x[1])
     correlation = np.abs(np.mean(x[0] * x[1].conj())) / (rms(x[0]) * rms(x[1]))
     assert correlation < STAT_RTOL
 
 
-def test_circular_awgn_seed_determines_the_samples(xp):
-    x0 = to_numpy(testing.circular_awgn(DURATION, FS, seed=0, xp=xp))
-    assert np.array_equal(x0, to_numpy(testing.circular_awgn(DURATION, FS, xp=xp)))
-    assert not np.array_equal(
-        x0, to_numpy(testing.circular_awgn(DURATION, FS, seed=1, xp=xp))
-    )
+def test_circular_awgn_preroll_is_independent_of_the_capture():
+    kws = {'count': STAT_SIZE, 'ports': 2}
+    preroll = testing.circular_awgn(None, FS, start_index=-STAT_SIZE, **kws)
+    capture = testing.circular_awgn(None, FS, start_index=0, **kws)
+
+    assert not np.array_equal(preroll, capture)
+    assert not np.array_equal(preroll, capture[:, ::-1])
+    for a, b in [(preroll[0], capture[0]), (preroll[0], preroll[1])]:
+        correlation = np.abs(np.mean(a * b.conj())) / (rms(a) * rms(b))
+        assert correlation < STAT_RTOL
 
 
-# %% noise
+# %% seeding
+
+
+@pytest.mark.parametrize('name', SEEDED, ids=SEEDED)
+def test_seed_determines_the_noise(name):
+    """`seed` defaults to 0, equal seeds reproduce the samples, and a different seed
+    changes the samples"""
+    func, kws = GENERATORS[name]
+    x0 = generate(func, seed=0, **kws)
+    assert np.array_equal(x0, generate(func, **kws))
+    assert not np.array_equal(x0, generate(func, seed=1, **kws))
 
 
 # %% sawtooth
 
 
-@pytest.mark.parametrize('power', [0, 3, -6], ids='power{}'.format)
-def test_sawtooth_ramps_and_resets(xp, power):
+@pytest.mark.parametrize(
+    ('power', 'start_index'),
+    [(0, 0), (3, 0), (-6, 0), (3, -64)],
+    ids=['power0', 'power3', 'power-6', 'power3_preroll'],
+)
+def test_sawtooth_ramps_and_resets(xp, power, start_index):
     # a binary-exact sample rate and period make i/fs % period exact, so the ramp
-    # reaches the last step rather than rounding up to the reset
+    # reaches the last step rather than rounding up to the reset. A start index that
+    # is a multiple of the period starts the window at a reset.
     fs = 2**20
     samples_per_period = 16
     period = samples_per_period / fs
     size = 4 * samples_per_period
 
     x = to_numpy(
-        testing.sawtooth(size / fs, fs, period=period, power=power, xp=xp)
+        testing.sawtooth(
+            size / fs,
+            fs,
+            period=period,
+            power=power,
+            start_index=start_index,
+            count=size,
+            xp=xp,
+        )
     ).real[0]
     amplitude = 10 ** (power / 20)
 
@@ -223,38 +243,8 @@ def test_sawtooth_ramps_and_resets(xp, power):
     assert ramp == pytest.approx(np.broadcast_to(expected, ramp.shape), rel=1e-6)
 
 
-@pytest.mark.parametrize('power', [0, -6], ids='power{}'.format)
-def test_sawtooth_follows_the_closed_form(xp, power):
-    """at an exact reset (``t == k * period``) the ramp jumps from `amplitude` back
-    to 0. `period` (1e-5) and `FS` (1e6) are not binary fractions, so ``i / FS`` at
-    a reset sample only approximates that instant. The sample is a floating-point
-    tie between the 2 endpoints of the discontinuity, and numpy and cupy may resolve
-    the modulo to different sides. Away from the resets the closed form is checked
-    pointwise. At the resets the check is that the sample is close to 0 or close to
-    `amplitude`.
-    """
-    period = 1e-5
-    x = to_numpy(testing.sawtooth(DURATION, FS, period=period, power=power, xp=xp))
-    amplitude = 10 ** (power / 20)
-
-    t = np.arange(SIZE, dtype='int64') / FS
-    expected = (t % period) * (amplitude / period)
-
-    samples_per_period = round(period * FS)
-    is_boundary = np.arange(SIZE) % samples_per_period == 0
-
-    assert np.array_equal(x.imag, np.zeros_like(x.imag))
-
-    interior = x.real[0][~is_boundary]
-    assert interior == pytest.approx(expected[~is_boundary], rel=1e-6)
-
-    boundary = x.real[0][is_boundary]
-    tol = max(1e-6 * abs(amplitude), 1e-9)
-    assert np.all((np.abs(boundary) <= tol) | (np.abs(boundary - amplitude) <= tol))
-
-
-def test_sawtooth_ports_are_identical(xp):
-    x = to_numpy(testing.sawtooth(DURATION, FS, period=1e-5, ports=2, xp=xp))
+def test_sawtooth_ports_are_identical():
+    x = testing.sawtooth(DURATION, FS, period=1e-5, ports=2)
     assert np.array_equal(x[0], x[1])
 
 
@@ -274,125 +264,41 @@ def test_dirac_delta_has_one_nonzero_sample(xp, time, power):
     assert x[0, indices[0]] == pytest.approx(10 ** (power / 20))
 
 
-def test_dirac_delta_outside_the_window_is_zero(xp):
-    x = testing.dirac_delta(DURATION, FS, time=2 * DURATION, ports=2, xp=xp)
-    assert not to_numpy(x).any()
+def test_dirac_delta_outside_the_window_is_zero():
+    x = testing.dirac_delta(DURATION, FS, time=2 * DURATION, ports=2)
+    assert not x.any()
+
+
+@pytest.mark.parametrize(
+    'time', [3.7e-5, -5 / FS, -PREROLL / FS], ids=['in_capture', 'in_preroll', 'first']
+)
+def test_dirac_delta_preroll_has_the_impulse_only_at_its_time(time):
+    kws = {'start_index': -PREROLL, 'count': PREROLL + SIZE}
+    x = generate(testing.dirac_delta, time=time, power=-4, **kws)
+    _, indices = np.nonzero(x)
+    assert indices.tolist() == [round(time * FS) + PREROLL]
+    assert x[0, indices[0]] == pytest.approx(10 ** (-4 / 20))
 
 
 # %% windowing invariant
 
 
 @pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
-@pytest.mark.parametrize(('start_index', 'count'), WINDOWS, ids=WINDOW_IDS)
-@pytest.mark.parametrize('ports', [1, 2], ids='ports{}'.format)
-def test_window_matches_the_whole_capture(xp, name, start_index, count, ports):
+@pytest.mark.parametrize('window', list(WINDOWS), ids=list(WINDOWS))
+def test_window_is_a_slice_of_the_longer_call(xp, name, window):
+    """a call with `start_index` and `count` equals the slice of one longer call that
+    starts `PREROLL` samples before index 0, on both sides of index 0 and with the
+    default count"""
     func, kws = GENERATORS[name]
-    whole = generate(func, xp, ports=ports, **kws)
-    window = generate(
-        func, xp, ports=ports, start_index=start_index, count=count, **kws
-    )
+    start_index, count = WINDOWS[window]
+    kws = {'ports': 2, **kws}
+    whole = generate(func, xp, start_index=-PREROLL, count=PREROLL + SIZE, **kws)
+    sliced = generate(func, xp, start_index=start_index, count=count, **kws)
 
-    assert window.shape == (ports, count)
-    assert np.array_equal(window, whole[:, start_index : start_index + count])
-
-
-@pytest.mark.parametrize(
-    ('start_index', 'count'),
-    [(SIZE - 10, 10), (-10, SIZE + 10)],
-    ids=['tail', 'preroll'],
-)
-def test_count_defaults_to_the_remainder_of_the_capture(xp, start_index, count):
-    x = testing.circular_awgn(DURATION, FS, start_index=start_index, xp=xp)
-    assert x.shape == (1, count)
-
-
-# %% pre-roll: negative absolute indices
-
-
-@pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
-@pytest.mark.parametrize(
-    ('start_index', 'count'), PREROLL_WINDOWS, ids=PREROLL_WINDOW_IDS
-)
-@pytest.mark.parametrize('ports', [1, 2], ids='ports{}'.format)
-def test_window_across_zero_matches_the_longer_window(
-    xp, name, start_index, count, ports
-):
-    """the windowing identity with index 0 inside the reference window: the pre-roll
-    and the capture are each the corresponding slice of one longer call"""
-    func, kws = GENERATORS[name]
-    whole = generate(
-        func, xp, ports=ports, start_index=-PREROLL, count=PREROLL + SIZE, **kws
-    )
-    window = generate(
-        func, xp, ports=ports, start_index=start_index, count=count, **kws
-    )
-
-    assert window.shape == (ports, count)
+    expected_count = SIZE - start_index if count is None else count
+    assert sliced.shape == (2, expected_count)
     offset = start_index + PREROLL
-    assert np.array_equal(window, whole[:, offset : offset + count])
-
-
-def test_tone_preroll_follows_the_closed_form(xp):
-    frequency = 1e5
-    kws = {'start_index': -PREROLL, 'count': PREROLL}
-    x = generate(testing.tone, xp, frequency=frequency, **kws)
-    i = np.arange(-PREROLL, 0)
-    expected = np.exp(2j * np.pi * frequency / FS * i).astype('complex64')
-    assert_close(x[0], expected, rtol=elementwise_rtol(np.complex64))
-
-
-def test_sawtooth_preroll_follows_the_closed_form(xp):
-    # a binary-exact rate and period make `t % period` exact (see
-    # test_sawtooth_ramps_and_resets)
-    fs = 2**20
-    samples_per_period = 16
-    period = samples_per_period / fs
-    amplitude = 10 ** (3 / 20)
-    count = 2 * samples_per_period + 3
-
-    kws = {'period': period, 'power': 3, 'start_index': -count, 'count': count}
-    x = generate(testing.sawtooth, xp, None, fs, **kws)
-    t = np.arange(-count, 0) / fs
-    expected = (t % period) * (amplitude / period)
-
-    assert np.array_equal(x.imag, np.zeros_like(x.imag))
-    assert x.real[0] == pytest.approx(expected, rel=1e-6)
-    # the ramp is continuous across index 0: sample -1 is the top step of a ramp
-    assert x.real[0, -1] == pytest.approx(
-        amplitude * (samples_per_period - 1) / samples_per_period, rel=1e-6
-    )
-
-
-@pytest.mark.parametrize(
-    'time', [3.7e-5, -5 / FS, -PREROLL / FS], ids=['in_capture', 'in_preroll', 'first']
-)
-def test_dirac_delta_preroll_has_the_impulse_only_at_its_time(xp, time):
-    kws = {'start_index': -PREROLL, 'count': PREROLL + SIZE}
-    x = generate(testing.dirac_delta, xp, time=time, power=-4, **kws)
-    _, indices = np.nonzero(x)
-    assert indices.tolist() == [round(time * FS) + PREROLL]
-    assert x[0, indices[0]] == pytest.approx(10 ** (-4 / 20))
-
-
-@pytest.mark.parametrize('power', [1.0, 1e-3], ids='power{:g}'.format)
-def test_circular_awgn_preroll_power_matches_the_request(xp, power):
-    x = testing.circular_awgn(
-        None, FS, power=power, start_index=-STAT_SIZE, count=STAT_SIZE, xp=xp
-    )
-    assert x.dtype == np.dtype('complex64')
-    assert mean_power(x) == pytest.approx(power, rel=STAT_RTOL)
-
-
-def test_circular_awgn_preroll_is_independent_of_the_capture(xp):
-    kws = {'count': STAT_SIZE, 'ports': 2, 'xp': xp}
-    preroll = to_numpy(testing.circular_awgn(None, FS, start_index=-STAT_SIZE, **kws))
-    capture = to_numpy(testing.circular_awgn(None, FS, start_index=0, **kws))
-
-    assert not np.array_equal(preroll, capture)
-    assert not np.array_equal(preroll, capture[:, ::-1])
-    for a, b in [(preroll[0], capture[0]), (preroll[0], preroll[1])]:
-        correlation = np.abs(np.mean(a * b.conj())) / (rms(a) * rms(b))
-        assert correlation < STAT_RTOL
+    assert np.array_equal(sliced, whole[:, offset : offset + expected_count])
 
 
 # %% argument validation

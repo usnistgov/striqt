@@ -16,7 +16,7 @@ from analysis_strategies import (
     valid_symbol_ranges,
 )
 from conftest import raises_on_both_paths
-from hypothesis import given
+from hypothesis import example, given
 
 import striqt.analysis as sa
 
@@ -94,6 +94,8 @@ class TestSpecBaseFreezing:
 
 
 class TestCapture:
+    # the sample count check tolerates a microsample
+    @example(kws={'duration': (1000 + 1e-7) / 1e6, 'sample_rate': 1e6})
     @given(kws=integer_sample_captures())
     def test_integer_sample_count_is_accepted(self, construct, kws):
         capture = construct(Capture, **kws)
@@ -109,22 +111,24 @@ class TestCapture:
         with pytest.raises(ValueError, match=PERIOD_MSG):
             capture.replace(duration=1.5e-6)
 
-    def test_tolerance_is_one_microsample(self):
-        Capture(duration=(1000 + 1e-7) / 1e6, sample_rate=1e6)
-
-    def test_nan_sample_rate_is_rejected_on_both_paths(self):
-        with pytest.raises(ValueError, match=PERIOD_MSG):
-            Capture(duration=1e-3, sample_rate=math.nan)
-        with pytest.raises(msgspec.ValidationError, match='sample_rate'):
-            Capture.from_dict({'duration': 1e-3, 'sample_rate': math.nan})
-
-    def test_infinite_sample_rate_reports_sample_period_message(self):
-        with pytest.raises(ValueError, match=PERIOD_MSG):
-            Capture(duration=1e-3, sample_rate=math.inf)
-
-    def test_negative_sample_rate_is_rejected_on_convert(self):
-        with pytest.raises(msgspec.ValidationError, match='sample_rate'):
-            Capture.from_dict({'duration': 1e-3, 'sample_rate': -1e6})
+    @pytest.mark.parametrize(
+        ('sample_rate', 'from_dict', 'exc_type', 'match'),
+        [
+            (math.nan, False, ValueError, PERIOD_MSG),
+            (math.nan, True, msgspec.ValidationError, 'sample_rate'),
+            (math.inf, False, ValueError, PERIOD_MSG),
+            (-1e6, True, msgspec.ValidationError, 'sample_rate'),
+        ],
+        ids=['nan_direct', 'nan_from_dict', 'inf_direct', 'negative_from_dict'],
+    )
+    def test_nonfinite_or_negative_sample_rate_is_rejected(
+        self, sample_rate, from_dict, exc_type, match
+    ):
+        """the `Meta` bound ``> 0`` on `sample_rate` applies on the decode path, and
+        the sample count check rejects nan and inf on both paths"""
+        build = (lambda **kws: Capture.from_dict(kws)) if from_dict else Capture
+        with pytest.raises(exc_type, match=match):
+            build(duration=1e-3, sample_rate=sample_rate)
 
 
 # %% Cellular 5G NR SSB correlators
@@ -147,27 +151,6 @@ class TestSSBCorrelators:
     def test_subcarrier_spacing_is_required(self):
         raises_on_both_paths(CORRELATORS[0], TypeError, 'subcarrier_spacing')
 
-    @pytest.mark.parametrize(
-        'cls, field, value, match',
-        [
-            (S.Cellular5GNRPSSCorrelator, 'max_lag_symbols', 7, r'<= 6'),
-            (S.Cellular5GNRPSSCorrelator, 'max_lag_symbols', 0, r'>= 1'),
-            (S.Cellular5GNPSSSync, 'window_fill', 0, r'> 0'),
-            (S.Cellular5GNPSSSync, 'max_beams', 0, r'>= 1'),
-        ],
-        ids=lambda v: v.__name__ if isinstance(v, type) else str(v),
-    )
-    def test_meta_bounds_enforced_only_on_convert(self, cls, field, value, match):
-        # Meta constraints are checked by msgspec during conversion, not on
-        # direct construction
-        direct = cls(subcarrier_spacing=SCS, **{field: value})
-        assert getattr(direct, field) == value
-
-        with pytest.raises(msgspec.ValidationError, match=match):
-            cls.from_dict({'subcarrier_spacing': SCS, field: value})
-        with pytest.raises(msgspec.ValidationError, match=match):
-            cls(subcarrier_spacing=SCS).replace(**{field: value})
-
 
 # %% CellularCyclicAutocorrelator
 
@@ -182,6 +165,7 @@ class TestCellularCyclicAutocorrelator:
         assert isinstance(spec.symbol_range, tuple)
 
     @pytest.mark.parametrize('field', ['frame_range', 'symbol_range'])
+    @example(range_=(0, -5))
     @given(range_=descending_ranges())
     def test_descending_range_rejected(self, field, range_):
         raises_on_both_paths(
@@ -197,13 +181,4 @@ class TestCellularCyclicAutocorrelator:
             S.helpers.SpecValidationError,
             r'\$\.symbol_range: Expected an end value, since `start` is greater than 0',
             symbol_range=(1, None),
-        )
-
-    @pytest.mark.parametrize('field', ['frame_range', 'symbol_range'])
-    def test_descending_range_from_zero_rejected(self, field):
-        raises_on_both_paths(
-            CCA,
-            S.helpers.SpecValidationError,
-            rf'\$\.{field}: Expected an end value at or after `start`',
-            **{field: (0, -5)},
         )

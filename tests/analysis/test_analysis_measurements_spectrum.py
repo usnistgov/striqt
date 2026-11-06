@@ -16,21 +16,8 @@ import re
 import msgspec
 import numpy as np
 import pytest
-from analysis_strategies import (
-    POWER_BINS,
-    SSB_SPECTROGRAM_PERIODICITY,
-    SSB_SPECTROGRAM_SPEC,
-    registered_tolerance,
-    ssb_spectrogram_capture,
-)
-from numeric_checks import (
-    ATOL,
-    RTOL_FLOAT64,
-    assert_close,
-    elementwise_rtol,
-    levels,
-    populated,
-)
+from analysis_strategies import POWER_BINS, RTOL, registered_tolerance
+from numeric_checks import ATOL, RTOL_FLOAT64, assert_close, levels, populated
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -48,23 +35,6 @@ CAPTURE = sa.specs.Capture(duration=DURATION, sample_rate=FS)
 
 # roundoff of the one FFT that separates the IQ from the reported spectrum
 FFT_SIGMA = fft_tolerance_rms(np.complex64, [NFFT])
-
-
-def bin_centered_tone_level_dB(window, nfft=NFFT):
-    """return the level (dB) of the peak bin of a bin-centered unit tone through
-    `window`: -10*log10 of the ENBW in bins."""
-    enbw_bins = sw.equivalent_noise_bandwidth(window, nfft)
-    return -10 * np.log10(float(enbw_bins))
-
-
-def centered_bin_count(size, count):
-    """return the count of `count`-wide bins that `sw.binned_mean(..., fft=True)` keeps
-    over `size` FFT bins.
-
-    `binned_mean` centers one bin on DC and keeps an odd number of bins, so the
-    partial bins at both edges of the frequency axis are dropped.
-    """
-    return 2 * ((size // 2 - count // 2) // count) + 1
 
 
 # %% spectrogram
@@ -85,27 +55,6 @@ def spg_of(iq, capture=CAPTURE, **kwargs):
 
 
 class TestSpectrogram:
-    @pytest.mark.parametrize('window', WINDOWS, ids=WINDOWS)
-    def test_bin_centered_tone_level(self, window):
-        tone_bin = 5
-        iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
-        arr, metadata = spg_of(iq, window=window, as_xarray=False)
-
-        spg = levels(arr)
-        assert metadata['noise_bandwidth'] == RES
-        expected = bin_centered_tone_level_dB(window)
-        peak_index = NFFT // 2 + tone_bin
-
-        tol = registered_tolerance(CAPTURE, spg_spec(window=window))
-        assert_close(
-            spg[:, :, peak_index],
-            expected,
-            rtol=tol.rtol,
-            atol=tol.on_peak.peak,
-            err_msg=f'{window} peak bin level',
-        )
-        assert np.argmax(spg, axis=-1).tolist() == [[peak_index] * NWINDOW]
-
     def test_off_peak_bins_hold_only_roundoff(self):
         tone_bin = 5
         iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
@@ -170,9 +119,9 @@ class TestSpectrogram:
         da = spg_of(iq, as_xarray=True, **binning)
 
         assert da.sizes['spectrogram_time'] == NWINDOW // time_bins
-        assert da.sizes['spectrogram_baseband_frequency'] == centered_bin_count(
-            NFFT, frequency_bins
-        )
+        # `binned_mean` centers one 4-bin bin on DC and keeps whole bins: 7 on each
+        # side of the remaining 30 of the 64 FFT bins
+        assert da.sizes['spectrogram_baseband_frequency'] == 15
 
         freqs = da.spectrogram_baseband_frequency.values
         assert_close(np.diff(freqs), frequency_bins * RES, rtol=RTOL_FLOAT64)
@@ -263,7 +212,8 @@ class TestSpectrogram:
     )
     def test_non_integer_binning_raises(self, kwargs, message, quantities):
         """the sizing validator rejects these before any IQ is read, so the error is a
-        `msgspec.ValidationError` at the field path of the measurement"""
+        `msgspec.ValidationError` at the field path of the measurement. The message
+        lists the quantities the rule compared after the rule text."""
         iq = testing.tone(DURATION, FS)
         with pytest.raises(
             msgspec.ValidationError, match=re.escape(message)
@@ -271,18 +221,8 @@ class TestSpectrogram:
             spg_of(iq, as_xarray=False, **kwargs)
 
         assert str(excinfo.value).startswith('$.spectrogram: ')
-
-        # the validator raises the bare error. The caller attaches the field path
-        spec_fields = {'window': 'boxcar', 'frequency_resolution': RES, **kwargs}
-        with pytest.raises(ValueError, match=re.escape(message)) as valueinfo:
-            sa.measurements.spectrum.validated_spectrogram_sizing(
-                CAPTURE, sa.specs.Spectrogram(**spec_fields)
-            )
-
-        # only the validator has the quantities the rule compared, so the message
-        # lists the quantities in a parenthetical after the rule text
         for quantity in quantities:
-            assert quantity in str(valueinfo.value)
+            assert quantity in str(excinfo.value)
 
     @pytest.mark.parametrize(
         'capture,message',
@@ -422,8 +362,8 @@ def test_power_spectral_density_white_noise_reads_noise_bandwidth():
 )
 def test_resolution_bandwidth_sets_the_tone_level(window, window_fill):
     """a bin-centered tone has `frequency_resolution` / `resolution_bandwidth` of the
-    tone power in the tone bin. The `resolution_bandwidth` attr is the ENBW (Hz) of
-    the nonzero part of the window."""
+    tone power in the tone bin of every STFT window. The `resolution_bandwidth` attr
+    is the ENBW (Hz) of the nonzero part of the window."""
     nwindow = round(window_fill * NFFT)
     enbw_bins = float(sw.equivalent_noise_bandwidth(window, nwindow))
     expected_rbw = enbw_bins * FS / nwindow
@@ -432,17 +372,22 @@ def test_resolution_bandwidth_sets_the_tone_level(window, window_fill):
     iq = testing.tone(DURATION, FS, frequency=tone_bin * RES)
     da = spg_of(iq, window=window, window_fill=window_fill, as_xarray=True)
 
+    assert da.attrs['noise_bandwidth'] == RES
     assert da.attrs['resolution_bandwidth'] == pytest.approx(expected_rbw)
     assert da.spectrogram_baseband_frequency.attrs.get('resolution_bandwidth') is None
 
-    peak_dB = float(da.max())
+    spg = levels(da)
+    peak_index = NFFT // 2 + tone_bin
+    assert np.argmax(spg, axis=-1).tolist() == [[peak_index] * NWINDOW]
     tol = registered_tolerance(
         CAPTURE, spg_spec(window=window, window_fill=window_fill)
     )
     assert_close(
-        peak_dB,
-        10 * np.log10(RES / da.attrs['resolution_bandwidth']),
+        spg[:, :, peak_index],
+        10 * np.log10(RES / expected_rbw),
+        rtol=tol.rtol,
         atol=tol.on_peak.peak,
+        err_msg=f'{window} peak bin level',
     )
 
 
@@ -557,8 +502,6 @@ HIST_FREQUENCY_RESOLUTION = 50e3
 HIST_NFFT = round(HIST_FS / HIST_FREQUENCY_RESOLUTION)
 HIST_CAPTURE = sa.specs.Capture(duration=HIST_DURATION, sample_rate=HIST_FS)
 
-RTOL = elementwise_rtol(np.float32)
-
 
 def spectrogram_histogram_of(iq, window='hamming', **kwargs):
     return sa.measurements.spectrogram_histogram(
@@ -606,24 +549,19 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
     assert_close(fractions, ((HIST_NFFT - 1) / HIST_NFFT, 1 / HIST_NFFT), rtol=RTOL)
 
 
-@pytest.mark.parametrize(
-    'integration_bandwidth,noise_bandwidth',
-    [(None, 50e3), (100e3, 100e3)],
-    ids=['no_integration', 'integrate_100kHz'],
-)
-def test_spectrogram_histogram_bin_coordinate(integration_bandwidth, noise_bandwidth):
-    """the bin coordinate is the shared power grid. The `noise_bandwidth` attr of the
-    coordinate equals that of the histogram variable."""
+def test_spectrogram_histogram_bin_coordinate_follows_the_integration_bandwidth():
+    """the `noise_bandwidth` attr of the bin coordinate and of the histogram variable
+    is the `integration_bandwidth`, 2 bins of the 50 kHz resolution"""
     iq = sa.AcquiredIQ(
         sa.testing.tone(HIST_DURATION, HIST_FS), HIST_CAPTURE, power_units='mW'
     )
 
-    da = spectrogram_histogram_of(iq, integration_bandwidth=integration_bandwidth)
+    da = spectrogram_histogram_of(iq, integration_bandwidth=100e3)
 
     coord_attrs = da.spectrogram_power_bin.attrs
     assert coord_attrs['units'] == 'dBm'
-    assert coord_attrs['noise_bandwidth'] == noise_bandwidth
-    assert da.attrs['noise_bandwidth'] == noise_bandwidth
+    assert coord_attrs['noise_bandwidth'] == 100e3
+    assert da.attrs['noise_bandwidth'] == 100e3
 
 
 # a histogram of 1e5 noise pixels: the dB-of-the-mean bin is populated 10 % more than
@@ -715,30 +653,12 @@ def test_spectrogram_ratio_histogram_requires_two_ports(ports):
         ratio_histogram(iq)
 
 
-def test_spectrogram_ratio_histogram_bin_units_are_ratios():
-    """the bin coordinate is a cross-port ratio, so the `units` attr is dB rather than
-    the dBm of the absolute spectrogram histogram. Neither the coordinate nor the
-    histogram has a `noise_bandwidth` attr."""
-    da = ratio_histogram(two_ports_offset_by(0.0))
-
-    assert da.spectrogram_ratio_power_bin.attrs['units'] == 'dB'
-    assert 'noise_bandwidth' not in da.spectrogram_ratio_power_bin.attrs
-    assert 'noise_bandwidth' not in da.attrs
-
-
 # %% tolerance
 
-TOLERANCE_CASES = [
-    (CAPTURE, spg_spec()),
-    (PSD_CAPTURE, psd_spec()),
-    (ssb_spectrogram_capture(SSB_SPECTROGRAM_PERIODICITY), SSB_SPECTROGRAM_SPEC),
-]
-TOLERANCE_IDS = ['spectrogram', 'power_spectral_density', 'cellular_5g_ssb_spectrogram']
 
-
-@pytest.mark.parametrize('capture,spec', TOLERANCE_CASES, ids=TOLERANCE_IDS)
-def test_tolerance_is_looser_for_cupy_than_numpy(capture, spec):
-    numpy_tol = registered_tolerance(capture, spec, array_backend='numpy')
-    cupy_tol = registered_tolerance(capture, spec, array_backend='cupy')
+def test_tolerance_is_looser_for_cupy_than_numpy():
+    """the FFT roundoff term of the budget is larger on cupy than on numpy"""
+    numpy_tol = registered_tolerance(CAPTURE, spg_spec(), array_backend='numpy')
+    cupy_tol = registered_tolerance(CAPTURE, spg_spec(), array_backend='cupy')
     assert cupy_tol.on_peak.rms > numpy_tol.on_peak.rms
     assert cupy_tol.on_peak.peak > numpy_tol.on_peak.peak

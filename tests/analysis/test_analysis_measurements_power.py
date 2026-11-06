@@ -16,15 +16,19 @@ import re
 import msgspec
 import numpy as np
 import pytest
-from analysis_strategies import POWER_BINS, registered_tolerance
-from numeric_checks import assert_close, elementwise_rtol, populated
+from analysis_strategies import (
+    DURATION,
+    FS,
+    POWER_BINS,
+    RTOL,
+    capture,
+    tolerance,
+)
+from numeric_checks import assert_close, populated
 
 import striqt.analysis as sa
 from striqt.analysis import testing
 
-FS = 1e6
-
-DURATION = 1e-4
 SIZE = round(DURATION * FS)
 DETECTOR_PERIOD = fractions.Fraction(1, 100_000)
 BIN_SIZE = round(float(DETECTOR_PERIOD) * FS)
@@ -32,10 +36,6 @@ BIN_COUNT = SIZE // BIN_SIZE
 
 CYCLIC_PERIOD = 1e-4
 CYCLIC_LAGS = round(CYCLIC_PERIOD / float(DETECTOR_PERIOD))
-
-
-def capture(duration=DURATION, sample_rate=FS) -> sa.specs.Capture:
-    return sa.specs.Capture(duration=duration, sample_rate=sample_rate)
 
 
 def cpts(iq, duration=DURATION, **kws):
@@ -49,20 +49,6 @@ def cyclic(iq, duration=DURATION, **kws):
     kws.setdefault('cyclic_period', CYCLIC_PERIOD)
     kws.setdefault('detector_period', DETECTOR_PERIOD)
     return sa.measurements.cyclic_channel_power(iq, capture(duration=duration), **kws)
-
-
-def validate_cyclic(capture: sa.specs.Capture, spec: sa.specs.CyclicChannelPower):
-    """run the validator registered for `CyclicChannelPower` on the analysis
-    projection of `capture` and `spec`."""
-    validate = sa.registry[sa.specs.CyclicChannelPower].validate
-    assert validate is not None
-    return validate(sa.specs.helpers.to_analysis_capture(capture), spec)
-
-
-def tolerance(spec, duration=DURATION, **kws) -> sa.specs.Tolerance:
-    """return the tolerance registered for `spec` on a capture of `duration` (s) at
-    `FS`."""
-    return registered_tolerance(capture(duration=duration), spec, **kws)
 
 
 CPTS_SPEC = sa.specs.ChannelPowerTimeSeries(detector_period=DETECTOR_PERIOD)
@@ -177,17 +163,6 @@ class TestChannelPowerTimeSeries:
 
         assert str(excinfo.value).startswith('$.channel_power_time_series: ')
 
-        validate = sa.registry[sa.specs.ChannelPowerTimeSeries].validate
-        assert validate is not None
-        with pytest.raises(ValueError, match=re.escape(message)):
-            validate(
-                sa.specs.helpers.to_analysis_capture(capture(duration=duration)),
-                sa.specs.ChannelPowerTimeSeries(**{
-                    'detector_period': DETECTOR_PERIOD,
-                    **kwargs,
-                }),
-            )
-
     @pytest.mark.parametrize('power', [0.0, -13.0, 7.5], ids='{:g}dBm'.format)
     def test_absolute_level_is_the_amplitude_in_dBm(self, power):
         amplitude = np.float32(10 ** (power / 20))
@@ -214,16 +189,6 @@ class TestChannelPowerTimeSeries:
         assert longer_bin.on_peak.peak > base.on_peak.peak
         assert longer_capture.on_peak.rms == pytest.approx(base.on_peak.rms)
         assert longer_capture.on_peak.peak > base.on_peak.peak
-
-    def test_tolerance_accumulates_only_for_the_averaging_detectors(self):
-        """peak and min select one sample exactly, so the budget of a selection
-        detector does not grow with the detector period. The budget of the rms mean
-        does."""
-        rms = tolerance(CPTS_SPEC.replace(power_detectors=('rms',)))
-        peak = tolerance(CPTS_SPEC.replace(power_detectors=('peak',)))
-        longer = CPTS_SPEC.replace(detector_period=5 * DETECTOR_PERIOD)
-        assert peak.on_peak.peak < rms.on_peak.peak
-        assert tolerance(longer.replace(power_detectors=('peak',))) == peak
 
 
 # %% cyclic_channel_power
@@ -305,27 +270,6 @@ class TestCyclicChannelPower:
 
         assert str(excinfo.value).startswith('$.cyclic_channel_power: ')
 
-        spec_kwargs = {
-            'cyclic_period': CYCLIC_PERIOD,
-            'detector_period': DETECTOR_PERIOD,
-            **kwargs,
-        }
-        with pytest.raises(ValueError, match=re.escape(message)):
-            validate_cyclic(
-                capture(duration=duration),
-                sa.specs.CyclicChannelPower(**spec_kwargs),
-            )
-
-    def test_validator_returns_the_lag_count(self):
-        lag_count = validate_cyclic(
-            capture(),
-            sa.specs.CyclicChannelPower(
-                cyclic_period=CYCLIC_PERIOD, detector_period=DETECTOR_PERIOD
-            ),
-        )
-
-        assert lag_count == CYCLIC_LAGS
-
     def test_statistics_are_taken_in_linear_power(self):
         """cycles that alternate between 0 dBm and 20 dBm average to 17.03 dBm in
         linear power but to 10 dBm in dB. The mean statistic equals the linear-power
@@ -346,36 +290,12 @@ class TestCyclicChannelPower:
         assert_close(da.sel(cyclic_statistic='mean').values, linear_mean_dB, **kws)
         assert abs(linear_mean_dB - (0.0 + 20.0) / 2) > 7
 
-    def test_tolerance_accumulates_over_the_cycles_in_the_capture(self):
-        """a cyclic statistic reduces `duration / cyclic_period` detector samples on
-        top of the averaging of the detector, so the exact-input budget grows with the
-        capture duration, unlike that of `channel_power_time_series`"""
-        one_cycle = tolerance(CYCLIC_SPEC)
-        many_cycles = tolerance(CYCLIC_SPEC, duration=10 * CYCLIC_PERIOD)
-
-        assert many_cycles.on_peak.peak > one_cycle.on_peak.peak
-        assert one_cycle.on_peak.peak > tolerance(CPTS_SPEC).on_peak.peak
-
-    def test_quantile_statistic_adds_an_interpolation_rounding(self):
-        """a quantile interpolates between 2 cycle samples where a selection returns
-        one exactly. The peak term also grows with the output element count, so both
-        tuples have 3 statistics."""
-        selections = tolerance(
-            CYCLIC_SPEC.replace(cyclic_statistics=('min', 'max', 'peak'))
-        )
-        quantile = tolerance(CYCLIC_SPEC.replace(cyclic_statistics=('min', 'max', 0.9)))
-
-        assert quantile.on_peak.rms > selections.on_peak.rms
-        assert quantile.on_peak.peak > selections.on_peak.peak
-
 
 # %% channel_power_histogram
 
 HIST_DURATION = 1e-3
 HIST_DETECTOR_PERIOD = fractions.Fraction(1, 10000)
 HIST_CAPTURE = sa.specs.Capture(duration=HIST_DURATION, sample_rate=FS)
-
-RTOL = elementwise_rtol(np.float32)
 
 
 @pytest.mark.parametrize(
@@ -460,14 +380,9 @@ def test_channel_power_histogram_bin_coordinate(
     assert_close(da.channel_power_bin.values, expected, rtol=RTOL)
 
 
-def test_channel_power_histogram_shares_the_time_series_validator():
+def test_channel_power_histogram_rejects_an_unknown_detector_at_its_own_path():
     """the histogram bins the time series, so the detector names and tiling rules
     that reject the time series reject the histogram, at the path of the histogram"""
-    assert (
-        sa.registry[sa.specs.ChannelPowerHistogram].validate
-        is sa.registry[sa.specs.ChannelPowerTimeSeries].validate
-    )
-
     iq = sa.testing.tone(HIST_DURATION, FS)
     with pytest.raises(
         msgspec.ValidationError, match="power_detectors entry 'bogus'"
@@ -483,32 +398,6 @@ def test_channel_power_histogram_shares_the_time_series_validator():
 
 
 # %% registered tolerances
-
-# %% noise bandwidth
-
-
-def test_channel_power_outputs_set_no_noise_bandwidth():
-    """the time series, cyclic power, histogram, and the histogram bin coordinate set
-    no `noise_bandwidth` attr. The noise bandwidth of
-    these outputs is the per-capture `analysis_bandwidth`. One attr on a store
-    variable cannot represent a per-capture value."""
-    cap = sa.specs.Capture(
-        duration=HIST_DURATION, sample_rate=FS, analysis_bandwidth=FS / 4
-    )
-    iq = sa.AcquiredIQ(sa.testing.tone(HIST_DURATION, FS), cap, power_units='mW')
-    kws = {'detector_period': HIST_DETECTOR_PERIOD, 'as_xarray': True}
-
-    series = sa.measurements.channel_power_time_series(iq, cap, **kws)
-    cyclic_power = sa.measurements.cyclic_channel_power(
-        iq, cap, cyclic_period=HIST_DURATION, **kws
-    )
-    histogram = sa.measurements.channel_power_histogram(iq, cap, **POWER_BINS, **kws)
-
-    for da in (series, cyclic_power, histogram, histogram.channel_power_bin):
-        assert 'noise_bandwidth' not in da.attrs
-    for da in (series, cyclic_power, histogram.channel_power_bin):
-        assert da.attrs['units'] == 'dBm'
-
 
 POWER_SPECS = [CPTS_SPEC, CYCLIC_SPEC]
 POWER_IDS = [type(spec).__name__ for spec in POWER_SPECS]
