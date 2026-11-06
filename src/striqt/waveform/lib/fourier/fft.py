@@ -2,7 +2,8 @@
 grid, and the FFT roundoff model.
 
 On cupy, `fft` and `ifft` honor the `out=` buffer and run the batched transform in
-groups of at most `MAX_CUPY_FFT_SAMPLES` samples; None runs one group.
+groups of at most `MAX_CUPY_FFT_SAMPLES` samples, or in one group when that limit is
+None.
 """
 
 from __future__ import annotations as __
@@ -42,7 +43,7 @@ MAX_CUPY_FFT_SAMPLES: int | None = 2**23
 
 # %% roundoff model
 #
-# The FFT roundoff models are rms models with fitted constants; FFT_ROUNDOFF_SAFETY is
+# The FFT roundoff models are rms models with fitted constants. FFT_ROUNDOFF_SAFETY is
 # the margin applied to the tolerances built on the models. The errors of independent
 # backends add in quadrature (measured 0.83-1.0).
 FFT_ROUNDOFF_SAFETY = 3
@@ -67,7 +68,7 @@ def fft_roundoff_rms(
     Returns:
         a dimensionless fraction of the output rms, proportional to the unit
         roundoff of `dtype`, that grows with each FFT size in `nffts` and with
-        `n_elementwise`, and is larger for cupy than for numpy
+        `n_elementwise`
     """
     # Per FFT pass the rms error relative to the output rms is c*eps*sqrt(log2 N),
     # where eps is the unit roundoff (Gentleman & Sande 1966; FFTW accuracy notes),
@@ -107,10 +108,10 @@ def peak_factor(size: int) -> float:
 def on_peak_roundoff(dtype: DTypeLike) -> float:
     """bound the structured roundoff in the matched-filter bin of the matched input.
 
-    The bound is relative to that peak's amplitude and is a fixed multiple of the
-    unit roundoff of `dtype`. Roundoff concentrates in that bin: the bin of a tone
-    in the frequency domain (an FFT), or the sample of an impulse in the time domain
-    (a resampler or detector).
+    The bound is relative to the amplitude of that peak, is a multiple of the unit
+    roundoff of `dtype`, and does not depend on the transform size. Roundoff
+    concentrates in that bin: the bin of a tone in the frequency domain (an FFT), or
+    the sample of an impulse in the time domain (a resampler or detector).
     """
     # an FFT of a tone measured up to 6.7 units of roundoff of the tone amplitude at
     # the tone (cuFFT, N=512) and 3.9 in a far bin (cuFFT, N=1024), against ~2 for
@@ -134,9 +135,9 @@ def off_peak_floor_dBc(
 ) -> float:
     """return the roundoff floor (in dBc) in the off-peak bins of a matched-filter output.
 
-    The matched input (a bin-centered tone) occupies one bin while roundoff of
-    relative rms `sigma` spreads evenly over all `nfft` bins. The floor below the
-    peak therefore deepens with `nfft`.
+    The matched input, a bin-centered tone, occupies one bin, and the roundoff of
+    relative rms `sigma` spreads evenly over the `nfft` bins. The floor below the
+    peak deepens by 10 dB per decade of `nfft`.
 
     Args:
         sigma: the rms roundoff relative to the output rms
@@ -156,8 +157,11 @@ def off_peak_floor_dBc(
 def set_max_cupy_fft_chunk(count: int | None) -> None:
     """set the sample count per group of a cupy FFT into an ``out=`` buffer.
 
+    The setting is global to the process.
+
     Args:
-        count: the most samples transformed in one cuFFT call; None runs one group
+        count: the most samples transformed in one cuFFT call; None selects one
+            group
     """
     global MAX_CUPY_FFT_SAMPLES
     MAX_CUPY_FFT_SAMPLES = count
@@ -258,8 +262,8 @@ def _cupy_fftn_helper(
     x_views = grouped_views_along_axis(x, MAX_CUPY_FFT_SAMPLES, axis=axis)
     out_views = grouped_views_along_axis(out, MAX_CUPY_FFT_SAMPLES, axis=axis)
 
-    # `_fftn` writes into `out_view`; assigning its return value back is a second
-    # full pass over the data
+    # `_fftn` writes into `out_view`, and assigning its return value back would be a
+    # second full pass over the data
     for x_view, out_view in zip(x_views, out_views):
         _fft._fftn(x_view, *args, out=out_view, **kws)
 
@@ -283,8 +287,7 @@ def fftfreq(
         fs: the sample rate (in S/s)
         dtype: the floating-point dtype of the result
         as_index: True evaluates each bin in decimal arithmetic, exact to the
-            rounding of `dtype`; False evaluates in floating point, at least as
-            accurately as `scipy.fft.fftfreq`
+            rounding of `dtype`; False evaluates in floating point
         xp: the array namespace of the result
 
     Returns:
@@ -304,7 +307,6 @@ def fftfreq(
     if not array_api_compat.is_numpy_namespace(xp):
         return xp.asarray(fftfreq(nfft, fs, dtype, as_index=as_index))
 
-    # high resolution rational representation of frequency resolution
     fres = decimal.Decimal(fs) / nfft
     span = range(-nfft // 2, -nfft // 2 + nfft)
     if nfft % 2 == 0:
@@ -317,7 +319,6 @@ def fftfreq(
 def time_fftshift(x, scale: Array | float | None = None, overwrite_x=False, axis=0):
     if scale is None:
         if overwrite_x:
-            # short path: no scale and write directly to x
             xview = axis_slice(x, start=1, step=2, axis=axis)
             xview *= -1
             return x
@@ -352,8 +353,16 @@ def slice_freqs(
 ) -> slice:
     """return the slice of `bandwidth` about `offset` on an `nfft`-bin frequency axis.
 
-    The axis is the ascending `fftfreq` grid at sample rate `fs`. `fs`, `bandwidth`,
-    and `offset` are in Hz.
+    The axis is the ascending `fftfreq` grid at sample rate `fs`.
+
+    Args:
+        nfft: the number of bins on the axis
+        fs: the sample rate (in S/s)
+        bandwidth: the width (in Hz) of the band
+        offset: the center frequency (in Hz) of the band, on the ``fs/nfft`` grid
+
+    Returns:
+        the slice of bin indexes of the band, centered on the bin of `offset`
 
     Raises:
         ValueError: if `bandwidth` is negative, if `offset` is off the ``fs/nfft``
@@ -389,7 +398,7 @@ def truncate_freqs(
     offset: float = 0.0,
     axis: int = 0,
 ) -> _AT:
-    """trim an array outside of the specified bandwidth on a frequency axis"""
+    """return the bins of `x` within `bandwidth` about `offset` on the frequency `axis`"""
 
     s = slice_freqs(nfft, fs, bandwidth, offset=offset)
     return typing.cast('_AT', axis_slice(x, s.start, s.stop, axis=axis))
@@ -404,8 +413,10 @@ def null_lo(
     offset: float = 0,
     axis: int = 0,
 ):
-    """sets samples within the specified bandwidth on a frequency axis to nan in-place"""
-    # to make the top bound inclusive
+    """set the bins of `x` within `bandwidth` about `offset` on `axis` to nan in place.
+
+    `nfft` is ignored, and the bin count is ``x.shape[axis]``.
+    """
     nfft = x.shape[axis]
     s = slice_freqs(nfft, fs, bandwidth, offset=offset)
     view = axis_slice(x, s.start, s.stop, axis=axis)
@@ -418,7 +429,7 @@ def _freq_band_edges(
 ) -> tuple[int | None, int | None]:
     """return the half-open index bounds of ``[cutoff_low, cutoff_hi)`` on an `fftfreq` grid.
 
-    The grid is the ascending `fftfreq` axis of `n` bins at sample rate `d` (in Hz).
+    The grid is the ascending `fftfreq` axis of `n` bins at sample rate `d` (in S/s).
     The cutoffs are in Hz and need not fall on the grid. A bound is `None` when the
     corresponding cutoff is `None`.
     """
@@ -441,7 +452,7 @@ def _freq_band_edges(
 
 # %% Helpers
 def _broadcast_onto(a: _AT, other: _AT, *, axis: int) -> _AT:
-    """reshape a 1-D array to support broadcasting onto a specified axis of `other`"""
+    """reshape the 1-D array `a` to broadcast along `axis` of `other`"""
 
     if a.ndim != 1:
         raise ValueError('input array a must be 1-D')

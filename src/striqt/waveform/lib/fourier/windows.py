@@ -27,7 +27,7 @@ def _len_guards(M):
 
 
 def _extend(M, sym):
-    """Extend window by 1 sample if needed for DFT-even symmetry"""
+    """extend the window length `M` by 1 sample for a periodic window (`sym` False)"""
     if not sym:
         return M + 1, True
     else:
@@ -35,7 +35,7 @@ def _extend(M, sym):
 
 
 def _truncate(w, needed):
-    """Truncate window by 1 sample if needed for DFT-even symmetry"""
+    """drop the last sample of the window `w` when `needed`"""
     if needed:
         return w[:-1]
     else:
@@ -72,7 +72,7 @@ def modified_bessel(M, alpha, sym=True):
         special.i1(np.pi * alpha) * sqrt_term
     )
 
-    w[0] = w[-1] = 0  # np.pi*alpha/np.sinh(np.pi*alpha)
+    w[0] = w[-1] = 0
 
     w /= np.sqrt(np.sum(w**2))
 
@@ -138,8 +138,7 @@ def acg(M: int, sigma_t: float, sym=True, dtype='float64'):
 def register_extra_windows():
     """register the ``'acg'``, ``'cosh'``, ``'modified_bessel'``, and ``'knab'`` windows with scipy.
 
-    The registration modifies the window table of `scipy.signal.get_window` for the
-    process.
+    The window table of `scipy.signal.get_window` is modified for the process.
     """
     # the private table is named by scipy version
     windows: typing.Any = importlib.import_module('scipy.signal.windows._windows')
@@ -189,7 +188,6 @@ def _design_window(
         w[nwindow:] = 0
 
     if norm:
-        # scale the time-averaged power to 1
         w /= np.sqrt(np.mean(np.abs(w) ** 2))
 
     if fftshift:
@@ -238,23 +236,20 @@ def get_window(
             `register_extra_windows`
         nwindow: the number of nonzero window samples
         nzero: the number of zero samples appended to the window
-        fftshift: True to modulate the window by a half-band shift so that the FFT of
-            a windowed signal is in ascending frequency order; the window is
-            then complex when `nwindow + nzero` is odd
-        center_zeros: True to split the `nzero` zeros before and after the window;
+        fftshift: True modulates the window by the half-band shift that puts the FFT
+            of a windowed signal in ascending frequency order; the window is then
+            complex when ``nwindow + nzero`` is odd
+        center_zeros: True splits the `nzero` zeros before and after the window;
             False appends all `nzero` zeros after the window
         fftbins: True for a periodic window (spectral analysis), False for a
             symmetric one, as in `scipy.signal.get_window`
-        norm: True to scale the window to unit time-averaged power
+        norm: True scales the window to unit time-averaged power
         dtype: the floating-point precision of the result (the complex counterpart
             when `fftshift` makes the window complex); None keeps scipy's float64
         xp: the array namespace of the result; None selects numpy
 
     Returns:
-        a 1-D array of `nwindow + nzero` samples in `xp`
-
-    References:
-        `scipy.signal.get_window`
+        a 1-D array of ``nwindow + nzero`` samples in `xp`
     """
     if dtype is not None:
         dtype = np.dtype(dtype)
@@ -288,7 +283,8 @@ def equivalent_noise_bandwidth(window: WindowSpecType, N, fftbins=True, cached=T
         window: the window name or ``(name, parameter)`` for `get_window`
         N: the number of nonzero window samples
         fftbins: the `get_window` periodic-window flag
-        cached: True to design through the cached `get_window`
+        cached: True designs the window through the cached `get_window`; False
+            designs it uncached
 
     Returns:
         the ENBW as a float: 1.0 for a rectangular window and larger for every other
@@ -311,9 +307,8 @@ def find_window_param_from_enbw(
     """return the parameter of `window_name` with equivalent noise bandwidth `target`.
 
     The parameter is found for a window of `nfft` samples and converges to a limit as
-    `nfft` grows. For `target` of at least 1.1, the result is slightly below
-    ``target**2`` for ``'dpss'`` and slightly below ``pi * target**2`` for
-    ``'kaiser'``.
+    `nfft` grows. For `target` of at least 1.1, the result is below ``target**2``
+    for ``'dpss'`` and below ``pi * target**2`` for ``'kaiser'``.
 
     Args:
         window_name: ``'kaiser'``, ``'dpss'``, or ``'chebwin'``

@@ -106,9 +106,9 @@ def float_dtype_like(x: Array, min_dtype: Any | None = None):
 # %% roundoff model
 #
 # Every tolerance in striqt.waveform is a count of the roundings a routine performs
-# times the unit roundoff of the working dtype. A violation then means the routine
-# rounds worse than its model, not worse than a hand-picked number. ROUNDOFF_SAFETY is
-# the margin applied to the elementwise budgets.
+# times the unit roundoff of the working dtype. A violation means the routine rounds
+# worse than its model. ROUNDOFF_SAFETY is the margin applied to the elementwise
+# budgets.
 ROUNDOFF_SAFETY = 2
 
 
@@ -116,8 +116,8 @@ def unit_roundoff(dtype: DTypeLike) -> float:
     """return the unit roundoff of the real dtype underlying `dtype`.
 
     The unit roundoff is half the spacing between 1 and the next representable
-    value of that dtype (half an ulp). A complex `dtype` selects the unit roundoff
-    of the real component.
+    value of that dtype. A complex `dtype` selects the unit roundoff of the real
+    component.
     """
     return float(np.finfo(cast('np.dtype[np.floating[Any]]', np.dtype(dtype))).eps / 2)
 
@@ -125,15 +125,16 @@ def unit_roundoff(dtype: DTypeLike) -> float:
 def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """return the relative rms roundoff of a sum or mean over `n` terms of `dtype`.
 
-    The model applies to a reduction along a contiguous axis; `accum_rtol` bounds a
+    The model holds for a reduction along a contiguous axis. `accum_rtol` bounds a
     reduction along a strided axis. The result grows with the square root of `n`
-    from a floor of a few unit roundoffs of `dtype`.
+    from a floor of ``3 * sqrt(n_impl)`` unit roundoffs of `dtype`, with the
+    roundoff of each implementation added in quadrature.
 
     Args:
         dtype: the accumulation dtype; a complex dtype selects the real component
         n: the number of terms summed
-        n_impl: the number of independent implementations compared, added in
-            quadrature: 1 against an exact reference, 2 between two backends
+        n_impl: the number of independent implementations compared, 1 against an
+            exact reference or 2 between two backends
     """
     # A reduction over a contiguous axis is not summed in order. numpy sums it pairwise
     # (numpy/_core/src/umath/loops_utils.h.src; before numpy 2.3 per 8192-element
@@ -156,16 +157,17 @@ def accum_rms(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
 def accum_rtol(dtype: DTypeLike, n: int, n_impl: int = 1) -> float:
     """bound the relative roundoff of a sum or mean over `n` terms of `dtype`.
 
-    The model applies to a reduction along a strided axis, which is summed in order.
-    The bound grows linearly with `n` in unit roundoffs of `dtype` (measured 1600 u
-    rms and 2000 u max at n = 1e6, against the 2e6 u of this bound).
+    The model holds for a reduction along a strided axis. The bound grows linearly
+    with `n` and `n_impl` in unit roundoffs of `dtype`.
 
     Args:
         dtype: the accumulation dtype; a complex dtype selects the real component
         n: the number of terms summed
-        n_impl: the number of independent implementations compared: 1 against an
-            exact reference, 2 between two implementations
+        n_impl: the number of independent implementations compared, 1 against an
+            exact reference or 2 between two implementations
     """
+    # a strided axis is summed in order. Measured at n = 1e6 in float32: 1600 u rms
+    # and 2000 u max, against the 2e6 u of this bound
     return ROUNDOFF_SAFETY * n_impl * n * unit_roundoff(dtype)
 
 
@@ -194,14 +196,14 @@ def binned_mean(
     Args:
         x: the array to bin; NaN samples are excluded from each mean
         count: the number of samples per bin
-        axis: the axis to bin, which the result shortens by a factor of `count`
+        axis: the axis to bin, shortened by a factor of `count` in the result
         truncate: True drops the samples at the edges of `axis` that do not fill a
             bin; False raises `ValueError` for a length that is not a multiple of
             `count`
         reject_extrema: True excludes the minimum and maximum sample of each bin
         fft: True centers a bin on index ``x.shape[axis] // 2``, the DC bin of an
             `fftfreq` axis, and drops edge samples symmetrically; False starts the
-            first bin at index 0
+            first bin at index 0; ignored when `truncate` is False
 
     Returns:
         the binned means, in the array namespace of `x`
@@ -296,8 +298,8 @@ def _sliding_window_output_shape(
 def sliding_window_view(x, window_shape, axis=None, *, subok=False, writeable=False):
     """return a read-only view of `x` with a sliding window of `window_shape`.
 
-    The view follows `numpy.lib.stride_tricks.sliding_window_view` and is evaluated
-    in the array namespace of `x`.
+    The view has the layout of `numpy.lib.stride_tricks.sliding_window_view`, in the
+    array namespace of `x`.
 
     Args:
         x: the array to view
@@ -559,18 +561,17 @@ def pad_along_axis(
 def pinned_array_as_cupy(
     x: np.ndarray, stream: Any = None, *, out: cupy.ndarray | None = None
 ) -> cupy.ndarray:
-    """return a device copy of the pinned host array `x`, started on `stream`.
+    """copy the pinned host array `x` to the device on `stream`.
 
-    The copy is asynchronous: synchronize `stream` (the current stream when None)
-    before `x` is rewritten or `out` is read. `x` is C-contiguous, or a 2-D array with
-    contiguous rows such as a column slice, which is copied one row at a time. A
-    C-contiguous `x` of the `nbytes` of `out` fills `out`. Otherwise a 2-D `x` requires
-    a 2-D `out` with the same row count, contiguous rows, and a row pitch of at least
-    the row bytes of `x`. The bytes of each row of `x` are written at the head of the
-    row of `out`.
+    The copy is asynchronous, so `stream` must be synchronized before `x` is
+    rewritten or `out` is read. A C-contiguous `x` with the `nbytes` of a
+    C-contiguous `out` is copied in one transfer. Otherwise `out` must be 2-D with
+    the row count of `x`, contiguous rows, and a row pitch of at least the row bytes
+    of `x`. Each row of `x` is then copied to the head of the matching row of `out`.
 
     Args:
-        x: the pinned host array
+        x: the pinned host array, C-contiguous or 2-D with contiguous rows such as
+            a column slice
         stream: the cupy stream of the copy; `None` selects the current stream
         out: the device array to fill; `None` allocates one shaped like `x`
 
@@ -667,7 +668,7 @@ class NonStreamContext:
 def array_stream(
     obj: Array, null: bool = False, non_blocking: bool = False, ptds: bool = False
 ) -> cupy.cuda.Stream | NonStreamContext:
-    """return a `cupy.cuda.Stream` for a cupy `obj`, otherwise a do-nothing stand-in"""
+    """return a `cupy.cuda.Stream` for a cupy `obj`, otherwise a `NonStreamContext`"""
     if is_cupy_array(obj) and cp is not None:
         return cp.cuda.Stream(null=null, non_blocking=non_blocking, ptds=ptds)
     else:

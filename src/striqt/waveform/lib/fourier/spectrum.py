@@ -68,10 +68,15 @@ def spectrogram(
     truncate: bool = True,
     return_axis_arrays: bool = True,
 ) -> _AT | tuple[_AT, _AT, _AT]:
-    """evaluate the power spectrogram of x with the given arguments.
+    """return the power spectrogram of `x` along `axis`.
 
-    The output is scaled such that the noise bandwidth is equal to the
+    The arguments are those of `stft`. The noise bandwidth of the output equals the
     frequency resolution.
+
+    Returns:
+        ``(freqs, times, S)``, with `freqs` and `times` the axes of `stft` and `S`
+        the linear power of each bin in the squared units of `x`; `S` alone when
+        `return_axis_arrays` is False
     """
     ret = stft(norm='power', **dict(locals()))
     if return_axis_arrays:

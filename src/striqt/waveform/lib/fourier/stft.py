@@ -38,7 +38,7 @@ def _same_base_memory(a: Array, b: Array) -> bool:
 def _get_stft_axes(
     fs: float, nfft: int, time_size: int, overlap_frac: float = 0, *, xp=None
 ) -> tuple[Array, Array]:
-    """returns stft (freqs, times) array tuple appropriate to the array module xp"""
+    """return the ``(freqs, times)`` axes of an STFT in the array namespace `xp`"""
     if xp is None:
         xp = np
 
@@ -81,7 +81,7 @@ def stft(
             False raises `ValueError` for a partial segment
         norm: None, or ``'power'`` to scale the window to unit time-averaged power
         overwrite_x: True writes the result into the buffer of `x` when `noverlap` is
-            0 and `out` is None; ignored otherwise
+            0, and `out` is then ignored; ignored when `noverlap` is nonzero
         return_axis_arrays: True returns the frequency and time axes with the
             transform; False returns the transform alone
         out: a buffer with the shape and dtype of the transform
@@ -126,7 +126,6 @@ def stft(
         )
 
     if noverlap == 0:
-        # special case for speed
         xstack = axis_to_blocks(x, nfft, axis=axis, truncate=truncate)
         wstack = _broadcast_onto(w / nfft, xstack, axis=axis + 1)
 
@@ -157,7 +156,7 @@ def stft(
     assert xstack.dtype == x.dtype
     del x
 
-    # no fftshift needed since it was baked into the window
+    # the fftshift is baked into the window
     y = fft(xstack, axis=axis + 1, overwrite_x=True, out=xstack)
 
     if not return_axis_arrays:
@@ -199,12 +198,10 @@ def istft(
         out: a buffer of at least the untrimmed output size in the dtype of `y`; a
             non-contiguous buffer is copied, and the result is then not a view of
             `out`
-        overwrite_x: if True, `y` is overwritten by the inverse FFT of each window
+        overwrite_x: True overwrites `y` with the inverse FFT of each window
         axis: the window axis of `y`
-        fftshift: True for bins in the ascending-frequency order that `stft` returns,
-            which multiplies each inverse transform by the half-band shift of the
-            analysis window; False for bins in `fftfreq` order, which skips that
-            multiply
+        fftshift: True for bins in the ascending-frequency order that `stft` returns;
+            False for bins in `fftfreq` order
 
     Returns:
         the waveform on `axis`, in the dtype and array namespace of `y`, of
@@ -215,7 +212,6 @@ def istft(
     xp = array_namespace(y)
     dtype = typing.cast(str, y.dtype)
 
-    # give the stacked NFFT-sized time domain vectors in axis + 1
     xstack = ifft(
         y,
         axis=axis + 1,
@@ -224,8 +220,7 @@ def istft(
     )
 
     if fftshift:
-        # correct the fft shift in the time domain, since the
-        # multiply operation can be applied in-place
+        # the fft shift is undone in the time domain, where the multiply is in place
         w = get_window('rect', nfft, xp=xp, dtype=dtype, fftshift=True)
         wstack = _broadcast_onto(w, xstack, axis=axis + 1)
         xstack = xp.multiply(
@@ -269,6 +264,10 @@ def _stack_stft_windows(
             stride; ``'power'`` applies the window unscaled
         axis: the time axis of `x`
         out: a buffer with the shape and dtype of the result
+
+    Returns:
+        the windowed segments, `nperseg` samples each on ``axis + 1``, in the dtype
+        of `x`; a C-contiguous allocation when `out` is None
     """
 
     xp = array_namespace(x)
@@ -345,8 +344,8 @@ def _unstack_stft_windows(
     xp.copyto(xr_slice, 0)
 
     # sum in groups of non-overlapping windows. The strided group of windows is
-    # added into the output span viewed as (windows, nfft): splitting the contiguous
-    # time axis is a view, where merging the strided window axis would copy
+    # added into the output span viewed as (windows, nfft), because splitting the
+    # contiguous time axis is a view and merging the strided window axis would copy
     group_count = nfft // hop_size
     for offs in range(group_count):
         windows = axis_slice(y, start=offs, step=group_count, axis=axis)
@@ -368,7 +367,18 @@ def _unstack_stft_windows(
 def zero_stft_by_freq(
     freqs: Array, xstft: Array, *, passband: tuple[float, float], axis=0
 ) -> Array:
-    """apply a bandpass filter in the STFT domain by zeroing frequency indices"""
+    """zero the bins of `xstft` outside `passband` in place.
+
+    Args:
+        freqs: the ascending bin center frequencies (in Hz) of `xstft`
+        xstft: the STFT, with segments on `axis` and bins on ``axis + 1``
+        passband: the ``(low, high)`` band edges (in Hz) kept nonzero; None at
+            either edge extends the band to that end of `freqs`
+        axis: the segment axis of `xstft`
+
+    Returns:
+        `xstft`
+    """
     xp = array_namespace(xstft)
 
     freq_step = float(freqs[1] - freqs[0])
@@ -415,7 +425,6 @@ def downsample_stft(
     shape_out = list(y.shape)
     shape_out[ax] = nfft_out
 
-    # passband indexes in the input
     freq_step = float(freqs[1] - freqs[0])
     fs = y.shape[ax] * freq_step
     passband_start, passband_end = _freq_band_edges(y.shape[ax], fs, *passband)
@@ -425,7 +434,6 @@ def downsample_stft(
     freqs_out = _find_downsampled_freqs(nfft_out, freq_step, xp=xp)
 
     if tuple(bounds_out) == (0, shape_out[ax]) and _same_base_memory(y, out):
-        # fast path: a view when no bins are zeroed and `out` shares memory with `y`
         return freqs_out, axis_slice(y, *bounds_in, axis=ax)
 
     if out is None:
@@ -456,9 +464,6 @@ def _find_downsample_copy_range(
     passband_size = edge_in_end - edge_in_start
     passband_center = (edge_in_end + edge_in_start) // 2
 
-    # passband_center_error = (passband_end - passband_start) % 2
-
-    # copy input indexes, taken from the passband
     max_copy_size = min(passband_size, nfft_out)
     copy_in_start = max(passband_center - max_copy_size // 2, 0)
     copy_in_end = min(passband_center - max_copy_size // 2 + max_copy_size, nfft_in)
@@ -468,9 +473,9 @@ def _find_downsample_copy_range(
     assert copy_size >= 0, copy_size
     assert copy_in_end - copy_in_start == copy_size
 
-    # copy output indexes, anchored so that the passband center lands on the
-    # output DC bin. Splitting the zeroed bins evenly would put it one bin low when
-    # their count is odd, which inverts alternate frames at 50% overlap
+    # the output range is anchored so that the passband center lands on the output
+    # DC bin. Splitting the zeroed bins evenly would put the center one bin low when
+    # the count is odd, which inverts alternate frames at 50% overlap
     copy_out_start = nfft_out // 2 - (passband_center - copy_in_start)
     copy_out_end = copy_out_start + copy_size
 

@@ -1,6 +1,6 @@
 """FIR low-pass designs and the STFT overlap-add filters that apply a design.
 
-Window overlaps come from one constant-overlap-add (COLA) divisor table.
+The overlap of each window is set by one constant-overlap-add (COLA) divisor table.
 """
 
 from __future__ import annotations as __
@@ -18,7 +18,6 @@ if typing.TYPE_CHECKING:
     from ..typing import _AT, Array, DTypeLike, WindowType, XpType
 
 
-# required divisors
 _COLA_WINDOW_SIZE_DIVISOR = {
     None: 1,
     'rect': 1,
@@ -104,10 +103,10 @@ def design_fir_lpf(
         numtaps: the number of taps, odd for a type I design
         transition_bw: the width (in Hz) of the transition band
         dtype: the dtype of the taps
-        xp: unused; the taps are a numpy array
+        xp: the array namespace of the result; None selects numpy
 
     Returns:
-        the `numtaps` taps as a 1-D numpy array of `dtype`
+        the `numtaps` taps as a 1-D array of `dtype` in `xp`
 
     Raises:
         ValueError: if the transition band reaches 0 Hz or ``fs/2``
@@ -170,7 +169,7 @@ def _fir_lowpass_fft(
         a 1-D array of `size` samples
 
     Raises:
-        ValueError: if the transition band reaches 0 Hz, which leaves no passband
+        ValueError: if ``cutoff - transition/2`` is at or below 0 Hz
     """
 
     if xp is None:
@@ -250,23 +249,37 @@ def oafilter(
     extend=False,
     overwrite_x=False,
 ):
-    """apply a bandpass filter implemented through STFT overlap-and-add.
+    """apply a bandpass filter to `x` through STFT overlap-add.
+
+    The bins outside `passband` are zeroed in each STFT block, with the band narrowed
+    at each edge by the equivalent noise bandwidth of `window`.
 
     Args:
-        x: the input waveform
-        fs: the sample rate of the input waveform, in Hz
-        noverlap: the size of overlap between adjacent FFT windows, in samples
-        window: the type of COLA window to apply, 'hann', 'blackman', or 'blackmanharris'
-        passband: a tuple of low-pass cutoff and high-pass cutoff frequency (or None to skip either)
-        nfft_out: implement downsampling by adjusting the size of overlap between adjacent FFT windows
-        frequency_shift: the direction to shift the downsampled frequencies ('left' or 'right', or False to center)
-        axis: the axis of `x` along which to compute the filter
-        extend: if True, allow use of zero-padded samples at the edges to accommodate a non-integer number of overlapping windows in x
-        out: None, 'shared', or an array object to receive the output data
-
+        x: the waveform, with time on `axis`
+        fs: the sample rate (in S/s) of `x`
+        nfft: the STFT block size (in samples), an even multiple of the COLA divisor
+            of `window`
+        window: the COLA window, ``'hann'``, ``'blackman'``, or ``'blackmanharris'``
+        passband: the ``(low, high)`` band edges (in Hz) kept nonzero
+        nfft_out: the output block size (in samples), an even multiple of the COLA
+            divisor; a value other than `nfft` resamples by ``nfft_out / nfft`` with
+            the passband centered on the output DC bin; None keeps `nfft`
+        frequency_shift: True centers the passband on the output DC bin when
+            `nfft_out` equals `nfft`
+        axis: the time axis of `x`
+        extend: False raises `ValueError` when ``x.size`` is not a multiple of the
+            overlap; True skips that check
+        overwrite_x: True permits the STFT to consume the buffer of `x`
 
     Returns:
-        an Array of the same shape as X
+        the filtered waveform on `axis`, at ``fs * nfft_out / nfft``, in the array
+        namespace of `x`
+
+    Raises:
+        TypeError: if `window` is not a key of the COLA divisor table
+        ValueError: if `nfft` or `nfft_out` is odd or not a multiple of the COLA
+            divisor, if ``x.size`` is not a multiple of the overlap without `extend`,
+            or if ``x.shape[axis]`` is not a whole number of STFT segments
     """
 
     nfft_out, noverlap, overlap_scale, _ = design_oafilter(
@@ -277,7 +290,7 @@ def oafilter(
         extend=extend,
     )
 
-    # the ENBW is in bins of fs / nfft_out; the passband edges are in Hz
+    # the ENBW is in bins of fs / nfft_out, and the passband edges are in Hz
     enbw_bins = equivalent_noise_bandwidth(window, nfft_out, fftbins=False)
     guard = float(enbw_bins) * fs / nfft_out
 
@@ -322,10 +335,9 @@ def oafilter(
 
 
 def oaconvolve(x1, x2, mode='full', axes=-1):
-    """convolve x1 and x2, and return the result.
+    """convolve `x1` and `x2` by overlap-add, as `scipy.signal.oaconvolve`.
 
-    See also:
-        `scipy.signal.oaconvolve`
+    The result is in the array namespace of `x1`.
     """
     if is_cupy_array(x1):
         from cupyx.scipy.signal import oaconvolve as func  # type: ignore
