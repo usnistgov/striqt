@@ -13,7 +13,9 @@ if _typing.TYPE_CHECKING:
     from xarray import DataArray as _DA, Dataset as _DS
     from xarray.core.types import ScaleOptions as _ScaleOptions
 
-    from .backend import PlotBackend as _PlotBackend
+    from .backend import PlotBackend, StepStyle as _StepStyle
+
+    _PlotBackend = PlotBackend[_typing.Any]
 
     class _DataVariablePlotter(_typing.Protocol):
         def __call__(
@@ -169,25 +171,56 @@ def channel_power_time_series(
 
 
 @_register_data_var_plot
-def cyclic_channel_power(data: _DS, plotter: _PlotBackend, *, noise_line=True):
-    # PlotBackend has no method for this layout, so the FacetGrid is built here
+def cyclic_channel_power(
+    data: _DS,
+    plotter: _PlotBackend,
+    *,
+    center_statistic: str | float = 'mean',
+    bound_statistics: tuple[str | float, str | float] = ('min', 'max'),
+    hue: str = 'power_detector',
+    dB: bool = True,
+    steps: bool = True,
+    noise_line: bool = True,
+) -> _Path | None:
+    """plot the `center_statistic` line per `hue` value and shade `bound_statistics`.
 
-    from xarray.plot import FacetGrid
+    Args:
+        data: the dataset with the `cyclic_channel_power` variable
+        plotter: the backend that draws the figure
+        center_statistic: the `cyclic_statistic` value drawn as the line
+        bound_statistics: the `cyclic_statistic` values at the lower and upper edge of
+            the shaded band
+        hue: the dimension that selects one line and band per value
+        dB: False converts the values from dB to linear power before drawing
+        steps: True holds each value until the next `cyclic_lag` sample
+        noise_line: True marks the system noise level on each facet
 
-    from . import backend
-
+    Raises:
+        ValueError: if `center_statistic` or either of `bound_statistics` is not a
+            `cyclic_statistic` value of `data`
+    """
     name = sa.measurements.cyclic_channel_power.__name__
     sub = data[name]
-    grid = FacetGrid(sub, **plotter._coord_kws(), sharey=True)  # type: ignore
-    coords = plotter._coord_kws(x='cyclic_lag')
-    grid._x_var = coords['x']  # type: ignore
 
-    for col, ax in zip(data[coords['col']], grid.axs.flat):
-        backend.plot_cyclic_channel_power(sub.sel({coords['col']: col}), ax=ax)
+    available = sub.cyclic_statistic.values.tolist()
+    missing = [s for s in (center_statistic, *bound_statistics) if s not in available]
+    if missing:
+        raise ValueError(
+            f'cyclic_statistic values {missing!r} are not in {available!r}'
+        )
 
+    if not dB:
+        sub = _sw.dBtopow(sub)
+    step: _StepStyle | None = 'post' if steps else None
+
+    center = sub.sel(cyclic_statistic=center_statistic)
+    low = sub.sel(cyclic_statistic=bound_statistics[0])
+    high = sub.sel(cyclic_statistic=bound_statistics[1])
+
+    grid = plotter.line(center, x='cyclic_lag', hue=hue, step=step)
+    plotter.fill_between(low, high, x='cyclic_lag', hue=hue, step=step, target=grid)
     if noise_line:
         plotter.mark_noise_level(data, name, grid, where='x')
-
     return plotter.finish(grid)
 
 
