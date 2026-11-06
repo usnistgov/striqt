@@ -213,6 +213,7 @@
     <div class="header">
         <h1 id="header-title">&#x1F4E1; Striqt WebView</h1>
         <div class="controls">
+            <div id="capture-controls" class="controls"></div>
             <div class="control-group">
                 <label for="variable-select">Data Variable:</label>
                 <select id="variable-select">
@@ -244,6 +245,7 @@
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
         const coordsSidebar = document.getElementById('coords-sidebar');
+        const captureControls = document.getElementById('capture-controls');
 
         let ws = null;
         let currentVariable = '';
@@ -348,6 +350,7 @@
                     // State message always updates variables (initial connection)
                     variablesInitialized = false;
                     updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
+                    updateCaptureSelects(msg.capture_options, msg.capture_selection);
                     if (msg.coordinates) {
                         updateCoordsTable(msg.coordinates);
                     }
@@ -458,6 +461,71 @@
             html += '</div>';
 
             coordsSidebar.innerHTML = html;
+        }
+
+        // One <select> for the captures: entry (when the sweep lists more than one)
+        // and one per loop field. Option values are indexes into the server's
+        // option lists; '' is "All".
+        function buildSelect(id, labelText, labels, selectedIndex) {
+            const group = document.createElement('div');
+            group.className = 'control-group';
+            const label = document.createElement('label');
+            label.htmlFor = id;
+            label.textContent = labelText;
+            const select = document.createElement('select');
+            select.id = id;
+            const all = document.createElement('option');
+            all.value = '';
+            all.textContent = 'All';
+            select.appendChild(all);
+            labels.forEach((text, i) => {
+                const option = document.createElement('option');
+                option.value = String(i);
+                option.textContent = text;
+                select.appendChild(option);
+            });
+            select.value = (selectedIndex === null || selectedIndex === undefined) ? '' : String(selectedIndex);
+            select.addEventListener('change', sendCaptureSelection);
+            group.appendChild(label);
+            group.appendChild(select);
+            return group;
+        }
+
+        function updateCaptureSelects(options, selection) {
+            captureControls.innerHTML = '';
+            if (!options) {
+                return;
+            }
+            const sel = selection || { capture: null, loops: [] };
+            if (options.captures && options.captures.length > 1) {
+                captureControls.appendChild(
+                    buildSelect('capture-select', 'Capture:', options.captures, sel.capture));
+            }
+            (options.loops || []).forEach((loop, j) => {
+                const chosen = (sel.loops && sel.loops.length > j) ? sel.loops[j] : null;
+                captureControls.appendChild(
+                    buildSelect(`loop-select-${j}`, `${loop.field}:`, loop.labels, chosen));
+            });
+        }
+
+        function indexOrNull(select) {
+            return (select && select.value !== '') ? parseInt(select.value, 10) : null;
+        }
+
+        function sendCaptureSelection() {
+            const loops = [];
+            for (let j = 0; ; j++) {
+                const select = document.getElementById(`loop-select-${j}`);
+                if (!select) {
+                    break;
+                }
+                loops.push(indexOrNull(select));
+            }
+            ws.send(JSON.stringify({
+                type: 'select_captures',
+                capture: indexOrNull(document.getElementById('capture-select')),
+                loops: loops
+            }));
         }
 
         function updateVariableSelect(variables, labels, selected) {
