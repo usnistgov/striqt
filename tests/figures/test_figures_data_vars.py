@@ -86,22 +86,22 @@ def test_cyclic_channel_power_on_matplotlib() -> None:
 
 
 def test_cyclic_channel_power_on_plotly() -> None:
-    """one pending result with, per facet, one line trace per detector and 2 band
+    """one pending figure with, per facet, one line trace per detector and 2 band
     traces per detector, and one noise shape per facet"""
     ds = make_dataset()
     plotter = plotly_backend()
 
     data_vars.cyclic_channel_power(ds, plotter)
 
-    (result,) = plotter.get_plot_data()
+    (fig,) = plotter.get_plot_data()
     for i in range(3):
         xaxis = 'x' if i == 0 else f'x{i + 1}'
-        traces = [t for t in result['traces'] if t['xaxis'] == xaxis]
-        lines = [t for t in traces if t['line'].get('width') != 0]
-        bands = [t for t in traces if t['line'].get('width') == 0]
+        traces = [t for t in fig.data if (t.xaxis or 'x') == xaxis]
+        lines = [t for t in traces if t.line.width != 0]
+        bands = [t for t in traces if t.line.width == 0]
         assert len(lines) == N_DETECTORS
         assert len(bands) == 2 * N_DETECTORS
-    assert len(result['layout']['shapes']) == 3
+    assert len(fig.layout.shapes) == 3
 
 
 @pytest.mark.parametrize(

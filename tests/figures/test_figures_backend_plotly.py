@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import functools
-from typing import Any
 
 import numpy as np
+import plotly.graph_objects as go
 import pytest
 import xarray as xr
 from figures_datasets import (
     CYCLIC_BOUND_DB,
-    CYCLIC_LAG_COUNT,
-    DETECTOR_PERIOD,
     POWER_DETECTORS,
     capture_bandwidth,
     cyclic_mean_dBm,
@@ -47,10 +45,10 @@ def axis_refs(i: int) -> tuple[str, str]:
     return ('x', 'y') if i == 0 else (f'x{i + 1}', f'y{i + 1}')
 
 
-def facet_traces(result: dict[str, Any], i: int) -> list[dict[str, Any]]:
-    """return the traces of `result` on 0-based facet `i`, in order."""
+def facet_traces(fig: go.Figure, i: int) -> list[go.Scattergl]:
+    """return the traces of `fig` on 0-based facet `i`, in draw order."""
     xaxis, _ = axis_refs(i)
-    return [t for t in result['traces'] if t.get('xaxis', 'x') == xaxis]
+    return [t for t in fig.data if (t.xaxis or 'x') == xaxis]
 
 
 def rgb_of(color: str) -> tuple[int, int, int]:
@@ -72,91 +70,90 @@ def test_fill_between_appends_a_lower_then_upper_trace_per_hue_per_facet() -> No
     low, _, high = cyclic_statistics()
     plotter = capture_backend()
 
-    result = plotter.fill_between(low, high, x=X, hue=HUE)
+    fig = plotter.fill_between(low, high, x=X, hue=HUE)
 
-    assert result['facets'] == [0, 1, 2]
+    assert list(fig.layout.meta['facets']) == [0, 1, 2]
     expected = cyclic_mean_dBm()
     for i_capture in range(3):
-        traces = facet_traces(result, i_capture)
+        traces = facet_traces(fig, i_capture)
         assert len(traces) == 2 * len(POWER_DETECTORS)
         xaxis, yaxis = axis_refs(i_capture)
         for i, (lower, upper) in enumerate(zip(traces[::2], traces[1::2])):
-            assert 'fill' not in lower
-            assert upper['fill'] == 'tonexty'
+            assert lower.fill is None
+            assert upper.fill == 'tonexty'
             for t in (lower, upper):
-                assert (t['xaxis'], t['yaxis']) == (xaxis, yaxis)
-                assert t['line']['width'] == 0
-                assert t['showlegend'] is False
+                assert (t.xaxis, t.yaxis) == (xaxis, yaxis)
+                assert t.line.width == 0
+                assert t.showlegend is False
             level = expected[i_capture, i]
-            np.testing.assert_allclose(lower['y'], level - CYCLIC_BOUND_DB, atol=1e-3)
-            np.testing.assert_allclose(upper['y'], level + CYCLIC_BOUND_DB, atol=1e-3)
+            np.testing.assert_allclose(lower.y, level - CYCLIC_BOUND_DB, atol=1e-3)
+            np.testing.assert_allclose(upper.y, level + CYCLIC_BOUND_DB, atol=1e-3)
 
 
 def test_fill_between_on_target_appends_traces_in_the_line_colors() -> None:
-    """bands drawn onto the result of `line` extend its traces, add no pending
-    result, and the band of hue index `i` has the RGB of the `i`th line"""
+    """bands drawn onto the figure of `line` extend its traces, add no pending
+    figure, and the band of hue index `i` has the RGB of the `i`th line"""
     low, mean, high = cyclic_statistics()
     plotter = capture_backend()
 
-    result = plotter.line(mean, x=X, hue=HUE)
-    n_lines = len(result['traces'])
-    out = plotter.fill_between(low, high, x=X, hue=HUE, target=result)
+    fig = plotter.line(mean, x=X, hue=HUE)
+    n_lines = len(fig.data)
+    out = plotter.fill_between(low, high, x=X, hue=HUE, target=fig)
 
-    assert out is result
-    assert len(result['traces']) == n_lines + 2 * len(POWER_DETECTORS) * 3
+    assert out is fig
+    assert len(fig.data) == n_lines + 2 * len(POWER_DETECTORS) * 3
     assert len(plotter.get_plot_data()) == 1
     for i_capture in range(3):
-        traces = facet_traces(result, i_capture)
+        traces = facet_traces(fig, i_capture)
         lines = traces[: len(POWER_DETECTORS)]
         uppers = traces[len(POWER_DETECTORS) + 1 :: 2]
         for line, upper in zip(lines, uppers):
-            assert rgb_of(upper['fillcolor']) == rgb_of(line['line']['color'])
+            assert rgb_of(upper.fillcolor) == rgb_of(line.line.color)
 
 
 # %% limit_facets
 
 
 def test_limit_facets_sets_a_range_per_facet_from_the_capture_values() -> None:
-    """each facet x range starts at the value of that capture and ends at the last
-    lag sample when `high` is None"""
+    """each facet x range starts at the value of that capture and ends at None
+    (autorange) when `high` is None"""
     _, mean, _ = cyclic_statistics()
     plotter = capture_backend()
-    result = plotter.line(mean, x=X, hue=HUE)
+    fig = plotter.line(mean, x=X, hue=HUE)
     lows = xr.DataArray([1e-3, 2e-3, 0.0], dims='capture')
 
-    plotter.limit_facets(result, lows, None)
+    plotter.limit_facets(fig, lows, None)
 
-    x_max = (CYCLIC_LAG_COUNT - 1) * DETECTOR_PERIOD
     for i, key in enumerate(['xaxis', 'xaxis2', 'xaxis3']):
-        assert result['layout'][key]['range'] == pytest.approx([float(lows[i]), x_max])
+        lo, hi = fig.layout[key].range
+        assert lo == pytest.approx(float(lows[i]))
+        assert hi is None
 
 
 # %% mark_noise_level
 
 
-def test_mark_noise_level_edits_only_the_given_result_by_facet_value() -> None:
-    """the shapes of the given result are at the system noise of the capture of
-    each facet, in the facet order of that result; another result is unchanged"""
+def test_mark_noise_level_edits_only_the_given_figure_by_facet_value() -> None:
+    """the shapes of the given figure are at the system noise of the capture of
+    each facet, in the facet order of that figure; another figure is unchanged"""
     plotter = capture_backend()
     _, mean_all, _ = cyclic_statistics()
     other = plotter.line(mean_all, x=X, hue=HUE)
     ds = make_dataset().isel(capture=[2, 0])
     _, mean, _ = cyclic_statistics(ds)
-    result = plotter.line(mean, x=X, hue=HUE)
+    fig = plotter.line(mean, x=X, hue=HUE)
 
-    plotter.mark_noise_level(ds, 'cyclic_channel_power', result, where='x')
+    plotter.mark_noise_level(ds, 'cyclic_channel_power', fig, where='x')
 
-    assert 'shapes' not in other['layout']
-    shapes = result['layout']['shapes']
+    assert other.layout.shapes == ()
+    shapes = fig.layout.shapes
     assert len(shapes) == 2
     expected = predicted_levels_dBm(capture_bandwidth())
     for shape, i_capture, (xaxis, yaxis) in zip(shapes, [2, 0], map(axis_refs, [0, 1])):
-        assert shape['type'] == 'line'
-        assert (
-            shape['y0'] == shape['y1'] == pytest.approx(expected[i_capture], abs=1e-3)
-        )
-        assert shape['yref'] == yaxis
-        assert shape['xref'] == f'{xaxis} domain'
+        assert shape.type == 'line'
+        assert shape.y0 == shape.y1 == pytest.approx(expected[i_capture], abs=1e-3)
+        assert shape.yref == yaxis
+        assert shape.xref == f'{xaxis} domain'
 
 
 # %% step and validation
@@ -172,10 +169,10 @@ def test_step_selects_the_plotly_line_shape(step: str, shape: str) -> None:
     low, mean, high = cyclic_statistics()
     plotter = capture_backend()
 
-    result = plotter.line(mean, x=X, hue=HUE, step=step)
-    plotter.fill_between(low, high, x=X, hue=HUE, step=step, target=result)
+    fig = plotter.line(mean, x=X, hue=HUE, step=step)
+    plotter.fill_between(low, high, x=X, hue=HUE, step=step, target=fig)
 
-    assert all(t['line']['shape'] == shape for t in result['traces'])
+    assert all(t.line.shape == shape for t in fig.data)
 
 
 def test_line_rejects_a_yscale_other_than_linear_or_log() -> None:
@@ -185,14 +182,24 @@ def test_line_rejects_a_yscale_other_than_linear_or_log() -> None:
         capture_backend().line(mean, x=X, hue=HUE, yscale='symlog')
 
 
+def test_figure_rejects_a_property_value_outside_the_plotly_schema() -> None:
+    """the figure returned by `line` validates an axis type against the plotly
+    enumeration on assignment"""
+    _, mean, _ = cyclic_statistics()
+    fig = capture_backend().line(mean, x=X, hue=HUE)
+
+    with pytest.raises(ValueError, match='enumeration'):
+        fig.update_yaxes(type='symlog')
+
+
 @pytest.mark.parametrize('method', ['line', 'fill_between'])
 def test_target_with_other_facets_raises(method: str) -> None:
-    """a result of 3 captures rejects data with 2 captures"""
+    """a figure of 3 captures rejects data with 2 captures"""
     low, mean, high = cyclic_statistics()
     plotter = capture_backend()
-    result = plotter.line(mean, x=X, hue=HUE)
+    fig = plotter.line(mean, x=X, hue=HUE)
     two = {'capture': [0, 1]}
-    kws = {'x': X, 'hue': HUE, 'target': result}
+    kws = {'x': X, 'hue': HUE, 'target': fig}
     if method == 'line':
         call = functools.partial(plotter.line, mean.isel(two), **kws)
     else:

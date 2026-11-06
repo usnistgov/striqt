@@ -23,11 +23,12 @@ from typing import (
 import click
 import msgspec
 import numpy as np
-import plotly.graph_objects as go
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 if TYPE_CHECKING:
+    import plotly.graph_objects as go
+
     import striqt.analysis as sa
     import striqt.figures as sf
     import striqt.sensor as ss
@@ -243,8 +244,8 @@ def _prepare_plot_data_sync(
     plotter: PlotlyBackend,
     variable: str,
     data_select: dict[str, Any],
-) -> tuple[list[dict[str, Any]], CoordinatesData]:
-    """return the plot results and capture coordinates of `variable` in `result`.
+) -> tuple[list[go.Figure], CoordinatesData]:
+    """return the figures and capture coordinates of `variable` in `result`.
 
     The call blocks on the materialization of the delayed dataset (a GPU transfer
     on the TX2i).
@@ -257,7 +258,7 @@ def _prepare_plot_data_sync(
             indexes of the dataset are dropped
 
     Returns:
-        the list of result dicts from `plotter`, and the `CoordinatesData`
+        the figures from `plotter` in drawing order, and the `CoordinatesData`
     """
     from striqt.sensor.lib import compute
 
@@ -287,7 +288,7 @@ def _prepare_plot_data_sync(
 
 
 def _serialize_plot_message(
-    plot_data: list[dict[str, Any]],
+    plot_data: list[go.Figure],
     coordinates: CoordinatesData,
     available_variables: list[str],
     variable_labels: dict[str, str],
@@ -296,28 +297,12 @@ def _serialize_plot_message(
 ) -> str:
     """return the ``plot_data`` message as JSON text.
 
-    Numpy arrays in the traces are encoded as base64 typed arrays, as by
-    `Figure.to_json`.
+    Each figure is encoded by `Figure.to_json`, which writes numpy arrays as base64
+    typed arrays.
     """
-    serialized_plots = []
-    for plot in plot_data:
-        traces = plot.get('traces', [])
-        layout = plot.get('layout', {})
-
-        go_traces: list[Any] = []
-        for trace in traces:
-            trace_type = trace.get('type', 'scatter')
-            if trace_type == 'heatmap':
-                go_traces.append(go.Heatmap(trace))
-            elif trace_type == 'scattergl':
-                go_traces.append(go.Scattergl(trace))
-            elif trace_type == 'scatter':
-                go_traces.append(go.Scatter(trace))
-            else:
-                go_traces.append(trace)
-
-        fig = go.Figure(data=go_traces, layout=layout)
-        serialized_plots.append(_json_decoder.decode(cast(str, fig.to_json())))
+    serialized_plots = [
+        _json_decoder.decode(cast(str, fig.to_json())) for fig in plot_data
+    ]
 
     # msgspec encodes to bytes; decode to str so callers can send it as a text
     # WebSocket frame (keeps the browser's JSON.parse(event.data) path unchanged).
