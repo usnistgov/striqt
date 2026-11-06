@@ -1008,9 +1008,11 @@ def _describe_capture_entries(
 ) -> tuple[str, ...]:
     """label each entry of `captures` by the fields that differ across the entries.
 
+    `adjust_analysis` is never a label field.
+
     Returns:
         one label per entry, from `describe_capture` over the differing fields in
-        struct field order, or ``'capture {i}'`` when no field differs
+        struct field order, or ``'capture {i}'`` when no other field differs
     """
     if len(captures) == 0:
         return ()
@@ -1019,7 +1021,8 @@ def _describe_capture_entries(
     fields = tuple(
         name
         for name in type(first).__struct_fields__
-        if any(not _same(getattr(c, name), getattr(first, name)) for c in captures)
+        if name != 'adjust_analysis'
+        and any(not _same(getattr(c, name), getattr(first, name)) for c in captures)
     )
 
     if len(fields) == 0:
