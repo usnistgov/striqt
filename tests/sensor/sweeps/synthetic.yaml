@@ -62,7 +62,7 @@ analysis:
     detector_period: 1/8000 # s
     power_detectors: [rms, peak]
 
-plot_hint: !include fragments/plot/site.yaml
+plot_hint: !include fragments/plot/synthetic.yaml
 
 sink:
   path: "outputs/{spec_name}-{start_time}.zarr.zip"

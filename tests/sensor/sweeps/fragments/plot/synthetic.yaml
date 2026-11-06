@@ -1,0 +1,19 @@
+# plot options for the synthetic single-tone sweep: every template field is a
+# field of SingleToneCapture or AcquisitionInfo, so the labels render for the
+# function source, which stamps no start_time
+data:
+  sweep_index: -1
+  select:
+    spectrogram_time: slice(0, 2e-3)
+
+plotter:
+  col: port
+  col_label_format: 'Port {port}: {frequency_offset} tone at {snr} SNR'
+  suptitle_fmt: '{name} (sweep {sweep_index}, capture {capture_index})'
+  filename_fmt: '{name} {frequency_offset:M}.png'
+  style: striqt.figures.presentation_full_width
+
+variables:
+  spectrogram: {}
+  power_spectral_density: {}
+  channel_power_time_series: {}
