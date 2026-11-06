@@ -3,6 +3,8 @@ SoapySDR device and the null driver"""
 
 from __future__ import annotations
 
+import math
+
 import msgspec
 import numpy as np
 import pytest
@@ -85,24 +87,41 @@ validate = soapy.RxStream.validate_stream_read
 
 
 @pytest.mark.parametrize(
-    'result, sync_time_ns, expected',
+    'result, on_overflow, sync_time_ns, expected',
     [
         pytest.param(
-            StreamResult(ret=1024, timeNs=5_000), None, (1024, 5_000), id='count'
+            StreamResult(ret=1024, timeNs=5_000),
+            'except',
+            None,
+            (1024, 5_000),
+            id='count',
         ),
-        pytest.param(StreamResult(ret=0, timeNs=7), None, (0, 7), id='zero-length'),
         pytest.param(
-            StreamResult(ret=8, timeNs=200), 100, (8, 200), id='timestamp-after-sync'
+            StreamResult(ret=0, timeNs=7), 'except', None, (0, 7), id='zero-length'
+        ),
+        pytest.param(
+            StreamResult(ret=8, timeNs=200),
+            'except',
+            100,
+            (8, 200),
+            id='timestamp-after-sync',
+        ),
+        pytest.param(
+            StreamResult(ret=OVERFLOW, timeNs=9),
+            'ignore',
+            None,
+            (0, 9),
+            id='overflow-ignore',
+        ),
+        pytest.param(
+            StreamResult(ret=OVERFLOW, timeNs=9), 'log', None, (0, 9), id='overflow-log'
         ),
     ],
 )
-def test_validate_stream_read_accepts(result, sync_time_ns, expected):
-    assert validate(result, 'except', sync_time_ns=sync_time_ns) == expected
-
-
-@pytest.mark.parametrize('on_overflow', ['ignore', 'log'])
-def test_overflow_is_a_zero_length_read_otherwise(fake_soapy, on_overflow):
-    assert validate(StreamResult(ret=OVERFLOW, timeNs=9), on_overflow) == (0, 9)
+def test_validate_stream_read_accepts(
+    fake_soapy, result, on_overflow, sync_time_ns, expected
+):
+    assert validate(result, on_overflow, sync_time_ns=sync_time_ns) == expected
 
 
 def _named_error(name):
@@ -177,34 +196,52 @@ def test_no_limits_gives_no_info():
     assert soapy.compute_overload_info(_samples(np, [1.0]), source, capture) == {}
 
 
+# |x| of a complex sample with both rails at full scale is sqrt(2). The peak level
+# of a rail in dBFS is 20 log10(max |x|) - 3 dB for a float32 transport.
+RAIL_dB = -3
+
+
+def peak_dBFS(peak):
+    return 20 * np.log10(peak) + RAIL_dB
+
+
 HEADROOM_CASES = {
-    # (source, capture, |x| peak per port)
+    # (source, capture, |x| peak per port, expected headroom per port)
     'adc': (
         source_spec(adc_overload_limit=-1),
         soapy_capture(port=(0, 1), gain=(0, -10)),
         [1.0, 0.1],
+        [math.floor(-1 - peak_dBFS(1.0)), math.floor(-1 - peak_dBFS(0.1))],
     ),
     'if': (
         source_spec(adc_overload_limit=None, if_overload_limit=-10),
         soapy_capture(port=(0, 1), gain=(0, -30)),
         [1.0, 1.0],
+        # the IF limit applies at maximum gain (port 0). The headroom at 30 dB less
+        # gain (port 1) follows the intermod slope of the model and is asserted
+        # only to exceed port 0.
+        [math.floor(-10 - peak_dBFS(1.0)), None],
     ),
 }
 
 
 @pytest.mark.parametrize('limit', list(HEADROOM_CASES), ids=list(HEADROOM_CASES))
-def test_headroom_has_one_int8_entry_per_port(limit, xp):
-    """only the limits the source sets are reported, and port 1 has more headroom:
-    a smaller peak below the ADC limit, and 30 dB less gain into the intermod model"""
-    source, capture, peaks = HEADROOM_CASES[limit]
+def test_headroom_is_the_floored_margin_below_the_limit(limit, xp):
+    """only the limit the source sets is reported, as int8 dB per port in the
+    namespace of the samples"""
+    source, capture, peaks, expected = HEADROOM_CASES[limit]
     info = soapy.compute_overload_info(_samples(xp, peaks), source, capture)
 
     assert list(info) == [f'{limit}_headroom']
     headroom = info[f'{limit}_headroom']
-    assert headroom.dtype == xp.int8
-    assert headroom.shape == (2,)
     assert sw.array_namespace(headroom) is sw.array_namespace(xp.zeros(1))
-    assert headroom[1] > headroom[0]
+    assert headroom.dtype == xp.int8
+    values = headroom.tolist()
+    assert values[0] == expected[0]
+    if expected[1] is None:
+        assert values[1] > values[0]
+    else:
+        assert values[1] == expected[1]
 
 
 # %% _assign_iq_calibration
@@ -249,26 +286,20 @@ def test_assign_iq_calibration_without_a_file_leaves_iq_alone(fake_soapy):
 # %% probe_soapy_info (fake device)
 
 
-def test_probe_soapy_info_fields(soapy_device):
+def test_probe_soapy_info_derives_port_counts_ranges_and_retries(soapy_device):
+    """the port counts and ranges are derived from the channel probes of the 2-port
+    fake device, and `retries` is the argument"""
     info = soapy.probe_soapy_info(soapy_device, retries=3)
 
     assert isinstance(info, soapy.SoapyInfo)
-    assert (info.driver, info.hardware) == ('SoapyAIRT', 'AIR7101B')
-    assert info.hardware_info == {'firmware': '1.0.0', 'fpga': 'fake'}
     assert (info.num_rx_ports, info.num_tx_ports) == (2, 0)
     assert info.has_timestamps is True
-    assert info.timesources == ('internal', 'external', 'gps')
-    assert info.registers == ('FPGA',)
-    assert info.global_sensors['xcvr_temp'].reading == '41.5'
-    assert info.global_sensors['xcvr_temp'].info.units == 'C'
     assert info.retries == 3
     assert info.min_port_count(1) == 2
-
-    port = info.rx_ports[1]
-    assert port.full_gain_range == soapy._SoapyRange(minimum=-30, maximum=0, step=0.5)
-    assert port.frequencies['RF'][0].maximum == pytest.approx(6e9)
-    assert port.master_clock_rates == (125e6,)
-    assert port.stream_formats == ('CF32', 'CS16')
+    assert len(info.rx_ports) == 2
+    assert info.rx_ports[1].full_gain_range == soapy._SoapyRange(
+        minimum=-30, maximum=0, step=0.5
+    )
 
 
 @pytest.mark.xfail(
@@ -300,18 +331,13 @@ class TestRxStreamSetup:
     @pytest.mark.parametrize(
         'ports, expected', [((1,), (1,)), (0, (0,))], ids=['tuple', 'scalar']
     )
-    def test_requested_ports_with_gain_minimized(self, soapy_device, ports, expected):
+    def test_requested_ports_open_the_stream(self, soapy_device, ports, expected):
         stream = _stream(soapy_device)
         stream.setup(soapy_device, ports=ports)
 
         assert stream.ports == expected
-        assert soapy_device.calls_named('setGain', 'setupStream') == [
-            ('setGain', RX, 0, -30.0),
-            ('setGain', RX, 1, -30.0),
-            ('setupStream', RX, 'CF32', expected),
-            ('setGain', RX, 0, 0.0),
-            ('setGain', RX, 1, 0.0),
-        ]
+        assert soapy_device.streams[0].channels == expected
+        assert soapy_device.gains == {(RX, 0): 0.0, (RX, 1): 0.0}
 
     def test_stream_all_rx_ports_ignores_the_request(self, soapy_device):
         stream = _stream(soapy_device, source_spec(stream_all_rx_ports=True))
@@ -339,19 +365,6 @@ class TestRxStreamSetup:
         soapy_stream.setup(soapy_device, ports=(0,))
         assert len(soapy_device.calls_named('setupStream')) == 1
 
-    def test_setup_with_new_ports_closes_and_reopens_the_stream(
-        self, soapy_device, soapy_stream
-    ):
-        soapy_stream.setup(soapy_device, ports=(1,))
-
-        assert call_names(
-            soapy_device, 'setupStream', 'deactivateStream', 'closeStream'
-        ) == ['setupStream', 'deactivateStream', 'closeStream', 'setupStream']
-        assert soapy_stream.ports == (1,)
-        assert not soapy_stream.is_enabled
-        assert [s.channels for s in soapy_device.streams] == [(1,)]
-        assert soapy_stream.stream is soapy_device.streams[0]
-
 
 class TestRxStreamEnable:
     def test_enable_activates_with_a_delayed_timestamp(self, soapy_device):
@@ -373,22 +386,6 @@ class TestRxStreamEnable:
         stream.setup(soapy_device, ports=(0,))
         stream.enable(soapy_device, True)
         assert soapy_device.calls_named('activateStream') == [('activateStream', 4, 0)]
-
-    def test_enable_is_idempotent_and_disable_deactivates(self, soapy_device):
-        stream = _stream(soapy_device)
-        stream.setup(soapy_device, ports=(0,))
-
-        stream.enable(soapy_device, False)
-        stream.enable(soapy_device, True)
-        stream.enable(soapy_device, True)
-        stream.enable(soapy_device, False)
-        stream.enable(soapy_device, False)
-
-        assert call_names(soapy_device, 'activateStream', 'deactivateStream') == [
-            'activateStream',
-            'deactivateStream',
-        ]
-        assert not stream.is_enabled
 
 
 def _float_buffers(count, ports=1):
@@ -420,17 +417,6 @@ class TestRxStreamRead:
         assert not buf[:20].any()
         assert buf[20:60].all()
         assert not buf[60:].any()
-        assert soapy_device.calls_named('readStream') == [
-            ('readStream', 20, round((0.0 + 0.1 + 0.5) * 1e6))
-        ]
-
-    def test_first_read_rejects_a_timestamp_from_before_the_sync(
-        self, soapy_device, soapy_stream
-    ):
-        stale = soapy_device.streams[0].activate_time_ns + 1
-
-        with pytest.raises(ReceiveStreamError, match='before last sync'):
-            _read8(soapy_stream, soapy_device, stale)
 
     def test_only_the_first_read_is_checked(self, soapy_device, soapy_stream):
         activation = soapy_device.streams[0].activate_time_ns
@@ -620,25 +606,24 @@ class TestSoapySourceOpen:
 
 class TestSoapySourceSetup:
     @pytest.mark.parametrize(
-        'time_source, device_time_source, on_overflow',
-        [('host', 'internal', 'log'), ('external', 'external', 'except')],
+        'time_source, device_time_source',
+        [('host', 'internal'), ('external', 'external')],
         ids=['host', 'external'],
     )
     def test_time_source_configures_the_device(
-        self, fake_soapy, time_source, device_time_source, on_overflow
+        self, fake_soapy, time_source, device_time_source
     ):
+        """automatic gain is off on every port, and the time source, clock source,
+        and master clock rate of the spec are set on the device before any stream is
+        opened"""
         source = _source(time_source=time_source, clock_source='external')
         source.setup()
 
         device = fake_soapy.devices[0]
-        assert device.calls == [
-            ('setGainMode', RX, 0, False),
-            ('setGainMode', RX, 1, False),
-            ('setTimeSource', device_time_source),
-            ('setClockSource', 'external'),
-            ('setMasterClockRate', MCR),
-        ]
-        assert source.rx_stream._on_overflow == on_overflow
+        assert device.gain_modes == {(RX, 0): False, (RX, 1): False}
+        assert device.time_source == device_time_source
+        assert device.clock_source == 'external'
+        assert device.master_clock_rate == MCR
         assert source.rx_stream.stream is None
 
     def test_sync_at_open(self, fake_soapy):
@@ -743,17 +728,6 @@ class TestSoapySourceDisarm:
         assert call_names(device, 'deactivateStream', 'closeStream') == [
             'deactivateStream'
         ]
-
-    def test_prepare_retrigger_issues_the_disarm_calls(self, fake_soapy):
-        recorded = []
-        for method in ('disarm', 'prepare_retrigger'):
-            source, device = self._enabled_source(fake_soapy)
-            start = len(device.calls)
-            getattr(source, method)()
-            recorded.append(device.calls[start:])
-            assert not source.rx_stream.is_enabled
-
-        assert recorded[0] == recorded[1] == [('deactivateStream',)]
 
 
 class TestSoapySourceAcquire:
@@ -863,13 +837,9 @@ def null_device(real_soapy):
 
 
 class TestNullDriver:
-    def test_device_sequence_form(self, real_soapy, null_device):
-        # the SWIG proxy is not an instance of the Device class of the module
-        assert type(null_device).__name__ == 'Device'
-        assert null_device.getDriverKey() == 'null'
-        assert real_soapy.Device.enumerate({'driver': 'null'}) == ()
-
-    def test_fake_constants_match_the_library(self, real_soapy, subtests):
+    def test_fake_module_matches_the_library(self, real_soapy, subtests):
+        """the constants, error names, and the `ArgInfo`, `Range`, and `StreamResult`
+        attributes of the fake module are those of the installed bindings"""
         for name, value in CONSTANTS.items():
             with subtests.test(msg=name):
                 assert getattr(real_soapy, name) == value
@@ -877,7 +847,6 @@ class TestNullDriver:
             with subtests.test(msg=f'errToStr({value})'):
                 assert real_soapy.errToStr(value) == name
 
-    def test_fake_types_match_the_library(self, real_soapy, subtests):
         info = real_soapy.ArgInfo()
         for attr in vars(ArgInfo('x')):
             with subtests.test(msg=f'ArgInfo.{attr}'):

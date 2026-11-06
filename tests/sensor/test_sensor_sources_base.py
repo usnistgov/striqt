@@ -18,7 +18,6 @@ PERIOD = 1e-4
 # asymmetric, so that a read positioned by the tail overlap instead of the lead shows
 OVERLAPS = (512, 256)
 COUNT = 1000
-NOISE_PSD = 1e-17
 
 NO_SOURCE = ss.specs.NoSource(master_clock_rate=MCR, num_rx_ports=2)
 
@@ -160,28 +159,6 @@ def test_reads_after_one_arm_are_consecutive_segments():
         assert np.array_equal(np.stack(buffers), expected), f'read {k}'
 
     assert np.diff(stamps).tolist() == [_sample_period_ns(COUNT)] * 2
-
-
-def test_rows_follow_the_capture_port_order():
-    """``buffers[i]`` is the i-th port of the capture, port 1 for ``port=(1, 0)``"""
-    kws = {'port': (1, 0), 'noise_psd': NOISE_PSD}
-    source, _ = _armed(
-        sources.NoiseSource, FUNCTION_SOURCE, ss.specs.NoiseCapture, **kws
-    )
-    buffers = _buffers(COUNT)
-
-    source.read(buffers, 0, COUNT)
-
-    expected = testing.circular_awgn(
-        None,
-        SAMPLE_RATE,
-        power=NOISE_PSD * SAMPLE_RATE,
-        ports=2,
-        start_index=-OVERLAPS[0],
-        count=COUNT,
-    )
-    assert np.array_equal(np.stack(buffers), expected)
-    assert not np.array_equal(buffers[0], buffers[1])
 
 
 # %% NoSource

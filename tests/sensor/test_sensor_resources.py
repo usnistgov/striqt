@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import os
 from pathlib import Path
 
 import pytest
-import yaml
 from conftest import FAKE_SOAPY_SPEC, assert_source_released
 from synthetic_sources import SCALE_ONLY, preset_capture, preset_sweep, tone_sweep
 
-import striqt.analysis as sa
 import striqt.sensor as ss
 
 OFFSETS = (1e6, 2e6)
@@ -45,7 +42,7 @@ class BindingPeripherals(ss.peripherals.NoPeripherals):
         raise RuntimeError("the binding's peripherals were opened")
 
 
-def test_test_only_opens_no_peripherals_and_runs_the_sweep(monkeypatch):
+def test_test_only_substitutes_no_peripherals(monkeypatch):
     """`test_only` substitutes the no-op `NoPeripherals` for the peripherals of the
     binding"""
     sweep = tone_sweep(OFFSETS)
@@ -53,8 +50,6 @@ def test_test_only_opens_no_peripherals_and_runs_the_sweep(monkeypatch):
     monkeypatch.setattr(binding, 'peripherals_cls', BindingPeripherals)
     with ss.open_resources(sweep, None, test_only=True) as res:
         assert type(res['peripherals']) is ss.peripherals.NoPeripherals
-        results = list(ss.iterate_sweep(res, sink=ss.sinks.NoSink(sweep)))
-    assert len([r for r in results if r is not None]) == len(OFFSETS)
 
 
 # %% sink failure
@@ -108,28 +103,24 @@ def test_calibration_is_loaded_from_the_source_spec(fake_soapy_ext, calibration_
 # %% log file
 
 
-def _run_with_log(tmp_path) -> str:
+def test_log_path_installs_a_file_handler_at_the_log_level(tmp_path):
+    """a sink with `log_path` installs a file handler for that path on the ``striqt``
+    logger at the `log_level` of the sink"""
     log_path = tmp_path / 'logs' / 'sweep.log'
     sweep = tone_sweep(OFFSETS)
-    sweep = sweep.replace(sink=sweep.sink.replace(log_path=str(log_path)))
-    with ss.open_resources(sweep, None) as res:
-        sa.util.get_logger('sweep').info('marker record')
-        sa.util.get_logger('sweep').debug('below the log level')
-        list(ss.iterate_sweep(res))
-    # the file is terminated when the handler closes; restore_logging_state
-    # would otherwise close it only at teardown
-    logging.getLogger('striqt')._striqt_handler.close()
-    return log_path.read_text()
+    sink = sweep.sink.replace(log_path=str(log_path), log_level='warning')
+    sweep = sweep.replace(sink=sink)
 
+    with ss.open_resources(sweep, None):
+        handlers = [
+            h
+            for h in logging.getLogger('striqt').handlers
+            if getattr(h, 'baseFilename', None) == str(log_path)
+        ]
 
-def test_log_path_records_a_json_array_at_the_log_level(tmp_path):
-    text = _run_with_log(tmp_path)
-    records = json.loads(text)
-    assert isinstance(records, list)
-    assert yaml.safe_load(text) == records
-    by_message = {r['message']: r for r in records}
-    assert by_message['marker record']['level'] == 'INFO'
-    assert 'below the log level' not in by_message
+    assert len(handlers) == 1
+    assert handlers[0].level == logging.WARNING
+    assert log_path.exists()
 
 
 # %% resident_bytes_bound

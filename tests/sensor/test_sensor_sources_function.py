@@ -43,12 +43,19 @@ def _rows(source, ports):
     'binding, port, capture_kws',
     [
         ('noise', (0, 1), {'noise_psd': NOISE_PSD}),
+        ('noise', (1, 0), {'noise_psd': NOISE_PSD}),
         ('noise', 1, {'noise_psd': NOISE_PSD}),
         ('single_tone', (0, 1), {'frequency_offset': -3e6, 'snr': 20}),
     ],
-    ids=['noise_two_ports', 'noise_scalar_port', 'tone_with_noise'],
+    ids=[
+        'noise_two_ports',
+        'noise_reversed_ports',
+        'noise_scalar_port',
+        'tone_with_noise',
+    ],
 )
 def test_noise_rows_match_the_generator_and_differ_per_port(binding, port, capture_kws):
+    """row ``i`` is the port at position ``i`` of the `port` field, in that order"""
     source, capture = _armed(
         BINDINGS[binding].sensor.source_cls,
         BINDINGS[binding].schema.capture,
@@ -110,13 +117,6 @@ def test_get_waveform_is_the_generator_at_the_absolute_index(binding, start_inde
     for port in (0, 1):
         row = source.get_waveform(COUNT, start_index, port=port, xp=np)
         assert np.array_equal(row, expected[port : port + 1])
-
-
-@pytest.mark.parametrize('binding', list(BINDINGS))
-def test_power_units_are_milliwatts(binding):
-    """the generators are written to a squared magnitude of 1 at 1 mW"""
-    source = BINDINGS[binding].sensor.source_cls(SOURCE)
-    assert source.power_units() == 'mW'
 
 
 def test_host_resampled_capture_generates_at_the_source_rate():

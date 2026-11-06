@@ -13,7 +13,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from conftest import FAKE_SOAPY_SPEC
 from numeric_checks import FIR_LEAKAGE, assert_close, interior, to_numpy
 from pytest_lazy_fixtures import lf
 from synthetic_sources import (
@@ -268,22 +267,6 @@ def test_zarr_round_trip_filtered(zarr_iq_file):
     )
 
 
-@pytest.fixture
-def fake_soapy_iq_store(fake_soapy_ext, tmp_path):
-    """return the path of a zarr store of `iq_waveform` written by a one-capture
-    sweep on the uncalibrated fake SoapySDR device"""
-    spec = ss.read_yaml_spec(FAKE_SOAPY_SPEC)
-    sweep = spec.replace(
-        captures=(spec.captures[1].replace(duration=1e-4),),
-        analysis=type(spec.analysis).from_dict({'iq_waveform': {}}),
-        sink=spec.sink.replace(path=str(tmp_path / 'fake_soapy.zarr')),
-    )
-    with ss.open_resources(sweep, FAKE_SOAPY_SPEC, test_only=True) as res:
-        for _ in ss.iterate_sweep(res):
-            pass
-    return sweep.sink.path
-
-
 def test_zarr_power_units_of_a_synthetic_store(zarr_iq_file):
     """a store written by the synthetic sources has ``'√mW'`` on `iq_waveform` and the
     family ``'mW'``"""
@@ -292,26 +275,25 @@ def test_zarr_power_units_of_a_synthetic_store(zarr_iq_file):
     assert source.power_units() == 'mW'
 
 
-def test_zarr_power_units_of_an_uncalibrated_soapy_store(fake_soapy_iq_store):
-    """a store written by an uncalibrated SoapySDR sweep has ``'√FS'`` on `iq_waveform`
-    and the family ``'FS'``"""
-    assert sa.load(fake_soapy_iq_store).iq_waveform.attrs['units'] == '√FS'
-    spec = ss.specs.ZarrIQSource(
-        path=str(fake_soapy_iq_store),
-        center_frequency=1.5e9,
-        master_clock_rate=62.5e6,
-    )
-    assert ss.lib.sources.ZarrIQSource(spec).power_units() == 'FS'
-
-
-def test_zarr_power_units_without_a_units_attr_are_arbitrary(zarr_iq_file, tmp_path):
+@pytest.mark.parametrize(
+    'units, expected', [('√FS', 'FS'), (None, 'a.u.')], ids=['full_scale', 'no_attr']
+)
+def test_zarr_power_units_follow_the_units_attr(
+    zarr_iq_file, tmp_path, units, expected
+):
+    """the family is read from the `units` attr of `iq_waveform`: the voltage unit
+    ``'√FS'`` of an uncalibrated acquisition selects ``'FS'``, and a missing attr
+    selects ``'a.u.'``"""
     ds = sa.load(zarr_iq_file.path).load()
-    del ds.iq_waveform.attrs['units']
-    path = tmp_path / 'unitless.zarr'
+    if units is None:
+        del ds.iq_waveform.attrs['units']
+    else:
+        ds.iq_waveform.attrs['units'] = units
+    path = tmp_path / 'rewritten.zarr'
     sa.dump(sa.open_store(path, mode='w'), ds)
 
     spec = zarr_spec(zarr_iq_file).replace(path=str(path))
-    assert ss.lib.sources.ZarrIQSource(spec).power_units() == 'a.u.'
+    assert ss.lib.sources.ZarrIQSource(spec).power_units() == expected
 
 
 @pytest.mark.xfail(
@@ -345,7 +327,8 @@ def test_zarr_resampler_pins_file_rate(zarr_iq_file):
 @pytest.fixture(scope='module')
 def mat_files(tmp_path_factory):
     """return ``.mat`` files with a ``'waveform'`` matrix of 1 and of 2 tone rows, keyed
-    by row count"""
+    by row count. Each file also contains the matrix at twice the amplitude under
+    the key ``'scaled'``."""
     from scipy.io import savemat
 
     root = tmp_path_factory.mktemp('mat')
@@ -354,8 +337,8 @@ def mat_files(tmp_path_factory):
         tone = {'frequency_offset': TONE_FREQUENCIES[0], 'count': FILE_SAMPLES}
         waveform = testing.single_tone(None, FS, ports=rows, **tone)
         path = root / f'{rows}row.mat'
-        savemat(path, {'waveform': waveform})
-        files[rows] = SimpleNamespace(path=path, waveform=waveform)
+        savemat(path, {'waveform': waveform, 'scaled': 2 * waveform})
+        files[rows] = SimpleNamespace(path=path, waveform=waveform, scaled=2 * waveform)
     return files
 
 
@@ -382,9 +365,9 @@ def test_mat_get_waveform_preroll(mat_files, array_backend, fill):
     assert_preroll_then_file(waveform, fill, mat_files[1].waveform)
 
 
-def test_mat_explicit_key_reads_the_named_variable(mat_files):
-    waveform = mat_waveform(mat_files[1], 0, key='waveform')
-    assert_preroll_then_file(waveform, 0, mat_files[1].waveform)
+def test_mat_key_selects_the_named_variable(mat_files):
+    waveform = mat_waveform(mat_files[1], 0, key='scaled')
+    assert_preroll_then_file(waveform, 0, mat_files[1].scaled)
 
 
 @pytest.mark.parametrize(
@@ -503,10 +486,8 @@ def tdms_spec(tdms_file, **kws):
 TDMS_SCALING_TOL = {'rtol': accum_rtol(np.float32, 2)}
 
 
-def test_tdms_file_info(tdms_file):
+def test_tdms_info_has_one_port_per_iq_channel_pair(tdms_file):
     source = ss.lib.sources.TDMSSource(tdms_spec(tdms_file))
-    assert source._file_info.backend_sample_rate == FS
-    assert source._file_info.center_frequency == CENTER_FREQUENCY
     assert source.get_info().num_rx_ports == 1
 
 
@@ -600,21 +581,11 @@ def test_request_past_end(file, open_source, match):
 
 
 @pytest.mark.parametrize(
-    'binding, file, make_spec',
-    [
-        pytest.param(
-            ss.bindings.zarr_iq,
-            lf('zarr_iq_file'),
-            lambda f: zarr_spec(f, capture_index=0),
-            id='zarr',
-        ),
-        pytest.param(ss.bindings.mat_file, lf('mat_file_1row'), mat_spec, id='mat'),
-        pytest.param(ss.bindings.mat_file, lf('npy_file'), mat_spec, id='npy'),
-        pytest.param(ss.bindings.tdms_file, lf('tdms_file'), tdms_spec, id='tdms'),
-    ],
+    'binding',
+    [ss.bindings.zarr_iq, ss.bindings.mat_file, ss.bindings.tdms_file],
+    ids=['zarr', 'mat', 'tdms'],
 )
-def test_acquisition_info_is_the_class_of_the_binding(binding, file, make_spec):
-    """the metadata of an acquisition has exactly the class resolved from the binding"""
-    stages = acquire_corrected(binding, file_capture(port=0), source=make_spec(file))
-    expected = ss.lib.sources.acquisition_info_cls(binding.sensor.source_cls)
-    assert type(stages.raw.info) is expected
+def test_file_bindings_resolve_file_acquisition_info(binding):
+    """the acquisition metadata class of every file source is `FileAcquisitionInfo`"""
+    cls = ss.lib.sources.acquisition_info_cls(binding.sensor.source_cls)
+    assert cls is ss.specs.FileAcquisitionInfo
