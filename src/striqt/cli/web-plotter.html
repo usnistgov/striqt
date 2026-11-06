@@ -159,6 +159,45 @@
             overflow-y: auto;
             flex-shrink: 0;
         }
+        /* the capture and loop selectors stack above the field tables */
+        .selectors {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .selectors:not(:empty) {
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #0f3460;
+        }
+        .selectors .control-group {
+            display: grid;
+            grid-template-columns: 8rem 1fr;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .selectors .control-group label {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8rem;
+            color: #aaa;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .selectors .control-group select {
+            width: 100%;
+            min-width: 0;
+        }
+        .selectors .stepper {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            min-width: 0;
+        }
+        .selectors .stepper input[type=number] {
+            flex: 1;
+            min-width: 0;
+        }
         .coords-section {
             margin-bottom: 1.5rem;
         }
@@ -267,7 +306,6 @@
     <div class="header">
         <h1 id="header-title">&#x1F4E1; Striqt WebView</h1>
         <div class="controls">
-            <div id="capture-controls" class="controls"></div>
             <div class="status">
                 <div class="status-dot" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
@@ -275,9 +313,12 @@
         </div>
     </div>
     <div class="main">
-        <div class="sidebar" id="coords-sidebar">
-            <div class="coords-section">
-                <p style="color: #666; font-size: 0.8rem;">Waiting for data...</p>
+        <div class="sidebar">
+            <div id="capture-controls" class="selectors"></div>
+            <div id="coords-sidebar">
+                <div class="coords-section">
+                    <p style="color: #666; font-size: 0.8rem;">Waiting for data...</p>
+                </div>
             </div>
         </div>
         <div class="plot-area">
@@ -576,11 +617,14 @@
                 input.value = String(Math.min(count - 1, Math.max(0, parseInt(input.value, 10) || 0)));
                 sendCaptureSelection();
             });
+            const stepper = document.createElement('div');
+            stepper.className = 'stepper';
+            stepper.appendChild(prev);
+            stepper.appendChild(input);
+            stepper.appendChild(next);
+            stepper.appendChild(total);
             group.appendChild(label);
-            group.appendChild(prev);
-            group.appendChild(input);
-            group.appendChild(next);
-            group.appendChild(total);
+            group.appendChild(stepper);
             return group;
         }
 
