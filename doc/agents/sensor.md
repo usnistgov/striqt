@@ -217,12 +217,21 @@ the analysis thread, after `compute.analyze` and before the dataset is submitted
 `sink.append`; `on_sink_cached(resources, cache, capture, result, **kwargs)` runs in the
 analysis thread each time a measurement fills a `KwArgCache` (the pipeline forwards the
 cache's own callback arguments and prepends `resources`, since the SNR line needs the
-calibration, `format_path`, and `source_id`). A front end that wants two behaviors on
-one event writes one function. A callback exception ends the run like an analysis
-error. No hooks are registered by default. `open_resources` bundles the three into the
-internal dataclass `lib/resources.py:SweepCallbacks` under `resources['callbacks']`,
-which `iterate_captures` reads; `iterate_sweep(res, callbacks=...)` replaces that
-bundle for one run.
+calibration, `format_path`, and `source_id`); `select_analysis(capture, analysis)` runs
+in the analysis thread before each analysis with the group adjusted by
+`capture.adjust_analysis`, and returns the group to evaluate. `compute.analyze` resolves
+the signal trigger from the adjusted group before the hook runs, so a measurement that
+prefers aligned input aligns whether or not the trigger measurement survives the
+selection, and `adjust_analysis` warns about no parameter of a dropped measurement.
+`sa.specs.helpers.narrow_analysis_group(group, names)` builds the narrowed group.
+`ZarrCaptureSink` allocates one array per measurement of the full group at open and
+raises `ValueError` on a dataset that lacks one, so the hook pairs with a `NoSink` or a
+`MemoryCacheSink`. A front end that wants two behaviors on one event writes one
+function. A callback exception ends the run like an analysis error. No hooks are
+registered by default. `open_resources` bundles the four into the internal dataclass
+`lib/resources.py:SweepCallbacks` under `resources['callbacks']`, which
+`iterate_captures` reads; `iterate_sweep(res, callbacks=...)` replaces that bundle for
+one run.
 
 `lib/compute/summary.py` returns structured data and never logs: `overloads(dd)` gives
 one `PortOverload` per port (`adc`, `im3_victims`) and `spectrogram_snr(sweep, capture,
@@ -230,14 +239,27 @@ result)` one `SpectrogramSNR` per port with a finite SNR, None without a calibra
 the `describe_*` functions render each as one line. The logging callbacks are CLI code:
 `cli/sensor_sweep.py:log_overloads` (`on_analyzed`) and `log_spectrogram_snr`
 (`on_sink_cached`, gated on `'spectrogram' in cache.name`), which `sensor-sweep` registers
-beside `confirm_labels` and `web-plotter` imports and calls from its own callbacks.
-`from_delayed` emits none of these messages.
+beside `confirm_labels`; `web-plotter` registers `log_overloads` from its own
+`on_analyzed`. `from_delayed` emits none of these messages.
+
+`cli/web_plotter.py` is the live preview. The runner runs with a null sink and two
+extensions of the pipeline: `select_analysis` narrows each analysis to the variable on
+display, and `iterate_sweep(res, captures=...)` takes a generator that yields the
+captures matching the entry of `captures:` and the loop values chosen in the page.
+`specs.sequencing.plan_choices(sweep, source_id)` lists those choices from
+`loop_capture_origins`, and `select_plan` filters the expanded plan by them.
+`compute/summary.py:capture_fields`, `acquisition_fields`, and `analysis_labels` return
+the sidebar and selector text as data, and the page renders them.
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in
 `actions/core.py:iterate_captures`. A dedicated acquisition thread (`striqt-acquire`)
 arms the source once per capture, acquires the `burst` segments of the capture with the
 stream left enabled, and puts each `AcquiredIQ` on a bounded `AcquisitionQueue` of
-`source.bursts.buffers` acquisitions. The caller's thread dequeues one acquisition per
+`source.bursts.buffers` acquisitions. The captures are `repeat_captures` of the sweep,
+or the `captures=` iterable of `iterate_sweep`/`iterate_captures` when given (finite or
+endless; rejected together with `loop=True` and by the Y-factor runner). The acquisition
+thread advances that iterable between captures, and `iterate_captures` joins the thread
+at exit, so an iterable that waits must return when the run ends. The caller's thread dequeues one acquisition per
 step, runs `compute.analyze` on the acquisition dequeued at the previous step in the
 foreground (GPU work stays on this thread), and submits the `sink.append` of the
 acquisition before that to the thread pool. N delivered acquisitions take N + 2 steps.
