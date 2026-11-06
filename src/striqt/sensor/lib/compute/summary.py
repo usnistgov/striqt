@@ -1,5 +1,8 @@
-"""per-port summaries of one analyzed capture: overload state, spectrogram SNR, and
-the text of the capture and acquisition fields."""
+"""per-port summaries of one analyzed capture.
+
+Each summary is a frozen dataclass with one entry per port of the capture, in
+`split_capture_ports` order.
+"""
 
 from __future__ import annotations as __
 
@@ -26,9 +29,9 @@ class PortOverload:
     adc: bool
     """True when the ADC headroom at the port is at or below 0 dB"""
     im3_victims: tuple[float, ...]
-    """center frequencies (Hz), sorted, of the sweep captures at this port where the
-    third-order products of this capture exceed the IF headroom; empty when
-    `if_headroom` is absent from `extra_data`"""
+    """sorted center frequencies (Hz) of the sweep captures at the port that the
+    third-order products of the capture overload, empty when `extra_data` lacks
+    `if_headroom`"""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -46,8 +49,8 @@ def overloads(dd: datasets.DelayedDataset) -> tuple[PortOverload, ...]:
     """return the overload state of each port of `dd.capture`.
 
     `adc_headroom` and `if_headroom` (dB, one value per port) in `dd.extra_data`
-    determine `adc` and `im3_victims`. The candidate IM3 victims are the center
-    frequencies of `dd.config.sweep_spec`.
+    determine `adc` and `im3_victims`. `adc` is False when `adc_headroom` is absent.
+    The candidate IM3 victims are the center frequencies of `dd.config.sweep_spec`.
 
     Args:
         dd: the analyzed capture
@@ -83,8 +86,7 @@ def _im3_victims(
     capture: specs.SoapyCapture,
     if_headroom: float,
 ) -> tuple[float, ...]:
-    """return the sorted center frequencies (Hz) that the third-order products of
-    `capture` overload.
+    """return the sorted victim frequencies (Hz) of the IM3 products of `capture`.
 
     A sweep capture at the port of `capture` is a victim when `if_headroom` (dB) plus
     2/3 of the gain (dB) of `capture` above that capture is at or below 0.
@@ -106,7 +108,7 @@ def describe_overloads(ports: Sequence[PortOverload]) -> str | None:
     """return a one-line description of the overloaded ports in `ports`.
 
     Returns:
-        the description, or None when no port overloaded
+        the description, or None when no port is overloaded
     """
     adc = []
     im3 = []
@@ -149,8 +151,9 @@ def spectrogram_snr(
     Args:
         sweep: the sweep with the calibration
         capture: the capture of the spectrogram
-        result: the cached ``(spectrogram, attrs)`` pair; the spectrogram is linear
-            power with the port on axis 0, and ``attrs['noise_bandwidth']`` is in Hz
+        result: the cached ``(spectrogram, attrs)`` pair, with the spectrogram in
+            linear power (mW) with the port on axis 0 and ``attrs['noise_bandwidth']``
+            in Hz
         format_path: the formatter of the ``{field}`` templates in the calibration
             path, or None
 
@@ -306,7 +309,7 @@ def analysis_labels(
     """return a title for each enabled field of `analysis`, keyed by field name.
 
     Args:
-        analysis: the analysis group; a field equal to None is omitted
+        analysis: the analysis group, with a field equal to None omitted
         registry: the registry that names the measurements
 
     Returns:
@@ -328,8 +331,10 @@ def analysis_labels(
 
 
 def _field_owners(cls: type) -> dict[str, type]:
-    """return the struct class in the MRO of `cls` that first declares each field,
-    keyed by field name in base-to-derived order."""
+    """return the struct class in the MRO of `cls` that first declares each field.
+
+    The dict is keyed by field name in base-to-derived order.
+    """
     owners: dict[str, type] = {}
     for klass in reversed(cls.__mro__):
         fields = getattr(klass, '__struct_fields__', None)
@@ -348,8 +353,11 @@ def _as_groups(groups: dict[type, list[FieldValue]]) -> tuple[FieldGroup, ...]:
 
 
 def _field_value(name: str, values: Sequence[Any], units: str) -> FieldValue:
-    """return the `FieldValue` of `values` in `units`, with one SI prefix on `units`
-    when `units` is set and every value is a finite number."""
+    """return the `FieldValue` of `values` in `units`.
+
+    One SI prefix is applied to `units` when `units` is set and every value is a
+    finite number.
+    """
     if units and all(_is_finite_number(v) for v in values):
         prefix = sw.units.si_prefix([float(v) for v in values], units)
         text = tuple(sw.units.format_quantity(v, None, prefix=prefix) for v in values)
@@ -358,8 +366,10 @@ def _field_value(name: str, values: Sequence[Any], units: str) -> FieldValue:
 
 
 def _coordinate_items(values: np.ndarray) -> list[Any]:
-    """return the entries of a per-port coordinate as Python values, with datetime
-    and timedelta entries as text."""
+    """return the entries of a per-port coordinate as Python values.
+
+    Datetime and timedelta entries are text.
+    """
     if values.dtype.kind in 'mM':
         return [str(v) for v in values.flat]
     return np.ravel(values).tolist()
@@ -374,7 +384,7 @@ def _is_finite_number(value: Any) -> bool:
 
 
 def _describe(value: Any, units: str) -> str:
-    """return `value` as text, through `describe_value` for None, numbers, and tuples."""
+    """return `value` as text, via `describe_value` for None, numbers, and tuples."""
     if isinstance(value, bytes):
         return value.decode('utf-8', errors='replace')
     if value is None or isinstance(value, (bool, numbers.Number, tuple)):

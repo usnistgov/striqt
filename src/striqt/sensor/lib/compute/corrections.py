@@ -33,8 +33,8 @@ if IGNORE_HIGHSIDE_LO:
         '(shell STRIQT_IGNORE_HIGHSIDE_LO=1)'
     )
 
-# 1 resamples and low-passes in one STFT pass; 0 selects the whole-record FFT
-# resampler followed by the FIR
+# 1 selects resampling and low-pass in one STFT pass. 0 selects the whole-record FFT
+# resampler followed by the FIR.
 USE_OARESAMPLE = int(os.environ.get('STRIQT_USE_OARESAMPLE', '1'))
 if not USE_OARESAMPLE:
     warnings.warn(
@@ -56,10 +56,10 @@ def attach_corrections(
     The copy has a `Preprocessor` of its own with every stage empty.
 
     Args:
-        signal_trigger: the trigger that `preprocess` runs for alignment; None
-            selects `iq.info.signal_trigger`
-        overwrite_x: True to let the resampling stage consume `iq.x` in place; `x`
-            of the copy is a `ConsumedBuffer` when the stage returns another array
+        signal_trigger: the trigger that `preprocess` runs for alignment, or None
+            for `iq.info.signal_trigger`
+        overwrite_x: True lets the resampling stage consume `iq.x` in place and
+            replace `x` of the copy with a `ConsumedBuffer`
 
     Raises:
         TypeError: if `iq.capture` is not a `SensorCapture`
@@ -81,8 +81,8 @@ class ConsumedBuffer:
     """the stand-in for `x` of an acquisition after the resampling stage has consumed
     the buffer under `overwrite_x`.
 
-    The size attributes of the buffer stay readable. Every read of the samples raises
-    `RuntimeError`.
+    `shape`, `dtype`, `nbytes`, `ndim`, and `size` are readable. Every read of the
+    samples raises `RuntimeError`.
     """
 
     shape: tuple[int, ...]
@@ -124,9 +124,9 @@ def consumed_buffer(x: Array) -> ConsumedBuffer:
 class Preprocessor(sa.Preprocessor):
     """the sensor signal path of one acquisition, memoized stage by stage.
 
-    An instance refers to the acquisition weakly and memoizes the stages of that
-    acquisition alone. Each stage runs on the first call that needs the stage, and
-    `x` of the acquisition must not change after that call.
+    An instance holds a weak reference to the acquisition and memoizes the stages of
+    that acquisition alone. Each stage runs on the first call that needs the stage,
+    and `x` of the acquisition must not change after that call.
     """
 
     def __init__(self, iq: specs.AcquiredIQ) -> None:
@@ -140,10 +140,10 @@ class Preprocessor(sa.Preprocessor):
 
     @property
     def iq(self) -> specs.AcquiredIQ:
-        """the sensor acquisition that owns this preprocessor.
+        """the sensor acquisition that the preprocessor conditions.
 
         Raises:
-            RuntimeError: when the acquisition has been garbage collected
+            RuntimeError: if the acquisition has been garbage collected
         """
         return cast('specs.AcquiredIQ', super().iq)
 
@@ -158,10 +158,10 @@ class Preprocessor(sa.Preprocessor):
 
         Args:
             prefer_filtered: True selects the waveform low-passed to
-                `capture.analysis_bandwidth`; the unfiltered waveform is returned
-                when `needs_analysis_filter` is false
-            prefer_aligned: True selects the waveform shifted by the trigger lags; the
-                unaligned waveform is returned when no trigger is set
+                `capture.analysis_bandwidth`, or the unfiltered waveform when
+                `needs_analysis_filter` is false
+            prefer_aligned: True selects the waveform shifted by the trigger lags, or
+                the unaligned waveform when no trigger is set
 
         Returns:
             shape (port, sample) array of ``round(duration * sample_rate)`` samples
@@ -206,9 +206,8 @@ class Preprocessor(sa.Preprocessor):
 def needs_analysis_filter(iq: specs.AcquiredIQ) -> bool:
     """return whether `preprocess` low-passes `iq` to `analysis_bandwidth` with the FIR.
 
-    The filter runs when `analysis_bandwidth` is finite, except on the oaresample
-    path, where the resampler applies the low-pass as a response on the STFT bins
-    with the band edges of the FIR.
+    The FIR runs when `analysis_bandwidth` is finite, except when the oaresample path
+    resamples the capture.
     """
     capture = _sensor_capture(iq)
     if not isfinite(capture.analysis_bandwidth):
@@ -229,13 +228,13 @@ def _trigger_of(iq: specs.AcquiredIQ) -> sa.Trigger | None:
 
 
 def _resampled_stage(pp: Preprocessor) -> tuple[Array, int | None]:
-    """return ``(y, lead)``: `x` scaled, resampled, and conjugated, and the lead pad in
-    output samples.
+    """return the resampled `x` and the lead pad in output samples.
 
-    No other stage reads `x` of the acquisition. When `overwrite_x` of the
-    acquisition is set, the stage consumes that `x` in place, and when the output is
-    another array than `x` the stage replaces `x` of the acquisition with a
-    `ConsumedBuffer`.
+    The waveform is `x` scaled by the voltage scale, resampled to
+    `capture.sample_rate`, and conjugated at the ports in `conjugate`. No other stage
+    reads `x` of the acquisition. Under `overwrite_x`, the stage consumes `x` in
+    place. When the output is an array other than `x`, the stage then replaces `x` of
+    the acquisition with a `ConsumedBuffer`.
     """
     if pp.resampled is not None:
         return pp.resampled
@@ -263,8 +262,9 @@ def _resampled_stage(pp: Preprocessor) -> tuple[Array, int | None]:
             y, offs = _resample(iq, **resample_kws)
 
         if iq.conjugate and not IGNORE_HIGHSIDE_LO:
-            # the scale-only path returns the acquisition buffer itself when there
-            # is nothing to scale, so conjugate in place only on a fresh array
+            # _scale_only returns the acquisition buffer itself when there is nothing
+            # to scale, so the conjugate runs in place only on a fresh array or under
+            # overwrite_x
             y = _apply_conj(
                 y, iq.conjugate, overwrite_x=iq.overwrite_x or y is not iq.x
             )
@@ -289,7 +289,7 @@ def _unfiltered_stage(pp: Preprocessor) -> Array:
 def _filtered_stage(pp: Preprocessor) -> Array:
     """return the low-passed waveform from the lead offset, with the tail overlap.
 
-    The FIR runs on the full resampled record, and the transient falls in the lead
+    The FIR runs on the full resampled record, and the transient lies within the lead
     overlap. When `needs_analysis_filter` is false, the return value is the
     unfiltered stage object.
     """
@@ -327,7 +327,7 @@ def trigger_shifts(iq: specs.AcquiredIQ) -> Array:
     """return the per-port alignment shift of `iq`, in samples at the capture rate.
 
     `iq.trigger_shifts` is returned when set. Otherwise the trigger of the
-    acquisition runs on `iq.preprocess`, and the result is memoized there.
+    acquisition runs, and `iq.preprocess` memoizes the result.
 
     Raises:
         TypeError: if `iq.capture` is not a `SensorCapture`
@@ -343,7 +343,7 @@ def trigger_shifts(iq: specs.AcquiredIQ) -> Array:
 def _trigger_shifts(pp: Preprocessor) -> Array:
     """return the per-port shift, in samples, from the trigger of the acquisition.
 
-    `trigger_shifts` of the acquisition is returned when set. `aligning` is set
+    `trigger_shifts` of the acquisition is returned when set. `pp.aligning` is True
     while the trigger measurement runs on the acquisition.
     """
     if pp.shifts is not None:
@@ -376,11 +376,10 @@ def get_correction_overlaps(
 ) -> tuple[int, int]:
     """return the ``(lead, tail)`` acquisition overlap of `capture` in source samples.
 
-    The lead absorbs the transient of the analysis FIR, which `AcquiredIQ.preprocess`
-    applies at `capture.sample_rate` after resampling. The tail absorbs that
+    The lead covers the transient of the conditioning filters. The tail covers that
     transient and the largest lag of the trigger named by ``setup.signal_trigger``.
-    The lead and tail pad the record of `source_record_size` samples to a whole
-    number of resampler FFTs.
+    The padded record is a whole number of resampler FFTs on the whole-record path
+    and a whole number of STFT hops on the oaresample path.
 
     Args:
         capture: the capture with the `duration`, `sample_rate`, and
@@ -550,7 +549,7 @@ def validate_fir_band(capture: specs.SensorCapture) -> None:
 def validate_oaresample_shift(design: sw.ResamplerDesign) -> None:
     """raise unless `striqt.waveform.oaresample` accepts the ``lo_offset`` of `design`.
 
-    A zero ``lo_offset`` always passes.
+    A zero ``lo_offset`` is accepted.
 
     Raises:
         ValueError: if ``lo_offset`` is nonzero while upsampling, is not a multiple
@@ -586,7 +585,7 @@ def _apply_trigger_shifts(x: Array, shifts: Array, size_out: int) -> Array:
         raise ValueError('waveform is too short to align')
 
     if shifts.shape[0] == 1 or len(set(shifts.tolist())) == 1:
-        # fast path: a view when there is only one offset
+        # one shared offset selects a view instead of a copy
         return x[:, shifts[0] : shifts[0] + size_out]
 
     else:
@@ -648,13 +647,11 @@ def _scale_only(
 def _resample(
     iq: specs.AcquiredIQ, overwrite_x: bool, min_overlap: int, axis: int
 ) -> tuple[Array, int | None]:
-    """return ``(y, lead)``: `iq.x` resampled to `capture.sample_rate` and the lead pad.
+    """return `iq.x` resampled to `capture.sample_rate` and the lead pad.
 
-    `y` begins with the lead pad and ends with the resampled tail pad, and `lead` is
-    the lead pad in output samples.
-
-    The `lo_offset` of the resampler design is shifted to 0 Hz. `iq.x` is consumed
-    in place when `overwrite_x` is set.
+    The waveform begins with the lead pad and ends with the resampled tail pad, and
+    the returned lead is in output samples. The `lo_offset` of the resampler design
+    is shifted to 0 Hz. `iq.x` is consumed in place when `overwrite_x` is set.
 
     Raises:
         ValueError: if the record does not resample to a whole number of output
@@ -697,10 +694,9 @@ def _oaresample(
 
     The returned waveform begins with the lead pad and ends with the resampled tail
     pad, at `capture.sample_rate`. The waveform is low-passed to `analysis_bandwidth`
-    when finite and shifted by the `lo_offset` of the resampler design. `iq.x` is
-    consumed in place when `overwrite_x` is set, and the returned waveform is then a
-    view of the buffer of `iq.x` when the design downsamples and `iq.x` is
-    C-contiguous.
+    when finite and shifted by the `lo_offset` of the resampler design. Under
+    `overwrite_x`, `iq.x` is consumed in place. The returned waveform is then a view
+    of the buffer of `iq.x` when the design downsamples and `iq.x` is C-contiguous.
 
     Raises:
         ValueError: if the acquisition is shorter than the capture plus the pads of
@@ -748,7 +744,7 @@ def _oaresample(
 def _get_filter_overlap(capture: specs.SensorCapture) -> int:
     """return the output-rate sample count of the analysis FIR transient at each end.
 
-    The count is 0 when `analysis_bandwidth` is infinite and no filter runs.
+    The count is 0 when `analysis_bandwidth` is infinite.
     """
     if isfinite(capture.analysis_bandwidth):
         return FILTER_SIZE // 2 + 1
@@ -775,19 +771,17 @@ def _get_oaresample_overlaps(
     """return the (lead, tail) pads, in source samples, that `_oaresample` needs.
 
     Each pad covers one STFT overlap: the span at either end of the `sw.oaresample`
-    output that fewer than the full count of COLA windows reach. The low-pass of that
-    path is a response on the bins of each STFT block. No pad is reserved for a
-    filter transient. The lead resamples to a whole number of output samples. The
-    tail adds `min_overlap` trigger-lag samples (in source samples) and is extended
-    until the padded acquisition is a whole number of the STFT hops that
-    `sw.oaresample` requires.
+    output that fewer than the full count of COLA windows reach. No pad is reserved
+    for a filter transient. The lead is a whole number of output samples after
+    resampling. The tail includes `min_overlap` source samples for the trigger lag,
+    plus the samples that make the padded acquisition a whole number of STFT hops.
     """
     design = design_resampler(capture, master_clock_rate)
     nfft = design['nfft']
     nfft_out = design['nfft_out']
 
-    # only the COLA overlap fraction is needed here; the size argument sizes the
-    # padding internal to design_oafilter
+    # the call to design_oafilter supplies the COLA overlap fraction alone, and the
+    # size argument sizes only the padding internal to design_oafilter
     overlap_scale = sw.fourier.design_oafilter(
         nfft, window=design['window'], nfft_out=nfft_out, nfft=nfft, extend=True
     )[2]
@@ -814,8 +808,8 @@ def source_record_size(capture: specs.SensorCapture, design: sw.ResamplerDesign)
     """
     samples_out = round(capture.duration * capture.sample_rate)
     nfft, nfft_out = design['nfft'], design['nfft_out']
-    # integer round-half-up: the float product duration * fs_sdr falls below the half
-    # sample when both factors are inexact, and round() would then round down
+    # integer round-half-up, because the float product duration * fs_sdr falls below
+    # the half sample when both factors are inexact and round() then rounds down
     return (2 * samples_out * nfft + nfft_out) // (2 * nfft_out)
 
 
@@ -826,10 +820,10 @@ def _get_resample_overlap(
     """return the (lead, tail) source-rate pad around the record of `capture`.
 
     The padded record is a whole number of resampler FFTs, and that number is a fast
-    FFT length for `setup.array_backend`. The lead is a multiple of the reduced
-    denominator of the ``nfft / nfft_out`` ratio of the resampler. The FIR transient
-    is counted at `capture.sample_rate` and converted to source-rate samples through
-    that ratio.
+    FFT length for `setup.array_backend`. The lead is a whole number of output
+    samples after resampling. The FIR transient is counted at `capture.sample_rate`
+    and converted to source-rate samples through the ``nfft / nfft_out`` ratio of
+    the resampler.
 
     Args:
         min_overlap: tail (in source-rate samples) reserved beyond the filter
@@ -849,7 +843,8 @@ def _get_resample_overlap(
     tail_min = filter_pad + min_overlap
 
     block_size = nfft * max(1, sw.util.ceildiv(filter_pad, nfft))
-    # a lead that is a multiple of q resamples to a whole number of output samples
+    # a lead that is a multiple of q is a whole number of output samples after
+    # resampling
     q = nfft // gcd(nfft, nfft_out)
 
     min_blocks = sw.util.ceildiv(analysis_size + lead_min + tail_min, block_size)
@@ -865,8 +860,8 @@ def _get_resample_overlap(
         if tail >= tail_min:
             return (lead, tail)
 
-        # rounding the lead to a multiple of q left the tail short; one more block
-        # adds at least q
+        # rounding the lead to a multiple of q leaves the tail short, and one more
+        # block adds at least q
         min_blocks = pad_blocks + 1
 
 

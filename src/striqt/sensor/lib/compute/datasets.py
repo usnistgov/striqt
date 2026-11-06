@@ -42,16 +42,18 @@ class DelayedDataset:
     extra_data: dict[str, Any]
     config: EvaluationOptions
     pending_extra_data: specs.PendingExtraData | None = None
-    """the peripheral read of the capture when still running; None when `extra_data`
-    is complete"""
+    """the peripheral read of the capture while the read runs, or None when
+    `extra_data` is complete"""
 
 
 def peripheral_result(pending: specs.PendingExtraData) -> dict[str, Any]:
-    """return the dict of the peripheral read of `pending`, waiting for the read.
+    """return the dict of the peripheral read of `pending`.
+
+    The call blocks until the read completes.
 
     Raises:
         TypeError: if the peripheral read returned an object other than a dict
-        Exception: the exception of the peripheral read
+        Exception: the exception raised by the peripheral read
     """
     result = pending.peripherals.result()
     if not isinstance(result, dict):
@@ -60,14 +62,15 @@ def peripheral_result(pending: specs.PendingExtraData) -> dict[str, Any]:
 
 
 def resolve_extra_data(dd: DelayedDataset) -> dict[str, Any]:
-    """return the complete `extra_data` of `dd`, waiting for a pending peripheral read.
+    """return the complete `extra_data` of `dd`.
 
     A peripheral entry overrides an entry of `dd.extra_data` with the same key, and an
-    `override` entry of the pending read overrides the peripheral entry.
+    `override` entry of the pending read overrides the peripheral entry. The call
+    blocks until a pending peripheral read completes.
 
     Raises:
         TypeError: if the peripheral read returned an object other than a dict
-        Exception: the exception of the peripheral read
+        Exception: the exception raised by the peripheral read
     """
     pending = dd.pending_extra_data
     if pending is None:
@@ -80,9 +83,9 @@ def from_delayed(dd: DelayedDataset) -> xr.Dataset:
 
     The dataset has one ``capture`` entry per port of `dd.capture`, a coordinate per
     capture field and per acquisition info field, one variable per measurement and
-    per entry of `resolve_extra_data`, and the attrs ``dd.config.extra_attrs``. The
-    call blocks until a pending peripheral read completes. Timings log at DEBUG on
-    the ``analysis`` logger.
+    per entry of `resolve_extra_data`, and ``dd.config.extra_attrs`` among the attrs.
+    The call blocks until a pending peripheral read completes. Timings log at DEBUG
+    on the ``analysis`` logger.
 
     Raises:
         ValueError: if the first axis of an `extra_data` array has a size other
@@ -139,11 +142,11 @@ def extra_data_arrays(
 ) -> dict[str, xr.DataArray]:
     """return the data variables of the `extra_data` of one capture.
 
-    A scalar becomes a ``capture`` vector of `port_count` copies. An array of
+    A scalar is broadcast to a ``capture`` vector of `port_count` copies. An array of
     ``ndim`` axes takes the dims ``capture`` and ``<key>_dim1`` through
     ``<key>_dim<ndim-1>``. An `xarray.DataArray` keeps its dims and coordinates and
-    gains a leading ``capture`` axis of `port_count` entries unless the first dim is
-    already ``capture``.
+    is expanded along a leading ``capture`` axis of `port_count` entries unless the
+    first dim is ``capture``.
 
     Raises:
         ValueError: if the ``capture`` axis of a value has a size other than 0, 1,
@@ -180,7 +183,7 @@ def concat_time_dim(datasets: list[xr.Dataset], time_dim: str) -> xr.Dataset:
 
     Every dataset must share the dimensions and dtypes of the first and have a
     uniformly spaced `time_dim` coordinate. The `time_dim` coordinate of the result
-    counts from 0 in the step of the first dataset.
+    starts at 0 with the step of the first dataset.
     """
     pad_dims = {time_dim: (0, len(datasets[0][time_dim]) * (len(datasets) - 1))}
     ds = datasets[0].pad(pad_dims, constant_values=float('nan'))
@@ -250,7 +253,7 @@ def get_looped_coords(ds: xr.Dataset, include_repeats: bool = False) -> list[str
 
     Args:
         ds: a sensor dataset with the ``loops`` attr of a sweep
-        include_repeats: if True, keep the `Repeat` loops, listed as None
+        include_repeats: True keeps the `Repeat` loops, each listed as None
 
     Raises:
         AttributeError: if `ds` has no ``loops`` attr
@@ -279,12 +282,15 @@ def index_dataset(
 ) -> xr.Dataset:
     """return `ds` with a multi-index over `index_coords`.
 
+    With xarray older than 2024.9.0 the uniqueness check is skipped and a WARNING is
+    logged on the ``analysis`` logger.
+
     Args:
         ds: the sensor dataset to index
-        index_coords: capture field names, or ``'sweep_start_time'``; together the
-            coordinates must select exactly one capture
+        index_coords: capture field names, or ``'sweep_start_time'``, that together
+            select exactly one capture
         chunks: a chunk size or ``'auto'`` backs the result with dask arrays
-            (`xarray.Dataset.chunk`); None keeps the arrays of `ds`
+            (`xarray.Dataset.chunk`), and None keeps the arrays of `ds`
 
     Returns:
         the data and coordinates of `ds` with the multi-index set
@@ -306,20 +312,25 @@ def unstack_dataset(
     *,
     chunks: int | Literal['auto'] | None = None,
 ) -> xr.Dataset:
-    """Unstack a dataset from a flat list of captures into multiple dimensions.
+    """return `ds` with the ``capture`` dimension unstacked into `dim_coords`.
 
-    The dimensions are `['sweep_start_time', *extra_coord_dims, 'port']`.
+    When `dim_coords` includes ``'sweep_start_time'`` or ``'sweep_index'``, a
+    coordinate that spans the other new dimensions is replaced by its values at
+    index 0 of ``sweep_start_time``.
 
     Args:
         ds: the sensor dataset to unstack
-        dim_coords:
-            A list of coordinate names to transform into dimensions, which must fulfill
-            the conditions given for the `index_coords` parameter of `index_dataset`.
+        dim_coords: the coordinate names that become dimensions, under the constraint
+            of `index_coords` in `index_dataset`
         chunks: a chunk size or ``'auto'`` backs the result with dask arrays
-            (`xarray.Dataset.chunk`); None keeps the arrays of `ds`
+            (`xarray.Dataset.chunk`), and None keeps the arrays of `ds`
 
     Returns:
-        The unstacked dataset.
+        the dataset with one dimension per entry of `dim_coords` in place of
+        ``capture``
+
+    Raises:
+        ValueError: if `dim_coords` do not select exactly one capture
     """
     dim_coords = list(dim_coords)
     idx_ds = index_dataset(ds, dim_coords, chunks=chunks)
@@ -369,8 +380,8 @@ def _coords_template(
         else:
             return v
 
-    # templates for the capture and acquisition info type fields; adjust_analysis is
-    # a dict and signal_trigger a Trigger, and neither is a coordinate
+    # adjust_analysis is a dict and signal_trigger a Trigger, so neither is a
+    # coordinate
     skipped = {'adjust_analysis', 'signal_trigger'}
     for spec_cls in (capture_cls, info_cls):
         for field in msgspec.structs.fields(spec_cls):
@@ -407,10 +418,8 @@ def _check_coord_indexes(ds: xr.Dataset, index_coords: list[str]) -> None:
 
     sub = coords_group.reset_coords()  # .drop_vars('start_time')
     if sub.sizes['capture'] == 1:
-        # the specified index fields select a unique capture in the first group
         return
 
-    # suggest coordinates that would make the index unique
     counts = {n: np.unique(da).tolist() for n, da in sub.data_vars.items()}
     counts = {n: c for n, c in counts.items() if len(c) == sub.sizes['capture']}
     suggest = set(counts.keys())
@@ -474,9 +483,8 @@ def _equivalent(a: Any, b: Any) -> bool:
 def drop_conflicts(attrs_list: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """return the union of the attrs, without a key that differs between 2 mappings.
 
-    This is the ``combine_attrs='drop_conflicts'`` rule of `xarray.concat`: a key
-    present in some mappings is kept with its value, and a key with 2 unequal
-    values is removed.
+    The rule is ``combine_attrs='drop_conflicts'`` of `xarray.concat`: a key present
+    in some mappings keeps its value, and a key with 2 unequal values is removed.
     """
     result: dict[str, Any] = {}
     dropped: set[str] = set()
@@ -493,11 +501,11 @@ def drop_conflicts(attrs_list: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def sweep_row_count(sweep: specs.Sweep, source_id: str) -> int:
-    """return the row count of a store of `sweep`: one per port per burst segment.
+    """return the row count of a store of `sweep`, one row per port per burst segment.
 
     The captures are those of `specs.sequencing.repeat_captures`, so a leading
-    `Repeat` loop multiplies the count. Each capture contributes `burst`
-    acquisitions.
+    `Repeat` loop multiplies the count. Each capture counts `burst` acquisitions per
+    port.
     """
     captures = specs.sequencing.repeat_captures(sweep, source_id)
     return sum(len(specs.captures.split_capture_ports(c)) * c.burst for c in captures)
@@ -532,15 +540,19 @@ def measurement_grids(
 
     The coordinate factories of each measurement run once per distinct pair of
     capture and adjusted analysis. A dim with equal coordinate values on every pair
-    keeps those values. Otherwise the coordinate is the sorted union of the values, which is
-    the outer join of `xarray.concat`, and the grid is `mixed`. The attrs of each
-    variable and coordinate are those of `striqt.analysis.dataarrays.measurement_attrs`
-    and `measurement_coords` in `power_units`, less the body attrs of a measurement.
+    keeps those values. Otherwise the coordinate is the sorted union of the values,
+    which is the outer join of `xarray.concat`, and the grid is `mixed`. The attrs
+    of each variable and coordinate are those of
+    `striqt.analysis.dataarrays.measurement_attrs` and `measurement_coords` in
+    `power_units`, less the body attrs of a measurement.
 
     Args:
         sweep: the sweep with the enabled measurements in `analysis`
         captures: the expanded captures of the sweep
         power_units: the unit of the squared magnitude of the IQ of the source
+
+    Returns:
+        one `VariableGrid` per enabled measurement, keyed by measurement name
 
     Raises:
         NotImplementedError: if a coordinate with more than one dim differs between
@@ -553,7 +565,7 @@ def measurement_grids(
     for name in names:
         per_pair = []
         for capture, analysis in pairs:
-            # the registry wrapper hands the validated spec to the factories and
+            # the registry wrapper passes the validated spec to the factories and
             # the attrs, so a Fraction default reads back as a string
             spec = getattr(analysis, name).validate()
             info = sa.registry[type(spec)]
@@ -611,8 +623,8 @@ def row_index(
 ) -> tuple[slice | np.ndarray, ...]:
     """return the position of the coordinates of one capture on the union grid.
 
-    Each entry is ``slice(None)`` when the capture's coordinate values equal the
-    union, and otherwise an integer index array, one per value.
+    Each entry is ``slice(None)`` when the coordinate values of the capture equal the
+    union, and otherwise an integer index array with one position per value.
 
     Raises:
         ValueError: if a coordinate value of the capture is not on the union grid
@@ -648,7 +660,7 @@ def scatter_rows(
 ) -> np.ndarray:
     """return the rows of one capture placed on the union grid of `grid`.
 
-    `result` has one leading axis of rows (ports) and the dims of `grid` after it.
+    `result` has one leading axis of rows (ports) followed by the dims of `grid`.
     When every entry of `index` is ``slice(None)``, `result` is returned as an
     array without a copy. Otherwise the rows are placed into a block of the grid
     shape filled with NaN (float and complex), NaT (datetime), or 0.
@@ -665,7 +677,7 @@ def scatter_rows(
 
 
 def _encode_times(values: np.ndarray) -> np.ndarray:
-    """return `values` as int64 nanoseconds since the epoch, NaT as the int64 minimum."""
+    """return `values` as int64 epoch nanoseconds, with NaT as the int64 minimum."""
     arr = np.asarray(values)
     if arr.dtype.kind != 'M':
         # numpy's conversion of Timestamp objects truncates to microseconds
@@ -772,7 +784,7 @@ def sweep_template(
         coordinate that needs one, and the row encoder per per-capture coordinate
 
     Raises:
-        NotImplementedError: as `measurement_grids`
+        NotImplementedError: under the conditions of `measurement_grids`
         ValueError: if 2 measurements share a dim with different union coordinates
     """
     captures = specs.sequencing.loop_captures(sweep, source_id=source_id)

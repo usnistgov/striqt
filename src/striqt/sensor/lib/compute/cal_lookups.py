@@ -69,12 +69,12 @@ def lookup_system_noise_power(
     B=1.0,
     xp=None,
 ):
-    """return the system noise power (dBm) referred to the calibrated input, per port.
+    """return the system noise power (dBm in `B`) of each port referred to the input.
 
     The power is ``k * T * B * F``, the noise power that the sensor measures with the
-    input terminated at temperature `T`. `F` is the linear noise figure from the
-    calibration file at the port, gain, LO shift, backend sample rate, and analysis
-    bandwidth of `capture`, interpolated in center frequency.
+    input terminated at temperature `T`. `F` is the linear noise figure interpolated
+    in center frequency from the calibration rows at the port, gain, LO shift,
+    backend sample rate, and analysis bandwidth of `capture`.
 
     Args:
         cal_data: the path of the calibration corrections file, or None for no
@@ -83,16 +83,15 @@ def lookup_system_noise_power(
         master_clock_rate: the SDR master clock rate (S/s), which sets the backend
             sample rate of the row
         format_path: the formatter of the ``{field}`` templates in `cal_data`, or None
-        T: the source temperature (K) that the noise figure is referred to
-        B: the noise bandwidth (Hz); 1 Hz gives a power spectral density
+        T: the temperature (K) of the input termination
+        B: the noise bandwidth (Hz), or 1 for a power spectral density
         xp: the array namespace of the result, or None for numpy
 
     Returns:
-        a `DataArray` on the capture dimension, one value per port, with `units`
-        ``'dBm/Hz'`` when `B` is 1 and ``'dBm'`` beside a `noise_bandwidth` attr of
-        `B` otherwise; `standard_name` and `long_name` name the quantity without
-        units, and `reference_temperature` is `T`. None when `cal_data` is None or
-        the file has no corrections.
+        a `DataArray` on the ``capture`` dimension with one value per port. The
+        `units` attr is ``'dBm/Hz'`` when `B` is 1, and ``'dBm'`` with a
+        `noise_bandwidth` attr equal to `B` otherwise. The `reference_temperature`
+        attr is `T`. None when `cal_data` is None or the file has no corrections.
 
     Raises:
         TypeError: if `cal_data` is neither a path nor None
@@ -245,7 +244,8 @@ def _lookup_calibration_var(
 def _get_port_variable(ds: xr.DataArray | xr.Dataset) -> str:
     """return the port coordinate name of `ds`.
 
-    ``'port'`` is returned when present, otherwise ``'channel'``.
+    The name is ``'port'`` when `ds` has that coordinate or is None, otherwise
+    ``'channel'``.
     """
     if ds is None:
         return PORT_DIM

@@ -1,4 +1,4 @@
-"""decide whether a sweep puts work on the GPU"""
+"""decide whether any stage of a sweep runs on the GPU"""
 
 from __future__ import annotations as __
 
