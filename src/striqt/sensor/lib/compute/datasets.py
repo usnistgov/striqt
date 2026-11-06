@@ -395,7 +395,7 @@ def _coords_template(
 def _check_coord_indexes(ds: xr.Dataset, index_coords: list[str]) -> None:
     if _xarray_version() < (2024, 9, 0):
         sa.util.get_logger('analysis').warning(
-            'xarray is too old to to validate coord indexes'
+            'xarray is too old to validate coord indexes'
         )
         return
 

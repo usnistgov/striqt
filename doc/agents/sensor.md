@@ -191,8 +191,7 @@ defines the derived bindings.
 A derived binding changes the action or the analysis group with
 `dataclasses.replace(ctrl_cls.schema, action=..., analysis=...)`.
 `tests/sensor/sweeps/src/extensions.py` binds `site_quick` that way over
-`SiteQuickAnalyses`, and `tests/sensor/sweeps/site/site-quick.yaml` runs through the
-CLI test.
+`SiteQuickAnalyses`.
 
 The principal downstream user is the aggregate-directivity-acquisition project, which
 binds site-style sensors through `extensions:` and runs on a Jetson with cupy. The

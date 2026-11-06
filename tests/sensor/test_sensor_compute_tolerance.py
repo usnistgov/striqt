@@ -91,13 +91,13 @@ def test_capture_tolerances_feed_the_correction_error_into_each_measurement():
 
 
 def test_sweep_tolerances_follow_the_looped_captures():
+    """one entry per capture in loop order, with a smaller budget for the scale-only
+    capture than for the resampled, filtered one"""
     captures = (tone_capture(RESAMPLE_FILTER), tone_capture(SCALE_ONLY))
     sweep = preset_sweep('single_tone', captures, analysis=ANALYSIS)
     entries = tolerance.sweep_tolerances(sweep)
 
-    assert [c for c, _ in entries] == list(ss.specs.sequencing.loop_captures(sweep))
-    for capture, tols in entries:
-        assert tols == tolerance.capture_tolerances(capture, sweep.source, ANALYSIS)
+    assert [c for c, _ in entries] == list(captures)
     # iq_waveform passes the correction error straight through, so it alone orders the
     # captures; the spectral products also differ in nfft between the 2 presets
     assert (

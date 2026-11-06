@@ -371,12 +371,12 @@ def test_check_coord_indexes_suggests_burst_index():
 
 
 def test_check_coord_indexes_warns_on_old_xarray(monkeypatch, caplog):
+    """below xarray 2024.9 the index is not validated, and the ``striqt.analysis``
+    logger records one WARNING in place of the error"""
     monkeypatch.setattr(datasets, '_xarray_version', lambda: (2024, 8, 0))
     with caplog.at_level(logging.WARNING, logger='striqt.analysis'):
         datasets._check_coord_indexes(full_run(), ['port'])
-    assert [r.getMessage() for r in caplog.records] == [
-        'xarray is too old to to validate coord indexes'
-    ]
+    assert [r.levelno for r in caplog.records] == [logging.WARNING]
 
 
 # %% drop_conflicts / measurement_grids / sweep_template

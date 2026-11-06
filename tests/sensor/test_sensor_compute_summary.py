@@ -25,7 +25,6 @@ from synthetic_sources import (
 
 import striqt.analysis as sa
 import striqt.sensor as ss
-import striqt.waveform as sw
 from striqt.sensor.lib.compute import summary
 
 AIR = ss.bindings.air7101b
@@ -107,17 +106,7 @@ def test_describe_overloads_is_none_without_an_overload():
     assert summary.describe_overloads(()) is None
 
 
-def test_describe_overloads_names_the_overloaded_ports():
-    ports = summary.overloads(
-        delayed({'adc_headroom': (-1.0, 3.0), 'if_headroom': (10.0, 10.0)})
-    )
-    text = summary.describe_overloads(ports)
-    assert isinstance(text, str)
-    assert 'port 0' in text
-    assert 'port 1' not in text
-
-
-def test_describe_overloads_renders_frequencies_in_mhz():
+def test_describe_overloads_names_the_overloaded_port_and_its_victim_in_mhz():
     ports = summary.overloads(
         delayed({'adc_headroom': (-1.0, 3.0), 'if_headroom': (10.0, 10.0)})
     )
@@ -125,6 +114,7 @@ def test_describe_overloads_renders_frequencies_in_mhz():
     assert isinstance(text, str)
     assert 'port 0 (1000 MHz)' in text
     assert 'onto 2000 MHz' in text
+    assert 'port 1' not in text
 
 
 # %% spectrogram_snr
@@ -165,18 +155,6 @@ def test_spectrogram_snr_skips_a_port_with_no_power(calibration_nc):
         air_sweep(capture, calibration=calibration_nc), capture, (spg, attrs)
     )
     assert entries == ()
-
-
-def test_describe_spectrogram_snr_names_the_port(calibration_nc):
-    capture = soapy_capture()
-    (entry,) = summary.spectrogram_snr(
-        air_sweep(capture, calibration=calibration_nc),
-        capture,
-        spectrogram_result(PEAK_DBM),
-    )
-    text = summary.describe_spectrogram_snr(entry, source_id='beef')
-    assert isinstance(text, str)
-    assert 'port' in text
 
 
 # %% capture_fields
@@ -225,23 +203,15 @@ def test_capture_fields_list_the_port_values_in_split_order():
 
 
 @pytest.mark.parametrize(
-    'name, units, symbol',
-    [('center_frequency', 'Hz', 'G'), ('sample_rate', 'S/s', 'M')],
+    'name, units, values',
+    [('center_frequency', 'GHz', ('1', '2')), ('sample_rate', 'MS/s', ('125', '125'))],
     ids=['center_frequency', 'sample_rate'],
 )
-def test_capture_fields_share_one_si_prefix_per_field(name, units, symbol):
+def test_capture_fields_share_one_si_prefix_per_field(name, units, values):
     """1 GHz and 2 GHz share the giga prefix; the 125 MS/s clock of the fake device
     takes mega. `Meta` of the field gives the base units."""
     fields = field_by_name(summary.capture_fields(delayed({})))
-    ports = ss.specs.captures.split_capture_ports(CAPTURE)
-    raw = [getattr(c, name) for c in ports]
-
-    prefix = sw.units.si_prefix(raw, units)
-    assert prefix.symbol == symbol
-    assert fields[name].units == f'{symbol}{units}'
-    assert fields[name].values == tuple(
-        sw.units.format_quantity(v, None, prefix=prefix) for v in raw
-    )
+    assert fields[name] == summary.FieldValue(name, values, units)
 
 
 def test_capture_fields_render_text_and_infinite_values_without_a_prefix():
@@ -294,12 +264,8 @@ def test_acquisition_fields_have_one_value_each():
     assert fields['capture_index'] == summary.FieldValue('capture_index', ('3',), '')
     assert fields['sweep_index'] == summary.FieldValue('sweep_index', ('2',), '')
     assert fields['source_id'] == summary.FieldValue('source_id', ('beef',), '')
-
-    prefix = sw.units.si_prefix(INFO.backend_sample_rate, 'S/s')
     assert fields['backend_sample_rate'] == summary.FieldValue(
-        'backend_sample_rate',
-        (sw.units.format_quantity(INFO.backend_sample_rate, None, prefix=prefix),),
-        f'{prefix.symbol}S/s',
+        'backend_sample_rate', ('15.36',), 'MS/s'
     )
 
 

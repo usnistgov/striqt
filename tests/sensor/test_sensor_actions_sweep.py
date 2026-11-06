@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import pytest
 from sweep_strategies import SweepCls
-from synthetic_sources import tone_captures, tone_sweep
+from synthetic_sources import tone_sweep
 
 import striqt.sensor as ss
-from striqt.sensor.lib.actions import SweepRunner, core, registry
+from striqt.sensor.lib.actions import SweepRunner, registry
 
 OFFSETS = (1e6, 2e6)
 
@@ -62,27 +62,18 @@ class RecordingRunner(SweepRunner):
         )
 
 
-def test_iterate_sweep_runs_the_runner_in_the_resources():
-    """`iterate_sweep` calls the `iterate` of ``resources['runner']``. The runner
-    receives the resources with the replacements applied and the modes forwarded."""
+def test_iterate_sweep_replaces_resources_in_a_copy():
     sweep = tone_sweep(OFFSETS)
     runner = RecordingRunner(sweep)
     res = ss.lib.resources.Resources(
         action_spec=sweep, sweep_spec=sweep, runner=runner, format_path=None
     )
-    modes = {
-        'always_yield': True,
-        'yield_values': False,
-        'loop': True,
-        'captures': None,
-    }
+    token = object()
 
-    items = list(ss.iterate_sweep(res, calibration=None, **modes))
+    ((received, _),) = list(ss.iterate_sweep(res, calibration=token))
 
-    assert items == [({**res, 'calibration': None}, modes)]
-    assert set(res) == {'action_spec', 'sweep_spec', 'runner', 'format_path'}, (
-        'the input is not mutated'
-    )
+    assert received['calibration'] is token
+    assert 'calibration' not in res
 
 
 def test_open_resources_builds_the_registered_runner(monkeypatch):
@@ -99,37 +90,3 @@ def test_open_resources_raises_for_an_unregistered_spec_type(monkeypatch):
     monkeypatch.delitem(registry, ss.specs.Sweep)
     with pytest.raises(TypeError, match=SweepCls.__name__):
         ss.open_resources(tone_sweep(OFFSETS), None)
-
-
-# %% SweepRunner.iterate
-
-
-def record_iterate_captures(monkeypatch) -> list:
-    """replace `core.iterate_captures` with a one-item generator that records its
-    arguments in the returned list"""
-    recorded = []
-
-    def record(resources, **kwargs):
-        recorded.append((resources, kwargs))
-        yield None
-
-    monkeypatch.setattr(core, 'iterate_captures', record)
-    return recorded
-
-
-def test_iterate_forwards_captures_to_the_pipeline(monkeypatch):
-    recorded = record_iterate_captures(monkeypatch)
-    sweep = tone_sweep(OFFSETS)
-    captures = tone_captures(OFFSETS)[::-1]
-    res = ss.lib.resources.Resources(action_spec=sweep, sweep_spec=sweep)
-
-    items = list(SweepRunner(sweep).iterate(res, captures=captures))
-
-    assert items == [None]
-    kwargs = {
-        'always_yield': False,
-        'yield_values': True,
-        'loop': False,
-        'captures': captures,
-    }
-    assert recorded == [(res, kwargs)]

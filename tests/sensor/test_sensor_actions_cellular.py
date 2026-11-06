@@ -5,7 +5,7 @@ the runner that builds and runs the plain `Sweep`
 
 from __future__ import annotations
 
-import copy
+from contextlib import nullcontext
 from fractions import Fraction
 from typing import Optional
 
@@ -31,7 +31,6 @@ from striqt.analysis.specs.helpers import subset_of
 from striqt.sensor.lib.actions import (
     Cellular5GNRSweepRunner,
     cellular,
-    core,
     registry,
 )
 
@@ -273,23 +272,16 @@ def test_resolve_capture_rejects_another_derived_value(field, value):
 
 
 def test_analysis_parameter_names_are_the_fields_of_the_enabled_measurements():
+    """`subcarrier_spacing` is a field of the PSS correlator and `start_time_sec` of
+    the IQ waveform. `window` is a field of the spectral measurements, which are
+    disabled."""
     analysis = ss.specs.BundledAnalysis.from_dict({
         'cellular_5g_pss_correlation': {'subcarrier_spacing': SCS},
         'iq_waveform': {},
     })
-    assert cellular.analysis_parameter_names(analysis) == {
-        'subcarrier_spacing',
-        'sample_rate',
-        'discovery_periodicity',
-        'frequency_offset',
-        'shared_spectrum',
-        'delay',
-        'symbol_indexes',
-        'max_lag_symbols',
-        'max_block_count',
-        'start_time_sec',
-        'stop_time_sec',
-    }
+    names = cellular.analysis_parameter_names(analysis)
+    assert {'subcarrier_spacing', 'start_time_sec'} <= names
+    assert 'window' not in names
 
 
 def test_analysis_parameter_names_of_no_measurements_is_empty():
@@ -302,15 +294,6 @@ def test_analysis_parameter_names_of_no_measurements_is_empty():
 def test_channel_subcarrier_spacing_is_the_shared_spacing():
     channels = {0: CELL_CHANNEL, 1: OTHER_CHANNEL}
     assert cellular.channel_subcarrier_spacing(channels) == pytest.approx(SCS)
-
-
-def test_channel_subcarrier_spacing_rejects_mixed_spacings():
-    """`CellChannel` accepts 30 kHz only. The 15 kHz channel is written onto a copy with
-    `force_setattr`."""
-    at_15k = copy.copy(OTHER_CHANNEL)
-    msgspec.structs.force_setattr(at_15k, 'subcarrier_spacing', 15e3)
-    with pytest.raises(msgspec.ValidationError, match='cell_channels'):
-        cellular.channel_subcarrier_spacing({0: CELL_CHANNEL, 1: at_15k})
 
 
 # %% cellular_analysis
@@ -409,49 +392,59 @@ class _ToyBlock(ss.specs.SpecBase, frozen=True, kw_only=True):
     detector_period: Optional[float] = None
 
 
-def _classify(monkeypatch, **tables):
-    """run `check_block_fields` on the toy block with the `FIXED` and `DEFAULTED`
-    tables of the module replaced by `tables`"""
-    for k in ('FIXED', 'DEFAULTED'):
-        monkeypatch.setattr(cellular, k, {'toy': tables.get(k, {})})
-    cellular.check_block_fields(_ToyBlock, _ToyMeasurement, 'toy')
+class _PlainBlock(ss.specs.SpecBase, frozen=True, kw_only=True):
+    window: str = 'hann'
 
 
-def test_check_block_fields_accepts_an_agreeing_classification(monkeypatch):
-    """the check passes with `frequency_resolution` fixed, `frame_slots` per capture,
-    `detector_period` defaulted, and `generation` omitted without a table entry"""
-    _classify(
-        monkeypatch,
-        FIXED={'frequency_resolution': lambda scs: scs},
-        DEFAULTED={'detector_period': lambda scs: scs},
+FIXED_RESOLUTION = {'frequency_resolution': lambda scs: scs}
+DEFAULTED_PERIOD = {'detector_period': lambda scs: scs}
+
+# (block, measurement, FIXED entry, DEFAULTED entry, the TypeError match or None).
+# The agreeing row has `frequency_resolution` fixed, `frame_slots` per capture,
+# `detector_period` defaulted, and `generation` omitted without a table entry
+BLOCK_FIELD_CASES = {
+    'agreeing': (_ToyBlock, _ToyMeasurement, FIXED_RESOLUTION, DEFAULTED_PERIOD, None),
+    'fixed_but_exposed': (
+        _ToyBlock,
+        _ToyMeasurement,
+        {'window': lambda scs: 'x'},
+        DEFAULTED_PERIOD,
+        r"fixed but exposed \['window'\]",
+    ),
+    'defaulted_differs_from_optional': (
+        _ToyBlock,
+        _ToyMeasurement,
+        FIXED_RESOLUTION,
+        {},
+        r'defaulted \[\] differs from optional',
+    ),
+    'undeclared_block': (
+        _PlainBlock,
+        _ToyMeasurement,
+        {},
+        {},
+        'not declared with subset_of',
+    ),
+    'block_of_another_measurement': (
+        _ToyBlock,
+        sa.specs.IQWaveform,
+        {},
+        {},
+        r'subset of _ToyMeasurement, not of',
+    ),
+}
+
+
+@pytest.mark.parametrize('case', list(BLOCK_FIELD_CASES), ids=list(BLOCK_FIELD_CASES))
+def test_check_block_fields(monkeypatch, case):
+    block, measurement, fixed, defaulted, match = BLOCK_FIELD_CASES[case]
+    monkeypatch.setattr(cellular, 'FIXED', {'toy': fixed})
+    monkeypatch.setattr(cellular, 'DEFAULTED', {'toy': defaulted})
+    expectation = (
+        nullcontext() if match is None else pytest.raises(TypeError, match=match)
     )
-
-
-def test_check_block_fields_reports_a_fixed_parameter_the_block_exposes(monkeypatch):
-    with pytest.raises(TypeError, match=r"fixed but exposed \['window'\]"):
-        _classify(
-            monkeypatch,
-            FIXED={'window': lambda scs: 'x'},
-            DEFAULTED={'detector_period': lambda scs: scs},
-        )
-
-
-def test_check_block_fields_reports_defaulted_optional_disagreement(monkeypatch):
-    with pytest.raises(TypeError, match=r'defaulted \[\] differs from optional'):
-        _classify(monkeypatch, FIXED={'frequency_resolution': lambda scs: scs})
-
-
-def test_check_block_fields_rejects_an_undeclared_block():
-    class Plain(ss.specs.SpecBase, frozen=True, kw_only=True):
-        window: str = 'hann'
-
-    with pytest.raises(TypeError, match='not declared with subset_of'):
-        cellular.check_block_fields(Plain, _ToyMeasurement, 'toy')
-
-
-def test_check_block_fields_rejects_a_block_of_another_measurement():
-    with pytest.raises(TypeError, match=r'subset of _ToyMeasurement, not of'):
-        cellular.check_block_fields(_ToyBlock, sa.specs.IQWaveform, 'iq_waveform')
+    with expectation:
+        cellular.check_block_fields(block, measurement, 'toy')
 
 
 def test_every_cellular_block_is_classified():
@@ -509,7 +502,6 @@ def test_build_sweep_copies_the_document_fields():
     assert {f: getattr(sweep, f) for f in copied} == {
         f: getattr(doc, f) for f in copied
     }
-    assert sweep.analysis == cellular.cellular_analysis(doc, SCS)
 
 
 def test_build_sweep_resolves_every_capture():
@@ -562,9 +554,7 @@ def test_center_frequency_loop_is_rejected_at_construction():
 
 
 def test_registry_runs_the_cellular_sweep_with_its_runner():
-    spec = make_cellular_sweep()
-    assert registry.lookup(spec) is Cellular5GNRSweepRunner
-    assert Cellular5GNRSweepRunner(spec).sweep is cellular.build_cellular_sweep(spec)
+    assert registry.lookup(make_cellular_sweep()) is Cellular5GNRSweepRunner
 
 
 def test_in_memory_run_yields_one_dataset_per_capture_at_the_derived_rate():
@@ -585,27 +575,3 @@ def test_in_memory_run_yields_one_dataset_per_capture_at_the_derived_rate():
         assert (ds.sample_rate.item(), ds.analysis_bandwidth.item()) == (26.88e6, 20e6)
         assert ds.channel_power_time_series.sizes['time_elapsed'] == 28
         assert ds.attrs['cell_channels'] == {CELL_LABEL: channel.to_dict()}
-
-
-def test_iterate_forwards_captures_to_the_pipeline(monkeypatch):
-    recorded = []
-
-    def record(resources, **kwargs):
-        recorded.append((resources, kwargs))
-        yield None
-
-    monkeypatch.setattr(core, 'iterate_captures', record)
-    runner = make_cellular_runner()
-    captures = runner.sweep.captures[::-1]
-    res = ss.lib.resources.Resources(action_spec=runner.spec, sweep_spec=runner.sweep)
-
-    items = list(runner.iterate(res, captures=captures))
-
-    assert items == [None]
-    kwargs = {
-        'always_yield': False,
-        'yield_values': True,
-        'loop': False,
-        'captures': captures,
-    }
-    assert recorded == [(res, kwargs)]

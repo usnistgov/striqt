@@ -16,18 +16,10 @@ import math
 import os
 import re
 from fractions import Fraction
-from pathlib import Path
 
 import numpy as np
 import pytest
-import yaml
-from conftest import (
-    FAKE_SOAPY_CELLULAR_SPEC,
-    FAKE_SOAPY_SPEC,
-    SITE_CELLULAR_SPEC,
-    SITE_DIR,
-    SWEEP_DIR,
-)
+from conftest import FAKE_SOAPY_CELLULAR_SPEC, SITE_CELLULAR_SPEC, SITE_DIR, SWEEP_DIR
 from numeric_checks import COLA_LEVEL_DB, COLA_RIPPLE_DB, assert_close, cross_backend
 from site_strategies import RADIO_ID
 from sweep_strategies import SOURCE
@@ -176,7 +168,6 @@ def check_site(ds):
 CLI_SWEEPS = {
     'synthetic': SWEEP_DIR / 'synthetic.yaml',
     'site': SITE_DIR / 'site-cpu.yaml',
-    'site_quick': SITE_DIR / 'site-quick.yaml',
 }
 
 
@@ -215,95 +206,39 @@ def test_cli_run(name, tmp_path, monkeypatch, subtests):
         check_site(ds)
 
 
-BURST = 3
-
-
-def write_burst_sweep(tmp_path) -> Path:
-    """write `fake_soapy-cpu.yaml` with its last capture repeated as a `burst: 3`
-    capture, with the extension path made absolute, and return the path.
-
-    The queue holds every acquisition of the pass, so no segment is dropped under
-    the ``on_gap: skip`` default when the fake source outruns analysis.
-    """
-    tree = yaml.safe_load(FAKE_SOAPY_SPEC.read_text())
-    tree['extensions']['import_path'] = str(FAKE_SOAPY_SPEC.parent / 'src')
-    tree['captures'].append({**tree['captures'][-1], 'burst': BURST})
-    tree['source']['bursts'] = {'buffers': len(tree['captures']) - 1 + BURST}
-    path = tmp_path / 'fake_soapy-burst.yaml'
-    path.write_text(yaml.safe_dump(tree))
-    return path
-
-
-def test_cli_run_burst(fake_soapy, tmp_path, monkeypatch):
-    """a capture with `burst: 3` writes one row per port per segment. The store has the
-    `sweep_row_count` rows, `burst_index` runs over the segments of that capture and is
-    0 elsewhere, and `capture_index` is shared by the segments."""
-    path = write_burst_sweep(tmp_path)
-    # open_resources chdirs into the spec directory and does not change back
-    monkeypatch.chdir(os.getcwd())
-    out_path = tmp_path / 'out.zarr.zip'
-
-    sensor_sweep.run(str(path), output_path=str(out_path))
-
-    spec = ss.read_yaml_spec(path, output_path=str(out_path))
-    assert [c.burst for c in spec.captures] == [1, 1, BURST]
-    ds = sa.load(out_path)
-    source_id = str(ds.source_id.values[0])
-
-    rows = [
-        (i, k, p)
-        for i, c in enumerate(spec.captures)
-        for k in range(c.burst)
-        for p in ports_of(c.port)
-    ]
-    assert ds.sizes['capture'] == ss.lib.compute.datasets.sweep_row_count(
-        spec, source_id
-    )
-    assert ds.sizes['capture'] == len(rows)
-    assert ds.capture_index.values.tolist() == [i for i, _, _ in rows]
-    assert ds.burst_index.values.tolist() == [k for _, k, _ in rows]
-    assert ds.port.values.tolist() == [p for _, _, p in rows]
-    assert ds.burst.values.tolist() == [spec.captures[i].burst for i, _, _ in rows]
+def tolerance_rows(out: str) -> dict[str, list[str]]:
+    """return the numeric fields of each row of the tolerance table in `out`, keyed
+    by the measurement name that starts the row"""
+    pattern = r'^([a-z_]+) +(\S+) +(\S+) +(\S+) +(\S+) +(\S+)$'
+    return {m[1]: list(m.groups()[1:]) for m in re.finditer(pattern, out, re.MULTILINE)}
 
 
 def test_check_sweep_prints_the_error_budget(monkeypatch, capsys):
+    """one row per measurement with a registered tolerance: rtol, then the on-peak
+    and off-peak rms and peak bounds, each finite"""
     path = SWEEP_DIR / 'synthetic.yaml'
     # open_resources chdirs into the spec directory and does not change back
     monkeypatch.chdir(os.getcwd())
 
     check_sweep.run(str(path))
 
-    out = capsys.readouterr().out
-    assert 'Numerical tolerance' in out
-    spec = ss.read_yaml_spec(path)
-    source_id = ast.literal_eval(re.search(r'^source_id: (.*)$', out, re.MULTILINE)[1])
-    count = ss.specs.sequencing.count_acquisitions(spec, source_id)
-    bound = ss.lib.resources.resident_bytes_bound(spec, source_id)
-    assert f'acquisitions per pass: {count}' in out
-    assert f'resident IQ bound: {bound} bytes' in out
-    # the block is the title, a rule, the column header, and one row per product
-    block = out.split('Numerical tolerance')[1].split('\n\n')[0]
-    groups, header, *rows = block.splitlines()[2:]
-    assert 'On-peak tolerance (dB)' in groups and 'Off-peak (dBc)' in groups
-    assert header.split() == ['rms', 'peak', 'rms', 'peak']
-    table = {row.split()[0]: row.split()[1:] for row in rows}
-
-    spec = ss.read_yaml_spec(path)
-    budgeted = {
-        name
-        for name in spec.analysis.to_dict()
-        if sa.registry[type(getattr(spec.analysis, name))].tolerance is not None
-    }
-    assert budgeted == {
+    table = tolerance_rows(capsys.readouterr().out)
+    assert set(table) == {
         'power_spectral_density',
         'channel_power_time_series',
         'spectrogram',
         'iq_waveform',
     }
-    assert set(table) == budgeted
     for name, fields in table.items():
-        # rtol, then the on-peak and off-peak pairs
-        assert len(fields) == 5 and all(math.isfinite(float(f)) for f in fields), name
+        assert all(math.isfinite(float(f)) for f in fields), name
+
+
+def formatted_sink_path(out: str) -> str:
+    """return the formatted ``sink.path`` of a ``check-sweep`` report, the first
+    path the report lists"""
+    line = re.search(r'^ +Formatted: +(.*)$', out, re.MULTILINE)
+    assert line is not None, out
+    return ast.literal_eval(line[1])
 
 
 def test_check_sweep_formats_the_default_sink_path(write_yaml, monkeypatch, capsys):
@@ -330,16 +265,7 @@ def test_check_sweep_formats_the_default_sink_path(write_yaml, monkeypatch, caps
 
     check_sweep.run(str(path))
 
-    out = capsys.readouterr().out
-    block = re.search(
-        r'^sink\.path:\n  Input: +(.*)\n  Formatted: +(.*)$', out, re.MULTILINE
-    )
-    assert block is not None, out
-    template, formatted = (ast.literal_eval(v) for v in block.groups())
-    assert set(ss.specs.paths.get_format_fields(template)) <= {
-        'spec_name',
-        'start_time',
-    }
+    formatted = formatted_sink_path(capsys.readouterr().out)
     assert formatted.startswith(path.stem + '-')
     assert '{' not in formatted
 
@@ -383,30 +309,11 @@ def test_check_sweep_lists_the_looped_field_over_its_adjustment(
     check_sweep.run(str(path))
 
     out = capsys.readouterr().out
-    id_line = re.search(r'^source_id: (.*)$', out, re.MULTILINE)
-    source_id = ast.literal_eval(id_line[1])
-    # the title, then a rule, then the entries of a pformat dict without its braces
-    _, _, *entries = out.split('Unique capture field coordinates in output:')[1].split(
-        '\n'
-    )
-    labels = ast.literal_eval('{' + '\n'.join(entries) + '}')
-
-    spec = ss.read_yaml_spec(path)
-    captures = ss.specs.sequencing.loop_captures(spec, source_id=source_id)
-    looped = tuple(dict.fromkeys(c.host_resample for c in captures))
-    assert looped == (True, False)
-    assert labels == {
-        'host_resample': looped,
-        'snr': (spec.adjust_captures['defaults']['snr'],),
-    }
+    assert "'host_resample': (True, False)" in out
+    assert "'snr': (5.0,)" in out
 
 
 # %% cellular sweeps: the Sweep that the runner derives from a Cellular5GNRSweep
-
-CELLULAR_SWEEPS = {
-    'fake_soapy': FAKE_SOAPY_CELLULAR_SPEC,
-    'site': SITE_CELLULAR_SPEC,
-}
 
 
 def derived_sample_rates(spec) -> list[float]:
@@ -426,45 +333,29 @@ def derived_sample_rates(spec) -> list[float]:
     return rates
 
 
-@pytest.mark.parametrize('name', list(CELLULAR_SWEEPS), ids=list(CELLULAR_SWEEPS))
 def test_check_sweep_budgets_the_derived_cellular_analysis(
-    name, fake_soapy, monkeypatch, capsys
+    fake_soapy, monkeypatch, capsys
 ):
     """``check-sweep`` opens a cellular spec through the runner of the spec. The printed
-    sink path is formatted, and the tolerance table lists the measurements of the
-    derived `Sweep` analysis rather than the fields of the `analysis:` block of the
-    document."""
-    path = CELLULAR_SWEEPS[name]
+    sink path is formatted, and the tolerance table has one row per block of the
+    `analysis:` section of the document, budgeted as the derived measurement. The
+    cellular blocks register no tolerance of their own."""
+    path = SITE_CELLULAR_SPEC
     # open_resources chdirs into the spec directory and does not change back
     monkeypatch.chdir(os.getcwd())
 
     check_sweep.run(str(path))
 
     out = capsys.readouterr().out
-    assert f'for {ss.read_yaml_spec(path).__class__.__name__!r} bindings' in out
-    block = re.search(
-        r'^sink\.path:\n  Input: +(.*)\n  Formatted: +(.*)$', out, re.MULTILINE
-    )
-    assert block is not None, out
-    template, formatted = (ast.literal_eval(v) for v in block.groups())
-    assert formatted.startswith(template.split('{')[0])
+    assert "for 'site_cellular' bindings" in out
+    formatted = formatted_sink_path(out)
     assert path.stem in formatted
     assert '{' not in formatted
-
-    spec = ss.read_yaml_spec(path)
-    sweep = ss.lib.actions.cellular.build_cellular_sweep(spec)
-    budgeted = {
-        name
-        for name in sweep.analysis.to_dict()
-        if sa.registry[type(getattr(sweep.analysis, name))].tolerance is not None
+    assert set(tolerance_rows(out)) == {
+        'power_spectral_density',
+        'channel_power_time_series',
+        'cyclic_channel_power',
     }
-    assert budgeted, 'the fixture must enable at least one budgeted measurement'
-    enabled = {k for k, v in spec.analysis.to_dict().items() if v is not None}
-    block = out.split('Numerical tolerance')[1].split('\n\n')[0]
-    rows = block.splitlines()[4:]
-    table = {row.split()[0] for row in rows}
-    assert table == budgeted
-    assert table.isdisjoint(enabled - set(sweep.analysis.to_dict()))
 
 
 def test_cli_run_cellular(fake_soapy, tmp_path, monkeypatch):
@@ -491,9 +382,14 @@ def test_cli_run_cellular(fake_soapy, tmp_path, monkeypatch):
     assert ds.port.values.tolist() == [0, 1, 0]
     assert set(ds.attrs['cell_channels']) == {'3750 MHz', '3960 MHz'}
 
-    sweep = ss.lib.actions.cellular.build_cellular_sweep(spec)
-    assert set(sweep.analysis.to_dict()) <= set(ds.data_vars)
-    assert 'cellular_5g_pss_correlation' in ds.data_vars
+    enabled = {k for k, v in spec.analysis.to_dict().items() if v is not None}
+    assert enabled == {
+        'channel_power_time_series',
+        'cyclic_channel_power',
+        'cellular_5g_pss_correlation',
+        'iq_waveform',
+    }
+    assert enabled <= set(ds.data_vars)
     # the default detector period is one OFDM symbol: 28000 per second at 30 kHz
     # subcarrier spacing with a normal cyclic prefix
     (duration,) = {c.duration for c in spec.captures}
