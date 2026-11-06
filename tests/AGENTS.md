@@ -59,7 +59,7 @@ tests/profiling/cuda_streams.py`; see the module docstring for the usage and how
 the output). The basenames share the `tests/` namespace, so a script imports a sibling
 by bare name (`from profiling_tools import CAPTURE`) and no name repeats elsewhere under
 `tests/`. The scripts pass `ruff check` with the rest of `tests/`. The 4 maintained
-scripts and `profiling_tools.py` carry full type hints, and `pixi run -e test314 ty check`
+scripts and `profiling_tools.py` carry full type hints, and `pixi run -e test315 ty check`
 over those files reports nothing. A script that reads or writes the window shelf runs with its own
 `STRIQT_CACHE_DIR` beside a test session. Each script runs end to end on `--backend
 numpy` (`--duration 0.02 --repeat 1`) as the local check; the cupy columns are verified
@@ -163,9 +163,9 @@ because pytest 8 on py39 ignores `[tool.pytest]`:
 ```sh
 pixi run -e test39 ruff format src tests && pixi run -e test39 ruff check src tests
 pixi run -e test39 pytest -q -p no:cacheprovider tests -rxX
-pixi run -e test314 pytest -q -p no:cacheprovider tests -rxX
+pixi run -e test315 pytest -q -p no:cacheprovider tests -rxX
 grep -rn "mark.xfail" tests --include='*.py' | wc -l   # reconcile with the ledger
-pixi run -e test314 ty check src                        # must stay clean
+pixi run -e test315 ty check src                        # must stay clean
 ```
 
 Account for every count delta: `passed` moves only by the arithmetic of folds, `xfailed`

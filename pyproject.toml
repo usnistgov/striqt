@@ -162,7 +162,7 @@ keep-runtime-typing = true
 "src/striqt/sensor/bindings.py" = ["F401"]
 
 [tool.ty.environment]
-# the 3.9 floor governs the rules in every environment; test314 differs only through
+# the 3.9 floor governs the rules in every environment; test315 differs only through
 # its newer dependency stubs
 python-version = "3.9"
 
@@ -183,7 +183,7 @@ ignore-missing-imports = ["cupy", "cupy.*"]
 [tool.tox]
 # Forces tox to auto-provision the tox-uv plugin if missing
 requires = ["tox-uv"]
-env_list = ["py39", "py314"]
+env_list = ["py39", "py315"]
 
 [tool.tox.env_run_base]
 # Dependencies specified JSON-style for TOML compatibility

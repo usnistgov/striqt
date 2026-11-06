@@ -302,7 +302,7 @@ tables draw their marks from the module's `scs_cp_layout` builder
   looped; otherwise it is a scalar (or multi-dimensional) coordinate,
   `sel` raises `KeyError`, and `_describe_missing_data` then iterates the
   0-d coordinate at `compute/cal_lookups.py:521` and raises `TypeError`. xarray
-  2026.7 (the `test314` environment) raises `ValueError` from `sel` itself
+  2026.7 raises `ValueError` from `sel` itself
   instead; the xfail accepts either.
 - **Why the test is right.** The scalar coordinate carries exactly the value
   being matched; the lookup has the information it needs. Medium: it is
