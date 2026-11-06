@@ -100,7 +100,23 @@ class lookup:
     def id(cls, spec: specs.Source, timeout=0.5) -> str:
         """lookup a source ID from a source specification."""
         cls.instance(spec, timeout)
+        return cls._wait_id(spec)
 
+    @classmethod
+    def power_units(cls, spec: specs.Source, timeout=0.5) -> sw.units.PowerUnits:
+        """return the power units of the controller registered for `spec`.
+
+        The call blocks until the backend of the controller is constructed, which is
+        when the source id is set. `TimeoutError` is raised when no controller is
+        registered within `timeout` seconds.
+        """
+        controller = cls.instance(spec, timeout)
+        cls._wait_id(spec)
+        return controller.power_units
+
+    @classmethod
+    def _wait_id(cls, spec: specs.Source) -> str:
+        """return the source id of the registered controller, waiting for it to be set"""
         obj: Event | str | BaseException = cls._id[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()

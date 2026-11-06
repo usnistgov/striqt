@@ -683,3 +683,9 @@ it was standing in for is enabled.
   `allocate_store` on an unstaged `ZipStore`, which the production sink never
   passes, and the io test harness now stages metadata as the sink does. The
   doubled word in the old-xarray warning of `compute/datasets.py` was fixed.
+  `ZarrCaptureSink` read `Controller.power_units` through `lookup.instance` after a
+  separate `lookup.id` call, so a registered controller without a backend raised
+  `AttributeError` in the sink thread whenever `lookup.id` did not block (the test
+  fixtures stub it; seen on the Jetson on 2026-11-06). `lookup.power_units` now waits
+  on the id slot itself
+  (`test_sensor_sinks.py::test_zarr_capture_sink_waits_for_the_backend_of_a_pending_source`).

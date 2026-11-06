@@ -403,8 +403,7 @@ class ZarrCaptureSink(ZarrSinkBase):
         _ = (pd.__version__, xr.__version__)
 
         self._source_id = controller.lookup.id(sweep_spec.source)
-        # `lookup.id` returns after the backend of the controller is constructed
-        self._power_units = controller.lookup.instance(sweep_spec.source).power_units
+        self._power_units = controller.lookup.power_units(sweep_spec.source)
         self._planned_rows = compute.datasets.sweep_row_count(
             sweep_spec, self._source_id
         )

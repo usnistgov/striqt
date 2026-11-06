@@ -28,8 +28,10 @@ from synthetic_sources import (
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import compute, sinks
+from striqt.sensor.lib.sources import buffers
 
 OFFSETS = (1e6, 2e6)
+TONE = ss.bindings.single_tone
 
 
 def zarr_sweep(path, offsets, *, analysis=IQ_ONLY, **sink_kws):
@@ -143,6 +145,54 @@ def test_zarr_capture_sink_allocates_the_store_at_open(tmp_path):
             assert chunk_files == []
             # an unwritten store is trimmed to zero rows at close
     assert sa.load(sweep.sink.path).sizes['capture'] == 0
+
+
+def test_zarr_capture_sink_waits_for_the_backend_of_a_pending_source(
+    tmp_path, isolated_lookup, monkeypatch
+):
+    """a sink constructed while the source is between registration and backend
+    construction reads the power units of the backend once it exists, also when
+    `lookup.id` is replaced by a stub that does not wait (as the test fixtures do)"""
+    from threading import Event, Thread
+
+    sweep = tone_sweep((1e6,), sink=ss.specs.ZarrSink(path=str(tmp_path / 'p.zarr')))
+    monkeypatch.setattr(isolated_lookup, 'id', lambda spec, timeout=0.5: 'beef')
+    sink_waiting = Event()
+    sink_done = Event()
+    outcome = []
+
+    class WaitingIdSlot(Event):
+        def wait(self, timeout=None):
+            sink_waiting.set()
+            return super().wait(timeout)
+
+    isolated_lookup._id[sweep.source] = WaitingIdSlot()
+    real_buffers = buffers.ReceiveBuffers
+
+    def buffers_after_the_sink_asks(controller):
+        # the controller is registered but has no backend until this returns
+        for _ in range(600):
+            if sink_waiting.wait(timeout=0.05) or sink_done.is_set():
+                break
+        return real_buffers(controller)
+
+    monkeypatch.setattr(buffers, 'ReceiveBuffers', buffers_after_the_sink_asks)
+
+    def open_sink():
+        try:
+            outcome.append(sinks.ZarrCaptureSink(sweep, None)._power_units)
+        except BaseException as ex:
+            outcome.append(ex)
+        finally:
+            sink_done.set()
+
+    opener = Thread(target=open_sink)
+    opener.start()
+    with TONE.from_sweep_spec(sweep):
+        opener.join(timeout=30)
+
+    assert not opener.is_alive(), 'the sink is still blocked'
+    assert outcome == ['mW']
 
 
 def test_zarr_capture_sink_template_units_follow_the_source(fake_soapy_ext, tmp_path):
