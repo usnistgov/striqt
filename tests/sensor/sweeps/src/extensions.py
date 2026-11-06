@@ -108,7 +108,7 @@ class SiteQuickAnalyses(
     specs.AnalysisGroup, frozen=True, kw_only=True, omit_defaults=True
 ):
     """the analysis group of the measurements in ``fragments/analysis/quick.yaml``, and
-    no others"""
+    no others."""
 
     spectrogram: Optional[sa.specs.Spectrogram] = None
     power_spectral_density: Optional[sa.specs.PowerSpectralDensity] = None

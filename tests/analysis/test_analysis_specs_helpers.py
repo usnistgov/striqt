@@ -1,5 +1,5 @@
 """striqt.analysis.specs.helpers: frozendict, freezing, Meta, conversion hooks,
-json_schema, and coordinate inference"""
+json_schema, and coordinate inference."""
 
 from __future__ import annotations
 
@@ -496,7 +496,7 @@ def test_to_analysis_capture_defaults_absent_center_frequency_to_none():
 
 def test_to_analysis_capture_collapses_fields_the_analysis_layer_ignores():
     """a sweep looping over a sensor-only field maps to one projected capture, so the
-    validator cache has one key for the whole loop"""
+    validator cache has one key for the whole loop."""
     kws = {'port': 0, 'center_frequency': 3.5e9, 'duration': 1e-3, 'sample_rate': 1e6}
     low = to_analysis_capture(ss.specs.SoapyCapture(gain=0.0, **kws))
     high = to_analysis_capture(ss.specs.SoapyCapture(gain=30.0, **kws))
@@ -587,9 +587,7 @@ def test_a_projected_argument_passed_by_keyword_raises():
 )
 def test_the_cache_is_reachable_through_the_wrapper(clear):
     """`functools.wraps` does not copy `cache_clear` or `cache_info` off an
-    `lru_cache` wrapper, so the decorator re-exposes both. Without those attributes
-    the cache of a decorated function cannot be reset between measurements and is
-    missing from the `sw.util.cache_info()` report."""
+    `lru_cache` wrapper, so the decorator re-exposes both."""
     calls = []
 
     @lru_cache_on_converted(ss.specs.SensorCapture)
@@ -700,7 +698,7 @@ def test_spec_validation_error_renders_the_path_then_the_locations(case):
 
 def test_spec_validation_error_at_and_prepend_are_independent():
     """`at` and `prepend` commute, so a validator may interleave the 2 calls while
-    unwinding"""
+    unwinding."""
     exc = SpecValidationError('bad value', ('.spectrogram',))
     interleaved = exc.prepend('.analysis').at(".loops: {'repeat': 0}")
     interleaved = interleaved.prepend('.nfft').at('.captures[0]')

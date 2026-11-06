@@ -1,8 +1,7 @@
 """factories for the site-style binding defined in ``sweeps/src/extensions.py``.
 
 Importing this module registers the binding by reading a site sweep through
-`striqt.sensor.read_yaml_spec`. That is the path of the ``sensor-sweep`` CLI for an
-out-of-tree extension module.
+`striqt.sensor.read_yaml_spec`.
 """
 
 from __future__ import annotations

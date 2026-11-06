@@ -64,8 +64,8 @@ class TestIqWaveform:
         np.testing.assert_array_equal(indices.values, np.arange(start, stop))
 
     def test_reversed_window_is_empty(self):
-        """a window that ends before it starts yields an empty result rather than an
-        error. The empty result is current behavior, not a contract."""
+        """a window that ends before it starts yields an empty result with a 0-size
+        index coordinate."""
         iq = self.waveform()
         da = sa.measurements.iq_waveform(
             iq, capture(), start_time_sec=6e-5, stop_time_sec=2e-5

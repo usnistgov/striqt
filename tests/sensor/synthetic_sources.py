@@ -114,7 +114,7 @@ NO_SINK = ss.specs.ZarrSink(path=None)
 
 def preset_capture(binding: str, **kws):
     """return the capture spec of `binding` built from `RESAMPLE_FILTER` updated with
-    `kws`"""
+    `kws`."""
     return BINDINGS[binding].schema.capture(**{**RESAMPLE_FILTER, **kws})
 
 
@@ -128,7 +128,7 @@ def preset_sweep(
     **replace,
 ):
     """return a sweep spec bound to `binding` with `NO_SINK` unless `replace` gives
-    `sink`"""
+    `sink`."""
     cls = BINDINGS[binding].sensor.sweep_spec_cls
     replace.setdefault('sink', NO_SINK)
     return cls(
@@ -142,11 +142,7 @@ def preset_sweep(
 
 def tone_capture(preset: dict, **kws) -> ss.specs.SingleToneCapture:
     """return a `single_tone` capture from `preset` at a 1 MHz offset with no added
-    noise, with `kws` overriding both.
-
-    A result attributed to the wrong capture disagrees with the generator oracle of
-    that capture.
-    """
+    noise, with `kws` overriding both."""
     fields = {**preset, 'frequency_offset': 1e6, 'snr': None, **kws}
     return preset_capture('single_tone', **fields)
 
@@ -174,7 +170,7 @@ def fs_sdr(capture, source=SOURCE) -> float:
 
 def spectrogram_frames(capture, spec) -> tuple[int, float]:
     """return the frame count and hop period (s) of the spectrogram of `capture` under
-    `spec`"""
+    `spec`."""
     nfft = round(capture.sample_rate / spec.frequency_resolution)
     hop = nfft - round(Fraction(spec.fractional_overlap) * nfft)
     count = round(capture.duration * capture.sample_rate)
@@ -183,7 +179,7 @@ def spectrogram_frames(capture, spec) -> tuple[int, float]:
 
 def source_count(capture, source=SOURCE) -> int:
     """return the source-rate sample count of `capture.duration`, from the exact
-    rational resampler ratio with a half sample rounded up"""
+    rational resampler ratio with a half sample rounded up."""
     design = ss.lib.compute.design_resampler(capture, source.master_clock_rate)
     samples_out = round(capture.duration * capture.sample_rate)
     exact = Fraction(samples_out * design['nfft'], design['nfft_out'])
@@ -208,8 +204,8 @@ def expected_raw(
         source: the function source spec
         overlaps: the (lead, tail) overlap sample counts at `fs_sdr`; `None` selects
             the correction overlaps of `capture` under `source`
-        burst_index: the burst segment; the generator starts
-            ``burst_index * source_count`` samples after segment 0
+        burst_index: the burst segment, starting ``burst_index * source_count``
+            samples after segment 0
         xp: the array namespace of the result
 
     Returns:
@@ -246,8 +242,9 @@ class Stages(NamedTuple):
     raw: ss.specs.AcquiredIQ
     """``[lead overlap | round(duration*fs_sdr) | tail overlap]`` at `fs_sdr`"""
     corrected: ss.specs.AcquiredIQ
-    """`raw` with the trigger and `overwrite_x` attached; `unfiltered`, `filtered`,
-    and `aligned` select the conditioned waveforms at `capture.sample_rate`"""
+    """`raw` with the trigger and `overwrite_x` attached, from which `unfiltered`,
+    `filtered`, and `aligned` select the conditioned waveforms at
+    `capture.sample_rate`"""
     overlaps: tuple[int, int]
     """lead and tail overlap sample counts at `fs_sdr`"""
     resampler: dict
@@ -293,7 +290,7 @@ def acquire_corrected(
 
 def unfiltered(iq: sa.AcquiredIQ) -> sw.typing.Array:
     """return the resampled waveform before the analysis filter, trigger-shifted when
-    a trigger is set"""
+    a trigger is set."""
     return iq.preprocess(prefer_filtered=False, prefer_aligned=True)
 
 
@@ -329,8 +326,7 @@ def expected_corrected(binding: str, capture, *, count=None, xp=np):
     """return the corrected waveform of `capture` under the uniform time origin: the
     generator at `capture.sample_rate` from index 0.
 
-    The return is None for the noise binding. The source draws noise at `fs_sdr`, and
-    only the noise power survives resampling.
+    The return is None for the noise binding.
     """
     if binding == 'noise':
         return None
@@ -418,8 +414,8 @@ def cupy_sweep(captures, *, analysis=IQ_ONLY, loops=(), **kws):
 
 
 def mixed_rate_sweep(path=None, **sink_kws):
-    """return a sweep of 2 single-tone captures at 2 sample rates and bandwidths, so
-    that the PSD frequency grids and the IQ time axes differ between the captures.
+    """return a sweep of 2 single-tone captures at 2 sample rates and bandwidths. The
+    PSD frequency grids and the IQ time axes differ between the captures.
 
     With `path`, the sink is a `ZarrSink` at `path` with `sink_kws`; otherwise the
     preset sink.

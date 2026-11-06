@@ -1,5 +1,5 @@
 """striqt.analysis.lib.stores: metadata staging over directory and zip stores on the
-installed zarr version"""
+installed zarr version."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def open_inner(path, kind: str, mode: str):
 
 
 def listed_keys(store) -> list[str]:
-    """every key the store lists, duplicates included"""
+    """return every key the store lists, duplicates included"""
     if ZARR_3:
         from zarr.core.sync import collect_aiterator
 
@@ -68,7 +68,8 @@ def children(store, prefix: str) -> list[str]:
 
 
 def write_group(store):
-    """a group with attrs and one 4x4 float32 array in 2x2 chunks, fully written"""
+    """write a group with attrs and one fully written 4x4 float32 array in 2x2 chunks
+    to `store` and return the array."""
     group = zarr.open_group(store, mode='w')
     group.attrs['a'] = 1
     if ZARR_3:

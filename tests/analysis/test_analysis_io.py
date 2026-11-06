@@ -1,5 +1,5 @@
 """striqt.analysis.lib.io: YAML decoding with `!include`, zarr store access and
-allocation, and the attr repair of stores written with bandwidth-suffixed units"""
+allocation, and the attr repair of stores written with bandwidth-suffixed units."""
 
 from __future__ import annotations
 
@@ -25,8 +25,8 @@ METADATA_BASENAMES = {'.zarray', '.zattrs', '.zgroup', '.zmetadata', 'zarr.json'
 
 
 def test_glob_include_merges_in_sorted_filename_order(write_yaml):
-    """the files are written out of name order. A key set by 2 files takes the value
-    from the file with the later name."""
+    """a key set by 2 files of a glob include takes the value from the file with the
+    later name, whatever the order in which the files were written."""
     write_yaml('sites/c.yaml', 'z: 3\n')
     write_yaml('sites/a.yaml', 'x: 1\ny: 1\n')
     write_yaml('sites/b.yaml', 'y: 2\nz: 2\n')
@@ -54,8 +54,8 @@ def test_list_include_merges_dicts_with_later_files_winning(
 def test_include_resolves_against_the_including_file_under_a_relative_spec_path(
     write_yaml, tmp_path, monkeypatch
 ):
-    """a spec given by a path relative to the working directory includes a file in a
-    subdirectory, and that file includes a file in a deeper subdirectory"""
+    """an `!include` path resolves against the including file when the spec path is
+    relative to the working directory, at both levels of a nested include."""
     write_yaml('spec.yaml', 'plot: !include fragments/plot.yaml\n')
     write_yaml('fragments/plot.yaml', 'style: !include deeper/style.yaml\n')
     write_yaml('fragments/deeper/style.yaml', 'name: dark\n')
@@ -267,14 +267,17 @@ def legacy_store_dataset():
     return ds
 
 
-# the attrs of each variable of `legacy_store_dataset` after the repair: `units` of the
-# form ``'<unit>/<bandwidth>'`` loses the bandwidth; a ``' (<unit>/<bandwidth>)'``
-# suffix is cut from `long_name` and `standard_name`; a bin coordinate without a
-# `noise_bandwidth` takes the one of the histogram on its dimension; a ratio
-# coordinate and histogram carry none; a correlator `noise_bandwidth` equal to the
-# sample rate becomes the subcarrier spacing; the channel power and IQ outputs lose
-# the store-wide `noise_bandwidth` and bandwidth-suffixed `long_name` because that
-# bandwidth is set per capture; a density unit is kept
+# the attrs of each variable of `legacy_store_dataset` after the repair:
+# - `units` of the form ``'<unit>/<bandwidth>'`` loses the bandwidth
+# - a ``' (<unit>/<bandwidth>)'`` suffix is cut from `long_name` and `standard_name`
+# - a bin coordinate without a `noise_bandwidth` takes the one of the histogram on its
+#   dimension
+# - a ratio coordinate and histogram have no `noise_bandwidth`
+# - a correlator `noise_bandwidth` equal to the sample rate becomes the subcarrier
+#   spacing
+# - the channel power and IQ outputs lose the store-wide `noise_bandwidth` and the
+#   bandwidth-suffixed `long_name`, because that bandwidth is set per capture
+# - a density unit is kept
 REPAIRED_ATTRS = {
     'spectrogram': {
         'standard_name': 'PSD',
@@ -357,7 +360,7 @@ def test_repair_legacy_attrs_is_idempotent(repaired_legacy_dataset):
 def test_repair_legacy_attrs_keeps_the_full_scale_and_arbitrary_families():
     """units of the FS and a.u. families match no repair condition: no bandwidth
     suffix, no ``'√mW'`` correlator, and a bin coordinate that already names its
-    `noise_bandwidth`"""
+    `noise_bandwidth`."""
     bins = np.array([-np.inf, -100.0, -99.0, np.inf])
     ds = xr.Dataset(
         {
@@ -496,9 +499,12 @@ TIMES = np.array(['2026-10-30T12:00:00.000000001', '2026-10-30T12:00:01'], 'M8[n
 
 
 def zero_row_template() -> xr.Dataset:
-    """2 registered measurements on a fixed coordinate `x` and a datetime capture
-    coordinate, with 0 rows along `capture`. `channel_power_time_series` is registered
-    with `store_compressed=True` and `iq_waveform` with `store_compressed=False`."""
+    """return a dataset of 2 registered measurements on a fixed coordinate `x` and a
+    datetime `start_time` coordinate, with 0 rows along `capture`.
+
+    `channel_power_time_series` is registered with `store_compressed=True` and
+    `iq_waveform` with `store_compressed=False`.
+    """
     return xr.Dataset(
         {
             'channel_power_time_series': (
@@ -515,8 +521,8 @@ def zero_row_template() -> xr.Dataset:
 
 
 def allocate_template(path, **kws):
-    """allocate `zero_row_template` at `path` through a metadata-staging store, as
-    the zarr sink does, and return the store with the allocated arrays."""
+    """allocate `zero_row_template` at `path` through a metadata-staging store and
+    return the store with the allocated arrays."""
     store = stores.staged_metadata_store(sa.lib.io.open_store(path, mode='w'))
     arrays = sa.lib.io.allocate_store(
         store,

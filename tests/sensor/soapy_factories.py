@@ -34,7 +34,7 @@ _CLASS_ATTRS = (
 
 def soapy_capture(**kws) -> ss.specs.SoapyCapture:
     """return a `SoapyCapture` at the master clock rate of the fake device, with `kws`
-    overriding the defaults"""
+    overriding the defaults."""
     return ss.specs.SoapyCapture(**{**CAPTURE_DEFAULTS, **kws})
 
 
@@ -67,5 +67,5 @@ def source_spec(**overrides) -> ss.specs.SoapySource:
 
 def call_names(device, *names) -> list[str]:
     """return the names of the recorded calls of the fake `device` that match `names`,
-    in call order"""
+    in call order."""
     return [c[0] for c in device.calls_named(*names)]

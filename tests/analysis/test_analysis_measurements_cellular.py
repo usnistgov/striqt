@@ -1,12 +1,10 @@
 """striqt.analysis.measurements.cellular: the 5G NR synchronization, cyclic prefix, and
 resource grid measurements.
 
-`tests/waveform/test_waveform_comms_sync_5gnr.py` and
-`tests/waveform/test_waveform_comms_cp.py` prove the correlators and the cyclic prefix
-kernel numerically. These tests cover the (capture, spec) validation the measurement
-layer adds, and the coordinates and levels of the spectrogram products. Two frames at
-3.84 MS/s is the smallest capture in which a 30 kHz cell search (case C, 3GPP TS 38.213
-Section 4.1) and a 2-frame `frame_range` both fit.
+The tests cover the (capture, spec) validation the measurement layer adds, and the
+coordinates and levels of the spectrogram products. Two frames at 3.84 MS/s is the
+smallest capture in which a 30 kHz cell search (case C, 3GPP TS 38.213 Section 4.1)
+and a 2-frame `frame_range` both fit.
 """
 
 from __future__ import annotations
@@ -53,8 +51,8 @@ def capture(
 
 
 def measure(spec, cap: sa.specs.Capture):
-    """run the measurement registered for `spec` on unit-power white noise over `cap`,
-    with ``as_xarray=False``."""
+    """return the result of the measurement registered for `spec` on unit-power white
+    noise over `cap`, with ``as_xarray=False``."""
     info = sa.registry[type(spec)]
     iq = testing.circular_awgn(cap.duration, cap.sample_rate, power=1.0)
     return info.func(iq, cap, as_xarray=False, **spec.to_dict())
@@ -62,8 +60,8 @@ def measure(spec, cap: sa.specs.Capture):
 
 # %% the 5G NR SSB correlators and synchronizers
 
-# the PSS and SSS correlators and synchronizers share one validator, so the PSS
-# correlator carries every case
+# the PSS and SSS correlators and synchronizers share one validator, so every case
+# runs on the PSS correlator only
 SSB_REJECTED = {
     'odd_sample_count': (
         capture(2 * CELL_FRAME + 1),
@@ -158,7 +156,8 @@ AUTOCORRELATION_REJECTED = {
 def test_autocorrelation_index_out_of_the_capture_is_rejected(case):
     """`Phy3GPP.index_cyclic_prefix` bounds the symbol axis but not the frame axis.
     The correlation kernel reads frame indices past the capture as zeros. An
-    all-uplink frame leaves the downlink correlation with no indices."""
+    all-uplink frame leaves the downlink correlation with no indices. The validator
+    rejects each case at the measurement path and names the field."""
     kwargs, message = AUTOCORRELATION_REJECTED[case]
     spec = sa.specs.CellularCyclicAutocorrelator(subcarrier_spacings=SCS, **kwargs)
 
@@ -171,7 +170,7 @@ def test_autocorrelation_index_out_of_the_capture_is_rejected(case):
 def test_autocorrelation_guards_a_waveform_shorter_than_its_capture():
     """the wrapper validates the capture, not the array, so a direct call of the body
     with fewer samples than the capture declares raises before the kernel reads past
-    the end"""
+    the end."""
     body = sa.measurements.cellular_cyclic_autocorrelation.__wrapped__
     spec = sa.specs.CellularCyclicAutocorrelator(
         subcarrier_spacings=SCS, frame_range=(0, 2)
@@ -194,7 +193,7 @@ def test_window_fractions_hop_one_symbol_per_window(cyclic_prefix, symbols_per_s
     """one slot spans 15 subcarrier periods (3GPP TS 38.211 §5.3.1: 30720 kappa 2^-mu
     at 2048 kappa 2^-mu per period) and one window at half the subcarrier spacing
     spans 2, so one symbol with its prefix fills 15/(2 * symbols) of the window and
-    the overlap is the rest"""
+    the overlap is the rest."""
     fill = Fraction(15, 2 * symbols_per_slot)
 
     overlap, window_fill = cellular.cellular_stft_window_fractions(cyclic_prefix)
@@ -321,7 +320,7 @@ class TestCellular5GSSBSpectrogram:
     )
     def test_incompatible_burst_layout_is_rejected(self, duration, kwargs, message):
         """the frequency cut and the per-block reshape at the end of the measurement
-        fail on these layouts. The validator rejects each layout first and names the
+        raise on these layouts. The validator rejects each layout first and names the
         field."""
         with pytest.raises(msgspec.ValidationError, match=re.escape(message)) as ex:
             ssb_of(duration, **kwargs)
@@ -385,8 +384,8 @@ def test_ssb_spectrogram_white_noise_reads_one_subcarrier():
 # the cellular resource grid requires sample_rate/(subcarrier_spacing/2) divisible by
 # 28, because the spectrogram overlaps 13/28 of the window and fills 15/28 of the
 # window. At 15 kHz subcarriers, 210 kHz gives the smallest such FFT (28 bins, hopping
-# 1 symbol of 15 samples). 2 ms covers 2 of the 10 slots in a frame, and the slot mask
-# needs no more.
+# 1 symbol of 15 samples). 2 ms covers 2 of the 10 slots in a frame, enough to
+# exercise the slot mask.
 RESOURCE_GRID_FS = 210e3
 RESOURCE_GRID_DURATION = 2e-3
 RESOURCE_GRID_SCS = 15e3
@@ -439,8 +438,8 @@ def test_apply_mask_nulls_the_guard_band_and_keeps_downlink_symbols():
 
 
 def test_cellular_resource_power_histogram_leaves_the_cached_spectrogram_intact():
-    """a `spectrogram` measurement with the sizing's spectrogram spec reads the same
-    cache entry after the histogram, so that entry must stay free of guard-band NaN"""
+    """a `spectrogram` measurement with the spectrogram spec of the sizing reads the
+    same cache entry after the histogram, so that entry stays free of guard-band NaN."""
     x = sa.testing.tone(RESOURCE_GRID_DURATION, RESOURCE_GRID_FS)
     spec = sa.specs.CellularResourcePowerHistogram(
         frame_slots='dddddddddd',
@@ -574,9 +573,8 @@ def test_cellular_resource_power_histogram_guard_bandwidths(guard_bandwidths):
 def test_cellular_resource_power_histogram_rejects_undersized_grids(
     capture, kwargs, message
 ):
-    """`truncate_freqs` and both `binned_mean` calls fail on these grids with
-    array-shape errors. The validator rejects each grid first, at the measurement
-    path."""
+    """`truncate_freqs` and both `binned_mean` calls raise array-shape errors on these
+    grids. The validator rejects each grid first, at the measurement path."""
     iq = sa.testing.tone(capture.duration, RESOURCE_GRID_FS)
     with pytest.raises(msgspec.ValidationError, match=message) as ex:
         sa.measurements.cellular_resource_power_histogram(
