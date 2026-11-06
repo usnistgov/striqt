@@ -45,8 +45,8 @@ class TestStft:
 
     @pytest.mark.parametrize('noverlap', [0, 32])
     def test_transposed_input_gives_a_c_contiguous_result(self, noverlap):
-        """the layout of a Fortran-ordered record does not reach the result, whose
-        frequency axis the consumers read as contiguous"""
+        """the result of a Fortran-ordered input is C-contiguous and equals the result
+        of the C-ordered input"""
         x = gaussian_iq(2 * 512, dtype=np.complex64, seed=1).reshape(2, 512)
         kws = {'fs': 1e6, 'window': 'hamming', 'nperseg': 64, 'noverlap': noverlap}
 
@@ -59,9 +59,8 @@ class TestStft:
     @settings(max_examples=50)
     @given(x=noise_waveforms(min_size=256, max_size=512), params=stft_parameters())
     def test_output_shape(self, x, params):
-        """the window count follows the segment step, the bin count is nperseg, the
-        dtype is that of the input, and the frequency axis is fftfreq(nperseg, fs).
-        ``min_size=256`` guarantees ``len(x) >= max(nperseg)``."""
+        """the window count follows the segment step, the bin count is `nperseg`, the
+        dtype is that of the input, and the frequency axis is ``fftfreq(nperseg, fs)``"""
         freqs, times, X = stft(x, truncate=True, **params)
 
         step = params['nperseg'] - params['noverlap']
@@ -369,9 +368,7 @@ class TestNumpyCupyCrossComparison:
     """tolerances come from `cross_backend_sigma`, parameterized by the FFT sizes and
     elementwise operations each function performs.
 
-    Elementwise checks use an absolute tolerance anchored on the output rms. The
-    outputs are noise-like, and a relative tolerance is meaningless in the smallest
-    bins.
+    Elementwise checks use an absolute tolerance anchored on the output rms.
     """
 
     NFFT = 64

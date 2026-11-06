@@ -131,8 +131,7 @@ def fft_bin_cases(draw):
 class TestBinnedMean:
     def test_strided_axis_reduction_needs_the_in_order_bound(self):
         """numpy sums a strided axis in order, so the error of a bin that straddles 2
-        levels exceeds the contiguous-axis model and stays inside `accum_rtol`. The
-        tolerance functions select the bound by the axis a measurement reduces."""
+        levels exceeds the contiguous-axis model and stays inside `accum_rtol`."""
         n = 1_000_000
         x = np.full((2, n, 8), 3e-4, dtype=np.float32)
         x[:, : n // 2] = 1.0
@@ -505,8 +504,8 @@ class TestCupyHelpers:
         assert_array_equal(device.get(), host)
 
     def test_pinned_copy_of_a_column_slice_copies_each_row(self, cupy_available):
-        """the receive buffer is sliced to the samples read before the device copy,
-        which leaves the rows contiguous but not the array"""
+        """a column slice of a pinned 2-D buffer, with contiguous rows but a
+        non-contiguous array, is copied to the device with its shape and values"""
         import cupyx
 
         cp = cupy_available

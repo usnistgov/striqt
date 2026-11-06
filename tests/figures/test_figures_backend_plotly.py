@@ -84,8 +84,9 @@ def test_fill_between_appends_a_lower_then_upper_trace_per_hue_per_facet() -> No
 
 
 def test_fill_between_on_target_appends_traces_in_the_line_colors() -> None:
-    """bands drawn onto the figure of `line` extend its traces, add no pending
-    figure, and the band of hue index `i` has the RGB of the `i`th line"""
+    """`fill_between` with the figure of `line` as `target` extends the traces of
+    that figure and leaves one pending figure, and the band of hue index `i` has the
+    RGB of the `i`th line."""
     low, mean, high = cyclic_statistics()
     plotter = capture_backend()
 
@@ -128,7 +129,8 @@ def test_limit_facets_sets_a_range_per_facet_from_the_capture_values() -> None:
 
 def test_mark_noise_level_edits_only_the_given_figure_by_facet_value() -> None:
     """the shapes of the given figure are at the system noise of the capture of
-    each facet, in the facet order of that figure; another figure is unchanged"""
+    each facet, in the facet order of that figure. Another figure of the same
+    backend is unchanged."""
     plotter = capture_backend()
     _, mean_all, _ = cyclic_statistics()
     other = plotter.line(mean_all, x=X, hue=HUE)
@@ -201,7 +203,8 @@ def test_line_rejects_a_yscale_other_than_linear_or_log() -> None:
 
 @pytest.mark.parametrize('method', ['line', 'fill_between'])
 def test_target_with_other_facets_raises(method: str) -> None:
-    """a figure of 3 captures rejects data with 2 captures"""
+    """`line` and `fill_between` raise `ValueError` for data with 2 captures on a
+    `target` figure of 3 captures."""
     low, mean, high = cyclic_statistics()
     plotter = capture_backend()
     fig = plotter.line(mean, x=X, hue=HUE)

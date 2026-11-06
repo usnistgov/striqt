@@ -40,8 +40,8 @@ def test_system_noise_in_the_noise_bandwidth_attr(
     """the level is the system noise in the `noise_bandwidth` of the variable.
 
     A bin coordinate without the attr and with ``dBm/<bandwidth>`` units resolves to
-    the `noise_bandwidth` of the histogram variable on the same dimension. The attrs
-    carry the units and the bandwidth as facts.
+    the `noise_bandwidth` of the histogram variable on the same dimension. The
+    returned attrs are `units` and `noise_bandwidth`, without a `long_name`.
     """
     ds = make_dataset(attr_missing=attr_missing)
 
@@ -119,8 +119,9 @@ def test_noise_bandwidth_of_a_full_scale_variable(
 def test_full_scale_units_are_rejected_against_the_dBm_system_noise(
     func: Callable, var_name: str, rewritten: str | None
 ) -> None:
-    """the system noise is in dBm, so a variable or bin coordinate in dBFS has no
-    predicted level. `rewritten` names the bin coordinate of a histogram variable."""
+    """a variable or bin coordinate in dBFS has no predicted level against the dBm
+    system noise, and `ValueError` is raised. `rewritten` names the bin coordinate of
+    a histogram variable."""
     ds = in_full_scale(make_dataset(), rewritten or var_name)
 
     with pytest.raises(ValueError, match='dBFS'):

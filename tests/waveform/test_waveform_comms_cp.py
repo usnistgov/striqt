@@ -43,10 +43,9 @@ def corr_reference(inds, x, nfft, ncp, norm):
 def corr_cases(min_inds=1, max_inds=8, dtype=None, ncp_from_inds=False):
     """draw (inds, x, nfft, ncp, norm) arguments with arbitrary index sets.
 
-    The waveform length is drawn so that some examples run index pairs past the end of
-    `x`. The indices are in arbitrary order, so an out-of-range pair may precede a
-    valid one. With `ncp_from_inds`, `ncp` is the index count, as
-    `cp.correlate_cyclic_shift` infers from the last axis of `inds`.
+    The waveform length ranges from one at which only the smallest index keeps every
+    pair inside `x` to one at which every index does. The indices are in arbitrary
+    order. With `ncp_from_inds`, `ncp` is the index count.
     """
 
     @st.composite
@@ -77,7 +76,7 @@ def runs_cases():
 
     `inds` has shape ``(n_symbols, ncp)``, with each row the ``ncp`` consecutive
     samples from a symbol start. The starts are sorted and at least ``nfft + ncp``
-    apart. The waveform length is drawn as in `corr_cases`: some examples run the
+    apart. The waveform length is drawn as in `corr_cases`, and some examples run the
     pairs of the last symbols past the end of `x`.
     """
 
@@ -103,7 +102,7 @@ def runs_cases():
 
 def out_of_range_before_valid(norm):
     """return a `corr_cases` tuple in which the first index runs past the end of `x`
-    at every lag and the second index stays inside `x` at every lag"""
+    at every lag and the second index stays inside `x` at every lag."""
     nfft, ncp = 32, 2
     x = gaussian_iq(3 * nfft, seed=0)
     inds = np.array([2 * nfft, 0], dtype=np.int64)
@@ -149,8 +148,8 @@ class TestCorrelateCyclicShiftDispatcher:
 
 
 class TestCorrelateCyclicShift:
-    """cyclic prefix correlation on a synthetic OFDM waveform, indexed as the
-    cellular cyclic autocorrelation measurement does"""
+    """cyclic prefix correlation on a synthetic OFDM waveform at the 3GPP cyclic
+    prefix indexes"""
 
     def test_normalized_correlation_peaks_at_zero_lag(self):
         phy, x, inds = cp_case()

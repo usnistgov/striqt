@@ -45,12 +45,8 @@ class _Shelf(UserDict):
 
 @pytest.fixture
 def shelf(monkeypatch, tmp_path):
-    """install a fresh shelf with files under `tmp_path`, never the real cache.
-
-    `_discard_cache_shelf` unlinks the file that `_cache_shelf_path` names, so without
-    this redirection a test that reaches `_discard_cache_shelf` would delete the cache
-    of the developer.
-    """
+    """install a fresh `_Shelf` with its file path under `tmp_path` and return the
+    shelf."""
     fake = _Shelf()
     monkeypatch.setattr(util, '_cache_shelf_path', lambda: str(tmp_path / 'calls.db'))
     monkeypatch.setattr(util, '_cache_shelf_disabled', False)
@@ -163,9 +159,8 @@ def test_a_failing_open_falls_back_to_computing(monkeypatch, shelf):
 
 
 def test_the_wrapped_functions_own_error_propagates_unchanged(shelf):
-    """`get_window` raises a bare `ValueError` for a bad window name, and callers
-    label that error a specification error. A cache fault must not arrive as a
-    `ValueError`, and a `ValueError` must not arrive as a cache fault."""
+    """a `ValueError` raised by the wrapped function propagates unchanged, and the
+    shelf stays enabled and empty"""
 
     @util.persistent_cache()
     def get_window(name):
@@ -184,7 +179,8 @@ def test_the_wrapped_functions_own_error_propagates_unchanged(shelf):
 def test_lazy_import_binds_a_submodule_onto_its_imported_parent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`import json.tool` leaves `json.tool` resolvable, so `lazy_import` must too"""
+    """`lazy_import` of a submodule binds the submodule onto the imported parent, as
+    ``import json.tool`` does"""
     monkeypatch.delitem(sys.modules, 'json.tool', raising=False)
     monkeypatch.delattr(json, 'tool', raising=False)
 
@@ -197,9 +193,9 @@ def test_lazy_import_binds_a_submodule_onto_its_imported_parent(
 def test_lazy_import_of_dask_array_leaves_the_dask_attribute_resolvable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """array_api_compat 1.11 tests ``isinstance(x, dask.array.Array)`` after a bare
-    ``import dask.array``. That import returns the lazy entry without binding the
-    `array` attribute."""
+    """after `lazy_import` of ``dask.array``, a bare ``import dask.array`` returns the
+    lazy entry and the `array` attribute of `dask` is bound to the entry.
+    array_api_compat 1.11 reads ``dask.array.Array`` after such an import."""
     dask = pytest.importorskip('dask')
     monkeypatch.delitem(sys.modules, 'dask.array', raising=False)
     monkeypatch.delattr(dask, 'array', raising=False)

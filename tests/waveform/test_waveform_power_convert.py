@@ -211,7 +211,7 @@ class TestMultiBackend:
     @pytest.mark.parametrize('func', [powtodB, dBtopow, envtodB, envtopow], ids=func_id)
     @for_each_float_dtype
     def test_dtype_is_preserved(self, xp, func, dtype):
-        """with min_dtype='float32', the input precision is kept"""
+        """with ``min_dtype='float32'``, the input precision is kept"""
         x = as_xp(xp, np.array([0.5, 2.0], dtype=dtype))
         assert to_numpy(func(x, min_dtype='float32')).dtype == dtype
 
@@ -299,8 +299,7 @@ class TestAbsAndBoundedBranches:
 
 @pytest.mark.namespaces('dask')
 class TestDaskNamespace:
-    """one deterministic example per conversion on dask, which evaluates the numpy
-    kernels chunk by chunk and adds no arithmetic of its own"""
+    """one deterministic example per conversion on dask"""
 
     @pytest.mark.parametrize(
         'func, x, kws, reference, tol',
@@ -477,8 +476,7 @@ class TestArrayLikeHandling:
 class TestNumpyCupyCrossComparison:
     """the numpy and cupy results of each conversion compared against each other.
 
-    Tolerances come from the ulp budgets in `striqt.waveform.lib.power`, so a
-    difference larger than the rounding bounds of the 2 libraries fails the test.
+    Tolerances come from the ulp budgets in `striqt.waveform.lib.power`.
     """
 
     @pytest.mark.parametrize(

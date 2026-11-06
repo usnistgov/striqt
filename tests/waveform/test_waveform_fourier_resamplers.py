@@ -104,9 +104,8 @@ class TestColaResamplerDesign:
     def test_consistency(self, fs_base, fs_target, window, shift):
         """the rates, FFT sizes, and passband of a design are mutually consistent.
 
-        The grid omits `bw` and the shift spellings False and 'none'. `bw` only sets
-        the passband width. False and 'none' design the same centered passband as
-        None.
+        `bw` sets only the passband width, and the shift spellings False and 'none'
+        design the same centered passband as None, so the grid omits them.
         """
         bw = 10e6
         design = design_cola_resampler(
@@ -247,7 +246,6 @@ class TestResample:
         ids=['domain', 'window'],
     )
     def test_errors(self, kws, match):
-        """the shift and length errors of `resample_edges` are covered there"""
         x = np.ones(256, dtype=np.complex64)
         with pytest.raises(ValueError, match=match):
             resample(x, 128, **kws)
@@ -302,9 +300,8 @@ class TestOaresample:
         scale=st.sampled_from([1.0, 2.0]),
     )
     def test_downsample_tone(self, f0_bins, shift_bins, scale):
-        """as `sensor.lib.compute.corrections._oaresample` calls `oaresample`: 2-D
-        (channel, sample) input on axis=1, a bin-grid frequency shift, and a voltage
-        scale"""
+        """a tone in 2-D (channel, sample) input on ``axis=1`` is moved by a bin-grid
+        frequency shift and scaled by the voltage `scale` at the output rate"""
         up, down = self.NFFT // 2, self.NFFT
         fs_out = self.FS * up / down
         f0 = f0_bins * self.FS / self.NFFT
@@ -321,8 +318,7 @@ class TestOaresample:
             assert abs(tone_frequency(row, fs_out) - (f0 - shift)) <= fs_out / row.size
 
     def test_downsample_tone_with_a_scale_per_channel(self):
-        """a 1-D `scale` applies one gain per channel, as `resample` does with the
-        per-port `voltage_scale` of a calibrated acquisition"""
+        """a 1-D `scale` applies one gain per channel"""
         up, down = self.NFFT // 2, self.NFFT
         x = tiled_tone(self.FS, self.FS / self.NFFT * 4, self.COUNT, 2)
         scale = np.array([1.0, 2.0])
@@ -337,8 +333,8 @@ class TestOaresample:
         'window, down', [('hann', 256), ('blackman', 252)], ids=['hann', 'blackman']
     )
     def test_filter_bandwidth(self, window, down):
-        """a tone inside the passband keeps its level; a tone past the transition band
-        (``bw/2 + transition/2``) is rejected below the block-size floor"""
+        """a tone inside the passband keeps its level, and a tone past the transition
+        band at ``bw/2 + transition/2`` is rejected below the block-size floor"""
         up = down // 2
         kws = {**FILTER_KWS, 'window': window}
         # the STFT needs a whole number of hops, and `down` is a multiple of the hop
@@ -367,9 +363,8 @@ class TestOaresample:
 
     @pytest.mark.namespaces('numpy', 'cupy')
     def test_out_is_x_under_overwrite_x(self, xp):
-        """with an overlapping window the STFT leaves `x` free, so the filtered
-        downsample is written into the buffer of `x` and equals the output into a
-        fresh array"""
+        """with ``out=x`` under `overwrite_x`, the filtered downsample is written into
+        the buffer of `x` and equals the output into a fresh array"""
         up, down = self.NFFT // 2, self.NFFT
         x = xp.asarray(tiled_tone(self.FS, 0.05e6, self.COUNT, 2))
         expected = oaresample(x.copy(), up, down, self.FS, **FILTER_KWS)
@@ -381,7 +376,7 @@ class TestOaresample:
         xp.testing.assert_array_equal(y, expected)
 
     def test_out_sharing_x_requires_overwrite_x(self):
-        """without `overwrite_x` the input is kept, so it may not receive the output"""
+        """``out=x`` without `overwrite_x` raises `ValueError`"""
         up, down = self.NFFT // 2, self.NFFT
         x = tiled_tone(self.FS, 0.05e6, self.COUNT, 2)
         with pytest.raises(ValueError, match='overwrite_x'):
@@ -433,8 +428,8 @@ def reorder_case(
     per_port_gain: bool = False,
 ):
     """return ``(y, bounds_in, bounds_out, gain)`` for a reorder of `nfft` bins to
-    `nfft_out` with the bounds that `oaresample` derives, and a gain distinct per bin
-    (and per port when `per_port_gain`)."""
+    `nfft_out` with the bounds that `oaresample` derives, and a gain distinct per bin,
+    and per port when `per_port_gain`."""
     y = xp.asarray(gaussian_iq((ports, segments, nfft)))
     if nfft_out <= nfft:
         bounds_out, bounds_in, _ = _find_downsample_copy_range(nfft, nfft_out, *edges)
@@ -494,8 +489,7 @@ class TestCopyBinsToFftfreqOrder:
     ):
         """the in-place reorder writes the same values as the out-of-place one into
         the head of the buffer of `y`. Small blocks force both the scratch and the
-        direct regime and a partial final block. numpy buffers overlapping ufunc
-        operands on its own, so the cupy rows are the ones an ordering error fails."""
+        direct regime and a partial final block."""
         case = reorder_case(
             xp, nfft, nfft_out, segments=segments, per_port_gain=per_port_gain
         )
@@ -515,8 +509,8 @@ class TestCopyBinsToFftfreqOrder:
         ['upsampling', 'non_contiguous', 'bin_axis_not_last', 'overwrite_x_false'],
     )
     def test_falls_back_to_a_copy_when_unsafe(self, xp, reason):
-        """an output wider than the input, a strided `y`, or bins off the last axis
-        take the out-of-place path"""
+        """an output wider than the input, a strided `y`, bins off the last axis, or
+        ``overwrite_x=False`` take the out-of-place path"""
         overwrite_x = reason != 'overwrite_x_false'
         if reason == 'upsampling':
             case = reorder_case(xp, 64, 86)

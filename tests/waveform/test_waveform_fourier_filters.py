@@ -235,8 +235,8 @@ class TestOafilter:
     def test_rejects_out_of_band_tone(self):
         y = self._oafilter(self._tone(0.4e6))
         yi = interior(y, self.NFFT)
-        # the residual is the hann sidelobe leakage, which falls 18 dB per octave;
-        # 50 bins past the passband edge it is near the float32 roundoff floor
+        # the residual is the hann sidelobe leakage, which falls 18 dB per octave.
+        # 50 bins past the passband edge the leakage is near the float32 roundoff floor
         assert level_error_dB(rms(yi)) < -90
         assert level_error_dB(yi).max() < -80
 

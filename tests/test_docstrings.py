@@ -1,7 +1,7 @@
-"""the docstring gate: no personal pronouns or "whose", and no `.lib` paths in public
-docstrings; and the structure of the generated measurement docstrings.
+"""the docstring gate: no personal pronoun or "whose", no `.lib` path in a public
+docstring, and the structure of the generated measurement docstrings.
 
-The AST scan imports nothing from `striqt`; the registry cell imports
+The AST scan imports nothing from `striqt`. The registry tests import
 `striqt.analysis` inside each test.
 """
 
@@ -88,9 +88,10 @@ def test_registered_long_names_are_sentence_case_titles(subtests) -> None:
 
 
 def test_registered_measurement_docstrings_render_the_output_section(subtests) -> None:
-    """every builtin measurement writes the `Output:` section with the placeholders,
-    the registry renders the dtype, every dimension, and every coordinate factory into
-    the section, and the prose above the section names no attr"""
+    """every registered measurement docstring has an `Output:` section with no
+    placeholder left, with the dtype, every dimension, and every coordinate factory
+    rendered into the section, and with no attr named in the prose above the
+    section"""
     import striqt.analysis as sa
     from striqt.analysis.lib import dataarrays
 
@@ -119,9 +120,8 @@ def test_registered_measurement_docstrings_render_the_output_section(subtests) -
 
 
 def test_registered_coordinate_factories_have_a_docstring(subtests) -> None:
-    """the first paragraph of the factory docstring is the description of the
-    coordinate in every measurement docstring that lists the coordinate, so the
-    paragraph is a noun phrase rather than a `Returns` sentence"""
+    """every registered coordinate factory has a docstring, and the first paragraph
+    is a noun phrase, not a `Returns` sentence"""
     import inspect
 
     import striqt.analysis as sa

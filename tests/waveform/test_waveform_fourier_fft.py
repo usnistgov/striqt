@@ -49,8 +49,7 @@ OFF_PEAK_NFFTS = [64, 256, 1024, 4096]
 
 
 def fft_sizes(min_size: int = 4, max_size: int = 512):
-    """draw powers of 2, or arbitrary even sizes in [`min_size`, `max_size`]
-    (`resample` requires an even length)."""
+    """draw powers of 2, or arbitrary even sizes in [`min_size`, `max_size`]."""
     powers = st.integers(min_value=2, max_value=9).map(lambda p: 2**p)
     arbitrary = st.integers(min_value=min_size, max_value=max_size).filter(
         lambda n: n % 2 == 0
@@ -261,11 +260,11 @@ class TestOffPeakFloor:
     """roundoff in the off-peak bins of a unit, bin-centered complex64 tone, on each
     array namespace.
 
-    With an integer number of cycles per segment (and a rectangular window for the
-    STFT) the exact spectrum occupies the on-peak bin alone, so every other bin is
+    With an integer number of cycles per segment, and a rectangular window for the
+    STFT, the exact spectrum occupies the on-peak bin alone, so every other bin is
     roundoff alone, measured against a float64 reference of the same float32-quantized
     input. For the time-domain outputs of `resample` and `oaconvolve` the bins are
-    those of the error spectrum, taken in float64 so the analysis adds no roundoff.
+    those of the float64 error spectrum.
     """
 
     NSEG = 4

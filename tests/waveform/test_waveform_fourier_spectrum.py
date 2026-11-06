@@ -24,8 +24,7 @@ class TestSpectrogram:
     @given(x=noise_waveforms(min_size=256, max_size=512), params=stft_parameters())
     def test_is_the_power_of_the_normalized_stft(self, return_axis_arrays, x, params):
         """``Sxx == |X|**2`` for the STFT with ``norm='power'``, in the real dtype of
-        the input and on the frequency and time axes of the STFT. ``min_size=256``
-        guarantees ``len(x) >= max(nperseg)``."""
+        the input and on the frequency and time axes of the STFT"""
         freqs, times, X = stft(x, truncate=True, norm='power', **params)
         if return_axis_arrays:
             f, t, Sxx = spectrogram(x, truncate=True, **params)
