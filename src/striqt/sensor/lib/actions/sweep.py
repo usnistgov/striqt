@@ -2,7 +2,7 @@
 
 from __future__ import annotations as __
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from typing import Generic
 
 from striqt.analysis.lib.util import xr
@@ -45,10 +45,12 @@ class SweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
         always_yield: bool = False,
         yield_values: bool = True,
         loop: bool = False,
+        captures: Iterable[SC] | None = None,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
         return core.iterate_captures(
             resources,
             always_yield=always_yield,
             yield_values=yield_values,
             loop=loop,
+            captures=captures,
         )

@@ -142,7 +142,7 @@ def test_all_nan_data_is_still_labeled(ax) -> None:
 
     labels.label_axis('y', da, ax=ax, tick_units=False)
 
-    assert ax.get_ylabel() == 'Power spectral density (dBm/360 kHz)'
+    assert ax.get_ylabel() == 'PSD (dBm/360 kHz)'
 
 
 def test_auto_tick_units_follow_the_unit_length(ax) -> None:

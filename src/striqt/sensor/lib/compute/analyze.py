@@ -104,7 +104,11 @@ def analyze(
     """run the analysis of ``options.sweep_spec`` on `iq`.
 
     The analysis is ``options.sweep_spec.analysis`` adjusted by
-    ``iq.capture.adjust_analysis``. Each measurement selects a conditioning of `iq`
+    ``iq.capture.adjust_analysis``. The signal trigger is resolved from that adjusted
+    group. The `select_analysis` of `options`, when set, then receives the capture
+    and the adjusted group and returns the group to evaluate, so a measurement that
+    prefers aligned input aligns whether or not the field of the trigger measurement
+    is in the returned group. Each measurement selects a conditioning of `iq`
     through `preprocess`, and a conditioning stage runs on the first selection that
     needs the stage. The resampling stage consumes `iq.x` in place unless
     ``options.sweep_spec.options.reuse_iq`` is set. cupy arrays in `iq.extra_data`
@@ -118,9 +122,10 @@ def analyze(
         `iq.extra_data` as variables
 
     Raises:
-        TypeError: if `iq.capture` is not a `SensorCapture`
+        TypeError: if `iq.capture` is not a `SensorCapture`, or if `select_analysis`
+            returns an object that is not an instance of the adjusted group type
         ValueError: if ``iq.source_spec.signal_trigger`` names a measurement that
-            the analysis does not enable
+            the adjusted analysis does not enable
     """
 
     if isinstance(iq.capture, specs.SensorCapture):
@@ -134,6 +139,15 @@ def analyze(
 
     trigger = get_trigger_from_spec(iq.source_spec, analysis)
     overwrite_x = not options.sweep_spec.options.reuse_iq
+
+    if options.select_analysis is not None:
+        selected = options.select_analysis(capture, analysis)
+        if not isinstance(selected, type(analysis)):
+            raise TypeError(
+                f'select_analysis returned {type(selected).__name__}, not '
+                f'{type(analysis).__name__}'
+            )
+        analysis = selected
 
     with options.registry.cache_context(capture, options.cache_callback):
         iq = corrections.attach_corrections(

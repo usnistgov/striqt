@@ -12,7 +12,7 @@ from __future__ import annotations as __
 import contextlib
 import itertools
 import threading
-from collections.abc import Generator, Iterable, Mapping
+from collections.abc import Generator, Iterable, Mapping, Sized
 from queue import Empty
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -70,6 +70,7 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
         always_yield: bool = False,
         yield_values: bool = True,
         loop: bool = False,
+        captures: Iterable[SC] | None = None,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
         """run the action over `resources`.
 
@@ -81,12 +82,17 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
                 and False yields nothing
             yield_values: True yields the sink result of every step
             loop: True cycles through the captures from the first after the last
+            captures: the captures to acquire in place of the loop expansion of the
+                sweep, finite or endless; None acquires the expansion
 
         Yields:
             the return value of ``sink.append`` for each delivered acquisition, or
             None at the steps before the first sink write; with `yield_values`
             False, None at every step or nothing as `always_yield` selects. The
-            iteration never ends when `loop` is True.
+            iteration never ends when `loop` is True or `captures` is endless.
+
+        Raises:
+            ValueError: if `captures` is given with `loop` True
         """
         ...
 
@@ -97,6 +103,7 @@ def iterate_sweep(
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
+    captures: Iterable[SC] | None = None,
     **replace: Unpack[AnyResources[SS, SP, SC, SA, PS, PC]],
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
     """run the `iterate` of ``resources['runner']`` over `resources`.
@@ -107,13 +114,19 @@ def iterate_sweep(
             False yields nothing
         yield_values: True yields the sink result of every step
         loop: True cycles through the captures from the first after the last
+        captures: the captures to acquire in place of the loop expansion of the
+            sweep, finite or endless; None acquires the expansion
         **replace: entries that replace those of `resources` for this run
 
     Yields:
         the return value of ``sink.append`` for each delivered acquisition, or None
         at the steps before the first sink write; with `yield_values` False, None at
         every step or nothing as `always_yield` selects. The iteration never ends
-        when `loop` is True.
+        when `loop` is True or `captures` is endless.
+
+    Raises:
+        ValueError: if `captures` is given with `loop` True, or if the runner
+            rejects `captures`
     """
     runner = resources['runner']
     return runner.iterate(
@@ -121,6 +134,7 @@ def iterate_sweep(
         always_yield=always_yield,
         yield_values=yield_values,
         loop=loop,
+        captures=captures,
     )
 
 
@@ -130,6 +144,7 @@ def iterate_captures(
     always_yield: bool = False,
     yield_values: bool = True,
     loop: bool = False,
+    captures: Iterable[SC] | None = None,
     extra_data: Mapping[str, Any] | None = None,
     indexer: AcquisitionIndexer | None = None,
     **replace: Unpack[AnyResources[SS, SP, SC, SA, PS, PC]],
@@ -163,10 +178,14 @@ def iterate_captures(
 
     The captures are the loop expansion of the sweep for the open source. A `Repeat`
     first in `loops` runs the expanded captures `count` times. One `indexer` shared
-    by several calls numbers the captures of all of those calls consecutively.
+    by several calls numbers the captures of all of those calls consecutively. A
+    `captures` iterable is advanced in the acquisition thread between captures.
+    `iterate_captures` joins that thread at exit. An iterable that waits between
+    items must return once the run ends.
 
-    The `on_analyzed` and `on_sink_cached` hooks of ``resources['callbacks']`` run in
-    the calling thread. An exception from a hook ends the pipeline. The `extra_data`
+    The `on_analyzed`, `on_sink_cached`, and `select_analysis` hooks of
+    ``resources['callbacks']`` run in the calling thread. An exception from a hook
+    ends the pipeline. The `extra_data`
     of the dataset given to `on_analyzed` has the source and runner entries; the
     peripheral entries join when a sink resolves `pending_extra_data`.
 
@@ -176,6 +195,8 @@ def iterate_captures(
             False yields nothing
         yield_values: True yields the sink result of every step
         loop: True cycles through the captures from the first after the last
+        captures: the captures to acquire in place of the loop expansion of the
+            sweep, finite or endless; None acquires the expansion
         extra_data: entries merged into the `extra_data` of every acquisition after
             the data of the peripherals; a shared key takes the value from here
         indexer: the counter that stamps `capture_index` and `sweep_index` on each
@@ -185,18 +206,24 @@ def iterate_captures(
     Yields:
         None at steps 0 and 1 and then `Result i` at step ``i + 2``; or None at every
         step; or nothing, as `yield_values` and `always_yield` select. The iteration
-        ends after step N + 1, or never when `loop` is True.
+        ends after step N + 1, or never when `loop` is True or `captures` is
+        endless.
 
     Raises:
+        ValueError: if `captures` is given with `loop` True
         AcquisitionOverrunError: if a burst segment finds the queue full under
             ``source.bursts.on_gap='except'``
     """
+
+    if loop and captures is not None:
+        raise ValueError('captures sets the acquisition order, so loop must be False')
 
     resources = Resources(resources, **replace)
 
     callbacks = resources.get('callbacks')
     on_analyzed = None if callbacks is None else callbacks.on_analyzed
     on_sink_cached = None if callbacks is None else callbacks.on_sink_cached
+    select_analysis = None if callbacks is None else callbacks.select_analysis
 
     if on_sink_cached is None:
         cache_callback = None
@@ -214,6 +241,7 @@ def iterate_captures(
         registry=sa.registry,
         extra_attrs=resources['action_spec'].to_dict(True, allow_tuple_keys=False),
         cache_callback=cache_callback,
+        select_analysis=select_analysis,
         as_xarray='delayed',
         # a measurement launched before the previous result reached the host has
         # produced wrong data on the Tegra X2
@@ -221,23 +249,32 @@ def iterate_captures(
     )
 
     source_id = resources['source'].source_id
-    captures = specs.sequencing.repeat_captures(spec, source_id=source_id)
     if indexer is None:
         # `sweep_index` advances once per pass of a leading Repeat
         plan = specs.sequencing.loop_captures(spec, source_id=source_id)
         indexer = AcquisitionIndexer(len(plan))
 
-    if len(captures) == 0:
-        return
-
     capture_iter: Iterable[SC]
     count: float
-    if loop:
-        capture_iter = itertools.cycle(captures)
-        count = float('inf')
-    else:
+    if captures is not None:
         capture_iter = captures
-        count = specs.sequencing.count_acquisitions(spec, source_id)
+        if isinstance(captures, Sized):
+            capture_iter = tuple(captures)
+            if len(capture_iter) == 0:
+                return
+            count = sum(c.burst for c in capture_iter)
+        else:
+            count = float('inf')
+    else:
+        expanded = specs.sequencing.repeat_captures(spec, source_id=source_id)
+        if len(expanded) == 0:
+            return
+        if loop:
+            capture_iter = itertools.cycle(expanded)
+            count = float('inf')
+        else:
+            capture_iter = expanded
+            count = specs.sequencing.count_acquisitions(spec, source_id)
 
     queue = AcquisitionQueue(spec.source.bursts.buffers)
     stop = threading.Event()

@@ -60,6 +60,7 @@ def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=No
         spec_type,
         dtype='float32',
         standard_name='Toy',
+        long_name='Toy',
         dims=('toy',),
         validate=validate,
         tolerance=tolerance,
@@ -102,7 +103,12 @@ def build_preference_registry(**preferences: bool):
     received = []
 
     @registry.measurement(
-        ToySpec, dtype='complex64', standard_name='Toy', dims=('toy',), **preferences
+        ToySpec,
+        dtype='complex64',
+        standard_name='Toy',
+        long_name='Toy',
+        dims=('toy',),
+        **preferences,
     )
     def toy(x, capture, **kwargs):
         received.append(x)
@@ -259,6 +265,7 @@ def build_group_registry(*validators, tolerances=(None, None)):
         ToySpec,
         dtype='float32',
         standard_name='Toy',
+        long_name='Toy',
         dims=('toy',),
         validate=toy_validate,
         tolerance=toy_tolerance,
@@ -270,6 +277,7 @@ def build_group_registry(*validators, tolerances=(None, None)):
         OtherToySpec,
         dtype='float32',
         standard_name='Other toy',
+        long_name='Other toy',
         dims=('other',),
         validate=other_validate,
         tolerance=other_tolerance,
@@ -957,18 +965,21 @@ def test_group_checks_reject_a_field_that_is_not_optional(check):
 # %% registration keywords
 
 
-def test_registration_requires_a_standard_name():
+@pytest.mark.parametrize('given', ['standard_name', 'long_name'])
+def test_registration_requires_both_names(given):
     registry = register.AnalysisRegistry()
     with pytest.raises(TypeError):
-        registry.measurement(ToySpec, dtype='float32', dims=('toy',))  # ty: ignore[missing-argument]
+        registry.measurement(ToySpec, dtype='float32', dims=('toy',), **{given: 'Toy'})  # ty: ignore[missing-argument]
 
 
-def test_registered_attrs_are_the_standard_name_and_units():
-    """the attrs of a registration are exactly the keywords given; `units` None is
-    absent rather than null"""
+def test_registered_attrs_are_the_names_and_units():
+    """the attrs of a registration are `standard_name`, `long_name`, and `units` when
+    given; `units` None is absent rather than null"""
     registry = register.AnalysisRegistry()
 
-    @registry.measurement(ToySpec, dtype='float32', standard_name='Toy', dims=('toy',))
+    @registry.measurement(
+        ToySpec, dtype='float32', standard_name='Toy', long_name='Toy', dims=('toy',)
+    )
     def toy(iq, capture, **kwargs):
         return np.zeros((1, 2), dtype='float32')
 
@@ -976,19 +987,30 @@ def test_registered_attrs_are_the_standard_name_and_units():
         OtherToySpec,
         dtype='float32',
         standard_name='Other toy',
+        long_name='Other toy',
         units=sa.units.DB_POWER,
         dims=('other',),
     )
     def other_toy(iq, capture, **kwargs):
         return np.zeros((1, 2), dtype='float32')
 
-    assert registry[ToySpec].attrs == {'standard_name': 'Toy'}
+    assert registry[ToySpec].attrs == {'standard_name': 'Toy', 'long_name': 'Toy'}
     assert registry[OtherToySpec].attrs == {
         'standard_name': 'Other toy',
+        'long_name': 'Other toy',
         'units': sa.units.DB_POWER,
     }
     assert registry[ToySpec].name == 'toy'
     assert registry[OtherToySpec].name == 'other_toy'
+
+
+def test_every_registered_long_name_is_a_sentence_case_title():
+    """a title starts with a capital letter or an acronym and contains no underscore"""
+    for info in sa.registry.values():
+        title = info.attrs['long_name']
+        assert '_' not in title, info.name
+        assert title[0].isupper() or title[0].isdigit(), info.name
+        assert title == title.strip(), info.name
 
 
 def test_coordinate_registration_names_itself_and_keeps_its_units():
@@ -1051,6 +1073,7 @@ def test_measurement_docstring_fills_dims_and_coords_in_place():
         ToySpec,
         dtype='float32',
         standard_name='Toy',
+        long_name='Toy',
         units=sa.units.DB_POWER,
         coord_factories=[toy_lag, bare],
     )(toy)
@@ -1092,7 +1115,7 @@ def test_measurement_docstring_with_explicit_dims_and_no_factories():
         '    - Attributes: {attrs}\n'
     )
     wrapped = registry.measurement(
-        ToySpec, dtype='float32', standard_name='Toy', dims=('toy',)
+        ToySpec, dtype='float32', standard_name='Toy', long_name='Toy', dims=('toy',)
     )(toy)
 
     assert '- Dimensions: `port`, `toy`\n' in wrapped.__doc__
@@ -1105,7 +1128,9 @@ def test_measurement_docstring_with_explicit_dims_and_no_factories():
 def test_measurement_without_a_docstring_gets_the_args_section():
     registry = register.AnalysisRegistry()
 
-    @registry.measurement(ToySpec, dtype='float32', standard_name='Toy', dims=('toy',))
+    @registry.measurement(
+        ToySpec, dtype='float32', standard_name='Toy', long_name='Toy', dims=('toy',)
+    )
     def toy(iq, capture, **kwargs):
         return np.zeros((1, 2), dtype='float32')
 

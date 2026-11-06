@@ -28,7 +28,12 @@ from synthetic_sources import run_in_memory
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis.specs.helpers import subset_of
-from striqt.sensor.lib.actions import Cellular5GNRSweepRunner, cellular, registry
+from striqt.sensor.lib.actions import (
+    Cellular5GNRSweepRunner,
+    cellular,
+    core,
+    registry,
+)
 
 H = ss.specs.sequencing
 SCS = 30e3
@@ -580,3 +585,27 @@ def test_in_memory_run_yields_one_dataset_per_capture_at_the_derived_rate():
         assert (ds.sample_rate.item(), ds.analysis_bandwidth.item()) == (26.88e6, 20e6)
         assert ds.channel_power_time_series.sizes['time_elapsed'] == 28
         assert ds.attrs['cell_channels'] == {CELL_LABEL: channel.to_dict()}
+
+
+def test_iterate_forwards_captures_to_the_pipeline(monkeypatch):
+    recorded = []
+
+    def record(resources, **kwargs):
+        recorded.append((resources, kwargs))
+        yield None
+
+    monkeypatch.setattr(core, 'iterate_captures', record)
+    runner = make_cellular_runner()
+    captures = runner.sweep.captures[::-1]
+    res = ss.lib.resources.Resources(action_spec=runner.spec, sweep_spec=runner.sweep)
+
+    items = list(runner.iterate(res, captures=captures))
+
+    assert items == [None]
+    kwargs = {
+        'always_yield': False,
+        'yield_values': True,
+        'loop': False,
+        'captures': captures,
+    }
+    assert recorded == [(res, kwargs)]

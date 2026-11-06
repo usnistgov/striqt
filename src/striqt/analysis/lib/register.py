@@ -372,6 +372,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         *,
         dtype: str,
         standard_name: str,
+        long_name: str,
         units: str | None = None,
         dims: tuple[str, ...] | str | None = None,
         coord_factories: Iterable[CoordFunc] | CoordFunc | None = None,
@@ -411,8 +412,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             spec_type: the `specs.Analysis` subclass with the keyword arguments of
                 the measurement as fields; one measurement per type
             dtype: numpy dtype name of the output array
-            standard_name: the short noun phrase that names the output, stored as the
-                `standard_name` attr
+            standard_name: the short noun phrase that names the output on an axis,
+                stored as the `standard_name` attr
+            long_name: the sentence-case title of the measurement for a plot or a
+                menu, stored as the `long_name` attr
             units: the units of the output values, stored as the `units` attr: a
                 power form (`striqt.waveform.units.DB_POWER`, `POWER`, or
                 `AMPLITUDE`) that the output resolves into the `power_units` of the
@@ -461,7 +464,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             'name': None,
             'cache': caches,
             'dtype': dtype,
-            'attrs': _registered_attrs(standard_name, units),
+            'attrs': {
+                **_registered_attrs(standard_name, units),
+                'long_name': long_name,
+            },
             'store_compressed': store_compressed,
             'prefer_filtered': prefer_filtered,
             'prefer_aligned': prefer_aligned,
@@ -1026,15 +1032,16 @@ def _coords_docstring(
 
 
 def _attrs_docstring(info: AnalysisInfo) -> str:
-    """return a nested list of the registered attrs other than `standard_name`.
+    """return a nested list of the registered attrs other than the 2 names.
 
-    A `units` with a power form renders as power units based on the acquisition,
-    with the calibrated unit in parentheses. A literal `units` renders as written.
-    Any other registered attr renders as its value.
+    `standard_name` and `long_name` are omitted. A `units` with a power form renders
+    as power units based on the acquisition, with the calibrated unit in
+    parentheses. A literal `units` renders as written. Any other registered attr
+    renders as its value.
     """
     entries = []
     for key, value in info.attrs.items():
-        if key == 'standard_name':
+        if key in ('standard_name', 'long_name'):
             continue
         if key == 'units' and _has_power_form(value):
             text = f'power units based on acquisition ({_units_docstring(value)})'

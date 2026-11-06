@@ -9,7 +9,7 @@ of the saved corrections beside the capture fields.
 
 from __future__ import annotations as __
 
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterable, Sequence
 from pathlib import Path
 from typing import Any, Generic
 
@@ -403,6 +403,7 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
         always_yield: bool = False,
         yield_values: bool = True,
         loop: bool = False,
+        captures: Iterable[SC] | None = None,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
         """run the calibration passes over `resources`.
 
@@ -417,13 +418,15 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
             and `yield_values` select
 
         Raises:
-            ValueError: if `loop` is True
+            ValueError: if `loop` is True or `captures` is not None
             RuntimeError: if the operator rejects the ENR confirmation
             KeyError: if a calibration field is neither a coordinate nor a data
                 variable of the collected captures
         """
         if loop:
             raise ValueError('a calibration does not loop')
+        if captures is not None:
+            raise ValueError('a calibration acquires its own capture passes')
 
         confirm_enr(self.spec.calibration.enr)
 

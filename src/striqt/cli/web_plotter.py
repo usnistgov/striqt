@@ -4,1107 +4,292 @@
 FastAPI and uvicorn serve the page and stream updates over a websocket. Plotly.js
 renders the updates in the browser through WebGL. The page is at
 http://localhost:8000 for ``web-plotter path/to/spec.yaml``.
+
+The sweep runs with a null sink. Each acquisition evaluates only the measurement on
+display, through the `select_analysis` hook, and the acquisition sequence follows the
+capture and loop values selected in the page, through the `captures` keyword of
+`iterate_sweep`.
 """
 
 from __future__ import annotations
 
 import asyncio
-import functools
+import dataclasses
+import logging
+import socket
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Literal,
-    Optional,
-    TypedDict,
-    Union,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import click
 import msgspec
-import numpy as np
-import plotly.graph_objects as go
-import xarray as xr
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 if TYPE_CHECKING:
-    import striqt.analysis as sa
+    from collections.abc import AsyncGenerator, Iterator
+
+    import plotly.graph_objects as go
+
     import striqt.figures as sf
     import striqt.sensor as ss
+    from striqt.figures.backend import PlotlyBackend
+    from striqt.sensor.lib.resources import Resources
+    from striqt.sensor.specs.sequencing import PlanChoices
 
 
 _json_encoder = msgspec.json.Encoder()
 _json_decoder = msgspec.json.Decoder()
 
-
-def _to_numpy(arr: Any) -> np.ndarray:
-    """return `arr` as a numpy array, with a cupy array transferred to the CPU"""
-    if hasattr(arr, 'get'):
-        return arr.get()
-    return np.asarray(arr)
+_HTML_TEMPLATE_PATH = Path(__file__).parent / 'web-plotter.html'
 
 
-# ---------------------------------------------------------------------------
-# Type definitions for app state
-# ---------------------------------------------------------------------------
+@dataclasses.dataclass
+class PreviewState:
+    """the state shared by the acquisition thread and the websocket server.
 
-
-class CoordinateDict(TypedDict):
-    """A single coordinate entry with name, values, and unit."""
-
-    name: str
-    values: list[str]
-    unit: str
-
-
-class ExtraCoordDict(TypedDict):
-    """A single extra coordinate entry (from AcquisitionInfo) with name and value."""
-
-    name: str
-    value: str
-    unit: str
-
-
-class CoordinatesData(TypedDict, total=False):
-    """Coordinates data structure sent to the frontend.
-
-    Keys:
-        num_ports: Number of receiver ports
-        groups: Dict mapping class name to list of coordinate dicts (capture fields)
-        extra_coords: Dict mapping class name to list of extra coordinate dicts (AcquisitionInfo)
+    The acquisition thread sets `sweep`, `source_id`, `choices`, `plotter`, and
+    `dataset`. The websocket handlers set the selections. A selection is replaced
+    as a whole, never mutated in place.
     """
 
-    num_ports: int
-    groups: dict[str, list[CoordinateDict]]
-    extra_coords: dict[str, list[ExtraCoordDict]]
+    spec_filename: str = ''
+    """the file name of the spec, shown in the page header"""
+    sweep: Optional[ss.specs.Sweep] = None
+    """the sweep that the open resources run"""
+    source_id: Optional[str] = None
+    """the id of the open source"""
+    plot_opts: Optional[sf.specs.PlotOptions] = None
+    """the plot options from ``sweep.plot_hint`` or the preview default"""
+    plotter: Optional[PlotlyBackend] = None
+    """the backend that draws the selected variable"""
+    data_select: dict[str, Any] = dataclasses.field(default_factory=dict)
+    """the ``plot_opts.data.select`` indexers, filtered per variable at draw time"""
+    available_variables: list[str] = dataclasses.field(default_factory=list)
+    """the enabled measurements of the sweep that have a registered plot"""
+    variable_labels: dict[str, str] = dataclasses.field(default_factory=dict)
+    """the display label of each available variable"""
+    selected_variable: str = 'spectrogram'
+    """the variable on display; the only measurement evaluated per acquisition"""
+    choices: Optional[PlanChoices] = None
+    """the capture entries and loop values the page offers"""
+    selected_capture: Optional[int] = None
+    """the index into ``sweep.captures`` to acquire, or None for every entry"""
+    selected_loops: dict[tuple[str, str], Any] = dataclasses.field(default_factory=dict)
+    """the loop values to acquire, keyed by ``(isin, field)``; a missing loop
+    acquires every value"""
+    dataset: Optional[ss.lib.compute.DelayedDataset] = None
+    """the latest analyzed acquisition"""
+    websockets: set[WebSocket] = dataclasses.field(default_factory=set)
+    """the connected clients"""
+    broadcast_pending: bool = False
+    """True while a broadcast is in progress"""
+    data_updated: bool = False
+    """True when a dataset arrived during a broadcast"""
+    running: bool = True
+    """False holds the acquisition before the next capture until set True again"""
+    stop: threading.Event = dataclasses.field(default_factory=threading.Event)
+    """set to end the acquisition thread"""
+    thread: Optional[threading.Thread] = None
+    """the acquisition thread, once started"""
 
 
-class AppState(TypedDict):
-    """Type definition for the global application state."""
-
-    delayed_dataset: Optional[ss.lib.compute.DelayedDataset]
-    plotter: Optional[WebPlotBackend]
-    selected_variable: str
-    available_variables: list[str]
-    variable_labels: dict[str, str]
-    websockets: set[WebSocket]
-    broadcast_pending: bool
-    data_updated: bool
-    plot_opts: Optional[sf.specs.PlotOptions]
-    data_select: dict[str, Any]
-    spec_filename: str
+STATE = PreviewState()
 
 
-# ---------------------------------------------------------------------------
-# WebPlotBackend - FastAPI/Plotly-based backend mirroring PlotBackend
-# ---------------------------------------------------------------------------
+def _logger():
+    import striqt.analysis as sa
+
+    return sa.util.get_logger('sweep')
 
 
-class WebPlotBackend:
-    """a `striqt.figures.backend.PlotBackend` for Plotly trace and layout dicts.
+# %% analysis and capture selection
 
-    The results of each `heatmap` and `line` call accumulate until `get_plot_data`.
-    The color and y-axis limits only widen across calls.
+
+def select_displayed(
+    capture: ss.specs.SensorCapture, analysis: ss.specs.AnalysisGroup
+) -> ss.specs.AnalysisGroup:
+    """return `analysis` narrowed to the variable on display.
+
+    The whole group is returned when the selected variable is not an enabled field
+    of `analysis`.
     """
-
-    def __init__(
-        self,
-        opts: sf.specs.SharedPlotOptions,
-    ):
-        self.opts = opts
-        self._pending_traces: list[dict[str, Any]] = []
-        self._layout: dict[str, Any] = {}
-        self._remembered_vmin: Optional[float] = None
-        self._remembered_vmax: Optional[float] = None
-        self._remembered_ymin: Optional[float] = None
-        self._remembered_ymax: Optional[float] = None
-
-    def reset(self) -> None:
-        """Clear per-broadcast state while preserving vmin/vmax memory."""
-        self._pending_traces.clear()
-        self._layout.clear()
-
-    def _get_subplot_key(self, data: xr.DataArray) -> str:
-        """Generate a subplot identifier from column/row coordinates."""
-        parts = []
-        col = self.opts.col
-        row = self.opts.row
-        if col and col in data.coords:
-            parts.append(f'{col}={data[col].values}')
-        if row and row in data.coords:
-            parts.append(f'{row}={data[row].values}')
-        return '_'.join(parts) if parts else 'main'
-
-    def _get_col_dim(self, data: xr.DataArray) -> Optional[str]:
-        """return the dimension for column faceting, or None.
-
-        `opts.col` is returned when `opts.col` is a dimension of `data`. When
-        `opts.col` is a 1-D coordinate of `data`, the dimension of that coordinate is
-        returned if `data` has more than 1 value along that dimension.
-        """
-        col = self.opts.col
-        if not col:
-            return None
-
-        if col in data.dims:
-            return col
-
-        if col in data.coords:
-            coord = data.coords[col]
-            if coord.dims and len(coord.dims) == 1:
-                dim = coord.dims[0]
-                if dim in data.dims and len(data[dim]) > 1:
-                    return cast(str, dim)
-
-        return None
-
-    def heatmap(
-        self,
-        data: xr.DataArray,
-        *,
-        x: str,
-        y: str,
-        cmap: str = 'cubehelix',
-        vmin: Optional[float] = None,
-        vmax: Optional[float] = None,
-        vstep: Optional[float] = None,
-        **kwargs,
-    ) -> dict[str, Any]:
-        """add a heatmap of `data` to the pending results.
-
-        Every subplot (one per value of the column dimension) shares one colorbar
-        scale. A `vmin` or `vmax` of None is the minimum or maximum of `data`,
-        widened by the values of earlier calls.
-
-        Args:
-            data: the 2-D array to plot, with coordinates `x` and `y`
-            x: the name of the x coordinate
-            y: the name of the y coordinate
-            cmap: a matplotlib colormap name
-            vmin: the lower color limit, or None to infer
-            vmax: the upper color limit, or None to infer
-            vstep: the spacing of quantized color levels; None selects a continuous
-                gradient
-
-        Returns:
-            a dict with keys ``type``, ``traces``, ``layout``, and ``variable``
-        """
-        traces = []
-        col_dim = self._get_col_dim(data)
-
-        # the remembered vmin/vmax span every port and every broadcast, so the
-        # subplots share one colorbar scale
-        data_np = _to_numpy(data.values)
-        if vmin is None:
-            current_vmin = float(np.nanmin(data_np))
-            if self._remembered_vmin is None:
-                self._remembered_vmin = current_vmin
-            else:
-                self._remembered_vmin = min(self._remembered_vmin, current_vmin)
-            vmin = self._remembered_vmin
-        if vmax is None:
-            current_vmax = float(np.nanmax(data_np))
-            if self._remembered_vmax is None:
-                self._remembered_vmax = current_vmax
-            else:
-                self._remembered_vmax = max(self._remembered_vmax, current_vmax)
-            vmax = self._remembered_vmax
-
-        if vstep is not None:
-            colorscale = _make_quantized_colorscale(cmap, vmin, vmax, vstep)
-        else:
-            colorscale = _mpl_to_plotly_colorscale(cmap)
-
-        if col_dim:
-            n_subplots = len(data[col_dim].values)
-            for i, col_val in enumerate(data[col_dim].values):
-                sub = data.sel({col_dim: col_val})
-                # Only show colorbar on the last subplot to avoid duplicates
-                show_colorbar = i == n_subplots - 1
-                trace = self._make_heatmap_trace(
-                    sub,
-                    x,
-                    y,
-                    colorscale,
-                    vmin,
-                    vmax,
-                    subplot_idx=i + 1,
-                    show_colorbar=show_colorbar,
-                )
-                trace['name'] = f'{col_dim}={col_val}'
-                traces.append(trace)
-        else:
-            traces.append(
-                self._make_heatmap_trace(
-                    data, x, y, colorscale, vmin, vmax, show_colorbar=True
-                )
-            )
-
-        result = {
-            'type': 'heatmap',
-            'traces': traces,
-            'layout': self._make_heatmap_layout(data, x, y, len(traces)),
-            'variable': str(data.name),
-        }
-        self._pending_traces.append(result)
-        return result
-
-    def _make_heatmap_trace(
-        self,
-        data: xr.DataArray,
-        x: str,
-        y: str,
-        colorscale: Any,
-        vmin: Optional[float],
-        vmax: Optional[float],
-        subplot_idx: Optional[int] = None,
-        show_colorbar: bool = True,
-    ) -> dict[str, Any]:
-        """Create a single heatmap trace.
-
-        Args:
-            data: The data array to plot
-            x: Name of the x coordinate
-            y: Name of the y coordinate
-            colorscale: Plotly colorscale (string for built-in or list of [pos, color] pairs)
-            vmin: Minimum value for color scale (shared across all subplots)
-            vmax: Maximum value for color scale (shared across all subplots)
-            subplot_idx: Index of the subplot (1-based)
-            show_colorbar: Whether to show the colorbar for this trace
-        """
-        x_data = data[x].values
-        y_data = data[y].values
-        z_data = _to_numpy(data.values)
-
-        # Ensure 2D by selecting first element along extra dimensions
-        while z_data.ndim > 2:
-            z_data = z_data[0]
-        if z_data.ndim == 1:
-            z_data = z_data.reshape(1, -1)
-
-        # Plotly heatmap expects z with shape (len(y), len(x))
-        if z_data.shape != (len(y_data), len(x_data)) and z_data.shape == (
-            len(x_data),
-            len(y_data),
-        ):
-            z_data = z_data.T
-
-        # inf is replaced with NaN, which Plotly draws as a gap
-        if np.issubdtype(z_data.dtype, np.floating):
-            z_data = np.where(np.isinf(z_data), np.nan, z_data)
-
-        # numpy arrays are passed as is. Figure.to_json() encodes a numpy array as a
-        # base64 typed array
-        trace: dict[str, Any] = {
-            'type': 'heatmap',
-            'x': x_data,
-            'y': y_data,
-            'z': z_data,
-            'colorscale': colorscale,
-            'showscale': show_colorbar,
-        }
-
-        if show_colorbar:
-            trace['colorbar'] = {
-                'title': {'text': _colorbar_title(data)},
-            }
-
-        if vmin is not None:
-            trace['zmin'] = vmin
-        if vmax is not None:
-            trace['zmax'] = vmax
-
-        if subplot_idx is not None:
-            trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
-            trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
-
-        return trace
-
-    def _make_heatmap_layout(
-        self, data: xr.DataArray, x: str, y: str, n_subplots: int
-    ) -> dict[str, Any]:
-        """Create layout for heatmap with optional subplots."""
-        layout: dict[str, Any] = {
-            'uirevision': 'constant',  # Preserve zoom/pan on updates
-        }
-
-        if self.opts.col is None or self.opts.col_label_format is None:
-            pass
-        else:
-            layout['annotations'] = _format_subplots(data, self.opts)
-
-        if n_subplots > 1:
-            cols = min(n_subplots, self.opts.col_wrap or 4)
-            rows = (n_subplots + cols - 1) // cols
-
-            for i in range(n_subplots):
-                row_idx = i // cols
-                col_idx = i % cols
-                suffix = str(i + 1) if i > 0 else ''
-
-                x_domain = [col_idx / cols + 0.02, (col_idx + 1) / cols - 0.02]
-                y_domain = [
-                    1 - (row_idx + 1) / rows + 0.02,
-                    1 - row_idx / rows - 0.08,
-                ]
-
-                layout[f'xaxis{suffix}'] = {
-                    'title': {'text': _axis_title(data[x])},
-                    'domain': x_domain,
-                }
-                layout[f'yaxis{suffix}'] = {
-                    'title': {'text': _axis_title(data[y])},
-                    'domain': y_domain,
-                }
-        else:
-            layout['xaxis'] = {'title': {'text': _axis_title(data[x])}}
-            layout['yaxis'] = {'title': {'text': _axis_title(data[y])}}
-
-        return layout
-
-    def line(
-        self,
-        data: xr.DataArray,
-        *,
-        x: str,
-        hue: Optional[str] = None,
-        yscale: Literal['linear', 'log'] = 'linear',
-        ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
-        **kwargs,
-    ) -> dict[str, Any]:
-        """add ``scattergl`` lines of `data` to the pending results.
-
-        The y-axis limits are `ylim` where given and the finite extent of `data`
-        otherwise, widened by the values of earlier calls.
-
-        Returns:
-            a dict with keys ``type``, ``traces``, ``layout``, and ``variable``
-        """
-        traces = []
-        col_dim = self._get_col_dim(data)
-
-        if col_dim:
-            for i, col_val in enumerate(data[col_dim].values):
-                sub = data.sel({col_dim: col_val})
-                subplot_traces = self._make_line_traces(sub, x, hue, subplot_idx=i + 1)
-                for t in subplot_traces:
-                    t['legendgroup'] = f'{col_dim}={col_val}'
-                traces.extend(subplot_traces)
-        else:
-            traces.extend(self._make_line_traces(data, x, hue))
-
-        n_subplots = len(data[col_dim].values) if col_dim else 1
-
-        data_np = _to_numpy(data.values)
-        finite_mask = np.isfinite(data_np)
-        if np.any(finite_mask):
-            current_ymin = float(np.nanmin(data_np[finite_mask]))
-            current_ymax = float(np.nanmax(data_np[finite_mask]))
-        else:
-            current_ymin, current_ymax = 0.0, 1.0
-
-        # the remembered limits only widen across broadcasts
-        candidate_ymin = (
-            ylim[0] if (ylim is not None and ylim[0] is not None) else current_ymin
-        )
-        if self._remembered_ymin is None:
-            self._remembered_ymin = candidate_ymin
-        else:
-            self._remembered_ymin = min(self._remembered_ymin, candidate_ymin)
-
-        candidate_ymax = (
-            ylim[1] if (ylim is not None and ylim[1] is not None) else current_ymax
-        )
-        if self._remembered_ymax is None:
-            self._remembered_ymax = candidate_ymax
-        else:
-            self._remembered_ymax = max(self._remembered_ymax, candidate_ymax)
-
-        effective_ylim = (self._remembered_ymin, self._remembered_ymax)
-
-        result = {
-            'type': 'line',
-            'traces': traces,
-            'layout': self._make_line_layout(
-                data, x, yscale, n_subplots, ylim=effective_ylim
-            ),
-            'variable': str(data.name),
-        }
-        self._pending_traces.append(result)
-        return result
-
-    def _make_line_traces(
-        self,
-        data: xr.DataArray,
-        x: str,
-        hue: Optional[str],
-        subplot_idx: Optional[int] = None,
-    ) -> list[dict[str, Any]]:
-        """Create line traces, optionally split by hue dimension."""
-        traces = []
-        x_data = np.asarray(data[x].values).flatten()
-
-        # Plotly default color sequence for consistent colors across subplots
-        plotly_colors = [
-            '#636EFA',
-            '#EF553B',
-            '#00CC96',
-            '#AB63FA',
-            '#FFA15A',
-            '#19D3F3',
-            '#FF6692',
-            '#B6E880',
-            '#FF97FF',
-            '#FECB52',
-        ]
-
-        hue_is_dim = hue and hue in data.dims
-        hue_is_coord = hue and hue in data.coords and hue not in data.dims
-
-        if hue_is_dim:
-            hue_values = data[hue].values
-            for hue_idx, hue_val in enumerate(hue_values):
-                sub = data.sel({hue: hue_val})
-                y_data = _to_numpy(sub.values).squeeze()
-
-                # Ensure x and y have matching lengths
-                if y_data.size != x_data.size:
-                    if x in sub.dims:
-                        y_data = _to_numpy(sub.values)
-                        x_dim_idx = list(sub.dims).index(x)
-                        y_data = np.moveaxis(y_data, x_dim_idx, -1)
-                        y_data = y_data.reshape(-1, y_data.shape[-1])
-                        # only the first row is plotted when more than one remains
-                        if y_data.shape[0] > 1:
-                            y_data = y_data[0]
-                        y_data = y_data.flatten()
-                    else:
-                        y_data = y_data.flatten()
-
-                # Use markers only when there's a single point (lines won't show)
-                mode = 'markers' if len(x_data) == 1 else 'lines'
-
-                # Use consistent color for same hue value across subplots
-                color = plotly_colors[hue_idx % len(plotly_colors)]
-                hue_name = f'{hue}={hue_val}'
-
-                trace: dict[str, Any] = {
-                    'type': 'scattergl',  # WebGL-accelerated scatter
-                    'mode': mode,
-                    'x': _to_json_serializable(x_data),
-                    'y': _to_json_serializable(y_data),
-                    'name': hue_name,
-                    'legendgroup': hue_name,  # Group same hue across subplots
-                    'showlegend': subplot_idx is None
-                    or subplot_idx == 1,  # Only show legend for first subplot
-                    'line': {'color': color},
-                    'marker': {'color': color},
-                }
-
-                if subplot_idx is not None:
-                    trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
-                    trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
-
-                traces.append(trace)
-        elif hue_is_coord:
-            # hue is a coordinate but not a dimension - use it for labeling
-            # but iterate over the coordinate values
-            hue_values = data[hue].values
-            # If hue_values is 0-d or scalar, make it iterable
-            if np.ndim(hue_values) == 0:
-                hue_values = [hue_values.item()]
-            else:
-                hue_values = np.unique(hue_values)
-
-            for hue_idx, hue_val in enumerate(hue_values):
-                # `sel` does not accept a non-dimension coordinate, so the whole
-                # array is plotted
-                y_data = _to_numpy(data.values).squeeze()
-
-                # Ensure x and y have matching lengths
-                if y_data.size != x_data.size:
-                    if x in data.dims:
-                        x_dim_idx = list(data.dims).index(x)
-                        y_data = np.moveaxis(y_data, x_dim_idx, -1)
-                        y_data = y_data.reshape(-1, y_data.shape[-1])
-                        if y_data.shape[0] > 1:
-                            y_data = y_data[0]
-                        y_data = y_data.flatten()
-                    else:
-                        y_data = y_data.flatten()
-
-                mode = 'markers' if len(x_data) == 1 else 'lines'
-                color = plotly_colors[hue_idx % len(plotly_colors)]
-                hue_name = f'{hue}={hue_val}'
-
-                trace: dict[str, Any] = {
-                    'type': 'scattergl',
-                    'mode': mode,
-                    'x': _to_json_serializable(x_data),
-                    'y': _to_json_serializable(y_data),
-                    'name': hue_name,
-                    'legendgroup': hue_name,
-                    'showlegend': subplot_idx is None or subplot_idx == 1,
-                    'line': {'color': color},
-                    'marker': {'color': color},
-                }
-
-                if subplot_idx is not None:
-                    trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
-                    trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
-
-                traces.append(trace)
-                # a non-dimension hue cannot split the data, so one trace is added
-                break
-        else:
-            y_data = _to_numpy(data.values).squeeze()
-
-            # Ensure x and y have matching lengths
-            if y_data.size != x_data.size:
-                if x in data.dims:
-                    x_dim_idx = list(data.dims).index(x)
-                    y_data = np.moveaxis(y_data, x_dim_idx, -1)
-                    y_data = y_data.reshape(-1, y_data.shape[-1])
-                    if y_data.shape[0] > 1:
-                        y_data = y_data[0]
-                    y_data = y_data.flatten()
-                else:
-                    y_data = y_data.flatten()
-
-            # Use markers only when there's a single point (lines won't show)
-            mode = 'markers' if len(x_data) == 1 else 'lines'
-
-            trace_name = str(data.name)
-            trace = {
-                'type': 'scattergl',
-                'mode': mode,
-                'x': _to_json_serializable(x_data),
-                'y': _to_json_serializable(y_data),
-                'name': trace_name,
-                'legendgroup': trace_name,
-                'showlegend': subplot_idx is None or subplot_idx == 1,
-                'line': {'color': plotly_colors[0]},
-                'marker': {'color': plotly_colors[0]},
-            }
-
-            if subplot_idx is not None:
-                trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
-                trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
-
-            traces.append(trace)
-
-        return traces
-
-    def _make_line_layout(
-        self,
-        data: xr.DataArray,
-        x: str,
-        yscale: str,
-        n_subplots: int,
-        *,
-        ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
-    ) -> dict[str, Any]:
-        """Create layout for line plot with optional subplots.
-
-        Subplots in the same row share the same y-axis range.
-        Only the leftmost subplot in each row shows y-axis title and tick labels.
-        """
-        layout: dict[str, Any] = {
-            'uirevision': 'constant',
-            'showlegend': True,
-            'legend': {'orientation': 'h', 'y': -0.15},
-        }
-
-        if self.opts.col is None or self.opts.col_label_format is None:
-            pass
-        else:
-            layout['annotations'] = _format_subplots(data, self.opts)
-
-        if n_subplots > 1:
-            cols = min(n_subplots, self.opts.col_wrap or 4)
-            rows = (n_subplots + cols - 1) // cols
-
-            if ylim is not None and ylim[0] is not None and ylim[1] is not None:
-                y_range: list[Optional[float]] = [ylim[0], ylim[1]]
-            else:
-                # Compute shared y-axis range across all data, excluding inf values
-                data_np = _to_numpy(data.values)
-                finite_mask = np.isfinite(data_np)
-                if np.any(finite_mask):
-                    y_min = float(np.nanmin(data_np[finite_mask]))
-                    y_max = float(np.nanmax(data_np[finite_mask]))
-                else:
-                    # All values are inf/nan - use default range
-                    y_min, y_max = 0.0, 1.0
-                # Add 5% padding
-                y_range_pad = (y_max - y_min) * 0.05
-                y_range = [y_min - y_range_pad, y_max + y_range_pad]
-
-                if ylim is not None:
-                    if ylim[0] is not None:
-                        y_range[0] = ylim[0]
-                    if ylim[1] is not None:
-                        y_range[1] = ylim[1]
-
-            for i in range(n_subplots):
-                row_idx = i // cols
-                col_idx = i % cols
-                suffix = str(i + 1) if i > 0 else ''
-                is_leftmost = col_idx == 0
-
-                x_domain = [col_idx / cols + 0.05, (col_idx + 1) / cols - 0.02]
-                y_domain = [
-                    1 - (row_idx + 1) / rows + 0.1,
-                    1 - row_idx / rows - 0.05,
-                ]
-
-                layout[f'xaxis{suffix}'] = {
-                    'title': {'text': _axis_title(data[x])},
-                    'domain': x_domain,
-                }
-
-                # inf is not valid JSON
-                sanitized_y_range = [
-                    None if (v is not None and np.isinf(v)) else v for v in y_range
-                ]
-                y_axis_config: dict[str, Any] = {
-                    'domain': y_domain,
-                    'type': yscale,
-                    'range': sanitized_y_range,
-                }
-
-                # Only show y-axis title and tick labels on leftmost column
-                if is_leftmost:
-                    y_axis_config['title'] = {'text': _axis_title(data)}
-                else:
-                    y_axis_config['title'] = {'text': ''}
-                    y_axis_config['showticklabels'] = False
-
-                layout[f'yaxis{suffix}'] = y_axis_config
-        else:
-            layout['xaxis'] = {'title': {'text': _axis_title(data[x])}}
-            y_axis_config = {
-                'title': {'text': _axis_title(data)},
-                'type': yscale,
-            }
-            if ylim is not None and (ylim[0] is not None or ylim[1] is not None):
-                y_range_single: list[Optional[float]] = [
-                    ylim[0]
-                    if (ylim[0] is not None and not np.isinf(ylim[0]))
-                    else None,
-                    ylim[1]
-                    if (ylim[1] is not None and not np.isinf(ylim[1]))
-                    else None,
-                ]
-                y_axis_config['range'] = y_range_single
-            layout['yaxis'] = y_axis_config
-
-        return layout
-
-    def _coord_kws(self, **kwargs) -> dict[str, Any]:
-        """return `kwargs` with the `col`, `row`, and `col_wrap` of `opts` added.
-
-        `col` is ``'_view'`` when `opts` sets neither `col` nor `row`.
-        """
-        col = self.opts.col
-        if col is None and self.opts.row is None:
-            col = '_view'
-
-        return {
-            **kwargs,
-            'col_wrap': self.opts.col_wrap,
-            'row': self.opts.row,
-            'col': col,
-        }
-
-    def finish(
-        self,
-        grid: dict[str, Any],
-        xticklabelunits: Union[bool, Literal['auto']] = 'auto',
-    ) -> None:
-        """accept the `PlotBackend.finish` call without effect.
-
-        The traces are collected by `heatmap` and `line`.
-        """
-
-    def mark_noise_level(
-        self,
-        data: xr.Dataset,
-        var_name: str,
-        grid: dict[str, Any],
-        where: Literal['x', 'y', 'colorbar'],
-    ) -> None:
-        """mark the system noise level of `var_name` on the most recent plot.
-
-        `where` of ``'x'`` draws a horizontal line at the level, ``'y'`` a vertical
-        line, and ``'colorbar'`` an annotation at the level on the colorbar. Nothing
-        is added when `data` has no system noise or no plot is pending.
-        """
-        from striqt.figures import util
-
-        noise = util.get_system_noise(data, var_name)
-        if noise is None:
-            return
-
-        if not self._pending_traces:
-            return
-
-        plot_data = self._pending_traces[-1]
-        layout = plot_data.get('layout', {})
-
-        if 'shapes' not in layout:
-            layout['shapes'] = []
-
-        noise_values = (
-            _to_numpy(noise.values).flat if isinstance(noise, xr.DataArray) else [noise]
-        )
-
-        for i, noise_val in enumerate(noise_values):
-            noise_float = float(noise_val)
-
-            if where == 'x':
-                # Horizontal line at noise level (for line plots with y=power)
-                shape = {
-                    'type': 'line',
-                    'x0': 0,
-                    'x1': 1,
-                    'xref': f'x{i + 1} domain' if i > 0 else 'x domain',
-                    'y0': noise_float,
-                    'y1': noise_float,
-                    'yref': f'y{i + 1}' if i > 0 else 'y',
-                    'line': {'color': '#eec009', 'width': 1, 'dash': 'dot'},
-                }
-            elif where == 'y':
-                # Vertical line at noise level (for histograms with x=power)
-                shape = {
-                    'type': 'line',
-                    'x0': noise_float,
-                    'x1': noise_float,
-                    'xref': f'x{i + 1}' if i > 0 else 'x',
-                    'y0': 0,
-                    'y1': 1,
-                    'yref': f'y{i + 1} domain' if i > 0 else 'y domain',
-                    'line': {'color': '#eec009', 'width': 1, 'dash': 'dot'},
-                }
-            elif where == 'colorbar':
-                # Plotly annotations cannot reference colorbar values, so the marker
-                # is placed in paper coordinates at the normalized (0-1) position
-                # within the colorbar range
-                traces = plot_data.get('traces', [])
-                if traces:
-                    # Get the z range from the first trace with a colorbar
-                    zmin = None
-                    zmax = None
-                    for trace in traces:
-                        if trace.get('showscale', False):
-                            zmin = trace.get('zmin')
-                            zmax = trace.get('zmax')
-                            break
-
-                    if zmin is not None and zmax is not None and zmax > zmin:
-                        # assumed colorbar extent in paper coordinates
-                        colorbar_bottom = 0.1
-                        colorbar_top = 0.9
-                        colorbar_height = colorbar_top - colorbar_bottom
-
-                        clamped_noise = max(zmin, min(zmax, noise_float))
-                        normalized = (clamped_noise - zmin) / (zmax - zmin)
-                        y_paper = colorbar_bottom + normalized * colorbar_height
-
-                        if 'annotations' not in layout:
-                            layout['annotations'] = []
-                        layout['annotations'].append({
-                            'x': 1.02,
-                            'y': y_paper,
-                            'xref': 'paper',
-                            'yref': 'paper',
-                            'text': 'kTB',
-                            'showarrow': True,
-                            'arrowhead': 2,
-                            'arrowsize': 1,
-                            'arrowwidth': 1,
-                            'arrowcolor': '#eec009',
-                            'font': {'color': '#eec009', 'size': 10},
-                            'ax': 20,
-                            'ay': 0,
-                        })
-                continue  # Skip adding to shapes for colorbar
-
-            layout['shapes'].append(shape)
-
-        plot_data['layout'] = layout
-
-    def get_plot_data(self) -> list[dict[str, Any]]:
-        """Return all pending plot data and clear the buffer."""
-        data = self._pending_traces.copy()
-        self._pending_traces.clear()
-        return data
-
-
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-
-
-def _to_json_serializable(
-    arr: Any, preserve_inf: bool = False
-) -> Union[np.ndarray, list, float, int, str, None]:
-    """convert an array or scalar to a Plotly graph object input.
-
-    Numeric arrays are returned as contiguous numpy arrays, with a cupy array
-    transferred to the CPU. String, object, and datetime64 arrays are returned as
-    lists, and a timedelta64 array as seconds. In arrays, NaN is kept. In lists and
-    scalars, NaN is returned as None.
-
-    Args:
-        arr: the array or scalar
-        preserve_inf: if True, Inf is kept in arrays and returned as ±1e38 in lists
-            and scalars; if False, Inf is NaN in arrays and None in lists and scalars
-    """
-    # Use large but finite values for Inf when preserving
-    _INF_REPLACEMENT = 1e38
-    _NEG_INF_REPLACEMENT = -1e38
-
-    def _sanitize_value(v):
-        """return `v` with NaN as None and Inf as `preserve_inf` selects"""
-        if isinstance(v, float):
-            if np.isnan(v):
-                return None
-            if np.isinf(v):
-                if preserve_inf:
-                    return _INF_REPLACEMENT if v > 0 else _NEG_INF_REPLACEMENT
-                else:
-                    return None  # Skip infinite values in line plots
-        return v
-
-    def _sanitize_list(lst):
-        """Recursively sanitize a list."""
-        result: list[Any] = []
-        for item in lst:
-            if isinstance(item, list):
-                result.append(_sanitize_list(item))
-            elif isinstance(item, float):
-                result.append(_sanitize_value(item))
-            else:
-                result.append(item)
-        return result
-
-    # cupy arrays transfer to the CPU
-    if hasattr(arr, 'get'):
-        arr = arr.get()
-
-    if isinstance(arr, np.ndarray):
-        # String types - must use list format
-        if arr.dtype.kind in ('U', 'S', 'O'):
-            return arr.tolist()
-        # datetime64 must use list format
-        if np.issubdtype(arr.dtype, np.datetime64):
-            return [str(x) for x in arr]
-        if np.issubdtype(arr.dtype, np.timedelta64):
-            arr = (arr / np.timedelta64(1, 's')).astype(np.float64)
-
-        if arr.dtype.kind in ('f', 'i', 'u'):
-            arr = np.ascontiguousarray(arr)
-            if not preserve_inf and np.issubdtype(arr.dtype, np.floating):
-                arr = np.where(np.isinf(arr), np.nan, arr)
-            return arr
-
-        # Fallback to list format for other types
-        return _sanitize_list(arr.tolist())
-
-    if isinstance(arr, (np.floating, np.integer)):
-        val = float(arr)
-        return _sanitize_value(val)
-    if isinstance(arr, float):
-        return _sanitize_value(arr)
-    return arr
-
-
-def _format_subplots(data, opts: sf.specs.SharedPlotOptions):
-    import striqt.figures as sf
-
-    col_titles = sf.labels.label_by_coord(
-        data,
-        opts.col_label_format,
-        coord_or_dim=opts.col or 'port',
-        title_case=True,
-        name=data.name,
-        **data.attrs,
+    import striqt.analysis as sa
+
+    name = STATE.selected_variable
+    if name not in analysis.to_dict():
+        return analysis
+    return sa.specs.helpers.narrow_analysis_group(analysis, [name])
+
+
+def current_plan(state: PreviewState) -> tuple[ss.specs.SensorCapture, ...]:
+    """return the captures that match the selections of `state`, in sweep order."""
+    from striqt.sensor.specs import sequencing
+
+    assert state.sweep is not None
+    return sequencing.select_plan(
+        state.sweep,
+        state.source_id,
+        capture=state.selected_capture,
+        loops=state.selected_loops,
     )
 
-    return [
-        {
-            'text': t,
-            'showarrow': False,
-            'xref': 'paper',
-            'yref': 'paper',
-            'x': ((i + 0.5) / len(col_titles)),
-            'y': 1.0,  # X/Y placement on canvas
-            'xanchor': 'center',
-            'yanchor': 'bottom',
-        }
-        for i, t in enumerate(col_titles)
-    ]
 
+def selected_captures(state: PreviewState) -> Iterator[ss.specs.SensorCapture]:
+    """yield the captures of `current_plan`, wrapping, until ``state.stop`` is set.
 
-def _measurand(da: xr.DataArray) -> sa.labels.Measurand:
-    import striqt.analysis as sa
-
-    name = None if da.name is None else str(da.name)
-    return sa.labels.measurand_from_attrs(da.attrs, name)
-
-
-def _axis_title(da: xr.DataArray) -> str:
-    """return the name of `da` with its units in parentheses, from its attrs."""
-    import striqt.analysis as sa
-
-    return sa.labels.quantity_label(_measurand(da))
-
-
-def _colorbar_title(da: xr.DataArray) -> str:
-    """return the units text of `da` from its attrs, or ``''`` without units."""
-    import striqt.analysis as sa
-
-    return sa.labels.units_label(_measurand(da)) or ''
-
-
-def _mpl_to_plotly_colorscale(cmap: str) -> Any:
-    """return the Plotly colorscale for the matplotlib colormap name `cmap`.
-
-    Returns:
-        the Plotly name of a colormap that Plotly defines, otherwise a list of 256
-        ``[position, 'rgb(r,g,b)']`` pairs sampled from matplotlib; ``'Viridis'``
-        for a name matplotlib does not define
+    The plan is re-read before each capture. A selection change takes effect at the
+    next acquisition. An empty plan, or ``state.running`` False, waits, polling
+    ``state.stop``.
     """
-    import matplotlib.pyplot as plt
+    i = 0
+    while not state.stop.is_set():
+        plan = current_plan(state)
+        if len(plan) == 0 or not state.running:
+            state.stop.wait(0.1)
+            continue
+        yield plan[i % len(plan)]
+        i += 1
 
-    # Built-in Plotly colormaps that can be used directly
-    plotly_builtins = {
-        'viridis': 'Viridis',
-        'plasma': 'Plasma',
-        'inferno': 'Inferno',
-        'magma': 'Magma',
-        'cividis': 'Cividis',
-        'jet': 'Jet',
-        'hot': 'Hot',
-        'blues': 'Blues',
+
+# %% messages to the page
+
+
+def capture_options(choices: PlanChoices | None) -> dict[str, Any]:
+    """return the capture and loop choices as the ``capture_options`` message field."""
+    if choices is None:
+        return {'captures': [], 'loops': []}
+    return {
+        'captures': list(choices.captures),
+        'loops': [
+            {'field': loop.field, 'isin': loop.isin, 'labels': list(loop.labels)}
+            for loop in choices.loops
+        ],
     }
 
-    cmap_lower = cmap.lower()
-    if cmap_lower in plotly_builtins:
-        return plotly_builtins[cmap_lower]
 
-    try:
-        mpl_cmap = plt.get_cmap(cmap)
-    except ValueError:
-        # Fallback to viridis if colormap not found
-        return 'Viridis'
-
-    n_colors = 256
-    colorscale: list[list[Any]] = []
-    for i in range(n_colors):
-        pos = i / (n_colors - 1)
-        rgba = mpl_cmap(pos)
-        r, g, b = int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255)
-        colorscale.append([pos, f'rgb({r},{g},{b})'])
-
-    return colorscale
+def capture_selection(state: PreviewState) -> dict[str, Any]:
+    """return the selections of `state` as indexes into `capture_options`."""
+    loops: list[int | None] = []
+    for loop in () if state.choices is None else state.choices.loops:
+        key = (loop.isin, loop.field)
+        if key in state.selected_loops:
+            loops.append(loop.values.index(state.selected_loops[key]))
+        else:
+            loops.append(None)
+    return {'capture': state.selected_capture, 'loops': loops}
 
 
-def _make_quantized_colorscale(
-    cmap: str,
-    vmin: float,
-    vmax: float,
-    vstep: float,
-) -> list[list[Any]]:
-    """return a stepped Plotly colorscale with bands of `vstep` from `vmin` to `vmax`.
+def select_first(state: PreviewState) -> None:
+    """select the first ``captures:`` entry and the first value of each loop.
 
-    The bands follow the matplotlib `BoundaryNorm` over a resampled colormap.
+    A sweep without a ``captures:`` list selects no entry, and a loop without
+    values is left unselected.
+    """
+    choices = state.choices
+    if choices is None:
+        return
+    state.selected_capture = 0 if choices.captures else None
+    state.selected_loops = {
+        (loop.isin, loop.field): loop.values[0] for loop in choices.loops if loop.values
+    }
+
+
+def apply_capture_selection(state: PreviewState, msg: dict[str, Any]) -> None:
+    """set the selections of `state` from a ``select_captures`` message.
 
     Args:
-        cmap: a matplotlib colormap name; an undefined name selects viridis
-        vmin: the lower color limit
-        vmax: the upper color limit
-        vstep: the spacing of the color levels, in the units of the data
+        state: the state to update
+        msg: ``{'capture': int | None, 'loops': [int | None, ...]}`` with indexes
+            into the `capture_options` lists, in the order of ``choices.loops``; a
+            capture index is clamped to the ``captures:`` list, and None keeps every
+            entry or every value
+    """
+    if state.choices is None:
+        return
+    capture = msg.get('capture')
+    if capture is None or not state.choices.captures:
+        state.selected_capture = None
+    else:
+        state.selected_capture = min(
+            max(int(capture), 0), len(state.choices.captures) - 1
+        )
+    selected: dict[tuple[str, str], Any] = {}
+    indexes = msg.get('loops') or []
+    for loop, index in zip(state.choices.loops, indexes):
+        if index is not None and loop.values:
+            selected[loop.isin, loop.field] = loop.values[
+                min(max(int(index), 0), len(loop.values) - 1)
+            ]
+    state.selected_loops = selected
+
+
+def coordinates_message(dd: ss.lib.compute.DelayedDataset) -> dict[str, Any]:
+    """return the capture and acquisition fields of `dd` as the ``coordinates`` field.
 
     Returns:
-        a list of ``[position, color]`` pairs with 2 entries per band
+        ``num_ports``, ``groups`` (capture fields per defining class, one value per
+        port), and ``extra_coords`` (acquisition info per defining class)
     """
-    import matplotlib.pyplot as plt
+    import striqt.sensor as ss
+    from striqt.sensor.lib.compute import summary
 
-    import striqt.figures as sf
-
-    # data=None is accepted when vmin and vmax are both given
-    levels = sf.util.quantized_value_range(None, vmin, vmax, vstep)  # type: ignore[arg-type]
-    n_levels = len(levels) - 1
-
-    n_levels = max(n_levels, 1)
-
-    try:
-        mpl_cmap = plt.get_cmap(cmap).resampled(n_levels)
-    except ValueError:
-        mpl_cmap = plt.get_cmap('viridis').resampled(n_levels)
-
-    # each band takes 2 entries of the same color, so the colorscale is flat
-    # within a band
-    colorscale: list[list[Any]] = []
-    for i in range(n_levels):
-        pos_start = i / n_levels
-        pos_end = (i + 1) / n_levels
-
-        rgba = mpl_cmap(i / (n_levels - 1) if n_levels > 1 else 0.5)
-        r, g, b = int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255)
-        color = f'rgb({r},{g},{b})'
-
-        colorscale.append([pos_start, color])
-        if i < n_levels - 1:
-            colorscale.append([pos_end, color])
-        else:
-            colorscale.append([1.0, color])
-
-    return colorscale
+    groups = {
+        group.owner: [
+            {'name': f.name, 'values': list(f.values), 'unit': f.units}
+            for f in group.fields
+        ]
+        for group in summary.capture_fields(dd)
+    }
+    extra = {
+        group.owner: [
+            {'name': f.name, 'value': f.values[0], 'unit': f.units}
+            for f in group.fields
+        ]
+        for group in summary.acquisition_fields(dd)
+    }
+    return {
+        'num_ports': len(ss.specs.captures.split_capture_ports(dd.capture)),
+        'groups': groups,
+        'extra_coords': extra,
+    }
 
 
-# ---------------------------------------------------------------------------
-# Use striqt.figures.data_vars registry directly
-# ---------------------------------------------------------------------------
+def state_message(state: PreviewState) -> dict[str, Any]:
+    """return the ``state`` message: the variables, selections, and coordinates."""
+    coordinates: dict[str, Any] = {'num_ports': 1, 'groups': {}, 'extra_coords': {}}
+    if state.dataset is not None:
+        coordinates = coordinates_message(state.dataset)
+    return {
+        'type': 'state',
+        'available_variables': state.available_variables,
+        'variable_labels': state.variable_labels,
+        'selected_variable': state.selected_variable,
+        'coordinates': coordinates,
+        'spec_filename': state.spec_filename,
+        'capture_options': capture_options(state.choices),
+        'capture_selection': capture_selection(state),
+        'running': state.running,
+    }
 
 
-def get_data_plots_registry():
-    """Get the data variable plotting functions from striqt.figures.data_vars."""
-    from striqt.figures.data_vars import _data_plots
-
-    return _data_plots
+def _encode(message: dict[str, Any]) -> str:
+    # msgspec encodes to bytes; a text frame keeps the browser's JSON.parse path
+    return _json_encoder.encode(message).decode()
 
 
-# ---------------------------------------------------------------------------
-# FastAPI Application
-# ---------------------------------------------------------------------------
-
-_app_state: AppState = {
-    'delayed_dataset': None,
-    'plotter': None,
-    'selected_variable': 'spectrogram',
-    'available_variables': [],
-    'variable_labels': {},
-    'websockets': set(),
-    'broadcast_pending': False,
-    'data_updated': False,
-    'plot_opts': None,
-    'data_select': {},
-    'spec_filename': '',
-}
+# %% FastAPI application
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan context manager for FastAPI app startup/shutdown."""
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """end the acquisition thread when the server shuts down."""
     yield  # noqa: RUF075
-    # Cleanup on shutdown
-    _app_state['websockets'].clear()
+    STATE.stop.set()
+    STATE.websockets.clear()
+    if STATE.thread is not None:
+        STATE.thread.join()
 
 
 app = FastAPI(
@@ -1114,139 +299,124 @@ app = FastAPI(
 )
 
 
-_HTML_TEMPLATE_PATH = Path(__file__).parent / 'web-plotter.html'
-
-
 @app.get('/', response_class=HTMLResponse)
-async def get_index():
-    """Serve the main HTML page."""
+async def get_index() -> str:
     return _HTML_TEMPLATE_PATH.read_text()
 
 
+async def _send_all(message: str) -> None:
+    """send `message` to every client, dropping the clients that fail."""
+    disconnected = set()
+    for ws in STATE.websockets:
+        try:
+            await ws.send_text(message)
+        except Exception:
+            disconnected.add(ws)
+    STATE.websockets -= disconnected
+
+
+async def broadcast_state() -> None:
+    await _send_all(_encode(state_message(STATE)))
+
+
 @app.websocket('/ws')
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time data streaming."""
+async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
-    _app_state['websockets'].add(websocket)
+    STATE.websockets.add(websocket)
 
     try:
         while True:
-            data = await websocket.receive_text()
-            msg = _json_decoder.decode(data)
+            msg = _json_decoder.decode(await websocket.receive_text())
 
             if msg['type'] == 'get_state':
-                # Extract coordinates on demand (deferred from update_dataset)
-                coordinates: CoordinatesData = {
-                    'num_ports': 1,
-                    'groups': {},
-                    'extra_coords': {},
-                }
-                if _app_state['delayed_dataset'] is not None:
-                    coordinates = _extract_capture_coordinates(
-                        _app_state['delayed_dataset']
-                    )
-                # msgspec encodes to bytes; decode to str so the frame is sent as
-                # text and the browser's JSON.parse(event.data) works unchanged.
-                await websocket.send_text(
-                    _json_encoder.encode({
-                        'type': 'state',
-                        'available_variables': _app_state['available_variables'],
-                        'variable_labels': _app_state['variable_labels'],
-                        'selected_variable': _app_state['selected_variable'],
-                        'coordinates': coordinates,
-                        'spec_filename': _app_state['spec_filename'],
-                    }).decode()
-                )
-                if _app_state['delayed_dataset'] is not None:
+                await websocket.send_text(_encode(state_message(STATE)))
+                if STATE.dataset is not None:
                     await broadcast_plot_update()
             elif msg['type'] == 'select_variable':
-                _app_state['selected_variable'] = msg['variable']
-                # Reset remembered vmin/vmax/ymin/ymax when switching variables
-                plotter = _app_state['plotter']
-                if plotter is not None:
-                    plotter._remembered_vmin = None
-                    plotter._remembered_vmax = None
-                    plotter._remembered_ymin = None
-                    plotter._remembered_ymax = None
-                # Trigger immediate update with new variable
+                STATE.selected_variable = msg['variable']
+                if STATE.plotter is not None:
+                    STATE.plotter.reset(limits=True)
                 await broadcast_plot_update()
+            elif msg['type'] == 'select_captures':
+                apply_capture_selection(STATE, msg)
+                await broadcast_state()
+            elif msg['type'] == 'set_running':
+                STATE.running = bool(msg['running'])
+                await broadcast_state()
 
     except WebSocketDisconnect:
-        _app_state['websockets'].discard(websocket)
-    except Exception as e:
-        print(f'WebSocket error: {e}')
-        _app_state['websockets'].discard(websocket)
+        STATE.websockets.discard(websocket)
+    except Exception:
+        _logger().exception('websocket handler failed')
+        STATE.websockets.discard(websocket)
 
 
-async def broadcast_plot_update():
+async def broadcast_plot_update() -> None:
     """send the current plot to every connected websocket.
 
     A call during a broadcast in progress sets `data_updated` instead of queuing.
     One more broadcast follows the current one.
     """
-    if _app_state['broadcast_pending']:
-        _app_state['data_updated'] = True
+    if STATE.broadcast_pending:
+        STATE.data_updated = True
         return
 
-    _app_state['broadcast_pending'] = True
+    STATE.broadcast_pending = True
 
     try:
         await _do_broadcast()
     finally:
-        _app_state['broadcast_pending'] = False
+        STATE.broadcast_pending = False
 
-        if _app_state['data_updated']:
-            _app_state['data_updated'] = False
-            # Use create_task to avoid recursion depth issues
-            asyncio.create_task(_do_broadcast_if_needed())
+        if STATE.data_updated:
+            STATE.data_updated = False
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # the server stopped during the broadcast
+                return
+            # a task rather than recursion, which would grow with the backlog
+            loop.create_task(_do_broadcast_if_needed())
 
 
-async def _do_broadcast_if_needed():
-    """broadcast again when data arrived during the previous broadcast"""
-    if (
-        _app_state['delayed_dataset'] is not None
-        and not _app_state['broadcast_pending']
-    ):
+async def _do_broadcast_if_needed() -> None:
+    if STATE.dataset is not None and not STATE.broadcast_pending:
         await broadcast_plot_update()
 
 
-def _select_delayed_variable(result: ss.lib.compute.DelayedDataset, name: str):
-    import dataclasses
-
-    delayed_var = result.delayed[name]
-    return dataclasses.replace(result, delayed={name: delayed_var})
+def _select_delayed_variable(
+    result: ss.lib.compute.DelayedDataset, name: str
+) -> ss.lib.compute.DelayedDataset:
+    return dataclasses.replace(result, delayed={name: result.delayed[name]})
 
 
 def _prepare_plot_data_sync(
     result: ss.lib.compute.DelayedDataset,
-    plotter: WebPlotBackend,
+    plotter: PlotlyBackend,
     variable: str,
     data_select: dict[str, Any],
-) -> tuple[list[dict[str, Any]], CoordinatesData]:
-    """return the plot results and capture coordinates of `variable` in `result`.
+) -> list[go.Figure]:
+    """return the figures of `variable` in `result`.
 
     The call blocks on the materialization of the delayed dataset (a GPU transfer
     on the TX2i).
 
     Args:
         result: the delayed dataset of the analyzed capture
-        plotter: the backend that produces the results; `reset` is called first
+        plotter: the backend that produces the figures; `reset` is called first
         variable: the name of the data variable to plot
         data_select: the `PlotOptions.data.select` selection; keys that are not
             indexes of the dataset are dropped
 
     Returns:
-        the list of result dicts from `plotter`, and the `CoordinatesData`
+        the figures from `plotter` in drawing order
     """
+    import striqt.figures as sf
     from striqt.sensor.lib import compute
 
     plotter.reset()
 
-    # Extract capture coordinates (deferred from update_dataset to reduce acquisition thread work)
-    coordinates = _extract_capture_coordinates(result)
-
-    data_plots = get_data_plots_registry()
-    plot_func = data_plots[variable]
+    plot_func = sf.data_var_plotters()[variable]
 
     delayed = _select_delayed_variable(result, variable)
     ds = compute.from_delayed(delayed).set_xindex('port')
@@ -1258,391 +428,186 @@ def _prepare_plot_data_sync(
         if filtered_select:
             ds = ds.sel(filtered_select)
 
-    # plot_func draws through plotter.heatmap or plotter.line, which collect the results
-    plot_func(ds, cast('sf.backend.PlotBackend', plotter))
+    plot_func(ds, plotter)
 
-    plot_data = plotter.get_plot_data()
-
-    return plot_data, coordinates
+    return plotter.get_plot_data()
 
 
 def _serialize_plot_message(
-    plot_data: list[dict[str, Any]],
-    coordinates: CoordinatesData,
-    available_variables: list[str],
-    variable_labels: dict[str, str],
-    selected_variable: str,
-    spec_filename: str,
+    plot_data: list[go.Figure],
+    coordinates: dict[str, Any],
+    state: PreviewState,
 ) -> str:
     """return the ``plot_data`` message as JSON text.
 
-    Numpy arrays in the traces are encoded as base64 typed arrays, as by
-    `Figure.to_json`.
+    Each figure is encoded by `Figure.to_json`, which writes numpy arrays as base64
+    typed arrays.
     """
-    serialized_plots = []
-    for plot in plot_data:
-        traces = plot.get('traces', [])
-        layout = plot.get('layout', {})
+    serialized_plots = [
+        _json_decoder.decode(cast(str, fig.to_json())) for fig in plot_data
+    ]
 
-        go_traces: list[Any] = []
-        for trace in traces:
-            trace_type = trace.get('type', 'scatter')
-            if trace_type == 'heatmap':
-                go_traces.append(go.Heatmap(trace))
-            elif trace_type == 'scattergl':
-                go_traces.append(go.Scattergl(trace))
-            elif trace_type == 'scatter':
-                go_traces.append(go.Scatter(trace))
-            else:
-                go_traces.append(trace)
-
-        fig = go.Figure(data=go_traces, layout=layout)
-        serialized_plots.append(_json_decoder.decode(cast(str, fig.to_json())))
-
-    # msgspec encodes to bytes; decode to str so callers can send it as a text
-    # WebSocket frame (keeps the browser's JSON.parse(event.data) path unchanged).
-    return _json_encoder.encode({
+    return _encode({
         'type': 'plot_data',
         'data': serialized_plots,
         'coordinates': coordinates,
-        'available_variables': available_variables,
-        'variable_labels': variable_labels,
-        'selected_variable': selected_variable,
-        'spec_filename': spec_filename,
-    }).decode()
+        'available_variables': state.available_variables,
+        'variable_labels': state.variable_labels,
+        'selected_variable': state.selected_variable,
+        'spec_filename': state.spec_filename,
+    })
 
 
-async def _do_broadcast():
-    """Internal broadcast implementation."""
-    result = _app_state['delayed_dataset']
-    if result is None:
+async def _do_broadcast() -> None:
+    result = STATE.dataset
+    plotter = STATE.plotter
+    if result is None or plotter is None or not STATE.websockets:
         return
 
-    plotter = _app_state['plotter']
-    if plotter is None:
+    variable = STATE.selected_variable
+    if variable not in result.delayed:
+        # the acquisition in flight was analyzed under the previous selection
         return
 
-    variable = _app_state['selected_variable']
-    data_plots = get_data_plots_registry()
+    try:
+        plot_data = await asyncio.to_thread(
+            _prepare_plot_data_sync, result, plotter, variable, STATE.data_select
+        )
 
-    if variable in data_plots:
-        try:
-            data_select = _app_state['data_select']
-            plot_data, coordinates = await asyncio.to_thread(
-                _prepare_plot_data_sync, result, plotter, variable, data_select
-            )
-
-            if not plot_data:
-                # an empty result means the plot function drew with matplotlib
-                # calls (FacetGrid, ax=) that WebPlotBackend does not implement
-                error_message = _json_encoder.encode({
+        if not plot_data:
+            await _send_all(
+                _encode({
                     'type': 'error',
-                    'message': f"'{variable}' uses matplotlib-specific plotting that isn't supported in web view yet",
-                }).decode()
-                for ws in _app_state['websockets']:
-                    try:
-                        await ws.send_text(error_message)
-                    except Exception:  # noqa: S110
-                        pass
-                return
-
-            message = await asyncio.to_thread(
-                _serialize_plot_message,
-                plot_data,
-                coordinates,
-                _app_state['available_variables'],
-                _app_state['variable_labels'],
-                _app_state['selected_variable'],
-                _app_state['spec_filename'],
+                    'message': f"'{variable}' produced no plot data for the web view",
+                })
             )
+            return
 
-            disconnected = set()
-            for ws in _app_state['websockets']:
-                try:
-                    await ws.send_text(message)
-                except Exception:
-                    disconnected.add(ws)
+        coordinates = await asyncio.to_thread(coordinates_message, result)
+        message = await asyncio.to_thread(
+            _serialize_plot_message, plot_data, coordinates, STATE
+        )
+        await _send_all(message)
 
-            _app_state['websockets'] -= disconnected
-
-        except Exception as e:
-            import traceback
-
-            traceback.print_exc()
-
-            error_message = _json_encoder.encode({
-                'type': 'error',
-                'message': f"Error plotting '{variable}': {e!s}",
-            }).decode()
-            for ws in _app_state['websockets']:
-                try:
-                    await ws.send_text(error_message)
-                except Exception:  # noqa: S110
-                    pass
+    except Exception as e:
+        _logger().exception(f"plotting '{variable}' failed")
+        await _send_all(
+            _encode({'type': 'error', 'message': f"Error plotting '{variable}': {e!s}"})
+        )
 
 
-@functools.cache
-def _get_field_origins(cls: type) -> dict[str, type]:
-    """return the class in the MRO of `cls` that first defines each msgspec field.
+# %% the server
 
-    Returns:
-        a dict from field name to the base-most class with the field in
-        ``__struct_fields__``
+
+WILDCARD_HOSTS = ('', '0.0.0.0', '::')
+
+
+def serving_urls(host: str, port: int) -> list[str]:
+    """return the URLs at which a server bound to `host` answers.
+
+    A wildcard `host` (``''``, ``'0.0.0.0'``, or ``'::'``) expands to the loopback
+    address, the host name, the fully qualified host name when it differs, and the
+    IPv4 address of every network interface other than loopback. Any other `host`
+    gives the one URL at that host.
     """
-    field_origins: dict[str, type] = {}
+    if host not in WILDCARD_HOSTS:
+        return [f'http://{host}:{port}']
 
-    # Walk MRO from base to derived (reversed)
-    mro = [
-        c
-        for c in cls.__mro__
-        if hasattr(c, '__struct_fields__') and isinstance(c.__struct_fields__, tuple)
-    ]
+    import psutil
 
-    for klass in reversed(mro):
-        struct_fields: tuple[str, ...] = klass.__struct_fields__  # ty: ignore
-        for field_name in struct_fields:
-            if field_name not in field_origins:
-                field_origins[field_name] = klass
-
-    return field_origins
-
-
-def _extract_extra_coords(
-    result: ss.lib.compute.DelayedDataset,
-) -> dict[str, list[dict[str, Any]]]:
-    """Extract extra_coords (AcquisitionInfo) fields from dataset, grouped by defining class.
-
-    Skips the 'signal_trigger' field if present.
-
-    Args:
-        result: DelayedDataset containing extra_coords (AcquisitionInfo)
-
-    Returns:
-        Dict mapping class name to list of coordinate dicts. Each coordinate dict
-        has 'name', 'value', and 'unit' keys.
-    """
-    from collections import defaultdict
-
-    import striqt.analysis as sa
-
-    extra_coords = result.extra_coords
-    if extra_coords is None:
-        return {}
-
-    field_origins = _get_field_origins(type(extra_coords))
-    field_attrs = sa.specs.helpers.get_capture_type_attrs(type(extra_coords))
-
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-
-    for field_name, defining_class in field_origins.items():
-        if field_name == 'signal_trigger':
-            continue
-
-        value = getattr(extra_coords, field_name, None)
-        if value is None:
-            continue
-
-        formatted_value = _format_coord_value(value)
-        unit = field_attrs.get(field_name, {}).get('units', '')
-
-        coord_dict = {
-            'name': field_name,
-            'value': formatted_value,
-            'unit': unit,
-        }
-
-        qualname = f'{defining_class.__module__}.{defining_class.__name__}'
-        grouped[qualname].append(coord_dict)
-
-    return grouped
+    names = ['127.0.0.1', socket.gethostname()]
+    fqdn = socket.getfqdn()
+    if fqdn not in names:
+        names.append(fqdn)
+    for addresses in psutil.net_if_addrs().values():
+        for address in addresses:
+            if address.family != socket.AF_INET:
+                continue
+            if address.address.startswith('127.') or address.address in names:
+                continue
+            names.append(address.address)
+    return [f'http://{name}:{port}' for name in names]
 
 
-def _extract_capture_coordinates(
-    result: ss.lib.compute.DelayedDataset,
-) -> CoordinatesData:
-    """Extract capture coordinates from dataset, grouped by defining class.
+# %% the acquisition thread
 
-    Only includes coordinates that correspond to fields in the capture spec.
 
-    Args:
-        result: DelayedDataset containing capture information and coordinates
+def _default_plot_options() -> sf.specs.PlotOptions:
+    import striqt.figures as sf
 
-    Returns:
-        CoordinatesData with 'num_ports' (number of ports), 'groups' (dict mapping
-        class name to list of coordinate dicts), and 'extra_coords' (dict
-        mapping class name to list of extra coordinate dicts from AcquisitionInfo).
-        Each coordinate dict has 'name', 'values' (list), and 'unit' keys.
-    """
-    from collections import defaultdict
-
-    import striqt.sensor as ss
-    import striqt.waveform as sw
-
-    capture_coords = ss.lib.compute.datasets.build_capture_coords(
-        result.capture, result.extra_coords, result.config.sweep_spec.loops
-    )
-
-    if capture_coords is None:
-        raise TypeError('did not receive capture information')
-
-    splits = ss.specs.captures.split_capture_ports(result.capture)
-    port_count = len(splits)
-
-    field_origins = _get_field_origins(type(result.capture))
-
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-
-    for field_name, defining_class in field_origins.items():
-        if field_name not in capture_coords:
-            continue
-
-        coord = capture_coords[field_name]
-        value = coord.values
-
-        unit = coord.attrs.get('units', '')
-
-        # Format values as a list (one per port if multi-valued)
-        if value.ndim == 0:
-            # Scalar value - same for all ports
-            raw_values = [value.item()] * port_count
-        elif value.size == port_count:
-            # One value per port
-            raw_values = [v for v in value.flat]
-        elif value.size <= 5:
-            # Small array but not matching ports - show as single combined value
-            combined = ', '.join(_format_coord_value(v) for v in value.flat)
-            raw_values = combined  # Signal to use combined string
-        else:
-            # Large array - show summary
-            raw_values = None  # Signal to use summary string
-
-        # Apply SI prefix formatting for numeric values with units
-        if raw_values is not None and unit:
-            numeric_vals = [
-                float(v)
-                for v in raw_values
-                if isinstance(v, (int, float, np.integer, np.floating))
-                and np.isfinite(v)
-            ]
-            if len(numeric_vals) == len(raw_values):
-                p = sw.units.si_prefix(numeric_vals, unit)
-                values = [
-                    sw.units.format_quantity(v, None, prefix=p) for v in numeric_vals
-                ]
-                unit = f'{p.symbol}{unit}'
-            else:
-                # Mixed or non-numeric - format without SI prefix
-                values = [_format_coord_value(v) for v in raw_values]
-        elif raw_values is not None:
-            # No unit - format without SI prefix
-            values = [_format_coord_value(v) for v in raw_values]
-        elif value.size <= 5:
-            # Small array combined string
-            combined = ', '.join(_format_coord_value(v) for v in value.flat)
-            values = [combined] * port_count
-        else:
-            # Large array summary
-            values = [f'[{value.size} values]'] * port_count
-
-        coord_dict = {
-            'name': field_name,
-            'values': values,  # List of values, one per port
-            'unit': unit,
-        }
-
-        class_name = f'{defining_class.__module__}.{defining_class.__name__}'
-        grouped[class_name].append(coord_dict)
-
-    extra_coords_groups = _extract_extra_coords(result)
-
-    return cast(
-        CoordinatesData,
-        {
-            'num_ports': port_count,
-            'groups': grouped,
-            'extra_coords': extra_coords_groups,
-        },
+    return sf.specs.PlotOptions(
+        data=sf.specs.DataOptions(
+            sweep_index=-1,
+            select={'spectrogram_time': slice(0, 5e-3)},
+        ),
+        plotter=sf.specs.SharedPlotOptions(
+            col='port',
+            col_label_format='Port {port}',
+            style=None,
+            filename_fmt='',
+            suptitle_fmt='{name}',
+        ),
     )
 
 
-def _format_coord_value(value: Any) -> str:
-    """Format a single coordinate value for display (without SI prefix)."""
-    if isinstance(value, (np.floating, float)):
-        if abs(value) >= 1e6 or (abs(value) < 1e-3 and value != 0):
-            return f'{value:.3e}'
-        return f'{value:.4g}'
-    if isinstance(value, np.datetime64):
-        return str(value)[:19]  # Trim to seconds
-    if isinstance(value, np.timedelta64):
-        # Convert to seconds
-        seconds = value / np.timedelta64(1, 's')
-        return f'{seconds:.3g} s'
-    if isinstance(value, bytes):
-        return value.decode('utf-8', errors='replace')
-    return str(value)
+def configure(state: PreviewState, resources: Resources) -> None:
+    """set the sweep-derived fields of `state` from the open `resources`.
 
-
-def _build_variable_labels_from_registry(
-    analysis_spec: sa.specs.AnalysisGroup,
-    registry: sa.lib.register.AnalysisRegistry,
-) -> dict[str, str]:
-    """return a label for each enabled field of `analysis_spec`, keyed by field name.
-
-    The label of a field with a `registry` entry is the `standard_name` of the
-    registration. A field without an entry is labeled by the field name in title
-    case with underscores replaced by spaces.
+    The variables offered are the enabled measurements of the sweep with a plot in
+    `striqt.figures.data_var_plotters`. The selected variable falls back to the
+    first offered one when the current selection is not offered. The capture
+    selection starts at the first entry and the first value of each loop.
     """
-    standard_names = {
-        info.name: str(info.attrs['standard_name']) for info in registry.values()
-    }
-    labels: dict[str, str] = {}
-    for field_name in analysis_spec.__struct_fields__:
-        if getattr(analysis_spec, field_name) is None:
-            continue
-        fallback = field_name.replace('_', ' ').title()
-        labels[field_name] = standard_names.get(field_name, fallback)
-    return labels
+    import striqt.figures as sf
+    from striqt.figures.backend import PlotlyBackend
+    from striqt.sensor.lib.compute import summary
+    from striqt.sensor.specs import sequencing
+
+    sweep = resources['sweep_spec']
+    state.sweep = sweep
+    state.source_id = resources['source'].source_id
+
+    if sweep.plot_hint is None:
+        plot_opts = _default_plot_options()
+    else:
+        plot_opts = sf.specs.PlotOptions.from_spec(sweep.plot_hint)
+    state.plot_opts = plot_opts
+    state.plotter = PlotlyBackend(plot_opts.plotter)
+    state.data_select = dict(plot_opts.data.select)
+
+    plotters = sf.data_var_plotters()
+    labels = summary.analysis_labels(sweep.analysis)
+    state.available_variables = [name for name in labels if name in plotters]
+    state.variable_labels = {name: labels[name] for name in state.available_variables}
+    if (
+        state.selected_variable not in state.available_variables
+        and state.available_variables
+    ):
+        state.selected_variable = state.available_variables[0]
+
+    state.choices = sequencing.plan_choices(sweep, state.source_id)
+    select_first(state)
 
 
-def update_dataset(result: ss.lib.compute.DelayedDataset):
-    """store the dataset and refresh the list of plottable variables.
+def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
+    """run the web server and the acquisition thread for the spec at `path`.
 
-    The selected variable falls back to the first plottable variable when the
-    current selection is not plottable.
+    The sink of the spec is replaced by a null sink, so nothing is written. The
+    server exits when the acquisition thread ends, and the acquisition thread ends
+    after the capture in progress when the server exits. The URLs of
+    `serving_urls` are logged at INFO on the ``sweep`` logger once the server
+    starts.
+
+    Raises:
+        click.ClickException: if `path` has a suffix other than ``.yaml``, ``.yml``,
+            or ``.json``
     """
-    _app_state['delayed_dataset'] = result
-
-    data_plots = get_data_plots_registry()
-    available = [n for n in result.delayed if n in data_plots]
-
-    _app_state['available_variables'] = available
-
-    # If current selection is not available, switch to first available
-    if _app_state['selected_variable'] not in available and available:
-        _app_state['selected_variable'] = available[0]
-
-
-# ---------------------------------------------------------------------------
-# Main runner (mirrors live-plotter structure)
-# ---------------------------------------------------------------------------
-
-
-def run_server(
-    path: str,
-    host: str = '0.0.0.0',
-    port: int = 8000,
-):
-    """Run the web server with data acquisition loop."""
-    import threading
-
     import uvicorn
 
-    import striqt.analysis as sa
-    import striqt.figures as sf
     import striqt.sensor as ss
+    from striqt.cli.sensor_sweep import log_overloads
 
-    # Store the spec filename for display in the web UI header
-    _app_state['spec_filename'] = Path(path).name
+    STATE.spec_filename = Path(path).name
 
     if path.endswith(('.yaml', '.yml')):
         spec = ss.read_yaml_spec(path)
@@ -1651,71 +616,66 @@ def run_server(
     else:
         raise click.ClickException('expected file to have .json or .yaml suffix')
 
-    # a null sink path writes nothing, and on_data receives the results instead
+    # a null sink path writes nothing, and on_analyzed receives the results instead
     spec = spec.replace(sink=spec.sink.replace(path=None))
 
-    # the plotter shows the sweep the action runs, which may differ from the spec
-    sweep = ss.lib.actions.registry.lookup(spec)(spec).sweep
-
-    if sweep.plot_hint is None:
-        plot_opts = sf.specs.PlotOptions(
-            data=sf.specs.DataOptions(
-                sweep_index=-1,
-                select={
-                    # 'channel_power_bin': slice(-100, -15),
-                    # 'spectrogram_power_bin': slice(-130, -50),
-                    'spectrogram_time': slice(0, 5e-3),
-                },
-            ),
-            plotter=sf.specs.SharedPlotOptions(
-                col='port',
-                col_label_format='Port {port}',
-                style=None,
-                filename_fmt='',
-                suptitle_fmt='{name}',
-            ),
-        )
-    else:
-        plot_opts = sf.specs.PlotOptions.from_spec(sweep.plot_hint)
-
-    _app_state['plot_opts'] = plot_opts
-    _app_state['plotter'] = WebPlotBackend(plot_opts.plotter)
-    # the selection is filtered to valid indexes per variable in _prepare_plot_data_sync
-    _app_state['data_select'] = dict(plot_opts.data.select)
-
-    _app_state['variable_labels'] = _build_variable_labels_from_registry(
-        sweep.analysis, sa.registry
-    )
-
     loop = asyncio.new_event_loop()
-
-    def acquisition_loop():
-        """Run data acquisition in a separate thread."""
-
-        def on_data(result: ss.lib.compute.DelayedDataset) -> None:
-            """Callback when new data arrives."""
-            update_dataset(result)
-
-            # Schedule broadcast on the event loop
-            asyncio.run_coroutine_threadsafe(broadcast_plot_update(), loop)
-
-        ctx = ss.open_resources(spec, path, on_analyzed=on_data)
-
-        with ctx as resources:
-            while True:
-                sweep = ss.iterate_sweep(
-                    resources, yield_values=True, always_yield=True
-                )
-                for _ in sweep:
-                    pass
-
-    acq_thread = threading.Thread(target=acquisition_loop, daemon=True)
-    acq_thread.start()
-
     config = uvicorn.Config(app, host=host, port=port, loop='asyncio')
     server = uvicorn.Server(config)
+    # the uvicorn startup line names the bind address, which is 0.0.0.0 by default;
+    # the URLs are logged below instead, and uvicorn errors still show
+    logging.getLogger('uvicorn.error').setLevel(logging.WARNING)
 
-    loop.run_until_complete(server.serve())
+    async def serve() -> None:
+        task = asyncio.ensure_future(server.serve())
+        while not server.started and not task.done():
+            await asyncio.sleep(0.05)
+        if server.started:
+            urls = ', '.join(serving_urls(host, port))
+            _logger().info(f'serving the display at {urls}')
+        await task
+
+    def on_data(result: ss.lib.compute.DelayedDataset) -> None:
+        log_overloads(result)
+        STATE.dataset = result
+        if loop.is_running():
+            asyncio.run_coroutine_threadsafe(broadcast_plot_update(), loop)
+
+    def acquisition_loop() -> None:
+        try:
+            ctx = ss.open_resources(
+                spec, path, on_analyzed=on_data, select_analysis=select_displayed
+            )
+            with ctx as resources:
+                configure(STATE, resources)
+                asyncio.run_coroutine_threadsafe(broadcast_state(), loop)
+                sweep = ss.iterate_sweep(
+                    resources,
+                    yield_values=False,
+                    always_yield=True,
+                    captures=selected_captures(STATE),
+                )
+                try:
+                    for _ in sweep:
+                        if STATE.stop.is_set():
+                            break
+                finally:
+                    sweep.close()
+        except Exception:
+            _logger().exception('the acquisition thread failed')
+        finally:
+            server.should_exit = True
+
+    STATE.thread = threading.Thread(
+        target=acquisition_loop, name='striqt-preview', daemon=True
+    )
+    STATE.thread.start()
+
+    try:
+        loop.run_until_complete(serve())
+    finally:
+        STATE.stop.set()
+        STATE.thread.join()
 
 
 @click.command('Web-based real-time radio diagnostic display')
@@ -1734,7 +694,7 @@ def run_server(
     show_default=True,
     help='Port to bind the server to',
 )
-def cli(path: str, host: str, port: int):
+def cli(path: str, host: str, port: int) -> None:
     """
     Run a web-based real-time display for radio diagnostics.
 

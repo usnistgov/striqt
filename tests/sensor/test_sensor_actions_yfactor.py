@@ -446,3 +446,9 @@ def test_iterate_does_not_loop():
     runner = make_calibration_runner()
     with pytest.raises(ValueError, match='loop'):
         next(runner.iterate({}, loop=True))
+
+
+def test_iterate_rejects_a_capture_sequence():
+    runner = make_calibration_runner()
+    with pytest.raises(ValueError, match='capture'):
+        next(runner.iterate({}, captures=runner.sweep.captures))

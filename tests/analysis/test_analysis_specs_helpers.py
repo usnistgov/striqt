@@ -38,6 +38,7 @@ from striqt.analysis.specs.helpers import (
     inspect_freeze_depths,
     json_schema,
     lru_cache_on_converted,
+    narrow_analysis_group,
     spec_subset,
     subset_of,
     to_analysis_capture,
@@ -885,3 +886,42 @@ def test_subset_of_rejects_names_that_do_not_apply(kws, match):
 
     with pytest.raises(TypeError, match=match):
         subset_of(_Base, **kws)(Block)
+
+
+# %% narrow_analysis_group
+
+THREE_MEASUREMENTS = sa.specs.BuiltinAnalyses.from_dict({
+    'iq_waveform': {},
+    'power_spectral_density': {'window': 'hann', 'frequency_resolution': 8e3},
+    'channel_power_time_series': {'detector_period': 1e-3},
+})
+
+
+@pytest.mark.parametrize(
+    'names',
+    [
+        ['iq_waveform'],
+        ['channel_power_time_series', 'power_spectral_density'],
+        [],
+    ],
+    ids=['one', 'two', 'none'],
+)
+def test_narrow_analysis_group_keeps_the_named_fields_at_their_values(names):
+    narrowed = narrow_analysis_group(THREE_MEASUREMENTS, names)
+    assert type(narrowed) is type(THREE_MEASUREMENTS)
+    assert set(narrowed.to_dict()) == set(names)
+    for name in names:
+        assert getattr(narrowed, name) == getattr(THREE_MEASUREMENTS, name)
+
+
+@pytest.mark.parametrize(
+    'names, match',
+    [
+        (['iq_waveform', 'spectrogram'], r"\['spectrogram'\]"),
+        (['bogus'], r"\['bogus'\]"),
+    ],
+    ids=['disabled_field', 'unknown_name'],
+)
+def test_narrow_analysis_group_rejects_a_name_that_is_not_enabled(names, match):
+    with pytest.raises(KeyError, match=match):
+        narrow_analysis_group(THREE_MEASUREMENTS, names)

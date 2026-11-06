@@ -42,6 +42,7 @@ from sweep_strategies import (
     sweeps,
 )
 
+import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis.specs.helpers import frozendict
 
@@ -685,6 +686,167 @@ def test_describe_capture_origin_omits_the_loops_dropped_by_only_fields():
         ".loops: {'snr': 10.0}",
         '.captures[0]',
     )
+
+
+# %% plan_choices
+
+CHOICE_OFFSETS = (1e5, 2.5e6)
+CHOICE_LOOPS = (
+    ss.specs.Repeat(count=2),
+    ss.specs.List(field='snr', values=(10.0, 10.0, 20.0)),
+    ss.specs.Range(field='duration', start=1e-3, stop=3e-3, step=1e-3),
+    ss.specs.List(field='frequency_resolution', isin='analysis', values=(1e3, 2e3)),
+)
+
+
+def choice_sweep(loops=CHOICE_LOOPS):
+    """return a sweep over 2 captures that differ in `frequency_offset` under `loops`,
+    with the analysis that `frequency_resolution` adjusts"""
+    captures = tuple(make_capture(frequency_offset=f) for f in CHOICE_OFFSETS)
+    return make_sweep(captures=captures, loops=loops, analysis=SPG)
+
+
+@pytest.mark.parametrize('count', [1, 2], ids=['one_entry', 'two_entries'])
+def test_plan_choices_numbers_the_capture_entries(count):
+    sweep = make_sweep(captures=tuple(make_capture(snr=i) for i in range(count)))
+    assert S.plan_choices(sweep).captures == tuple(f'capture {i}' for i in range(count))
+
+
+def test_plan_choices_lists_no_capture_entries_without_a_capture_list():
+    loops = (
+        ss.specs.List(field='port', values=(0, 1)),
+        ss.specs.List(field='sample_rate', values=(1e6,)),
+        ss.specs.List(field='duration', values=(1e-3,)),
+    )
+    choices = S.plan_choices(make_sweep(loops=loops))
+    assert choices.captures == ()
+    assert [c.values for c in choices.loops] == [(0, 1), (1e6,), (1e-3,)]
+
+
+def test_plan_choices_lists_each_loop_with_a_field_in_declaration_order(subtests):
+    """the leading `Repeat` is skipped, and a `List` that repeats a value contributes
+    the value once"""
+    sweep = choice_sweep()
+    choices = S.plan_choices(sweep)
+    looped = [loop for loop in sweep.loops if loop.field is not None]
+
+    assert [(c.isin, c.field) for c in choices.loops] == [
+        (loop.isin, loop.field) for loop in looped
+    ]
+    for loop, choice in zip(looped, choices.loops):
+        with subtests.test(msg=loop.field):
+            assert choice.values == tuple(dict.fromkeys(loop.get_points()))
+            assert len(choice.labels) == len(choice.values)
+
+
+def test_plan_choices_labels_capture_loop_values_in_the_units_of_the_field():
+    """the label of a value is the value text of `describe_field` for a capture that
+    has the value"""
+    choices = S.plan_choices(choice_sweep())
+    snr = next(c for c in choices.loops if c.field == 'snr')
+    for value, label in zip(snr.values, snr.labels):
+        capture = make_capture(snr=value)
+        assert f'snr: {label}' == sa.labels.describe_field(capture, 'snr', sep=': ')
+    assert all(label.endswith(' dB') for label in snr.labels)
+
+
+def test_plan_choices_lists_an_analysis_loop_as_decoded():
+    choices = S.plan_choices(choice_sweep())
+    (analysis,) = [c for c in choices.loops if c.isin == 'analysis']
+    assert analysis.field == 'frequency_resolution'
+    assert analysis.values == (1e3, 2e3)
+    assert analysis.labels == (repr(1e3), repr(2e3))
+
+
+def test_plan_choices_lists_a_loop_without_points_with_empty_tuples():
+    loops = (ss.specs.List(field='snr', values=()),)
+    sweep = make_sweep(captures=(make_capture(),), loops=loops)
+    assert S.loop_captures(sweep) == ()
+    (snr,) = S.plan_choices(sweep).loops
+    assert (snr.field, snr.values, snr.labels) == ('snr', (), ())
+
+
+# %% select_plan
+
+SELECT_LOOPS = tuple(
+    loop.replace(values=tuple(dict.fromkeys(loop.values)))
+    if isinstance(loop, ss.specs.List)
+    else loop
+    for loop in CHOICE_LOOPS
+)
+"""`CHOICE_LOOPS` with the repeated `List` value removed, so that every expanded
+capture is distinct"""
+
+
+def point_count(sweep) -> int:
+    return math.prod(
+        len(loop.get_points()) for loop in sweep.loops if loop.field is not None
+    )
+
+
+def test_select_plan_without_a_selection_returns_every_capture():
+    sweep = choice_sweep(SELECT_LOOPS)
+    assert S.select_plan(sweep) == S.loop_captures(sweep)
+
+
+@pytest.mark.parametrize('index', range(len(CHOICE_OFFSETS)), ids=lambda i: f'entry{i}')
+def test_select_plan_by_capture_entry_keeps_every_loop_point_of_the_entry(index):
+    sweep = choice_sweep(SELECT_LOOPS)
+    origins = S.loop_capture_origins(sweep)
+
+    selected = S.select_plan(sweep, capture=index)
+
+    assert selected == tuple(c for c, o in origins.items() if o.spec_index == index)
+    assert len(selected) == point_count(sweep)
+
+
+def test_select_plan_by_loop_value_keeps_one_capture_per_entry_and_other_loops():
+    sweep = choice_sweep(SELECT_LOOPS)
+    (snr,) = [loop for loop in sweep.loops if loop.field == 'snr']
+    value = snr.get_points()[-1]
+
+    selected = S.select_plan(sweep, loops={('capture', 'snr'): value})
+
+    per_entry = point_count(sweep) // len(snr.get_points())
+    assert len(selected) == per_entry * len(sweep.captures)
+    assert all(c.snr == value for c in selected)
+    origins = S.loop_capture_origins(sweep)
+    entries = list(range(len(sweep.captures))) * per_entry
+    assert sorted(origins[c].spec_index for c in selected) == sorted(entries)
+
+
+def test_select_plan_by_analysis_loop_value_reads_adjust_analysis():
+    sweep = choice_sweep(SELECT_LOOPS)
+    selected = S.select_plan(sweep, loops={('analysis', 'frequency_resolution'): 2e3})
+    assert len(selected) == point_count(sweep) // 2 * len(sweep.captures)
+    assert all(c.adjust_analysis['frequency_resolution'] == 2e3 for c in selected)
+
+
+def test_select_plan_by_every_loop_and_the_entry_keeps_one_capture():
+    sweep = choice_sweep(SELECT_LOOPS)
+    origins = S.loop_capture_origins(sweep)
+    target, origin = list(origins.items())[-1]
+
+    selected = S.select_plan(
+        sweep, capture=origin.spec_index, loops=dict(origin.loop_points)
+    )
+
+    assert selected == (target,)
+
+
+def test_select_plan_with_a_value_outside_the_loop_is_empty():
+    sweep = choice_sweep(SELECT_LOOPS)
+    assert S.select_plan(sweep, loops={('capture', 'snr'): 30.0}) == ()
+
+
+@pytest.mark.parametrize(
+    'key',
+    [('capture', 'nope'), ('analysis', 'snr'), ('capture', 'frequency_resolution')],
+    ids=['unknown_field', 'wrong_isin', 'analysis_field_as_capture'],
+)
+def test_select_plan_rejects_a_key_that_names_no_loop(key):
+    with pytest.raises(KeyError):
+        S.select_plan(choice_sweep(SELECT_LOOPS), loops={key: 1.0})
 
 
 # %% adjust_captures

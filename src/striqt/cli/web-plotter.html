@@ -57,11 +57,27 @@
         select:hover {
             border-color: #e94560;
         }
-        .status {
+        .status, .run-button {
             display: flex;
             align-items: center;
             gap: 0.5rem;
             font-size: 0.85rem;
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #1a1a2e;
+            padding: 0.45rem 0.9rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .status:hover, .run-button:hover:not(:disabled) {
+            border-color: #e94560;
+        }
+        .run-button:disabled {
+            color: #777;
+            cursor: default;
+        }
+        .run-button.running {
+            border-color: #4ade80;
         }
         .status-dot {
             width: 8px;
@@ -69,8 +85,15 @@
             border-radius: 50%;
             background: #e94560;
         }
+        .status-dot.connecting {
+            background: #fbbf24;
+            animation: pulse 1s ease-in-out infinite;
+        }
         .status-dot.connected {
             background: #4ade80;
+        }
+        @keyframes pulse {
+            50% { opacity: 0.3; }
         }
         .main {
             padding: 1rem;
@@ -83,11 +106,39 @@
             min-width: 0;
             height: 100%;
         }
+        .plot-stage {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
         #plot-container {
             width: 100%;
             height: 100%;
             background: #16213e;
             border-radius: 8px;
+        }
+        /* the dropdown is centered on the row of the plotly mode bar, which plotly
+           places at top 2px, right 2px, about 30px tall */
+        .plot-title-select {
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            height: 30px;
+            z-index: 2;
+            background: transparent;
+            border: 1px solid transparent;
+            color: #eee;
+            font-size: 1rem;
+            font-weight: 500;
+            line-height: 1;
+            text-align: center;
+            text-align-last: center;
+            padding: 0 1.25rem;
+        }
+        .plot-title-select:hover, .plot-title-select:focus {
+            background: #0f3460;
+            border-color: #e94560;
         }
         .loading {
             display: flex;
@@ -104,6 +155,54 @@
             padding: 1rem;
             overflow-y: auto;
             flex-shrink: 0;
+        }
+        /* the capture and loop selectors stack above the field tables */
+        .selectors {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+        .selectors:not(:empty) {
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #0f3460;
+        }
+        .selectors .control-group {
+            display: grid;
+            grid-template-columns: 8rem 1fr;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .selectors .control-group label {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8rem;
+            color: #aaa;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .selectors .control-group select {
+            width: 100%;
+            min-width: 0;
+        }
+        .selectors .slider {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            min-width: 0;
+        }
+        .selectors .slider input[type=range] {
+            flex: 1;
+            min-width: 0;
+            accent-color: #e94560;
+            cursor: pointer;
+        }
+        .selectors .slider-value {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8rem;
+            color: #eee;
+            min-width: 3.5rem;
+            text-align: right;
         }
         .coords-section {
             margin-bottom: 1.5rem;
@@ -213,27 +312,30 @@
     <div class="header">
         <h1 id="header-title">&#x1F4E1; Striqt WebView</h1>
         <div class="controls">
-            <div class="control-group">
-                <label for="variable-select">Data Variable:</label>
-                <select id="variable-select">
-                    <option value="">Loading...</option>
-                </select>
-            </div>
-            <div class="status">
-                <div class="status-dot" id="status-dot"></div>
+            <button type="button" id="run-button" class="run-button" disabled>Run</button>
+            <button type="button" id="status-button" class="status" title="Disconnect">
+                <div class="status-dot connecting" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
-            </div>
+            </button>
         </div>
     </div>
     <div class="main">
-        <div class="sidebar" id="coords-sidebar">
-            <div class="coords-section">
-                <p style="color: #666; font-size: 0.8rem;">Waiting for data...</p>
+        <div class="sidebar">
+            <div id="capture-controls" class="selectors"></div>
+            <div id="coords-sidebar">
+                <div class="coords-section">
+                    <p style="color: #666; font-size: 0.8rem;">Waiting for data...</p>
+                </div>
             </div>
         </div>
         <div class="plot-area">
-            <div id="plot-container">
-                <div class="loading">Waiting for data...</div>
+            <div class="plot-stage">
+                <select id="variable-select" class="plot-title-select" title="Data variable">
+                    <option value="">Loading...</option>
+                </select>
+                <div id="plot-container">
+                    <div class="loading">Waiting for data...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -243,9 +345,15 @@
         const variableSelect = document.getElementById('variable-select');
         const statusDot = document.getElementById('status-dot');
         const statusText = document.getElementById('status-text');
+        const statusButton = document.getElementById('status-button');
+        const runButton = document.getElementById('run-button');
         const coordsSidebar = document.getElementById('coords-sidebar');
+        const captureControls = document.getElementById('capture-controls');
 
         let ws = null;
+        // set by the status button; suppresses the automatic reconnect
+        let userDisconnected = false;
+        let running = true;
         let currentVariable = '';
         let plotInitialized = false;
         let variablesInitialized = false;
@@ -257,7 +365,8 @@
             paper_bgcolor: '#16213e',
             plot_bgcolor: '#1a1a2e',
             font: { color: '#eee' },
-            margin: { t: 50, r: 50, b: 60, l: 70 }
+            // the top margin holds the mode bar row with the variable dropdown
+            margin: { t: 64, r: 50, b: 60, l: 70 }
         };
 
         // Grid styling applied to every axis in the merged layout.
@@ -309,22 +418,51 @@
             return merged;
         }
 
+        function send(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(message));
+            }
+        }
+
+        function setConnectionState(state) {
+            statusDot.classList.remove('connecting', 'connected');
+            if (state === 'connecting') {
+                statusDot.classList.add('connecting');
+                statusText.textContent = 'Connecting...';
+                statusButton.title = 'Cancel';
+            } else if (state === 'connected') {
+                statusDot.classList.add('connected');
+                statusText.textContent = 'Connected';
+                statusButton.title = 'Disconnect';
+            } else {
+                statusText.textContent = 'Disconnected';
+                statusButton.title = 'Connect';
+            }
+            runButton.disabled = state !== 'connected';
+        }
+
+        function updateRunButton(isRunning) {
+            running = isRunning;
+            runButton.textContent = isRunning ? 'Stop' : 'Run';
+            runButton.classList.toggle('running', isRunning);
+        }
+
         function connect() {
+            userDisconnected = false;
+            setConnectionState('connecting');
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
             ws.onopen = () => {
-                statusDot.classList.add('connected');
-                statusText.textContent = 'Connected';
-                // Request initial state
-                ws.send(JSON.stringify({ type: 'get_state' }));
+                setConnectionState('connected');
+                send({ type: 'get_state' });
             };
 
             ws.onclose = () => {
-                statusDot.classList.remove('connected');
-                statusText.textContent = 'Disconnected';
-                // Reconnect after delay
-                setTimeout(connect, 2000);
+                setConnectionState('disconnected');
+                if (!userDisconnected) {
+                    setTimeout(connect, 2000);
+                }
             };
 
             ws.onerror = (error) => {
@@ -337,6 +475,19 @@
             };
         }
 
+        statusButton.addEventListener('click', () => {
+            if (ws && ws.readyState !== WebSocket.CLOSED) {
+                userDisconnected = true;
+                ws.close();
+            } else {
+                connect();
+            }
+        });
+
+        runButton.addEventListener('click', () => {
+            send({ type: 'set_running', running: !running });
+        });
+
         function handleMessage(msg) {
             // Update header title with spec filename if provided
             if (msg.spec_filename) {
@@ -348,6 +499,8 @@
                     // State message always updates variables (initial connection)
                     variablesInitialized = false;
                     updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
+                    updateCaptureSelects(msg.capture_options, msg.capture_selection);
+                    updateRunButton(msg.running !== false);
                     if (msg.coordinates) {
                         updateCoordsTable(msg.coordinates);
                     }
@@ -386,12 +539,13 @@
 
             let html = '<div class="coords-section">';
 
+            let extraHtml = '';
             // Render extra_coords (AcquisitionInfo) in ONE unified table inside a
             // single collapsible, with a section-header row per subclass - mirrors
-            // the Capture table below. AcquisitionInfo values are scalar (not
+            // the Capture table, which is rendered first. AcquisitionInfo values are scalar (not
             // per-port), so this table is two columns and colspan is 2.
             if (Object.keys(extraCoords).length > 0) {
-                html += `
+                extraHtml += `
                     <details class="coords-details" open>
                         <summary>Acquisition Info</summary>
                         <table class="coords-table">
@@ -405,15 +559,15 @@
                 `;
 
                 for (const [className, coords] of Object.entries(extraCoords)) {
-                    html += `<tr class="section-header"><td colspan="2">${className}</td></tr>`;
+                    extraHtml += `<tr class="section-header"><td colspan="2">${className}</td></tr>`;
 
                     for (const coord of coords) {
-                        html += `<tr><td class="coord-name">${coord.name}</td>`;
-                        html += `<td class="coord-value">${coord.value || ''}</td></tr>`;
+                        extraHtml += `<tr><td class="coord-name">${coord.name}</td>`;
+                        extraHtml += `<td class="coord-value">${coord.value || ''}</td></tr>`;
                     }
                 }
 
-                html += `</tbody></table></details>`;
+                extraHtml += `</tbody></table></details>`;
             }
 
             // Render all capture coordinate groups in ONE unified table inside a single collapsible
@@ -455,9 +609,103 @@
 
             html += `</tbody></table></details>`;
 
+            // the acquisition info follows the capture fields
+            html += extraHtml;
             html += '</div>';
 
             coordsSidebar.innerHTML = html;
+        }
+
+        // One <select> per loop field and a slider for the captures: entry (when
+        // the sweep lists more than one). Values are indexes into the server's
+        // option lists.
+        function buildSelect(id, labelText, labels, selectedIndex) {
+            const group = document.createElement('div');
+            group.className = 'control-group';
+            const label = document.createElement('label');
+            label.htmlFor = id;
+            label.textContent = labelText;
+            const select = document.createElement('select');
+            select.id = id;
+            labels.forEach((text, i) => {
+                const option = document.createElement('option');
+                option.value = String(i);
+                option.textContent = text;
+                select.appendChild(option);
+            });
+            select.value = String(selectedIndex || 0);
+            select.addEventListener('change', sendCaptureSelection);
+            group.appendChild(label);
+            group.appendChild(select);
+            return group;
+        }
+
+        function buildCaptureSlider(count, selectedIndex) {
+            const group = document.createElement('div');
+            group.className = 'control-group';
+            const label = document.createElement('label');
+            label.htmlFor = 'capture-select';
+            label.textContent = 'capture';
+            const input = document.createElement('input');
+            input.type = 'range';
+            input.id = 'capture-select';
+            input.min = '0';
+            input.max = String(count - 1);
+            input.step = '1';
+            input.value = String(selectedIndex || 0);
+            const value = document.createElement('span');
+            value.className = 'slider-value';
+            const show = () => { value.textContent = `${input.value} / ${count - 1}`; };
+            show();
+            // the value follows the thumb; the selection is sent on release
+            input.addEventListener('input', show);
+            input.addEventListener('change', sendCaptureSelection);
+            const slider = document.createElement('div');
+            slider.className = 'slider';
+            slider.appendChild(input);
+            slider.appendChild(value);
+            group.appendChild(label);
+            group.appendChild(slider);
+            return group;
+        }
+
+        function updateCaptureSelects(options, selection) {
+            captureControls.innerHTML = '';
+            if (!options) {
+                return;
+            }
+            const sel = selection || { capture: 0, loops: [] };
+            if (options.captures && options.captures.length > 1) {
+                captureControls.appendChild(buildCaptureSlider(options.captures.length, sel.capture));
+            }
+            (options.loops || []).forEach((loop, j) => {
+                if (loop.labels.length === 0) {
+                    return;
+                }
+                const chosen = (sel.loops && sel.loops.length > j) ? sel.loops[j] : 0;
+                captureControls.appendChild(
+                    buildSelect(`loop-select-${j}`, `${loop.field}:`, loop.labels, chosen));
+            });
+        }
+
+        function indexOf(element) {
+            return element ? parseInt(element.value, 10) : null;
+        }
+
+        function sendCaptureSelection() {
+            const loops = [];
+            for (let j = 0; ; j++) {
+                const select = document.getElementById(`loop-select-${j}`);
+                if (!select) {
+                    break;
+                }
+                loops.push(indexOf(select));
+            }
+            send({
+                type: 'select_captures',
+                capture: indexOf(document.getElementById('capture-select')),
+                loops: loops
+            });
         }
 
         function updateVariableSelect(variables, labels, selected) {
@@ -535,10 +783,10 @@
             if (newVariable && newVariable !== currentVariable) {
                 currentVariable = newVariable;
                 plotInitialized = false;  // Reset plot for new variable type
-                ws.send(JSON.stringify({
+                send({
                     type: 'select_variable',
                     variable: newVariable
-                }));
+                });
             }
         });
 

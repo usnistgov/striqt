@@ -48,14 +48,15 @@ class PlotOptions(
     def __post_init__(self):
         import inspect
 
-        from .data_vars import _data_plots
+        from .data_vars import data_var_plotters
 
+        plotters = data_var_plotters()
         for name, kwargs in self.variables.items():
-            if name not in _data_plots:
+            if name not in plotters:
                 raise KeyError(
-                    f'not such plot func {name!r}. must be one of {_data_plots!r}'
+                    f'not such plot func {name!r}. must be one of {list(plotters)!r}'
                 )
-            sig = inspect.signature(_data_plots[name])
+            sig = inspect.signature(plotters[name])
             try:
                 sig.bind(None, None, **kwargs)
             except Exception as ex:

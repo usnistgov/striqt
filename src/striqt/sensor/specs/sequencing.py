@@ -8,6 +8,7 @@ produced the capture.
 
 from __future__ import annotations as __
 
+import dataclasses
 import itertools
 import math
 from collections import ChainMap, defaultdict
@@ -922,6 +923,132 @@ def describe_capture(
         diffs.append(desc)
 
     return join.join(diffs)
+
+
+@dataclasses.dataclass(frozen=True)
+class LoopChoices:
+    """the values of one loop of a sweep, with a text label for each value."""
+
+    field: str
+    """the capture field or measurement parameter that the loop steps"""
+
+    isin: types.IsIn
+    """``'capture'`` when `field` is a capture field, ``'analysis'`` when `field`
+    is a measurement parameter"""
+
+    values: tuple[Any, ...]
+    """the distinct loop points in order of first appearance in the expanded plan,
+    coerced to the field type for a capture loop and as decoded for an analysis
+    loop"""
+
+    labels: tuple[str, ...]
+    """one label per entry of `values`, in the units of the capture field for a
+    capture loop and as ``repr`` for an analysis loop"""
+
+
+@dataclasses.dataclass(frozen=True)
+class PlanChoices:
+    """the capture entries and loop values of a sweep, labeled for selection."""
+
+    captures: tuple[str, ...]
+    """one label ``'capture {i}'`` per entry of `sweep.captures`, in order; empty when
+    the sweep lists no captures"""
+
+    loops: tuple[LoopChoices, ...]
+    """one entry per loop of `sweep.loops` with a `field`, in declaration order"""
+
+
+def plan_choices(
+    sweep: structs.Sweep[Any, Any, SC, Any],
+    source_id: types.SourceID | None = None,
+) -> PlanChoices:
+    """list the capture entries and loop values of `sweep` as labeled choices.
+
+    The loop values are read from the origins that `loop_capture_origins` returns,
+    in expansion order. A loop that contributes no point to the expanded plan is
+    listed with empty `values` and `labels`.
+
+    Args:
+        sweep: the sweep to expand, as `loop_captures`
+        source_id: as `loop_captures`
+
+    Returns:
+        the `PlanChoices` of `sweep`
+
+    Raises:
+        msgspec.ValidationError: as `loop_captures`
+    """
+    origins = tuple(loop_capture_origins(sweep, source_id).values())
+    capture_cls = _resolve_capture_cls(sweep)
+
+    loops = []
+    for loop in sweep.loops:
+        if loop.field is None:
+            continue
+        key = (loop.isin, loop.field)
+        values = tuple(
+            dict.fromkeys(o.loop_points[key] for o in origins if key in o.loop_points)
+        )
+        if loop.isin == 'capture':
+            m = sa.labels.measurand_from_field(capture_cls, loop.field)
+        else:
+            m = None
+        labels = tuple(sa.labels.describe_value(v, m) for v in values)
+        loops.append(LoopChoices(loop.field, loop.isin, values, labels))
+
+    return PlanChoices(
+        captures=tuple(f'capture {i}' for i in range(len(sweep.captures))),
+        loops=tuple(loops),
+    )
+
+
+def _same(a: Any, b: Any) -> bool:
+    return a is b or bool(a == b)
+
+
+def select_plan(
+    sweep: structs.Sweep[Any, Any, SC, Any],
+    source_id: types.SourceID | None = None,
+    *,
+    capture: int | None = None,
+    loops: Mapping[tuple[str, str], Any] | None = None,
+) -> tuple[SC, ...]:
+    """return the expanded captures that match a capture entry and loop values.
+
+    Args:
+        sweep: the sweep to expand, as `loop_captures`
+        source_id: as `loop_captures`
+        capture: the index into `sweep.captures` of the entry to keep; `None` keeps
+            every entry
+        loops: the value to keep for each loop, keyed by ``(isin, field)``; a loop
+            absent from the mapping keeps every value, as does `None`
+
+    Returns:
+        the matching captures of `loop_capture_origins`, in expansion order, or
+        empty when none match
+
+    Raises:
+        KeyError: if a key of `loops` names no loop of `sweep`
+        msgspec.ValidationError: as `loop_captures`
+    """
+    known = {(loop.isin, loop.field) for loop in sweep.loops if loop.field is not None}
+    wanted = {} if loops is None else dict(loops)
+    unknown = set(wanted) - known
+    if len(unknown) > 0:
+        raise KeyError(f'no loop in the sweep matches {min(unknown)!r}')
+
+    frozen = {k: sa.specs.helpers.freeze(v) for k, v in wanted.items()}
+
+    def matches(origin: CaptureOrigin) -> bool:
+        if capture is not None and origin.spec_index != capture:
+            return False
+        return all(
+            k in origin.loop_points and _same(origin.loop_points[k], v)
+            for k, v in frozen.items()
+        )
+
+    origins = loop_capture_origins(sweep, source_id)
+    return tuple(c for c, o in origins.items() if matches(o))
 
 
 def describe_capture_origin(

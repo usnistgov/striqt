@@ -50,6 +50,18 @@ def test_list_include_merges_dicts_with_later_files_winning(
     assert load(spec)['source'] == expected
 
 
+def test_include_resolves_against_the_including_file_under_a_relative_spec_path(
+    write_yaml, tmp_path, monkeypatch
+):
+    """a spec given by a path relative to the working directory includes a file in a
+    subdirectory, and that file includes a file in a deeper subdirectory"""
+    write_yaml('spec.yaml', 'plot: !include fragments/plot.yaml\n')
+    write_yaml('fragments/plot.yaml', 'style: !include deeper/style.yaml\n')
+    write_yaml('fragments/deeper/style.yaml', 'name: dark\n')
+    monkeypatch.chdir(tmp_path.parent)
+    assert load(f'{tmp_path.name}/spec.yaml') == {'plot': {'style': {'name': 'dark'}}}
+
+
 def test_glob_include_merges_only_one_level_deep(write_yaml):
     write_yaml('sites/a.yaml', 'block:\n  x: 1\n  y: 1\n')
     write_yaml('sites/b.yaml', 'block:\n  y: 2\n')

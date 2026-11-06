@@ -186,6 +186,10 @@ if typing.TYPE_CHECKING:
 
     AnalyzedCallback: TypeAlias = Callable[[DelayedDataset], None]
 
+    AnalysisSelector: TypeAlias = Callable[
+        [specs.SensorCapture, specs.AnalysisGroup], specs.AnalysisGroup
+    ]
+
     class CachedCallback(Protocol):
         def __call__(
             self,

@@ -624,7 +624,6 @@ def test_spectrogram_histogram_bin_coordinate(integration_bandwidth, noise_bandw
     assert coord_attrs['units'] == 'dBm'
     assert coord_attrs['noise_bandwidth'] == noise_bandwidth
     assert da.attrs['noise_bandwidth'] == noise_bandwidth
-    assert 'long_name' not in da.attrs
 
 
 # a histogram of 1e5 noise pixels: the dB-of-the-mean bin is populated 10 % more than
