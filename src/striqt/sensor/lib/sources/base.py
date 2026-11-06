@@ -23,7 +23,7 @@ class ReceiveStreamError(IOError):
 
 
 class AcquisitionOverrunError(RuntimeError):
-    """a burst segment had no free slot in the acquisition queue under
+    """the acquisition queue has no free slot for a burst segment under
     ``bursts.on_gap='except'``."""
 
 
@@ -143,8 +143,8 @@ class VirtualSource(SourceBackend[SS, SC]):
         """return `count` samples of `port` starting at source sample `start_index`.
 
         Index 0 is the first sample of the corrected capture, and negative indices
-        are the lead-overlap pre-roll that conditioning trims. A source with no
-        samples before index 0 fills the pre-roll with zeros.
+        are in the lead-overlap pre-roll. A source with no samples before index 0
+        fills the pre-roll with zeros.
 
         Args:
             count: the number of samples, at the source sample rate

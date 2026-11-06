@@ -75,8 +75,8 @@ class ExceptionStack:
     """context manager that collects the exceptions raised in `defer` blocks.
 
     The collected exceptions are raised by `handle`, on exit from the context, and
-    on garbage collection. With `cancel_on_except`, an exception in a `defer` block
-    also calls `cancel_threads`.
+    on garbage collection. With `cancel_on_except`, `cancel_threads` runs on each
+    exception in a `defer` block.
     """
 
     def __init__(self, group_label: str | None = None, cancel_on_except: bool = False):

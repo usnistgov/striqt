@@ -35,7 +35,10 @@ class TestSourceBase(base.VirtualSource[SS, SC]):
         return specs.SourceInfo(num_rx_ports=self.setup_spec.num_rx_ports)
 
     def power_units(self) -> sw.units.PowerUnits:
-        """return ``'mW'``: the generators produce a squared magnitude of 1 at 1 mW."""
+        """return ``'mW'``.
+
+        A squared magnitude of 1 in the generated IQ is 1 mW.
+        """
         return 'mW'
 
     def _generator_kws(
@@ -103,7 +106,7 @@ class SingleToneSource(TestSourceBase[specs.FunctionSource, specs.SingleToneCapt
             **self._generator_kws(count, start_index, xp),
         )
 
-        # all ports are generated and one row kept; see the noise source below
+        # all ports are generated and one row kept, as in `NoiseSource.get_waveform`
         return x[index : index + 1]
 
 
@@ -163,7 +166,7 @@ class NoiseSource(TestSourceBase[specs.FunctionSource, specs.NoiseCapture]):
             power=capture.noise_psd * kws['sample_rate'], ports=ports, **kws
         )
 
-        # all ports are generated and one row kept: the noise draws interleave by
-        # port within each sample, so one row of an N-port call matches no smaller
-        # call, and an acquisition read port by port reproduces one N-port call
+        # all ports are generated and one row kept because the noise draws interleave
+        # by port within each sample. One row of an N-port call matches no smaller
+        # call, so an acquisition read port by port reproduces one N-port call
         return x[index : index + 1]

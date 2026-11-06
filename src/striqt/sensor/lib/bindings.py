@@ -2,7 +2,7 @@
 
 Each binding is a `Controller` subclass paired with a tagged action spec class that
 `msgspec.defstruct` builds. The registry of bindings and the tagged union of the
-bound spec classes are module-global. A registered key binds once per process.
+bound spec classes are module-global. A key is registered once per process.
 """
 
 from __future__ import annotations as __
@@ -45,8 +45,8 @@ class Sensor(Generic[SS, SP, SC]):
     source_cls: type[SourceBackend[SS, SC]]
     """the source backend class instantiated from the `source` block of a spec"""
     sweep_spec_cls: type[specs.ActionSpec[SS, SP, Any]] = specs.Sweep
-    """the action spec type to bind; at the default of `specs.Sweep`, `Schema.action`
-    selects the type"""
+    """the action spec type to bind, or the default `specs.Sweep` to take the type
+    from `Schema.action`"""
     peripherals_cls: type[Peripherals[SP, SC] | NoPeripherals[SP, SC]] = NoPeripherals
     """the peripherals class instantiated from a `Sweep`; `NoPeripherals` opens
     nothing"""
@@ -76,7 +76,8 @@ def _resolve_action_type(
     The `sweep_spec_cls` of a `SensorBinding` is disregarded.
 
     Raises:
-        TypeError: if both name a type other than `specs.Sweep` and the types differ
+        TypeError: if `schema.action` and `sensor.sweep_spec_cls` name different
+            types and neither is `specs.Sweep`
     """
     if isinstance(sensor, SensorBinding):
         from_sensor = specs.Sweep
@@ -119,12 +120,13 @@ def bind_sensor(
 
     Args:
         key: the ``sensor_binding`` value of sweep files, and the registry key
-        sensor: the implementation classes; the `sensor` of an existing controller
-            binds the same hardware for the action in `schema`
+        sensor: the implementation classes; the `sensor` of a registered controller
+            selects the same hardware for the action in `schema`
         schema: the spec types; `schema.action` selects the action spec type and
             `schema.analysis` the analysis group
-        register: if True, make the binding available by `key` to `get_controller`
-            and the tagged subclass an arm of the union from `get_tagged_sweep_type`
+        register: if True, the binding is registered under `key` for
+            `get_controller`, and the tagged subclass is added to the union that
+            `get_tagged_sweep_type` returns
         module: the `__module__` of the returned class; the module of the caller
             when None
 
@@ -164,8 +166,8 @@ def bind_sensor(
         sweep_cls = _bind_spec_class(f'{key}.sweep', specs.Sweep, schema, binding)
     _set_class_attrs(tagged_cls, sweep_cls, sweep_cls=sweep_cls)
 
-    # assigned in place: the bound spec classes and the controller reference this
-    # same `SensorBinding` object
+    # assigned in place because the bound spec classes and the controller reference
+    # this same `SensorBinding` object
     binding.sweep_spec_cls = tagged_cls
 
     cls = bind_controller(binding, schema)
@@ -192,10 +194,10 @@ def bind_manual_yfactor_calibration(
 ) -> type[Controller[SS, SP, Any, SA, PS, PC]]:
     """bind the sensor of `ctrl_cls` for `ManualYFactorCalibration` under `name`.
 
-    Deprecated in favor of `bind_sensor` with `ctrl_cls.sensor` and
+    The function is deprecated and emits a `DeprecationWarning` on each call. The
+    replacement is `bind_sensor` with `ctrl_cls.sensor` and
     ``dataclasses.replace(ctrl_cls.schema, action=specs.ManualYFactorCalibration)``.
-    A `DeprecationWarning` is emitted on each call. The `__module__` of the returned
-    class is the module of the caller.
+    The `__module__` of the returned class is the module of the caller.
     """
     warnings.warn(
         'bind_manual_yfactor_calibration is deprecated; call bind_sensor with '
@@ -225,14 +227,15 @@ def mock_binding(
 ) -> type[Controller[Any, Any, Any, Any, Any, Any]]:
     """bind the spec types of `origin` to the implementation classes of `target`.
 
-    The returned controller decodes the sweep files of `origin` and opens the source
-    and peripherals of `target`. Repeated calls with equal arguments return the
-    cached class.
+    The tagged spec class of the returned controller is a subclass of the spec
+    class of `origin`, and the controller opens the source and peripherals of
+    `target`. Repeated calls with equal arguments return the cached class.
 
     Args:
         origin: the controller with the sweep, capture, and peripherals spec types
         target: the registry key or controller class with the source backend
-        register: if True, register the binding under ``mock_<target>_<sweep class>``
+        register: if True, the binding is registered under
+            ``mock_<target>_<sweep class>``
     """
     mock_name = f'mock_{target}_{origin.sensor.sweep_spec_cls.__name__}'
 

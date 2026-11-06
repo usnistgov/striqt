@@ -26,7 +26,8 @@ def _split_preroll(start_index: int, count: int) -> tuple[int, int, int]:
     File index 0 is corrected sample 0. The part of the request before index 0 is
     filled with zeros rather than read. All 3 values are in samples and never
     negative. The zero-fill and file sample counts sum to `count`. Reading starts
-    at `start_index` when that lies in the file and at sample 0 otherwise.
+    at `start_index` when `start_index` is not negative, and at file sample 0
+    otherwise.
     """
     fill = min(max(-start_index, 0), count)
     return fill, max(start_index, 0), count - fill
@@ -250,8 +251,8 @@ class ZarrIQSource(base.VirtualSource[specs.ZarrIQSource, specs.FileCapture]):
     def power_units(self) -> sw.units.PowerUnits:
         """return the power family of the `units` attr of the stored `iq_waveform`.
 
-        A store without a `units` attr, or with units outside the power families,
-        gives ``'a.u.'``.
+        The result is ``'a.u.'`` for a store without a `units` attr, or with units
+        outside the power families.
         """
         units = str(self._waveform.attrs.get('units', ''))
         return sw.units.power_family(units) or 'a.u.'

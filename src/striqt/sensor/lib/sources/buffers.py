@@ -48,7 +48,7 @@ class ReceiveBuffers(typing.Generic[SC]):
             and the number of carried-over samples, 0 without a stash
 
         Raises:
-            ValueError: a stash is present without its timestamp
+            ValueError: if a stash is present without its timestamp
         """
         if self.start_time_ns is None and self.carryover_samples is not None:
             raise ValueError(
@@ -76,9 +76,9 @@ class ReceiveBuffers(typing.Generic[SC]):
         Args:
             capture: the armed capture, which sets the port count and the read count
             overlaps: the ``(lead, tail)`` overlap in source samples
-            include_holdoff: True sizes the buffer for the transient and strobe
-                holdoff ahead of the record; False sizes it for the record and
-                overlaps alone, as a burst segment that continues the stream reads
+            include_holdoff: if True, the buffer is sized for the transient and
+                strobe holdoff ahead of the record; if False, for the record and
+                overlaps alone, as for a burst segment that continues the stream
 
         Returns:
             the buffer with shape (ports, count) and the per-port stream views
@@ -222,13 +222,15 @@ def _alloc_empty_iq(
         prior: a buffer to reuse when it has one row per port and at least the read
             count of columns
         overlaps: the ``(lead, tail)`` overlap in source samples
-        include_holdoff: True adds the transient and strobe holdoff to the read count
+        include_holdoff: if True, the transient and strobe holdoff are added to the
+            read count
         prior_extra: a throwaway buffer to reuse for the RX ports outside the capture
             when it is at least the read count in the transport dtype
 
     Returns:
-        The buffer, the ``(samples, buffers)`` pair for streaming, and the throwaway
-        buffer for the RX ports outside the capture (None when none is streamed).
+        the buffer, the ``(samples, buffers)`` pair for streaming, and the throwaway
+        buffer for the RX ports outside the capture, or None when no such port is
+        streamed
     """
     count = get_read_count(
         controller.capture_spec,
@@ -339,7 +341,7 @@ def find_trigger_holdoff(
 def cast_iq(
     spec: specs.Source, buffer: Array, acquired_count: int, *, start: int = 0
 ) -> Array:
-    """return `acquired_count` samples per port of `buffer` from column `start` as complex64.
+    """copy `acquired_count` complex64 samples per port of `buffer` from column `start`.
 
     The result is a copy, and the receive buffer is free for the next read when the
     call returns. The columns of `buffer` outside the span contribute nothing to the

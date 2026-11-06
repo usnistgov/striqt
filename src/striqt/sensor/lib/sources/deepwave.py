@@ -59,11 +59,14 @@ class Airstack1Source(soapy.SoapySource):
     def _set_jesd_sysref_delay(self, value: int):
         """set the SYSREF delay of the FPGA JESD204B SYSREF handling register.
 
-        `value` is the delay (in core_clk cycles, 0 to 15) of the SYSREF
-        re-alignment of the LMFC counter, written to bits 11:8 of the register at
-        address ``0x0004_0010``. A nonzero delay moves the re-alignment away from the
-        LMFC rollover. The register must be written before the JESD204B bus is
+        A nonzero delay moves the re-alignment of the LMFC counter away from the LMFC
+        rollover. The register must be written before the JESD204B bus is
         synchronized.
+
+        Args:
+            value: the delay (in core_clk cycles, 0 to 15) of the SYSREF
+                re-alignment, written to bits 11:8 of the register at address
+                ``0x0004_0010``
 
         References:
             https://docs.deepwavedigital.com/Tutorials/8_triggered_signal_stream/#maintaining-fixed-delay-between-calibrations

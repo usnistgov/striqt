@@ -45,8 +45,7 @@ class SweepCallbacks:
     """the hooks of one run of an action.
 
     An exception from any hook ends the run. `on_analyzed` and `on_sink_cached` run
-    in the analysis thread. That thread blocks until the hook returns. The `kwargs`
-    of `on_sink_cached` are the measurement keywords.
+    in the analysis thread. That thread blocks until the hook returns.
     """
 
     on_source_opened: SourceOpenCallback | None = None
@@ -55,13 +54,13 @@ class SweepCallbacks:
     on_analyzed: AnalyzedCallback | None = None
     """hook run with the `DelayedDataset` of each acquisition before the sink
     receives the dataset; the `extra_data` of the dataset lacks the peripheral
-    entries, which the sink joins"""
+    entries"""
     on_sink_cached: CachedCallback | None = None
     """hook run with ``(resources, cache, capture, result, **kwargs)`` each time a
-    measurement fills a `KwArgCache`"""
+    measurement fills a `KwArgCache`; `kwargs` are the measurement keywords"""
     select_analysis: AnalysisSelector | None = None
     """hook run with ``(capture, analysis)`` before each analysis, returning the
-    group to evaluate in place of the adjusted `analysis`; None evaluates the whole
+    group to evaluate in place of the adjusted `analysis`; None selects the whole
     group"""
 
 
@@ -232,13 +231,14 @@ def resident_bytes_bound(
     per complex64 sample, times the source samples of the record, the correction
     overlaps, and the transient and strobe holdoff of a first burst segment. The
     holdoff of a first segment is read into the receive buffer and dropped from the
-    acquisition. The later segments of a burst read no holdoff. The bound exceeds the
-    resident bytes by at least the holdoff of each acquisition. The bound covers the
-    `x` arrays alone, not the resampled, filtered, or analyzed copies.
+    acquisition. The reads of the later segments of a burst include no holdoff. The
+    bound exceeds the resident bytes by at least the holdoff of each acquisition. The
+    bound covers the `x` arrays alone, not the resampled, filtered, or analyzed
+    copies.
 
     Args:
         sweep: the sweep to size, with the `bursts` policy of its source
-        source_id: as `specs.sequencing.repeat_captures`
+        source_id: the source id for `specs.sequencing.repeat_captures`, or None
     """
     captures = specs.sequencing.repeat_captures(sweep, source_id)
     largest = 0
@@ -256,7 +256,7 @@ def resident_bytes_bound(
 
 
 def _prepare_sweep(spec: specs.Sweep, callbacks: SweepCallbacks) -> None:
-    """list the capture adjustments of `spec`, then run `callbacks.on_source_opened`.
+    """run `callbacks.on_source_opened` after listing the capture adjustments of `spec`.
 
     The `resident_bytes_bound` of `spec` is logged at INFO on the ``sweep`` logger.
     """
@@ -294,15 +294,16 @@ def open_resources(
 
     Args:
         spec: the action spec
-        spec_path: the file from which `spec` was read, or None; sets the process
-            working directory and the ``{spec_path}`` path field
+        spec_path: the file from which `spec` was read, or None; the process working
+            directory becomes the directory of the file, and the ``{spec_path}`` path
+            field is set
         test_only: if True, open `NoPeripherals` in place of the peripherals and
             skip the compute warmup
         on_source_opened: hook run once with ``(sweep, source_id)`` in a worker
             thread after the source opens and before the first capture
         on_analyzed: hook run in the analysis thread with the `DelayedDataset` of
             each acquisition, before the sink receives the dataset; the `extra_data`
-            of the dataset lacks the peripheral entries, which the sink joins
+            of the dataset lacks the peripheral entries
         on_sink_cached: hook run in the analysis thread with ``(resources, cache,
             capture, result, **kwargs)`` each time a measurement fills a `KwArgCache`
         select_analysis: hook run in the analysis thread with ``(capture, analysis)``
