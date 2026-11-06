@@ -54,10 +54,9 @@ def data_var_plotters() -> _Mapping[str, _DataVariablePlotter]:
     """return a read-only mapping from data variable name to plotting function.
 
     Each key is the name of a data variable in an analysis dataset. Each value is
-    the function in this module that draws the variable. A value is called as
-    ``plotter(ds, backend, **options)``: `ds` is the dataset that contains the
-    variable, `backend` a `PlotBackend`, and `options` the keyword arguments of
-    the function.
+    the function that draws the variable, called as ``plotter(ds, backend,
+    **options)``: `ds` is the dataset that contains the variable, `backend` a
+    `PlotBackend`, and `options` the keyword arguments of the function.
 
     Returns:
         a read-only view of the registered functions; item assignment raises
@@ -200,7 +199,7 @@ def cyclic_channel_power(
     steps: bool = True,
     noise_line: bool = True,
 ) -> _Path | None:
-    """plot the `center_statistic` line per `hue` value and shade `bound_statistics`.
+    """draw the `center_statistic` line and the `bound_statistics` band per `hue` value.
 
     Args:
         data: the dataset with the `cyclic_channel_power` variable
@@ -212,6 +211,9 @@ def cyclic_channel_power(
         dB: False converts the values from dB to linear power before drawing
         steps: True holds each value until the next `cyclic_lag` sample
         noise_line: True marks the system noise level on each facet
+
+    Returns:
+        the path of the figure file, or `None` when the backend writes no file
 
     Raises:
         ValueError: if `center_statistic` or either of `bound_statistics` is not a

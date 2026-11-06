@@ -20,8 +20,8 @@ get_format_fields = ss.specs.paths.get_format_fields
 def _owner_noise_bandwidth(data: xr.Dataset, coord_name: str) -> float | None:
     """return the `noise_bandwidth` attr (Hz) of a variable spanning `coord_name`.
 
-    None when `coord_name` is a data variable or a scalar, or when no data variable on
-    the dimension of `coord_name` has the attr.
+    The result is None when `coord_name` is a data variable or a scalar, or when no
+    data variable on the dimension of `coord_name` has the attr.
     """
     coord = data[coord_name]
     if coord_name in data.data_vars or coord.ndim == 0:
@@ -41,9 +41,9 @@ def noise_bandwidth(data: xr.Dataset, var_name: str) -> xr.DataArray | float | N
     * `var_name` has a `noise_bandwidth` attr: that value;
     * `var_name` is a coordinate: the `noise_bandwidth` attr of a data variable on
       the dimension of the coordinate;
-    * `var_name` has `units` of a power quantity (`striqt.waveform.units.power_family`
-      is not None): the `analysis_bandwidth` coordinate where finite, and the
-      `sample_rate` coordinate where infinite;
+    * the `units` of `var_name` are in a power family of
+      `striqt.waveform.units.power_family`: the `analysis_bandwidth` coordinate
+      where finite, and the `sample_rate` coordinate where infinite;
     * otherwise: None.
 
     Returns:

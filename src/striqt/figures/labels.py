@@ -37,8 +37,9 @@ def label_by_coord(
     """return `fmt` formatted once per value of `coord_or_dim` in `data`.
 
     The fields of `fmt` are the coordinates on the dimension of `coord_or_dim` and
-    `extra_fields`. A coordinate field takes precedence over an extra field of the
-    same name.
+    `extra_fields`. The coordinate value is used when a coordinate and an extra
+    field share a name. The xarray plot unit label format is changed process-wide
+    to ``'Label (units)'``.
 
     Args:
         data: the array with the coordinates
@@ -58,11 +59,13 @@ def label_by_coord(
 
 @dataclasses.dataclass(frozen=True)
 class _FacetValue:
-    """a numeric coordinate value that is formatted in its units by a template field.
+    """a numeric coordinate value formatted in its units by a `str.format` field.
 
-    The format spec ``''`` or ``'auto'`` applies `shared`; a spec that is one SI
-    prefix symbol (``'M'``, ``'G'``, ``'k'``, ``'u'``) forces that prefix; any other
-    spec formats the bare number through `format`.
+    The format spec selects the prefix:
+
+    * ``''`` or ``'auto'``: `shared`;
+    * one SI prefix symbol (``'M'``, ``'G'``, ``'k'``, ``'u'``): that prefix;
+    * any other spec: the bare number through `format`, without units.
     """
 
     value: typing.Union[int, float]
@@ -88,7 +91,10 @@ def _python_scalar(value: typing.Any) -> typing.Any:
 
 
 def _numbers(values: typing.Iterable[typing.Any]) -> list[float]:
-    """return the finite numbers among `values` and the members of its tuples."""
+    """return the ints and floats in `values` and its nested tuples, as floats.
+
+    A bool is skipped.
+    """
     out = []
     for v in values:
         if isinstance(v, tuple):
@@ -174,12 +180,12 @@ def label_axis(
     """label an axis with the quantity and units named by the attrs of `ax_data`.
 
     The label text is `striqt.analysis.labels.quantity_label` of the attrs. With a
-    `units` attr, each target axis gets an `EngFormatter` with one SI prefix, frozen
-    from the extent of the finite values as `si_prefix` selects it for a sequence
-    (the magnitude of the largest value, lowered to the span by at most one prefix).
-    The prefixed units appear in
-    every tick label (`tick_units` True) or once in the axis label (`tick_units`
-    False), never in both. A label is set with or without finite values.
+    `units` attr, an `EngFormatter` with one SI prefix is set on each target axis.
+    The prefix is `striqt.waveform.units.si_prefix` of the extent of the finite
+    values, and is fixed for the axis. The prefixed units are in every tick label
+    with `tick_units` True, or in the axis label with `tick_units` False, never in
+    both. A label is set with or without finite values. The xarray plot unit label
+    format is changed process-wide to ``'Label (units)'``.
 
     Args:
         which_axis: ``'x'``, ``'y'``, or ``'colorbar'``; the colorbar axis is the
@@ -190,8 +196,8 @@ def label_axis(
             instead, or None
         tick_units: True places the prefixed units in each tick label and False in
             the axis label; ``'auto'`` is True for a `units` attr of 1 or 2 characters
-        short: True labels with `standard_name`; False labels with `long_name`, the
-            title of the quantity, when the attrs carry one
+        short: True labels with `standard_name`; False labels with `long_name` when
+            the attrs set one
         ax: the axes, or list of axes, to label; None labels the current axes, or
             every axes of `fig` when `fig` is given
         fig: when given with `ax` None, an x or y label is set once as a figure
@@ -260,7 +266,7 @@ def label_axis(
         if finite.size:
             extent = (float(finite.min()), float(finite.max()))
     # the extent selects the prefix as a sequence does, so a 3.69 to 3.71 GHz axis
-    # reads in MHz, and the ticks keep the prefix through a zoom
+    # is labeled in MHz, and the ticks keep the prefix through a zoom
     p = sw.units.si_prefix(extent, m.units)
 
     if m.units is not None:
@@ -298,16 +304,16 @@ def label_legend(
 ) -> matplotlib.legend.Legend:
     """add a legend with one entry per value of `data` and a title naming the quantity.
 
-    Numeric entries share one SI prefix. With `tick_units` True each entry ends with
-    the prefixed units and the title has none; with False each entry is a bare
-    mantissa and the title ends with the prefixed units in parentheses. A string value
-    is written as is.
+    Numeric entries share one SI prefix. A string value is written as is. The xarray
+    plot unit label format is changed process-wide to ``'Label (units)'``.
 
     Args:
         data: the array or dataset with the attrs and values that label the legend
         coord_name: a coordinate of `data` that supplies the attrs and values, or
             None for `data` itself
-        tick_units: True puts the units in each entry, False in the title
+        tick_units: True ends each entry with the prefixed units; False ends the
+            title with the prefixed units in parentheses and leaves each entry a
+            bare mantissa
         ax: the axes that receives the legend; None uses the current axes
 
     Returns:

@@ -1,7 +1,7 @@
 """the drawing contract that the plotting backends implement.
 
 The grid type `T` is the object a backend returns from each drawing method and
-accepts back as `target`: a matplotlib facet grid or a plotly figure dict.
+accepts back as `target`: a matplotlib facet grid or a plotly figure.
 """
 
 from __future__ import annotations as __
@@ -61,14 +61,14 @@ class PlotBackend(typing.Protocol[T]):
             sharex: whether the facets share x limits
             ylim: the y limits; `None` in either position leaves that limit to the
                 data extent
-            step: when set, hold each value until the next sample as `StepStyle`
-                selects; `None` connects the samples
-            target: `None` builds a new grid; a grid returned by an earlier call of
-                this backend receives the lines, and the facet coordinates of `data`
-                must equal those of the grid
+            step: the placement of the step between samples when each value is held
+                until the next sample; `None` connects the samples
+            target: `None` builds a new grid; the lines are drawn onto a grid returned
+                by an earlier call of this backend, with facet coordinates equal to
+                those of `data`
 
         Returns:
-            the grid drawn on
+            the new grid, or `target` when given
 
         Raises:
             ValueError: if `target` is a grid with facets that `data` does not have
@@ -88,8 +88,8 @@ class PlotBackend(typing.Protocol[T]):
     ) -> T:
         """shade the band from `low` to `high` per `hue` value on each facet.
 
-        The band of hue index `i` takes the color of the `i`th line of `line` with the
-        same `hue`, so a band and a line drawn with the same `hue` on one grid match.
+        A band and a line drawn with the same `hue` value on one grid have the same
+        color.
 
         Args:
             low: the lower edge of the band, with dimensions `x`, `hue` (when set),
@@ -99,14 +99,14 @@ class PlotBackend(typing.Protocol[T]):
             hue: the dimension that selects one band per value; `None` shades one
                 band per facet
             alpha: the opacity of the band, in [0, 1]
-            step: when set, hold each edge until the next sample as `StepStyle`
-                selects; `None` connects the samples
-            target: `None` builds a new grid; a grid returned by an earlier call of
-                this backend receives the bands, and the facet coordinates of `low`
-                must equal those of the grid
+            step: the placement of the step between samples when each edge is held
+                until the next sample; `None` connects the samples
+            target: `None` builds a new grid; the bands are drawn onto a grid returned
+                by an earlier call of this backend, with facet coordinates equal to
+                those of `low`
 
         Returns:
-            the grid drawn on
+            the new grid, or `target` when given
 
         Raises:
             ValueError: if `target` is a grid with facets that `low` does not have
@@ -136,9 +136,9 @@ class PlotBackend(typing.Protocol[T]):
                 minimum
             vmax: the value at the high end of the colormap; `None` selects the data
                 maximum
-            vstep: when set, quantize the colormap into bands of this width in the
-                units of `data`, between `vmin` rounded down and `vmax` rounded up to
-                multiples of `vstep`; `None` maps colors continuously
+            vstep: the width (in the units of `data`) of the color bands that
+                quantize the colormap between `vmin` rounded down and `vmax` rounded
+                up to multiples of `vstep`; `None` maps colors continuously
 
         Returns:
             a new grid
@@ -154,8 +154,8 @@ class PlotBackend(typing.Protocol[T]):
 
         Args:
             target: the grid returned by a drawing method of this backend
-            xticklabelunits: whether the x tick labels carry a units suffix;
-                ``'auto'`` follows the backend's formatter for the x quantity
+            xticklabelunits: whether each x tick label ends with the units;
+                ``'auto'`` leaves the choice to the backend
 
         Returns:
             the path of the saved figure file, or `None` when no file is written
@@ -172,9 +172,8 @@ class PlotBackend(typing.Protocol[T]):
 
         Args:
             target: the grid to limit
-            low: the lower limit, or a DataArray with one value per facet selected
-                on the facet coordinates; `None` leaves the lower limit to the data
-                extent
+            low: the lower limit, or a DataArray with one value per facet; `None`
+                leaves the lower limit to the data extent
             high: the upper limit; `None` leaves the upper limit to the data extent
         """
         ...
@@ -186,11 +185,12 @@ class PlotBackend(typing.Protocol[T]):
         grid: T,
         where: typing.Literal['x', 'y', 'colorbar'],
     ) -> None:
-        """draw the system noise level (in dBm) of `var_name` on each facet of `grid`.
+        """draw the system noise level (in dBm) for `var_name` on each facet of `grid`.
 
-        Nothing is drawn when `data` has no `system_noise` variable or `var_name` has
-        no noise bandwidth. The level of a facet is the `system_noise` entry at the
-        coordinate value of that facet.
+        The level is `system_noise` in the noise bandwidth of `var_name`, drawn on
+        each facet at the entry for the coordinate value of that facet. Nothing is
+        drawn when `data` has no `system_noise` variable or `var_name` has no noise
+        bandwidth.
 
         Args:
             data: the dataset with the `system_noise` variable (dBm/Hz) and `var_name`
@@ -198,7 +198,7 @@ class PlotBackend(typing.Protocol[T]):
                 bandwidth
             grid: the grid to draw on
             where: ``'x'`` draws a horizontal line for power on the y axis, ``'y'`` a
-                vertical line for power on the x axis, and ``'colorbar'`` a tick on
+                vertical line for power on the x axis, and ``'colorbar'`` a mark on
                 the colorbar of a heatmap
 
         Raises:
@@ -209,10 +209,10 @@ class PlotBackend(typing.Protocol[T]):
 
 
 def coerce_column(data: _T, plotter: PlotBackend[typing.Any]) -> _T:
-    """add a size-1 `_view` dimension to `data` if `opts` sets neither `col` nor `row`.
+    """add the size-1 facet dimension `_view` to `data` of an unfaceted plot.
 
-    The xarray plot routines return a `FacetGrid` only when faceting, so `_view` is
-    the facet dimension of an unfaceted figure.
+    A plot is unfaceted when `plotter.opts` sets neither `col` nor `row`. With `col`
+    or `row` set, `data` is returned unchanged.
     """
     opts = plotter.opts
     if opts.col is None and opts.row is None:

@@ -62,11 +62,11 @@ FigureCanvasSVG.print_svg, FigureCanvasSVG._ps = (  # type: ignore
 def set_matplotlib_formats(formats, *args, **kws):
     """set inline figure formats and display a label and caption below each figure.
 
-    The arguments are those of `backend_inline.set_matplotlib_formats`.
-    The label is the figure suptitle, or the title of the last axes without a
-    suptitle, lowercased with runs of non-alphanumeric characters replaced by ``-``.
-    The caption is the text from `set_caption`. The IPython `print_figure` function
-    is replaced process-wide.
+    The arguments are those of `backend_inline.set_matplotlib_formats`. The label
+    is the figure suptitle or, without a suptitle, the title of the last axes with
+    a title. The label is lowercased, with each run of non-alphanumeric characters
+    replaced by ``-``. The caption is the text from `set_caption`. The IPython
+    `print_figure` function is replaced process-wide.
     """
 
     backend_inline.set_matplotlib_formats(formats, *args, **kws)
@@ -97,8 +97,7 @@ def set_matplotlib_formats(formats, *args, **kws):
 def set_caption(*args):
     """set the caption of a figure in a jupyter notebook.
 
-    Call as ``set_caption(fig, text)``, or as ``set_caption(text)`` for the current
-    figure.
+    The arguments are ``(fig, text)``, or ``(text,)`` for the current figure.
 
     Raises:
         ValueError: if called with neither 1 nor 2 positional arguments
