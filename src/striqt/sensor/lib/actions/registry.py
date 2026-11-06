@@ -1,7 +1,7 @@
 """registry of the action runner for each action spec type.
 
 A bound spec class subclasses the action spec type of the binding. A runner registered
-for the action spec type runs every binding of that type.
+for the action spec type runs every bound spec of that type.
 """
 
 from __future__ import annotations as __

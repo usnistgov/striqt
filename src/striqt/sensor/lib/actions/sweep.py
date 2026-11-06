@@ -18,11 +18,7 @@ from .registry import registry
 
 @registry.runner(spec_type=specs.Sweep)
 class SweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
-    """the runner of a `Sweep`.
-
-    `sweep` is `spec` itself. The sink is a `ZarrCaptureSink` at ``sweep.sink.path``,
-    or a `NoSink` when the path is None.
-    """
+    """the runner of a `Sweep`."""
 
     spec: specs.Sweep[SS, SP, SC, SA]
 
@@ -31,9 +27,12 @@ class SweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
 
     @property
     def sweep(self) -> specs.Sweep[SS, SP, SC, SA]:
+        """`spec` itself."""
         return self.spec
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
+        """return a `ZarrCaptureSink` at ``sweep.sink.path``, or a `NoSink` for a None
+        path."""
         if self.sweep.sink.path is None:
             return NoSink(self.sweep)
         return ZarrCaptureSink(self.sweep, format_path, action_spec=self.spec)

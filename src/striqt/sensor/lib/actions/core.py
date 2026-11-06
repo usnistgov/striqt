@@ -1,10 +1,10 @@
 """the runner contract and the capture pipeline that every action runs.
 
-A dedicated thread acquires the captures and feeds a bounded `AcquisitionQueue`.
-The calling thread takes one acquisition per step, analyzes the acquisition taken
-in the previous step, and submits the sink write of the analysis before that to
-`util.threadpool`. Exceptions from the 3 stages of one step are collected in an
-`ExceptionStack` and raised together at the end of that step.
+A dedicated thread acquires the captures and puts each acquisition on a bounded
+`AcquisitionQueue`. The calling thread takes one acquisition per step, analyzes the
+acquisition taken in the previous step, and submits the sink write of the analysis
+before that to `util.threadpool`. Exceptions from the 3 stages of one step are
+collected in an `ExceptionStack` and raised together at the end of that step.
 """
 
 from __future__ import annotations as __
@@ -87,7 +87,7 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
 
         Yields:
             the return value of ``sink.append`` for each delivered acquisition, or
-            None at the steps before the first sink write; with `yield_values`
+            None at the steps before the first sink write. With `yield_values`
             False, None at every step or nothing as `always_yield` selects. The
             iteration never ends when `loop` is True or `captures` is endless.
 
@@ -120,7 +120,7 @@ def iterate_sweep(
 
     Yields:
         the return value of ``sink.append`` for each delivered acquisition, or None
-        at the steps before the first sink write; with `yield_values` False, None at
+        at the steps before the first sink write. With `yield_values` False, None at
         every step or nothing as `always_yield` selects. The iteration never ends
         when `loop` is True or `captures` is endless.
 
@@ -149,8 +149,7 @@ def iterate_captures(
     indexer: AcquisitionIndexer | None = None,
     **replace: Unpack[AnyResources[SS, SP, SC, SA, PS, PC]],
 ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
-    """run the captures of ``resources['sweep_spec']`` through the acquire, analyze, and
-    sink pipeline.
+    """run the captures of ``resources['sweep_spec']`` through the capture pipeline.
 
     An acquisition thread arms each capture and acquires the `burst` segments of the
     capture into a queue of ``source.bursts.buffers`` acquisitions. The calling
@@ -172,22 +171,22 @@ def iterate_captures(
     ``resources['action_spec']``.
 
     A burst segment acquired while the queue is full is dropped under
-    ``source.bursts.on_gap='skip'`` and raises `AcquisitionOverrunError` under
-    ``'except'``. Under ``bursts.trigger_on='first'``, the signal trigger runs on
-    the first delivered segment of each burst and the shifts apply to the rest.
+    ``source.bursts.on_gap='skip'``. Under ``'except'``, `AcquisitionOverrunError` is
+    raised instead. Under ``bursts.trigger_on='first'``, the signal trigger runs on the
+    first delivered segment of each burst and the shifts apply to the rest.
 
-    The captures are the loop expansion of the sweep for the open source. A `Repeat`
-    first in `loops` runs the expanded captures `count` times. One `indexer` shared
-    by several calls numbers the captures of all of those calls consecutively. A
-    `captures` iterable is advanced in the acquisition thread between captures.
-    `iterate_captures` joins that thread at exit. An iterable that waits between
-    items must return once the run ends.
+    The captures are the loop expansion of the sweep for the open source. With a
+    `Repeat` first in `loops`, the expanded captures run `count` times. One `indexer`
+    shared by several calls numbers the captures of all of those calls consecutively.
+    A `captures` iterable is advanced in the acquisition thread between captures. The
+    generator joins that thread at exit. An iterable that waits between items must
+    return once the run ends.
 
     The `on_analyzed`, `on_sink_cached`, and `select_analysis` hooks of
     ``resources['callbacks']`` run in the calling thread. An exception from a hook
-    ends the pipeline. The `extra_data`
-    of the dataset given to `on_analyzed` has the source and runner entries; the
-    peripheral entries join when a sink resolves `pending_extra_data`.
+    ends the run. The `extra_data` of the dataset given to `on_analyzed` has the
+    source and runner entries. The peripheral entries join when a sink resolves
+    `pending_extra_data`.
 
     Args:
         resources: the open resources of `open_resources`
@@ -197,15 +196,15 @@ def iterate_captures(
         loop: True cycles through the captures from the first after the last
         captures: the captures to acquire in place of the loop expansion of the
             sweep, finite or endless; None acquires the expansion
-        extra_data: entries merged into the `extra_data` of every acquisition after
-            the data of the peripherals; a shared key takes the value from here
+        extra_data: entries merged into the `extra_data` of every acquisition, over
+            the source and peripheral entries with the same key
         indexer: the counter that stamps `capture_index` and `sweep_index` on each
             acquisition, or None for a counter over the captures of this sweep
         **replace: entries that replace those of `resources` for this run
 
     Yields:
-        None at steps 0 and 1 and then `Result i` at step ``i + 2``; or None at every
-        step; or nothing, as `yield_values` and `always_yield` select. The iteration
+        None at steps 0 and 1 and then `Result i` at step ``i + 2``, or None at every
+        step, or nothing, as `yield_values` and `always_yield` select. The iteration
         ends after step N + 1, or never when `loop` is True or `captures` is
         endless.
 
@@ -380,12 +379,7 @@ def _drain(queue: AcquisitionQueue) -> None:
 
 
 class _BurstShifts:
-    """the alignment shifts shared by the segments of the burst under analysis.
-
-    Under ``trigger_on='first'``, `apply` runs the trigger on the first delivered
-    segment of a burst with `burst` above 1 and sets `trigger_shifts` on every
-    segment of that burst. Under ``'all'`` nothing is set.
-    """
+    """the alignment shifts shared by the segments of one burst."""
 
     def __init__(self, trigger_on: str):
         self.trigger_on = trigger_on
@@ -393,6 +387,14 @@ class _BurstShifts:
         self.shifts: Array | None = None
 
     def apply(self, iq: specs.AcquiredIQ) -> None:
+        """set ``iq.trigger_shifts`` in place from the first delivered segment of its
+        burst.
+
+        Under ``trigger_on='first'``, the trigger runs on the first delivered segment
+        of a capture with `burst` above 1, and the shifts are set on every segment of
+        that burst. Under ``'all'``, on a capture with `burst` 1, or without a signal
+        trigger, nothing is set.
+        """
         if self.trigger_on != 'first':
             return
         if not isinstance(iq.capture, specs.SensorCapture) or iq.capture.burst == 1:
@@ -422,9 +424,9 @@ def acquisition_worker(
     are acquired with `Controller.acquire_burst`. The peripherals acquire once per
     capture, from segment 0 until the end of the burst, and the read is awaited before
     the next capture is armed. Each segment refers to the read through
-    `pending_extra_data`, with the entries of `extra_data` as the `override`, so a
-    sink joins the peripheral dict under the runner entries. `indexer` stamps each
-    segment. After the last capture the source is disarmed and `END` is put. An
+    `pending_extra_data`, with the entries of `extra_data` as the `override`.
+    `indexer` stamps the `info` of each segment. After the last capture, or after the
+    capture during which `stop` is set, the source is disarmed and `END` is put. An
     exception ends the acquisitions and is put in place of `END`.
 
     Args:
@@ -470,8 +472,7 @@ def _acquire_capture(
     """arm `capture` and acquire its burst into `queue`.
 
     Returns:
-        `ordinal` advanced by the number of segments that passed through the
-        finalizer
+        `ordinal` advanced once per finalized segment
     """
     source = resources['source']
     peripherals = resources['peripherals']
@@ -516,8 +517,7 @@ class AcquisitionIndexer:
     of one sweep.
 
     `capture_index` advances after the last burst segment of a capture and wraps to
-    0 at `captures_per_sweep`, where `sweep_index` advances. `apply` is not
-    thread-safe and must run once per acquisition, in order.
+    0 at `captures_per_sweep`, where `sweep_index` advances.
     """
 
     def __init__(self, captures_per_sweep: int):
@@ -540,7 +540,7 @@ class AcquisitionIndexer:
         The counter advances by one capture when ``info.burst_index`` is the last
         segment of `capture`. On a `SoapyAcquisitionInfo`, `sweep_start_time` is set
         to the `start_time` of the first segment of the first capture of the current
-        sweep.
+        sweep. The call is not thread-safe and must run once per acquisition, in order.
         """
         result = info.replace(
             sweep_index=self.sweep_index, capture_index=self.capture_index
