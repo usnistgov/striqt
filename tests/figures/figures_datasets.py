@@ -22,6 +22,12 @@ HISTOGRAM_BANDWIDTH = 1e4
 CORRELATOR_BANDWIDTH = 30e3
 HISTOGRAM_OFFSET_DB = np.array([0.0, 0.0, 5.0])
 GAMMA_SHAPE = 24
+POWER_DETECTORS = ['rms', 'peak']
+CYCLIC_STATISTICS = ['min', 'mean', 'max']
+CYCLIC_LAG_COUNT = 4
+DETECTOR_PERIOD = 1e-3
+PEAK_OFFSET_DB = 10.0
+CYCLIC_BOUND_DB = 3.0
 
 # one count in 1e6, above the float32 resolution of a cumulative fraction near 1, so
 # every nonzero bin registers in a float32 cumsum
@@ -44,6 +50,19 @@ def capture_bandwidth() -> np.ndarray:
     bandwidth is infinite.
     """
     return np.where(np.isfinite(ANALYSIS_BANDWIDTH), ANALYSIS_BANDWIDTH, SAMPLE_RATE)
+
+
+def cyclic_mean_dBm() -> np.ndarray:
+    """return the mean cyclic channel power (dBm) of each capture and detector.
+
+    The ``rms`` detector is at the system noise in the capture bandwidth, and the
+    ``peak`` detector `PEAK_OFFSET_DB` above. The array has shape
+    ``(capture, power_detector)``.
+    """
+    offsets = np.array([
+        PEAK_OFFSET_DB if d == 'peak' else 0.0 for d in POWER_DETECTORS
+    ])
+    return predicted_levels_dBm(capture_bandwidth())[:, np.newaxis] + offsets
 
 
 def gamma_dB_histogram(level_dBm: float) -> np.ndarray:
@@ -77,6 +96,13 @@ def make_dataset(attr_missing: bool = False, system_noise: bool = True) -> xr.Da
     levels = predicted_levels_dBm() + HISTOGRAM_OFFSET_DB
     hist = np.stack([gamma_dB_histogram(level) for level in levels])
 
+    stat_offsets = np.array([-CYCLIC_BOUND_DB, 0.0, CYCLIC_BOUND_DB])
+    cyclic = (
+        cyclic_mean_dBm()[:, :, np.newaxis, np.newaxis]
+        + stat_offsets[np.newaxis, np.newaxis, :, np.newaxis]
+        + np.zeros(CYCLIC_LAG_COUNT)
+    )
+
     if attr_missing:
         bin_attrs = {'standard_name': 'Spectrogram bin power', 'units': 'dBm/10 kHz'}
     else:
@@ -107,6 +133,11 @@ def make_dataset(attr_missing: bool = False, system_noise: bool = True) -> xr.Da
                 np.zeros((3, 5), 'float32'),
                 {'standard_name': 'Fraction of counts'},
             ),
+            'cyclic_channel_power': (
+                ('capture', 'power_detector', 'cyclic_statistic', 'cyclic_lag'),
+                cyclic.astype('float32'),
+                {'standard_name': 'Cyclic channel power', 'units': 'dBm'},
+            ),
             'cellular_5g_pss_correlation': (
                 ('capture', 'cellular_ssb_lag'),
                 np.zeros((3, 4), 'complex64'),
@@ -131,6 +162,19 @@ def make_dataset(attr_missing: bool = False, system_noise: bool = True) -> xr.Da
                     'standard_name': 'Spectrogram cross-channel power ratio',
                     'units': 'dB',
                 },
+            ),
+            'power_detector': (
+                'power_detector',
+                np.array(POWER_DETECTORS, dtype=object),
+            ),
+            'cyclic_statistic': (
+                'cyclic_statistic',
+                np.array(CYCLIC_STATISTICS, dtype=object),
+            ),
+            'cyclic_lag': (
+                'cyclic_lag',
+                np.arange(CYCLIC_LAG_COUNT) * DETECTOR_PERIOD,
+                {'standard_name': 'Cyclic lag', 'units': 's'},
             ),
             'analysis_bandwidth': ('capture', ANALYSIS_BANDWIDTH),
             'sample_rate': ('capture', np.full(3, SAMPLE_RATE)),

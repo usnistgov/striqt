@@ -9,12 +9,13 @@ import click
 
 if typing.TYPE_CHECKING:
     import xarray as xr
+    from xarray.plot import FacetGrid
 
     import striqt.figures as sf
 
     class WorkerData(typing.TypedDict):
         data: xr.Dataset
-        plotter: sf.backend.PlotBackend
+        plotter: sf.backend.PlotBackend[FacetGrid]
         opts: sf.specs.PlotOptions
 
 else:
@@ -180,7 +181,7 @@ def worker_init(
         output_path = (Path(zarr_path).parent / output_name).with_suffix('.plots')
         output_path.mkdir(exist_ok=True)
 
-    plotter = sf.backend.PlotBackend(
+    plotter = sf.backend.MatplotlibBackend(
         opts.plotter, output_dir=output_path, interactive=interactive, lock=lock
     )
 

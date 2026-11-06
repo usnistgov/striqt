@@ -1,13 +1,42 @@
-"""plotly trace and layout dicts for the browser display of sweep results."""
+"""plotly trace and layout dicts for the browser display of sweep results.
+
+The grid of this backend is a result dict with the keys ``type``, ``traces``,
+``layout``, ``variable``, ``facets``, and ``col_dim``. The traces of facet `i`
+reference the plotly axes ``x``/``y`` for ``i == 0`` and ``x{i+1}``/``y{i+1}``
+after, in the order of the facet coordinate values.
+"""
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, Union, cast
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union, cast
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import np, xr
 
 from .. import labels, specs, util
+
+if TYPE_CHECKING:
+    from xarray.core.types import ScaleOptions
+
+    from .protocol import StepStyle
+
+_PALETTE = (
+    '#636EFA',
+    '#EF553B',
+    '#00CC96',
+    '#AB63FA',
+    '#FFA15A',
+    '#19D3F3',
+    '#FF6692',
+    '#B6E880',
+    '#FF97FF',
+    '#FECB52',
+)
+"""the plotly default qualitative colors, indexed by hue position"""
+
+_STEP_SHAPES: dict[str, str] = {'post': 'hv', 'pre': 'vh', 'mid': 'hvh'}
+
+_NOISE_COLOR = '#eec009'
 
 
 def _to_numpy(arr: Any) -> np.ndarray:
@@ -17,12 +46,66 @@ def _to_numpy(arr: Any) -> np.ndarray:
     return np.asarray(arr)
 
 
-class WebPlotBackend:
-    """a `striqt.figures.backend.PlotBackend` for Plotly trace and layout dicts.
+def _rgba(hex_color: str, alpha: float) -> str:
+    """return `hex_color` (``'#rrggbb'``) as ``'rgba(r,g,b,a)'`` with opacity `alpha`"""
+    r, g, b = (int(hex_color.lstrip('#')[i : i + 2], 16) for i in (0, 2, 4))
+    return f'rgba({r},{g},{b},{alpha})'
 
-    The results of each `heatmap` and `line` call accumulate until `get_plot_data`.
-    The color and y-axis limits only widen across calls.
+
+def _axis_refs(subplot_idx: int | None) -> tuple[str, str]:
+    """return the ``(xaxis, yaxis)`` trace references of 1-based facet `subplot_idx`.
+
+    `None` selects the first facet.
     """
+    if subplot_idx is None or subplot_idx == 1:
+        return 'x', 'y'
+    return f'x{subplot_idx}', f'y{subplot_idx}'
+
+
+def _layout_axis_key(axis: Literal['xaxis', 'yaxis'], facet_index: int) -> str:
+    """return the layout key of `axis` for the 0-based `facet_index`"""
+    return axis if facet_index == 0 else f'{axis}{facet_index + 1}'
+
+
+def _y_along(data: xr.DataArray, x: str) -> np.ndarray:
+    """return the values of `data` as a 1-D array along the `x` dimension.
+
+    When `data` has values on dimensions other than `x`, only the first row along
+    the remaining dimensions is returned.
+    """
+    y_data = _to_numpy(data.values).squeeze()
+    x_size = data[x].size
+    if y_data.size != x_size and x in data.dims:
+        y_data = _to_numpy(data.values)
+        x_dim_idx = list(data.dims).index(x)
+        y_data = np.moveaxis(y_data, x_dim_idx, -1)
+        y_data = y_data.reshape(-1, y_data.shape[-1])
+        if y_data.shape[0] > 1:
+            y_data = y_data[0]
+    return y_data.flatten()
+
+
+def _finite_extent(values: Any) -> tuple[float, float]:
+    """return the (min, max) of the finite entries of `values`, or (0, 1) if none"""
+    arr = _to_numpy(values)
+    if arr.dtype.kind not in 'fiu':
+        return 0.0, 1.0
+    finite = arr[np.isfinite(arr)]
+    if finite.size == 0:
+        return 0.0, 1.0
+    return float(np.nanmin(finite)), float(np.nanmax(finite))
+
+
+class PlotlyBackend:
+    """the plotting backend that emits plotly trace and layout dicts.
+
+    Each drawing call appends one result dict to a pending list that `get_plot_data`
+    returns and clears. The color limits of `heatmap` and the y limits of `line` only
+    widen across calls.
+    """
+
+    opts: specs.SharedPlotOptions
+    """the facet layout and label formats shared by every figure"""
 
     def __init__(
         self,
@@ -40,17 +123,6 @@ class WebPlotBackend:
         """Clear per-broadcast state while preserving vmin/vmax memory."""
         self._pending_traces.clear()
         self._layout.clear()
-
-    def _get_subplot_key(self, data: xr.DataArray) -> str:
-        """Generate a subplot identifier from column/row coordinates."""
-        parts = []
-        col = self.opts.col
-        row = self.opts.row
-        if col and col in data.coords:
-            parts.append(f'{col}={data[col].values}')
-        if row and row in data.coords:
-            parts.append(f'{row}={data[row].values}')
-        return '_'.join(parts) if parts else 'main'
 
     def _get_col_dim(self, data: xr.DataArray) -> Optional[str]:
         """return the dimension for column faceting, or None.
@@ -75,6 +147,55 @@ class WebPlotBackend:
 
         return None
 
+    def _facets(self, data: xr.DataArray) -> tuple[str | None, list[Any]]:
+        """return the facet dimension of `data` and the facet values in trace order.
+
+        An unfaceted `data` gives ``(None, [None])``.
+        """
+        col_dim = self._get_col_dim(data)
+        if col_dim is None:
+            return None, [None]
+        return col_dim, data[col_dim].values.tolist()
+
+    def _new_result(
+        self,
+        kind: str,
+        traces: list[dict[str, Any]],
+        layout: dict[str, Any],
+        data: xr.DataArray,
+        col_dim: str | None,
+        facets: list[Any],
+    ) -> dict[str, Any]:
+        """append and return the result dict of one drawing call"""
+        result = {
+            'type': kind,
+            'traces': traces,
+            'layout': layout,
+            'variable': str(data.name),
+            'facets': facets,
+            'col_dim': col_dim,
+        }
+        self._pending_traces.append(result)
+        return result
+
+    def _check_target(self, target: dict[str, Any], data: xr.DataArray) -> None:
+        """raise `ValueError` unless the facets of `data` equal those of `target`.
+
+        Args:
+            target: a result dict returned by a drawing method of this backend
+            data: the array to draw onto `target`
+
+        Raises:
+            ValueError: if the facet dimension or the facet values of `data` differ
+                from those recorded in `target`
+        """
+        col_dim, facets = self._facets(data)
+        if col_dim != target.get('col_dim') or facets != target.get('facets'):
+            raise ValueError(
+                f'facets {col_dim}={facets} of {data.name!r} do not match the '
+                f'target facets {target.get("col_dim")}={target.get("facets")}'
+            )
+
     def heatmap(
         self,
         data: xr.DataArray,
@@ -85,7 +206,6 @@ class WebPlotBackend:
         vmin: Optional[float] = None,
         vmax: Optional[float] = None,
         vstep: Optional[float] = None,
-        **kwargs,
     ) -> dict[str, Any]:
         """add a heatmap of `data` to the pending results.
 
@@ -104,10 +224,11 @@ class WebPlotBackend:
                 gradient
 
         Returns:
-            a dict with keys ``type``, ``traces``, ``layout``, and ``variable``
+            a dict with keys ``type``, ``traces``, ``layout``, ``variable``,
+            ``facets``, and ``col_dim``
         """
         traces = []
-        col_dim = self._get_col_dim(data)
+        col_dim, facets = self._facets(data)
 
         # the remembered vmin/vmax span every port and every broadcast, so the
         # subplots share one colorbar scale
@@ -133,9 +254,9 @@ class WebPlotBackend:
             colorscale = _mpl_to_plotly_colorscale(cmap)
 
         if col_dim:
-            n_subplots = len(data[col_dim].values)
-            for i, col_val in enumerate(data[col_dim].values):
-                sub = data.sel({col_dim: col_val})
+            n_subplots = len(facets)
+            for i, col_val in enumerate(facets):
+                sub = data.isel({col_dim: i})
                 # Only show colorbar on the last subplot to avoid duplicates
                 show_colorbar = i == n_subplots - 1
                 trace = self._make_heatmap_trace(
@@ -157,14 +278,8 @@ class WebPlotBackend:
                 )
             )
 
-        result = {
-            'type': 'heatmap',
-            'traces': traces,
-            'layout': self._make_heatmap_layout(data, x, y, len(traces)),
-            'variable': str(data.name),
-        }
-        self._pending_traces.append(result)
-        return result
+        layout = self._make_heatmap_layout(data, x, y, len(traces))
+        return self._new_result('heatmap', traces, layout, data, col_dim, facets)
 
     def _make_heatmap_trace(
         self,
@@ -232,8 +347,7 @@ class WebPlotBackend:
             trace['zmax'] = vmax
 
         if subplot_idx is not None:
-            trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
-            trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
+            trace['xaxis'], trace['yaxis'] = _axis_refs(subplot_idx)
 
         return trace
 
@@ -285,40 +399,61 @@ class WebPlotBackend:
         *,
         x: str,
         hue: Optional[str] = None,
-        yscale: Literal['linear', 'log'] = 'linear',
+        yscale: ScaleOptions = 'linear',
+        sharex: bool = True,
         ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
-        **kwargs,
+        step: StepStyle | None = None,
+        target: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """add ``scattergl`` lines of `data` to the pending results.
+        """draw one ``scattergl`` line per `hue` value of `data` on each facet.
 
-        The y-axis limits are `ylim` where given and the finite extent of `data`
+        The y limits are `ylim` where given and the finite extent of `data`
         otherwise, widened by the values of earlier calls.
 
+        Args:
+            data: the values on the y axis, with dimensions `x`, `hue` (when set), and
+                the facet dimension of `opts`
+            x: the dimension or coordinate of `data` on the x axis
+            hue: the dimension of `data` that selects one line per value; `None`
+                draws one line per facet
+            yscale: the y axis scale, ``'linear'`` or ``'log'``
+            sharex: accepted without effect on the layout
+            ylim: the y limits; `None` in either position leaves that limit to the
+                data extent
+            step: when set, hold each value until the next sample as `StepStyle`
+                selects; `None` connects the samples
+            target: `None` builds a new result dict; a result dict returned by an
+                earlier call receives the lines, and the facet values of `data` must
+                equal those of the result
+
         Returns:
-            a dict with keys ``type``, ``traces``, ``layout``, and ``variable``
+            the result dict drawn on
+
+        Raises:
+            ValueError: if `yscale` is neither ``'linear'`` nor ``'log'``, or if
+                `target` has facets that `data` does not have
         """
+        if yscale not in ('linear', 'log'):
+            raise ValueError(f"yscale must be 'linear' or 'log', not {yscale!r}")
+        if target is not None:
+            self._check_target(target, data)
+
         traces = []
-        col_dim = self._get_col_dim(data)
+        col_dim, facets = self._facets(data)
 
         if col_dim:
-            for i, col_val in enumerate(data[col_dim].values):
-                sub = data.sel({col_dim: col_val})
-                subplot_traces = self._make_line_traces(sub, x, hue, subplot_idx=i + 1)
+            for i, col_val in enumerate(facets):
+                sub = data.isel({col_dim: i})
+                subplot_traces = self._make_line_traces(
+                    sub, x, hue, subplot_idx=i + 1, step=step
+                )
                 for t in subplot_traces:
                     t['legendgroup'] = f'{col_dim}={col_val}'
                 traces.extend(subplot_traces)
         else:
-            traces.extend(self._make_line_traces(data, x, hue))
+            traces.extend(self._make_line_traces(data, x, hue, step=step))
 
-        n_subplots = len(data[col_dim].values) if col_dim else 1
-
-        data_np = _to_numpy(data.values)
-        finite_mask = np.isfinite(data_np)
-        if np.any(finite_mask):
-            current_ymin = float(np.nanmin(data_np[finite_mask]))
-            current_ymax = float(np.nanmax(data_np[finite_mask]))
-        else:
-            current_ymin, current_ymax = 0.0, 1.0
+        current_ymin, current_ymax = _finite_extent(data.values)
 
         # the remembered limits only widen across broadcasts
         candidate_ymin = (
@@ -339,16 +474,141 @@ class WebPlotBackend:
 
         effective_ylim = (self._remembered_ymin, self._remembered_ymax)
 
-        result = {
-            'type': 'line',
-            'traces': traces,
-            'layout': self._make_line_layout(
-                data, x, yscale, n_subplots, ylim=effective_ylim
-            ),
-            'variable': str(data.name),
-        }
-        self._pending_traces.append(result)
-        return result
+        if target is not None:
+            target['traces'].extend(traces)
+            _widen_y_ranges(target['layout'], effective_ylim)
+            return target
+
+        layout = self._make_line_layout(
+            data, x, yscale, len(facets), ylim=effective_ylim
+        )
+        return self._new_result('line', traces, layout, data, col_dim, facets)
+
+    def fill_between(
+        self,
+        low: xr.DataArray,
+        high: xr.DataArray,
+        *,
+        x: str,
+        hue: str | None = None,
+        alpha: float = 0.25,
+        step: StepStyle | None = None,
+        target: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """shade the band from `low` to `high` per `hue` value on each facet.
+
+        The band of hue index `i` takes the color of the `i`th line of `line` with the
+        same `hue`.
+
+        Args:
+            low: the lower edge of the band, with dimensions `x`, `hue` (when set),
+                and the facet dimension of `opts`
+            high: the upper edge of the band, with the dimensions of `low`
+            x: the dimension or coordinate of `low` and `high` on the x axis
+            hue: the dimension that selects one band per value; `None` shades one
+                band per facet
+            alpha: the opacity of the band, in [0, 1]
+            step: when set, hold each edge until the next sample as `StepStyle`
+                selects; `None` connects the samples
+            target: `None` builds a new result dict; a result dict returned by an
+                earlier call receives the bands, and the facet values of `low` must
+                equal those of the result
+
+        Returns:
+            the result dict drawn on
+
+        Raises:
+            ValueError: if `target` has facets that `low` does not have
+        """
+        if target is not None:
+            self._check_target(target, low)
+
+        traces: list[dict[str, Any]] = []
+        col_dim, facets = self._facets(low)
+
+        if col_dim:
+            for i, col_val in enumerate(facets):
+                traces.extend(
+                    self._make_band_traces(
+                        low.isel({col_dim: i}),
+                        high.isel({col_dim: i}),
+                        x,
+                        hue,
+                        alpha,
+                        step,
+                        subplot_idx=i + 1,
+                        legendgroup=f'{col_dim}={col_val}',
+                    )
+                )
+        else:
+            traces.extend(self._make_band_traces(low, high, x, hue, alpha, step))
+
+        if target is not None:
+            target['traces'].extend(traces)
+            return target
+
+        ylim = (_finite_extent(low.values)[0], _finite_extent(high.values)[1])
+        layout = self._make_line_layout(low, x, 'linear', len(facets), ylim=ylim)
+        return self._new_result('line', traces, layout, low, col_dim, facets)
+
+    def _make_band_traces(
+        self,
+        low: xr.DataArray,
+        high: xr.DataArray,
+        x: str,
+        hue: str | None,
+        alpha: float,
+        step: StepStyle | None,
+        subplot_idx: int | None = None,
+        legendgroup: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """return the lower- and upper-edge trace pair of each band on one facet.
+
+        Plotly fills ``tonexty`` to the preceding trace in ``data`` order. The 2
+        traces of each band are consecutive in the returned list.
+        """
+        x_data = _to_json_serializable(np.asarray(low[x].values).flatten())
+        xaxis, yaxis = _axis_refs(subplot_idx)
+        line: dict[str, Any] = {'width': 0}
+        if step is not None:
+            line['shape'] = _STEP_SHAPES[step]
+
+        if hue is not None and hue in low.dims:
+            bands = [
+                (i, low.isel({hue: i}), high.isel({hue: i}), f'{hue}={v}')
+                for i, v in enumerate(low[hue].values)
+            ]
+        else:
+            bands = [(0, low, high, str(low.name))]
+
+        traces: list[dict[str, Any]] = []
+        for i, lo, hi, name in bands:
+            group = name if legendgroup is None else legendgroup
+            base: dict[str, Any] = {
+                'type': 'scattergl',
+                'mode': 'lines',
+                'x': x_data,
+                'line': dict(line),
+                'showlegend': False,
+                'legendgroup': group,
+                'xaxis': xaxis,
+                'yaxis': yaxis,
+            }
+            lower = {
+                **base,
+                'y': _to_json_serializable(_y_along(lo, x)),
+                'name': f'{name} low',
+                'hoverinfo': 'skip',
+            }
+            upper = {
+                **base,
+                'y': _to_json_serializable(_y_along(hi, x)),
+                'name': f'{name} high',
+                'fill': 'tonexty',
+                'fillcolor': _rgba(_PALETTE[i % len(_PALETTE)], alpha),
+            }
+            traces.extend((lower, upper))
+        return traces
 
     def _make_line_traces(
         self,
@@ -356,159 +616,54 @@ class WebPlotBackend:
         x: str,
         hue: Optional[str],
         subplot_idx: Optional[int] = None,
+        step: StepStyle | None = None,
     ) -> list[dict[str, Any]]:
-        """Create line traces, optionally split by hue dimension."""
+        """return one ``scattergl`` trace per `hue` value of `data` on one facet"""
         traces = []
         x_data = np.asarray(data[x].values).flatten()
-
-        # Plotly default color sequence for consistent colors across subplots
-        plotly_colors = [
-            '#636EFA',
-            '#EF553B',
-            '#00CC96',
-            '#AB63FA',
-            '#FFA15A',
-            '#19D3F3',
-            '#FF6692',
-            '#B6E880',
-            '#FF97FF',
-            '#FECB52',
-        ]
 
         hue_is_dim = hue and hue in data.dims
         hue_is_coord = hue and hue in data.coords and hue not in data.dims
 
-        if hue_is_dim:
-            hue_values = data[hue].values
-            for hue_idx, hue_val in enumerate(hue_values):
-                sub = data.sel({hue: hue_val})
-                y_data = _to_numpy(sub.values).squeeze()
-
-                # Ensure x and y have matching lengths
-                if y_data.size != x_data.size:
-                    if x in sub.dims:
-                        y_data = _to_numpy(sub.values)
-                        x_dim_idx = list(sub.dims).index(x)
-                        y_data = np.moveaxis(y_data, x_dim_idx, -1)
-                        y_data = y_data.reshape(-1, y_data.shape[-1])
-                        # only the first row is plotted when more than one remains
-                        if y_data.shape[0] > 1:
-                            y_data = y_data[0]
-                        y_data = y_data.flatten()
-                    else:
-                        y_data = y_data.flatten()
-
-                # Use markers only when there's a single point (lines won't show)
-                mode = 'markers' if len(x_data) == 1 else 'lines'
-
-                # Use consistent color for same hue value across subplots
-                color = plotly_colors[hue_idx % len(plotly_colors)]
-                hue_name = f'{hue}={hue_val}'
-
-                trace: dict[str, Any] = {
-                    'type': 'scattergl',  # WebGL-accelerated scatter
-                    'mode': mode,
-                    'x': _to_json_serializable(x_data),
-                    'y': _to_json_serializable(y_data),
-                    'name': hue_name,
-                    'legendgroup': hue_name,  # Group same hue across subplots
-                    'showlegend': subplot_idx is None
-                    or subplot_idx == 1,  # Only show legend for first subplot
-                    'line': {'color': color},
-                    'marker': {'color': color},
-                }
-
-                if subplot_idx is not None:
-                    trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
-                    trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
-
-                traces.append(trace)
-        elif hue_is_coord:
-            # hue is a coordinate but not a dimension - use it for labeling
-            # but iterate over the coordinate values
-            hue_values = data[hue].values
-            # If hue_values is 0-d or scalar, make it iterable
-            if np.ndim(hue_values) == 0:
-                hue_values = [hue_values.item()]
-            else:
-                hue_values = np.unique(hue_values)
-
-            for hue_idx, hue_val in enumerate(hue_values):
-                # `sel` does not accept a non-dimension coordinate, so the whole
-                # array is plotted
-                y_data = _to_numpy(data.values).squeeze()
-
-                # Ensure x and y have matching lengths
-                if y_data.size != x_data.size:
-                    if x in data.dims:
-                        x_dim_idx = list(data.dims).index(x)
-                        y_data = np.moveaxis(y_data, x_dim_idx, -1)
-                        y_data = y_data.reshape(-1, y_data.shape[-1])
-                        if y_data.shape[0] > 1:
-                            y_data = y_data[0]
-                        y_data = y_data.flatten()
-                    else:
-                        y_data = y_data.flatten()
-
-                mode = 'markers' if len(x_data) == 1 else 'lines'
-                color = plotly_colors[hue_idx % len(plotly_colors)]
-                hue_name = f'{hue}={hue_val}'
-
-                trace: dict[str, Any] = {
-                    'type': 'scattergl',
-                    'mode': mode,
-                    'x': _to_json_serializable(x_data),
-                    'y': _to_json_serializable(y_data),
-                    'name': hue_name,
-                    'legendgroup': hue_name,
-                    'showlegend': subplot_idx is None or subplot_idx == 1,
-                    'line': {'color': color},
-                    'marker': {'color': color},
-                }
-
-                if subplot_idx is not None:
-                    trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
-                    trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
-
-                traces.append(trace)
-                # a non-dimension hue cannot split the data, so one trace is added
-                break
-        else:
-            y_data = _to_numpy(data.values).squeeze()
-
-            # Ensure x and y have matching lengths
-            if y_data.size != x_data.size:
-                if x in data.dims:
-                    x_dim_idx = list(data.dims).index(x)
-                    y_data = np.moveaxis(y_data, x_dim_idx, -1)
-                    y_data = y_data.reshape(-1, y_data.shape[-1])
-                    if y_data.shape[0] > 1:
-                        y_data = y_data[0]
-                    y_data = y_data.flatten()
-                else:
-                    y_data = y_data.flatten()
-
-            # Use markers only when there's a single point (lines won't show)
+        def make_trace(y_data: np.ndarray, name: str, color: str) -> dict[str, Any]:
+            # a single point draws nothing in 'lines' mode
             mode = 'markers' if len(x_data) == 1 else 'lines'
-
-            trace_name = str(data.name)
-            trace = {
+            line: dict[str, Any] = {'color': color}
+            if step is not None:
+                line['shape'] = _STEP_SHAPES[step]
+            trace: dict[str, Any] = {
                 'type': 'scattergl',
                 'mode': mode,
                 'x': _to_json_serializable(x_data),
                 'y': _to_json_serializable(y_data),
-                'name': trace_name,
-                'legendgroup': trace_name,
+                'name': name,
+                'legendgroup': name,
                 'showlegend': subplot_idx is None or subplot_idx == 1,
-                'line': {'color': plotly_colors[0]},
-                'marker': {'color': plotly_colors[0]},
+                'line': line,
+                'marker': {'color': color},
             }
-
             if subplot_idx is not None:
-                trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
-                trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
+                trace['xaxis'], trace['yaxis'] = _axis_refs(subplot_idx)
+            return trace
 
-            traces.append(trace)
+        if hue_is_dim:
+            for hue_idx, hue_val in enumerate(data[hue].values):
+                sub = data.isel({hue: hue_idx})
+                color = _PALETTE[hue_idx % len(_PALETTE)]
+                traces.append(make_trace(_y_along(sub, x), f'{hue}={hue_val}', color))
+        elif hue_is_coord:
+            # `sel` does not accept a non-dimension coordinate, so the whole array
+            # is drawn as one trace labeled by the first coordinate value
+            hue_values = data[hue].values
+            if np.ndim(hue_values) == 0:
+                hue_val = hue_values.item()
+            else:
+                hue_val = np.unique(hue_values)[0]
+            traces.append(
+                make_trace(_y_along(data, x), f'{hue}={hue_val}', _PALETTE[0])
+            )
+        else:
+            traces.append(make_trace(_y_along(data, x), str(data.name), _PALETTE[0]))
 
         return traces
 
@@ -516,7 +671,7 @@ class WebPlotBackend:
         self,
         data: xr.DataArray,
         x: str,
-        yscale: str,
+        yscale: ScaleOptions,
         n_subplots: int,
         *,
         ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
@@ -618,31 +773,53 @@ class WebPlotBackend:
 
         return layout
 
-    def _coord_kws(self, **kwargs) -> dict[str, Any]:
-        """return `kwargs` with the `col`, `row`, and `col_wrap` of `opts` added.
-
-        `col` is ``'_view'`` when `opts` sets neither `col` nor `row`.
-        """
-        col = self.opts.col
-        if col is None and self.opts.row is None:
-            col = '_view'
-
-        return {
-            **kwargs,
-            'col_wrap': self.opts.col_wrap,
-            'row': self.opts.row,
-            'col': col,
-        }
-
     def finish(
         self,
-        grid: dict[str, Any],
+        target: dict[str, Any],
         xticklabelunits: Union[bool, Literal['auto']] = 'auto',
     ) -> None:
-        """accept the `PlotBackend.finish` call without effect.
+        """leave `target` unchanged."""
 
-        The traces are collected by `heatmap` and `line`.
+    def limit_facets(
+        self,
+        target: dict[str, Any],
+        low: xr.DataArray | float | None,
+        high: float | None,
+    ) -> None:
+        """set the x range of each facet of `target` to (`low`, `high`).
+
+        Args:
+            target: the result dict to limit
+            low: the lower limit, or a DataArray with one value per facet in facet
+                order; `None` selects the finite minimum of the x data on the facet
+            high: the upper limit; `None` selects the finite maximum of the x data
+                on the facet
         """
+        n_facets = len(target.get('facets', [None]))
+        if isinstance(low, xr.DataArray):
+            lows: list[float | None] = [float(v) for v in _to_numpy(low.values).flat]
+        else:
+            lows = [low] * n_facets
+
+        layout = target['layout']
+        for i in range(n_facets):
+            xref = _axis_refs(i + 1)[0]
+            lo = lows[i] if i < len(lows) else None
+            hi = high
+            if lo is None or hi is None:
+                x_values = [
+                    _to_numpy(t['x'])
+                    for t in target['traces']
+                    if t.get('xaxis', 'x') == xref and 'x' in t
+                ]
+                if x_values:
+                    x_min, x_max = _finite_extent(np.concatenate(x_values))
+                else:
+                    x_min, x_max = 0.0, 1.0
+                lo = x_min if lo is None else lo
+                hi = x_max if hi is None else hi
+            axis = layout.setdefault(_layout_axis_key('xaxis', i), {})
+            axis['range'] = [lo, hi]
 
     def mark_noise_level(
         self,
@@ -651,109 +828,146 @@ class WebPlotBackend:
         grid: dict[str, Any],
         where: Literal['x', 'y', 'colorbar'],
     ) -> None:
-        """mark the system noise level of `var_name` on the most recent plot.
+        """draw the system noise level (in dBm) of `var_name` on each facet of `grid`.
 
-        `where` of ``'x'`` draws a horizontal line at the level, ``'y'`` a vertical
-        line, and ``'colorbar'`` an annotation at the level on the colorbar. Nothing
-        is added when `data` has no system noise or no plot is pending.
+        Nothing is drawn when `data` has no `system_noise` variable or `var_name` has
+        no noise bandwidth. The level of a facet is the `system_noise` entry at the
+        facet value recorded in `grid`.
+
+        Args:
+            data: the dataset with the `system_noise` variable (dBm/Hz) and `var_name`
+            var_name: the data variable or power-bin coordinate that sets the noise
+                bandwidth
+            grid: the result dict to draw on
+            where: ``'x'`` draws a horizontal line for power on the y axis, ``'y'`` a
+                vertical line for power on the x axis, and ``'colorbar'`` an
+                annotation beside the colorbar of a heatmap
+
+        Raises:
+            TypeError: if `where` is ``'colorbar'`` and no trace of `grid` draws a
+                colorbar, or if `where` is none of the 3 values
         """
         noise = util.get_system_noise(data, var_name)
         if noise is None:
             return
 
-        if not self._pending_traces:
-            return
+        layout = grid['layout']
+        shapes = layout.setdefault('shapes', [])
 
-        plot_data = self._pending_traces[-1]
-        layout = plot_data.get('layout', {})
-
-        if 'shapes' not in layout:
-            layout['shapes'] = []
-
-        noise_values = (
-            _to_numpy(noise.values).flat if isinstance(noise, xr.DataArray) else [noise]
-        )
-
-        for i, noise_val in enumerate(noise_values):
-            noise_float = float(noise_val)
+        for i, noise_val in enumerate(_facet_noise(noise, grid)):
+            if noise_val is None:
+                continue
+            xref, yref = _axis_refs(i + 1)
 
             if where == 'x':
-                # Horizontal line at noise level (for line plots with y=power)
-                shape = {
+                shapes.append({
                     'type': 'line',
                     'x0': 0,
                     'x1': 1,
-                    'xref': f'x{i + 1} domain' if i > 0 else 'x domain',
-                    'y0': noise_float,
-                    'y1': noise_float,
-                    'yref': f'y{i + 1}' if i > 0 else 'y',
-                    'line': {'color': '#eec009', 'width': 1, 'dash': 'dot'},
-                }
+                    'xref': f'{xref} domain',
+                    'y0': noise_val,
+                    'y1': noise_val,
+                    'yref': yref,
+                    'line': {'color': _NOISE_COLOR, 'width': 1, 'dash': 'dot'},
+                })
             elif where == 'y':
-                # Vertical line at noise level (for histograms with x=power)
-                shape = {
+                shapes.append({
                     'type': 'line',
-                    'x0': noise_float,
-                    'x1': noise_float,
-                    'xref': f'x{i + 1}' if i > 0 else 'x',
+                    'x0': noise_val,
+                    'x1': noise_val,
+                    'xref': xref,
                     'y0': 0,
                     'y1': 1,
-                    'yref': f'y{i + 1} domain' if i > 0 else 'y domain',
-                    'line': {'color': '#eec009', 'width': 1, 'dash': 'dot'},
-                }
+                    'yref': f'{yref} domain',
+                    'line': {'color': _NOISE_COLOR, 'width': 1, 'dash': 'dot'},
+                })
             elif where == 'colorbar':
+                colorbar_traces = [t for t in grid['traces'] if t.get('showscale')]
+                if not colorbar_traces:
+                    raise TypeError('no colorbar in the result dict')
+                zmin = colorbar_traces[0].get('zmin')
+                zmax = colorbar_traces[0].get('zmax')
+                if zmin is None or zmax is None or zmax <= zmin:
+                    continue
+
                 # Plotly annotations cannot reference colorbar values, so the marker
                 # is placed in paper coordinates at the normalized (0-1) position
                 # within the colorbar range
-                traces = plot_data.get('traces', [])
-                if traces:
-                    # Get the z range from the first trace with a colorbar
-                    zmin = None
-                    zmax = None
-                    for trace in traces:
-                        if trace.get('showscale', False):
-                            zmin = trace.get('zmin')
-                            zmax = trace.get('zmax')
-                            break
+                colorbar_bottom = 0.1
+                colorbar_top = 0.9
+                clamped_noise = max(zmin, min(zmax, noise_val))
+                normalized = (clamped_noise - zmin) / (zmax - zmin)
+                y_paper = colorbar_bottom + normalized * (
+                    colorbar_top - colorbar_bottom
+                )
 
-                    if zmin is not None and zmax is not None and zmax > zmin:
-                        # assumed colorbar extent in paper coordinates
-                        colorbar_bottom = 0.1
-                        colorbar_top = 0.9
-                        colorbar_height = colorbar_top - colorbar_bottom
-
-                        clamped_noise = max(zmin, min(zmax, noise_float))
-                        normalized = (clamped_noise - zmin) / (zmax - zmin)
-                        y_paper = colorbar_bottom + normalized * colorbar_height
-
-                        if 'annotations' not in layout:
-                            layout['annotations'] = []
-                        layout['annotations'].append({
-                            'x': 1.02,
-                            'y': y_paper,
-                            'xref': 'paper',
-                            'yref': 'paper',
-                            'text': 'kTB',
-                            'showarrow': True,
-                            'arrowhead': 2,
-                            'arrowsize': 1,
-                            'arrowwidth': 1,
-                            'arrowcolor': '#eec009',
-                            'font': {'color': '#eec009', 'size': 10},
-                            'ax': 20,
-                            'ay': 0,
-                        })
-                continue  # Skip adding to shapes for colorbar
-
-            layout['shapes'].append(shape)
-
-        plot_data['layout'] = layout
+                layout.setdefault('annotations', []).append({
+                    'x': 1.02,
+                    'y': y_paper,
+                    'xref': 'paper',
+                    'yref': 'paper',
+                    'text': 'kTB',
+                    'showarrow': True,
+                    'arrowhead': 2,
+                    'arrowsize': 1,
+                    'arrowwidth': 1,
+                    'arrowcolor': _NOISE_COLOR,
+                    'font': {'color': _NOISE_COLOR, 'size': 10},
+                    'ax': 20,
+                    'ay': 0,
+                })
+            else:
+                raise TypeError('where must be "x", "y", or "colorbar"')
 
     def get_plot_data(self) -> list[dict[str, Any]]:
         """Return all pending plot data and clear the buffer."""
         data = self._pending_traces.copy()
         self._pending_traces.clear()
         return data
+
+
+def _widen_y_ranges(
+    layout: dict[str, Any], ylim: tuple[float | None, float | None]
+) -> None:
+    """widen every finite y axis ``range`` of `layout` to include `ylim`"""
+    for key, axis in layout.items():
+        if not key.startswith('yaxis') or not isinstance(axis, dict):
+            continue
+        y_range = axis.get('range')
+        if y_range is None:
+            continue
+        if ylim[0] is not None and np.isfinite(ylim[0]):
+            y_range[0] = ylim[0] if y_range[0] is None else min(y_range[0], ylim[0])
+        if ylim[1] is not None and np.isfinite(ylim[1]):
+            y_range[1] = ylim[1] if y_range[1] is None else max(y_range[1], ylim[1])
+
+
+def _facet_noise(noise: xr.DataArray, grid: dict[str, Any]) -> list[float | None]:
+    """return one value of `noise` per facet of `grid`, in facet order.
+
+    When the ``col_dim`` of `grid` is a dimension of `noise`, the value of a facet is
+    the entry of `noise` at the matching coordinate value along that dimension, or
+    None without a match. Otherwise the values of `noise` are returned in order, one
+    per facet, with None for each facet beyond the last value.
+    """
+    facets: list[Any] = grid.get('facets', [None])
+    col_dim = grid.get('col_dim')
+    values = _to_numpy(noise.values)
+
+    if col_dim is None or col_dim not in noise.dims:
+        flat = [float(v) for v in values.flat]
+        return flat[: len(facets)] + [None] * (len(facets) - len(flat))
+
+    coord = np.asarray(noise[col_dim].values)
+    along = np.moveaxis(values, noise.dims.index(col_dim), 0)
+    out: list[float | None] = []
+    for facet in facets:
+        matches = np.flatnonzero(coord == facet)
+        if matches.size == 0:
+            out.append(None)
+        else:
+            out.append(float(np.min(along[matches[0]])))
+    return out
 
 
 def _to_json_serializable(
@@ -935,7 +1149,7 @@ def _make_quantized_colorscale(
     import matplotlib.pyplot as plt
 
     # data=None is accepted when vmin and vmax are both given
-    levels = util.quantized_value_range(None, vmin, vmax, vstep)  # type: ignore[arg-type]
+    levels = util.quantized_value_range(cast('xr.DataArray', None), vmin, vmax, vstep)
     n_levels = len(levels) - 1
 
     n_levels = max(n_levels, 1)

@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     import striqt.analysis as sa
     import striqt.figures as sf
     import striqt.sensor as ss
-    from striqt.figures.backend import WebPlotBackend
+    from striqt.figures.backend import PlotlyBackend
 
 
 _json_encoder = msgspec.json.Encoder()
@@ -77,7 +77,7 @@ class AppState(TypedDict):
     """Type definition for the global application state."""
 
     delayed_dataset: Optional[ss.lib.compute.DelayedDataset]
-    plotter: Optional[WebPlotBackend]
+    plotter: Optional[PlotlyBackend]
     selected_variable: str
     available_variables: list[str]
     variable_labels: dict[str, str]
@@ -240,7 +240,7 @@ def _select_delayed_variable(result: ss.lib.compute.DelayedDataset, name: str):
 
 def _prepare_plot_data_sync(
     result: ss.lib.compute.DelayedDataset,
-    plotter: WebPlotBackend,
+    plotter: PlotlyBackend,
     variable: str,
     data_select: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], CoordinatesData]:
@@ -279,8 +279,7 @@ def _prepare_plot_data_sync(
         if filtered_select:
             ds = ds.sel(filtered_select)
 
-    # plot_func draws through plotter.heatmap or plotter.line, which collect the results
-    plot_func(ds, cast('sf.backend.PlotBackend', plotter))
+    plot_func(ds, plotter)
 
     plot_data = plotter.get_plot_data()
 
@@ -354,11 +353,10 @@ async def _do_broadcast():
             )
 
             if not plot_data:
-                # an empty result means the plot function drew with matplotlib
-                # calls (FacetGrid, ax=) that WebPlotBackend does not implement
+                # the plot function of `variable` returned without a drawing call
                 error_message = _json_encoder.encode({
                     'type': 'error',
-                    'message': f"'{variable}' uses matplotlib-specific plotting that isn't supported in web view yet",
+                    'message': f"'{variable}' produced no plot data for the web view",
                 }).decode()
                 for ws in _app_state['websockets']:
                     try:
@@ -661,7 +659,7 @@ def run_server(
     import striqt.analysis as sa
     import striqt.figures as sf
     import striqt.sensor as ss
-    from striqt.figures.backend import WebPlotBackend
+    from striqt.figures.backend import PlotlyBackend
 
     # Store the spec filename for display in the web UI header
     _app_state['spec_filename'] = Path(path).name
@@ -701,7 +699,7 @@ def run_server(
         plot_opts = sf.specs.PlotOptions.from_spec(sweep.plot_hint)
 
     _app_state['plot_opts'] = plot_opts
-    _app_state['plotter'] = WebPlotBackend(plot_opts.plotter)
+    _app_state['plotter'] = PlotlyBackend(plot_opts.plotter)
     # the selection is filtered to valid indexes per variable in _prepare_plot_data_sync
     _app_state['data_select'] = dict(plot_opts.data.select)
 

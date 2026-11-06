@@ -14,19 +14,28 @@ from striqt.analysis.lib.util import np, xr
 from .. import specs, util
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Generator, Iterator
     from multiprocessing.synchronize import RLock
 
     import matplotlib as mpl
-    import xarray.core.types
+    import matplotlib.axes
     import xarray.plot
-    from typing_extensions import NotRequired, Unpack
+    from typing_extensions import Self
+    from xarray.core.types import ScaleOptions
 
-    _T = typing.TypeVar('_T', bound=xr.DataArray)
+    from .protocol import StepStyle
 
 else:
     mpl = sw.util.lazy_import('matplotlib')
 
 TerminalGraphics = typing.Literal['sixel', 'kitcat', 'kitty']
+
+
+class _LayoutKws(typing.TypedDict):
+    col: str | None
+    row: str | None
+    col_wrap: int | None
+    figsize: list[float]
 
 
 def select_mpl_backend(style: str | None, interactive: TerminalGraphics | None) -> None:
@@ -63,7 +72,7 @@ def select_mpl_backend(style: str | None, interactive: TerminalGraphics | None) 
         plt.style.use(styles)
 
 
-def term_graphics_notice(interactive: str | None):
+def term_graphics_notice(interactive: str | None) -> None:
     if interactive is None:
         pass
     elif interactive == 'sixel':
@@ -80,101 +89,18 @@ def term_graphics_notice(interactive: str | None):
         )
 
 
-def coerce_column(data: _T, plotter: PlotBackend) -> _T:
-    """add a size-1 `_view` dimension to `data` when the plot options set neither `col` nor `row`"""
-    opts = plotter.opts
-    if opts.col is None and opts.row is None:
-        # xarray plot routines return a FacetGrid only when faceting
-        return data.extend_dims(_view=[''])
-    else:
-        return data
-
-
-class _DimKws(typing.TypedDict):
-    x: str
-    y: NotRequired[str]
-    hue: NotRequired[str]
-
-
-class _LayoutKwArgs(_DimKws):
-    col: str | None
-    col_wrap: NotRequired[int | None]
-    row: NotRequired[str | None]
-    figsize: NotRequired[list[float]]
-
-
-def plot_cyclic_channel_power(
-    cyclic_channel_power: xr.DataArray,
-    center_statistic='mean',
-    bound_statistics=('min', 'max'),
-    dB=True,
-    ax=None,
-    colors=None,
-    steps=True,
-    plot_kws: dict[str, typing.Any] | None = None,
-):
-    import matplotlib.pyplot as plt
-
-    from .. import labels
-
-    if plot_kws is None:
-        plot_kws = {}
-
-    if ax is None:
-        _, ax = plt.subplots()
-
-    time = cyclic_channel_power.cyclic_lag
-
-    fill_kws: dict[str, typing.Any] = {}
-    if steps:
-        plot_kws = plot_kws | {'drawstyle': 'steps-post'}
-        fill_kws['step'] = 'post'
-
-    if sa.dataarrays.CAPTURE_DIM in cyclic_channel_power.dims:
-        cyclic_channel_power = cyclic_channel_power.squeeze(sa.dataarrays.CAPTURE_DIM)
-
-    if not dB:
-        cyclic_channel_power = sw.dBtopow(cyclic_channel_power)
-
-    for i, detector in enumerate(cyclic_channel_power.power_detector.data):
-        a = cyclic_channel_power.sel(power_detector=detector)
-
-        ax.plot(
-            time,
-            (a.sel(cyclic_statistic=center_statistic)),
-            color=f'C{i}' if colors is None else colors[i],
-            **plot_kws,
-        )
-
-    for i, detector in enumerate(cyclic_channel_power.power_detector.data):
-        a = cyclic_channel_power.sel(power_detector=detector)
-
-        ax.fill_between(
-            time,
-            a.sel(cyclic_statistic=bound_statistics[0]),
-            a.sel(cyclic_statistic=bound_statistics[1]),
-            color=f'C{i}' if colors is None else colors[i],
-            alpha=0.25,
-            lw=0,
-            rasterized=True,
-            **fill_kws,
-        )
-
-    labels.label_axis('x', cyclic_channel_power.cyclic_lag, ax=ax)
-    labels.label_axis('y', cyclic_channel_power, tick_units=False, ax=ax)
-    labels.label_legend(cyclic_channel_power.power_detector, ax=ax)
-
-
 class _FakeLock:
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: object) -> None:
         pass
 
 
 @contextlib.contextmanager
-def batch_term_images(interactive: TerminalGraphics | None):
+def batch_term_images(
+    interactive: TerminalGraphics | None,
+) -> Generator[None, None, None]:
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         yield
@@ -187,10 +113,25 @@ def batch_term_images(interactive: TerminalGraphics | None):
     sys.stdout.flush()
 
 
-class PlotBackend:
+class MatplotlibBackend:
+    """a plotting backend that draws with matplotlib, one `FacetGrid` per figure.
+
+    Each drawing method lays out the facets from `opts` and returns the grid.
+    `finish` labels the grid, then writes and shows the figure as `output_dir` and
+    `interactive` select.
+    """
+
     opts: specs.SharedPlotOptions
+    """the facet layout and label formats shared by every figure"""
+    output_dir: Path | None
+    """the directory that `finish` writes figure files in; `None` writes no file"""
+    interactive: bool | str | None
+    """True leaves pyplot interactive after `finish`; a `TerminalGraphics` name
+    shows each figure in the terminal; False or `None` does neither"""
     lock: RLock | _FakeLock
+    """serializes the terminal image writes of `finish` across processes"""
     last_grid: xarray.plot.FacetGrid | None = None
+    """the grid of the most recent `finish` call, or `None` before the first"""
 
     def __init__(
         self,
@@ -199,7 +140,18 @@ class PlotBackend:
         *,
         interactive: bool | str | None = None,
         lock: RLock | None = None,
-    ):
+    ) -> None:
+        """store the options and create `output_dir` with its parents.
+
+        Args:
+            opts: the facet layout and label formats of every figure
+            output_dir: the directory for the figure files; `None` writes no file
+            interactive: True leaves pyplot interactive after each `finish`; a
+                `TerminalGraphics` name shows each figure in the terminal; False or
+                `None` does neither
+            lock: serializes the terminal image writes across processes; `None`
+                locks nothing
+        """
         self.opts = opts
         self.output_dir = output_dir
         self.interactive = interactive
@@ -212,15 +164,19 @@ class PlotBackend:
         if self.output_dir is not None:
             self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    @functools.lru_cache  # noqa: B019
-    def _coord_kws(self, **kwargs: Unpack[_DimKws]) -> _LayoutKwArgs:
+    @functools.lru_cache  # noqa: B019 one backend instance per process
+    def _coord_kws(self) -> _LayoutKws:
+        """return the facet layout keywords of the xarray plot calls from `opts`.
+
+        Without `col` or `row` in `opts`, `col` is the size-1 `_view` dimension that
+        `coerce_column` adds to the data.
+        """
         if self.opts.col is None and self.opts.row is None:
             col = '_view'
         else:
             col = self.opts.col
 
         return {
-            **kwargs,
             'figsize': mpl.rcParams['figure.figsize'],
             'col_wrap': self.opts.col_wrap,
             'row': self.opts.row,
@@ -231,15 +187,21 @@ class PlotBackend:
         self,
         data: xr.DataArray,
         *,
+        x: str,
+        y: str,
         cmap: str = 'cubehelix',
         vmin: float | None = None,
         vmax: float | None = None,
         vstep: float | None = None,
-        **kwargs: Unpack[_DimKws],
-    ):
+    ) -> xarray.plot.FacetGrid:
+        """draw `data` as a color image with a colorbar on each facet.
+
+        With `vstep`, the color scale has one band per `vstep` between `vmin` rounded
+        down and `vmax` rounded up to multiples of `vstep`. Images with more than
+        10000 values are rasterized.
+        """
         from matplotlib import colors
 
-        coords = self._coord_kws(**kwargs)
         rasterized = data.size > 10000
 
         if vstep is None:
@@ -249,14 +211,20 @@ class PlotBackend:
             levels = util.quantized_value_range(data, vmin, vmax, vstep)
             _cmap = mpl.colormaps.get_cmap(cmap).resampled(len(levels) - 1)
             norm = colors.BoundaryNorm(levels, ncolors=_cmap.N)
+            vmin = vmax = None
 
         grid = data.plot.imshow(
-            **coords,
+            **self._coord_kws(),
+            x=x,
+            y=y,
             cmap=_cmap,
             norm=norm,
+            vmin=vmin,
+            vmax=vmax,
             rasterized=rasterized,
             interpolation='nearest',
         )
+        grid = typing.cast('xarray.plot.FacetGrid', grid)
 
         for ax in grid.axs.flat:
             ax.grid(False)
@@ -264,47 +232,147 @@ class PlotBackend:
         if grid.cbar is not None and grid.cbar.solids is not None:
             grid.cbar.solids.set_rasterized(rasterized)
 
-        x = grid._x_var = kwargs['x']  # type: ignore
-        y = grid._y_var = kwargs.get('y', None)  # type: ignore
-        ydata = data if y is None else data[y]
-        grid._dpi = _select_dpi(grid, data[x], ydata, min_=120, max_=300)  # type: ignore
+        _set_axis_vars(grid, x, y)
 
         return grid
 
     def line(
         self,
         data: xr.DataArray,
-        yscale: xarray.core.types.ScaleOptions = 'linear',
+        *,
+        x: str,
+        hue: str | None = None,
+        yscale: ScaleOptions = 'linear',
         sharex: bool = True,
-        **kwargs: Unpack[_DimKws],
-    ):
-        coords = self._coord_kws(**kwargs)
-        rasterized = data.size > 10000
+        ylim: tuple[float | None, float | None] | None = None,
+        step: StepStyle | None = None,
+        target: xarray.plot.FacetGrid | None = None,
+    ) -> xarray.plot.FacetGrid:
+        """draw one line per `hue` value of `data` on each facet.
 
-        grid = data.plot.line(
-            **coords, yscale=yscale, rasterized=rasterized, sharex=sharex
-        )
+        Lines drawn on `target` add no legend. `yscale` and `ylim` are set on the
+        axes of a new grid and of `target`. `sharex` applies to a new grid only.
+        Lines with more than 10000 values are rasterized.
 
-        grid._x_var = kwargs['x']  # type: ignore
-        grid._y_var = None
-        grid._dpi = _select_dpi(grid, data[grid._x_var], None, min_=120, max_=300)  # type: ignore
+        Raises:
+            ValueError: if `target` has a facet that `data` lacks
+        """
+        kwargs: dict[str, typing.Any] = {'rasterized': data.size > 10000}
+        if step is not None:
+            kwargs['drawstyle'] = f'steps-{step}'
+        if ylim is not None:
+            kwargs['ylim'] = ylim
+
+        if target is None:
+            grid = data.plot.line(
+                **self._coord_kws(),
+                x=x,
+                hue=hue,
+                yscale=yscale,
+                sharex=sharex,
+                **kwargs,
+            )
+            grid = typing.cast('xarray.plot.FacetGrid', grid)
+            _set_axis_vars(grid, x, None)
+            return grid
+
+        from xarray.plot import dataarray_plot
+
+        for ax, sub in _facet_subsets(target, data):
+            dataarray_plot.line(
+                sub,
+                x=x,
+                hue=hue,
+                ax=ax,
+                yscale=yscale,
+                add_legend=False,
+                _labels=False,
+                **kwargs,
+            )
+
+        return target
+
+    def fill_between(
+        self,
+        low: xr.DataArray,
+        high: xr.DataArray,
+        *,
+        x: str,
+        hue: str | None = None,
+        alpha: float = 0.25,
+        step: StepStyle | None = None,
+        target: xarray.plot.FacetGrid | None = None,
+    ) -> xarray.plot.FacetGrid:
+        """shade the band from `low` to `high` per `hue` value on each facet.
+
+        The band of hue index `i` on a facet takes the color ``C{i}``, the color of
+        the `i`th line that `line` first draws on that facet. Bands are rasterized
+        and have no edge line.
+
+        Raises:
+            ValueError: if `target` has a facet that `low` or `high` lacks
+        """
+        if target is None:
+            from xarray.plot import FacetGrid
+
+            grid = FacetGrid(low, sharex=True, sharey=True, **self._coord_kws())
+            _set_axis_vars(grid, x, None)
+            for ax, name_dict in zip(grid.axs.flat, grid.name_dicts.flat):
+                if name_dict is None:
+                    ax.set_visible(False)
+            grid.fig.tight_layout()
+        else:
+            grid = target
+
+        for (ax, lo), (_, hi) in zip(
+            _facet_subsets(grid, low), _facet_subsets(grid, high)
+        ):
+            if hue is None:
+                bands = [(0, lo, hi)]
+            else:
+                bands = [
+                    (i, lo.sel({hue: value}), hi.sel({hue: value}))
+                    for i, value in enumerate(lo[hue].values)
+                ]
+
+            for i, lo_i, hi_i in bands:
+                ax.fill_between(
+                    lo_i[x].values,
+                    lo_i.values,
+                    hi_i.values,
+                    color=f'C{i}',
+                    alpha=alpha,
+                    lw=0,
+                    rasterized=True,
+                    step=step,
+                )
 
         return grid
 
     def finish(
         self,
-        grid: xarray.plot.FacetGrid,
-        # coords: _LayoutKwArgs,
+        target: xarray.plot.FacetGrid,
         xticklabelunits: bool | typing.Literal['auto'] = 'auto',
     ) -> Path | None:
+        """label `target` from the attrs of the drawn data and the formats of `opts`.
+
+        The figure file is written to `output_dir` at the dpi between 120 and 300
+        that resolves each sample of the drawn data, and a record is logged on the
+        ``analysis`` logger at INFO. Interactive mode is turned on when `interactive`
+        is True. The figure is shown in the terminal and closed when `interactive`
+        names a terminal graphics protocol. `target` is kept as `last_grid`.
+
+        Returns:
+            the path of the figure file, or `None` when `output_dir` is `None`
+        """
         import matplotlib.pyplot as plt
 
         from .. import labels
 
+        grid = target
         data = grid.data
         x = grid._x_var
         y = grid._y_var
-        dpi: int = getattr(grid, '_dpi', 150)
 
         if self.opts.suptitle_fmt is not None:
             suptitle = labels.label_by_coord(
@@ -366,6 +434,8 @@ class PlotBackend:
                 **data.attrs,
             )
             path = Path(self.output_dir) / filename[0]
+            ydata = None if y is None else data[y]
+            dpi = _select_dpi(grid, data[x], ydata, min_=120, max_=300)
             grid.fig.savefig(path, dpi=dpi)
             sa.util.get_logger('analysis').info(f"💾 '{path!s}'")
         else:
@@ -384,23 +454,23 @@ class PlotBackend:
 
     def limit_facets(
         self,
-        grid: xarray.plot.FacetGrid,
+        target: xarray.plot.FacetGrid,
         low: xr.DataArray | float | None,
         high: float | None,
     ) -> None:
-        """set the x limits of each facet of `grid` to (`low`, `high`).
+        """set the x limits of each facet of `target` to (`low`, `high`).
 
         Args:
-            grid: the facet grid to limit
+            target: the facet grid to limit
             low: the lower limit, or a DataArray with one value per facet selected
                 on the facet coordinates; None leaves the lower limit unchanged
             high: the upper limit; None leaves the upper limit unchanged
         """
         if isinstance(low, xr.DataArray):
-            lows = _facet_values(low, grid)
+            lows = _facet_values(low, target)
         else:
-            lows = [low] * grid.axs.size
-        for ax, lo in zip(grid.axs.flat, lows):
+            lows = [low] * target.axs.size
+        for ax, lo in zip(target.axs.flat, lows):
             ax.set_xlim(lo, high)
 
     def mark_noise_level(
@@ -409,7 +479,7 @@ class PlotBackend:
         var_name: str,
         grid: xarray.plot.FacetGrid,
         where: typing.Literal['x', 'y', 'colorbar'],
-    ):
+    ) -> None:
         """draw the system noise level (in dBm) of `var_name` on each facet of `grid`.
 
         Nothing is drawn when `data` has no `system_noise` variable or `var_name` has
@@ -470,6 +540,37 @@ class PlotBackend:
                 raise TypeError('where must be "x", "y", or "colorbar"')
 
 
+def _set_axis_vars(grid: xarray.plot.FacetGrid, x: str, y: str | None) -> None:
+    """set the x and y variable names of `grid`."""
+    # xarray annotates both attributes as None and assigns Hashable values to them
+    grid._x_var = x  # ty: ignore[invalid-assignment]
+    grid._y_var = y  # ty: ignore[invalid-assignment]
+
+
+def _facet_subsets(
+    grid: xarray.plot.FacetGrid, data: xr.DataArray
+) -> Iterator[tuple[matplotlib.axes.Axes, xr.DataArray]]:
+    """yield each named facet axis of `grid` with the subset of `data` on that facet.
+
+    The subset is `data` indexed by the `grid.name_dicts` entry of the facet, by
+    position on a dimension without coordinate values. An axis without a name (the
+    padding of a wrapped grid) is skipped.
+
+    Raises:
+        ValueError: if `data` lacks a facet dimension or value of `grid`
+    """
+    for name_dict, ax in zip(grid.name_dicts.flat, grid.axs.flat):
+        if name_dict is None:
+            continue
+        try:
+            sub = data.loc[name_dict]
+        except (KeyError, IndexError, ValueError) as ex:
+            raise ValueError(
+                f'{data.name!r} has no facet {name_dict!r} of the target grid'
+            ) from ex
+        yield ax, sub
+
+
 def _facet_values(
     values: xr.DataArray, grid: xarray.plot.FacetGrid
 ) -> list[float | None]:
@@ -506,7 +607,19 @@ def _facet_values(
     return out
 
 
-def _select_dpi(grid, x_data, y_data: xr.DataArray | None, min_=0, max_=300):
+def _select_dpi(
+    grid: xarray.plot.FacetGrid,
+    x_data: xr.DataArray,
+    y_data: xr.DataArray | None,
+    min_: float = 0,
+    max_: float = 300,
+) -> float:
+    """return the dpi in [`min_`, `max_`] that resolves one sample per pixel per facet.
+
+    The dpi of a facet is the sample count of `x_data` per inch of axis width or,
+    when `y_data` is set and larger, the sample count of `y_data` per inch of axis
+    height. The result is the largest facet dpi, clipped to [`min_`, `max_`].
+    """
     dpi = min_
     scale_inv = grid.fig.dpi_scale_trans.inverted()
     for ax in grid.fig.axes:
@@ -514,12 +627,9 @@ def _select_dpi(grid, x_data, y_data: xr.DataArray | None, min_=0, max_=300):
             continue
         bbox = ax.get_window_extent().transformed(scale_inv)
         width, height = bbox.width, bbox.height
-        x_dpi = x_data.size / width
-        dpi = max([dpi, x_dpi] + [] if y_data is None else [y_data.size / height])
+        candidates = [dpi, x_data.size / width]
+        if y_data is not None:
+            candidates.append(y_data.size / height)
+        dpi = max(candidates)
 
-    if dpi > max_:
-        return max_
-    elif dpi < min_:
-        return min_
-    else:
-        return dpi
+    return min(max(dpi, min_), max_)
