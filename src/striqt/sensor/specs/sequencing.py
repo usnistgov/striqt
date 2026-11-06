@@ -951,9 +951,8 @@ class PlanChoices:
     """the capture entries and loop values of a sweep, labeled for selection."""
 
     captures: tuple[str, ...]
-    """one label per entry of `sweep.captures`, in order, naming the fields that
-    differ across the entries, or ``'capture {i}'`` when none differ; empty when the
-    sweep lists no captures"""
+    """one label ``'capture {i}'`` per entry of `sweep.captures`, in order; empty when
+    the sweep lists no captures"""
 
     loops: tuple[LoopChoices, ...]
     """one entry per loop of `sweep.loops` with a `field`, in declaration order"""
@@ -998,37 +997,9 @@ def plan_choices(
         loops.append(LoopChoices(loop.field, loop.isin, values, labels))
 
     return PlanChoices(
-        captures=_describe_capture_entries(sweep.captures, source_id),
+        captures=tuple(f'capture {i}' for i in range(len(sweep.captures))),
         loops=tuple(loops),
     )
-
-
-def _describe_capture_entries(
-    captures: tuple[structs.Capture, ...], source_id: types.SourceID | None
-) -> tuple[str, ...]:
-    """label each entry of `captures` by the fields that differ across the entries.
-
-    `adjust_analysis` is never a label field.
-
-    Returns:
-        one label per entry, from `describe_capture` over the differing fields in
-        struct field order, or ``'capture {i}'`` when no other field differs
-    """
-    if len(captures) == 0:
-        return ()
-
-    first = captures[0]
-    fields = tuple(
-        name
-        for name in type(first).__struct_fields__
-        if name != 'adjust_analysis'
-        and any(not _same(getattr(c, name), getattr(first, name)) for c in captures)
-    )
-
-    if len(fields) == 0:
-        return tuple(f'capture {i}' for i in range(len(captures)))
-
-    return tuple(describe_capture(c, fields, source_id=source_id) for c in captures)
 
 
 def _same(a: Any, b: Any) -> bool:

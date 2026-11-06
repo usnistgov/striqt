@@ -706,32 +706,10 @@ def choice_sweep(loops=CHOICE_LOOPS):
     return make_sweep(captures=captures, loops=loops, analysis=SPG)
 
 
-def test_plan_choices_labels_each_capture_entry_by_the_differing_field():
-    sweep = choice_sweep()
-    expected = tuple(
-        sa.labels.describe_field(c, 'frequency_offset', sep=': ')
-        for c in sweep.captures
-    )
-    assert S.plan_choices(sweep).captures == expected
-    assert all('frequency_offset: ' in label for label in expected)
-
-
-@pytest.mark.parametrize('count', [1, 2], ids=['one_entry', 'identical_entries'])
-def test_plan_choices_numbers_the_capture_entries_when_no_field_differs(count):
-    sweep = make_sweep(captures=tuple(make_capture() for _ in range(count)))
+@pytest.mark.parametrize('count', [1, 2], ids=['one_entry', 'two_entries'])
+def test_plan_choices_numbers_the_capture_entries(count):
+    sweep = make_sweep(captures=tuple(make_capture(snr=i) for i in range(count)))
     assert S.plan_choices(sweep).captures == tuple(f'capture {i}' for i in range(count))
-
-
-def test_plan_choices_never_labels_by_adjust_analysis():
-    """2 entries that differ in `adjust_analysis` and `snr` are labeled by `snr`
-    alone, and 2 that differ in `adjust_analysis` alone are numbered"""
-    adjusted = make_capture(adjust_analysis={'frequency_resolution': 2e3})
-    by_snr = make_sweep(captures=(adjusted.replace(snr=10.0), make_capture(snr=20.0)))
-    assert S.plan_choices(by_snr).captures == tuple(
-        sa.labels.describe_field(c, 'snr', sep=': ') for c in by_snr.captures
-    )
-    only_adjusted = make_sweep(captures=(adjusted, make_capture()))
-    assert S.plan_choices(only_adjusted).captures == ('capture 0', 'capture 1')
 
 
 def test_plan_choices_lists_no_capture_entries_without_a_capture_list():
