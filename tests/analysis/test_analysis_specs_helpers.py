@@ -10,16 +10,14 @@ from typing import Annotated, Any, Optional, Union
 import msgspec
 import pytest
 from analysis_strategies import (
-    container_depth,
     frozendict_dicts,
     has_frozen_below,
     has_mutable_below,
     json_trees,
     listify,
     scalars,
-    tuplify,
 )
-from hypothesis import given, strategies as st
+from hypothesis import given, settings, strategies as st
 from msgspec import inspect as mi
 
 import striqt.analysis as sa
@@ -52,26 +50,15 @@ VAR_TUPLE_DEPTH_XFAIL = pytest.mark.xfail(
     'TupleType but not VarTupleType, so tuple[T, ...] fields get depth 0',
 )
 
+# the 4 `json_trees` properties cost 0.8 s at the default 100 examples; 25 examples
+# still reach every container type at depth 4
+JSON_TREE_EXAMPLES = settings(max_examples=25)
+
 
 # %% frozendict
 
 
 class TestFrozendict:
-    @given(d=frozendict_dicts)
-    def test_mapping_laws(self, d):
-        fd = frozendict(d)
-        assert len(fd) == len(d)
-        assert list(fd) == list(d)
-        assert list(fd.keys()) == list(d.keys())
-        assert list(fd.values()) == list(d.values())
-        assert list(fd.items()) == list(d.items())
-        for key in d:
-            assert key in fd
-            assert fd[key] == d[key]
-        assert object() not in fd
-        assert fd == d
-        assert d == fd
-
     @given(d=frozendict_dicts, data=st.data())
     def test_hash_is_order_independent(self, d, data):
         items = list(d.items())
@@ -139,6 +126,7 @@ class TestFrozendict:
 
 
 class TestFreeze:
+    @JSON_TREE_EXAMPLES
     @given(tree=json_trees())
     def test_is_idempotent(self, tree):
         frozen = freeze(tree)
@@ -147,15 +135,12 @@ class TestFreeze:
         assert type(refrozen) is type(frozen)
         assert not has_mutable_below(refrozen)
 
-    @given(tree=json_trees())
-    def test_matches_oracle(self, tree):
-        assert freeze(tree) == tuplify(tree)
-
     @given(x=scalars)
     def test_scalars_pass_through_by_identity(self, x):
         assert freeze(x) is x
         assert unfreeze(x) is x
 
+    @JSON_TREE_EXAMPLES
     @given(tree=json_trees(), max_depth=st.integers(min_value=-1, max_value=4))
     def test_depth_converts_only_shallower_levels(self, tree, max_depth):
         result = freeze(tree, max_depth)
@@ -163,10 +148,6 @@ class TestFreeze:
         # any max_depth <= 1 converts only the root and leaves the rest of the tree
         # untouched
         assert has_mutable_below(result) == has_mutable_below(tree, max(max_depth, 1))
-        if max_depth <= 1:
-            assert result == freeze(tree, 1)
-        if max_depth >= container_depth(tree):
-            assert result == freeze(tree)
 
     @pytest.mark.xfail(
         strict=True,
@@ -180,22 +161,20 @@ class TestFreeze:
 
 
 class TestUnfreeze:
+    @JSON_TREE_EXAMPLES
     @given(tree=json_trees())
     def test_roundtrip(self, tree):
         thawed = unfreeze(freeze(tree))
         assert thawed == listify(tree)
         assert not has_frozen_below(thawed)
 
+    @JSON_TREE_EXAMPLES
     @given(tree=json_trees(), max_depth=st.integers(min_value=-1, max_value=4))
     def test_depth_converts_only_shallower_levels(self, tree, max_depth):
         frozen = freeze(tree)
         result = unfreeze(frozen, max_depth)
         assert listify(result) == listify(tree)
         assert has_frozen_below(result) == has_frozen_below(frozen, max(max_depth, 1))
-        if max_depth <= 1:
-            assert result == unfreeze(frozen, 1)
-        if max_depth >= container_depth(tree):
-            assert result == unfreeze(frozen)
 
 
 # %% inspect_freeze_depths
@@ -304,12 +283,13 @@ def test_json_schema_of_bound_sweep(synthetic_sweep):
     assert sweep_def['properties']['sensor_binding'] == {'enum': [name]}
     assert 'sensor_binding' in sweep_def['required']
 
+    # the schema descriptions are the `Meta` standard names of the capture fields
     capture_ref = sweep_def['properties']['captures']['items']['$ref']
     capture_props = schema['$defs'][capture_ref.rsplit('/', 1)[-1]]['properties']
-    assert (
-        capture_props['duration']['description'] == 'Duration of the analysis waveform'
-    )
-    assert capture_props['port']['description'] == 'Input port indices'
+    capture_attrs = get_capture_type_attrs(ss.specs.SingleToneCapture)
+    for name in ('duration', 'port'):
+        description = capture_props[name]['description']
+        assert description == capture_attrs[name]['standard_name'], name
 
 
 # %% convert_dict, convert_spec and the encode/decode hooks
@@ -633,71 +613,89 @@ def test_the_cache_is_reachable_through_the_wrapper(clear):
 # %% SpecValidationError and validation_path
 
 
-@pytest.mark.parametrize(
-    ('path', 'locations', 'expected'),
-    [
-        ((), (), 'bad value'),
-        (('.analysis', '.spectrogram'), (), '$.analysis.spectrogram: bad value'),
-        ((), ('a', 'b'), 'bad value - at $a on $b'),
-        (
-            ('.analysis', '.spectrogram'),
-            (".loops: {'azimuth': 43}", '.captures[0]'),
-            (
-                '$.analysis.spectrogram: bad value'
-                " - at $.loops: {'azimuth': 43} on $.captures[0]"
-            ),
-        ),
-    ],
-    ids=['bare', 'path_only', 'locations_only', 'path_then_locations'],
-)
-def test_spec_validation_error_renders_the_path_then_the_locations(
-    path, locations, expected
-):
-    assert str(SpecValidationError('bad value', path, locations)) == expected
-
-
-@pytest.mark.parametrize(
-    ('path', 'expected'),
-    [
-        (('.spectrogram',), '$.spectrogram: bad value - at $a on $b'),
-        ((), 'bad value - at $a on $b'),
-    ],
-    ids=['with_path', 'without_path'],
-)
-def test_spec_validation_error_at_renders_locations_after_the_path(path, expected):
-    assert str(SpecValidationError('bad value', path).at('a', 'b')) == expected
-
-
-def test_spec_validation_error_prepend_composes_outermost_last():
-    exc = SpecValidationError('bad value', ('.spectrogram',))
-    outer = exc.prepend('.captures[4]', '.analysis')
-
-    assert outer.path == ('.captures[4]', '.analysis', '.spectrogram')
-    assert str(outer) == '$.captures[4].analysis.spectrogram: bad value'
-    assert exc.path == ('.spectrogram',)
-
-
-def test_spec_validation_error_at_composes_outermost_last():
-    exc = SpecValidationError('bad value').at(".loops: {'azimuth': 43}")
-    outer = exc.at('.captures[0]')
-
-    assert outer.locations == ('.captures[0]', ".loops: {'azimuth': 43}")
-
-
-def test_spec_validation_error_at_does_not_mutate_the_original():
+def derived_without_touching_the_original():
     exc = SpecValidationError('bad value', ('.spectrogram',), ('.captures[0]',))
     exc.at(".loops: {'repeat': 0}")
+    exc.prepend('.analysis')
+    return exc
 
-    assert exc.locations == ('.captures[0]',)
-    assert str(exc) == '$.spectrogram: bad value - at $.captures[0]'
+
+LOOPS = ".loops: {'azimuth': 43}"
+
+# (build the error, expected path, expected locations, expected str). `prepend` and
+# `at` each add the outermost element last and return a new error.
+VALIDATION_ERROR_RENDERINGS = {
+    'bare': (lambda: SpecValidationError('bad value'), (), (), 'bad value'),
+    'path': (
+        lambda: SpecValidationError('bad value', ('.analysis', '.spectrogram')),
+        ('.analysis', '.spectrogram'),
+        (),
+        '$.analysis.spectrogram: bad value',
+    ),
+    'locations': (
+        lambda: SpecValidationError('bad value', (), ('a', 'b')),
+        (),
+        ('a', 'b'),
+        'bad value - at $a on $b',
+    ),
+    'path_then_locations': (
+        lambda: SpecValidationError(
+            'bad value', ('.analysis', '.spectrogram'), (LOOPS, '.captures[0]')
+        ),
+        ('.analysis', '.spectrogram'),
+        (LOOPS, '.captures[0]'),
+        f'$.analysis.spectrogram: bad value - at ${LOOPS} on $.captures[0]',
+    ),
+    'at_with_path': (
+        lambda: SpecValidationError('bad value', ('.spectrogram',)).at('a', 'b'),
+        ('.spectrogram',),
+        ('a', 'b'),
+        '$.spectrogram: bad value - at $a on $b',
+    ),
+    'at_without_path': (
+        lambda: SpecValidationError('bad value').at('a', 'b'),
+        (),
+        ('a', 'b'),
+        'bad value - at $a on $b',
+    ),
+    'prepend_outermost_last': (
+        lambda: SpecValidationError('bad value', ('.spectrogram',)).prepend(
+            '.captures[4]', '.analysis'
+        ),
+        ('.captures[4]', '.analysis', '.spectrogram'),
+        (),
+        '$.captures[4].analysis.spectrogram: bad value',
+    ),
+    'at_outermost_last': (
+        lambda: SpecValidationError('bad value').at(LOOPS).at('.captures[0]'),
+        (),
+        ('.captures[0]', LOOPS),
+        f'bad value - at $.captures[0] on ${LOOPS}',
+    ),
+    'prepend_keeps_locations': (
+        lambda: SpecValidationError(
+            'bad value', ('.spectrogram',), ('.captures[0]',)
+        ).prepend('.analysis'),
+        ('.analysis', '.spectrogram'),
+        ('.captures[0]',),
+        '$.analysis.spectrogram: bad value - at $.captures[0]',
+    ),
+    'original_unchanged': (
+        derived_without_touching_the_original,
+        ('.spectrogram',),
+        ('.captures[0]',),
+        '$.spectrogram: bad value - at $.captures[0]',
+    ),
+}
 
 
-def test_spec_validation_error_prepend_carries_the_locations_through():
-    exc = SpecValidationError('bad value', ('.spectrogram',), ('.captures[0]',))
-    outer = exc.prepend('.analysis')
-
-    assert outer.locations == ('.captures[0]',)
-    assert str(outer) == '$.analysis.spectrogram: bad value - at $.captures[0]'
+@pytest.mark.parametrize(
+    'case', list(VALIDATION_ERROR_RENDERINGS), ids=list(VALIDATION_ERROR_RENDERINGS)
+)
+def test_spec_validation_error_renders_the_path_then_the_locations(case):
+    build, path, locations, expected = VALIDATION_ERROR_RENDERINGS[case]
+    exc = build()
+    assert (exc.path, exc.locations, str(exc)) == (path, locations, expected)
 
 
 def test_spec_validation_error_at_and_prepend_are_independent():

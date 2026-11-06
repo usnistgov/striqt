@@ -18,7 +18,6 @@ from figures_datasets import (
     predicted_levels_dBm,
 )
 
-import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.figures import util
 
@@ -26,24 +25,23 @@ from striqt.figures import util
 
 
 @pytest.mark.parametrize(
-    ('var_name', 'attr_missing', 'bandwidth', 'units_text'),
+    ('var_name', 'attr_missing', 'bandwidth'),
     [
-        ('spectrogram_histogram', False, HISTOGRAM_BANDWIDTH, 'dBm/10 kHz'),
-        ('spectrogram_power_bin', False, HISTOGRAM_BANDWIDTH, 'dBm/10 kHz'),
-        ('spectrogram_power_bin', True, HISTOGRAM_BANDWIDTH, 'dBm/10 kHz'),
-        ('cellular_5g_pss_correlation', False, CORRELATOR_BANDWIDTH, 'dBm/30 kHz'),
+        ('spectrogram_histogram', False, HISTOGRAM_BANDWIDTH),
+        ('spectrogram_power_bin', False, HISTOGRAM_BANDWIDTH),
+        ('spectrogram_power_bin', True, HISTOGRAM_BANDWIDTH),
+        ('cellular_5g_pss_correlation', False, CORRELATOR_BANDWIDTH),
     ],
     ids=['variable_attr', 'coordinate_attr', 'coordinate_without_attr', 'sqrt_mW_attr'],
 )
 def test_system_noise_in_the_noise_bandwidth_attr(
-    var_name: str, attr_missing: bool, bandwidth: float, units_text: str
+    var_name: str, attr_missing: bool, bandwidth: float
 ) -> None:
     """the level is the system noise in the `noise_bandwidth` of the variable.
 
     A bin coordinate without the attr and with ``dBm/<bandwidth>`` units resolves to
     the `noise_bandwidth` of the histogram variable on the same dimension. The attrs
-    carry the units and the bandwidth as facts, and the units text is composed from
-    them.
+    carry the units and the bandwidth as facts.
     """
     ds = make_dataset(attr_missing=attr_missing)
 
@@ -55,8 +53,6 @@ def test_system_noise_in_the_noise_bandwidth_attr(
     assert noise.attrs['units'] == 'dBm'
     assert noise.attrs['noise_bandwidth'] == bandwidth
     assert 'long_name' not in noise.attrs
-    measurand = sa.labels.measurand_from_attrs(noise.attrs)
-    assert sa.labels.units_label(measurand) == units_text
 
 
 @pytest.mark.parametrize('var_name', ['channel_power_time_series', 'channel_power_bin'])

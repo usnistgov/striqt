@@ -69,43 +69,47 @@ def max_cupy_fft_chunk():
 
 # %% fft_roundoff_rms, fft_tolerance_rms, on_peak_roundoff, off_peak_floor_dBc
 class TestRoundoffModels:
-    ARGS = (np.complex64, [256, 256], 2)
-
     @pytest.mark.parametrize(
-        'smaller, larger',
+        'func, smaller, larger',
         [
-            ((np.complex64, [256]), (np.complex64, [4096])),
-            ((np.complex64, [256]), (np.complex64, [256, 256])),
-            ((np.complex64, [256], 1), (np.complex64, [256], 4)),
-            ((np.complex64, [256]), (np.complex64, [256], 1)),
+            (fft_roundoff_rms, {'nffts': [256]}, {'nffts': [4096]}),
+            (fft_roundoff_rms, {'nffts': [256]}, {'nffts': [256, 256]}),
+            (
+                fft_roundoff_rms,
+                {'nffts': [256], 'n_elementwise': 1},
+                {'nffts': [256], 'n_elementwise': 4},
+            ),
+            (fft_roundoff_rms, {'nffts': [256]}, {'nffts': [256], 'n_elementwise': 1}),
+            (
+                fft_roundoff_rms,
+                {'nffts': [256, 256], 'array_backend': 'numpy'},
+                {'nffts': [256, 256], 'array_backend': 'cupy'},
+            ),
+            (on_peak_roundoff, {'dtype': np.complex128}, {'dtype': np.complex64}),
+        ],
+        ids=[
+            'longer_fft',
+            'second_fft',
+            'more_elementwise',
+            'one_elementwise',
+            'cupy_backend',
+            'single_precision',
         ],
     )
-    def test_fft_roundoff_rms_monotonic(self, smaller, larger):
-        assert fft_roundoff_rms(*smaller) < fft_roundoff_rms(*larger)
+    def test_bounds_grow_with_the_rounding_count(self, func, smaller, larger):
+        """a longer or additional FFT, an elementwise pass, the cupy backend, and
+        single precision each raise the bound"""
+        smaller = {'dtype': np.complex64, **smaller}
+        larger = {'dtype': np.complex64, **larger}
+        assert func(**smaller) < func(**larger)
 
     def test_fft_roundoff_rms_scales_with_unit_roundoff(self):
-        _, *shape_args = self.ARGS
-        ratio = fft_roundoff_rms(np.complex64, *shape_args) / fft_roundoff_rms(
-            np.complex128, *shape_args
+        ratio = fft_roundoff_rms(np.complex64, [256, 256], 2) / fft_roundoff_rms(
+            np.complex128, [256, 256], 2
         )
         assert ratio == pytest.approx(
             unit_roundoff(np.float32) / unit_roundoff(np.float64)
         )
-
-    def test_cupy_bound_is_looser_than_numpy(self):
-        by_numpy = fft_roundoff_rms(*self.ARGS, array_backend='numpy')
-        by_cupy = fft_roundoff_rms(*self.ARGS, array_backend='cupy')
-        assert by_cupy > by_numpy
-
-    def test_off_peak_floor_peak_covers_rms(self):
-        sigma = fft_tolerance_rms(np.complex64, [1024], 2)
-        assert off_peak_floor_dBc(sigma, 1024, size=1023) >= off_peak_floor_dBc(
-            sigma, 1024
-        )
-
-    def test_on_peak_roundoff_ignores_complexness(self):
-        assert on_peak_roundoff(np.complex64) == on_peak_roundoff(np.float32)
-        assert on_peak_roundoff(np.complex128) < on_peak_roundoff(np.complex64)
 
 
 # %% fftfreq
@@ -129,8 +133,9 @@ class TestFftfreq:
         assert fftfreq(nfft, fs, dtype='float32').dtype == np.float32
         assert fftfreq(nfft, fs, dtype='float64').dtype == np.float64
 
-    @given(nfft=st.sampled_from([8, 9, 64, 65, 256]), fs=sample_rates())
-    def test_as_index_false_matches_exact(self, nfft, fs):
+    @pytest.mark.parametrize('nfft', [8, 9, 64, 65, 256])
+    def test_as_index_false_matches_exact(self, nfft):
+        fs = 7.68e6
         exact = fftfreq(nfft, fs)
         approx = fftfreq(nfft, fs, as_index=False)
         # linspace endpoints are off by a few ulps of fs/2
@@ -311,10 +316,11 @@ class TestOffPeakFloor:
         segments."""
         return testing.tone(None, nfft, frequency=k, count=self.NSEG * nfft)[0]
 
-    @given(
-        nfft=st.sampled_from(OFF_PEAK_NFFTS),
-        bin_fraction=st.floats(min_value=0, max_value=1),
-    )
+    @pytest.mark.parametrize('nfft', OFF_PEAK_NFFTS)
+    # 10 bins per FFT size: the floor is a roundoff bound that does not depend on the
+    # bin, and the single @given over the 4 sizes ran 100 examples in 0.6 s
+    @settings(max_examples=10)
+    @given(bin_fraction=st.floats(min_value=0, max_value=1))
     def test_stft_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         k = tone_bin(nfft, bin_fraction)
         x = self._bin_centered_tone(nfft, k)
@@ -338,10 +344,11 @@ class TestOffPeakFloor:
         )
         self._assert_off_peak_bins((X - X_ref)[:, off_peak], tone_peak, nfft, sigma)
 
-    @given(
-        nfft=st.sampled_from(OFF_PEAK_NFFTS),
-        bin_fraction=st.floats(min_value=0, max_value=1),
-    )
+    @pytest.mark.parametrize('nfft', OFF_PEAK_NFFTS)
+    # 10 bins per FFT size: the floor is a roundoff bound that does not depend on the
+    # bin, and the single @given over the 4 sizes ran 100 examples in 0.6 s
+    @settings(max_examples=10)
+    @given(bin_fraction=st.floats(min_value=0, max_value=1))
     def test_resample_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         # keep the tone inside the half band that survives downsampling by 2
         k = tone_bin(nfft, 0.3 + 0.4 * bin_fraction)
@@ -358,10 +365,11 @@ class TestOffPeakFloor:
         out = resample(xp.asarray(x), num_out)
         self._assert_off_peak_error_spectrum(out, out_ref, sigma)
 
-    @given(
-        nfft=st.sampled_from(OFF_PEAK_NFFTS),
-        bin_fraction=st.floats(min_value=0, max_value=1),
-    )
+    @pytest.mark.parametrize('nfft', OFF_PEAK_NFFTS)
+    # 10 bins per FFT size: the floor is a roundoff bound that does not depend on the
+    # bin, and the single @given over the 4 sizes ran 100 examples in 0.6 s
+    @settings(max_examples=10)
+    @given(bin_fraction=st.floats(min_value=0, max_value=1))
     def test_oaconvolve_off_peak_bins(self, xp, array_backend, nfft, bin_fraction):
         x = self._bin_centered_tone(nfft, tone_bin(nfft, bin_fraction))
         # a unit-gain lowpass. The tone may fall in the stopband, so bounds are

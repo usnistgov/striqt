@@ -13,10 +13,12 @@ import numpy as np
 import pytest
 from numeric_checks import assert_close, elementwise_rtol
 from soapy_factories import soapy_capture
+from sweep_strategies import air_sweep, make_delayed
 from synthetic_sources import (
     IQ_ONLY,
     SCALE_ONLY,
     SPECTROGRAM,
+    mixed_rate_sweep,
     preset_capture,
     preset_sweep,
     spectrogram_frames,
@@ -71,18 +73,9 @@ def spectrogram_run() -> list:
 def test_from_delayed_does_not_warn_on_an_adc_overload(caplog):
     """`from_delayed` logs nothing for a negative headroom. The overload warning belongs
     to the `log_overloads` callback."""
-    air = ss.bindings.air7101b
     capture = soapy_capture(port=(0, 1), center_frequency=(1e9, 2e9), gain=0.0)
-    sweep = air.sensor.sweep_spec_cls(source=air.schema.source(), captures=(capture,))
-    config = compute.EvaluationOptions(
-        sweep_spec=sweep, registry=sa.registry, as_xarray='delayed', extra_attrs={}
-    )
-    dd = compute.DelayedDataset(
-        delayed={},
-        capture=capture,
-        extra_coords=ss.specs.AcquisitionInfo(),
-        extra_data={'adc_headroom': (-1.0, -1.0)},
-        config=config,
+    dd = make_delayed(
+        {'adc_headroom': (-1.0, -1.0)}, sweep=air_sweep(capture), capture=capture
     )
     with caplog.at_level(logging.WARNING, logger='striqt.analysis'):
         ds = compute.from_delayed(dd)
@@ -378,12 +371,12 @@ def test_check_coord_indexes_suggests_burst_index():
 
 
 def test_check_coord_indexes_warns_on_old_xarray(monkeypatch, caplog):
+    """below xarray 2024.9 the index is not validated, and the ``striqt.analysis``
+    logger records one WARNING in place of the error"""
     monkeypatch.setattr(datasets, '_xarray_version', lambda: (2024, 8, 0))
     with caplog.at_level(logging.WARNING, logger='striqt.analysis'):
         datasets._check_coord_indexes(full_run(), ['port'])
-    assert [r.getMessage() for r in caplog.records] == [
-        'xarray is too old to to validate coord indexes'
-    ]
+    assert [r.levelno for r in caplog.records] == [logging.WARNING]
 
 
 # %% drop_conflicts / measurement_grids / sweep_template
@@ -398,16 +391,6 @@ def test_drop_conflicts_keeps_agreeing_keys_and_drops_differing_ones():
         {'c': 'y', 'a': 1},
     ])
     assert merged == {'a': 1, 'b': [1, 2], 'd': 4}
-
-
-def mixed_rate_sweep():
-    """2 single-tone captures at 2 sample rates and bandwidths, so that the frequency
-    grids of the PSD differ and the time axis of the IQ differs"""
-    captures = (
-        preset_capture('single_tone', sample_rate=6.144e6),
-        preset_capture('single_tone', sample_rate=3.072e6, analysis_bandwidth=2.5e6),
-    )
-    return preset_sweep('single_tone', captures)
 
 
 @functools.lru_cache

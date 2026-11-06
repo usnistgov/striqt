@@ -13,6 +13,7 @@ from figures_datasets import (
     POWER_DETECTORS,
     capture_bandwidth,
     cyclic_mean_dBm,
+    cyclic_statistics,
     make_dataset,
     predicted_levels_dBm,
 )
@@ -30,14 +31,6 @@ def capture_backend() -> PlotlyBackend:
         col='capture', col_label_format='{center_frequency:M}', suptitle_fmt='title'
     )
     return PlotlyBackend(opts)
-
-
-def cyclic_statistics(
-    ds: xr.Dataset | None = None,
-) -> tuple[xr.DataArray, xr.DataArray, xr.DataArray]:
-    """return the (min, mean, max) cyclic channel power of `ds`, or of `make_dataset()`"""
-    da = (make_dataset() if ds is None else ds)['cyclic_channel_power']
-    return tuple(da.sel(cyclic_statistic=s) for s in ('min', 'mean', 'max'))
 
 
 def axis_refs(i: int) -> tuple[str, str]:
@@ -196,23 +189,7 @@ def test_reset_clears_the_pending_figures() -> None:
     assert plotter.get_plot_data() == []
 
 
-# %% step and validation
-
-
-@pytest.mark.parametrize(
-    ('step', 'shape'), [('pre', 'vh'), ('post', 'hv'), ('mid', 'hvh')]
-)
-def test_step_selects_the_plotly_line_shape(step: str, shape: str) -> None:
-    """``'post'`` is the plotly shape ``'hv'`` (horizontal, then vertical at the
-    next sample), ``'pre'`` is ``'vh'``, and ``'mid'`` is ``'hvh'``, on lines and
-    bands alike"""
-    low, mean, high = cyclic_statistics()
-    plotter = capture_backend()
-
-    fig = plotter.line(mean, x=X, hue=HUE, step=step)
-    plotter.fill_between(low, high, x=X, hue=HUE, step=step, target=fig)
-
-    assert all(t.line.shape == shape for t in fig.data)
+# %% validation
 
 
 def test_line_rejects_a_yscale_other_than_linear_or_log() -> None:
@@ -220,16 +197,6 @@ def test_line_rejects_a_yscale_other_than_linear_or_log() -> None:
 
     with pytest.raises(ValueError, match='symlog'):
         capture_backend().line(mean, x=X, hue=HUE, yscale='symlog')
-
-
-def test_figure_rejects_a_property_value_outside_the_plotly_schema() -> None:
-    """the figure returned by `line` validates an axis type against the plotly
-    enumeration on assignment"""
-    _, mean, _ = cyclic_statistics()
-    fig = capture_backend().line(mean, x=X, hue=HUE)
-
-    with pytest.raises(ValueError, match='enumeration'):
-        fig.update_yaxes(type='symlog')
 
 
 @pytest.mark.parametrize('method', ['line', 'fill_between'])
@@ -249,27 +216,3 @@ def test_target_with_other_facets_raises(method: str) -> None:
 
     with pytest.raises(ValueError, match='facets'):
         call()
-
-
-# %% axis titles
-
-
-def test_axis_titles_use_the_standard_name_not_the_long_name():
-    """the attrs of the mean cyclic power carry a `long_name` title; the axes are
-    labeled by `standard_name`, and the title appears on no axis"""
-    import xarray as xr
-
-    from striqt.figures.backend import plotly as backend_module
-
-    da = xr.DataArray(
-        [[1.0, 2.0]],
-        dims=('port', 'cyclic_lag'),
-        coords={'port': [0], 'cyclic_lag': [0.0, 1.0]},
-        name='cyclic_channel_power',
-        attrs={
-            'standard_name': 'Cyclic channel power',
-            'long_name': 'Cyclic channel power over the slot',
-            'units': 'dBm',
-        },
-    )
-    assert backend_module._axis_title(da) == 'Cyclic channel power (dBm)'

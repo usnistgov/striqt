@@ -13,7 +13,7 @@ from conftest import (
     as_xp,
     iq_waveforms,
 )
-from hypothesis import given, strategies as st
+from hypothesis import given, settings, strategies as st
 from hypothesis.extra.numpy import arrays
 from numeric_checks import (
     assert_close,
@@ -98,16 +98,6 @@ class TestRoundoffModels:
     """the tolerance models against which the rest of this module measures the
     library"""
 
-    def test_bin_power_rms_is_zero_for_selections_and_quantiles(self, subtests):
-        for kind in ['min', 'max', 'peak', 0.5]:
-            with subtests.test(kind=kind):
-                assert bin_power_rms(np.float32, 10_000, kind=kind) == 0
-
-    def test_stat_rtol_is_zero_for_selections_and_the_mean(self, subtests):
-        for kind in ['mean', 'rms', 'min', 'max', 'peak']:
-            with subtests.test(kind=kind):
-                assert stat_rtol(np.float32, kind) == 0
-
     @pytest.mark.parametrize('func', [stat_rtol, bin_power_rtol], ids=func_id)
     def test_unknown_statistic_raises(self, func):
         with pytest.raises(ValueError, match='bogus'):
@@ -115,6 +105,7 @@ class TestRoundoffModels:
 
 
 def bin_power_reference(iq, size, kind, axis):
+    axis %= iq.ndim
     power = reference_power(iq)
     return BIN_STATS[kind](blocks(power, size, axis), axis=axis + 1)
 
@@ -186,12 +177,18 @@ class TestIqToBinPower:
         assert_close(result, expected, rtol=rtol)
 
     @for_each_bin_size
-    @pytest.mark.parametrize('kind', ['mean', 'max', 0.9])
-    @pytest.mark.parametrize('channels', [None, 3])
-    @given(data=st.data())
-    def test_matches_reference(self, size, kind, channels, data):
+    # 30 examples per bin size: the 18-item grid over kind and channels at 100
+    # examples each took 2 s
+    @settings(max_examples=30)
+    @given(
+        kind=st.sampled_from(['mean', 'max', 0.9]),
+        channels=st.sampled_from([None, 3]),
+        negative_axis=st.booleans(),
+        data=st.data(),
+    )
+    def test_matches_reference(self, size, kind, channels, negative_axis, data):
         """each bin is the statistic of |iq|**2 over `size` samples, for a 1-D
-        waveform (axis 0) and a (channel, sample) array (axis 1).
+        waveform (axis 0) and a (channel, sample) array (axis 1 or -1).
 
         The kinds are one name from each group of BIN_STATS. The aliases are
         covered by TestStatUfuncFromShorthand, and the cupy cross-comparison runs
@@ -200,7 +197,7 @@ class TestIqToBinPower:
             min_size=size, max_size=32 * size, multiple_of=size, channels=channels
         )
         iq = data.draw(waveforms)
-        axis = 0 if channels is None else 1
+        axis = -1 if negative_axis else iq.ndim - 1
         Ts = 1e-6
 
         result = iq_to_bin_power(iq, Ts, size * Ts, kind=kind, axis=axis)
@@ -240,6 +237,7 @@ class TestIqToBinPower:
         iq = np.ones(64, dtype=np.complex64)
         result = iq_to_bin_power(iq, 1.0, 4.4, truncate=True)
         assert result.shape == (64 // 4,)
+        assert_array_equal(result, 1.0)
 
     @pytest.mark.parametrize('size', BIN_SIZES[1:])
     @given(data=st.data())
@@ -269,13 +267,6 @@ class TestIqToBinPower:
         with pytest.raises(ValueError, match='axis=0'):
             iq_to_bin_power(iq, 1.0, 4.0, randomize=True, axis=1)
 
-    def test_negative_axis(self):
-        iq = np.random.default_rng(0).normal(size=(2, 32)).astype(np.complex64)
-        assert_array_equal(
-            iq_to_bin_power(iq, 1.0, 4.0, axis=-1),
-            iq_to_bin_power(iq, 1.0, 4.0, axis=1),
-        )
-
 
 class TestIqToCyclicPower:
     """`iq_to_cyclic_power` on (channel, sample) input with axis=1, as the
@@ -292,31 +283,42 @@ class TestIqToCyclicPower:
     @staticmethod
     def evaluate(iq, size, lags, **kws):
         """run `iq_to_cyclic_power` with unit sample period, `size` samples per
-        detector bin, and `lags` bins per cycle."""
+        detector bin, and `lags` bins per cycle, on axis 1 of a 2-D `iq` unless
+        `axis` is given."""
         kws = {'detectors': TestIqToCyclicPower.DETECTORS, **kws}
-        kws = {'cycle_stats': TestIqToCyclicPower.CYCLE_STATS, 'axis': 1, **kws}
+        kws = {'cycle_stats': TestIqToCyclicPower.CYCLE_STATS, **kws}
+        if iq.ndim > 1:
+            kws.setdefault('axis', 1)
         return iq_to_cyclic_power(iq, 1.0, size, size * lags, **kws)
 
-    @given(case=cyclic_power_cases())
-    def test_matches_reference(self, case):
-        """each statistic is the column-wise reduction of the binned power reshaped to
-        (cycle, lag), including a quantile statistic"""
+    @given(case=cyclic_power_cases(channels=(None, 1, 2)), negative_axis=st.booleans())
+    def test_matches_reference(self, case, negative_axis):
+        """each statistic is the column-wise reduction of the binned power of
+        `bin_power_reference` reshaped to (cycle, lag), including a quantile
+        statistic, for a 1-D power time series on the default axis 0 and for a
+        (channel, sample) array on axis 1 or -1"""
         iq, size, bins_per_cycle, n_cycles = case
-        channels = iq.shape[0]
+        if iq.ndim == 1 and not negative_axis:
+            axis_kws = {}
+        else:
+            axis_kws = {'axis': -1 if negative_axis else 1}
 
-        result = self.evaluate(iq, size, bins_per_cycle)
+        result = self.evaluate(iq, size, bins_per_cycle, **axis_kws)
 
         assert set(result) == set(self.DETECTORS)
-        rtol = accum_rtol(float_dtype_like(iq), n_cycles)
+        dtype = float_dtype_like(iq)
+        outputs = iq.shape[-1] // size
         for detector in self.DETECTORS:
             assert set(result[detector]) == set(self.CYCLE_STATS)
-            binned = iq_to_bin_power(iq, 1.0, size, kind=detector, axis=1)
-            by_cycle = binned.reshape(channels, n_cycles, bins_per_cycle)
+            binned = bin_power_reference(iq, size, detector, iq.ndim - 1)
+            by_cycle = binned.reshape(iq.shape[:-1] + (n_cycles, bins_per_cycle))
+            rtol = bin_power_bound(dtype, size, outputs, kind=detector)
+            rtol += accum_rtol(dtype, n_cycles)
             for stat in self.CYCLE_STATS:
                 value = result[detector][stat]
-                assert value.shape == (channels, bins_per_cycle)
-                assert value.dtype == float_dtype_like(iq)
-                expected = BIN_STATS[stat](by_cycle, axis=1)
+                assert value.shape == iq.shape[:-1] + (bins_per_cycle,)
+                assert value.dtype == dtype
+                expected = BIN_STATS[stat](by_cycle, axis=-2)
                 assert_close(value, expected, rtol=rtol)
 
     @given(case=cyclic_power_cases())
@@ -442,21 +444,6 @@ class TestIqToCyclicPower:
                 with subtests.test(detector=detector, stat=stat):
                     assert value.shape == (2, 10)
                     assert_array_equal(value, 1.0)
-
-    def test_1d_input(self):
-        """the paper defines the input as a single power time series, and ``axis=0``
-        is the default"""
-        iq = np.random.default_rng(0).normal(size=64).astype(np.complex64)
-        result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0)
-        assert result['rms']['mean'].shape == (4,)
-
-    def test_negative_axis(self):
-        iq = np.random.default_rng(0).normal(size=(2, 64)).astype(np.complex64)
-        expected = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, axis=1)
-        result = iq_to_cyclic_power(iq, 1.0, 4.0, 16.0, axis=-1)
-        for detector, stats in expected.items():
-            for stat, value in stats.items():
-                assert_array_equal(result[detector][stat], value)
 
 
 def ccdf_reference(a, edges, density):

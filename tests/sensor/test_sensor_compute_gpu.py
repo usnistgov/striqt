@@ -3,47 +3,26 @@
 from __future__ import annotations
 
 import pytest
-from soapy_factories import soapy_capture
-from sweep_strategies import SOURCE
+from sweep_strategies import air_sweep
 from synthetic_sources import (
     ANALYSIS,
     FILTER_ONLY,
     IQ_ONLY,
-    SCALE_ONLY,
+    cupy_sweep,
     preset_capture,
     preset_sweep,
+    scale_only,
 )
 
 import striqt.sensor as ss
 from striqt.sensor.lib.compute import gpu
-
-CUPY = SOURCE.replace(array_backend='cupy')
-AIR = ss.bindings.air7101b
-
-
-def cupy_sweep(captures, *, analysis=IQ_ONLY, loops=()):
-    return preset_sweep(
-        'single_tone', captures, analysis=analysis, loops=loops, source=CUPY
-    )
-
-
-def scale_only(**kws):
-    return preset_capture('single_tone', **{**SCALE_ONLY, **kws})
-
-
-def air_sweep(**source_kws):
-    capture = soapy_capture()
-    return AIR.sensor.sweep_spec_cls(
-        source=AIR.schema.source(**source_kws), captures=(capture,), analysis=IQ_ONLY
-    )
-
 
 # %% sweep_touches_gpu
 
 TOUCHES_GPU = {
     'numpy': (preset_sweep('single_tone', (scale_only(),), analysis=ANALYSIS), False),
     'cupy_measurements': (cupy_sweep((scale_only(),), analysis=ANALYSIS), True),
-    'cupy_calibration': (air_sweep(calibration='cal.nc'), True),
+    'cupy_calibration': (air_sweep(analysis=IQ_ONLY, calibration='cal.nc'), True),
     'cupy_iq_scale_only': (cupy_sweep((scale_only(),)), False),
     'cupy_iq_host_resample': (cupy_sweep((scale_only(host_resample=True),)), True),
     'cupy_iq_filter_only': (

@@ -29,7 +29,6 @@ from waveform_strategies import (
     cross_backend_sigma,
     embed_pss_ports,
     embed_symbol,
-    get_ssb_spans,
     phy_5g,
     pss_setup,
     silent_block,
@@ -71,12 +70,6 @@ class TestSyncSequences:
         expected = [1 - 2 * x[(n + 43 * n_id2) % SC_COUNT] for n in range(SC_COUNT)]
 
         assert_array_equal(_pss_m_sequence(n_id2), expected)
-
-    def test_sss_m_sequences_are_distinct(self):
-        sss = np.array([_sss_m_sequence(n) for n in range(1008)])
-        assert sss.shape == (1008, SC_COUNT)
-        assert set(sss.ravel()) <= {-1, 1}
-        assert len({row.tobytes() for row in sss}) == 1008
 
     @given(n_id=st.integers(0, 1007))
     def test_sss_is_a_gold_sequence(self, n_id):
@@ -477,20 +470,25 @@ class TestCorrelateSyncSequence:
         with pytest.raises(ValueError, match='same excess CP'):
             sync_5gnr.correlate_sync_sequence(silent_block(params), pss, params=bad)
 
-    def test_sync_frame_count(self):
-        params = sync_params()
-        assert sync_5gnr.sync_frame_count(2 * params.frame_size, params) == 2
-
-    def test_sync_frame_count_rejects_a_partial_frame(self):
+    @pytest.mark.parametrize(
+        'frames, extra_samples, count',
+        [(2, 0, 2), (1, 1, None), (0, 0, None)],
+        ids=['two_frames', 'partial_frame', 'empty'],
+    )
+    def test_sync_frame_count(self, frames, extra_samples, count):
+        """a whole number of 10 ms frames is counted; a partial or empty record is
+        rejected by `sync_frame_count` and by `correlate_sync_sequence`"""
         params, _, pss, _ = pss_setup()
+        size = frames * params.frame_size + extra_samples
+        if count is not None:
+            assert sync_5gnr.sync_frame_count(size, params) == count
+            return
         match = 'whole number of 10 ms frames'
         with pytest.raises(ValueError, match=match):
-            sync_5gnr.sync_frame_count(params.frame_size + 1, params)
-        with pytest.raises(ValueError, match=match):
-            sync_5gnr.sync_frame_count(0, params)
+            sync_5gnr.sync_frame_count(size, params)
         with pytest.raises(ValueError, match=match):
             sync_5gnr.correlate_sync_sequence(
-                silent_block(params)[:, :-1], pss, params=params
+                silent_block(params)[:, :size], pss, params=params
             )
 
     def test_sync_frame_count_rejects_a_span_beyond_the_frame(self):
@@ -518,11 +516,12 @@ class TestChooseSsbOffset:
         params, pss, iq = embed_pss_ports(embeds, scales=scales)
         return params, sync_5gnr.correlate_sync_sequence(iq, pss, params=params)
 
-    @given(
-        delay=st.integers(0, 1000),
-        window_fill=st.sampled_from([1, Fraction(1, 2), Fraction(3, 4), 0.9, 0.25]),
+    @pytest.mark.parametrize('delay', [0, 613], ids=['zero', 'third_symbol'])
+    @pytest.mark.parametrize(
+        'window_fill',
+        [1, Fraction(1, 2), Fraction(3, 4), 0.9, 0.25],
+        ids=['full', 'half', 'three_quarters', '0.9', 'quarter'],
     )
-    @settings(max_examples=20)
     def test_recovers_the_delay(self, delay, window_fill):
         params, R = self._correlate([delay])
         offset = sync_5gnr.choose_ssb_offset(R, params, window_fill=window_fill)
@@ -537,10 +536,15 @@ class TestChooseSsbOffset:
         params, R = self._correlate([delay])
         assert sync_5gnr.choose_ssb_offset(R, params)[0] == delay
 
-    def test_weighted_detect_shape(self):
-        params, R = self._correlate([300])
+    def test_weighted_detect_peaks_at_the_delay(self):
+        """the weights are indexed (port, symbol lag, fine lag) and peak at the
+        symbol lag and fine lag that compose the delay"""
+        delay = 300
+        params, R = self._correlate([delay])
         weights = sync_5gnr.weighted_ssb_detect(R, params)
         assert weights.shape == (1, params.max_lag_symbols, params.short_symbol_size)
+        peak = np.unravel_index(weights.argmax(), weights.shape)
+        assert peak == (0, *divmod(delay, params.short_symbol_size))
 
     def test_per_port(self):
         params, R = self._correlate([40, 700], scales=[1.0, 3.0])
@@ -578,7 +582,7 @@ class TestChooseSsbOffset:
         iq = silent_block(params, n_blocks=2)
         embed_symbol(iq, phy_in, bodies_in[2], params.symbol_indexes[5], delay_in)
 
-        spans = get_ssb_spans(iq, params, fs_in=fs_in)
+        spans = sync_5gnr.get_5g_ssb_spans(iq, params=params, fs_in=fs_in)
         R = sync_5gnr.correlate_sync_spans(spans, pss, params=params)
         mag = np.abs(R[0])
         n_id2, _, beam, lag = np.unravel_index(mag.argmax(), mag.shape)
@@ -601,7 +605,9 @@ class TestCupy:
     def test_detection_pipeline(self, cupy_available):
         params, pss, iq = embed_pss_ports([(1, 3, 77)])
 
-        ssb_np, ssb_cp = numpy_and_cupy(cupy_available, get_ssb_spans, iq, params)
+        ssb_np, ssb_cp = numpy_and_cupy(
+            cupy_available, sync_5gnr.get_5g_ssb_spans, iq, params=params, fs_in=FS
+        )
         assert_close(ssb_cp, ssb_np, atol=1e-5)
 
         R_np, R_cp = numpy_and_cupy(

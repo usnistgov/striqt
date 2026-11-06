@@ -3,7 +3,7 @@ allocation, and the attr repair of stores written with bandwidth-suffixed units"
 
 from __future__ import annotations
 
-import math
+import zipfile
 
 import numpy as np
 import pytest
@@ -11,6 +11,7 @@ import xarray as xr
 import zarr
 
 import striqt.analysis as sa
+from striqt.analysis.lib import stores
 
 load = sa.lib.io.decode_from_yaml_file
 
@@ -69,6 +70,48 @@ def test_glob_include_merges_only_one_level_deep(write_yaml):
     assert load(spec)['sites'] == {'block': {'y': 2}}
 
 
+# (fragment files, spec path, spec text, expected document). A relative include path
+# resolves against the including file, and ``{root}`` is the temporary root.
+INCLUDE_PATHS = {
+    'nested_relative_to_the_including_file': (
+        {'frag/leaf.yaml': 'v: 1\n', 'frag/c.yaml': 'x: !include leaf.yaml\n'},
+        'spec.yaml',
+        'top: !include frag/c.yaml\n',
+        {'top': {'x': {'v': 1}}},
+    ),
+    'parent_relative_glob_from_subdirectory': (
+        {
+            'sites/global.yaml': 'defaults: {a: 1}\n',
+            'sites/radio.yaml': 'beef: {b: 2}\n',
+        },
+        'site/spec.yaml',
+        'adjust: !include "../sites/*.yaml"\n',
+        {'adjust': {'defaults': {'a': 1}, 'beef': {'b': 2}}},
+    ),
+    'absolute_inside_root': (
+        {'frag.yaml': 'v: 1\n'},
+        'site/spec.yaml',
+        'top: !include {root}/frag.yaml\n',
+        {'top': {'v': 1}},
+    ),
+    'absolute_outside_root': (
+        {'elsewhere/frag.yaml': 'v: 1\n'},
+        'site/spec.yaml',
+        'top: !include {root}/elsewhere/frag.yaml\n',
+        {'top': {'v': 1}},
+    ),
+}
+
+
+@pytest.mark.parametrize('case', list(INCLUDE_PATHS), ids=list(INCLUDE_PATHS))
+def test_include_path_resolution(write_yaml, tmp_path, case):
+    fragments, spec_path, spec_text, expected = INCLUDE_PATHS[case]
+    for path, text in fragments.items():
+        write_yaml(path, text)
+    spec = write_yaml(spec_path, spec_text.format(root=tmp_path))
+    assert load(spec) == expected
+
+
 def test_list_include_concatenates_sequences(write_yaml):
     write_yaml('a.yaml', '- 1\n- 2\n')
     write_yaml('b.yaml', '- 3\n')
@@ -90,31 +133,6 @@ def test_empty_glob_raises_with_the_pattern(write_yaml):
         load(spec)
 
 
-def test_parent_relative_glob_from_subdirectory(write_yaml):
-    write_yaml('sites/global.yaml', 'defaults: {a: 1}\n')
-    write_yaml('sites/radio.yaml', 'beef: {b: 2}\n')
-    spec = write_yaml('site/spec.yaml', 'adjust: !include "../sites/*.yaml"\n')
-    assert load(spec)['adjust'] == {'defaults': {'a': 1}, 'beef': {'b': 2}}
-
-
-@pytest.mark.parametrize(
-    'frag_path',
-    ['frag.yaml', 'elsewhere/frag.yaml'],
-    ids=['inside_root', 'outside_root'],
-)
-def test_absolute_include(write_yaml, frag_path):
-    frag = write_yaml(frag_path, 'v: 1\n')
-    spec = write_yaml('site/spec.yaml', f'top: !include {frag}\n')
-    assert load(spec)['top'] == {'v': 1}
-
-
-def test_nested_include_resolves_relative_to_the_including_file(write_yaml):
-    write_yaml('frag/leaf.yaml', 'v: 1\n')
-    write_yaml('frag/c.yaml', 'x: !include leaf.yaml\n')
-    spec = write_yaml('spec.yaml', 'top: !include frag/c.yaml\n')
-    assert load(spec)['top'] == {'x': {'v': 1}}
-
-
 # %% loader behavior
 
 
@@ -123,30 +141,14 @@ def test_flow_sequence_mapping_keys_become_tuples(write_yaml):
     assert load(spec)['lookup'] == {(0, 1): 2, (1, 0): 3}
 
 
-@pytest.mark.parametrize(
-    'text, expected',
-    [('3750e6', '3750e6'), ('inf', 'inf'), ('.inf', math.inf)],
-)
-def test_scalar_typing(write_yaml, text, expected):
-    # YAML 1.1 leaves engineering-notation numbers as strings, so a loop point like
-    # 3750e6 reaches _build_loop_points_dict as a string and is coerced there to the
-    # capture field type (xfail-audit #1)
-    value = load(write_yaml('spec.yaml', f'v: {text}\n'))['v']
-    assert value == expected
-    assert type(value) is type(expected)
-
-
 # %% repair_legacy_attrs
 
 
 def legacy_store_dataset():
     """build a dataset with the bandwidth encoded in `units`, the bandwidth as a
-    suffix of `long_name`, no `noise_bandwidth` on the bin coordinate, the sample rate
-    as the correlator `noise_bandwidth`, and a store-wide `noise_bandwidth` on the
-    channel power outputs."""
-    import numpy as np
-    import xarray as xr
-
+    suffix of `long_name` and `standard_name`, no `noise_bandwidth` on the bin
+    coordinate, the sample rate as the correlator `noise_bandwidth`, and a store-wide
+    `noise_bandwidth` on the channel power outputs."""
     bins = np.array([-np.inf, -100.0, -99.0, np.inf])
     ratio_bins = np.array([-np.inf, -1.0, 0.0, 1.0, np.inf])
     ds = xr.Dataset(
@@ -225,6 +227,16 @@ def legacy_store_dataset():
                 np.array([-160.0, -150.0], 'float32'),
                 {'name': 'Sensor system noise spectral density', 'units': 'dBm/Hz'},
             ),
+            'channel_power': (
+                ('capture',),
+                np.zeros(2, 'float32'),
+                {
+                    'standard_name': 'Channel power (dBW/10 MHz)',
+                    'long_name': 'Mean channel power (dBW/10 MHz)',
+                    'units': 'dBW',
+                    'noise_bandwidth': 10e6,
+                },
+            ),
         },
         coords={
             'spectrogram_power_bin': (
@@ -255,103 +267,90 @@ def legacy_store_dataset():
     return ds
 
 
-def test_repair_legacy_attrs_rewrites_bandwidth_labels():
-    """`units` of the form ``'<unit>/<bandwidth>'`` is reduced to the unit, and
-    `long_name` is unchanged. `noise_bandwidth` of a bin coordinate without one is
-    copied from the histogram on its dimension."""
-    ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
-
-    spg = ds.spectrogram.attrs
-    assert spg['units'] == 'dBm'
-    assert spg['noise_bandwidth'] == pytest.approx(360e3)
-    assert spg['standard_name'] == 'PSD'
-    assert spg['long_name'] == 'Power Spectral Density'
-
-    coord = ds.spectrogram_power_bin.attrs
-    assert coord['units'] == 'dBm'
-    assert coord['noise_bandwidth'] == pytest.approx(360e3)
-    assert coord['standard_name'] == 'Spectrogram bin power'
-    assert 'long_name' not in coord
-
-    ratio = ds.spectrogram_ratio_power_bin.attrs
-    assert ratio['units'] == 'dB'
-    assert 'noise_bandwidth' not in ratio
-    assert 'noise_bandwidth' not in ds.spectrogram_ratio_histogram.attrs
-    assert ds.spectrogram_histogram.attrs['noise_bandwidth'] == pytest.approx(360e3)
-
-
-def test_repair_legacy_attrs_corrects_the_correlator_noise_bandwidth():
-    """a stored `noise_bandwidth` equal to the sample rate is replaced by the
-    subcarrier spacing, which is the noise bandwidth of the unit-energy template"""
-    ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
-
-    attrs = ds.cellular_5g_pss_correlation.attrs
-    assert attrs['noise_bandwidth'] == pytest.approx(30e3)
-    assert attrs['units'] == '√mW'
-    assert attrs['standard_name'] == 'PSS Cross-Covariance'
-    assert 'long_name' not in attrs
-    assert attrs['sample_rate'] == pytest.approx(7.68e6)
-
-
-def test_repair_legacy_attrs_strips_the_bandwidth_suffix_from_names():
-    """a `long_name` or `standard_name` ending in ``' (<unit>/<bandwidth>)'`` loses
-    the suffix; `units` and `noise_bandwidth` are unchanged"""
-    ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
-
-    psd = ds.power_spectral_density.attrs
-    assert psd['long_name'] == 'Power spectral density'
-    assert psd['standard_name'] == 'PSD'
-    assert psd['units'] == 'dBm'
-    assert psd['noise_bandwidth'] == pytest.approx(360e3)
-
-    ds = xr.Dataset({
-        'channel_power': (
-            ('capture',),
-            np.zeros(2, 'float32'),
-            {
-                'standard_name': 'Channel power (dBW/10 MHz)',
-                'long_name': 'Mean channel power (dBW/10 MHz)',
-                'units': 'dBW',
-                'noise_bandwidth': 10e6,
-            },
-        )
-    })
-    attrs = sa.lib.io.repair_legacy_attrs(ds).channel_power.attrs
-    assert attrs['standard_name'] == 'Channel power'
-    assert attrs['long_name'] == 'Mean channel power'
-    assert attrs['units'] == 'dBW'
-    assert attrs['noise_bandwidth'] == pytest.approx(10e6)
+# the attrs of each variable of `legacy_store_dataset` after the repair: `units` of the
+# form ``'<unit>/<bandwidth>'`` loses the bandwidth; a ``' (<unit>/<bandwidth>)'``
+# suffix is cut from `long_name` and `standard_name`; a bin coordinate without a
+# `noise_bandwidth` takes the one of the histogram on its dimension; a ratio
+# coordinate and histogram carry none; a correlator `noise_bandwidth` equal to the
+# sample rate becomes the subcarrier spacing; the channel power and IQ outputs lose
+# the store-wide `noise_bandwidth` and bandwidth-suffixed `long_name` because that
+# bandwidth is set per capture; a density unit is kept
+REPAIRED_ATTRS = {
+    'spectrogram': {
+        'standard_name': 'PSD',
+        'long_name': 'Power Spectral Density',
+        'units': 'dBm',
+        'noise_bandwidth': 360e3,
+    },
+    'power_spectral_density': {
+        'standard_name': 'PSD',
+        'long_name': 'Power spectral density',
+        'units': 'dBm',
+        'noise_bandwidth': 360e3,
+    },
+    'spectrogram_histogram': {
+        'standard_name': 'Fraction of counts',
+        'noise_bandwidth': 360e3,
+    },
+    'spectrogram_ratio_histogram': {'standard_name': 'Fraction of counts'},
+    'channel_power_time_series': {'standard_name': 'Channel Power', 'units': 'dBm'},
+    'channel_power_histogram': {'standard_name': 'Fraction of channel power readings'},
+    'iq_waveform': {'standard_name': 'IQ waveform', 'units': '√mW'},
+    'cellular_5g_pss_correlation': {
+        'standard_name': 'PSS Cross-Covariance',
+        'units': '√mW',
+        'noise_bandwidth': 30e3,
+        'sample_rate': 7.68e6,
+        'subcarrier_spacing': 30e3,
+    },
+    'system_noise': {
+        'name': 'Sensor system noise spectral density',
+        'units': 'dBm/Hz',
+        'standard_name': 'System noise',
+    },
+    'channel_power': {
+        'standard_name': 'Channel power',
+        'long_name': 'Mean channel power',
+        'units': 'dBW',
+        'noise_bandwidth': 10e6,
+    },
+    'spectrogram_power_bin': {
+        'standard_name': 'Spectrogram bin power',
+        'units': 'dBm',
+        'noise_bandwidth': 360e3,
+    },
+    'channel_power_bin': {'standard_name': 'Channel power', 'units': 'dBm'},
+    'spectrogram_ratio_power_bin': {
+        'standard_name': 'Spectrogram cross-channel power ratio',
+        'units': 'dB',
+    },
+}
 
 
-def test_repair_legacy_attrs_removes_capture_bandwidth_attrs():
-    """a store-wide `noise_bandwidth` and a bandwidth-suffixed `long_name` on the
-    channel power and IQ outputs are removed. The bandwidth of those outputs is set per
-    capture."""
-    ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
-
-    names = (
-        'channel_power_time_series',
-        'channel_power_histogram',
-        'channel_power_bin',
-        'iq_waveform',
-    )
-    for name in names:
-        assert 'noise_bandwidth' not in ds[name].attrs, name
-        assert 'long_name' not in ds[name].attrs, name
-    assert ds.channel_power_time_series.attrs['units'] == 'dBm'
-    assert ds.channel_power_bin.attrs['units'] == 'dBm'
-    assert ds.iq_waveform.attrs['units'] == '√mW'
+@pytest.fixture(scope='module')
+def repaired_legacy_dataset() -> xr.Dataset:
+    return sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
 
 
-def test_repair_legacy_attrs_keeps_spectral_densities_and_current_stores():
-    """dBm/Hz is a density, not a bandwidth label. A second pass changes nothing."""
-    ds = sa.lib.io.repair_legacy_attrs(legacy_store_dataset())
-    assert ds.system_noise.attrs['units'] == 'dBm/Hz'
-    assert ds.system_noise.attrs['standard_name'] == 'System noise'
+def test_repair_legacy_attrs_covers_every_variable(repaired_legacy_dataset):
+    assert set(repaired_legacy_dataset.variables) == set(REPAIRED_ATTRS)
 
-    before = {name: dict(ds[name].attrs) for name in ds.variables}
-    sa.lib.io.repair_legacy_attrs(ds)
-    after = {name: dict(ds[name].attrs) for name in ds.variables}
+
+@pytest.mark.parametrize('variable', list(REPAIRED_ATTRS), ids=list(REPAIRED_ATTRS))
+def test_repair_legacy_attrs(repaired_legacy_dataset, variable):
+    assert dict(repaired_legacy_dataset[variable].attrs) == REPAIRED_ATTRS[variable]
+
+
+def test_repair_legacy_attrs_is_idempotent(repaired_legacy_dataset):
+    before = {
+        name: dict(repaired_legacy_dataset[name].attrs)
+        for name in repaired_legacy_dataset.variables
+    }
+    sa.lib.io.repair_legacy_attrs(repaired_legacy_dataset)
+    after = {
+        name: dict(repaired_legacy_dataset[name].attrs)
+        for name in repaired_legacy_dataset.variables
+    }
     assert after == before
 
 
@@ -359,9 +358,6 @@ def test_repair_legacy_attrs_keeps_the_full_scale_and_arbitrary_families():
     """units of the FS and a.u. families match no repair condition: no bandwidth
     suffix, no ``'√mW'`` correlator, and a bin coordinate that already names its
     `noise_bandwidth`"""
-    import numpy as np
-    import xarray as xr
-
     bins = np.array([-np.inf, -100.0, -99.0, np.inf])
     ds = xr.Dataset(
         {
@@ -485,19 +481,6 @@ def test_zarr_format_kws_rejects_other_arguments(bad):
         sa.lib.io.zarr_format_kws(bad)
 
 
-@pytest.mark.parametrize('suffix', ['.zarr', '.zip'])
-def test_get_store_info_exists_only_after_a_write(tmp_path, suffix):
-    store = sa.lib.io.open_store(tmp_path / f'store{suffix}', mode='w')
-    exists, kws = sa.lib.io._get_store_info(store)
-    assert exists is False
-    assert kws == sa.lib.io.zarr_format_kws()
-
-    zarr.open_group(store, mode='a')
-    exists, _ = sa.lib.io._get_store_info(store)
-    assert exists is True
-    store.close()
-
-
 # %% allocate_store
 
 ROWS = 5
@@ -532,7 +515,9 @@ def zero_row_template() -> xr.Dataset:
 
 
 def allocate_template(path, **kws):
-    store = sa.lib.io.open_store(path, mode='w')
+    """allocate `zero_row_template` at `path` through a metadata-staging store, as
+    the zarr sink does, and return the store with the allocated arrays."""
+    store = stores.staged_metadata_store(sa.lib.io.open_store(path, mode='w'))
     arrays = sa.lib.io.allocate_store(
         store,
         zero_row_template(),
@@ -642,6 +627,11 @@ def test_allocate_store_region_write_round_trips(tmp_path, suffix):
     arrays['iq_waveform'][0:2, :] = iq
     arrays['start_time'][0:2] = TIMES.astype('int64')
     store.close()
+
+    if suffix == '.zip':
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+        assert len(names) == len(set(names)), 'a zip entry written twice'
 
     ds = sa.load(path, consolidated=False)
     assert ds.sizes == {'capture': ROWS, 'x': 4}

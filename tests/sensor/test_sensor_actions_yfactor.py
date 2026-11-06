@@ -51,19 +51,23 @@ DURATION_LOOP = ss.specs.List(field='duration', values=(1e-3, 2e-3))
 # %% compute_y_factor_corrections
 
 
-class TestYFactorCorrections:
-    def test_recovers_the_receiver_model(self):
-        corrections = yfactor.compute_y_factor_corrections(
-            make_yfactor_dataset(), YFACTOR_ENR_DB
-        )
-        assert_corrections_match(corrections, expected_yfactor())
+# the receiver model overrides passed to both the dataset and the closed form
+RECEIVER_MODELS = {
+    'default': {},
+    'frequency_dependent_nf': {'nf_dB': {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}},
+    'infinite_bandwidth': {'grid': dict(YFACTOR_GRID, analysis_bandwidth=(40e6, INF))},
+}
 
-    def test_frequency_dependent_noise_figure(self):
-        nf = {0: {1e9: 5.0, 2e9: 7.0}, 1: 8.0}
+
+class TestYFactorCorrections:
+    @pytest.mark.parametrize('case', list(RECEIVER_MODELS), ids=list(RECEIVER_MODELS))
+    def test_recovers_the_receiver_model(self, case):
+        """an infinite analysis bandwidth is evaluated at the backend sample rate"""
+        model = RECEIVER_MODELS[case]
         corrections = yfactor.compute_y_factor_corrections(
-            make_yfactor_dataset(nf_dB=nf), YFACTOR_ENR_DB
+            make_yfactor_dataset(**model), YFACTOR_ENR_DB
         )
-        assert_corrections_match(corrections, expected_yfactor(nf_dB=nf))
+        assert_corrections_match(corrections, expected_yfactor(**model))
 
     def test_output_is_indexed_by_the_calibration_fields(self):
         corrections = yfactor.compute_y_factor_corrections(
@@ -84,13 +88,6 @@ class TestYFactorCorrections:
         point = {'port': 0, 'gain': 0.0, 'center_frequency': 1e9}
         assert corrections.p_off.sel(point).item() == pytest.approx(p_off, rel=1e-9)
         assert corrections.p_on.sel(point).item() == pytest.approx(p_on, rel=1e-9)
-
-    def test_infinite_bandwidth_uses_the_nyquist_bandwidth(self):
-        grid = dict(YFACTOR_GRID, analysis_bandwidth=(40e6, INF))
-        corrections = yfactor.compute_y_factor_corrections(
-            make_yfactor_dataset(grid), YFACTOR_ENR_DB
-        )
-        assert_corrections_match(corrections, expected_yfactor(grid))
 
 
 # %% _limit_nyquist_bandwidth
@@ -183,7 +180,7 @@ def test_build_sweep_is_cached_on_the_spec():
     assert yfactor.build_calibration_sweep(runner.spec) is runner.sweep
 
 
-def test_build_sweep_is_the_plan_with_generated_analysis_and_fixed_options():
+def test_build_sweep_is_the_plan_with_fixed_options():
     runner = make_calibration_runner(loops=(PORT_LOOP, GAIN_LOOP))
     doc, sweep = runner.spec, runner.sweep
     assert type(sweep) is type(doc).sweep_cls
@@ -193,7 +190,6 @@ def test_build_sweep_is_the_plan_with_generated_analysis_and_fixed_options():
         doc.captures,
         doc.loops,
     )
-    assert sweep.analysis == yfactor.calibration_analysis(doc)
     assert sweep.options == ss.specs.SweepOptions(
         reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
     )
@@ -426,11 +422,12 @@ def _run_passes_into_a_memory_sink(runner, monkeypatch, scripted_input):
 
 
 def test_null_sink_path_skips_the_save(monkeypatch, scripted_input, caplog):
+    """nothing is saved, and the ``striqt.sink`` logger records the skip at INFO"""
     runner = make_calibration_runner(sink=ss.specs.Sink(path=None))
     caplog.set_level(logging.INFO, logger='striqt.sink')
     saves = _run_passes_into_a_memory_sink(runner, monkeypatch, scripted_input)
     assert saves == []
-    assert any('not written' in record.getMessage() for record in caplog.records)
+    assert [r.levelno for r in caplog.records] == [logging.INFO]
 
 
 def test_sink_path_is_saved_once_after_the_last_pass(

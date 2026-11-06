@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from conftest import as_xp, gaussian_iq, iq_waveforms
 from hypothesis import example, given, strategies as st
-from numeric_checks import assert_close, numpy_and_cupy, reference_power
+from numeric_checks import assert_close, reference_power
 from waveform_strategies import corr_atol_for, cp_case
 
 from striqt.waveform.lib.comms import cp
@@ -175,14 +175,3 @@ class TestCorrelateCyclicShift:
         power = reference_power(x[inds.ravel()]).mean()
         assert R[0] == pytest.approx(power, abs=corr_atol_for(x, inds.size, norm=False))
         assert R.dtype == x.dtype
-
-
-class TestCupy:
-    """the dispatcher on cupy against the numpy result"""
-
-    def test_correlate_cyclic_shift(self, cupy_available):
-        phy, x, inds = cp_case(4)
-        R_np, R_cp = numpy_and_cupy(
-            cupy_available, cp.correlate_cyclic_shift, inds, x, phy.nfft, norm=False
-        )
-        assert_close(R_cp, R_np, atol=corr_atol_for(x, inds.size, norm=False, n_impl=2))

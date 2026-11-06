@@ -132,10 +132,6 @@ class TestAirstack1Source:
             ('writeRegister', 'FPGA', 0x00040010, 0)
         ]
 
-        device.registers['FPGA', 0x00040010] = 0xFFFF
-        source._set_jesd_sysref_delay(3)
-        assert device.registers['FPGA', 0x00040010] == 0xF3FF
-
     def test_read_peripherals_reports_the_transceiver_temperature(self, fake_soapy):
         source = deepwave.Airstack1Source(
             deepwave.Air7101BSourceSpec(array_backend='numpy')

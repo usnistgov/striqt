@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import functools
 import types
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -12,12 +14,16 @@ from figures_datasets import (
     CYCLIC_BOUND_DB,
     POWER_DETECTORS,
     cyclic_mean_dBm,
+    cyclic_statistics,
     make_dataset,
     predicted_levels_dBm,
 )
 
 from striqt.figures import specs, util
 from striqt.figures.backend import matplotlib as mpl_backend
+
+if TYPE_CHECKING:
+    from xarray.plot import FacetGrid
 
 
 def fake_grid(name_dicts: list[dict[str, float] | None]) -> types.SimpleNamespace:
@@ -112,7 +118,7 @@ def test_histogram_facet_limits_and_noise_lines_are_per_capture() -> None:
         ]
         assert len(vertical) == 1, 'one noise line per facet'
 
-    plt.close('all')
+    plt.close(grid.fig)
 
 
 # %% fill_between
@@ -133,65 +139,32 @@ def capture_backend(col_wrap: int | None = None) -> mpl_backend.MatplotlibBacken
     return mpl_backend.MatplotlibBackend(opts, output_dir=None)
 
 
-def cyclic_statistics() -> tuple[xr.DataArray, xr.DataArray, xr.DataArray]:
-    """return the (min, mean, max) cyclic channel power of the synthetic dataset."""
-    da = make_dataset()['cyclic_channel_power']
-    return tuple(da.sel(cyclic_statistic=s) for s in ('min', 'mean', 'max'))
-
-
 def data_axes(grid) -> list:
     """return the visible facet axes of `grid`, in facet order."""
     return [ax for ax in grid.axs.flat if ax.get_visible()]
 
 
-def test_fill_between_shades_one_band_per_hue_at_the_bound_levels() -> None:
-    """each facet has one `PolyCollection` per detector in the color ``C{i}`` at the
-    given alpha, spanning from the min to the max statistic of that capture."""
+@pytest.fixture(scope='module')
+def stepped_grid() -> Iterator[FacetGrid]:
+    """the grid of `line(mean, step='post')` with the min-max bands drawn onto it"""
     import matplotlib.pyplot as plt
-    from matplotlib import colors
-    from matplotlib.collections import PolyCollection
-
-    low, _, high = cyclic_statistics()
-    alpha = 0.4
-
-    grid = capture_backend().fill_between(
-        low, high, x='cyclic_lag', hue='power_detector', alpha=alpha
-    )
-
-    axs = data_axes(grid)
-    assert len(axs) == 3
-    expected = cyclic_mean_dBm()
-    for i_capture, ax in enumerate(axs):
-        assert len(ax.collections) == len(POWER_DETECTORS)
-        for i, band in enumerate(ax.collections):
-            assert isinstance(band, PolyCollection)
-            (facecolor,) = band.get_facecolor()
-            assert tuple(facecolor[:3]) == pytest.approx(colors.to_rgb(f'C{i}'))
-            assert facecolor[3] == pytest.approx(alpha)
-            y = band.get_paths()[0].vertices[:, 1]
-            level = expected[i_capture, i]
-            assert y.min() == pytest.approx(level - CYCLIC_BOUND_DB, abs=1e-3)
-            assert y.max() == pytest.approx(level + CYCLIC_BOUND_DB, abs=1e-3)
-
-    plt.close('all')
-
-
-def test_fill_between_on_a_line_grid_matches_the_line_colors() -> None:
-    """the band of hue index `i` drawn onto the grid of `line` has the facecolor of
-    the `i`th line on every facet."""
-    import matplotlib.pyplot as plt
-    from matplotlib import colors
 
     low, mean, high = cyclic_statistics()
     plotter = capture_backend()
-
-    grid = plotter.line(mean, x='cyclic_lag', hue='power_detector')
+    grid = plotter.line(mean, x='cyclic_lag', hue='power_detector', step='post')
     out = plotter.fill_between(
-        low, high, x='cyclic_lag', hue='power_detector', target=grid
+        low, high, x='cyclic_lag', hue='power_detector', step='post', target=grid
     )
+    yield out
+    plt.close(grid.fig)
 
-    assert out is grid
-    for ax in data_axes(grid):
+
+def test_fill_between_on_a_line_grid_matches_the_line_colors(stepped_grid) -> None:
+    """the band of hue index `i` drawn onto the grid of `line` has the facecolor of
+    the `i`th line on every facet, and adds no line."""
+    from matplotlib import colors
+
+    for ax in data_axes(stepped_grid):
         lines = ax.get_lines()
         assert len(lines) == len(POWER_DETECTORS)
         assert len(ax.collections) == len(POWER_DETECTORS)
@@ -200,8 +173,6 @@ def test_fill_between_on_a_line_grid_matches_the_line_colors() -> None:
             assert tuple(facecolor[:3]) == pytest.approx(
                 colors.to_rgb(line.get_color())
             )
-
-    plt.close('all')
 
 
 def test_line_on_target_adds_lines_to_the_existing_figure() -> None:
@@ -228,7 +199,7 @@ def test_line_on_target_adds_lines_to_the_existing_figure() -> None:
                 line.get_ydata(), expected[i_capture, i] - CYCLIC_BOUND_DB, atol=1e-3
             )
 
-    plt.close('all')
+    plt.close(grid.fig)
 
 
 @pytest.mark.parametrize('method', ['line', 'fill_between'])
@@ -251,25 +222,18 @@ def test_target_with_a_facet_the_data_lacks_raises(method: str) -> None:
     with pytest.raises(ValueError, match='capture'):
         call()
 
-    plt.close('all')
+    plt.close(grid.fig)
 
 
-def test_step_post_holds_each_value_until_the_next_sample() -> None:
+def test_step_post_holds_each_value_until_the_next_sample(stepped_grid) -> None:
     """every line has drawstyle ``steps-post``, and the lower edge of each band has
     the post-step vertices of the samples."""
-    import matplotlib.pyplot as plt
     from matplotlib import cbook
 
-    low, mean, high = cyclic_statistics()
-    plotter = capture_backend()
-
-    grid = plotter.line(mean, x='cyclic_lag', hue='power_detector', step='post')
-    plotter.fill_between(
-        low, high, x='cyclic_lag', hue='power_detector', step='post', target=grid
-    )
+    low, _, _ = cyclic_statistics()
 
     x = low['cyclic_lag'].values
-    for i_capture, ax in enumerate(data_axes(grid)):
+    for i_capture, ax in enumerate(data_axes(stepped_grid)):
         for line in ax.get_lines():
             assert line.get_drawstyle() == 'steps-post'
         for i, band in enumerate(ax.collections):
@@ -278,23 +242,39 @@ def test_step_post_holds_each_value_until_the_next_sample() -> None:
             # vertex 0 is the first point of the upper edge; the lower edge follows
             np.testing.assert_allclose(vertices[1 : 1 + edge.shape[1]], edge.T)
 
-    plt.close('all')
 
-
-def test_fill_between_hides_the_padding_axis_of_a_wrapped_grid() -> None:
-    """3 captures wrapped at 2 columns leave one of 4 axes hidden and empty"""
+def test_fill_between_without_a_target_shades_one_band_per_hue_per_facet() -> None:
+    """3 captures wrapped at 2 columns leave one of 4 axes hidden and empty. Each
+    visible facet has one `PolyCollection` per detector in the color ``C{i}`` at the
+    given alpha, spanning from the min to the max statistic of that capture."""
     import matplotlib.pyplot as plt
+    from matplotlib import colors
+    from matplotlib.collections import PolyCollection
 
     low, _, high = cyclic_statistics()
+    alpha = 0.4
 
     grid = capture_backend(col_wrap=2).fill_between(
-        low, high, x='cyclic_lag', hue='power_detector'
+        low, high, x='cyclic_lag', hue='power_detector', alpha=alpha
     )
 
     assert grid.axs.shape == (2, 2)
     hidden = [ax for ax in grid.axs.flat if not ax.get_visible()]
     assert len(hidden) == 1
     assert len(hidden[0].collections) == 0
-    assert all(len(ax.collections) == len(POWER_DETECTORS) for ax in data_axes(grid))
+    axs = data_axes(grid)
+    assert len(axs) == 3
+    expected = cyclic_mean_dBm()
+    for i_capture, ax in enumerate(axs):
+        assert len(ax.collections) == len(POWER_DETECTORS)
+        for i, band in enumerate(ax.collections):
+            assert isinstance(band, PolyCollection)
+            (facecolor,) = band.get_facecolor()
+            assert tuple(facecolor[:3]) == pytest.approx(colors.to_rgb(f'C{i}'))
+            assert facecolor[3] == pytest.approx(alpha)
+            y = band.get_paths()[0].vertices[:, 1]
+            level = expected[i_capture, i]
+            assert y.min() == pytest.approx(level - CYCLIC_BOUND_DB, abs=1e-3)
+            assert y.max() == pytest.approx(level + CYCLIC_BOUND_DB, abs=1e-3)
 
-    plt.close('all')
+    plt.close(grid.fig)

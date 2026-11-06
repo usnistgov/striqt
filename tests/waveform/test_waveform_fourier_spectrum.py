@@ -5,42 +5,38 @@ STFT on the same axes, on numpy and cupy.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from hypothesis import given, settings
 from numeric_checks import ATOL, assert_close, elementwise_rtol, numpy_and_cupy
 from numpy.testing import assert_array_equal
 from waveform_strategies import cross_backend_sigma, noise_waveforms, stft_parameters
 
-from striqt.waveform.lib.fourier.fft import fftfreq
 from striqt.waveform.lib.fourier.spectrum import spectrogram
 from striqt.waveform.lib.fourier.stft import stft
+from striqt.waveform.lib.power import envelope_power_rtol
 
 
 # %% spectrogram
 class TestSpectrogram:
-    @settings(max_examples=50)
+    @pytest.mark.parametrize('return_axis_arrays', [True, False], ids=['axes', 'array'])
+    # 25 waveforms per row, 50 in all as the single shape test ran
+    @settings(max_examples=25)
     @given(x=noise_waveforms(min_size=256, max_size=512), params=stft_parameters())
-    def test_output_shape(self, x, params):
-        """the spectrogram has the shape and axes of the stft and the real dtype of
-        the input. ``min_size=256`` guarantees ``len(x) >= max(nperseg)``."""
-        _, _, X = stft(x, truncate=True, **params)
-        freqs, times, Sxx = spectrogram(x, truncate=True, **params)
+    def test_is_the_power_of_the_normalized_stft(self, return_axis_arrays, x, params):
+        """``Sxx == |X|**2`` for the STFT with ``norm='power'``, in the real dtype of
+        the input and on the frequency and time axes of the STFT. ``min_size=256``
+        guarantees ``len(x) >= max(nperseg)``."""
+        freqs, times, X = stft(x, truncate=True, norm='power', **params)
+        if return_axis_arrays:
+            f, t, Sxx = spectrogram(x, truncate=True, **params)
+            assert_array_equal(f, freqs)
+            assert_array_equal(t, times)
+        else:
+            Sxx = spectrogram(x, truncate=True, return_axis_arrays=False, **params)
 
-        step = params['nperseg'] - params['noverlap']
-        assert Sxx.shape == X.shape
-        assert Sxx.shape[0] == (len(x) - params['noverlap']) // step
-        assert Sxx.shape[1] == params['nperseg']
-        assert len(freqs) == params['nperseg']
-        assert len(times) == Sxx.shape[0]
         assert Sxx.dtype == np.finfo(x.dtype).dtype
-        assert_array_equal(freqs, fftfreq(params['nperseg'], params['fs']))
-
-    def test_return_axis_arrays_false(self):
-        x = np.ones(512, dtype=np.complex64)
-        X = stft(x, fs=1.0, window='hann', nperseg=64, return_axis_arrays=False)
-        Sxx = spectrogram(
-            x, fs=1.0, window='hann', nperseg=64, return_axis_arrays=False
-        )
-        assert Sxx.shape == X.shape and np.isrealobj(Sxx)
+        rtol = envelope_power_rtol(Sxx.dtype, complex_input=True)
+        assert_close(Sxx, np.abs(X.astype(np.complex128)) ** 2, rtol=rtol)
 
 
 # %% numpy vs cupy

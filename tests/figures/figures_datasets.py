@@ -12,8 +12,6 @@ from __future__ import annotations
 import numpy as np
 import xarray as xr
 
-import striqt.analysis as sa
-
 SYSTEM_NOISE_DBM_HZ = np.array([-170.0, -170.0, -160.0])
 ANALYSIS_BANDWIDTH = np.array([1e6, np.inf, 1e6])
 SAMPLE_RATE = 2e6
@@ -106,7 +104,7 @@ def make_dataset(attr_missing: bool = False, system_noise: bool = True) -> xr.Da
     if attr_missing:
         bin_attrs = {'standard_name': 'Spectrogram bin power', 'units': 'dBm/10 kHz'}
     else:
-        bin_attrs = sa.measurements.shared.bandwidth_attrs(HISTOGRAM_BANDWIDTH, 'dBm')
+        bin_attrs = {'units': 'dBm', 'noise_bandwidth': HISTOGRAM_BANDWIDTH}
 
     ds = xr.Dataset(
         {
@@ -188,3 +186,11 @@ def make_dataset(attr_missing: bool = False, system_noise: bool = True) -> xr.Da
             {'standard_name': 'System noise', 'units': 'dBm/Hz'},
         )
     return ds
+
+
+def cyclic_statistics(
+    ds: xr.Dataset | None = None,
+) -> tuple[xr.DataArray, xr.DataArray, xr.DataArray]:
+    """return the (min, mean, max) cyclic channel power of `ds`, or of `make_dataset()`"""
+    da = (make_dataset() if ds is None else ds)['cyclic_channel_power']
+    return tuple(da.sel(cyclic_statistic=s) for s in ('min', 'mean', 'max'))

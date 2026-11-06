@@ -245,18 +245,11 @@ def interior(x, pad, axis=-1):
     return np.moveaxis(np.moveaxis(np.asarray(x), axis, 0)[pad:-pad], 0, axis)
 
 
-def reference_binned_mean(x, count, axis):
-    """return the mean over contiguous, left-aligned bins of `count` samples along
-    `axis`, dropping the remainder."""
-    moved = np.moveaxis(x, axis, -1)
-    m = moved.shape[-1] // count
-    binned = moved[..., : m * count].reshape(moved.shape[:-1] + (m, count))
-    return np.moveaxis(binned.mean(axis=-1), -1, axis)
-
-
 def blocks(x, size, axis):
     """return `x` with `axis` reshaped into (n_blocks, size) after truncating the
     remainder."""
+    x = np.asarray(x)
+    axis %= x.ndim
     x = np.moveaxis(x, axis, -1)
     n_blocks = x.shape[-1] // size
     x = x[..., : n_blocks * size].reshape(x.shape[:-1] + (n_blocks, size))

@@ -12,8 +12,10 @@ from hypothesis import strategies as st
 from numeric_checks import cross_backend
 
 from striqt.analysis import testing
+from striqt.waveform.lib.arrays import accum_rtol
 from striqt.waveform.lib.comms import cp, phy_3gpp, sync_5gnr
 from striqt.waveform.lib.fourier.fft import fft_tolerance_rms
+from striqt.waveform.lib.fourier.windows import get_window
 
 # the analysis default synchronization block sample rate (15.36e6 / 2)
 FS = 7.68e6
@@ -126,12 +128,25 @@ def embed_pss_ports(embeds, scales=None, n_blocks=1):
     return params, pss, iq
 
 
-def get_ssb_spans(iq, params, fs_in=FS, **kws):
-    """run `get_5g_ssb_spans` for `params` on a waveform at `fs_in`."""
-    return sync_5gnr.get_5g_ssb_spans(iq, params=params, fs_in=fs_in, **kws)
-
-
 # %% fourier strategies
+def cola_sum(window, nfft, hop):
+    """return the overlap-add sum of the periodic `window` of `nfft` samples at `hop`
+    over one hop period, which is constant when the window satisfies COLA at `hop`.
+    `None` and ``'rect'`` select the rectangular window."""
+    if window in (None, 'rect'):
+        w = np.ones(nfft)
+    else:
+        w = get_window(window, nfft, norm=False, dtype=np.float64)
+    return w.reshape(nfft // hop, hop).sum(axis=0)
+
+
+def cola_ripple_rtol(nfft, hop):
+    """return the rtol on the ripple of `cola_sum` for a float64 window: each of the
+    ``nfft // hop`` samples in a sum rounds once in the cosine series of the design,
+    and the sum rounds once per term."""
+    return accum_rtol(np.float64, 2 * (nfft // hop))
+
+
 def cross_backend_sigma(dtype, nffts, n_elementwise=0):
     """return the rms tolerance on the difference between the numpy and cupy results,
     each within the FFT roundoff budget of the backend."""

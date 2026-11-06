@@ -13,14 +13,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 from conftest import FAKE_SOAPY_SPEC
-from numeric_checks import assert_close, elementwise_rtol
 from sweep_strategies import make_cellular_sweep
 from synthetic_sources import (
     IQ_ONLY,
     ONE_PORT,
     SPECTROGRAM,
-    preset_capture,
-    preset_sweep,
+    mixed_rate_sweep,
     spectrogram_frames,
     tone_capture,
     tone_captures,
@@ -30,8 +28,10 @@ from synthetic_sources import (
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import compute, sinks
+from striqt.sensor.lib.sources import buffers
 
 OFFSETS = (1e6, 2e6)
+TONE = ss.bindings.single_tone
 
 
 def zarr_sweep(path, offsets, *, analysis=IQ_ONLY, **sink_kws):
@@ -46,37 +46,7 @@ def run_to_store(sweep):
         return [ds for ds in ss.iterate_sweep(res) if ds is not None]
 
 
-# %% NoSink
-
-
-def test_no_sink_append_returns_its_argument():
-    sink = ss.sinks.NoSink(tone_sweep((1e6,)))
-    token = object()
-    assert sink.append(token) is token
-    assert sink.acquisitions_elapsed == 1
-
-
 # %% _BatchTracker
-
-
-def test_batch_tracker_cycles_the_homogeneous_group_sizes():
-    """4 identical captures with batches of 2: 2 groups of 2, cycling"""
-    tracker = sinks._BatchTracker(tone_captures((1e6,) * 4), min_size=2)
-    assert tracker.total_size == 4
-    assert tracker.size == 2
-    assert tracker.next() == 2
-    assert tracker.next() == 2
-
-
-def test_batch_tracker_merges_captures_of_different_shape():
-    """a group closes only once every distinct capture shape is both pending and
-    still to come. 2 captures of 1 ms followed by 1 of 2 ms form a single group."""
-    captures = tone_captures((1e6, 2e6)) + (
-        preset_capture('single_tone', **{**ONE_PORT, 'duration': 2e-3}, snr=None),
-    )
-    tracker = sinks._BatchTracker(captures, min_size=1)
-    assert tracker.total_size == 3
-    assert tracker.size == 3
 
 
 def test_batch_tracker_counts_each_burst_segment():
@@ -124,16 +94,6 @@ def json_attrs(attrs):
     import json
 
     return json.loads(json.dumps(dict(attrs)))
-
-
-def mixed_rate_sweep(path, **sink_kws):
-    """2 single-tone captures at 2 sample rates, so the PSD frequency grids differ"""
-    captures = (
-        preset_capture('single_tone', sample_rate=6.144e6),
-        preset_capture('single_tone', sample_rate=3.072e6, analysis_bandwidth=2.5e6),
-    )
-    sweep = preset_sweep('single_tone', captures)
-    return sweep.replace(sink=ss.specs.ZarrSink(path=str(path), **sink_kws))
 
 
 def test_zarr_capture_sink_store_equals_the_concatenated_captures(tmp_path):
@@ -185,6 +145,54 @@ def test_zarr_capture_sink_allocates_the_store_at_open(tmp_path):
             assert chunk_files == []
             # an unwritten store is trimmed to zero rows at close
     assert sa.load(sweep.sink.path).sizes['capture'] == 0
+
+
+def test_zarr_capture_sink_waits_for_the_backend_of_a_pending_source(
+    tmp_path, isolated_lookup, monkeypatch
+):
+    """a sink constructed while the source is between registration and backend
+    construction reads the power units of the backend once it exists, also when
+    `lookup.id` is replaced by a stub that does not wait (as the test fixtures do)"""
+    from threading import Event, Thread
+
+    sweep = tone_sweep((1e6,), sink=ss.specs.ZarrSink(path=str(tmp_path / 'p.zarr')))
+    monkeypatch.setattr(isolated_lookup, 'id', lambda spec, timeout=0.5: 'beef')
+    sink_waiting = Event()
+    sink_done = Event()
+    outcome = []
+
+    class WaitingIdSlot(Event):
+        def wait(self, timeout=None):
+            sink_waiting.set()
+            return super().wait(timeout)
+
+    isolated_lookup._id[sweep.source] = WaitingIdSlot()
+    real_buffers = buffers.ReceiveBuffers
+
+    def buffers_after_the_sink_asks(controller):
+        # the controller is registered but has no backend until this returns
+        for _ in range(600):
+            if sink_waiting.wait(timeout=0.05) or sink_done.is_set():
+                break
+        return real_buffers(controller)
+
+    monkeypatch.setattr(buffers, 'ReceiveBuffers', buffers_after_the_sink_asks)
+
+    def open_sink():
+        try:
+            outcome.append(sinks.ZarrCaptureSink(sweep, None)._power_units)
+        except BaseException as ex:
+            outcome.append(ex)
+        finally:
+            sink_done.set()
+
+    opener = Thread(target=open_sink)
+    opener.start()
+    with TONE.from_sweep_spec(sweep):
+        opener.join(timeout=30)
+
+    assert not opener.is_alive(), 'the sink is still blocked'
+    assert outcome == ['mW']
 
 
 def test_zarr_capture_sink_template_units_follow_the_source(fake_soapy_ext, tmp_path):
@@ -426,52 +434,42 @@ def test_zarr_capture_sink_writes_one_row_group_per_burst_segment(tmp_path):
     assert stored.port.values.tolist() == [0] * burst
 
 
-def test_zarr_capture_sink_grows_past_the_planned_rows(tmp_path):
-    """a looped sweep writes more rows than the plan and the store keeps them all"""
-    sweep = zarr_sweep(tmp_path / 'loop.zarr', (1e6, 2e6))
-    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
-    taken = []
-    with (
-        ss.open_resources(unsunk, None) as res,
-        ss.sinks.ZarrCaptureSink(sweep) as sink,
-    ):
-        for dd in ss.iterate_sweep(res, loop=True, sink=sink):
-            if dd is None:
-                continue
-            taken.append(dd)
-            if len(taken) == 5:
-                break
-    stored = sa.load(sweep.sink.path)
-    assert stored.sizes['capture'] == 5
-    assert stored.capture_index.values.tolist() == [0, 1, 0, 1, 0]
-
-
-def test_zarr_capture_sink_trims_to_the_rows_written(tmp_path):
-    """a sweep stopped after 1 of 3 captures leaves a store of 1 row"""
-    sweep = zarr_sweep(tmp_path / 'short.zarr', (1e6, 2e6, 3e6))
+@pytest.mark.parametrize(
+    'offsets, loop, taken, capture_index',
+    [
+        ((1e6, 2e6), True, 5, [0, 1, 0, 1, 0]),
+        ((1e6, 2e6, 3e6), False, 1, [0]),
+    ],
+    ids=['grows_past_the_plan', 'trims_to_the_rows_written'],
+)
+def test_zarr_capture_sink_store_has_the_rows_written(
+    tmp_path, offsets, loop, taken, capture_index
+):
+    """the store has one row per appended capture: a looped sweep stopped after 5
+    writes keeps more rows than the 2 planned, and a sweep stopped after 1 of 3
+    captures leaves 1 row"""
+    sweep = zarr_sweep(tmp_path / 'rows.zarr', offsets)
     unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
     with (
         ss.open_resources(unsunk, None) as res,
         ss.sinks.ZarrCaptureSink(sweep) as sink,
     ):
-        for dd in ss.iterate_sweep(res, sink=sink):
-            if dd is not None:
+        written = 0
+        for dd in ss.iterate_sweep(res, loop=loop, sink=sink):
+            written += dd is not None
+            if written == taken:
                 break
     stored = sa.load(sweep.sink.path)
-    assert stored.sizes['capture'] == 1
-    assert stored.capture_index.values.tolist() == [0]
+    assert stored.sizes['capture'] == taken
+    assert stored.capture_index.values.tolist() == capture_index
 
 
-def test_zarr_sink_refuses_an_existing_store_without_force(tmp_path):
+def test_zarr_sink_replaces_an_existing_store_only_with_force(tmp_path):
     sweep = zarr_sweep(tmp_path / 'twice.zarr', (1e6,))
     run_to_store(sweep)
     with pytest.raises(FileExistsError):
         run_to_store(sweep)
 
-
-def test_zarr_sink_force_replaces_an_existing_store(tmp_path):
-    sweep = zarr_sweep(tmp_path / 'twice.zarr', (1e6,))
-    run_to_store(sweep)
     unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
     with (
         ss.open_resources(unsunk, None) as res,
@@ -504,25 +502,11 @@ def test_time_append_sink_requires_a_spectrogram():
         ss.sinks.ZarrTimeAppendSink(sweep)
 
 
-def test_time_append_sink_batches_count_burst_segments(tmp_path):
-    """the batch sizes of the sink are over acquisitions: 2 captures of `burst=2`
-    form 4 appends, and a batch size of 2 closes after every 2"""
-    sweep = zarr_sweep(tmp_path / 'spg.zarr', OFFSETS, analysis=SPECTROGRAM)
-    sweep = sweep.replace(captures=tuple(c.replace(burst=2) for c in sweep.captures))
-    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
-    with (
-        ss.open_resources(unsunk, None),
-        ss.sinks.ZarrTimeAppendSink(sweep, batch_size=2) as sink,
-    ):
-        assert sink._batch.total_size == 4
-        assert sink._batch.size == 2
-
-
 def test_time_append_sink_concatenates_the_frames(tmp_path):
-    """2 captures written as 1 batch form 1 row. The spectrogram time axis of that row
-    has the frames of both captures back to back on a uniform grid."""
+    """2 captures written as 1 batch form 1 row with the frames of both captures back
+    to back. The time grid of the join is tested at `concat_time_dim`."""
     sweep = zarr_sweep(tmp_path / 'spg.zarr', OFFSETS, analysis=SPECTROGRAM)
-    frames, hop_period = spectrogram_frames(sweep.captures[0], SPECTROGRAM.spectrogram)
+    frames, _ = spectrogram_frames(sweep.captures[0], SPECTROGRAM.spectrogram)
 
     # the ZarrCaptureSink of the runner would open the same store if the opened sweep
     # kept the path. A zarr sink looks up the source id in its constructor, which
@@ -537,9 +521,6 @@ def test_time_append_sink_concatenates_the_frames(tmp_path):
     stored = sa.load(sweep.sink.path)
     assert stored.sizes['capture'] == 1
     assert stored.sizes['spectrogram_time'] == 2 * frames
-    # concat_time_dim rebuilds the grid from the step of the float32 coordinate
-    time = stored.spectrogram_time.values.astype('float64')
-    assert_close(np.diff(time), hop_period, rtol=elementwise_rtol(np.float32))
     for i, ds in enumerate(results):
         half = slice(i * frames, (i + 1) * frames)
         assert np.array_equal(

@@ -296,14 +296,24 @@ def _json_round_trip(spec) -> dict:
     return json.loads(json.dumps(spec.to_dict(True, allow_tuple_keys=False)))
 
 
+def _write_spec_attrs(tmp_path, spec, **extra) -> Path:
+    """write the JSON attrs of `spec`, plus `extra`, into an empty zarr group at
+    ``tmp_path / 'out.zarr'`` and return the path"""
+    import zarr
+
+    path = tmp_path / 'out.zarr'
+    attrs = {**_json_round_trip(spec), **extra}
+    zarr.open(sa.open_store(path, mode='w'), mode='w').attrs.update(attrs)
+    return path
+
+
 @pytest.mark.parametrize(
     'sweep', ROUND_TRIP_SWEEPS.values(), ids=list(ROUND_TRIP_SWEEPS)
 )
-def test_read_zarr_spec_rebuilds_the_spec_that_ran(run_sweep_to_zarr, sweep):
-    spec, path = run_sweep_to_zarr(sweep)
-    rebuilt = ss.read_zarr_spec(path)
-    assert type(rebuilt) is type(spec)
-    assert rebuilt == spec
+def test_read_zarr_spec_rebuilds_the_spec_from_the_attrs(tmp_path, sweep):
+    rebuilt = ss.read_zarr_spec(_write_spec_attrs(tmp_path, sweep))
+    assert type(rebuilt) is type(sweep)
+    assert rebuilt == sweep
 
 
 @settings(max_examples=25)
@@ -312,22 +322,21 @@ def test_attrs_tree_rebuilds_any_sweep(sweep):
     assert _decode_spec_tree(_json_round_trip(sweep), SWEEP_DIR) == sweep
 
 
-def test_unknown_store_attrs_are_ignored(run_sweep_to_zarr):
-    import zarr
-
-    spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')
-    zarr.open(sa.open_store(path, mode='a')).attrs['junk'] = 1
+def test_unknown_store_attrs_are_ignored(tmp_path):
+    spec = ROUND_TRIP_SWEEPS['single_port']
+    path = _write_spec_attrs(tmp_path, spec, junk=1)
     assert ss.read_zarr_spec(path) == spec
 
 
-def test_read_zarr_spec_drops_the_removed_extensions_sink_attr(run_sweep_to_zarr):
+def test_read_zarr_spec_drops_the_removed_extensions_sink_attr(tmp_path):
     """a store with an ``extensions.sink`` key in the attrs decodes with a
     `DeprecationWarning`, and the key is discarded"""
-    import zarr
-
-    spec, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'], name='out.zarr')
-    attrs = zarr.open(sa.open_store(path, mode='a')).attrs
-    attrs['extensions'] = {**attrs['extensions'], 'sink': 'striqt.sensor.sinks.NoSink'}
+    spec = ROUND_TRIP_SWEEPS['single_port']
+    extensions = {
+        **_json_round_trip(spec)['extensions'],
+        'sink': 'striqt.sensor.sinks.NoSink',
+    }
+    path = _write_spec_attrs(tmp_path, spec, extensions=extensions)
 
     with pytest.warns(DeprecationWarning, match='extensions.sink'):
         rebuilt = ss.read_zarr_spec(path)
@@ -335,17 +344,10 @@ def test_read_zarr_spec_drops_the_removed_extensions_sink_attr(run_sweep_to_zarr
 
 
 def test_read_zarr_spec_keeps_the_fields_a_bound_sweep_adds(tmp_path):
-    import zarr
-
     sweep = make_calibration_sweep(
         calibration=ss.specs.ManualYFactorSpec(enr=20.87, ambient_temperature=296.0)
     )
-    path = tmp_path / 'out.zarr'
-    zarr.open(sa.open_store(path, mode='w'), mode='w').attrs.update(
-        _json_round_trip(sweep)
-    )
-
-    rebuilt = ss.read_zarr_spec(path)
+    rebuilt = ss.read_zarr_spec(_write_spec_attrs(tmp_path, sweep))
     assert type(rebuilt) is CalSweepCls
     assert rebuilt.calibration.enr == pytest.approx(20.87)
     assert rebuilt == sweep
@@ -354,19 +356,12 @@ def test_read_zarr_spec_keeps_the_fields_a_bound_sweep_adds(tmp_path):
 def test_read_zarr_spec_keeps_the_analysis_group_of_the_binding(tmp_path):
     """the attrs of a store written by a binding over a restricted group decode
     `analysis` as that group"""
-    import zarr
-
     cls = EXT.site_quick.sensor.sweep_spec_cls
     analysis = EXT.SiteQuickAnalyses.from_dict({
         'channel_power_time_series': {'detector_period': 1e-4}
     })
     sweep = make_site_sweep(cls=cls, analysis=analysis)
-    path = tmp_path / 'out.zarr'
-    zarr.open(sa.open_store(path, mode='w'), mode='w').attrs.update(
-        _json_round_trip(sweep)
-    )
-
-    rebuilt = ss.read_zarr_spec(path)
+    rebuilt = ss.read_zarr_spec(_write_spec_attrs(tmp_path, sweep))
     assert type(rebuilt) is cls
     assert type(rebuilt.analysis) is EXT.SiteQuickAnalyses
     assert rebuilt == sweep
@@ -378,8 +373,8 @@ def test_unknown_tree_keys_are_rejected():
         _decode_spec_tree({**tree, 'junk': 1}, SWEEP_DIR)
 
 
-def test_read_zarr_spec_output_overrides(run_sweep_to_zarr):
-    _, path = run_sweep_to_zarr(ROUND_TRIP_SWEEPS['single_port'])
+def test_read_zarr_spec_output_overrides(tmp_path):
+    path = _write_spec_attrs(tmp_path, ROUND_TRIP_SWEEPS['single_port'])
     spec = ss.read_zarr_spec(
         path, output_path='elsewhere.zarr.zip', store_backend='zip'
     )
@@ -387,13 +382,13 @@ def test_read_zarr_spec_output_overrides(run_sweep_to_zarr):
     assert spec.sink.store == 'zip'
 
 
-def test_read_zarr_spec_extension_root(run_sweep_to_zarr, fake_radio_id, site_sweep):
-    spec, path = run_sweep_to_zarr(site_sweep)
+def test_read_zarr_spec_extension_root(tmp_path, site_sweep):
+    path = _write_spec_attrs(tmp_path, site_sweep)
 
     # the store is in tmp_path, so its relative import_path '../src' resolves nowhere
     with pytest.raises(FileNotFoundError, match='src'):
         ss.read_zarr_spec(path)
 
     rebuilt = ss.read_zarr_spec(path, extension_root=SITE_DIR)
-    assert type(rebuilt) is type(spec)
-    assert rebuilt == spec
+    assert type(rebuilt) is type(site_sweep)
+    assert rebuilt == site_sweep

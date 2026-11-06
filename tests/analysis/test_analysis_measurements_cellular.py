@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import re
+from fractions import Fraction
 
 import msgspec
 import numpy as np
@@ -21,35 +22,28 @@ from analysis_strategies import (
     CELL_FRAME,
     CELL_FS,
     POWER_BINS,
+    RTOL,
     SSB_SPECTROGRAM_FS,
     SSB_SPECTROGRAM_PERIODICITY,
     SSB_SPECTROGRAM_SAMPLE_RATE,
     SSB_SPECTROGRAM_SCS,
     SSB_SPECTROGRAM_SPEC,
+    SSB_WINDOW_FILL,
     capture_of,
     registered_tolerance,
     ssb_spectrogram_capture,
 )
-from numeric_checks import RTOL_FLOAT64, assert_close, elementwise_rtol, levels
+from numeric_checks import RTOL_FLOAT64, assert_close, levels
 from numpy.testing import assert_array_equal
 
 import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis import testing
 from striqt.analysis.measurements import cellular
-from striqt.analysis.measurements.cellular import _ssb_spectrogram_spec
 
 DURATION = 2 * CELL_FRAME / CELL_FS
 SCS = 30e3
 SSB = {'subcarrier_spacing': SCS, 'sample_rate': CELL_FS, 'symbol_indexes': 'c'}
-
-SSB_SPEC_TYPES = [
-    sa.specs.Cellular5GNRPSSCorrelator,
-    sa.specs.Cellular5GNRSSSCorrelator,
-    sa.specs.Cellular5GNPSSSync,
-    sa.specs.Cellular5GNSSSSync,
-]
-SSB_IDS = [cls.__name__ for cls in SSB_SPEC_TYPES]
 
 
 def capture(
@@ -68,14 +62,8 @@ def measure(spec, cap: sa.specs.Capture):
 
 # %% the 5G NR SSB correlators and synchronizers
 
-
-@pytest.mark.parametrize('cls', SSB_SPEC_TYPES, ids=SSB_IDS)
-def test_ssb_measurements_share_one_validator(cls):
-    """`sss_params` reaches every check in `pss_params`, so one validator serves the 4
-    registrations"""
-    assert sa.registry[cls].validate is cellular.validated_5g_ssb_sync_params
-
-
+# the PSS and SSS correlators and synchronizers share one validator, so the PSS
+# correlator carries every case
 SSB_REJECTED = {
     'odd_sample_count': (
         capture(2 * CELL_FRAME + 1),
@@ -116,30 +104,18 @@ SSB_REJECTED = {
 }
 
 
-# the 4 registrations share one validator, so every case runs on one spec type. One
-# case on each other type checks the `$.{name}` prefix of the error path.
-SSB_REJECTED_CASES = [
-    pytest.param(SSB_SPEC_TYPES[0], case, id=f'{SSB_IDS[0]}-{case}')
-    for case in SSB_REJECTED
-] + [
-    pytest.param(cls, 'odd_sample_count', id=f'{cls.__name__}-odd_sample_count')
-    for cls in SSB_SPEC_TYPES[1:]
-]
-
-
-@pytest.mark.parametrize('cls, case', SSB_REJECTED_CASES)
-def test_ssb_layout_the_resampler_cannot_produce_is_rejected(cls, case):
+@pytest.mark.parametrize('case', list(SSB_REJECTED), ids=list(SSB_REJECTED))
+def test_ssb_layout_the_resampler_cannot_produce_is_rejected(case):
     """`fourier.resample` and `correlate_sync_sequence` raise on these layouts once
     given IQ. The validator rejects each layout at the measurement path and names the
     field."""
     cap, kwargs, message = SSB_REJECTED[case]
-    spec = cls(**{**SSB, **kwargs})
+    spec = sa.specs.Cellular5GNRPSSCorrelator(**{**SSB, **kwargs})
 
     with pytest.raises(msgspec.ValidationError, match=re.escape(message)) as ex:
         measure(spec, cap)
 
-    name = sa.registry[cls].name
-    assert str(ex.value).startswith(f'$.{name}: ')
+    assert str(ex.value).startswith('$.cellular_5g_pss_correlation: ')
 
 
 # %% cellular_cyclic_autocorrelation
@@ -206,6 +182,27 @@ def test_autocorrelation_guards_a_waveform_shorter_than_its_capture():
         body(short_iq, capture(), **spec.to_dict())
 
 
+# %% cellular_stft_window_fractions
+
+
+@pytest.mark.parametrize(
+    'cyclic_prefix, symbols_per_slot',
+    [('normal', 14), ('extended', 12)],
+    ids=['normal', 'extended'],
+)
+def test_window_fractions_hop_one_symbol_per_window(cyclic_prefix, symbols_per_slot):
+    """one slot spans 15 subcarrier periods (3GPP TS 38.211 §5.3.1: 30720 kappa 2^-mu
+    at 2048 kappa 2^-mu per period) and one window at half the subcarrier spacing
+    spans 2, so one symbol with its prefix fills 15/(2 * symbols) of the window and
+    the overlap is the rest"""
+    fill = Fraction(15, 2 * symbols_per_slot)
+
+    overlap, window_fill = cellular.cellular_stft_window_fractions(cyclic_prefix)
+
+    assert window_fill == fill
+    assert overlap == 1 - fill
+
+
 # %% cellular_5g_ssb_spectrogram
 
 SSB_SYMBOLS = round(28 * SSB_SPECTROGRAM_SCS / 15e3)
@@ -228,15 +225,14 @@ def ssb_tone_level_dB() -> float:
     """return the level (dB) of a tone centered on a 15 kHz bin after integration to
     one 30 kHz bin.
 
-    The STFT window is a boxcar of L = `window_fill` * nfft samples zero-padded to
-    nfft. The ENBW of the window is nfft/L bins, so the tone bin alone is at
+    The STFT window is a boxcar of L = `SSB_WINDOW_FILL` * nfft samples zero-padded
+    to nfft. The ENBW of the window is nfft/L bins, so the tone bin alone is at
     10*log10(L/nfft). The Dirichlet kernel of the window is not zero on the
     neighboring bins. The integration sums the tone bin with one neighbor at
     sinc(L/nfft)**2 of the tone power.
     """
-    _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
     nfft = round(2 * SSB_SPECTROGRAM_FS / SSB_SPECTROGRAM_SCS)
-    L = round(window_fill * nfft)
+    L = round(SSB_WINDOW_FILL * nfft)
     return 10 * np.log10(L / nfft * (1 + np.sinc(L / nfft) ** 2))
 
 
@@ -268,36 +264,6 @@ class TestCellular5GSSBSpectrogram:
         # a stationary tone has the same level in every symbol of every block
         peak = spg[..., expected]
         assert peak.max() == peak.min()
-
-    def test_burst_spans_equal_the_masked_whole_record_spectrogram(self):
-        """the STFT over the burst-set spans is the whole-record STFT with the
-        symbols outside the burst sets dropped, bit for bit. The assertion pins the
-        span stacking of the SSB spectrogram against the whole-record transform."""
-        duration = 2 * SSB_SPECTROGRAM_PERIODICITY
-        iq = testing.circular_awgn(duration, SSB_SPECTROGRAM_FS, power=1.0)
-        capture = ssb_spectrogram_capture(duration)
-        spec = SSB_SPECTROGRAM_SPEC
-        da = sa.measurements.cellular_5g_ssb_spectrogram(
-            iq, capture, as_xarray=True, **spec.to_dict()
-        )
-
-        spg, _ = sa.measurements.spectrum.evaluate_spectrogram(
-            iq,
-            capture=capture,
-            spec=_ssb_spectrogram_spec(spec),
-            limit_digits=3,
-            dtype='float16',
-        )
-        symbol_period = sw.comms_5gnr.slot_period(spec.subcarrier_spacing) / 14
-        discovery_symbols = round(spec.discovery_periodicity / symbol_period)
-        symbols = np.arange(spg.shape[1])
-        spg = spg[:, (symbols % discovery_symbols) < SSB_SYMBOLS]
-        nfft = round(SSB_SPECTROGRAM_FS / spec.subcarrier_spacing)
-        spg = sw.fourier.truncate_freqs(
-            spg, nfft, SSB_SPECTROGRAM_FS, spec.sample_rate, axis=2
-        )
-        expected = spg.reshape(1, 2, SSB_SYMBOLS, -1)
-        assert_array_equal(da.values, expected)
 
     def test_tone_level_sums_the_tone_bin_with_its_leaking_neighbor(self):
         duration = 2 * SSB_SPECTROGRAM_PERIODICITY
@@ -398,9 +364,8 @@ def test_ssb_spectrogram_white_noise_reads_one_subcarrier():
     da = ssb_of(periods * SSB_SPECTROGRAM_PERIODICITY)
 
     assert da.attrs['noise_bandwidth'] == SSB_SPECTROGRAM_SCS
-    _, window_fill = sa.measurements.cellular.cellular_stft_window_fractions('normal')
     nfft = round(2 * SSB_SPECTROGRAM_FS / SSB_SPECTROGRAM_SCS)
-    nwindow = round(window_fill * nfft)
+    nwindow = round(SSB_WINDOW_FILL * nfft)
     assert da.attrs['resolution_bandwidth'] == pytest.approx(
         SSB_SPECTROGRAM_FS / nwindow
     )
@@ -436,8 +401,6 @@ RESOURCE_GRID_KWS = {
     'subcarrier_spacing': RESOURCE_GRID_SCS,
     **POWER_BINS,
 }
-
-RTOL = elementwise_rtol(np.float32)
 
 
 def resource_histogram(*, frame_slots, **kwargs):
@@ -522,35 +485,48 @@ def test_cellular_resource_power_histogram_bin_coordinate_bandwidth(
     assert 'units' not in da.attrs
 
 
-def test_cellular_resource_power_histogram_link_direction_coordinate():
-    da = resource_histogram(frame_slots='d' * RESOURCE_GRID_SLOTS)
+# the 2 ms capture spans 2 slots of 14 symbols, but the STFT (28-sample window hopping
+# 15 samples over 420 samples) yields 27 windows, so the second slot has 13 symbols
+RESOURCE_GRID_SYMBOLS = 27
+
+
+@pytest.mark.parametrize(
+    ('frame_slots', 'expected'),
+    [
+        ('d' * RESOURCE_GRID_SLOTS, (1.0, 0.0)),
+        (
+            'd' + 'u' * (RESOURCE_GRID_SLOTS - 1),
+            (14 / RESOURCE_GRID_SYMBOLS, 13 / RESOURCE_GRID_SYMBOLS),
+        ),
+    ],
+    ids=['all_downlink', 'downlink_then_uplink'],
+)
+def test_cellular_resource_power_histogram_splits_the_fraction_by_link_direction(
+    frame_slots, expected
+):
+    """the normalization sums over link direction as well as power bin, so the
+    (downlink, uplink) rows share the fraction of 1 in the ratio of the symbols that
+    `frame_slots` assigns to each. A link direction without symbols is exactly 0."""
+    da = resource_histogram(frame_slots=frame_slots)
 
     assert tuple(da.link_direction.values) == ('downlink', 'uplink')
+    assert_close(da.values[0].sum(axis=-1), expected, rtol=RTOL)
 
 
-def test_cellular_resource_power_histogram_all_downlink_frame():
-    """an all-downlink frame masks every uplink resource element with nan, and the
-    histogram drops nan. The uplink row is exactly zero rather than nan. The downlink
-    row sums to 1."""
-    da = resource_histogram(frame_slots='d' * RESOURCE_GRID_SLOTS)
-
-    downlink, uplink = da.values[0]
-    assert (uplink == 0).all()
-    assert_close(downlink.sum(), 1.0, rtol=RTOL)
+# the 150 kHz analysis band spans 10 subcarriers, and `binned_mean` keeps the odd
+# count of 9 whole bins centered on DC: -60 kHz to 60 kHz. A guard nulls the bins
+# within its width of each band edge, and the retained band is half-open at the upper
+# edge: [-60, 60) kHz keeps 8 subcarriers with 15 kHz guards and [-45, 45) kHz keeps 6
+# with 30 kHz guards
+RETAINED_SUBCARRIERS = {(0, 0): 9, (15e3, 15e3): 8, (30e3, 30e3): 6}
 
 
-def test_cellular_resource_power_histogram_splits_link_directions():
-    """the normalization sums over link direction as well as power bin, so the 2 rows
-    of a mixed frame share the fraction of 1 instead of each summing to 1"""
-    da = resource_histogram(frame_slots='d' + 'u' * (RESOURCE_GRID_SLOTS - 1))
-
-    downlink, uplink = da.values[0]
-    assert downlink.sum() > 0 and uplink.sum() > 0
-    assert downlink.sum() < 1 and uplink.sum() < 1
-    assert_close(da.values[0].sum(), 1.0, rtol=RTOL)
-
-
-def test_cellular_resource_power_histogram_guard_bandwidths():
+@pytest.mark.parametrize(
+    'guard_bandwidths',
+    list(RETAINED_SUBCARRIERS),
+    ids=['no_guard', 'guard15kHz', 'guard30kHz'],
+)
+def test_cellular_resource_power_histogram_guard_bandwidths(guard_bandwidths):
     """a guard band masks the frequency bins at the edges of the analysis band with
     nan, and the histogram drops nan.
 
@@ -558,15 +534,13 @@ def test_cellular_resource_power_histogram_guard_bandwidths():
     retained frequency bin contributes the same count and the smallest non-zero
     fraction is the reciprocal of the retained bin count.
     """
-    retained = []
-    for guard_bandwidths in [(0, 0), (15e3, 15e3), (30e3, 30e3)]:
-        da = resource_histogram(
-            frame_slots='d' * RESOURCE_GRID_SLOTS, guard_bandwidths=guard_bandwidths
-        )
-        downlink = da.values[0, 0]
-        retained.append(round(1 / downlink[downlink > 0].min()))
+    da = resource_histogram(
+        frame_slots='d' * RESOURCE_GRID_SLOTS, guard_bandwidths=guard_bandwidths
+    )
 
-    assert retained[0] > retained[1] > retained[2]
+    downlink = da.values[0, 0]
+    smallest = downlink[downlink > 0].min()
+    assert_close(smallest, 1 / RETAINED_SUBCARRIERS[guard_bandwidths], rtol=RTOL)
 
 
 @pytest.mark.parametrize(

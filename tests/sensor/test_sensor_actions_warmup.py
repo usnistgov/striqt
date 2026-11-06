@@ -16,27 +16,16 @@ from sweep_strategies import (
 )
 from synthetic_sources import (
     ANALYSIS,
-    IQ_ONLY,
-    SCALE_ONLY,
-    preset_capture,
+    CUPY_SOURCE,
+    cupy_sweep,
     preset_sweep,
+    scale_only,
 )
 
 import striqt.sensor as ss
 from striqt.sensor.lib.actions import SweepRunner, registry, warmup
 
-CUPY = SOURCE.replace(array_backend='cupy')
 WARMUP_ENABLED = ss.specs.SweepOptions(skip_warmup=False)
-
-
-def cupy_sweep(captures, *, analysis=IQ_ONLY, loops=(), **kws):
-    return preset_sweep(
-        'single_tone', captures, analysis=analysis, loops=loops, source=CUPY, **kws
-    )
-
-
-def scale_only(**kws):
-    return preset_capture('single_tone', **{**SCALE_ONLY, **kws})
 
 
 # %% derive_warmup_sweep
@@ -74,7 +63,7 @@ def test_warmup_sweep_flattens_to_count_captures(count):
 def test_warmup_sweep_preserves_analysis_and_trigger_and_nulls_the_sink_path():
     """the analysis and the trigger of the source are copied. The sink is copied with
     `path` set to None."""
-    source = CUPY.replace(signal_trigger='cellular_5g_pss_sync')
+    source = CUPY_SOURCE.replace(signal_trigger='cellular_5g_pss_sync')
     sink = ss.specs.ZarrSink(path='somewhere.zarr')
     analysis = ss.specs.BundledAnalysis.from_dict({
         **ANALYSIS.to_dict(),
@@ -149,20 +138,16 @@ def test_warmup_binding_and_sweep_keep_the_analysis_group(isolated_bindings):
 
 # %% warmup_sweep_for
 
+# the GPU condition is the table of test_sensor_compute_gpu.py; these rows are the
+# `skip_warmup` option, set directly and by the sweep a calibration builds
 NO_WARMUP = {
-    'skip_option': preset_sweep('single_tone', (scale_only(),), analysis=ANALYSIS),
-    'numpy_backend': preset_sweep(
-        'single_tone', (scale_only(),), analysis=ANALYSIS, options=WARMUP_ENABLED
-    ),
-    'iq_passthrough': cupy_sweep((scale_only(),), options=WARMUP_ENABLED),
+    'skip_option': cupy_sweep((scale_only(),), analysis=ANALYSIS),
     'calibration': make_calibration_sweep(),
 }
 
 
 @pytest.mark.parametrize('case', list(NO_WARMUP), ids=list(NO_WARMUP))
-def test_warmup_sweep_is_none_when_nothing_needs_the_gpu(case):
-    """a sweep that skips the warmup, runs on numpy, or only passes IQ through has no
-    warmup. The sweep a calibration builds sets `skip_warmup`."""
+def test_warmup_sweep_is_none_under_skip_warmup(case):
     spec = NO_WARMUP[case]
     assert warmup.warmup_sweep_for(as_sweep(spec)) is None
 

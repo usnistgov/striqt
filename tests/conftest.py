@@ -315,7 +315,12 @@ def shaped_arrays(
 
 def gaussian_iq(shape, dtype=np.complex64, seed: int = 0):
     """return standard normal noise of `shape` from `seed`, complex unless `dtype` is
-    real."""
+    real.
+
+    This is the shape-addressed primitive for kernel tests; `striqt.analysis.testing.circular_awgn`
+    is the duration-, rate-, and port-addressed generator that the synthetic sensor
+    sources share.
+    """
     rng = np.random.default_rng(seed)
     x = rng.standard_normal(shape)
     if np.dtype(dtype).kind == 'c':
@@ -543,24 +548,10 @@ def assert_source_released(lookup, sweep):
     assert not isinstance(lookup._get(sweep.source), ss.lib.controller.Controller)
 
 
-@pytest.fixture
-def run_sweep_to_zarr(tmp_path, fake_source_id):
-    """run a sweep end to end into `tmp_path` through the returned
-    ``run(spec, name='out.zarr.zip') -> (spec as run, store path)``. `open_resources`
-    receives no spec path, so the working directory is unchanged."""
-    import striqt.sensor as ss
-
-    def run(spec, name='out.zarr.zip'):
-        path = tmp_path / name
-        spec = spec.replace(sink=spec.sink.replace(path=str(path)))
-        with ss.open_resources(spec, None) as resources:
-            list(ss.iterate_sweep(resources))
-        return spec, path
-
-    return run
-
-
 # %% Spec construction paths
+
+# `construct` parametrizes a test over the two paths; `raises_on_both_paths` asserts
+# one rejection on both; `construct_both` returns both instances for one assertion
 
 
 @pytest.fixture(params=('direct', 'from_dict'))

@@ -23,7 +23,7 @@ captures:
   - port: 0
     center_frequency: 1e9
     gain: 0
-    duration: 5e-3
+    duration: 2e-3
     sample_rate: 125e6
     host_resample: false
 

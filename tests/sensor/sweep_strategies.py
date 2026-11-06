@@ -10,7 +10,7 @@ import msgspec
 import numpy as np
 import xarray as xr
 from hypothesis import strategies as st
-from soapy_factories import MCR
+from soapy_factories import MCR, soapy_capture
 
 import striqt.analysis as sa
 import striqt.sensor as ss
@@ -228,7 +228,6 @@ CalSourceCls = CAL.schema.source
 
 PORT_LOOP = ss.specs.List(field='port', values=(0, 1))
 GAIN_LOOP = ss.specs.List(field='gain', values=(0, -10))
-CAL_LOOP_VALUES = {'port': (0, 1), 'gain': (0, -10), 'center_frequency': (1e9, 2e9)}
 
 
 def make_calibration_capture(**kws):
@@ -547,3 +546,44 @@ def _restricted_cellular_binding(origin):
     return ss.bindings.bind_sensor(
         'cellular_restricted', origin.sensor, schema, register=False, module=__name__
     )
+
+
+# %% air7101b sweeps and delayed datasets
+
+AIR = ss.bindings.air7101b
+
+
+def air_sweep(capture=None, *, analysis=None, **source_kws):
+    """return an `air7101b` sweep of one `capture` (a default `soapy_capture` when None)
+    with `source_kws` forwarded to the source spec and `analysis` set when given"""
+    if capture is None:
+        capture = soapy_capture()
+    kws = {} if analysis is None else {'analysis': analysis}
+    return AIR.sensor.sweep_spec_cls(
+        source=AIR.schema.source(**source_kws), captures=(capture,), **kws
+    )
+
+
+def make_delayed(extra_data, *, sweep, capture, extra_coords=None):
+    """return a `DelayedDataset` of `capture` in `sweep` with no measurements and
+    `extra_data` (the acquisition-side variables such as ``adc_headroom``)"""
+    config = ss.lib.compute.EvaluationOptions(
+        sweep_spec=sweep, registry=sa.registry, as_xarray='delayed', extra_attrs={}
+    )
+    if extra_coords is None:
+        extra_coords = ss.specs.AcquisitionInfo()
+    return ss.lib.compute.DelayedDataset(
+        delayed={},
+        capture=capture,
+        extra_coords=extra_coords,
+        extra_data=extra_data,
+        config=config,
+    )
+
+
+def spectrogram_result(peak_dBm=-100.0, shape=(1, 4, 8), noise_bandwidth=1e4):
+    """return a linear-power spectrogram of `shape` (port, time, frequency) with the
+    center bin of every port at `peak_dBm` above a 1e-30 floor, and its attrs"""
+    spg = np.full(shape, 1e-30, dtype='float32')
+    spg[:, shape[1] // 2, shape[2] // 2] = 10 ** (peak_dBm / 10)
+    return spg, {'noise_bandwidth': noise_bandwidth}

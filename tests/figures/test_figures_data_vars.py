@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import pytest
 from figures_datasets import (
+    CYCLIC_LAG_COUNT,
     POWER_DETECTORS,
     capture_bandwidth,
     cyclic_mean_dBm,
@@ -41,8 +42,9 @@ def plotly_backend() -> PlotlyBackend:
 
 def data_lines(ax) -> list:
     """return the lines of `ax` with one point per cyclic lag sample."""
-    n = make_dataset().sizes['cyclic_lag']
-    return [line for line in ax.get_lines() if len(line.get_xdata()) == n]
+    return [
+        line for line in ax.get_lines() if len(line.get_xdata()) == CYCLIC_LAG_COUNT
+    ]
 
 
 def noise_lines(ax, level: float) -> list:
@@ -86,20 +88,6 @@ def test_data_var_plotters_maps_each_plot_function_name_to_the_module_attribute(
         assert plotters[name] is func
 
 
-def test_data_var_plotters_is_exported_from_the_package() -> None:
-    assert sf.data_var_plotters is data_vars.data_var_plotters
-
-
-def test_data_var_plotters_rejects_item_assignment() -> None:
-    plotters = sf.data_var_plotters()
-    name = next(iter(plot_functions()))
-
-    with pytest.raises(TypeError):
-        plotters[name] = plotters[name]
-
-    assert sf.data_var_plotters()[name] is getattr(data_vars, name)
-
-
 # %% cyclic_channel_power
 
 
@@ -130,7 +118,7 @@ def test_cyclic_channel_power_on_matplotlib() -> None:
         assert len(ax.collections) == N_DETECTORS
         assert len(noise_lines(ax, noise[i_capture])) == 1
 
-    plt.close('all')
+    plt.close(grid.fig)
 
 
 def test_cyclic_channel_power_on_plotly() -> None:
@@ -166,38 +154,26 @@ def test_cyclic_channel_power_rejects_a_statistic_the_data_lacks(
         data_vars.cyclic_channel_power(ds, mpl_backend(), **kwargs)
 
 
-def test_cyclic_channel_power_without_steps_connects_the_samples() -> None:
+def test_cyclic_channel_power_without_steps_in_linear_units() -> None:
+    """with ``steps=False`` the line of each detector connects the samples, and with
+    ``dB=False`` it is drawn at ``10**(dBm/10)`` of the mean statistic"""
     import matplotlib.pyplot as plt
 
     plotter = mpl_backend()
 
-    data_vars.cyclic_channel_power(make_dataset(), plotter, steps=False)
-
-    grid = plotter.last_grid
-    assert grid is not None
-    for ax in grid.axs.flat:
-        for line in data_lines(ax):
-            assert line.get_drawstyle() == 'default'
-
-    plt.close('all')
-
-
-def test_cyclic_channel_power_linear_draws_the_power_in_mW() -> None:
-    """with ``dB=False`` the line of each detector is ``10**(dBm/10)`` of the mean"""
-    import matplotlib.pyplot as plt
-
-    plotter = mpl_backend()
-
-    data_vars.cyclic_channel_power(make_dataset(), plotter, dB=False)
+    data_vars.cyclic_channel_power(make_dataset(), plotter, steps=False, dB=False)
 
     grid = plotter.last_grid
     assert grid is not None
     expected = 10 ** (cyclic_mean_dBm() / 10)
     axs = [ax for ax in grid.axs.flat if ax.get_visible()]
     for i_capture, ax in enumerate(axs):
-        for i, line in enumerate(data_lines(ax)):
+        lines = data_lines(ax)
+        assert len(lines) == N_DETECTORS
+        for i, line in enumerate(lines):
+            assert line.get_drawstyle() == 'default'
             np.testing.assert_allclose(
                 line.get_ydata(), expected[i_capture, i], rtol=1e-5
             )
 
-    plt.close('all')
+    plt.close(grid.fig)

@@ -1,5 +1,9 @@
 """the docstring gate: no personal pronouns or "whose", and no `.lib` paths in public
-docstrings"""
+docstrings; and the structure of the generated measurement docstrings.
+
+The AST scan imports nothing from `striqt`; the registry cell imports
+`striqt.analysis` inside each test.
+"""
 
 import ast
 import pathlib
@@ -65,3 +69,67 @@ def test_docstrings_are_clean() -> None:
     hits = scan()
     lines = [f'{k}: {v}' for k, v in sorted(hits.items())]
     assert not hits, 'docstrings that break a prose rule:\n' + '\n'.join(lines)
+
+
+# %% registry docstrings
+
+
+def test_registered_long_names_are_sentence_case_titles(subtests) -> None:
+    """a title starts with a capital letter or a digit, contains no underscore, and
+    has no surrounding whitespace"""
+    import striqt.analysis as sa
+
+    for info in sa.registry.values():
+        with subtests.test(msg=info.name):
+            title = info.attrs['long_name']
+            assert '_' not in title
+            assert title[0].isupper() or title[0].isdigit()
+            assert title == title.strip()
+
+
+def test_registered_measurement_docstrings_render_the_output_section(subtests) -> None:
+    """every builtin measurement writes the `Output:` section with the placeholders,
+    the registry renders the dtype, every dimension, and every coordinate factory into
+    the section, and the prose above the section names no attr"""
+    import striqt.analysis as sa
+    from striqt.analysis.lib import dataarrays
+
+    for info in sa.registry.values():
+        with subtests.test(msg=info.name):
+            doc = info.func.__doc__
+
+            assert doc is not None
+            assert 'Output:' in doc
+            for placeholder in ('{args}', '{dtype}', '{dims}', '{coords}', '{attrs}'):
+                assert placeholder not in doc
+            assert f'- Array dtype: {info.dtype}' in doc
+            dims = ('port',) + dataarrays.measurement_dims(info)
+            assert '- Dimensions: ' + ', '.join(f'`{dim}`' for dim in dims) in doc
+            for factory in info.coord_factories:
+                name = sa.registry.coordinates[factory].name
+                assert f'* `{name}` (' in doc
+            if not info.coord_factories:
+                assert '- Coordinates:' not in doc
+            if 'units' in info.attrs:
+                assert '* `units`: ' in doc
+            if '- Attributes:' in doc:
+                assert re.search(r'- Attributes:\s+\* ', doc)
+            prose = doc[: doc.index('Output:')]
+            assert ' attr ' not in prose and ' attrs ' not in prose
+
+
+def test_registered_coordinate_factories_have_a_docstring(subtests) -> None:
+    """the first paragraph of the factory docstring is the description of the
+    coordinate in every measurement docstring that lists the coordinate, so the
+    paragraph is a noun phrase rather than a `Returns` sentence"""
+    import inspect
+
+    import striqt.analysis as sa
+
+    for factory, info in sa.registry.coordinates.items():
+        with subtests.test(msg=info.name):
+            doc = inspect.getdoc(factory)
+
+            assert doc, f'{factory.__name__} has no docstring'
+            first = doc.split('\n\n', 1)[0]
+            assert not first.lower().startswith(('return ', 'returns '))

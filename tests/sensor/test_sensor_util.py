@@ -7,7 +7,6 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import threading
-import time
 
 import exceptiongroup
 import pytest
@@ -89,6 +88,18 @@ class TestThreadInterrupts:
 
 
 # %% ExceptionStack / await_and_ignore
+
+
+class ResolvesWhenAwaited(concurrent.futures.Future):
+    """a future that stays pending until `result` is first requested, and then
+    resolves to ``'late'``"""
+
+    def result(self, timeout=None):
+        if not self.done():
+            self.set_result('late')
+        return super().result(timeout)
+
+
 class TestExceptionStack:
     def test_single_exception_is_reraised_at_exit(self):
         stack = util.ExceptionStack()
@@ -160,8 +171,7 @@ class TestAwaitAndIgnore:
             yield pool
 
     @staticmethod
-    def fail(exc, delay=0):
-        time.sleep(delay)
+    def fail(exc):
         raise exc
 
     def test_all_succeed(self, pool):
@@ -174,18 +184,12 @@ class TestAwaitAndIgnore:
             util.await_and_ignore(futures)
 
     def test_awaits_every_future_and_groups_failures(self, pool):
-        started = threading.Event()
-
-        def slow_success():
-            started.wait()
-            time.sleep(0.05)
-            return 'late'
-
+        """a future after the first failure is still awaited, and the failures form
+        one group"""
         first_failure = pool.submit(self.fail, ValueError('first'))
-        late_success = pool.submit(slow_success)
-        second_failure = pool.submit(self.fail, TypeError('second'), 0.02)
+        late_success = ResolvesWhenAwaited()
+        second_failure = pool.submit(self.fail, TypeError('second'))
         futures = [first_failure, late_success, second_failure]
-        started.set()
         with pytest.raises(ExceptionGroup) as info:
             util.await_and_ignore(futures, 'arm sensor')
 
@@ -197,23 +201,13 @@ class TestAwaitAndIgnore:
 
 # %% DebugOnException
 class TestDebugOnException:
-    def test_prints_traceback_and_propagates(self, capsys):
+    @pytest.mark.parametrize('verbose', [False, True], ids=['plain', 'verbose'])
+    def test_prints_traceback_and_propagates(self, capsys, verbose):
         with pytest.raises(ValueError, match='boom'):
-            raise_inside(util.DebugOnException(), ValueError('boom'))
+            raise_inside(util.DebugOnException(verbose=verbose), ValueError('boom'))
         out = capsys.readouterr().out
         assert 'ValueError' in out and 'boom' in out
         assert not util._handling_tracebacks
-
-    def test_verbose(self, capsys):
-        def fail_with_local():
-            local_detail = 'unique-local-value'  # noqa: F841
-            raise ValueError('boom')
-
-        with pytest.raises(ValueError), util.DebugOnException(verbose=True):
-            fail_with_local()
-        out = capsys.readouterr().out
-        assert 'boom' in out
-        assert 'unique-local-value' in out
 
     def test_exception_group_lists_members(self, capsys):
         group = ExceptionGroup(

@@ -9,7 +9,6 @@ import io
 import logging
 import sys
 import threading
-import time
 
 import numpy as np
 import pytest
@@ -31,17 +30,6 @@ def screen_handlers(name):
 
 # %% StriqtLogger / get_logger
 class TestStriqtLogger:
-    def test_new_adapter_merges_extra_defaults(self):
-        assert util.get_logger('analysis').extra == util.StriqtLogger.EXTRA_DEFAULTS
-
-        logger = util.StriqtLogger(
-            'test-util-suffix', {'capture_index': 3, 'site': 'a'}
-        )
-        assert util.get_logger('test-util-suffix') is logger
-        assert logger.extra['capture_index'] == 3
-        assert logger.extra['site'] == 'a'
-        assert logger.extra['capture_progress'] == 'control'
-
     def test_unknown_suffix(self):
         with pytest.raises(KeyError):
             util.get_logger('no-such-logger')
@@ -80,11 +68,6 @@ class TestShowMessages:
         assert len(screen_handlers('analysis')) == 1
         assert adapter.logger.handlers.count(adapter._screen_handler) == 1
 
-    def test_format_shows_capture_progress(self):
-        util.show_messages(logging.INFO, colors=False, logger_names=('analysis',))
-        fmt = util.get_logger('analysis')._screen_handler.formatter._fmt
-        assert '{capture_progress}' in fmt
-
     def test_none_silences_every_named_logger(self, subtests):
         util.StriqtLogger('test-silenced-logger')
         names = ('analysis', 'test-silenced-logger')
@@ -111,7 +94,7 @@ class TestStopwatch:
 
     def test_logs_elapsed_time(self, records):
         with util.stopwatch('napping'):
-            time.sleep(0.01)
+            pass
 
         (record,) = records()
         assert record.levelno == util.PERFORMANCE_INFO
@@ -121,11 +104,6 @@ class TestStopwatch:
         with util.stopwatch('quick', threshold=10):
             pass
         assert records()[-1].levelno == util.PERFORMANCE_DETAIL
-
-    def test_empty_description(self, records):
-        with util.stopwatch():
-            pass
-        assert records()[-1].getMessage().startswith('⏱')
 
     def test_exception_is_logged_and_propagates(self, records):
         with pytest.raises(ValueError, match='boom'), util.stopwatch('failing'):

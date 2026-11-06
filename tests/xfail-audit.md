@@ -39,7 +39,10 @@ at import that the registry and the bundles agree (`xfailed` 43 to 41 on both
 interpreters; 35 to 33 markers). Item 67 was retired on 2026-11-05. The cyclic-prefix
 correlation moved onto the array API (735aa631), which deleted the numba CUDA kernel
 `comms/cp_cuda_jit.py:_corr_at_indices` and the test class of item 67 (33 to 32
-markers). Items are
+markers). On 2026-11-06 (branch `audit-test-suite`) the test-suite audit folded the
+item 6 tests (`xfailed` 41 to 35; 32 markers unchanged) and added item 92
+(`xfailed` 36; 33 markers); the suite then ran 2417 passed, 276 skipped, 36
+xfailed on py39 (3044 to 2729 collected items) and 2417, 274, 36 on py315. Items are
 listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
@@ -93,7 +96,7 @@ item is open.
 
 | # | Test | Confidence | Impact | Fix |
 | --- | --- | --- | --- | --- |
-| 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
+| 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
 | 44 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]` | High | B | trivial |
@@ -119,6 +122,7 @@ item is open.
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
 | 56 | `TestHardwareTimeSync::test_unsupported_source_names_itself` | High | D | trivial |
 | 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
+| 92 | `TestFilterDesign::test_rect_window_filters_without_overlap` | High | C | design decision |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
 ## Tier B: reachable from plausible YAML or a spec default
@@ -127,10 +131,13 @@ item is open.
 
 `tests/waveform/test_waveform_comms_phy_3gpp.py::TestPhy3GPP::test_subframe_cp_layout[15kHz]`,
 `[60kHz]` (added 2026-09-16: tiles `cp_sizes` over a 1 ms subframe and
-asserts the TS 38.211 5.3.1 rule directly);
-`tests/waveform/test_waveform_comms_phy_3gpp.py::TestPhy3GPP::test_slots_tile_the_frame[15kHz]`,
-`[60kHz]`, and `test_lte_and_5g_agree_at_15khz[*]` (5 sample rates); both
-tables draw their marks from the module's `scs_cp_layout` builder
+asserts the TS 38.211 5.3.1 rule directly; since 2026-11-06 the test also
+asserts that the slots tile the 10 ms frame, the check of
+`test_slots_tile_the_frame[15kHz]`, `[60kHz]`; that fold retired the test and
+the two `reason` wordings of the test); and
+`tests/waveform/test_waveform_comms_phy_3gpp.py::TestPhy3GPP::test_lte_and_5g_agree_at_15khz`
+(one sample rate, 15.36 MS/s, since 2026-11-06; 5 sample rates before). The
+layout table draws the marks from the module's `scs_cp_layout` builder
 
 - **Mechanism.** `comms/phy_3gpp.py:176` adds the extra `16κ` CP samples once per 14
   symbols. TS 38.211 §5.3.1 adds them at `l = 0` and `l = 7·2^μ` of each 1 ms
@@ -487,6 +494,28 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   that load two sites are affected.
 - **Fix.** Needs a registry replace-or-namespace policy first. Design decision.
 
+### 92. `design_oafilter` gives a rect window a hop of 0 samples
+
+`tests/waveform/test_waveform_fourier_filters.py::TestFilterDesign::test_rect_window_filters_without_overlap`
+(added 2026-11-06 by the test-suite audit)
+
+- **Mechanism.** `fourier/filters.py` `design_oafilter` returns `overlap_scale=1`
+  and `noverlap=nfft_out` for `window='rect'` and `window=None`, and uses that
+  `noverlap` as the block-multiple check of the array size. `oafilter` and
+  `oaresample` pass `round(nfft * overlap_scale)` to `stft` as `noverlap`, so the
+  hop `nfft - noverlap` is 0 and `stft` raises `ZeroDivisionError`.
+- **Why the test is right.** A rect window sums to a constant at every hop that
+  divides the block, including the whole block (overlap 0), so the overlap-add
+  filter is defined for it; the other windows in the same table (`hann` 1/2,
+  `blackman` 2/3, `blackmanharris` 4/5) run.
+- **Impact.** Python API only as far as the audit established: the in-tree sweeps
+  and the resampler defaults select `hann` or `blackman`, and no spec field was
+  found that reaches `oafilter` with a rect window.
+- **Fix.** Return `overlap_scale=0` for the rect window and keep the array-size
+  check on the block size rather than on `noverlap`; `noverlap` then has one
+  meaning. Which overlap the filter should use for a rect window is a design
+  decision (0 is the COLA minimum; a larger overlap trades time for leakage).
+
 ## Tier D: cosmetic
 
 ### 46. Range error text embeds a DataArray repr
@@ -630,3 +659,33 @@ it was standing in for is enabled.
   carries.** `frame_slots: null` at `:14` is not a field of any measurement in
   `fragments/analysis/quick.yaml`, so every `site-cpu` run logs an unused-key
   warning.
+
+- **`analyze(..., as_xarray=False)` returns `DelayedDataArray` values, not arrays.**
+  `sensor/lib/compute/analyze.py` casts the delayed dict to `dict[str, Array]` for
+  the `False` branch, so the overload annotation and the `Returns:` section
+  disagree with the returned type. Pinned as current behavior in
+  `test_sensor_compute_analyze.py::test_as_xarray_false_returns_the_delayed_arrays`;
+  whether the branch should evaluate the arrays or the annotation should change
+  is a design decision (noted 2026-11-06).
+
+- **`MatplotlibBackend.line` and `fill_between` draw before rejecting a missing
+  facet.** `_facet_subsets` is a generator, so facets before the one the data
+  lacks are drawn on the `target` grid before the `ValueError`. The figures
+  tests keep function-scoped grids for those cases (noted 2026-11-06).
+
+- **Fixed on 2026-11-06 without a ledger number.** `cellular_stft_window_fractions('extended')`
+  returned `(11/24, 13/24)`; 12 symbols of `2560 kappa 2^-mu` span the 15 subcarrier
+  periods of a slot, so the window fill at half the subcarrier spacing is 5/8 and the
+  overlap 3/8 (`test_analysis_measurements_cellular.py::test_window_fractions_hop_one_symbol_per_window`
+  derives both from TS 38.211 §5.3.1). The `io.py` filter for the `zipfile`
+  `Duplicate name` warning never matched (`zipfile` warns with `stacklevel=3`, so
+  the warning is attributed to zarr) and was removed; the warning came from
+  `allocate_store` on an unstaged `ZipStore`, which the production sink never
+  passes, and the io test harness now stages metadata as the sink does. The
+  doubled word in the old-xarray warning of `compute/datasets.py` was fixed.
+  `ZarrCaptureSink` read `Controller.power_units` through `lookup.instance` after a
+  separate `lookup.id` call, so a registered controller without a backend raised
+  `AttributeError` in the sink thread whenever `lookup.id` did not block (the test
+  fixtures stub it; seen on the Jetson on 2026-11-06). `lookup.power_units` now waits
+  on the id slot itself
+  (`test_sensor_sinks.py::test_zarr_capture_sink_waits_for_the_backend_of_a_pending_source`).

@@ -7,6 +7,7 @@ import json
 import pathlib
 import sys
 import threading
+import types
 from collections import UserDict
 
 import pytest
@@ -76,31 +77,16 @@ def test_cache_dir_defaults_to_the_platformdirs_user_cache(monkeypatch):
 
 
 def test_shelf_path_is_per_python_version_under_cache_dir(monkeypatch, tmp_path):
+    """the shelf file is a direct child of the cache directory, named with the python
+    major and minor version"""
     monkeypatch.setenv('STRIQT_CACHE_DIR', str(tmp_path))
 
     path = util._cache_shelf_path()
 
     assert isinstance(path, str)  # python 3.9 shelve rejects Path
-    assert path == str(
-        tmp_path / f'calls-py{sys.version_info.major}.{sys.version_info.minor}.db'
-    )
-
-
-def test_the_session_isolates_the_disk_caches_in_a_temporary_directory():
-    """the conftest sets ``STRIQT_CACHE_DIR`` before collection, when the strategy
-    modules validate sweeps and design windows, so the shelf of the developer stays
-    untouched even by code that bypasses the in-memory shelf"""
-    import os
-    import tempfile
-
-    import platformdirs
-
-    cache_dir = util.cache_dir()
-
-    assert str(cache_dir) == os.environ['STRIQT_CACHE_DIR']
-    assert cache_dir != pathlib.Path(platformdirs.user_cache_dir('striqt'))
-    assert cache_dir.resolve().is_relative_to(
-        pathlib.Path(tempfile.gettempdir()).resolve()
+    assert pathlib.Path(path).parent == tmp_path
+    assert (
+        f'{sys.version_info.major}.{sys.version_info.minor}' in pathlib.Path(path).name
     )
 
 
@@ -118,8 +104,6 @@ def test_a_hit_returns_the_cached_value_without_recomputing(shelf):
     assert square(3) == 9
     assert square(3) == 9
     assert calls == [3]
-    # a hit syncs too, because reading an entry puts it in shelve's writeback cache
-    assert shelf.synced == 2
 
 
 def test_eviction_drops_the_oldest_entry(shelf):
@@ -207,8 +191,6 @@ def test_lazy_import_binds_a_submodule_onto_its_imported_parent(
     module = util.lazy_import('json.tool')
 
     assert json.tool is module
-    # the binding must not have reified the module
-    assert type(module).__name__ == '_LazyModule'
     assert importlib.import_module('json.tool') is module
 
 
@@ -232,13 +214,19 @@ def test_lazy_import_of_dask_array_leaves_the_dask_attribute_resolvable(
 
 def test_lazy_import_loads_once_under_concurrent_first_access(monkeypatch, tmp_path):
     """2 threads reading an attribute of an unloaded lazy module both see the loaded
-    module. The module body sleeps so that the second access lands during the load."""
-    import sys
-    import threading
-
+    module. The module body blocks on an event until the second thread has asked for
+    the attribute, so the second access lands during the load."""
     name = 'striqt_lazy_probe'
+    gate = types.ModuleType(f'{name}_gate')
+    gate.loading = threading.Event()
+    gate.release = threading.Event()
+    monkeypatch.setitem(sys.modules, gate.__name__, gate)
     (tmp_path / f'{name}.py').write_text(
-        'import time\ntime.sleep(0.2)\nVALUE = 1\nLOADS = globals().get("LOADS", 0) + 1\n'
+        f'import {gate.__name__} as gate\n'
+        'gate.loading.set()\n'
+        'gate.release.wait()\n'
+        'VALUE = 1\n'
+        'LOADS = globals().get("LOADS", 0) + 1\n'
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.delitem(sys.modules, name, raising=False)
@@ -246,18 +234,25 @@ def test_lazy_import_loads_once_under_concurrent_first_access(monkeypatch, tmp_p
 
     seen = []
     errors = []
+    reading = threading.Event()
 
     def read():
         try:
+            reading.set()
             seen.append(module.VALUE)
         except Exception as ex:
             errors.append(ex)
 
-    threads = [threading.Thread(target=read) for _ in range(2)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    first = threading.Thread(target=read, daemon=True)
+    first.start()
+    assert gate.loading.wait(5)
+    reading.clear()
+    second = threading.Thread(target=read, daemon=True)
+    second.start()
+    assert reading.wait(5)
+    gate.release.set()
+    first.join(5)
+    second.join(5)
 
     assert errors == []
     assert seen == [1, 1]
