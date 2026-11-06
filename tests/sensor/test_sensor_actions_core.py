@@ -21,17 +21,20 @@ from conftest import assert_source_released
 from numeric_checks import assert_close, cross_backend
 from sweep_strategies import SOURCE
 from synthetic_sources import (
+    ANALYSIS,
     BINDINGS,
     IQ_ONLY,
     SPECTROGRAM,
     FakeTrigger,
     expected_corrected,
+    generator,
     preset_sweep,
     run_in_memory,
     tone_captures,
     tone_sweep,
 )
 
+import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import compute, util
 from striqt.sensor.lib.actions import core
@@ -288,6 +291,164 @@ def test_a_shared_indexer_numbers_two_runs_consecutively():
         assert np.array_equal(
             ds.iq_waveform.values, expected_corrected('single_tone', capture)
         )
+
+
+# %% iterate_captures: select_analysis
+
+
+def keep_iq_waveform(capture, analysis):
+    return sa.specs.helpers.narrow_analysis_group(analysis, ['iq_waveform'])
+
+
+def test_select_analysis_evaluates_only_the_returned_group():
+    """with a 3-measurement analysis and a hook that keeps `iq_waveform`, each
+    result has that one variable. The values are the generator oracle of the
+    capture."""
+    captures = tone_captures(OFFSETS[:2])
+    sweep = tone_sweep(OFFSETS[:2], analysis=ANALYSIS)
+    with ss.open_resources(
+        sweep, None, test_only=True, select_analysis=keep_iq_waveform
+    ) as res:
+        sink = ss.sinks.NoSink(sweep)
+        results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
+
+    assert len(results) == len(captures)
+    for capture, result in zip(captures, results):
+        assert set(result.delayed) == {'iq_waveform'}
+        ds = ss.lib.compute.from_delayed(result)
+        assert np.array_equal(
+            ds.iq_waveform.values, expected_corrected('single_tone', capture)
+        )
+
+
+def test_a_select_analysis_exception_ends_the_pipeline():
+    sweep = tone_sweep(OFFSETS, analysis=ANALYSIS)
+
+    def fail(capture, analysis):
+        raise RuntimeError('selector failed')
+
+    with (
+        ss.open_resources(sweep, None, test_only=True, select_analysis=fail) as res,
+        pytest.raises(RuntimeError, match='selector failed'),
+    ):
+        list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
+
+
+def test_alignment_runs_with_the_trigger_outside_the_selected_group(monkeypatch):
+    """the trigger is resolved from the adjusted group before the hook narrows that
+    group. With and without the hook, `iq_waveform` is the tone generator from
+    index 8, not from index 0."""
+    shift = 8
+    (capture,) = tone_captures(OFFSETS[:1])
+    trigger = FakeTrigger(shift / capture.sample_rate)
+    analyze_module = sys.modules['striqt.sensor.lib.compute.analyze']
+    for module in (ss.lib.compute, analyze_module):
+        monkeypatch.setattr(
+            module, 'get_trigger_from_spec', lambda setup, analysis=None: trigger
+        )
+    # the overlap cache keys on the capture, source, and analysis, not on the
+    # trigger installed above. An entry from an earlier test omits the lag pad.
+    ss.lib.compute.corrections.get_correction_overlaps.cache_clear()
+    sweep = tone_sweep(OFFSETS[:1], analysis=ANALYSIS)
+
+    def run(select_analysis):
+        with ss.open_resources(
+            sweep, None, test_only=True, select_analysis=select_analysis
+        ) as res:
+            sink = ss.sinks.NoSink(sweep)
+            results = [r for r in core.iterate_captures(res, sink=sink) if r]
+        (result,) = results
+        return ss.lib.compute.from_delayed(result).iq_waveform.values
+
+    narrowed = run(keep_iq_waveform)
+    full = run(None)
+    unaligned = expected_corrected('single_tone', capture)
+    aligned = generator(
+        'single_tone',
+        capture,
+        sample_rate=capture.sample_rate,
+        start_index=shift,
+        count=unaligned.shape[-1],
+    )
+
+    assert np.array_equal(narrowed, full)
+    assert not np.array_equal(narrowed, unaligned)
+    assert np.array_equal(narrowed, aligned)
+
+
+# %% iterate_captures: captures
+
+
+def test_captures_runs_the_given_captures_in_the_given_order():
+    """the results follow the reversed capture tuple, not the sweep. The indexer
+    counts from 0 over the plan of the sweep."""
+    captures = tone_captures(OFFSETS)[::-1]
+    sweep = tone_sweep(OFFSETS)
+    datasets = run_in_memory(sweep, captures=captures)
+
+    assert len(datasets) == len(captures)
+    assert index_values(datasets, 'capture_index') == list(range(len(captures)))
+    assert [ds.frequency_offset.item() for ds in datasets] == list(OFFSETS[::-1])
+    for capture, ds in zip(captures, datasets):
+        assert np.array_equal(
+            ds.iq_waveform.values, expected_corrected('single_tone', capture)
+        )
+
+
+def test_a_finite_capture_generator_ends_the_run_after_its_items():
+    """the sweep has one capture. The generator supplies 2 others. The run ends
+    after the 2 captures of the generator."""
+    captures = tone_captures(OFFSETS[1:])
+    sweep = tone_sweep(OFFSETS[:1])
+    datasets = run_in_memory(sweep, captures=(c for c in captures))
+
+    assert [ds.frequency_offset.item() for ds in datasets] == list(OFFSETS[1:])
+    for capture, ds in zip(captures, datasets):
+        assert np.array_equal(
+            ds.iq_waveform.values, expected_corrected('single_tone', capture)
+        )
+
+
+def test_an_endless_capture_generator_ends_when_the_consumer_closes_the_run():
+    """the generator repeats the one capture of the sweep until `done` is set. With
+    a plan of one capture, `capture_index` stays 0 and `sweep_index` counts the
+    repeats. Closing the pipeline generator joins the acquisition thread."""
+    take = 3
+    (capture,) = tone_captures(OFFSETS[:1])
+    sweep = tone_sweep(OFFSETS[:1])
+    done = threading.Event()
+
+    def repeat():
+        while not done.is_set():
+            yield capture
+
+    results = []
+    with ss.open_resources(sweep, None) as res:
+        gen = core.iterate_captures(res, sink=ss.sinks.NoSink(sweep), captures=repeat())
+        for item in gen:
+            if item is not None:
+                results.append(ss.lib.compute.from_delayed(item))
+            if len(results) == take:
+                break
+        done.set()
+        gen.close()
+        for _ in range(200):
+            if not acquisition_threads():
+                break
+            time.sleep(0.01)
+
+    assert acquisition_threads() == []
+    assert index_values(results, 'capture_index') == [0] * take
+    assert index_values(results, 'sweep_index') == list(range(take))
+
+
+def test_captures_with_loop_is_rejected():
+    sweep = tone_sweep(OFFSETS)
+    with (
+        ss.open_resources(sweep, None) as res,
+        pytest.raises(ValueError, match='loop'),
+    ):
+        next(ss.iterate_sweep(res, loop=True, captures=tone_captures(OFFSETS)))
 
 
 # %% iterate_captures: failure propagation

@@ -6,7 +6,7 @@ The `Sweep` is built once per spec and memoized by `build_cellular_sweep`.
 from __future__ import annotations as __
 
 import typing
-from collections.abc import Callable, Collection, Generator, Mapping
+from collections.abc import Callable, Collection, Generator, Iterable, Mapping
 from fractions import Fraction
 from typing import Any, Generic
 
@@ -461,10 +461,12 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
         always_yield: bool = False,
         yield_values: bool = True,
         loop: bool = False,
+        captures: Iterable[SC] | None = None,
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
         return core.iterate_captures(
             resources,
             always_yield=always_yield,
             yield_values=yield_values,
             loop=loop,
+            captures=captures,
         )

@@ -297,6 +297,28 @@ def test_zarr_capture_sink_writes_extra_data_variables(tmp_path):
     assert stored.temperature_source.values.tolist() == ['cpu', 'gpu', 'board']
 
 
+def test_zarr_capture_sink_rejects_a_dataset_missing_an_allocated_variable(tmp_path):
+    """the store is allocated from the whole analysis group of the sweep. A
+    `select_analysis` hook that drops a measurement fails at the first write."""
+    analysis = ss.specs.BundledAnalysis.from_dict({
+        **IQ_ONLY.to_dict(),
+        **SPECTROGRAM.to_dict(),
+    })
+    sweep = zarr_sweep(tmp_path / 'narrowed.zarr', OFFSETS, analysis=analysis)
+    unsunk = sweep.replace(sink=sweep.sink.replace(path=None))
+    callbacks = ss.lib.resources.SweepCallbacks(
+        select_analysis=lambda capture, analysis: (
+            sa.specs.helpers.narrow_analysis_group(analysis, ['iq_waveform'])
+        )
+    )
+    with (
+        pytest.raises(ValueError, match=r"\['spectrogram'\]"),
+        ss.open_resources(unsunk, None) as res,
+        ss.sinks.ZarrCaptureSink(sweep) as sink,
+    ):
+        list(ss.lib.actions.core.iterate_captures(res, sink=sink, callbacks=callbacks))
+
+
 def burst_segments(dd, burst):
     """return `dd` as the `burst` segments of one capture of `burst` acquisitions, each
     with its own `burst_index`"""
