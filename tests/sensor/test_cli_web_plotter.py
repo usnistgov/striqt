@@ -41,6 +41,21 @@ def preview_state(sweep) -> web_plotter.PreviewState:
     return state
 
 
+class HookedStop(threading.Event):
+    """an Event with a `wait` that calls ``on_wait(self)`` and returns without
+    blocking"""
+
+    def __init__(self, on_wait):
+        super().__init__()
+        self.on_wait = on_wait
+        self.waits = 0
+
+    def wait(self, timeout=None):
+        self.waits += 1
+        self.on_wait(self)
+        return self.is_set()
+
+
 @pytest.fixture(scope='module')
 def analyzed():
     """the `DelayedDataset` of one spectrogram capture"""
@@ -107,21 +122,17 @@ def test_selected_captures_follows_the_selection_at_the_next_item():
 
 
 def test_selected_captures_waits_while_not_running():
+    """a paused generator polls `stop` and yields nothing until `running` is set"""
     sweep = looped_sweep()
     state = preview_state(sweep)
+    state.stop = HookedStop(lambda stop: setattr(state, 'running', True))
     items = web_plotter.selected_captures(state)
     first = next(items)
+    assert state.stop.waits == 0
 
     state.running = False
-    resumed = []
-    worker = threading.Thread(target=lambda: resumed.append(next(items)))
-    worker.start()
-    worker.join(0.3)
-    assert worker.is_alive(), 'the generator yielded while paused'
-
-    state.running = True
-    worker.join(2.0)
-    assert resumed == [first]
+    assert next(items) == first
+    assert state.stop.waits == 1
     state.stop.set()
 
 
@@ -129,9 +140,9 @@ def test_selected_captures_waits_through_an_empty_selection():
     sweep = looped_sweep()
     state = preview_state(sweep)
     state.selected_loops = {('capture', 'snr'): 5}
-    items = web_plotter.selected_captures(state)
-    threading.Timer(0.3, state.stop.set).start()
-    assert list(items) == []
+    state.stop = HookedStop(threading.Event.set)
+    assert list(web_plotter.selected_captures(state)) == []
+    assert state.stop.waits == 1
 
 
 # %% capture selection messages

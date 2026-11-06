@@ -377,7 +377,13 @@ class TestSavedCorrections:
 # %% closed loop through the fake SoapySDR device
 
 FAKE_TONE = (1.505e9, -60.0)
-# 5 ms at 40 MHz gives a 1-sigma statistical error near 0.015 dB
+# The least averaged grid points are the 2 ms captures at the 40 MHz analysis
+# bandwidth: N = 8e4 independent samples, for a standard deviation of
+# 4.34/sqrt(N) = 0.015 dB on each rms power estimate. The Y-factor ratio of 2
+# estimates gives sqrt(2) x that on the noise figure (0.022 dB). The temperature
+# T0 (F - 1), compared in dB, is the most sensitive variable: F/(F - 1) = 1.46 x the
+# noise figure error at NF = 5 dB, or 0.033 dB, and 3 sigma is 0.098 dB. At 1 ms
+# the same bound is 0.14 dB.
 FAKE_TOL_DB = 0.1
 
 

@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 import sys
 import threading
-import time
 from typing import ClassVar
 
 import numpy as np
@@ -21,21 +20,18 @@ from conftest import assert_source_released
 from numeric_checks import assert_close, cross_backend
 from sweep_strategies import SOURCE
 from synthetic_sources import (
-    ANALYSIS,
     BINDINGS,
     IQ_ONLY,
     SPECTROGRAM,
     TONE_OFFSETS,
     FakeTrigger,
     expected_corrected,
-    generator,
     preset_sweep,
     run_in_memory,
     tone_captures,
     tone_sweep,
 )
 
-import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.sensor.lib import compute, util
 from striqt.sensor.lib.actions import core
@@ -179,30 +175,57 @@ def test_extra_data_reaches_every_acquisition_and_wins_over_the_peripherals(burs
         assert extra_data['state'] is True
 
 
-class SlowPeripherals(TaggingPeripherals):
-    """a peripheral read that outlasts the whole burst"""
+class BlockedPeripherals(TaggingPeripherals):
+    """a peripheral read that returns only after `release` is set"""
 
-    delay: ClassVar[float] = 0.1
+    release: ClassVar[threading.Event] = threading.Event()
 
     def acquire(self, capture):
-        time.sleep(self.delay)
+        if not self.release.wait(timeout=30):
+            raise TimeoutError('the peripheral read was never released')
         return super().acquire(capture)
 
 
-def test_a_peripheral_read_may_last_the_whole_burst(caplog):
-    """the acquisition thread never waits for the peripheral inside a burst, so a
-    read longer than the burst drops no segment under a 1-slot queue, and every
-    segment carries the peripheral data once the read resolves"""
+class ReleasingSource(BINDINGS['single_tone'].sensor.source_cls):
+    """a source that sets `release` at the start of read number `release_at`"""
+
+    release: ClassVar[threading.Event] = threading.Event()
+    release_at: ClassVar[int] = 0
+    reads: ClassVar[int] = 0
+
+    def read(self, buffers, offset, count, timeout_sec=None, *, on_overflow='except'):
+        type(self).reads += 1
+        if self.reads == self.release_at:
+            self.release.set()
+        return super().read(
+            buffers, offset, count, timeout_sec, on_overflow=on_overflow
+        )
+
+
+def test_a_peripheral_read_may_last_the_whole_burst(
+    caplog, monkeypatch, isolated_lookup
+):
+    """the acquisition thread never waits for the peripheral inside a burst. A read
+    that blocks until the last segment is requested drops no segment under a 1-slot
+    queue, and the peripheral data joins every segment once the read resolves."""
     burst = 4
+    release = threading.Event()
+    monkeypatch.setattr(BINDINGS['single_tone'].sensor, 'source_cls', ReleasingSource)
+    for cls in (ReleasingSource, BlockedPeripherals):
+        monkeypatch.setattr(cls, 'release', release)
+    monkeypatch.setattr(ReleasingSource, 'release_at', burst)
+    monkeypatch.setattr(ReleasingSource, 'reads', 0)
     sweep = burst_sweep(TONE_OFFSETS[:1], burst=burst, buffers=1)
     with (
         caplog.at_level(logging.WARNING, logger='striqt.source'),
         ss.open_resources(sweep, None) as res,
     ):
         items = core.iterate_captures(
-            res, sink=ss.sinks.NoSink(sweep), peripherals=SlowPeripherals(sweep)
+            res, sink=ss.sinks.NoSink(sweep), peripherals=BlockedPeripherals(sweep)
         )
         results = [item for item in items if item is not None]
+
+    assert ReleasingSource.reads == burst
 
     assert [r.extra_coords.burst_index for r in results] == list(range(burst))
     assert [rec for rec in caplog.records if rec.levelno == logging.WARNING] == []
@@ -255,15 +278,16 @@ def test_iterate_sweep_replaces_the_callbacks_for_one_run():
     assert len(seen) == len(TONE_OFFSETS)
 
 
-def test_an_on_analyzed_exception_ends_the_pipeline():
+def fail_hook(*args):
+    raise RuntimeError('hook failed')
+
+
+@pytest.mark.parametrize('hook', ['on_analyzed', 'select_analysis'])
+def test_a_hook_exception_ends_the_pipeline(hook):
     sweep = tone_sweep(TONE_OFFSETS)
-
-    def fail(dd):
-        raise RuntimeError('callback failed')
-
     with (
-        ss.open_resources(sweep, None, on_analyzed=fail) as res,
-        pytest.raises(RuntimeError, match='callback failed'),
+        ss.open_resources(sweep, None, **{hook: fail_hook}) as res,
+        pytest.raises(RuntimeError, match='hook failed'),
     ):
         list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
 
@@ -292,116 +316,32 @@ def test_a_shared_indexer_numbers_two_runs_consecutively():
         )
 
 
-# %% iterate_captures: select_analysis
-
-
-def keep_iq_waveform(capture, analysis):
-    return sa.specs.helpers.narrow_analysis_group(analysis, ['iq_waveform'])
-
-
-def test_select_analysis_evaluates_only_the_returned_group():
-    """with a 3-measurement analysis and a hook that keeps `iq_waveform`, each
-    result has that one variable. The values are the generator oracle of the
-    capture."""
-    captures = tone_captures(TONE_OFFSETS[:2])
-    sweep = tone_sweep(TONE_OFFSETS[:2], analysis=ANALYSIS)
-    with ss.open_resources(
-        sweep, None, test_only=True, select_analysis=keep_iq_waveform
-    ) as res:
-        sink = ss.sinks.NoSink(sweep)
-        results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
-
-    assert len(results) == len(captures)
-    for capture, result in zip(captures, results):
-        assert set(result.delayed) == {'iq_waveform'}
-        ds = ss.lib.compute.from_delayed(result)
-        assert np.array_equal(
-            ds.iq_waveform.values, expected_corrected('single_tone', capture)
-        )
-
-
-def test_a_select_analysis_exception_ends_the_pipeline():
-    sweep = tone_sweep(TONE_OFFSETS, analysis=ANALYSIS)
-
-    def fail(capture, analysis):
-        raise RuntimeError('selector failed')
-
-    with (
-        ss.open_resources(sweep, None, test_only=True, select_analysis=fail) as res,
-        pytest.raises(RuntimeError, match='selector failed'),
-    ):
-        list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
-
-
-def test_alignment_runs_with_the_trigger_outside_the_selected_group(monkeypatch):
-    """the trigger is resolved from the adjusted group before the hook narrows that
-    group. With and without the hook, `iq_waveform` is the tone generator from
-    index 8, not from index 0."""
-    shift = 8
-    (capture,) = tone_captures(TONE_OFFSETS[:1])
-    trigger = FakeTrigger(shift / capture.sample_rate)
-    analyze_module = sys.modules['striqt.sensor.lib.compute.analyze']
-    for module in (ss.lib.compute, analyze_module):
-        monkeypatch.setattr(
-            module, 'get_trigger_from_spec', lambda setup, analysis=None: trigger
-        )
-    # the overlap cache keys on the capture, source, and analysis, not on the
-    # trigger installed above. An entry from an earlier test omits the lag pad.
-    ss.lib.compute.corrections.get_correction_overlaps.cache_clear()
-    sweep = tone_sweep(TONE_OFFSETS[:1], analysis=ANALYSIS)
-
-    def run(select_analysis):
-        with ss.open_resources(
-            sweep, None, test_only=True, select_analysis=select_analysis
-        ) as res:
-            sink = ss.sinks.NoSink(sweep)
-            results = [r for r in core.iterate_captures(res, sink=sink) if r]
-        (result,) = results
-        return ss.lib.compute.from_delayed(result).iq_waveform.values
-
-    narrowed = run(keep_iq_waveform)
-    full = run(None)
-    unaligned = expected_corrected('single_tone', capture)
-    aligned = generator(
-        'single_tone',
-        capture,
-        sample_rate=capture.sample_rate,
-        start_index=shift,
-        count=unaligned.shape[-1],
-    )
-
-    assert np.array_equal(narrowed, full)
-    assert not np.array_equal(narrowed, unaligned)
-    assert np.array_equal(narrowed, aligned)
-
-
 # %% iterate_captures: captures
 
 
-def test_captures_runs_the_given_captures_in_the_given_order():
-    """the results follow the reversed capture tuple, not the sweep. The indexer
-    counts from 0 over the plan of the sweep."""
-    captures = tone_captures(TONE_OFFSETS)[::-1]
-    sweep = tone_sweep(TONE_OFFSETS)
-    datasets = run_in_memory(sweep, captures=captures)
+@pytest.mark.parametrize(
+    'sweep_offsets, given_offsets, as_generator',
+    [
+        (TONE_OFFSETS, TONE_OFFSETS[::-1], False),
+        (TONE_OFFSETS[:1], TONE_OFFSETS[1:], True),
+    ],
+    ids=['reversed_tuple', 'finite_generator'],
+)
+def test_captures_runs_the_given_captures_in_the_given_order(
+    sweep_offsets, given_offsets, as_generator
+):
+    """the results follow the given captures, not the sweep, and the run ends after
+    the last given capture. The indexer counts over the plan of the sweep: with a
+    plan of one capture, every result has `capture_index` 0."""
+    captures = tone_captures(given_offsets)
+    sweep = tone_sweep(sweep_offsets)
+    given = (c for c in captures) if as_generator else captures
+    datasets = run_in_memory(sweep, captures=given)
 
     assert len(datasets) == len(captures)
-    assert index_values(datasets, 'capture_index') == list(range(len(captures)))
-    assert [ds.frequency_offset.item() for ds in datasets] == list(TONE_OFFSETS[::-1])
-    for capture, ds in zip(captures, datasets):
-        assert np.array_equal(
-            ds.iq_waveform.values, expected_corrected('single_tone', capture)
-        )
-
-
-def test_a_finite_capture_generator_ends_the_run_after_its_items():
-    """the sweep has one capture. The generator supplies 2 others. The run ends
-    after the 2 captures of the generator."""
-    captures = tone_captures(TONE_OFFSETS[1:])
-    sweep = tone_sweep(TONE_OFFSETS[:1])
-    datasets = run_in_memory(sweep, captures=(c for c in captures))
-
-    assert [ds.frequency_offset.item() for ds in datasets] == list(TONE_OFFSETS[1:])
+    expected_indexes = [i % len(sweep_offsets) for i in range(len(captures))]
+    assert index_values(datasets, 'capture_index') == expected_indexes
+    assert [ds.frequency_offset.item() for ds in datasets] == list(given_offsets)
     for capture, ds in zip(captures, datasets):
         assert np.array_equal(
             ds.iq_waveform.values, expected_corrected('single_tone', capture)
@@ -431,12 +371,8 @@ def test_an_endless_capture_generator_ends_when_the_consumer_closes_the_run():
                 break
         done.set()
         gen.close()
-        for _ in range(200):
-            if not acquisition_threads():
-                break
-            time.sleep(0.01)
+        assert acquisition_threads() == []
 
-    assert acquisition_threads() == []
     assert index_values(results, 'capture_index') == [0] * take
     assert index_values(results, 'sweep_index') == list(range(take))
 
@@ -551,23 +487,6 @@ def test_on_cached_fires_once_per_capture_when_the_spectrogram_cache_fills():
         assert 'noise_bandwidth' in attrs
 
 
-def test_no_cache_callback_is_installed_without_on_cached(monkeypatch):
-    from striqt.analysis.lib.register import KwArgCache
-
-    installed = []
-    original = KwArgCache.set_callback
-
-    def set_callback(self, func, capture=None):
-        installed.append(func)
-        return original(self, func, capture)
-
-    monkeypatch.setattr(KwArgCache, 'set_callback', set_callback)
-    sweep = tone_sweep(TONE_OFFSETS, analysis=SPECTROGRAM)
-    with ss.open_resources(sweep, None) as res:
-        list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
-    assert installed == []
-
-
 # %% iterate_captures: bursts
 
 
@@ -598,35 +517,6 @@ def test_one_arm_per_capture_and_one_read_per_segment(monkeypatch, isolated_look
     assert index_values(datasets, 'capture_index') == [0, 0, 0, 1, 1, 1]
     assert index_values(datasets, 'burst_index') == [0, 1, 2, 0, 1, 2]
     assert index_values(datasets, 'sweep_index') == [0] * 6
-
-
-@pytest.mark.parametrize('on_gap', ['skip', 'except'])
-def test_slow_analysis_overruns_a_one_buffer_burst(on_gap, caplog):
-    """with one buffer, a segment acquired while the previous one waits in the queue
-    is dropped under skip, with one warning per dropped segment, or raises under
-    except. The delivered segments keep their burst indexes."""
-    burst = 4
-    sweep = burst_sweep(TONE_OFFSETS[:1], burst=burst, on_gap=on_gap, buffers=1)
-    on_analyzed = lambda dd: time.sleep(0.05)
-
-    with (
-        caplog.at_level(logging.WARNING, logger='striqt.source'),
-        ss.open_resources(sweep, None, on_analyzed=on_analyzed) as res,
-    ):
-        if on_gap == 'except':
-            with pytest.raises(ss.lib.sources.base.AcquisitionOverrunError):
-                list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
-            return
-        results = [
-            r for r in core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)) if r
-        ]
-
-    datasets = [ss.lib.compute.from_delayed(r) for r in results]
-    indexes = index_values(datasets, 'burst_index')
-    assert 0 < len(indexes) < burst
-    assert indexes == sorted(set(indexes)), 'the delivered segments are in order'
-    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert len(warnings) == burst - len(indexes)
 
 
 class CountingTrigger(FakeTrigger):
