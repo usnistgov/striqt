@@ -26,7 +26,8 @@ def test_cwd_is_unchanged_without_a_spec_path(tmp_path, monkeypatch):
 
 
 def test_cwd_follows_the_spec_directory(tmp_path, monkeypatch):
-    # open_resources does not change back; monkeypatch restores at teardown
+    # open_resources does not change back, so monkeypatch restores the directory at
+    # teardown
     monkeypatch.chdir(os.getcwd())
     spec_dir = tmp_path / 'sub'
     spec_dir.mkdir()

@@ -99,7 +99,7 @@ def test_sweep_tolerances_follow_the_looped_captures():
 
     assert [c for c, _ in entries] == list(captures)
     # iq_waveform passes the correction error straight through, so it alone orders the
-    # captures; the spectral products also differ in nfft between the 2 presets
+    # captures. The spectral products also differ in nfft between the 2 presets
     assert (
         entries[1][1]['iq_waveform'].on_peak.rms
         < entries[0][1]['iq_waveform'].on_peak.rms

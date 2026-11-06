@@ -827,8 +827,8 @@ def test_adjust_captures_missing_required_default_lookup_raises():
         S.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None)
 
 
-# a remap of snr keyed on frequency_offset, the capture it is applied to, and the
-# adjustment it produces. PER_PORT hits 100 and misses 200.
+# (remap kws, capture kws, expected adjustment) for a remap of snr keyed on
+# frequency_offset. PER_PORT hits 100 and misses 200.
 SCALAR_HIT = {'frequency_offset': 100.0}
 SCALAR_MISS = {'frequency_offset': 300.0}
 PER_PORT = {'port': (0, 1), 'frequency_offset': (100.0, 200.0)}

@@ -73,14 +73,14 @@ BLOCKS = {
     'iq_waveform': ss.specs.CellularIQWaveformSpec(),
 }
 
-# the OFDM symbol grid: SCS/2 resolution with 13/28 overlap and 15/28 window fill
+# the OFDM symbol grid
 GRID = {
     'frequency_resolution': SCS / 2,
     'fractional_overlap': Fraction(13, 28),
     'window_fill': Fraction(15, 28),
 }
 
-# block field -> (measurement name, the parameters the spacing fills in). A resource
+# block field -> (measurement name, the parameters filled from the spacing). A resource
 # block is 12 subcarriers (TS 38.211 §4.4.4.1)
 MEASUREMENTS = {
     'spectrogram': ('spectrogram', {**GRID, 'integration_bandwidth': 12 * SCS}),
@@ -191,8 +191,8 @@ def test_match_channel_rejects_ports_at_different_frequencies():
 
 # %% resolve_capture
 #
-# nr_sample_rate steps in multiples of 896 x 30 kHz = 26.88 MS/s above the channel
-# bandwidth plus a 250 kHz transition band
+# nr_sample_rate is the smallest multiple of 896 x 30 kHz = 26.88 MS/s at or above the
+# channel bandwidth plus a 250 kHz transition band
 
 
 @pytest.mark.parametrize(
@@ -328,7 +328,7 @@ def test_time_series_detector_period_defaults_to_one_symbol(detector_period, exp
 
 def test_cellular_analysis_is_the_group_of_the_binding():
     """the generated analysis is an instance of the `schema.analysis` of the binding,
-    including a group restricted to the cellular measurements"""
+    here a group restricted to the cellular measurements"""
     cls = restricted_cellular_binding().sensor.sweep_spec_cls
     block = ss.specs.Cellular5GNRAnalysis(
         channel_power_time_series=BLOCKS['channel_power_time_series']
@@ -558,8 +558,8 @@ def test_registry_runs_the_cellular_sweep_with_its_runner():
 
 
 def test_in_memory_run_yields_one_dataset_per_capture_at_the_derived_rate():
-    """a 20 MHz channel derives 26.88 MS/s, and 1 ms of the time series at 30 kHz
-    spacing is 28 symbols"""
+    """the sample rate of a 20 MHz channel is 26.88 MS/s, and 1 ms of the time series
+    at 30 kHz spacing is 28 symbols"""
     channel = make_cell_channel(channel_bandwidth=20e6)
     captures = (make_cellular_capture(), make_cellular_capture(gain=0))
     spec = make_cellular_sweep(

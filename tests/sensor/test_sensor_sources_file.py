@@ -34,7 +34,7 @@ from striqt.waveform.arrays import accum_rtol
 FS = SCALE_ONLY['sample_rate']
 CENTER_FREQUENCY = 3.7e9
 START_TIME = np.datetime64('2026-01-01T00:00:00', 'ns')
-# the file spans 2 ms; the captures read 0.5 ms so that the tail overlap of a
+# the file spans 2 ms. The captures read 0.5 ms so that the tail overlap of a
 # filtered capture (16640 samples at FS) is still inside the file
 FILE_DURATION = 2e-3
 FILE_SAMPLES = round(FILE_DURATION * FS)
@@ -188,8 +188,8 @@ def test_zarr_read_timestamps(zarr_iq_file, lead):
 
 
 def test_zarr_reads_after_one_arm_are_stamped_one_read_apart(zarr_iq_file):
-    """a second read at buffer position 0 after one `arm` is stamped the samples of
-    the first read after it, with `start_time` of the store still at file index 0"""
+    """a second read at buffer position 0 after one `arm` is stamped one read duration
+    after the first, with the `start_time` of the store still at file index 0"""
     lead = 512
     count = 8
     source = ss.lib.sources.ZarrIQSource(zarr_spec(zarr_iq_file, capture_index=0))
@@ -423,7 +423,7 @@ def npy_file(tmp_path_factory):
     'file', [lf('mat_file_1row'), lf('npy_file')], ids=['mat', 'npy']
 )
 def test_mat_loop_repeats_file(file):
-    """with loop=True a capture longer than the file wraps around to index 0"""
+    """with ``loop=True`` a capture longer than the file wraps around to index 0"""
     duration = 1.5 * FILE_DURATION
     capture = file_capture(port=0, duration=duration)
     stages = acquire_corrected(
@@ -482,7 +482,7 @@ def tdms_spec(tdms_file, **kws):
     return ss.specs.TDMSSource(path=str(tdms_file.path), **kws)
 
 
-# int16 -> float32 is exact; the scale and the product each round once
+# int16 -> float32 is exact. The scale and the product each round once
 TDMS_SCALING_TOL = {'rtol': accum_rtol(np.float32, 2)}
 
 

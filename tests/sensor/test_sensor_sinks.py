@@ -135,7 +135,7 @@ def test_zarr_capture_sink_allocates_the_store_at_open(tmp_path):
             assert set(stored.data_vars) == set(sweep.analysis.to_dict())
             assert stored.iq_waveform.dtype == np.complex64
             assert {'capture_index', 'port', 'source_id'} <= set(stored.coords)
-            # the fixed coordinates are written at open; no row of a variable is
+            # the fixed coordinates are written at open, and no row of a variable is
             chunk_files = [
                 p
                 for name in stored.data_vars
@@ -150,9 +150,9 @@ def test_zarr_capture_sink_allocates_the_store_at_open(tmp_path):
 def test_zarr_capture_sink_waits_for_the_backend_of_a_pending_source(
     tmp_path, isolated_lookup, monkeypatch
 ):
-    """a sink constructed while the source is between registration and backend
-    construction reads the power units of the backend once it exists, also when
-    `lookup.id` is replaced by a stub that does not wait (as the test fixtures do)"""
+    """the sink waits for the backend of a source that is registered but not yet
+    constructed, and reads the power units once the backend exists. A `lookup.id`
+    stub that does not wait does not change that."""
     from threading import Event, Thread
 
     sweep = tone_sweep((1e6,), sink=ss.specs.ZarrSink(path=str(tmp_path / 'p.zarr')))
@@ -348,7 +348,7 @@ def pending(dd, **override):
 
 def test_zarr_capture_sink_defers_rows_behind_a_pending_peripheral_read(tmp_path):
     """rows wait in acquisition order until the peripheral read of the head
-    resolves; the peripheral dict then joins the rows under the override"""
+    resolves. The peripheral dict then joins the rows under the override."""
     burst = 3
     unsunk = tone_sweep((1e6,))
     (dd,) = [dd for dd in run_to_store(unsunk) if dd is not None]

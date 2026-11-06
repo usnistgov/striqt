@@ -61,8 +61,8 @@ IMPULSE_TIME = 0.5e-3
 IMPULSE_POWER_DB = -6.0
 
 # 1 MHz lies on the FFT grid of the padded acquisition of both resample presets
-# (18750 and 13200 samples at 6.25 MS/s), so its resample is exact up to roundoff;
-# the Gibbs ripple of an off-grid tone is tested at the kernel (tests/waveform)
+# (18750 and 13200 samples at 6.25 MS/s), so its resample is exact up to roundoff.
+# The Gibbs ripple of an off-grid tone is tested at the kernel (tests/waveform)
 TONE_FREQUENCY = 1e6
 # above bw/2 plus the 250 kHz transition band of the analysis filter, below fs/2
 OUT_OF_BAND_FREQUENCY = 2.9e6
@@ -106,11 +106,7 @@ def _build_iq(binding, capture, overlaps, xp=np):
 
 
 def _build_iq_for_trigger(binding, capture, trigger, xp):
-    """return `_build_iq` with the tail overlap sized for `trigger`.
-
-    `Controller.acquire` sizes the overlap from the trigger named in the analysis
-    spec. A stand-in trigger has no name there, and the sizing is repeated here.
-    """
+    """return `_build_iq` with the tail overlap sized for `trigger`"""
     lag_pad = corrections._get_max_trigger_lag(FUNCTION_SOURCE, capture, trigger)
     overlaps = corrections._get_resampler_overlaps(
         capture, FUNCTION_SOURCE, min_overlap=lag_pad
@@ -135,9 +131,9 @@ def assert_impulse_at(x, capture, time):
     'preset', [SCALE_ONLY, FILTER_ONLY], ids=['scale_only', 'filter_only']
 )
 def test_output_is_the_generator_from_index_zero(preset, array_backend):
-    """a sawtooth exposes a trim that is off by any number of samples, unlike a tone.
-    The discontinuities of a ramp ring through a brick-wall resampler, and the
-    resample presets are left to the impulse test."""
+    """a trim that is off by any number of samples changes a sawtooth, unlike a tone.
+    The discontinuities of a ramp ring through a brick-wall resampler, so the resample
+    presets are tested with the impulse instead."""
     capture = preset_capture('sawtooth', **preset, period=1e-4)
     stages = acquire_corrected('sawtooth', capture, array_backend=array_backend)
     expected = expected_corrected('sawtooth', capture)
@@ -187,9 +183,9 @@ def test_impulse_level_through_the_stages(
         else:
             # a brick-wall resample keeps the N_out central bins of the flat
             # spectrum and scales by N_out/N_in, so the on-sample impulse becomes
-            # fs/fs_sdr; the inverse FFT of a flat spectrum concentrates roundoff on
-            # the impulse's on-peak sample the way a tone's FFT does in its on-peak
-            # bin
+            # fs/fs_sdr. The inverse FFT of a flat spectrum concentrates roundoff on
+            # the on-peak sample of the impulse, as the FFT of a tone does in the
+            # on-peak bin
             ratio = fs / fs_sdr
             tol = _resample_tol(preset, stages.raw)
             if tol:
@@ -292,8 +288,8 @@ def test_overwrite_x_false_leaves_the_acquisition_intact(array_backend):
 def test_analysis_filter_passband(
     preset, frequency, passes, array_backend, resample_path
 ):
-    """the filtered waveform is the resampled tone, with no delay, inside
-    `analysis_bandwidth`, and rejects the tone past the transition band on both paths"""
+    """inside `analysis_bandwidth`, the filtered waveform is the resampled tone with no
+    delay. Past the transition band, the filter rejects the tone on both paths."""
     capture = preset_capture(
         'single_tone', **preset, frequency_offset=frequency, snr=None
     )
@@ -362,10 +358,10 @@ def test_overwrite_x_decides_whether_the_scaling_consumes_x(overwrite_x):
 def test_overwrite_x_decides_whether_resampling_consumes_x(
     overwrite_x, corrections_flags
 ):
-    """on the oaresample path the resampled waveform is written into the acquisition
-    buffer under `overwrite_x`, and `x` of the conditioned copy becomes a
-    `ConsumedBuffer` that raises on a read; without it the buffer is intact and the
-    output is a fresh array with the same values"""
+    """under `overwrite_x`, the oaresample path writes the resampled waveform into the
+    acquisition buffer, and `x` of the conditioned copy becomes a `ConsumedBuffer`
+    that raises on a read. Without `overwrite_x`, the buffer is intact and the output
+    is a fresh array with the same values."""
     corrections_flags(use_oaresample=True)
     capture = preset_capture(
         'single_tone', **RESAMPLE_ONLY, frequency_offset=TONE_FREQUENCY, snr=None
@@ -537,9 +533,9 @@ def _stopband_to_passband_power(x, capture):
 
 
 def test_oaresample_leaks_in_band_noise_no_more_than_the_fir(corrections_flags):
-    """white noise through the resampled, filtered preset: the power that the
-    oaresample path leaves past the transition band is within the suite's FIR leakage
-    bound of what the time-domain FIR leaves there"""
+    """with white noise through the resampled, filtered preset, the power that the
+    oaresample path leaves past the transition band exceeds the power that the
+    time-domain FIR leaves there by at most ``FIR_LEAKAGE**2``"""
     capture = preset_capture('noise', **RESAMPLE_FILTER, noise_psd=1e-12)
     ratios = {}
     for path in ('resample', 'oaresample'):
@@ -806,8 +802,8 @@ def test_overlaps_cover_the_filter_and_trigger_pads(
             tail * capture.sample_rate / fs
             >= filter_out + max_lag * capture.sample_rate
         )
-    # the sum of the two is an overlap that read_iq accepts, and it asks the source
-    # for exactly the padded resampler input
+    # the sum of the two is an overlap that read_iq accepts, and read_iq asks the
+    # source for exactly the padded resampler input
     read_count = buffers.get_read_count(capture, FUNCTION_SOURCE, overlap=lead + tail)
     assert read_count == source_count(capture, FUNCTION_SOURCE) + lead + tail
 
@@ -847,7 +843,7 @@ DOCUMENTED_OVERLAPS = {
         'filter_only': (4608, 4608),
     },
     # the oaresample path sizes the blocks of the resampled presets from
-    # MIN_OARESAMPLE_FFT_SIZE with the hann window; a preset served at the
+    # MIN_OARESAMPLE_FFT_SIZE with the hann window. A preset served at the
     # firmware rate pads for the FIR as on the default path
     'oaresample': {
         'resample_filter': (9375, 15625),
@@ -861,8 +857,7 @@ DOCUMENTED_OVERLAPS = {
 @pytest.mark.parametrize('name', list(PRESETS))
 def test_preset_overlaps_are_acquirable(name, resample_path):
     """the preset overlaps equal the documented values of each path (the default
-    path's are in `synthetic_sources`). A change in the overlap sizing then fails here
-    rather than as unrelated acquisition failures."""
+    path's are in `synthetic_sources`)"""
     capture = preset_capture('single_tone', **PRESETS[name])
     overlaps = corrections.get_correction_overlaps(capture, FUNCTION_SOURCE)
     assert overlaps == DOCUMENTED_OVERLAPS[resample_path][name]

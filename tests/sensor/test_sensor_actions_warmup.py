@@ -67,7 +67,7 @@ def test_warmup_sweep_preserves_analysis_and_trigger_and_nulls_the_sink_path():
     sink = ss.specs.ZarrSink(path='somewhere.zarr')
     analysis = ss.specs.BundledAnalysis.from_dict({
         **ANALYSIS.to_dict(),
-        # shared_spectrum selects SSB case C; a capture with no center_frequency
+        # shared_spectrum selects SSB case C. A capture with no center_frequency
         # cannot otherwise resolve the case at 30 kHz
         'cellular_5g_pss_sync': {
             'subcarrier_spacing': 30e3,
@@ -115,7 +115,7 @@ def test_one_warmup_binding_per_origin():
 def test_warmup_binding_and_sweep_keep_the_analysis_group(isolated_bindings):
     """the warmup binding has the analysis group of the origin, and the copied
     analysis decodes against the same fields. `derive_warmup_sweep` requires a
-    registered origin to look the controller up by name."""
+    registered origin."""
     assert warmup.warmup_binding(quick_binding()).schema.analysis is QuickAnalyses
 
     origin = ss.bindings.single_tone
@@ -138,7 +138,7 @@ def test_warmup_binding_and_sweep_keep_the_analysis_group(isolated_bindings):
 
 # %% warmup_sweep_for
 
-# the GPU condition is the table of test_sensor_compute_gpu.py; these rows are the
+# test_sensor_compute_gpu.py covers the GPU condition. These rows are the
 # `skip_warmup` option, set directly and by the sweep a calibration builds
 NO_WARMUP = {
     'skip_option': cupy_sweep((scale_only(),), analysis=ANALYSIS),

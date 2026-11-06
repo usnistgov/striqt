@@ -318,10 +318,7 @@ def test_probe_soapy_info_with_a_channel_sensor(soapy_device):
 
 
 def _stream(device, spec=None, **kws):
-    """return an `RxStream` on `device` that is not yet set up.
-
-    The `soapy_stream` fixture covers the default spec on port 0.
-    """
+    """return an `RxStream` on `device` that is not yet set up"""
     if spec is None:
         spec = source_spec()
     return soapy.RxStream(spec, soapy.probe_soapy_info(device), **kws)

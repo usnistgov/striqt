@@ -153,8 +153,9 @@ def test_reuse_iq_rejects_a_capture_burst():
     ids=['divides', 'remainder', 'no_strobe'],
 )
 def test_a_burst_capture_duration_is_a_whole_number_of_strobe_periods(strobe, accepted):
-    """a burst capture with a 1 ms duration passes a 0.5 ms strobe and fails a 0.3 ms
-    strobe, located at the capture; a capture with burst 1 is not checked"""
+    """a burst capture with a 1 ms duration is accepted with a 0.5 ms strobe and
+    rejected with a 0.3 ms strobe, located at the capture. A capture with burst 1 is
+    not checked."""
     source = SOURCE.replace(trigger_strobe=strobe)
     burst = make_capture(burst=3)
     if accepted:

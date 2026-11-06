@@ -64,12 +64,14 @@ def int16_receive_buffer(
     pinned: bool = False,
     rng: np.random.Generator | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """return a complex64-sized ``(ports, width)`` receive buffer with int16 (I, Q)
-    pairs in its int16 columns ``[2*start, 2*(start + acquired))``, and the complex64
-    ``(ports, acquired)`` array that `cast_iq` returns from that span.
+    """return a ``(ports, width)`` complex64 receive buffer with int16 (I, Q) pairs in
+    its int16 columns ``[2*start, 2*(start + acquired))``, and the ``(ports, acquired)``
+    complex64 array that `cast_iq` returns from that span.
 
-    The pairs are a ramp, or draws over the full int16 range from `rng`. A pinned
-    buffer comes from `cupyx.empty_pinned`."""
+    Args:
+        rng: the generator of draws over the full int16 range, or None for a ramp
+        pinned: True allocates the buffer with `cupyx.empty_pinned`
+    """
     shape = (ports, 2 * acquired)
     if rng is None:
         pairs = np.arange(ports * 2 * acquired).reshape(shape).astype('int16')
@@ -206,8 +208,8 @@ def test_cast_iq_int16_interleaved_pairs_become_unscaled_complex64():
 
 @pytest.mark.parametrize('transport', ['complex64', 'int16'])
 def test_cast_iq_copies_only_the_acquired_columns(transport):
-    """a receive buffer wider than the read, as a reused or holdoff-padded buffer is,
-    adds nothing to the copy that the acquisition keeps"""
+    """a receive buffer wider than the read adds nothing to the copy that the
+    acquisition keeps. A reused or holdoff-padded buffer is wider than the read."""
     source = source_spec(transport_dtype=transport)
     ports, acquired, width = 2, 300, 500
     if transport == 'int16':
@@ -475,7 +477,7 @@ def test_get_next_keeps_the_throwaway_port_buffer_between_reads():
 
 def test_alloc_without_holdoff_is_the_bare_read_count():
     """a segment that continues the stream reads no holdoff, so its buffer is the
-    record plus overlaps; a padded prior serves that request without reallocation"""
+    record plus overlaps. A padded prior serves that request without reallocation."""
     capture = _TWO_PORT
     source = source_spec(transient_holdoff_time=1e-3, trigger_strobe=0.5e-3)
     ctrl = stub_controller(capture, source)

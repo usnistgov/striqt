@@ -409,8 +409,8 @@ class TestLogToFile:
         assert handler in striqt_logger.handlers
         assert handler.level == logging.INFO
 
-        # records from the striqt.* adapters propagate up to the file handler;
-        # the JSON formatter merges a dict argument into the record
+        # records from the striqt.* adapters propagate up to the file handler. The
+        # JSON formatter merges a dict argument into the record
         sink = sa.util.get_logger('sink')
         sink.info('started', {'radio': 'ab12'})
         sink.debug('filtered out')

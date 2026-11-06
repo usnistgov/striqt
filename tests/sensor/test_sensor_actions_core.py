@@ -72,10 +72,10 @@ def test_results_follow_the_capture_order(subtests):
 
 @pytest.mark.namespaces('cupy')
 def test_results_follow_the_capture_order_cupy(array_backend, subtests):
-    """the cupy source draws the same generator as numpy. Scale-only correction
+    """the cupy and numpy sources evaluate the same generator. Scale-only correction
     leaves the tone samples as the complex exponential of the generator. The
-    tolerance budgets 4 roundings per backend: the phase product, the cosine, the
-    sine, and the float32 cast."""
+    tolerance is the roundoff of 4 roundings per backend: the phase product, the
+    cosine, the sine, and the float32 cast."""
     captures = tone_captures(TONE_OFFSETS)
     source = SOURCE.replace(array_backend=array_backend)
     datasets = run_in_memory(tone_sweep(TONE_OFFSETS, source=source))
@@ -176,7 +176,7 @@ def test_extra_data_reaches_every_acquisition_and_wins_over_the_peripherals(burs
 
 
 class BlockedPeripherals(TaggingPeripherals):
-    """a peripheral read that returns only after `release` is set"""
+    """a peripherals double with an `acquire` that returns only after `release` is set"""
 
     release: ClassVar[threading.Event] = threading.Event()
 
@@ -205,9 +205,10 @@ class ReleasingSource(BINDINGS['single_tone'].sensor.source_cls):
 def test_a_peripheral_read_may_last_the_whole_burst(
     caplog, monkeypatch, isolated_lookup
 ):
-    """the acquisition thread never waits for the peripheral inside a burst. A read
-    that blocks until the last segment is requested drops no segment under a 1-slot
-    queue, and the peripheral data joins every segment once the read resolves."""
+    """the acquisition thread never waits for the peripheral inside a burst. Under a
+    1-slot queue, no segment is dropped while a peripheral read blocks until the last
+    segment is requested, and the peripheral data joins every segment once the read
+    resolves."""
     burst = 4
     release = threading.Event()
     monkeypatch.setattr(BINDINGS['single_tone'].sensor, 'source_cls', ReleasingSource)
@@ -293,8 +294,8 @@ def test_a_hook_exception_ends_the_pipeline(hook):
 
 
 def test_a_shared_indexer_numbers_two_runs_consecutively():
-    """one indexer passed to 2 pipeline runs over the same open resources numbers
-    the captures of the second run after those of the first. The first run leaves
+    """one indexer numbers the captures of 2 pipeline runs over the same open
+    resources consecutively, the second run after the first. The first run leaves
     the last capture armed, and the second run re-arms the first capture."""
     n = len(TONE_OFFSETS)
     sweep = tone_sweep(TONE_OFFSETS)
@@ -442,8 +443,7 @@ def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
     """a peripheral that requests cancellation during the first acquisition stops
     the pipeline at the interrupt check after the yield of the first stage. The
     only item yielded is the leading None. Leaving `share_thread_interrupts` clears
-    the flag. `propagate_thread_interrupts` is a no-op in the main thread, and the
-    sweep is therefore consumed in a worker."""
+    the flag."""
     sweep = tone_sweep(TONE_OFFSETS)
     yielded = []
 
@@ -456,6 +456,7 @@ def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
 
     with util.share_thread_interrupts():
         with ss.open_resources(sweep, None) as res:
+            # propagate_thread_interrupts is a no-op in the main thread
             future = util.threadpool.submit(consume, res)
             with pytest.raises(util.ThreadInterruptRequest):
                 future.result(timeout=30)
@@ -533,8 +534,8 @@ class CountingTrigger(FakeTrigger):
 def test_trigger_on_selects_the_members_that_run_the_trigger(
     trigger_on, calls_per_burst, monkeypatch
 ):
-    """under first the trigger runs on the first segment and the shifts apply to
-    the others; under all it runs on every segment"""
+    """under ``'first'`` the trigger runs on the first segment and the shifts apply to
+    the others. Under ``'all'`` the trigger runs on every segment."""
     trigger = CountingTrigger(0.0)
     monkeypatch.setattr(CountingTrigger, 'calls', 0)
     # the controller reads the package attribute and `analyze` the module global

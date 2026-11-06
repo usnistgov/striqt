@@ -144,7 +144,7 @@ def test_collecting_an_unreferenced_controller_closes_it_and_frees_its_slot(capl
 
     del ctrl
     # the controller survives in a reference cycle with its ReceiveBuffers until
-    # the collector runs; the registry must not be what keeps it alive
+    # the collector runs. The registry must not keep the controller alive
     gc.collect()
     assert ref() is None
     assert closes == [1]
@@ -465,8 +465,8 @@ class TestBurst:
 
     def test_no_member_keeps_the_holdoff_pad(self, fake_controller):
         """segment 0 reads the transient and strobe holdoff ahead of the record and
-        the later segments read none; every segment keeps a copy of the record and
-        overlaps alone"""
+        the later segments read none. Every segment keeps a copy of the record and
+        overlaps alone."""
         strobe = BURST_CAPTURE.duration / 2
         with fake_controller(
             time_sync_at='open', receive_retries=0, trigger_strobe=strobe
@@ -491,9 +491,9 @@ class TestBurst:
 
     @pytest.mark.parametrize('on_gap', ['skip', 'except'])
     def test_full_queue_delivers_member_0_only(self, on_gap, fake_controller, caplog):
-        """with one buffer and no consumer, segment 0 fills the queue. Under skip the
-        other 2 segments are dropped with one warning each; under except the second
-        segment raises."""
+        """with one buffer and no consumer, segment 0 fills the queue. Under ``'skip'``
+        the other 2 segments are dropped with one warning each. Under ``'except'``
+        the second segment raises."""
         bursts = ss.specs.BurstOptions(on_gap=on_gap, buffers=1)
         queue = AcquisitionQueue(bursts.buffers)
         with (
@@ -514,10 +514,9 @@ class TestBurst:
 
     @pytest.mark.parametrize('on_gap', ['skip', 'except'])
     def test_overflow_at_member_1_is_retried(self, on_gap, fake_soapy, fake_controller):
-        """an overflow during segment 1 re-triggers the stream. Under skip segment 1 is
-        read again and segments 1 and 2 are contiguous; under except the burst
-        restarts and the queued segment 0 is replaced. The finalizer of segment 0
-        queues the fault for the first read of segment 1."""
+        """an overflow during segment 1 re-triggers the stream. Under ``'skip'``
+        segment 1 is read again and segments 1 and 2 are contiguous. Under
+        ``'except'`` the burst restarts and the queued segment 0 is replaced."""
         bursts = ss.specs.BurstOptions(on_gap=on_gap, buffers=3)
         queue = AcquisitionQueue(bursts.buffers)
         finalized = []
@@ -676,7 +675,7 @@ def test_acquire_before_arming_is_an_error(isolated_lookup):
 
 def test_acquire_returns_a_contiguous_copy_without_the_holdoff(isolated_lookup):
     """the receive buffer of a first segment is padded for the transient and strobe
-    holdoff; the acquisition keeps a copy of the record and overlaps alone"""
+    holdoff. The acquisition keeps a copy of the record and overlaps alone."""
     source = SOURCE.replace(trigger_strobe=0.25e-3)
     capture = preset_capture('sawtooth', **SCALE_ONLY)
     overlaps = ss.lib.compute.get_correction_overlaps(capture, source, None)
@@ -755,7 +754,7 @@ class TestControllerAcquire:
             iq = ctrl.acquire()
             assert fake_soapy.devices[0].streams[0].channels == (0, 1)
 
-        # -60 dBm through 50 dB of gain is -10 dBfs; port 0 would be noise only.
+        # -60 dBm through 50 dB of gain is -10 dBfs. Port 0 would be noise only.
         # The noise floor of the model biases the level 0.014 dB above the tone, so
         # the bound is that mismatch and not the sample fluctuation
         assert iq.x.shape[0] == 1

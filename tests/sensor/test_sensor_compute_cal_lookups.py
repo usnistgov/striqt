@@ -2,8 +2,8 @@
 calibration.
 
 The lookups are checked against files that `save_yfactor_corrections` writes from
-model captures and from the closed loop through the fake SoapySDR device. The
-Y-factor math is covered in `test_sensor_actions_yfactor.py`.
+model captures and from the closed loop through the fake SoapySDR device.
+`test_sensor_actions_yfactor.py` tests the Y-factor math.
 """
 
 from __future__ import annotations
@@ -172,7 +172,8 @@ class TestLookupPowerCorrection:
     def test_host_resampled_capture_matches_on_backend_sample_rate(
         self, calibration_nc
     ):
-        # 125 MS/s -> 62.5 MS/s designs fs_sdr = 62.5 MS/s, which is not calibrated
+        # the 125 MS/s -> 62.5 MS/s resampler has fs_sdr = 62.5 MS/s, which is not
+        # calibrated
         capture = soapy_capture(sample_rate=62.5e6, host_resample=True)
         with pytest.raises(KeyError, match=r"62500000\.0 in 'backend_sample_rate'"):
             _lookup_pc(calibration_nc, capture)
@@ -381,8 +382,8 @@ FAKE_TONE = (1.505e9, -60.0)
 # bandwidth: N = 8e4 independent samples, for a standard deviation of
 # 4.34/sqrt(N) = 0.015 dB on each rms power estimate. The Y-factor ratio of 2
 # estimates gives sqrt(2) x that on the noise figure (0.022 dB). The temperature
-# T0 (F - 1), compared in dB, is the most sensitive variable: F/(F - 1) = 1.46 x the
-# noise figure error at NF = 5 dB, or 0.033 dB, and 3 sigma is 0.098 dB. At 1 ms
+# T0 (F - 1) is the most sensitive variable when compared in dB: F/(F - 1) = 1.46 x
+# the noise figure error at NF = 5 dB, or 0.033 dB, and 3 sigma is 0.098 dB. At 1 ms
 # the same bound is 0.14 dB.
 FAKE_TOL_DB = 0.1
 

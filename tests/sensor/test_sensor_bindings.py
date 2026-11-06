@@ -150,8 +150,7 @@ class TestBindSensor:
             )
 
     def test_unregistered_binding_stays_out_of_the_union(self, isolated_bindings):
-        """`get_controller` finds registered bindings only. A file that decoded into
-        an unregistered one could not be run."""
+        """`get_controller` finds registered bindings only"""
         union_before = isolated_bindings.get_tagged_sweep_type()
         ss.bindings.bind_sensor(
             'unregistered_test', tone_sensor(), tone_schema(), register=False
@@ -170,7 +169,7 @@ def test_extension_module_registers_site_bindings(subtests):
 
 def test_derived_calibration_binding_records_the_extension_module():
     """the controllers bound in the extension module have `__module__` set to that
-    module. The API documentation groups a controller under `__module__`."""
+    module"""
     import site_strategies as S
 
     assert S.EXT.site_single_tone_calibration.__module__ == S.EXT.__name__
