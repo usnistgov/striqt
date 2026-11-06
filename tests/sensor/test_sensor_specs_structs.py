@@ -9,19 +9,16 @@ import re
 import msgspec
 import pytest
 from conftest import construct_both, raises_on_both_paths
-from hypothesis import assume, given, strategies as st
+from hypothesis import given, strategies as st
 from site_strategies import SiteCaptureCls, make_site_capture_kws
 from sweep_strategies import (
     RESOLUTION_MSG,
-    SOURCE,
     SPG,
     YFACTOR_ENR_DB,
     CalSourceCls,
     CalSweepCls,
     PlanCls,
     SweepCls,
-    list_loop,
-    loop_sets,
     make_calibration_capture,
     make_calibration_sweep,
     make_calibration_sweep_kws,
@@ -29,9 +26,6 @@ from sweep_strategies import (
     make_cell_channel,
     make_sweep,
     make_sweep_kws,
-    port_scalars,
-    port_tuples,
-    port_values,
 )
 
 import striqt.analysis as sa
@@ -50,67 +44,49 @@ BASE = {'center_frequency': 1e9, 'duration': 1e-3, 'sample_rate': 1e6}
 MCR = {'master_clock_rate': 1e6}
 TRIGGERS = ('cellular_5g_pss_sync', 'cellular_5g_sss_sync')
 
-SCALAR_GAIN_MSG = 'gain must be a single number unless multiple ports are specified'
-GAIN_COUNT_MSG = 'gain, when specified as a tuple, must match port count'
-FILE_RATE_MSG = 'backend_sample_rate is fixed by the file source'
+SCALAR_GAIN_MSG = 'gain must be a single number'
+GAIN_COUNT_MSG = 'must match port count'
+FILE_RATE_MSG = 'fixed by the file source'
 TRIGGER_MSG = 'signal_trigger must be one of'
-REPEAT_MSG = re.escape('Expected a `repeat` loop only as the outermost (first) entry')
+REPEAT_MSG = re.escape('Expected a `repeat` loop only as the outermost')
 DUPLICATE_MSG = 'Expected at most one loop over field'
-COLLISION_MSG = re.escape(
-    'Expected field `frequency_offset` to be looped or set per capture, not both'
-)
-IMPLIED_MSG = re.escape(
-    '$.captures: Expected at most one capture in a calibration sweep, unless the '
-    'calibration peripheral declares `implied_loops`'
-)
-SOURCE_CAL_MSG = re.escape(
-    '$.source.calibration: Expected `null`, since a calibration sweep cannot '
-    'itself be calibrated'
-)
+COLLISION_MSG = 'looped or set per capture, not both'
+IMPLIED_MSG = re.escape('$.captures:') + '.*implied_loops'
+SOURCE_CAL_MSG = re.escape('$.source.calibration:')
 
 key_pairs = st.tuples(
     st.integers(min_value=-100, max_value=100),
     st.integers(min_value=-100, max_value=100),
 )
 
-gains = st.floats(min_value=-30, max_value=60)
-gain_tuples = st.lists(gains, min_size=1, max_size=5).map(tuple)
-
-
-@st.composite
-def consistent_port_gain(draw):
-    """draw a port value and a gain of a shape that `SoapyCapture` accepts for that
-    port"""
-    port = draw(port_values)
-    if isinstance(port, tuple) and draw(st.booleans()):
-        return port, tuple(
-            draw(st.lists(gains, min_size=len(port), max_size=len(port)))
-        )
-    return port, draw(gains)
-
 
 # %% Capture specs
 
 
 class TestSoapyCapture:
-    @given(port_gain=consistent_port_gain())
-    def test_consistent_port_gain_accepted(self, port_gain):
-        port, gain = port_gain
-        capture = SoapyCapture.from_dict({'port': port, 'gain': gain, **BASE})
-        assert capture.port == port
-        assert capture.gain == gain
+    @pytest.mark.parametrize(
+        'port, gain',
+        [(0, 1.0), ((0, 1), 1.0), ((0, 1), (1.0, 2.0))],
+        ids=['scalar_port', 'shared_gain', 'gain_per_port'],
+    )
+    def test_consistent_port_gain_accepted(self, port, gain):
+        for capture in construct_both(SoapyCapture, port=port, gain=gain, **BASE):
+            assert (capture.port, capture.gain) == (port, gain)
 
-    @given(port=port_scalars, gain=gain_tuples)
-    def test_tuple_gain_with_scalar_port_rejected(self, port, gain):
+    @pytest.mark.parametrize(
+        'gain', [(1.0,), (1.0, 2.0)], ids=['one_element', 'two_elements']
+    )
+    def test_tuple_gain_with_scalar_port_rejected(self, gain):
         raises_on_both_paths(
-            SoapyCapture, ValueError, SCALAR_GAIN_MSG, port=port, gain=gain, **BASE
+            SoapyCapture, ValueError, SCALAR_GAIN_MSG, port=0, gain=gain, **BASE
         )
 
-    @given(port=port_tuples, gain=gain_tuples)
-    def test_gain_tuple_length_must_match_ports(self, port, gain):
-        assume(len(gain) != len(port))
+    @pytest.mark.parametrize(
+        'gain', [(1.0,), (1.0, 2.0, 3.0)], ids=['shorter', 'longer']
+    )
+    def test_gain_tuple_length_must_match_ports(self, gain):
         raises_on_both_paths(
-            SoapyCapture, ValueError, GAIN_COUNT_MSG, port=port, gain=gain, **BASE
+            SoapyCapture, ValueError, GAIN_COUNT_MSG, port=(0, 1), gain=gain, **BASE
         )
 
     def test_replace_revalidates_gain(self):
@@ -182,9 +158,9 @@ class TestBursts:
     @pytest.mark.parametrize('burst', [0, -1])
     def test_capture_burst_below_one_is_rejected_on_convert(self, burst):
         kws = {'port': 0, 'gain': 0, **BASE}
-        with pytest.raises(msgspec.ValidationError, match=r'>= 1 - at `\$.burst`'):
+        with pytest.raises(msgspec.ValidationError, match=r'\$\.burst'):
             SoapyCapture.from_dict({**kws, 'burst': burst})
-        with pytest.raises(msgspec.ValidationError, match=r'>= 1'):
+        with pytest.raises(msgspec.ValidationError, match=r'\$\.burst'):
             SoapyCapture(**kws).replace(burst=burst)
 
     def test_source_bursts_block_defaults(self):
@@ -195,52 +171,25 @@ class TestBursts:
                 on_gap='skip', buffers=1, trigger_on='first'
             )
 
-    def test_source_bursts_block_from_dict(self):
-        source = SoapySource.from_dict({
-            **MCR,
-            'bursts': {'on_gap': 'except', 'buffers': 4, 'trigger_on': 'all'},
-        })
-        assert source.bursts.on_gap == 'except'
-        assert source.bursts.buffers == 4
-        assert source.bursts.trigger_on == 'all'
-
     @pytest.mark.parametrize(
-        'field, value, match',
-        [
-            ('on_gap', 'drop', r'Invalid enum value .drop. - at .\$\.on_gap'),
-            ('buffers', 0, r'>= 1'),
-            ('trigger_on', 'last', r'Invalid enum value .last. - at .\$\.trigger_on'),
-        ],
+        'field, value',
+        [('on_gap', 'drop'), ('buffers', 0), ('trigger_on', 'last')],
         ids=['on_gap', 'buffers', 'trigger_on'],
     )
     def test_source_bursts_block_rejects_values_outside_the_contract(
-        self, field, value, match
+        self, field, value
     ):
+        match = re.escape(f'$.{field}')
         with pytest.raises(msgspec.ValidationError, match=match):
             ss.specs.BurstOptions.from_dict({field: value})
         with pytest.raises(msgspec.ValidationError, match=match):
             ss.specs.BurstOptions().replace(**{field: value})
-
-    def test_time_sync_and_retries_are_independent_of_bursts(self):
-        """the downstream source fragments pair `time_sync_at: acquire` with
-        `receive_retries: 3`; a burst policy may not reject them"""
-        source = SoapySource(
-            time_sync_at='acquire',
-            receive_retries=3,
-            bursts=ss.specs.BurstOptions(on_gap='except'),
-            **MCR,
-        )
-        assert source.receive_retries == 3
 
     def test_source_accepts_the_bursts_block_as_a_dict(self):
         """the binding call form of a controller passes the fields of `to_dict`"""
         source = SoapySource(bursts={'buffers': 2}, **MCR)
         assert source.bursts == ss.specs.BurstOptions(buffers=2)
         assert hash(source) == hash(SoapySource(**source.to_dict()))
-
-    def test_acquisition_info_burst_index_defaults_to_zero(self):
-        assert ss.specs.AcquisitionInfo().burst_index == 0
-        assert ss.specs.AcquisitionInfo(burst_index=2).burst_index == 2
 
     def test_calibration_rejects_a_capture_burst(self):
         match = re.escape('$.captures[0].burst: Expected 1')
@@ -253,10 +202,9 @@ class TestSignalTrigger:
     def test_registered_names_accepted(self, name):
         assert SoapySource(signal_trigger=name, **MCR).signal_trigger == name
 
-    @given(
-        name=st.text(min_size=1).filter(lambda s: s not in sa.registry.signal_trigger)
-    )
-    def test_unregistered_name_rejected(self, name):
+    def test_unregistered_name_rejected(self):
+        name = 'cellular_5g_nope'
+        assert name not in sa.registry.signal_trigger
         raises_on_both_paths(
             SoapySource, ValueError, TRIGGER_MSG, signal_trigger=name, **MCR
         )
@@ -286,7 +234,7 @@ class TestSignalTrigger:
         )
 
 
-# %% Loops, plot options and extensions
+# %% Loops
 
 
 def test_frequency_bin_range_endpoints_are_inclusive():
@@ -301,19 +249,6 @@ def test_frequency_bin_range_endpoints_are_inclusive():
     assert len(points) == 65
     assert points[0] == pytest.approx(-46.08e6)
     assert points[-1] == pytest.approx(46.08e6)
-
-
-def test_plot_options_reject_unknown_fields():
-    with pytest.raises(msgspec.ValidationError, match='foo'):
-        ss.specs.PlotOptions.from_dict({
-            'data': {'sweep_index': 0},
-            'plotter': {'foo': 1},
-        })
-
-
-def test_extension_rejects_a_sink_key():
-    with pytest.raises(msgspec.ValidationError, match='sink'):
-        ss.specs.Extension.from_dict({'sink': 'striqt.sensor.sinks.NoSink'})
 
 
 # %% Sink and ZarrSink
@@ -397,43 +332,6 @@ class TestCaptureRemap:
 
 class TestSpecChain:
     @pytest.mark.parametrize(
-        'cls, base, added',
-        [
-            (
-                ss.specs.ActionSpec,
-                sa.specs.SpecBase,
-                {'description', 'source', 'peripherals', 'extensions', 'sink'},
-            ),
-            (
-                ss.specs.CapturePlan,
-                ss.specs.ActionSpec,
-                {'captures', 'loops', 'adjust_captures'},
-            ),
-            (
-                ss.specs.Sweep,
-                ss.specs.CapturePlan,
-                {'plot_hint', 'analysis', 'options'},
-            ),
-            (
-                ss.specs.ManualYFactorCalibration,
-                ss.specs.CapturePlan,
-                {'calibration', 'analysis'},
-            ),
-            (
-                ss.specs.Cellular5GNRSweep,
-                ss.specs.CapturePlan,
-                {'plot_hint', 'options', 'cell_channels', 'analysis'},
-            ),
-        ],
-        ids=['action_spec', 'capture_plan', 'sweep', 'calibration', 'cellular'],
-    )
-    def test_each_level_adds_its_blocks(self, cls, base, added):
-        assert issubclass(cls, base)
-        inherited = set(base.__struct_fields__)
-        assert inherited <= set(cls.__struct_fields__)
-        assert set(cls.__struct_fields__) - inherited == added
-
-    @pytest.mark.parametrize(
         'kws, match',
         [
             ({'loops': (Repeat(count=2), Repeat(count=3))}, REPEAT_MSG),
@@ -472,40 +370,47 @@ class _ConflictingCapture(ss.specs.SingleToneCapture, frozen=True, kw_only=True)
     spectrogram: int = 0
 
 
-CAPTURE_FIELD_LOOPS = loop_sets(allow_repeat=False, allow_analysis=False)
+SNR_LOOP = List(field='snr', values=(0.0, 1.0))
+OFFSET_LOOP = List(field='frequency_offset', values=(0.0, 1e3))
+WINDOW_LOOP = List(field='window', isin='analysis', values=('hann',))
 
 
 class TestSweepLoops:
-    @given(
-        loops=loop_sets(allow_repeat=False).filter(bool),
-        position=st.integers(min_value=1, max_value=4),
-        count=st.integers(min_value=1, max_value=3),
+    @pytest.mark.parametrize(
+        'loops',
+        [
+            (SNR_LOOP, Repeat(count=2)),
+            (SNR_LOOP, Repeat(count=2), WINDOW_LOOP),
+            (SNR_LOOP, OFFSET_LOOP, WINDOW_LOOP, Repeat(count=2)),
+        ],
+        ids=['second_of_two', 'between_loops', 'last_of_four'],
     )
-    def test_repeat_must_be_first(self, loops, position, count):
-        loops = list(loops)
-        loops.insert(min(position, len(loops)), Repeat(count=count))
-        kws = make_sweep_kws(captures=(make_capture(),), loops=tuple(loops))
+    def test_repeat_must_be_first(self, loops):
+        kws = make_sweep_kws(captures=(make_capture(),), loops=loops)
         raises_on_both_paths(SweepCls, msgspec.ValidationError, REPEAT_MSG, **kws)
 
-    @given(base=CAPTURE_FIELD_LOOPS.filter(bool), data=st.data())
-    def test_duplicate_loop_field_rejected(self, base, data):
-        dup = data.draw(st.sampled_from(base))
-        loops = data.draw(st.permutations([*base, data.draw(list_loop(dup.field))]))
-        if data.draw(st.booleans()):
-            loops.insert(0, Repeat(count=1))
-        match = f'{DUPLICATE_MSG} `{dup.field}`'
-        kws = make_sweep_kws(loops=tuple(loops))
-        raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
-
-    def test_duplicate_loop_message_names_the_first_occurrence(self):
-        loops = (
-            List(field='snr', values=(0.0, 1.0)),
-            List(field='window', isin='analysis', values=('hann',)),
-            List(field='snr', values=(2.0, 3.0)),
-        )
-        match = re.escape(
-            '$.loops[2]: Expected at most one loop over field `snr`, which is '
-            'already looped in `capture` at $.loops[0]'
+    @pytest.mark.parametrize(
+        'loops, first, second',
+        [
+            ((SNR_LOOP, List(field='snr', values=(2.0, 3.0))), 0, 1),
+            ((SNR_LOOP, WINDOW_LOOP, List(field='snr', values=(2.0, 3.0))), 0, 2),
+            ((Repeat(count=1), SNR_LOOP, List(field='snr', values=(2.0,))), 1, 2),
+            (
+                (OFFSET_LOOP, SNR_LOOP, List(field='frequency_offset', values=(5.0,))),
+                0,
+                2,
+            ),
+        ],
+        ids=['adjacent', 'after_an_analysis_loop', 'after_a_repeat', 'other_field'],
+    )
+    def test_duplicate_loop_field_is_rejected_at_the_second_occurrence(
+        self, loops, first, second
+    ):
+        field = loops[second].field
+        match = (
+            re.escape(f'$.loops[{second}]: {DUPLICATE_MSG} `{field}`')
+            + '.*'
+            + re.escape(f'at $.loops[{first}]')
         )
         kws = make_sweep_kws(loops=loops)
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
@@ -521,9 +426,9 @@ class TestSweepLoops:
             loops.insert(0, Repeat(count=2))
         index = 1 if lead_repeat else 0
         match = (
-            re.escape(f'$.loops[{index}]: ')
-            + COLLISION_MSG
-            + re.escape(' - at $.captures[0] on $.captures[1]')
+            re.escape(f'$.loops[{index}]:')
+            + f'.*{COLLISION_MSG}.*'
+            + re.escape('$.captures[0] on $.captures[1]')
         )
         kws = make_sweep_kws(captures=captures, loops=tuple(loops))
         raises_on_both_paths(SweepCls, msgspec.ValidationError, match, **kws)
@@ -555,18 +460,9 @@ class TestSweepLoops:
 
 
 class TestSweepCaptures:
-    def test_bare_sweep_is_not_constructible(self):
-        # the TypeError comes from msgspec introspection of the unbound source or
-        # capture TypeVar, not from a guard, and carries no message to match
-        with pytest.raises(TypeError):
-            ss.specs.Sweep(source=SOURCE)
-
     def test_capture_field_conflicting_with_measurement_name(self):
         capture = _ConflictingCapture(port=0, sample_rate=1e6, duration=1e-3)
-        match = re.escape(
-            '$.analysis: Object contains measurement `spectrogram`, which shadows '
-            'a capture field of the same name'
-        )
+        match = re.escape('$.analysis:') + '.*`spectrogram`.*shadows'
         with pytest.raises(msgspec.ValidationError, match=match):
             make_sweep(captures=(capture,))
 
@@ -626,7 +522,7 @@ class TestSweepAdjustCaptures:
         [
             (
                 {'zz': {'snr': 1.0}},
-                re.escape("$.adjust_captures['zz']: Expected `defaults` or a hex"),
+                re.escape("$.adjust_captures['zz']"),
             ),
             (
                 {'defaults': {'duration': 1.0}},

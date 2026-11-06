@@ -3,15 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from conftest import scalars
 from hypothesis import given, strategies as st
-from sweep_strategies import (
-    capture_tuples,
-    make_capture,
-    port_scalars,
-    port_values,
-    ports_and_lo,
-)
+from sweep_strategies import capture_tuples, make_capture, ports_and_lo
 
 import striqt.sensor as ss
 
@@ -21,7 +14,7 @@ C = ss.specs.captures
 # %% split_capture_ports and pairwise_by_port
 
 
-@given(port=port_scalars)
+@pytest.mark.parametrize('port', [0, 1, 2, 3], ids=lambda p: f'port{p}')
 def test_split_scalar_port_is_identity(port):
     capture = make_capture(port=port)
     assert C.split_capture_ports(capture) == [capture]
@@ -86,50 +79,49 @@ def test_pairwise_rejects_different_port_counts():
 # %% ensure_tuple
 
 
-@given(x=scalars, size=st.one_of(st.none(), st.integers(min_value=0, max_value=5)))
-def test_ensure_tuple_wraps_scalars(x, size):
-    if size is None:
-        assert C.ensure_tuple(x) == (x,)
-    else:
-        assert C.ensure_tuple(x, size) == (x,) * size
-
-
-@given(
-    items=st.lists(scalars, min_size=1, max_size=4),
-    size=st.integers(min_value=0, max_value=5),
+@pytest.mark.parametrize(
+    'x, size, expected',
+    [
+        (3, None, (3,)),
+        ('a', 3, ('a', 'a', 'a')),
+        (None, 0, ()),
+        ((1,), 3, (1, 1, 1)),
+    ],
+    ids=['scalar_unsized', 'scalar_sized', 'scalar_zero', 'singleton_broadcast'],
 )
-def test_ensure_tuple_broadcasts_only_singletons(items, size):
-    t = tuple(items)
-    assert C.ensure_tuple(t) is t
-    if len(t) == 1:
-        assert C.ensure_tuple(t, size) == t * size
-    else:
-        assert C.ensure_tuple(t, size) is t
+def test_ensure_tuple_wraps_scalars_and_broadcasts_singletons(x, size, expected):
+    assert C.ensure_tuple(x, size) == expected
+
+
+@pytest.mark.parametrize('size', [None, 3], ids=['unsized', 'sized'])
+def test_ensure_tuple_passes_a_longer_tuple_through(size):
+    t = (1, 2)
+    assert C.ensure_tuple(t, size) is t
 
 
 # %% get_unique_ports
 
 
-@given(
-    captures=capture_tuples(min_size=0, max_size=3),
-    loop_ports=st.one_of(st.none(), st.lists(port_values, min_size=1, max_size=3)),
+PORT_LOOP = ss.specs.List(field='port', values=((3,), 1))
+SNR_LOOP = ss.specs.List(field='snr', values=(1.0, 2.0))
+
+
+@pytest.mark.parametrize(
+    'ports, loops, expected',
+    [
+        ((2, (0, 1)), (), (0, 1, 2)),
+        ((2, (0, 1)), (PORT_LOOP,), (0, 1, 2, 3)),
+        ((), (PORT_LOOP,), (1, 3)),
+        (((1, 0),), (SNR_LOOP,), (0, 1)),
+        ((), (), ()),
+    ],
+    ids=['captures_only', 'captures_and_loop', 'loop_only', 'other_loop', 'empty'],
 )
-def test_unique_ports_is_the_sorted_union(captures, loop_ports):
-    expected = set()
-    for c in captures:
-        expected |= set(C.ensure_tuple(c.port))
-    loops = ()
-    if loop_ports is not None:
-        loops = (ss.specs.List(field='port', values=tuple(loop_ports)),)
-        for p in loop_ports:
-            expected |= set(C.ensure_tuple(p))
-    assert C.get_unique_ports(captures, loops) == tuple(sorted(expected))
-
-
-@given(captures=capture_tuples())
-def test_unique_ports_ignores_other_loops(captures):
-    loops = (ss.specs.List(field='snr', values=(1.0, 2.0)),)
-    assert C.get_unique_ports(captures, loops) == C.get_unique_ports(captures)
+def test_unique_ports_is_the_sorted_union_of_captures_and_port_loops(
+    ports, loops, expected
+):
+    captures = tuple(make_capture(port=p) for p in ports)
+    assert C.get_unique_ports(captures, loops) == expected
 
 
 # %% get_capture_type

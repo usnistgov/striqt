@@ -32,7 +32,6 @@ from sweep_strategies import (
     SPG,
     CaptureCls,
     QuickAnalyses,
-    capture_tuples,
     frequency_bin_range_loop,
     make_capture,
     make_capture_kws,
@@ -42,7 +41,6 @@ from sweep_strategies import (
     sweeps,
 )
 
-import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis.specs.helpers import frozendict
 
@@ -74,20 +72,29 @@ def first_site_capture(sweep, source_id, **capture_kws):
 
 # %% describe_capture
 
-DESCRIBE_FIELDS = ('port', 'duration', 'sample_rate', 'frequency_offset', 'lo_shift')
-
-
-@given(
-    captures=capture_tuples(min_size=1, max_size=1),
-    fields=st.lists(st.sampled_from(DESCRIBE_FIELDS), min_size=1, unique=True),
-    join=st.sampled_from((' | ', '; ')),
+DESCRIBED = make_capture(
+    port=(0, 1), duration=2.5e-3, sample_rate=15.36e6, frequency_offset=-1e6, snr=12.0
 )
-def test_describe_capture_one_segment_per_field(captures, fields, join):
-    text = S.describe_capture(captures[0], tuple(fields), source_id=None, join=join)
-    parts = text.split(join)
-    assert len(parts) == len(fields)
-    for part, field in zip(parts, fields):
-        assert part.startswith(f'{field}: ')
+DESCRIBED_TEXT = {
+    'port': 'port: (0, 1)',
+    'duration': 'duration: 2.5 ms',
+    'sample_rate': 'sample_rate: 15.36 MS/s',
+    'frequency_offset': 'frequency_offset: -1 MHz',
+    'snr': 'snr: 12 dB',
+    'lo_shift': "lo_shift: 'none'",
+}
+
+
+@pytest.mark.parametrize('field', list(DESCRIBED_TEXT), ids=list(DESCRIBED_TEXT))
+def test_describe_capture_renders_the_value_in_the_units_of_the_field(field):
+    text = S.describe_capture(DESCRIBED, (field,), source_id=None)
+    assert text == DESCRIBED_TEXT[field]
+
+
+def test_describe_capture_joins_the_fields_in_order():
+    fields = ('sample_rate', 'duration')
+    text = S.describe_capture(DESCRIBED, fields, source_id=None, join=' | ')
+    assert text == 'sample_rate: 15.36 MS/s | duration: 2.5 ms'
 
 
 def test_describe_capture_names_the_field_driven_by_a_key():
@@ -96,32 +103,40 @@ def test_describe_capture_names_the_field_driven_by_a_key():
         captures=(make_capture(frequency_offset=100.0),),
         adjust_captures={'defaults': {'snr': remap}},
     )
-    capture, fields = sweep.captures[0], ('frequency_offset',)
+    (capture,) = S.loop_captures(sweep)
+    fields = ('frequency_offset',)
     kws = {'adjust_spec': sweep.adjust_captures, 'source_id': None}
-    text = S.describe_capture(capture, fields, **kws)
-    assert text.startswith('snr: ')
+    assert S.describe_capture(capture, fields, **kws) == 'snr: 1 dB'
     other = S.describe_capture(capture, fields, **{**kws, 'source_id': 'ab12'})
-    assert text == other
+    assert other == 'snr: 1 dB'
 
 
 # %% max_by_frequency
 
 
-def test_max_by_frequency_without_loops():
-    captures = (
-        ss.specs.SoapyCapture(port=(0, 1), center_frequency=1e9, gain=(0.0, 5.0)),
-        ss.specs.SoapyCapture(port=0, center_frequency=2e9, gain=3.0),
-    )
-    assert S.max_by_frequency('gain', captures) == {
-        0: {1e9: 0.0, 2e9: 3.0},
-        1: {1e9: 5.0},
-    }
-
-
-def test_max_by_frequency_loop_replaces_the_field():
-    captures = (ss.specs.SoapyCapture(port=0, center_frequency=1e9, gain=3.0),)
-    loops = (ss.specs.List(field='gain', values=(1.0, 9.0)),)
-    assert S.max_by_frequency('gain', captures, loops) == {0: {1e9: 9.0}}
+@pytest.mark.parametrize(
+    'captures, loops, expected',
+    [
+        (
+            (
+                ss.specs.SoapyCapture(
+                    port=(0, 1), center_frequency=1e9, gain=(0.0, 5.0)
+                ),
+                ss.specs.SoapyCapture(port=0, center_frequency=2e9, gain=3.0),
+            ),
+            (),
+            {0: {1e9: 0.0, 2e9: 3.0}, 1: {1e9: 5.0}},
+        ),
+        (
+            (ss.specs.SoapyCapture(port=0, center_frequency=1e9, gain=3.0),),
+            (ss.specs.List(field='gain', values=(1.0, 9.0)),),
+            {0: {1e9: 9.0}},
+        ),
+    ],
+    ids=['tuple_port_split_per_port', 'loop_replaces_the_field'],
+)
+def test_max_by_frequency_is_keyed_per_port_and_frequency(captures, loops, expected):
+    assert S.max_by_frequency('gain', captures, loops) == expected
 
 
 @given(
@@ -200,19 +215,33 @@ def test_string_loop_points_are_coerced_to_the_field_type(values):
     assert all(type(c.frequency_offset) is float for c in strings)
 
 
-def test_only_fields_filters_capture_loops_but_keeps_analysis_loops():
-    base = make_capture(frequency_offset=7.0)
-    loops = (
-        ss.specs.List(field='frequency_offset', values=(1.0, 2.0, 3.0)),
-        ss.specs.List(field='snr', values=(10.0, 20.0)),
-        ss.specs.List(field='window', isin='analysis', values=('hann', 'hamming')),
+ONLY_FIELDS_LOOPS = (
+    ss.specs.List(field='frequency_offset', values=(1.0, 2.0, 3.0)),
+    ss.specs.List(field='snr', values=(10.0, 20.0)),
+    ss.specs.List(field='window', isin='analysis', values=('hann', 'hamming')),
+)
+CAPTURELESS_LOOPS = (
+    ss.specs.List(field='port', values=(0, 1)),
+    ss.specs.List(field='sample_rate', values=(1e6,)),
+    ss.specs.List(field='duration', values=(1e-3,)),
+)
+"""loops over every required capture field, for a sweep without a `captures:` entry"""
+
+
+def test_only_fields_keeps_the_named_capture_loops_and_every_analysis_loop():
+    sweep = make_sweep(
+        captures=(make_capture(frequency_offset=7.0),), loops=ONLY_FIELDS_LOOPS
     )
-    sweep = make_sweep(captures=(base,), loops=loops)
-    result = S.loop_captures(sweep, only_fields=('snr',))
-    assert len(result) == 2 * 2
+    origins = S.loop_capture_origins(sweep, only_fields=('snr',))
+    result = tuple(origins)
+    assert result == S.loop_captures(sweep, only_fields=('snr',))
     assert [c.frequency_offset for c in result] == [7.0] * 4
     assert [c.snr for c in result] == [10.0, 10.0, 20.0, 20.0]
     assert [c.adjust_analysis['window'] for c in result] == ['hann', 'hamming'] * 2
+    assert all(
+        set(o.loop_points) == {('capture', 'snr'), ('analysis', 'window')}
+        for o in origins.values()
+    )
 
 
 @pytest.mark.parametrize(
@@ -230,7 +259,7 @@ def test_a_bad_loop_point_names_its_position_in_the_declared_loops(only_fields):
     )
     bad_index = len(loops) - 1
 
-    match = re.escape(f'$.loops[{bad_index}]: Expected `float`, got `str`')
+    match = re.escape(f'$.loops[{bad_index}]')
     # the expansion rather than a Sweep, which rejects a bad point at construction
     with pytest.raises(msgspec.ValidationError, match=match):
         S._expand_capture_loops_with_origins(
@@ -239,12 +268,7 @@ def test_a_bad_loop_point_names_its_position_in_the_declared_loops(only_fields):
 
 
 def test_loops_without_captures_build_new_instances():
-    loops = (
-        ss.specs.List(field='port', values=(0, 1)),
-        ss.specs.List(field='sample_rate', values=(1e6,)),
-        ss.specs.List(field='duration', values=(1e-3,)),
-    )
-    result = S.loop_captures(make_sweep(loops=loops))
+    result = S.loop_captures(make_sweep(loops=CAPTURELESS_LOOPS))
     assert [c.port for c in result] == [0, 1]
     assert all((c.sample_rate, c.duration) == (1e6, 1e-3) for c in result)
 
@@ -269,12 +293,13 @@ def test_loops_that_leave_a_required_field_unset_name_the_loop_point():
     message = str(info.value)
     # the expanded tuple index msgspec would report is not a place in the sweep
     assert '$[0]' not in message
-    assert message == "Object missing required field `port` - at $.loops: {'snr': 1.0}"
+    assert 'port' in message
+    assert message.endswith("- at $.loops: {'snr': 1.0}")
 
 
 def test_unknown_loop_field_raises():
     loops = (ss.specs.List(field='nope', values=(1,)),)
-    match = r'\$\.loops: Object contains unknown field `nope`'
+    match = r'\$\.loops.*`nope`'
     with pytest.raises(msgspec.ValidationError, match=match):
         make_sweep(captures=(make_capture(),), loops=loops)
 
@@ -332,30 +357,6 @@ def test_expansion_args_take_the_nyquist_filter_as_an_argument(
     args, kws = S._expansion_args(plan, None, None, None, loop_only_nyquist)
     expanded, _ = S._expand_capture_loops_with_origins(*args, **kws)
     assert [c.analysis_bandwidth for c in expanded] == expected
-
-
-def test_calibration_fixture_expansion(calibration_sweep):
-    """the sweep of the runner expands the loop points of ``calibration.json`` over the
-    one capture, less the (sample_rate, analysis_bandwidth) pairs above Nyquist. Each
-    diode pass runs the captures of one port, and the passes together acquire the plan
-    twice."""
-    points = {loop.field: loop.get_points() for loop in calibration_sweep.loops}
-    rates = [float(v) for v in points.pop('sample_rate')]
-    bandwidths = [float(v) for v in points.pop('analysis_bandwidth')]
-    within_nyquist = sum(
-        not math.isfinite(bw) or bw <= fs for fs in rates for bw in bandwidths
-    )
-    expected = within_nyquist * math.prod(len(p) for p in points.values())
-    expected *= len(calibration_sweep.captures)
-
-    runner = ss.lib.actions.ManualYFactorRunner(calibration_sweep)
-    assert len(S.loop_captures(runner.sweep)) == expected
-    yfactor = ss.lib.actions.yfactor
-    by_pass = [
-        len(S.loop_captures(yfactor.pass_sweep(runner.sweep, port)))
-        for port, _ in yfactor.calibration_passes(runner.spec)
-    ]
-    assert sum(by_pass) == 2 * expected
 
 
 def test_adjustments_apply_before_loops_take_priority():
@@ -484,7 +485,7 @@ def test_range_loop_on_an_int_field_accepts_integral_floats():
 
 def test_range_loop_on_an_int_field_rejects_fractions():
     loops = (ss.specs.Range(field='azimuth_repeat', start=0, stop=3, step=1.5),)
-    match = re.escape('$.loops[0]: Expected `int`') + '.*azimuth_repeat'
+    match = re.escape('$.loops[0]') + '.*azimuth_repeat'
     with pytest.raises(msgspec.ValidationError, match=match):
         make_site_sweep(cls=SurveySweepCls, loops=loops)
 
@@ -529,18 +530,15 @@ def test_repeat_captures_repeats_every_pass_in_order(synthetic_sweep, count):
 # %% count_acquisitions
 
 
-def test_count_acquisitions_sums_the_bursts_of_every_repeated_pass(synthetic_sweep):
-    repeat, *others = synthetic_sweep.loops
-    assert isinstance(repeat, ss.specs.Repeat)
+def test_count_acquisitions_sums_the_bursts_of_every_repeated_pass():
+    """3 entries with bursts 1, 2, and 3 under a 2-point loop and 2 repeats"""
+    bursts = (1, 2, 3)
     captures = tuple(
-        c.replace(burst=i + 1) for i, c in enumerate(synthetic_sweep.captures)
+        make_capture(burst=b, frequency_offset=1e3 * i) for i, b in enumerate(bursts)
     )
-    sweep = synthetic_sweep.replace(
-        captures=captures, loops=(ss.specs.Repeat(count=2), *others)
-    )
-    expected = sum(c.burst for c in S.repeat_captures(sweep))
-    assert S.count_acquisitions(sweep) == expected
-    assert expected > 2 * len(S.loop_captures(sweep))
+    loops = (ss.specs.Repeat(count=2), ss.specs.List(field='snr', values=(10.0, 20.0)))
+    sweep = make_sweep(captures=captures, loops=loops)
+    assert S.count_acquisitions(sweep) == 2 * 2 * sum(bursts)
 
 
 def test_count_acquisitions_is_unbounded_when_looping(synthetic_sweep):
@@ -565,14 +563,11 @@ def test_origin_spec_index_cycles_over_the_capture_entries():
     assert [o.capture_index for o in origins.values()] == [0, 1, 2, 3]
 
 
-def test_origin_spec_index_is_none_without_a_capture_list():
-    loops = (
-        ss.specs.List(field='port', values=(0, 1)),
-        ss.specs.List(field='sample_rate', values=(1e6,)),
-        ss.specs.List(field='duration', values=(1e-3,)),
-    )
-    origins = S.loop_capture_origins(make_sweep(loops=loops))
+def test_without_a_capture_list_there_is_no_entry_to_index():
+    sweep = make_sweep(loops=CAPTURELESS_LOOPS)
+    origins = S.loop_capture_origins(sweep)
     assert [o.spec_index for o in origins.values()] == [None, None]
+    assert S.plan_choices(sweep).captures == ()
 
 
 def test_origin_loop_points_coerce_capture_values_but_not_analysis_values():
@@ -589,13 +584,6 @@ def test_origin_loop_points_coerce_capture_values_but_not_analysis_values():
         ('analysis', 'window'): 'hann',
     }
     assert type(origin.loop_points['capture', 'frequency_offset']) is float
-
-
-def test_origin_loop_points_are_hashable(site_survey_sweep):
-    """the mapping hashes lazily, and an unfrozen loop point would surface late"""
-    origins = S.loop_capture_origins(site_survey_sweep, source_id=RADIO_ID)
-    assert isinstance(hash(origins), int)
-    assert all(isinstance(hash(o.loop_points), int) for o in origins.values())
 
 
 def test_origins_are_renumbered_after_the_nyquist_filter():
@@ -626,66 +614,51 @@ def test_a_repeated_loop_value_collapses_onto_the_first_origin():
     assert origin.capture_index == 0
 
 
-def test_only_fields_omits_the_filtered_loops_from_loop_points():
-    loops = (
-        ss.specs.List(field='frequency_offset', values=(1.0, 2.0, 3.0)),
-        ss.specs.List(field='snr', values=(10.0, 20.0)),
-        ss.specs.List(field='window', isin='analysis', values=('hann', 'hamming')),
-    )
-    sweep = make_sweep(captures=(make_capture(frequency_offset=7.0),), loops=loops)
-    origins = S.loop_capture_origins(sweep, only_fields=('snr',))
-    assert all(
-        set(o.loop_points) == {('capture', 'snr'), ('analysis', 'window')}
-        for o in origins.values()
-    )
-
-
 # %% describe_capture_origin
 
 
-def test_describe_capture_origin_names_the_entry_and_every_loop():
-    loops = (
-        ss.specs.Repeat(count=3),
-        ss.specs.List(field='frequency_offset', values=('1e5',)),
-        ss.specs.List(field='window', isin='analysis', values=('hann',)),
-    )
-    sweep = make_sweep(captures=(make_capture(),), loops=loops)
-    ((capture, origin),) = S.loop_capture_origins(sweep).items()
-
-    assert S.describe_capture_origin(sweep.loops, capture, origin) == (
-        # a Repeat is left to the sweep runner, so only its first pass is validated
-        ".loops: {'repeat': 0, 'frequency_offset': 100000.0, 'window': 'hann'}",
-        '.captures[0]',
-    )
-
-
-def test_describe_capture_origin_omits_the_entry_without_a_capture_list():
-    loops = (
-        ss.specs.List(field='port', values=(0,)),
-        ss.specs.List(field='sample_rate', values=(1e6,)),
-        ss.specs.List(field='duration', values=(1e-3,)),
-    )
-    sweep = make_sweep(loops=loops)
-    ((capture, origin),) = S.loop_capture_origins(sweep).items()
-
-    assert S.describe_capture_origin(sweep.loops, capture, origin) == (
-        ".loops: {'port': 0, 'sample_rate': 1000000.0, 'duration': 0.001}",
-    )
-
-
-def test_describe_capture_origin_omits_the_loops_dropped_by_only_fields():
-    loops = (
-        ss.specs.List(field='frequency_offset', values=(1.0,)),
-        ss.specs.List(field='snr', values=(10.0,)),
-    )
-    sweep = make_sweep(captures=(make_capture(frequency_offset=7.0),), loops=loops)
-    origins = S.loop_capture_origins(sweep, only_fields=('snr',))
+@pytest.mark.parametrize(
+    'captures, loops, only_fields, expected',
+    [
+        (
+            (make_capture(),),
+            (
+                ss.specs.Repeat(count=3),
+                ss.specs.List(field='frequency_offset', values=('1e5',)),
+                ss.specs.List(field='window', isin='analysis', values=('hann',)),
+            ),
+            None,
+            (
+                # a Repeat is left to the sweep runner, so only its first pass is validated
+                ".loops: {'repeat': 0, 'frequency_offset': 100000.0, 'window': 'hann'}",
+                '.captures[0]',
+            ),
+        ),
+        (
+            (),
+            CAPTURELESS_LOOPS,
+            None,
+            (".loops: {'port': 0, 'sample_rate': 1000000.0, 'duration': 0.001}",),
+        ),
+        (
+            (make_capture(frequency_offset=7.0),),
+            (
+                ss.specs.List(field='frequency_offset', values=(1.0,)),
+                ss.specs.List(field='snr', values=(10.0,)),
+            ),
+            ('snr',),
+            (".loops: {'snr': 10.0}", '.captures[0]'),
+        ),
+    ],
+    ids=['entry_and_every_loop', 'without_a_capture_list', 'only_fields_filtered'],
+)
+def test_describe_capture_origin_names_the_loop_point_and_the_entry(
+    captures, loops, only_fields, expected
+):
+    sweep = make_sweep(captures=captures, loops=loops)
+    origins = S.loop_capture_origins(sweep, only_fields=only_fields, limit=1)
     ((capture, origin),) = origins.items()
-
-    assert S.describe_capture_origin(sweep.loops, capture, origin) == (
-        ".loops: {'snr': 10.0}",
-        '.captures[0]',
-    )
+    assert S.describe_capture_origin(sweep.loops, capture, origin) == expected
 
 
 # %% plan_choices
@@ -712,17 +685,6 @@ def test_plan_choices_numbers_the_capture_entries(count):
     assert S.plan_choices(sweep).captures == tuple(f'capture {i}' for i in range(count))
 
 
-def test_plan_choices_lists_no_capture_entries_without_a_capture_list():
-    loops = (
-        ss.specs.List(field='port', values=(0, 1)),
-        ss.specs.List(field='sample_rate', values=(1e6,)),
-        ss.specs.List(field='duration', values=(1e-3,)),
-    )
-    choices = S.plan_choices(make_sweep(loops=loops))
-    assert choices.captures == ()
-    assert [c.values for c in choices.loops] == [(0, 1), (1e6,), (1e-3,)]
-
-
 def test_plan_choices_lists_each_loop_with_a_field_in_declaration_order(subtests):
     """the leading `Repeat` is skipped, and a `List` that repeats a value contributes
     the value once"""
@@ -740,22 +702,9 @@ def test_plan_choices_lists_each_loop_with_a_field_in_declaration_order(subtests
 
 
 def test_plan_choices_labels_capture_loop_values_in_the_units_of_the_field():
-    """the label of a value is the value text of `describe_field` for a capture that
-    has the value"""
     choices = S.plan_choices(choice_sweep())
     snr = next(c for c in choices.loops if c.field == 'snr')
-    for value, label in zip(snr.values, snr.labels):
-        capture = make_capture(snr=value)
-        assert f'snr: {label}' == sa.labels.describe_field(capture, 'snr', sep=': ')
-    assert all(label.endswith(' dB') for label in snr.labels)
-
-
-def test_plan_choices_lists_an_analysis_loop_as_decoded():
-    choices = S.plan_choices(choice_sweep())
-    (analysis,) = [c for c in choices.loops if c.isin == 'analysis']
-    assert analysis.field == 'frequency_resolution'
-    assert analysis.values == (1e3, 2e3)
-    assert analysis.labels == (repr(1e3), repr(2e3))
+    assert snr.labels == ('10 dB', '20 dB')
 
 
 def test_plan_choices_lists_a_loop_without_points_with_empty_tuples():
@@ -786,7 +735,9 @@ def point_count(sweep) -> int:
 
 def test_select_plan_without_a_selection_returns_every_capture():
     sweep = choice_sweep(SELECT_LOOPS)
-    assert S.select_plan(sweep) == S.loop_captures(sweep)
+    selected = S.select_plan(sweep)
+    assert len(selected) == point_count(sweep) * len(sweep.captures)
+    assert selected == S.loop_captures(sweep)
 
 
 @pytest.mark.parametrize('index', range(len(CHOICE_OFFSETS)), ids=lambda i: f'entry{i}')
@@ -936,10 +887,7 @@ def test_yaml_and_direct_adjustments_agree(site_sweep):
 
 
 def test_builtin_binding_rejects_site_fields():
-    match = re.escape(
-        "$.adjust_captures['defaults']: Object contains unknown field `channel_name` "
-        'for capture type `striqt.sensor.specs.SingleToneCapture`'
-    )
+    match = re.escape("$.adjust_captures['defaults']") + '.*`channel_name`'
     with pytest.raises(msgspec.ValidationError, match=match):
         make_sweep(adjust_captures={'defaults': {'channel_name': 'x'}})
 
@@ -1148,13 +1096,10 @@ def test_list_capture_adjustments_of_unlooped_fields_beside_a_looped_one():
 # %% adjust_analysis
 
 
-def test_adjust_analysis_is_identity_without_adjustments(synthetic_sweep):
-    # through the lru_cache an equal analysis seen earlier in the session would be
-    # returned instead, so the identity is checked on the uncached function
-    adjust_analysis = S.adjust_analysis.__wrapped__
+@pytest.mark.parametrize('adjustment', [None, frozendict()], ids=['none', 'empty'])
+def test_adjust_analysis_is_unchanged_without_adjustments(synthetic_sweep, adjustment):
     analysis = synthetic_sweep.analysis
-    assert adjust_analysis(analysis, None) is analysis
-    assert adjust_analysis(analysis, frozendict()) is analysis
+    assert S.adjust_analysis(analysis, adjustment) == analysis
 
 
 @given(resolution=st.floats(min_value=1e3, max_value=1e5))

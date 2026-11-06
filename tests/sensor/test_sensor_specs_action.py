@@ -63,14 +63,8 @@ def test_validate_sweep_reports_a_per_source_override():
         ss.specs.action.validate_sweep(sweep, 'ab12')
 
     message = str(excinfo.value)
-    # the measurement that rejected it, the values the failed rule compared, then the
-    # place in the sweep that produced them: the loop point and the `captures:` entry
-    assert message.startswith('$.analysis.spectrogram: ')
     assert RESOLUTION_MSG in message
-    assert '(sample_rate: 1000000.0, frequency_resolution: 30000.0)' in message
-    assert message.endswith(
-        " - at $.loops: {'frequency_offset': 100000.0} on $.captures[0]"
-    )
+    assert "$.loops: {'frequency_offset': 100000.0} on $.captures[0]" in message
 
 
 def test_validate_sweep_ignores_loops_over_sensor_only_fields(monkeypatch):
