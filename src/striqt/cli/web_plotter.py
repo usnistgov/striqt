@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import logging
+import socket
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -176,23 +178,47 @@ def capture_selection(state: PreviewState) -> dict[str, Any]:
     return {'capture': state.selected_capture, 'loops': loops}
 
 
+def select_first(state: PreviewState) -> None:
+    """select the first ``captures:`` entry and the first value of each loop.
+
+    A sweep without a ``captures:`` list selects no entry, and a loop without
+    values is left unselected.
+    """
+    choices = state.choices
+    if choices is None:
+        return
+    state.selected_capture = 0 if choices.captures else None
+    state.selected_loops = {
+        (loop.isin, loop.field): loop.values[0] for loop in choices.loops if loop.values
+    }
+
+
 def apply_capture_selection(state: PreviewState, msg: dict[str, Any]) -> None:
     """set the selections of `state` from a ``select_captures`` message.
 
     Args:
         state: the state to update
         msg: ``{'capture': int | None, 'loops': [int | None, ...]}`` with indexes
-            into the `capture_options` lists, in the order of ``choices.loops``
+            into the `capture_options` lists, in the order of ``choices.loops``; a
+            capture index is clamped to the ``captures:`` list, and None keeps every
+            entry or every value
     """
     if state.choices is None:
         return
     capture = msg.get('capture')
-    state.selected_capture = None if capture is None else int(capture)
+    if capture is None or not state.choices.captures:
+        state.selected_capture = None
+    else:
+        state.selected_capture = min(
+            max(int(capture), 0), len(state.choices.captures) - 1
+        )
     selected: dict[tuple[str, str], Any] = {}
     indexes = msg.get('loops') or []
     for loop, index in zip(state.choices.loops, indexes):
-        if index is not None:
-            selected[loop.isin, loop.field] = loop.values[int(index)]
+        if index is not None and loop.values:
+            selected[loop.isin, loop.field] = loop.values[
+                min(max(int(index), 0), len(loop.values) - 1)
+            ]
     state.selected_loops = selected
 
 
@@ -463,6 +489,39 @@ async def _do_broadcast() -> None:
         )
 
 
+# %% the server
+
+
+WILDCARD_HOSTS = ('', '0.0.0.0', '::')
+
+
+def serving_urls(host: str, port: int) -> list[str]:
+    """return the URLs at which a server bound to `host` answers.
+
+    A wildcard `host` (``''``, ``'0.0.0.0'``, or ``'::'``) expands to the loopback
+    address, the host name, the fully qualified host name when it differs, and the
+    IPv4 address of every network interface other than loopback. Any other `host`
+    gives the one URL at that host.
+    """
+    if host not in WILDCARD_HOSTS:
+        return [f'http://{host}:{port}']
+
+    import psutil
+
+    names = ['127.0.0.1', socket.gethostname()]
+    fqdn = socket.getfqdn()
+    if fqdn not in names:
+        names.append(fqdn)
+    for addresses in psutil.net_if_addrs().values():
+        for address in addresses:
+            if address.family != socket.AF_INET:
+                continue
+            if address.address.startswith('127.') or address.address in names:
+                continue
+            names.append(address.address)
+    return [f'http://{name}:{port}' for name in names]
+
+
 # %% the acquisition thread
 
 
@@ -489,7 +548,8 @@ def configure(state: PreviewState, resources: Resources) -> None:
 
     The variables offered are the enabled measurements of the sweep with a plot in
     `striqt.figures.data_var_plotters`. The selected variable falls back to the
-    first offered one when the current selection is not offered.
+    first offered one when the current selection is not offered. The capture
+    selection starts at the first entry and the first value of each loop.
     """
     import striqt.figures as sf
     from striqt.figures.backend import PlotlyBackend
@@ -519,6 +579,7 @@ def configure(state: PreviewState, resources: Resources) -> None:
         state.selected_variable = state.available_variables[0]
 
     state.choices = sequencing.plan_choices(sweep, state.source_id)
+    select_first(state)
 
 
 def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
@@ -526,7 +587,9 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
 
     The sink of the spec is replaced by a null sink, so nothing is written. The
     server exits when the acquisition thread ends, and the acquisition thread ends
-    after the capture in progress when the server exits.
+    after the capture in progress when the server exits. The URLs of
+    `serving_urls` are logged at INFO on the ``sweep`` logger once the server
+    starts.
 
     Raises:
         click.ClickException: if `path` has a suffix other than ``.yaml``, ``.yml``,
@@ -552,6 +615,18 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     loop = asyncio.new_event_loop()
     config = uvicorn.Config(app, host=host, port=port, loop='asyncio')
     server = uvicorn.Server(config)
+    # the uvicorn startup line names the bind address, which is 0.0.0.0 by default;
+    # the URLs are logged below instead, and uvicorn errors still show
+    logging.getLogger('uvicorn.error').setLevel(logging.WARNING)
+
+    async def serve() -> None:
+        task = asyncio.ensure_future(server.serve())
+        while not server.started and not task.done():
+            await asyncio.sleep(0.05)
+        if server.started:
+            urls = ', '.join(serving_urls(host, port))
+            _logger().info(f'serving the display at {urls}')
+        await task
 
     def on_data(result: ss.lib.compute.DelayedDataset) -> None:
         log_overloads(result)
@@ -590,7 +665,7 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     STATE.thread.start()
 
     try:
-        loop.run_until_complete(server.serve())
+        loop.run_until_complete(serve())
     finally:
         STATE.stop.set()
         STATE.thread.join()

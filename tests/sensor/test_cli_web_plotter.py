@@ -29,8 +29,10 @@ def looped_sweep(analysis=SPECTROGRAM):
 
 
 def preview_state(sweep) -> web_plotter.PreviewState:
+    """return a state over `sweep` with the first entry of every choice selected"""
     state = web_plotter.PreviewState(sweep=sweep)
     state.choices = sequencing.plan_choices(sweep, None)
+    web_plotter.select_first(state)
     return state
 
 
@@ -66,19 +68,32 @@ def test_select_displayed_passes_an_unknown_selection_through(monkeypatch):
 # %% selected_captures
 
 
+def test_select_first_picks_the_first_entry_and_loop_value():
+    state = preview_state(looped_sweep())
+    assert state.selected_capture == 0
+    assert state.selected_loops == {('capture', 'snr'): SNR_LOOP.values[0]}
+
+
 def test_selected_captures_follows_the_selection_at_the_next_item():
     sweep = looped_sweep()
     state = preview_state(sweep)
-    plan = sequencing.loop_captures(sweep)
+    (first,) = sequencing.select_plan(
+        sweep, None, capture=0, loops={('capture', 'snr'): SNR_LOOP.values[0]}
+    )
     items = web_plotter.selected_captures(state)
 
-    assert next(items) == plan[0]
-    assert next(items) == plan[1]
+    assert next(items) == first
+    assert next(items) == first
+
+    state.selected_capture = None
+    state.selected_loops = {}
+    plan = sequencing.loop_captures(sweep)
+    assert next(items) in plan
+    assert len({next(items) for _ in range(len(plan))}) > 1
 
     state.selected_capture = 2
     only_third = sequencing.select_plan(sweep, None, capture=2)
     assert len(only_third) == len(SNR_LOOP.values)
-    assert next(items) in only_third
     assert next(items) in only_third
 
     state.stop.set()
@@ -108,6 +123,8 @@ def test_capture_options_list_one_entry_per_loop_and_capture():
 
 def test_apply_capture_selection_round_trips():
     state = preview_state(looped_sweep())
+    assert web_plotter.capture_selection(state) == {'capture': 0, 'loops': [0]}
+
     web_plotter.apply_capture_selection(state, {'capture': 1, 'loops': [1]})
     assert state.selected_capture == 1
     assert state.selected_loops == {('capture', 'snr'): SNR_LOOP.values[1]}
@@ -117,6 +134,13 @@ def test_apply_capture_selection_round_trips():
     assert state.selected_capture is None
     assert state.selected_loops == {}
     assert web_plotter.capture_selection(state) == {'capture': None, 'loops': [None]}
+
+
+def test_apply_capture_selection_clamps_indexes_to_the_choices():
+    state = preview_state(looped_sweep())
+    web_plotter.apply_capture_selection(state, {'capture': 99, 'loops': [-3]})
+    assert state.selected_capture == len(OFFSETS) - 1
+    assert state.selected_loops == {('capture', 'snr'): SNR_LOOP.values[0]}
 
 
 # %% plot and coordinate messages
@@ -167,7 +191,7 @@ def test_messages_are_json_text(analyzed):
     status = json.loads(web_plotter._encode(web_plotter.state_message(state)))
     assert status['type'] == 'state'
     assert status['capture_options']['loops'][0]['field'] == 'snr'
-    assert status['capture_selection'] == {'capture': None, 'loops': [None]}
+    assert status['capture_selection'] == {'capture': 0, 'loops': [0]}
     assert status['coordinates']['num_ports'] == 1
 
 
@@ -192,8 +216,8 @@ def test_websocket_serves_the_state_the_plot_and_a_selection(analyzed, monkeypat
     monkeypatch.setattr(state, 'available_variables', ['spectrogram'])
     monkeypatch.setattr(state, 'selected_variable', 'spectrogram')
     monkeypatch.setattr(state, 'data_select', {})
-    monkeypatch.setattr(state, 'selected_capture', None)
-    monkeypatch.setattr(state, 'selected_loops', {})
+    monkeypatch.setattr(state, 'selected_capture', configured.selected_capture)
+    monkeypatch.setattr(state, 'selected_loops', configured.selected_loops)
     monkeypatch.setattr(state, 'websockets', set())
     monkeypatch.setattr(state, 'stop', threading.Event())
 
@@ -212,3 +236,19 @@ def test_websocket_serves_the_state_the_plot_and_a_selection(analyzed, monkeypat
     assert updated['type'] == 'state'
     assert updated['capture_selection'] == {'capture': 1, 'loops': [0]}
     assert state.selected_loops == {('capture', 'snr'): SNR_LOOP.values[0]}
+
+
+# %% serving_urls
+
+
+def test_serving_urls_of_a_wildcard_bind_start_with_loopback_and_the_host_name():
+    import socket
+
+    urls = web_plotter.serving_urls('0.0.0.0', 8000)
+    assert urls[:2] == ['http://127.0.0.1:8000', f'http://{socket.gethostname()}:8000']
+    assert len(urls) == len(set(urls))
+    assert all(url.endswith(':8000') for url in urls)
+
+
+def test_serving_urls_of_an_explicit_host_is_that_host():
+    assert web_plotter.serving_urls('192.0.2.7', 8001) == ['http://192.0.2.7:8001']

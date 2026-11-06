@@ -57,6 +57,32 @@
         select:hover {
             border-color: #e94560;
         }
+        .control-group input[type=number] {
+            width: 4.5rem;
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #1a1a2e;
+            padding: 0.5rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        .control-group button {
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #1a1a2e;
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .control-group button:hover {
+            border-color: #e94560;
+        }
+        .capture-total {
+            font-size: 0.85rem;
+            color: #aaa;
+        }
         .status {
             display: flex;
             align-items: center;
@@ -463,9 +489,9 @@
             coordsSidebar.innerHTML = html;
         }
 
-        // One <select> for the captures: entry (when the sweep lists more than one)
-        // and one per loop field. Option values are indexes into the server's
-        // option lists; '' is "All".
+        // One <select> per loop field and a number box with step buttons for the
+        // captures: entry (when the sweep lists more than one). Values are indexes
+        // into the server's option lists.
         function buildSelect(id, labelText, labels, selectedIndex) {
             const group = document.createElement('div');
             group.className = 'control-group';
@@ -474,20 +500,59 @@
             label.textContent = labelText;
             const select = document.createElement('select');
             select.id = id;
-            const all = document.createElement('option');
-            all.value = '';
-            all.textContent = 'All';
-            select.appendChild(all);
             labels.forEach((text, i) => {
                 const option = document.createElement('option');
                 option.value = String(i);
                 option.textContent = text;
                 select.appendChild(option);
             });
-            select.value = (selectedIndex === null || selectedIndex === undefined) ? '' : String(selectedIndex);
+            select.value = String(selectedIndex || 0);
             select.addEventListener('change', sendCaptureSelection);
             group.appendChild(label);
             group.appendChild(select);
+            return group;
+        }
+
+        function buildCaptureStepper(count, selectedIndex) {
+            const group = document.createElement('div');
+            group.className = 'control-group';
+            const label = document.createElement('label');
+            label.htmlFor = 'capture-select';
+            label.textContent = 'Capture:';
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.id = 'capture-select';
+            input.min = '0';
+            input.max = String(count - 1);
+            input.step = '1';
+            input.value = String(selectedIndex || 0);
+            const step = (delta) => {
+                const next = Math.min(count - 1, Math.max(0, parseInt(input.value, 10) + delta));
+                if (next !== parseInt(input.value, 10)) {
+                    input.value = String(next);
+                    sendCaptureSelection();
+                }
+            };
+            const prev = document.createElement('button');
+            prev.type = 'button';
+            prev.textContent = '−';
+            prev.addEventListener('click', () => step(-1));
+            const next = document.createElement('button');
+            next.type = 'button';
+            next.textContent = '+';
+            next.addEventListener('click', () => step(1));
+            const total = document.createElement('span');
+            total.className = 'capture-total';
+            total.textContent = `of ${count}`;
+            input.addEventListener('change', () => {
+                input.value = String(Math.min(count - 1, Math.max(0, parseInt(input.value, 10) || 0)));
+                sendCaptureSelection();
+            });
+            group.appendChild(label);
+            group.appendChild(prev);
+            group.appendChild(input);
+            group.appendChild(next);
+            group.appendChild(total);
             return group;
         }
 
@@ -496,20 +561,22 @@
             if (!options) {
                 return;
             }
-            const sel = selection || { capture: null, loops: [] };
+            const sel = selection || { capture: 0, loops: [] };
             if (options.captures && options.captures.length > 1) {
-                captureControls.appendChild(
-                    buildSelect('capture-select', 'Capture:', options.captures, sel.capture));
+                captureControls.appendChild(buildCaptureStepper(options.captures.length, sel.capture));
             }
             (options.loops || []).forEach((loop, j) => {
-                const chosen = (sel.loops && sel.loops.length > j) ? sel.loops[j] : null;
+                if (loop.labels.length === 0) {
+                    return;
+                }
+                const chosen = (sel.loops && sel.loops.length > j) ? sel.loops[j] : 0;
                 captureControls.appendChild(
                     buildSelect(`loop-select-${j}`, `${loop.field}:`, loop.labels, chosen));
             });
         }
 
-        function indexOrNull(select) {
-            return (select && select.value !== '') ? parseInt(select.value, 10) : null;
+        function indexOf(element) {
+            return element ? parseInt(element.value, 10) : null;
         }
 
         function sendCaptureSelection() {
@@ -519,11 +586,11 @@
                 if (!select) {
                     break;
                 }
-                loops.push(indexOrNull(select));
+                loops.push(indexOf(select));
             }
             ws.send(JSON.stringify({
                 type: 'select_captures',
-                capture: indexOrNull(document.getElementById('capture-select')),
+                capture: indexOf(document.getElementById('capture-select')),
                 loops: loops
             }));
         }
