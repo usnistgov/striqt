@@ -101,6 +101,7 @@ def iq_index(capture: specs.Capture, spec: specs.IQWaveform) -> typing.Iterable[
     spec_type=specs.IQWaveform,
     dtype='complex64',
     standard_name='IQ waveform',
+    long_name='IQ waveform',
     units=sw.units.AMPLITUDE,
     store_compressed=False,
     tolerance=iq_waveform_tolerance,

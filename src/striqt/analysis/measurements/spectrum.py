@@ -405,6 +405,7 @@ def spectrogram_tolerance(
     dtype='float16',
     caches=spectrogram_cache,
     standard_name='PSD',
+    long_name='Spectrogram',
     validate=validated_spectrogram_sizing,
     tolerance=spectrogram_tolerance,
     prefer_filtered=False,
@@ -497,6 +498,7 @@ def power_spectral_density_tolerance(
     spec_type=specs.PowerSpectralDensity,
     dtype='float32',
     standard_name='Power spectral density',
+    long_name='Power spectral density',
     validate=validated_psd_sizing,
     tolerance=power_spectral_density_tolerance,
     prefer_filtered=False,
@@ -625,6 +627,7 @@ def spectrogram_power_bin(
     spec_type=specs.SpectrogramHistogram,
     dtype='float32',
     standard_name='Fraction of counts',
+    long_name='Spectrogram histogram',
     validate=validated_spectrogram_sizing,
     prefer_filtered=False,
 )
@@ -714,6 +717,7 @@ def spectrogram_ratio_power_bin(
     spec_type=specs.SpectrogramHistogramRatio,
     dtype='float32',
     standard_name='Fraction of counts',
+    long_name='Spectrogram ratio histogram',
     validate=validated_spectrogram_sizing,
     prefer_filtered=False,
 )

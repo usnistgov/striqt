@@ -168,34 +168,6 @@ def _registered_attrs(standard_name: str, units: str | None) -> dict[str, str]:
     return attrs
 
 
-_ACRONYMS = {
-    'iq': 'IQ',
-    '5g': '5G',
-    'nr': 'NR',
-    'lte': 'LTE',
-    'ofdm': 'OFDM',
-    'pss': 'PSS',
-    'sss': 'SSS',
-    'ssb': 'SSB',
-    'psd': 'PSD',
-    'snr': 'SNR',
-    'rms': 'RMS',
-}
-
-
-def default_long_name(name: str) -> str:
-    """return the sentence-case title of the measurement function name `name`.
-
-    The underscores of `name` become spaces, the first word is capitalized, and a
-    word that is a known acronym (``iq``, ``5g``, ``pss``, ...) is written in its
-    upper-case form wherever it appears.
-    """
-    words = [_ACRONYMS.get(word, word) for word in name.split('_')]
-    if words and words[0] not in _ACRONYMS.values():
-        words[0] = words[0].capitalize()
-    return ' '.join(words)
-
-
 class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
     def __call__(
         self,
@@ -400,8 +372,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         *,
         dtype: str,
         standard_name: str,
+        long_name: str,
         units: str | None = None,
-        long_name: str | None = None,
         dims: tuple[str, ...] | str | None = None,
         coord_factories: Iterable[CoordFunc] | CoordFunc | None = None,
         depends: Iterable[Callable] | Callable = (),
@@ -443,8 +415,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             standard_name: the short noun phrase that names the output on an axis,
                 stored as the `standard_name` attr
             long_name: the sentence-case title of the measurement for a plot or a
-                menu, stored as the `long_name` attr; None selects
-                `default_long_name` of the function name
+                menu, stored as the `long_name` attr
             units: the units of the output values, stored as the `units` attr: a
                 power form (`striqt.waveform.units.DB_POWER`, `POWER`, or
                 `AMPLITUDE`) that the output resolves into the `power_units` of the
@@ -493,7 +464,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
             'name': None,
             'cache': caches,
             'dtype': dtype,
-            'attrs': _registered_attrs(standard_name, units),
+            'attrs': {
+                **_registered_attrs(standard_name, units),
+                'long_name': long_name,
+            },
             'store_compressed': store_compressed,
             'prefer_filtered': prefer_filtered,
             'prefer_aligned': prefer_aligned,
@@ -570,12 +544,6 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
                     return data.to_xarray(expand_dims=('port',))
 
             name = info_kws['name'] = func.__name__
-            info_kws['attrs'] = {
-                **info_kws['attrs'],
-                'long_name': default_long_name(name)
-                if long_name is None
-                else long_name,
-            }
             if name in self.names:
                 raise TypeError(f'a measurement named {name!r} was already registered')
             self.names.add(name)

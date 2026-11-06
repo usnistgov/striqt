@@ -88,9 +88,8 @@ template and the rules are under **Measurement docstrings** and **Coordinate fac
 docstrings** in `AGENTS.md`.
 
 A registration names its output with the `standard_name=` keyword (the axis label), its
-title with `long_name=` (the plot or menu title; `register.default_long_name` derives the
-sentence-case form of the function name, with acronyms such as `IQ` and `5G` upper-cased,
-when the keyword is omitted), and its unit with `units=`; those three are the registered
+title with `long_name=` (the plot or menu title, written in sentence case with acronyms
+such as `IQ` and `5G` upper-cased), and its unit with `units=`; those three are the registered
 attrs, and every other attr is returned by the measurement body. `figures.labels.label_axis`
 and the plotly axis titles label by `standard_name`; `quantity_label(short=False)` gives
 the `long_name` form. A power output or power-bin coordinate declares the *form* of its unit
