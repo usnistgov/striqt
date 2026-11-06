@@ -1036,14 +1036,14 @@ class _YAMLIncludeConstructor(yaml.Loader):
     def __exit__(self, *args):
         self._lock.release()
 
-    def get_include_path(self, s: str):
-        p = Path(s)
-        if p.is_absolute():
-            pass
-        else:
-            p = self.nested_paths[-1].parent / p
-        self.nested_paths.append(p)
+    def get_include_path(self, s: str) -> Path:
+        """push and return the path of an included file.
 
+        `s` is already rooted at the directory of the including file by
+        `_expand_paths`, so a relative `s` is relative to the working directory.
+        """
+        p = Path(s)
+        self.nested_paths.append(p)
         return p
 
     def pop_include_path(self):
