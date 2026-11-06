@@ -40,19 +40,23 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
     """return the zarr store at `target`.
 
     `mode` applies to a ``.zip`` path: ``'r'`` opens the archive read-only, ``'w'``
-    replaces the archive, and ``'a'`` creates or extends the archive. A directory store
-    opens read-write in every mode. A store passed as `target` is returned unchanged.
+    replaces the archive, and ``'a'`` creates or extends the archive. A directory
+    path is opened read-write in every mode. A store passed as `target` is returned
+    unchanged. With a URL that contains ``simplecache``, the fetched data is cached
+    under ``~/.cache/fsspec``, and the directory is created when absent.
 
     Args:
-        target: a directory path, a path ending in ``.zip``, an fsspec URL, or an open store
+        target: a directory path, a path ending in ``.zip``, an fsspec URL, or an
+            open store
         mode: the access mode of a ``.zip`` path
 
     Returns:
-        a `ZipStore` for a ``.zip`` path, an fsspec mapper for a URL, and otherwise
-        a directory store (`DirectoryStore` on zarr 2, `LocalStore` on zarr 3)
+        a `ZipStore` for a ``.zip`` path, an fsspec mapper for a URL, `target` for
+        a store, and otherwise a directory store (`DirectoryStore` on zarr 2,
+        `LocalStore` on zarr 3)
 
     Raises:
-        ValueError: if `target` is not a string, `Path`, or store
+        ValueError: when `target` is not a string, `Path`, or store
     """
     # the zarr 2 and zarr 3 stubs each lack the names of the other version
     storage: typing.Any = importlib.import_module('zarr.storage')
@@ -170,26 +174,31 @@ def allocate_store(
 ) -> dict[str, typing.Any]:
     """create the arrays of `template` in `store` with `rows` along the `capture` dimension.
 
-    The write is metadata only along `capture`: no chunk of a variable with the
-    `capture` dimension is written, and the coordinates without that dimension are
-    written in full. A variable already in `store` is replaced. A second call adds new
-    variables to the group. A returned array writes a chunk equal to its fill value
-    instead of deleting the chunk.
+    No chunk of a variable with the `capture` dimension is written. The coordinates
+    without that dimension are written in full. A variable already in `store` is
+    replaced. A second call adds variables to the group. A returned array writes a
+    chunk equal to the fill value of the array instead of deleting the chunk.
 
     Args:
         store: the open store of the group
-        template: a dataset with ``sizes['capture'] == 0`` and the other coordinates populated
+        template: a dataset with ``sizes['capture'] == 0`` and the other coordinates
+            populated
         rows: the length of the `capture` dimension in the allocated arrays
         chunks: the chunk shape of each variable, keyed by name, in dimension order
-        encoding: xarray encoding entries per variable, applied over the compression and chunk entries
-        compression: `False` to store every variable uncompressed; `True` compresses the measurements registered with ``store_compressed`` using Blosc zstd (clevel 1)
-        registry: the measurement registry that selects the compressed variables; `None` selects the live registry
+        encoding: xarray encoding entries per variable, applied over the compression
+            and chunk entries
+        compression: `True` compresses the measurements registered with
+            ``store_compressed`` with Blosc zstd (clevel 1), `False` stores every
+            variable uncompressed
+        registry: the measurement registry that selects the compressed variables, or
+            `None` for the live registry
 
     Returns:
         the zarr array of each variable with the `capture` dimension, keyed by name
 
     Raises:
-        ValueError: if `template` has no `capture` dimension or a nonzero length along it
+        ValueError: when `template` has no `capture` dimension or a nonzero length
+            along it
     """
     if template.sizes.get('capture', None) != 0:
         raise ValueError('template must have length 0 along the capture dimension')
@@ -302,35 +311,35 @@ def _owner_noise_bandwidth(data: xr.Dataset, coord_name: str) -> float | None:
 
 
 def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
-    """return `data` with the bandwidth attrs in the current convention.
+    """return `data` with the power-unit and bandwidth attrs rewritten by the rules below.
 
-    The attrs are rewritten in place; data values and other attrs are unchanged. In
-    the current convention `units` is the unit of the stored values, `noise_bandwidth`
-    is the noise bandwidth in Hz, and `long_name` and `standard_name` are noun phrases
-    without units. The rewrite applies to every variable and coordinate that matches
-    one of these conditions:
+    The attrs are rewritten in place. The data values are unchanged. After the
+    rewrite, `units` is the unit of the stored values, `noise_bandwidth` is the noise
+    bandwidth in Hz, and `long_name` and `standard_name` are noun phrases without
+    units. The rewrite applies to every variable and coordinate that matches one of
+    these conditions:
 
     * `channel_power_time_series`, `channel_power_histogram`, `cyclic_channel_power`,
       `iq_waveform`, and the `channel_power_bin` coordinate: `noise_bandwidth` is
-      removed, and `long_name` is removed when it ends in ``' (<unit>/<bandwidth>)'``.
-      The noise bandwidth of these outputs is the `analysis_bandwidth` of the capture.
+      removed, and `long_name` is removed when the text ends in
+      ``' (<unit>/<bandwidth>)'``.
     * `long_name` or `standard_name` ending in ``' (<unit>/<bandwidth>)'``: the
       suffix is removed.
-    * A variable with `units` starting in ``'√mW'`` and equal `noise_bandwidth` and
-      `sample_rate` attrs: `noise_bandwidth` is set to the `subcarrier_spacing` attr of
-      the variable.
+    * A variable with `units` starting in ``'√mW'``, a `subcarrier_spacing` attr, and
+      equal `noise_bandwidth` and `sample_rate` attrs: `noise_bandwidth` is set to
+      the `subcarrier_spacing` attr of the variable.
     * A ``*_power_bin`` coordinate without `noise_bandwidth` and with `units` not
       starting in ``'dB/'``: `noise_bandwidth` is copied from a data variable on the
       dimension of the coordinate.
-    * `units` of the form ``'<unit>/<bandwidth>'`` other than ``'dBm/Hz'``: `units`
-      is set to ``'<unit>'``.
-    * A data variable on a ``*_power_bin`` dimension with a coordinate in `units` of
-      dB: `noise_bandwidth` is removed.
+    * `units` of the form ``'<unit>/<bandwidth>'`` with ``<unit>`` one of ``dBm``,
+      ``dB``, or ``√mW`` and ``<bandwidth>`` other than ``Hz``: `units` is set to
+      ``'<unit>'``.
+    * A data variable on a ``*_power_bin`` dimension with a coordinate with `units`
+      equal to ``'dB'``: `noise_bandwidth` is removed.
     * `system_noise` without `standard_name`: `standard_name` is set to
       ``'System noise'``.
 
-    A dataset in the current convention matches none of the conditions and is
-    returned unchanged.
+    A dataset that matches none of the conditions is returned unchanged.
 
     Returns:
         the same dataset object
@@ -374,7 +383,7 @@ def repair_legacy_attrs(data: xr.Dataset) -> xr.Dataset:
     for var in data.variables.values():
         match = _BANDWIDTH_UNITS.match(str(var.attrs.get('units', '')))
         if match is None or match.group(2) == 'Hz':
-            # 'dBm/Hz' denotes a spectral density and keeps its units
+            # a unit per Hz denotes a spectral density and is kept
             continue
         var.attrs['units'] = match.group(1)
 
@@ -417,8 +426,8 @@ def decode_from_yaml_file(
 ) -> dict[str, typing.Any] | specs.SpecBase:
     """decode a YAML file into a dict or a spec struct.
 
-    ``!include`` tags are expanded relative to the directory of the file that
-    contains the tag, and YAML sequences decode as tuples.
+    An ``!include`` tag is expanded relative to the directory of the file that
+    contains the tag. YAML sequences decode as tuples.
 
     Args:
         path: the YAML file
@@ -862,7 +871,7 @@ def zarr_format_kws(zarr_format: ZarrFormat = 'auto') -> dict[str, int]:
         ``{'zarr_version': 2}`` or ``{'zarr_format': 3}``
 
     Raises:
-        TypeError: if `zarr_format` is not 2, 3, or ``'auto'``
+        TypeError: when `zarr_format` is not 2, 3, or ``'auto'``
     """
     if isinstance(zarr_format, str):
         zarr_format = zarr_format.lower()
@@ -1035,8 +1044,8 @@ class _YAMLIncludeConstructor(yaml.Loader):
     def get_include_path(self, s: str) -> Path:
         """push and return the path of an included file.
 
-        `s` is already rooted at the directory of the including file by
-        `_expand_paths`, so a relative `s` is relative to the working directory.
+        A relative `s` is kept relative to the working directory, not to the
+        including file.
         """
         p = Path(s)
         self.nested_paths.append(p)

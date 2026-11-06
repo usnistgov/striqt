@@ -270,13 +270,14 @@ def elementwise_atol(tolerance: specs.Tolerance, expected_dB: ArrayLike) -> np.n
 
     The tolerance of an element grows with the depth of the element below the peak
     of `expected_dB`. At the peak the tolerance is `tolerance.on_peak.peak`. Below
-    the peak the tolerance follows `sw.power_analysis.off_peak_dB_tolerance` and
-    reaches +inf at a depth of `off_peak_dBc.peak`. Without `off_peak_dBc`, the
-    tolerance is `on_peak.peak` at every element.
+    the peak the tolerance follows
+    `striqt.waveform.power_analysis.off_peak_dB_tolerance` and reaches +inf at a
+    depth of `off_peak_dBc.peak`. Without `off_peak_dBc`, the tolerance is
+    `on_peak.peak` at every element.
 
     Args:
-        tolerance: the budget; `on_peak.peak` and `off_peak_dBc` are read
-        expected_dB: the expected output values, in dB; the nanmax is the peak
+        tolerance: the budget, of which `on_peak.peak` and `off_peak_dBc` are read
+        expected_dB: the expected output values, in dB, with the nanmax as the peak
 
     Returns:
         a float64 numpy array of the shape of `expected_dB`, in dB: no element is

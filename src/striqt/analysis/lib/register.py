@@ -42,13 +42,14 @@ else:
 
 
 class KwArgCache:
-    """a memo of the results of one measurement function within one capture.
+    """a memo of the results of one measurement function.
 
-    An entry is keyed on the identity of the input array, the capture, and the values
-    of the `fields` named at construction, and up to `maxsize` entries are held at
-    once, the oldest evicted first. The cache is disabled until entered as a context
-    manager, and exit clears the entries and the callback. Each entry keeps a
-    reference to the input array until the entry is cleared or evicted.
+    An entry is keyed on the identity of the input array and the values of the
+    `fields` named at construction. The keywords available to `fields` include
+    ``'capture'``. Up to `maxsize` entries are held at once, the oldest evicted
+    first. The cache is disabled until entered as a context manager. Exit clears the
+    entries and the callback. Each entry holds a reference to the input array until
+    the entry is cleared or evicted.
     """
 
     enabled = False
@@ -93,16 +94,17 @@ class KwArgCache:
     def apply(self, func: AnalysisFunc[P, RM]) -> AnalysisFunc[P, RM]:
         """wrap `func` to return the cached result on a repeated call.
 
+        While the cache is enabled, a call with the same `x` object and the same
+        values of the `fields` named at construction returns the stored result of the
+        earlier call. Any other call runs `func` and stores the result. A call that
+        runs `func` invokes the callback set by `set_callback` with the cache, the
+        capture given to `set_callback`, the result, and the keywords.
+
         Args:
             func: a measurement function called as ``func(x, capture, **kwargs)``
 
         Returns:
-            a wrapper with the signature of `func`. While the cache is enabled, a
-            call with the same `x` object, the same `capture`, and the same values of
-            the `fields` named at construction returns the stored result of that
-            call. Any other call runs `func`, stores the result, and invokes the
-            callback set by `set_callback` with the cache, the capture, the result,
-            and the keywords.
+            a wrapper with the signature of `func`
         """
 
         @functools.wraps(func)
@@ -181,16 +183,17 @@ class CoordRegistry(dict['CoordFunc', 'CoordInfo']):
 
         The coordinate is named by the `__name__` of the factory. The factory is
         called as ``func(capture, spec)`` and returns the coordinate values along
-        `dims`, or None for a dimension without coordinate values.
+        `dims`, or None for a dimension without coordinate values. A `units` in a
+        power form (`striqt.waveform.units.DB_POWER`, `POWER`, or `AMPLITUDE`) is
+        resolved into the `power_units` of the acquisition when the output is built.
+        A literal unit is stored as written.
 
         Args:
             dtype: numpy dtype of the coordinate values
             standard_name: the short noun phrase that names the coordinate, stored
                 as the `standard_name` attr
-            units: the units of the values, stored as the `units` attr: a power form
-                (`striqt.waveform.units.DB_POWER`, `POWER`, or `AMPLITUDE`) that the
-                output resolves into the `power_units` of the acquisition, a literal
-                unit, or None for a dimensionless coordinate
+            units: the units of the values, stored as the `units` attr, or None for a
+                dimensionless coordinate
             dims: the dimension names of the coordinate, a single name, or None
                 for the coordinate name alone
 
@@ -309,8 +312,8 @@ def _select_input(
     """return the measurement input array selected from `iq`.
 
     Returns:
-        `iq` when it is an array; for an `AcquiredIQ`, the waveform from `preprocess`
-        with `prefer_filtered` and `prefer_aligned`
+        `iq` when `iq` is an array, or the waveform that `iq.preprocess` selects for
+        `prefer_filtered` and `prefer_aligned`
     """
     from .dataarrays import AcquiredIQ
 
@@ -386,60 +389,62 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     ) -> AnalysisFuncWrapper[P]:
         """register the decorated function as the measurement configured by `spec_type`.
 
-        Registration mutates this registry when the decorator is applied. A sweep
-        enables the measurement through an ``Optional[spec_type]`` field named `name`
-        in an analysis group such as `specs.BuiltinAnalyses`.
-
-        The decorated function is called as ``func(x, capture, **spec.to_dict())``
-        with `x` an array of shape (port, sample), and returns an array with axes
-        `dims` or an ``(array, attrs)`` tuple. The returned wrapper is called as
-        ``wrapper(iq, capture, as_xarray=True, **kwargs)`` with the fields of
-        `spec_type` as keywords. The `__signature__` of the wrapper is filled from
+        The returned decorator adds an entry to this registry. The decorated function
+        is called as ``func(x, capture, **spec.to_dict())`` with `x` an array of
+        shape (port, sample). The function returns an array with a leading port axis
+        followed by `dims`, or an ``(array, attrs)`` tuple. The returned wrapper is
+        called as ``wrapper(iq, capture, as_xarray=True, **kwargs)`` with the fields
+        of `spec_type` as keywords. The `__signature__` of the wrapper is filled from
         `spec_type`. The docstring placeholders are filled at registration:
         ``{args}`` from the fields of `spec_type`, ``{dtype}`` from `dtype`,
         ``{dims}`` with the dimension names of the output (``port`` first),
         ``{coords}`` with one bullet per `coord_factories` entry, and ``{attrs}``
-        with one bullet per registered attr other than `standard_name`. An array
-        `iq` is passed to the function as `x`. From an `AcquiredIQ`,
-        `AcquiredIQ.preprocess` selects `x` as `prefer_filtered` and
-        `prefer_aligned` request. `validate` runs before the IQ is read and raises
-        `specs.helpers.SpecValidationError` on a rejected combination. The wrapper
-        returns, by `as_xarray`: ``True``, an `xarray.DataArray` with a leading
-        ``port`` dimension; ``'delayed'``, a `DelayedDataArray`; ``False``, the
-        ``(array, attrs)`` pair.
+        with one bullet per registered attr other than `standard_name` and
+        `long_name`.
+
+        An array `iq` is passed to the function as `x`. From an `AcquiredIQ`, `x` is
+        the waveform that `AcquiredIQ.preprocess` selects for `prefer_filtered` and
+        `prefer_aligned`. `validate` runs before the IQ is read and raises
+        `specs.helpers.SpecValidationError` on a rejected combination. A `units` in
+        a power form (`striqt.waveform.units.DB_POWER`, `POWER`, or `AMPLITUDE`) is
+        resolved into the `power_units` of the acquisition when the output is built.
+        A literal unit such as the ratio ``'dB'`` is stored as written. The fields of
+        the spec and the attrs returned by the function are added to the registered
+        attrs and win on a shared key.
+
+        The wrapper returns, by `as_xarray`:
+
+        - ``True``: an `xarray.DataArray` with a leading ``port`` dimension
+        - ``'delayed'``: a `DelayedDataArray`
+        - ``False``: the ``(array, attrs)`` pair
 
         Args:
             spec_type: the `specs.Analysis` subclass with the keyword arguments of
-                the measurement as fields; one measurement per type
+                the measurement as fields, registered once
             dtype: numpy dtype name of the output array
             standard_name: the short noun phrase that names the output on an axis,
                 stored as the `standard_name` attr
             long_name: the sentence-case title of the measurement for a plot or a
                 menu, stored as the `long_name` attr
-            units: the units of the output values, stored as the `units` attr: a
-                power form (`striqt.waveform.units.DB_POWER`, `POWER`, or
-                `AMPLITUDE`) that the output resolves into the `power_units` of the
-                acquisition, a literal unit such as the ratio ``'dB'``, or None for
-                a dimensionless output. The spec fields and the attrs returned by
-                the function are added to these attrs and win on a shared key
-            dims: dimension names of the output axes, or None for the dimensions of
-                `coord_factories`, in order
+            units: the units of the output values, stored as the `units` attr, or
+                None for a dimensionless output
+            dims: the dimension names of the output axes after ``port``, or None for
+                the dimensions that `coord_factories` declare, in order
             coord_factories: functions registered with `coordinates` that produce the
                 coordinate values along `dims` from ``(capture, spec)``
-            depends: measurements with an intermediate this one reuses; recorded on
-                the `AnalysisInfo` entry and not otherwise read
-            caches: `KwArgCache` instances that `cache_context` enables for one
-                capture; shared with other measurements
+            depends: measurements with an intermediate that this measurement reuses,
+                recorded on the `AnalysisInfo` entry and not otherwise read
+            caches: the `KwArgCache` instances that `cache_context` enables for one
+                capture, shared with the other measurements that list the same cache
             store_compressed: False to store the output uncompressed in zarr
             prefer_filtered: False to measure the waveform before the
-                `analysis_bandwidth` low-pass; applies only when the acquisition
-                filters
+                `analysis_bandwidth` low-pass, where one is applied
             prefer_aligned: False to measure the waveform before the signal-trigger
-                shift; applies only when the acquisition runs a trigger. A
-                `signal_trigger` measurement must set False
+                shift, where one is applied. A `signal_trigger` measurement must set
+                False
             validate: a function of ``(capture, spec)`` that raises on a rejected
-                combination without reading IQ; `capture` is the
-                `specs.AnalysisCapture` projection, and the return value is ignored
+                combination without reading IQ, called with the
+                `specs.AnalysisCapture` projection of the capture
             tolerance: a function of ``(capture, spec, *, array_backend,
                 input_error)`` that returns the `specs.Tolerance` of the output
                 without reading IQ
@@ -450,11 +455,8 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         Raises:
             ValueError: when `spec_type` is already registered
             TypeError: when a `coord_factories` entry is not callable; from the
-                returned decorator, when the function name is already registered,
-                when `caches`
-                contains something other than `KwArgCache` instances, or when a field
-                of `spec_type` shares a name with a field of another registered spec
-                and differs in type
+                returned decorator, when the function name is already registered or
+                when `caches` contains something other than `KwArgCache` instances
         """
 
         if isinstance(dims, str):
@@ -611,10 +613,10 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
     def validate(self, capture: specs.Capture, analysis: specs.AnalysisGroup) -> None:
         """check each measurement in `analysis` against `capture` without IQ.
 
-        Measurements left unset in `analysis`, and those registered without a
-        `validate=` function, are skipped. Results are cached on the
-        `specs.AnalysisCapture` projection of `capture`. Captures equal in that
-        projection share one entry.
+        Measurements left unset in `analysis`, those with a spec type that has no
+        fields, and those registered without a `validate=` function are skipped.
+        Results are cached on the `specs.AnalysisCapture` projection of `capture`.
+        Captures equal in that projection share one entry.
 
         Raises:
             specs.helpers.SpecValidationError: on the first invalid combination,
@@ -635,15 +637,15 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         Results are cached on the `specs.AnalysisCapture` projection of `capture`.
 
         Args:
-            array_backend: the array namespace of the measurement evaluation;
+            array_backend: the array namespace of the measurement evaluation, which
                 selects the roundoff model
             input_error: relative rms amplitude error already present in the IQ
                 handed to the measurements, as a ratio
 
         Returns:
-            a dict of `specs.Tolerance` keyed by measurement name; measurements left
-            unset in `analysis` or registered without a `tolerance=` function are
-            omitted
+            a dict of `specs.Tolerance` keyed by measurement name, omitting the
+            measurements left unset in `analysis`, those with a spec type that has
+            no fields, and those registered without a `tolerance=` function
         """
         return _analysis_group_tolerances(
             capture, analysis, self, array_backend, input_error
@@ -927,12 +929,11 @@ def _output_dims(registry: AnalysisRegistry, info: AnalysisInfo) -> tuple[str, .
 
 
 def _fill_measurement_docstring(doc: str | None, **fields: str) -> str:
-    """return `doc` with each ``{name}`` placeholder in `fields` replaced by its text.
+    """return `doc` with each ``{name}`` placeholder replaced by the text in `fields`.
 
-    A placeholder is replaced where the placeholder stands in `doc`. Each line of the
-    text after the first is indented to the column of the placeholder. Braces other
-    than the placeholders are left as written. A `doc` of None is the `args` text
-    under an ``Args:`` header.
+    Each line of the text after the first is indented to the column of the
+    placeholder. Braces other than the placeholders are left as written. With `doc`
+    None, the result is the `args` text under an ``Args:`` header.
     """
     if doc is None:
         return 'Args:\n' + fields['args']
@@ -971,7 +972,7 @@ def _has_power_form(units: str) -> bool:
 
 
 def _units_docstring(units: str | None) -> str | None:
-    """return `units` as docstring text, a power form as the calibrated unit."""
+    """return the docstring text of `units`, the calibrated unit for a power form."""
     from striqt.waveform.lib import units as _units
 
     if units is None:
@@ -982,7 +983,10 @@ def _units_docstring(units: str | None) -> str | None:
 
 
 def _coord_description(func: CoordFunc, info: CoordInfo) -> str:
-    """return the first paragraph of the docstring of `func`, or its `standard_name`."""
+    """return the first docstring paragraph of `func`, or the `standard_name` of `info`.
+
+    The paragraph is returned with whitespace collapsed and without a trailing period.
+    """
     doc = inspect.getdoc(func)
     if doc is None:
         return info.attrs['standard_name']
@@ -994,8 +998,7 @@ def _nested_list_docstring(entries: list[str]) -> str:
     """return `entries` as a nested bullet list that continues a ``- name:`` bullet.
 
     The text starts with a blank line and indents each ``*`` item 2 spaces under the
-    placeholder. With no entries, the text is the line break alone, and hand-written
-    items on the following lines form the nested list.
+    placeholder. With no entries, the text is a line break alone.
     """
     if not entries:
         return '\n'
@@ -1005,13 +1008,13 @@ def _nested_list_docstring(entries: list[str]) -> str:
 def _coords_docstring(
     registry: AnalysisRegistry, coord_factories: tuple[CoordFunc, ...]
 ) -> str:
-    """return a nested list with one ``* `name` (dtype, units): description`` item
-    per coordinate factory.
+    """return a nested list with one item per coordinate factory.
 
-    The description is the first paragraph of the docstring of the factory, with
-    whitespace collapsed, or the registered `standard_name` for a factory without a
-    docstring. The dims of a coordinate with dims other than the coordinate name
-    are appended. The text is ``none`` when `coord_factories` is empty.
+    An item is ``* `name` (dtype, units): description``. The description is the first
+    paragraph of the docstring of the factory, with whitespace collapsed, or the
+    registered `standard_name` for a factory without a docstring. The dims of a
+    coordinate with dims other than the coordinate name are appended. The text is
+    ``none`` when `coord_factories` is empty.
     """
     entries = []
     for func in coord_factories:
@@ -1032,12 +1035,11 @@ def _coords_docstring(
 
 
 def _attrs_docstring(info: AnalysisInfo) -> str:
-    """return a nested list of the registered attrs other than the 2 names.
+    """return a nested list of the registered attrs other than the 2 name attrs.
 
-    `standard_name` and `long_name` are omitted. A `units` with a power form renders
-    as power units based on the acquisition, with the calibrated unit in
-    parentheses. A literal `units` renders as written. Any other registered attr
-    renders as its value.
+    A `units` in a power form is written as power units based on the acquisition,
+    with the calibrated unit in parentheses. A literal `units` is written as given.
+    Any other registered attr is written as the value of the attr.
     """
     entries = []
     for key, value in info.attrs.items():
@@ -1055,9 +1057,9 @@ def _attrs_docstring(info: AnalysisInfo) -> str:
 
 def _make_measurement_docstring(spec_cls):
     extra_prepend = {
-        'iq': 'IQ waveform of shape (port, sample), or an `AcquiredIQ` from which the conditioned waveform is selected',
+        'iq': 'the IQ waveform with shape (port, sample), or an `AcquiredIQ` from which the conditioned waveform is selected',
         'capture': 'the acquisition parameters of `iq`',
-        'as_xarray': "True for an `xarray.DataArray`, False for an ``(array, attrs)`` tuple, or 'delayed' for a `DelayedDataArray`",
+        'as_xarray': "True for an `xarray.DataArray`, False for an ``(array, attrs)`` tuple, or ``'delayed'`` for a `DelayedDataArray`",
     }
     extra_types = {
         'iq': 'Array or AcquiredIQ',

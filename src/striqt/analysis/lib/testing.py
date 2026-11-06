@@ -1,7 +1,7 @@
-"""generate reference synthetic waveforms for tests and the synthetic sensor sources.
+"""reference synthetic waveforms with sample-exact windows.
 
 Each generator returns an array of shape ``(ports, count)`` in the array namespace
-`xp`. `start_index` is an absolute sample index, and a call with `start_index` and
+`xp`. `start_index` is an absolute sample index. A call with `start_index` and
 `count` equals the slice ``[:, start_index:start_index + count]`` of the
 whole-capture call. Index 0 is the first sample of a capture. A negative
 `start_index` extends the waveform backward in time.
@@ -51,16 +51,17 @@ def _expand_ports(x: Array, ports: int, xp: ModuleType) -> Array:
     return xp.broadcast_to(x, (ports, x.shape[-1])).copy()
 
 
-# seed offset of the pre-roll stream; both seeds fit the 32-bit range of
-# RandomState when the caller's seed is below 2**31
+# seed offset of the pre-roll stream. Both seeds fit the 32-bit range of
+# RandomState when the seed given is below 2**31
 PREROLL_SEED_OFFSET = 2**31
 
 
 def _complex_normal_draws(*, ports: int, size: int, seed: int, xp: ModuleType) -> Array:
     """generate complex64 draws with standard normal real and imaginary parts.
 
-    Draws are interleaved across ports within each sample. The first `size` samples
-    of every port are a prefix of the stream from ``RandomState(seed)``.
+    Draws are taken from ``RandomState(seed)`` in sample order, interleaved across
+    ports within each sample. The array for a smaller `size` is a leading slice of
+    the array for a larger `size`.
 
     Returns:
         an array of shape ``(ports, size)`` and dtype complex64 in the namespace `xp`
@@ -76,10 +77,9 @@ def _windowed_normal_draws(
 ) -> Array:
     """generate complex64 standard normal draws at absolute indices from `start_index`.
 
-    Indices ``i >= 0`` are the stream from ``RandomState(seed)``; index ``i < 0`` is
+    Indices ``i >= 0`` are the stream from ``RandomState(seed)``. Index ``i < 0`` is
     draw ``-i - 1`` of the stream from ``RandomState(seed + PREROLL_SEED_OFFSET)``.
-    The pre-roll runs backward from index -1 and is independent of the forward
-    stream.
+    The pre-roll stream is independent of the forward stream.
 
     Returns:
         an array of shape ``(ports, count)`` and dtype complex64 in the namespace
@@ -114,17 +114,16 @@ def tone(
     """generate a unit-amplitude complex tone at `frequency`.
 
     The phase is zero at absolute sample index 0 regardless of `start_index`, and
-    advances `frequency` cycles per second. Mean power is 1, i.e., 0 dBm in the mW
-    convention of the power measurements.
+    advances `frequency` cycles per second. The mean power is 1.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
         sample_rate: IQ sample rate, in Hz
         frequency: tone frequency, in Hz relative to the center frequency
-        ports: number of receive ports; every port has the same samples
+        ports: number of receive ports, with the same samples on every port
         start_index: absolute index of the first returned sample
         count: number of samples, or None for `duration` less `start_index`
-        xp: the array namespace to generate with
+        xp: the array namespace of the returned array
         dtype: the returned complex dtype
 
     Returns:
@@ -155,7 +154,7 @@ def single_tone(
     xp: ModuleType = np,
     dtype: DTypeLike = 'complex64',
 ) -> Array:
-    """generate a unit-amplitude tone, LO-shifted, with optional additive noise.
+    """generate a unit-amplitude tone with an LO shift and optional additive noise.
 
     The tone is `tone` at the sum of `frequency_offset` and `lo_offset`, with unit
     amplitude and zero phase at absolute sample index 0. When `snr` is set,
@@ -167,12 +166,12 @@ def single_tone(
         sample_rate: IQ sample rate, in Hz
         frequency_offset: tone frequency, in Hz relative to the center frequency
         snr: ratio of the tone power to the noise power, in dB, or None for no noise
-        lo_offset: additional frequency shift, in Hz, as applied by an LO shift
+        lo_offset: a second frequency shift, in Hz, added to `frequency_offset`
         ports: number of receive ports
         start_index: absolute index of the first returned sample
         count: number of samples, or None for `duration` less `start_index`
         seed: seed of the noise generator, in ``[0, 2**31)``
-        xp: the array namespace to generate with
+        xp: the array namespace of the returned array
         dtype: the returned complex dtype
 
     Returns:
@@ -221,20 +220,21 @@ def circular_awgn(
     has total power ``noise_psd * sample_rate`` mW.
 
     Samples at indices ``i >= 0`` are the stream from ``RandomState(seed)``,
-    interleaved across ports within each sample. Samples at negative indices are a
-    second stream seeded ``seed + 2**31`` and running backward from index -1,
-    independent of the first stream and of the same power. A window at any
-    `start_index` is the corresponding slice of any longer window.
+    interleaved across ports within each sample. Samples at negative indices are
+    drawn from a second stream seeded ``seed + 2**31``, independent of the first
+    stream and of the same power, with index -1 the first draw. A window at any
+    `start_index` is the matching slice of any longer window.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
-        sample_rate: IQ sample rate, in Hz, unused except to size `duration`
+        sample_rate: IQ sample rate, in Hz, read only to convert `duration` to a
+            sample count
         power: total power of each port, in linear units
-        ports: number of receive ports, which get independent noise
+        ports: number of receive ports, with independent noise on each port
         start_index: absolute index of the first returned sample
         count: number of samples, or None for `duration` less `start_index`
         seed: seed of the noise generator, in ``[0, 2**31)``
-        xp: the array namespace to generate with
+        xp: the array namespace of the returned array
         dtype: the returned complex dtype
 
     Returns:
@@ -251,7 +251,8 @@ def circular_awgn(
         ports=ports, start_index=start_index, count=count, seed=seed, xp=xp
     )
 
-    # a python float scalar; a numpy scalar would upcast the samples to complex128
+    # a python float scalar, because a numpy scalar would upcast the samples to
+    # complex128
     scale = float(np.sqrt(power / 2))
     return (values * scale).astype(dtype, copy=False)
 
@@ -270,20 +271,20 @@ def sawtooth(
 ) -> Array:
     """generate a real-valued sawtooth ramp that repeats every `period` s.
 
-    Each ramp rises linearly from 0 toward the amplitude with power `power` dB (1
-    at 0 dB). Ramps reset at absolute sample index 0 and at every multiple of
-    `period` s before and after that index. The peak is never reached. The
-    imaginary part is 0. Every port has the same samples.
+    Each ramp rises linearly from 0 toward a peak amplitude of `power` dB relative
+    to 1. Ramps reset at absolute sample index 0 and at every multiple of `period` s
+    before and after that index. The peak is never reached. The imaginary part is 0.
+    Every port has the same samples.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
         sample_rate: IQ sample rate, in Hz
-        period: duration of one ramp, in s; must be positive
-        power: peak amplitude of the ramp expressed as a power, in dB
+        period: duration of one ramp, in s, positive
+        power: the peak amplitude of the ramp, in dB relative to 1
         ports: number of receive ports
         start_index: absolute index of the first returned sample
         count: number of samples, or None for `duration` less `start_index`
-        xp: the array namespace to generate with
+        xp: the array namespace of the returned array
         dtype: the returned complex dtype
 
     Returns:
@@ -318,20 +319,20 @@ def dirac_delta(
 ) -> Array:
     """generate a single impulse at `time` in a field of zeros.
 
-    The impulse is real, with the amplitude with power `power` dB (1 at 0 dB), at
-    the absolute sample index nearest `time` s from the start of the capture. The
-    returned array is all zeros when that index falls outside the returned window.
+    The impulse is real with an amplitude of `power` dB relative to 1, at the
+    absolute sample index nearest `time` s from the start of the capture. The
+    returned array is all zeros when that index is outside the returned window.
     Every port has the same samples.
 
     Args:
         duration: capture duration, in s, used only when `count` is None
         sample_rate: IQ sample rate, in Hz
         time: time of the impulse, in s from the start of the capture
-        power: impulse amplitude expressed as a power, in dB
+        power: the impulse amplitude, in dB relative to 1
         ports: number of receive ports
         start_index: absolute index of the first returned sample
         count: number of samples, or None for `duration` less `start_index`
-        xp: the array namespace to generate with
+        xp: the array namespace of the returned array
         dtype: the returned complex dtype
 
     Returns:

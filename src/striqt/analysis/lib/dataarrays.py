@@ -29,8 +29,7 @@ PORT_DIM = 'port'
 class Preprocessor:
     """the conditioned-waveform selector of one acquisition.
 
-    The base class returns `x` of the acquisition for every preference. A subclass
-    that conditions the waveform lazily overrides `__call__`.
+    A subclass that conditions the waveform overrides `__call__`.
     """
 
     def __init__(self, iq: AcquiredIQ) -> None:
@@ -39,7 +38,7 @@ class Preprocessor:
 
     @property
     def iq(self) -> AcquiredIQ:
-        """the acquisition that owns this preprocessor.
+        """the acquisition for which the preprocessor selects a waveform.
 
         Raises:
             RuntimeError: when the acquisition has been garbage collected
@@ -52,13 +51,15 @@ class Preprocessor:
     def __call__(
         self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
     ) -> Array:
-        """return the waveform conditioned as the preferences request.
+        """return the waveform selected by `prefer_filtered` and `prefer_aligned`.
+
+        The base implementation returns `x` of the acquisition for every preference.
 
         Args:
-            prefer_filtered: True selects the waveform low-passed to the capture
-                `analysis_bandwidth` when the acquisition applies one
-            prefer_aligned: True selects the waveform shifted by the signal trigger
-                when the acquisition runs one
+            prefer_filtered: True prefers the waveform low-passed to the
+                `analysis_bandwidth` of the capture over the unfiltered waveform
+            prefer_aligned: True prefers the waveform shifted by the signal trigger
+                over the unaligned waveform
 
         Returns:
             the shape (port, sample) array in the namespace of `x`
@@ -71,7 +72,7 @@ class Preprocessor:
 
 @dataclasses.dataclass
 class AcquiredIQ:
-    """an acquired IQ waveform `x` with the capture that describes the acquisition."""
+    """an acquired IQ waveform with the parameters and power unit of the acquisition."""
 
     x: Array
     """the acquired waveform with shape (port, sample)"""
@@ -83,9 +84,11 @@ class AcquiredIQ:
 
     @cached_property
     def preprocess(self) -> Preprocessor:
-        """return the `Preprocessor` of this acquisition, one per instance.
+        """return the `Preprocessor` of this acquisition.
 
-        A `dataclasses.replace` copy starts with a `Preprocessor` of its own.
+        The `Preprocessor` is created on the first access and kept on the instance.
+        A copy from `dataclasses.replace` is a separate instance with a
+        `Preprocessor` of its own.
         """
         return Preprocessor(self)
 
@@ -93,10 +96,13 @@ class AcquiredIQ:
 def _results_as_arrays(
     obj: Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray],
 ) -> Array:
-    """return `obj` as a numpy array; a cupy or torch array is transferred from the device.
+    """return `obj` as a numpy array.
+
+    A cupy or torch array is copied from the device. A numpy array is returned
+    unchanged.
 
     Raises:
-        TypeError: if `obj` is not a numpy, cupy, or torch array
+        TypeError: when `obj` is not a numpy, cupy, or torch array
     """
     # the array predicates narrow the type only when the backend is importable
     array: typing.Any = obj
@@ -167,8 +173,7 @@ def _restore_padded_coord_dtype(da: xr.DataArray, info: register.CoordInfo) -> N
     """restore the integer or bool dtype declared for coordinate `info.name` of `da`.
 
     The coordinate is replaced in place with zeros of `info.dtype` when `info.dtype`
-    is an integer or bool dtype and the coordinate dtype differs. Other coordinates
-    are left unchanged.
+    is an integer or bool dtype and the coordinate dtype differs.
     """
 
     dtype = np.dtype(info.dtype)
@@ -214,8 +219,8 @@ def measurement_attrs(
     """return the attrs of the output of the measurement `info` for one acquisition.
 
     The registered attrs of `info`, the fields of `spec`, and `body_attrs` are merged
-    in that order, a later source winning on a shared key, and a `units` entry in a
-    power form (`striqt.waveform.units.DB_POWER`, `POWER`, `AMPLITUDE`) is resolved
+    in that order. A later source wins on a shared key. A `units` entry in a power
+    form (`striqt.waveform.units.DB_POWER`, `POWER`, or `AMPLITUDE`) is resolved
     into `power_units`.
 
     Args:
@@ -223,6 +228,9 @@ def measurement_attrs(
         spec: the measurement parameters
         body_attrs: the attrs returned by the measurement body
         power_units: the power unit of the acquisition
+
+    Returns:
+        a new dict of the merged attrs, with the inputs unchanged
     """
     attrs = {**info.attrs, **spec.to_dict(), **body_attrs}
     return _resolve_units(attrs, power_units)
@@ -247,8 +255,8 @@ def measurement_coords(
 
     Args:
         info: the registration of the measurement
-        capture: the acquisition parameters passed to each coordinate factory
-        spec: the measurement parameters passed to each coordinate factory
+        capture: the acquisition parameters that set the coordinate values
+        spec: the measurement parameters that set the coordinate values
         power_units: the power unit that resolves a `units` attr in a power form, or
             None to leave the form fields in place
 
@@ -291,8 +299,8 @@ def measurement_shape(
 
     Args:
         info: the registration of the measurement
-        capture: the acquisition parameters passed to each coordinate factory
-        spec: the measurement parameters passed to each coordinate factory
+        capture: the acquisition parameters that set the coordinate values
+        spec: the measurement parameters that set the coordinate values
 
     Returns:
         one length per dimension of `measurement_dims(info)`, taken from the shape
@@ -435,14 +443,13 @@ class DelayedDataArray(collections.UserDict):
     info: register.AnalysisInfo
     attrs: dict
     power_units: sw.units.PowerUnits = 'a.u.'
-    """the power unit of the acquisition, which `to_xarray` writes into the `units`
-    attrs of the power outputs and coordinates"""
+    """the power unit of the acquisition: ``'mW'``, ``'FS'``, or ``'a.u.'``"""
 
     def compute(self) -> DelayedDataArray:
         """return a copy with `result` materialized to numpy.
 
-        A cupy or torch `result` is transferred from the device here; a numpy
-        `result` is shared.
+        A cupy or torch `result` is copied from the device. A numpy `result` is
+        shared with the copy.
 
         Returns:
             a `DelayedDataArray` with the same `capture`, `spec`, `info`, and `attrs`
@@ -468,12 +475,14 @@ class DelayedDataArray(collections.UserDict):
                 dimensions, or None for none
 
         Returns:
-            a `xarray.DataArray` named `info.name`, with the attrs of `info`, the
-            fields of `spec`, and `attrs`
+            an `xarray.DataArray` without a name, with the attrs of `info`, the
+            fields of `spec`, and `attrs`, and with a power-form `units` attr
+            resolved into `power_units`
 
         Raises:
-            ValueError: when the shape of `result` does not match the dimensions or a
-                coordinate factory returns the wrong shape
+            ValueError: when the shape of `result` does not match the dimensions, or
+                when the values of a coordinate factory differ in shape from the
+                data along that dimension
             TypeError: when `result` is a dict
         """
         return build_dataarray(self, expand_dims=expand_dims)
@@ -482,23 +491,23 @@ class DelayedDataArray(collections.UserDict):
 class EvaluationOptions(msgspec.Struct, typing.Generic[TAR]):
     """the result type and registry for one evaluation of an analysis group.
 
-    `as_xarray` selects the result type of `analyze_by_spec`: ``True`` for an
-    `xarray.Dataset`, ``'delayed'`` for `DelayedDataArray` results, or ``False``
-    for the bare arrays in the array namespace of the input. `registry` supplies
-    the measurement function of each spec type. `block_each` True materializes
-    each result to numpy as soon as the measurement returns, when
-    `as_xarray` is ``True`` or ``'delayed'``. `expand_dims` names the leading
-    dimension of each `xarray.DataArray` when `as_xarray` is ``True``, and that
-    dimension indexes the port axis of the input.
-
     Raises:
         TypeError: when `as_xarray` is not ``True``, ``False``, or ``'delayed'``
     """
 
     as_xarray: TAR
+    """the result type of `analyze_by_spec`: ``True`` for an `xarray.Dataset`,
+    ``'delayed'`` for `DelayedDataArray` results, or ``False`` for the bare arrays
+    in the array namespace of the input"""
     registry: register.AnalysisRegistry
+    """the registry that supplies the measurement function of each spec type"""
     block_each: bool = True
+    """True copies each result to numpy as the measurement returns, False after
+    the last measurement. The field is read when `as_xarray` is ``True`` or
+    ``'delayed'``."""
     expand_dims: typing.Sequence[str] = (PORT_DIM,)
+    """the name of the leading dimension of each `xarray.DataArray` when
+    `as_xarray` is ``True``. That dimension indexes the port axis of the input."""
 
     def __post_init__(self):
         if self.as_xarray not in (True, False, 'delayed'):
@@ -521,20 +530,25 @@ def evaluate_by_spec(
 ) -> dict[str, DelayedDataArray] | dict[str, Array]:
     """evaluate each enabled measurement of `spec` on the IQ waveform.
 
+    A measurement with a spec type that has no fields is skipped.
+
     Args:
         iq: the waveform with shape (port, sample), or an `AcquiredIQ` from which
             each measurement selects the conditioned waveform
-        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`; the ``None``
-            fields are skipped
+        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`, with the ``None``
+            fields skipped
         capture: the acquisition parameters of `iq`
         options: the result type and the registry of the measurement functions
 
     Returns:
-        a dict keyed by measurement name, in the field order of `spec`: a
-        `DelayedDataArray` per measurement when `options.as_xarray` is ``True`` or
-        ``'delayed'``, materialized to numpy when `options.block_each` is set; the
-        bare array of each measurement in the array namespace of `iq`, without
-        attrs, when ``False``
+        a dict keyed by measurement name, in the field order of `spec`, by
+        `options.as_xarray`:
+
+        - ``True`` or ``'delayed'``: a `DelayedDataArray` per measurement with
+          `result` copied to numpy, each as the measurement returns when
+          `options.block_each` is True, otherwise after the last measurement
+        - ``False``: the bare array of each measurement in the array namespace of
+          `iq`, without attrs
 
     Raises:
         TypeError: when `spec` is not an `AnalysisGroup`
@@ -641,11 +655,13 @@ def analyze_by_spec(
 ) -> Array | dict[str, Array] | xr.Dataset | dict[str, DelayedDataArray]:
     """evaluate the enabled measurements of `spec` on the IQ waveform.
 
+    A measurement with a spec type that has no fields is skipped.
+
     Args:
         iq: the waveform with shape (port, sample), or an `AcquiredIQ` from which
             each measurement selects the conditioned waveform
-        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`; the ``None``
-            fields are skipped
+        spec: an `AnalysisGroup` such as `specs.BuiltinAnalyses`, with the ``None``
+            fields skipped
         capture: the acquisition parameters of `iq`
         options: the result type and the registry, or ``None`` for the default
             registry with `as_xarray` ``True``
