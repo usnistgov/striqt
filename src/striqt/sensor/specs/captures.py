@@ -36,6 +36,9 @@ def split_capture_ports(capture: SC) -> list[SC]:
     Each tuple-valued field is distributed by position. A capture with a scalar
     `port` is returned as the only element.
 
+    Returns:
+        one capture per port, in `port` order
+
     Raises:
         ValueError: if a tuple-valued field has a length other than the number of
             ports
@@ -65,10 +68,8 @@ def split_capture_ports(capture: SC) -> list[SC]:
 
 @sa.util.lru_cache()
 def pairwise_by_port(c1: SC, c2: SC | None, is_new: bool) -> list[tuple[SC, SC | None]]:
-    # a list with 1 capture per port
     c1_split = split_capture_ports(c1)
 
-    # a new capture has no predecessor
     if c2 is None or is_new:
         c2_split = len(c1_split) * [None]
     else:
@@ -119,9 +120,9 @@ def concat_group_sizes(
     """return the sizes of capture groups that each include every distinct capture.
 
     The groups are consecutive runs of `captures`, which compare by the
-    `SensorCapture` fields alone. A group closes once the
-    group has at least `min_size` captures and both the group and the remaining
-    captures include every distinct capture. The last group takes the remainder.
+    `SensorCapture` fields alone. A group ends once the group holds at least
+    `min_size` captures and both the group and the remaining captures include every
+    distinct capture. The last group holds the remainder.
 
     Returns:
         the group sizes in order, summing to ``len(captures)``
@@ -140,8 +141,6 @@ def concat_group_sizes(
 
     while len(remaining) > 0:
         if count >= min_size and set(pending) == set(counts) == whole_set:
-            # close the group only when both pending and remaining span every
-            # distinct capture
             sizes.append(count)
             count = 0
             pending = []

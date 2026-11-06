@@ -1,8 +1,8 @@
 """run the first-use compilation of the GPU kernels for the current platform.
 
-The `cupy.fuse` and `ReductionKernel` detector kernels compile on first call, and
-cupy caches the compiled kernels on disk across runs. Without cupy, the command
-exercises the cyclic-prefix correlation on numpy and compiles nothing.
+cupy compiles the `cupy.fuse` and `ReductionKernel` detector kernels on first call
+and caches the compiled kernels on disk across runs. Without cupy, the command runs
+the cyclic-prefix correlation on numpy and compiles nothing.
 """
 
 import click

@@ -5,10 +5,10 @@ FastAPI and uvicorn serve the page and stream updates over a websocket. Plotly.j
 renders the updates in the browser through WebGL. The page is at
 http://localhost:8000 for ``web-plotter path/to/spec.yaml``.
 
-The sweep runs with a null sink. Each acquisition evaluates only the measurement on
-display, through the `select_analysis` hook, and the acquisition sequence follows the
-capture and loop values selected in the page, through the `captures` keyword of
-`iterate_sweep`.
+The sweep runs with a null sink. The analysis of each acquisition is narrowed to the
+measurement on display through the `select_analysis` hook, and the acquisition
+sequence follows the capture and loop values selected in the page through the
+`captures` keyword of `iterate_sweep`.
 """
 
 from __future__ import annotations
@@ -55,9 +55,9 @@ class PreviewState:
     """
 
     spec_filename: str = ''
-    """the file name of the spec, shown in the page header"""
+    """the file name of the spec"""
     sweep: Optional[ss.specs.Sweep] = None
-    """the sweep that the open resources run"""
+    """the sweep spec of the open resources"""
     source_id: Optional[str] = None
     """the id of the open source"""
     plot_opts: Optional[sf.specs.PlotOptions] = None
@@ -65,20 +65,20 @@ class PreviewState:
     plotter: Optional[PlotlyBackend] = None
     """the backend that draws the selected variable"""
     data_select: dict[str, Any] = dataclasses.field(default_factory=dict)
-    """the ``plot_opts.data.select`` indexers, filtered per variable at draw time"""
+    """the ``plot_opts.data.select`` indexers"""
     available_variables: list[str] = dataclasses.field(default_factory=list)
     """the enabled measurements of the sweep that have a registered plot"""
     variable_labels: dict[str, str] = dataclasses.field(default_factory=dict)
     """the display label of each available variable"""
     selected_variable: str = 'spectrogram'
-    """the variable on display; the only measurement evaluated per acquisition"""
+    """the variable on display"""
     choices: Optional[PlanChoices] = None
-    """the capture entries and loop values the page offers"""
+    """the capture entries and loop values available for selection"""
     selected_capture: Optional[int] = None
     """the index into ``sweep.captures`` to acquire, or None for every entry"""
     selected_loops: dict[tuple[str, str], Any] = dataclasses.field(default_factory=dict)
-    """the loop values to acquire, keyed by ``(isin, field)``; a missing loop
-    acquires every value"""
+    """the loop values to acquire, keyed by ``(isin, field)``, with every value kept
+    for a loop absent from the mapping"""
     dataset: Optional[ss.lib.compute.DelayedDataset] = None
     """the latest analyzed acquisition"""
     websockets: set[WebSocket] = dataclasses.field(default_factory=set)
@@ -88,11 +88,11 @@ class PreviewState:
     data_updated: bool = False
     """True when a dataset arrived during a broadcast"""
     running: bool = True
-    """False holds the acquisition before the next capture until set True again"""
+    """True while acquisition proceeds; False pauses before the next capture"""
     stop: threading.Event = dataclasses.field(default_factory=threading.Event)
-    """set to end the acquisition thread"""
+    """the event that ends the acquisition thread when set"""
     thread: Optional[threading.Thread] = None
-    """the acquisition thread, once started"""
+    """the acquisition thread, or None before start"""
 
 
 STATE = PreviewState()
@@ -137,11 +137,15 @@ def current_plan(state: PreviewState) -> tuple[ss.specs.SensorCapture, ...]:
 
 
 def selected_captures(state: PreviewState) -> Iterator[ss.specs.SensorCapture]:
-    """yield the captures of `current_plan`, wrapping, until ``state.stop`` is set.
+    """yield the captures of `current_plan` in a cycle until ``state.stop`` is set.
 
-    The plan is re-read before each capture. A selection change takes effect at the
-    next acquisition. An empty plan, or ``state.running`` False, waits, polling
-    ``state.stop``.
+    The plan is re-read before each capture, and a selection change takes effect at
+    the next acquisition. The generator polls ``state.stop`` every 0.1 s while the
+    plan is empty or ``state.running`` is False.
+
+    Yields:
+        the next capture of the plan, cycling to the first after the last, until
+        ``state.stop`` is set
     """
     i = 0
     while not state.stop.is_set():
@@ -184,8 +188,8 @@ def capture_selection(state: PreviewState) -> dict[str, Any]:
 def select_first(state: PreviewState) -> None:
     """select the first ``captures:`` entry and the first value of each loop.
 
-    A sweep without a ``captures:`` list selects no entry, and a loop without
-    values is left unselected.
+    No entry is selected when the sweep lists no captures, and a loop without
+    values is left unselected. `state` is unchanged when ``state.choices`` is None.
     """
     choices = state.choices
     if choices is None:
@@ -199,12 +203,14 @@ def select_first(state: PreviewState) -> None:
 def apply_capture_selection(state: PreviewState, msg: dict[str, Any]) -> None:
     """set the selections of `state` from a ``select_captures`` message.
 
+    A capture index is clamped to the ``captures:`` list and a loop index to the
+    values of the loop. None keeps every entry or every value. `state` is unchanged
+    when ``state.choices`` is None.
+
     Args:
         state: the state to update
         msg: ``{'capture': int | None, 'loops': [int | None, ...]}`` with indexes
-            into the `capture_options` lists, in the order of ``choices.loops``; a
-            capture index is clamped to the ``captures:`` list, and None keeps every
-            entry or every value
+            into the `capture_options` lists, in the order of ``choices.loops``
     """
     if state.choices is None:
         return
@@ -229,8 +235,9 @@ def coordinates_message(dd: ss.lib.compute.DelayedDataset) -> dict[str, Any]:
     """return the capture and acquisition fields of `dd` as the ``coordinates`` field.
 
     Returns:
-        ``num_ports``, ``groups`` (capture fields per defining class, one value per
-        port), and ``extra_coords`` (acquisition info per defining class)
+        a dict with ``num_ports``, ``groups`` (the capture fields keyed by defining
+        class, one value per port), and ``extra_coords`` (the acquisition info
+        fields keyed by defining class)
     """
     import striqt.sensor as ss
     from striqt.sensor.lib.compute import summary
@@ -275,7 +282,7 @@ def state_message(state: PreviewState) -> dict[str, Any]:
 
 
 def _encode(message: dict[str, Any]) -> str:
-    # msgspec encodes to bytes; a text frame keeps the browser's JSON.parse path
+    # msgspec encodes to bytes. The page parses text frames with JSON.parse.
     return _json_encoder.encode(message).decode()
 
 
@@ -305,7 +312,7 @@ async def get_index() -> str:
 
 
 async def _send_all(message: str) -> None:
-    """send `message` to every client, dropping the clients that fail."""
+    """send `message` to every client, dropping each client on a send error."""
     disconnected = set()
     for ws in STATE.websockets:
         try:
@@ -354,8 +361,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 async def broadcast_plot_update() -> None:
     """send the current plot to every connected websocket.
 
-    A call during a broadcast in progress sets `data_updated` instead of queuing.
-    One more broadcast follows the current one.
+    During a broadcast in progress, the function sets `data_updated` and returns,
+    and one more broadcast follows the current one.
     """
     if STATE.broadcast_pending:
         STATE.data_updated = True
@@ -398,12 +405,11 @@ def _prepare_plot_data_sync(
 ) -> list[go.Figure]:
     """return the figures of `variable` in `result`.
 
-    The call blocks on the materialization of the delayed dataset (a GPU transfer
-    on the TX2i).
+    The function blocks until the delayed dataset is materialized.
 
     Args:
         result: the delayed dataset of the analyzed capture
-        plotter: the backend that produces the figures; `reset` is called first
+        plotter: the backend that produces the figures, reset before drawing
         variable: the name of the data variable to plot
         data_select: the `PlotOptions.data.select` selection; keys that are not
             indexes of the dataset are dropped
@@ -440,8 +446,8 @@ def _serialize_plot_message(
 ) -> str:
     """return the ``plot_data`` message as JSON text.
 
-    Each figure is encoded by `Figure.to_json`, which writes numpy arrays as base64
-    typed arrays.
+    Numpy arrays in each figure are encoded as base64 typed arrays by
+    `Figure.to_json`.
     """
     serialized_plots = [
         _json_decoder.decode(cast(str, fig.to_json())) for fig in plot_data
@@ -507,8 +513,8 @@ def serving_urls(host: str, port: int) -> list[str]:
 
     A wildcard `host` (``''``, ``'0.0.0.0'``, or ``'::'``) expands to the loopback
     address, the host name, the fully qualified host name when it differs, and the
-    IPv4 address of every network interface other than loopback. Any other `host`
-    gives the one URL at that host.
+    IPv4 address of every network interface other than loopback. For any other
+    `host`, the list holds the one URL at that host.
     """
     if host not in WILDCARD_HOSTS:
         return [f'http://{host}:{port}']
@@ -554,8 +560,8 @@ def configure(state: PreviewState, resources: Resources) -> None:
     """set the sweep-derived fields of `state` from the open `resources`.
 
     The variables offered are the enabled measurements of the sweep with a plot in
-    `striqt.figures.data_var_plotters`. The selected variable falls back to the
-    first offered one when the current selection is not offered. The capture
+    `striqt.figures.data_var_plotters`. `selected_variable` is replaced by the first
+    offered variable when the current selection is not offered. The capture
     selection starts at the first entry and the first value of each loop.
     """
     import striqt.figures as sf
@@ -592,11 +598,11 @@ def configure(state: PreviewState, resources: Resources) -> None:
 def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     """run the web server and the acquisition thread for the spec at `path`.
 
-    The sink of the spec is replaced by a null sink, so nothing is written. The
-    server exits when the acquisition thread ends, and the acquisition thread ends
-    after the capture in progress when the server exits. The URLs of
-    `serving_urls` are logged at INFO on the ``sweep`` logger once the server
-    starts.
+    The sink path of the spec is set to None, and no store is written. The server
+    exits when the acquisition thread ends, and the acquisition thread ends after
+    the capture in progress when the server exits. The URLs of `serving_urls` are
+    logged at INFO on the ``sweep`` logger once the server starts, and the
+    ``uvicorn.error`` logger level is set to WARNING.
 
     Raises:
         click.ClickException: if `path` has a suffix other than ``.yaml``, ``.yml``,
@@ -616,14 +622,14 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     else:
         raise click.ClickException('expected file to have .json or .yaml suffix')
 
-    # a null sink path writes nothing, and on_analyzed receives the results instead
+    # with a None sink path, no store is written and on_analyzed receives the results
     spec = spec.replace(sink=spec.sink.replace(path=None))
 
     loop = asyncio.new_event_loop()
     config = uvicorn.Config(app, host=host, port=port, loop='asyncio')
     server = uvicorn.Server(config)
-    # the uvicorn startup line names the bind address, which is 0.0.0.0 by default;
-    # the URLs are logged below instead, and uvicorn errors still show
+    # the uvicorn startup line names only the bind address, 0.0.0.0 by default.
+    # serve() logs the reachable URLs instead, and WARNING still passes uvicorn errors
     logging.getLogger('uvicorn.error').setLevel(logging.WARNING)
 
     async def serve() -> None:

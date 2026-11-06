@@ -28,14 +28,14 @@ class Schema(Generic[SS, SP, SC, SA, PS, PC]):
     """the `Peripherals` subclass of the binding"""
 
     init_like: Callable[PS, Any]
-    """a callable with the keyword signature of `source`; read only by the type
-    checker"""
+    """a callable with the keyword signature of `source`, read by the type checker
+    alone"""
     arm_like: Callable[PC, Any]
-    """a callable with the keyword signature of `capture`; read only by the type
-    checker"""
+    """a callable with the keyword signature of `capture`, read by the type checker
+    alone"""
 
     action: type[structs.ActionSpec[SS, SP, SA]] = structs.Sweep
-    """the action spec type that `bind_sensor` subclasses"""
+    """the action spec type of the binding"""
     analysis: type[SA] = dataclasses.field(
         default=cast('type[SA]', sa.specs.BuiltinAnalyses)
     )
@@ -51,15 +51,11 @@ class Schema(Generic[SS, SP, SC, SA, PS, PC]):
 
 @dataclasses.dataclass
 class PendingExtraData:
-    """the peripheral read of a capture that is still running when an acquisition is
-    handed to analysis.
-
-    The result joins the `extra_data` of the acquisition when a sink resolves the
-    read.
-    """
+    """a peripheral read of a capture that is still running when the acquisition is
+    handed to analysis."""
 
     peripherals: Future[dict[str, Any]]
-    """the running peripheral read of the capture; the result is one dict"""
+    """the running peripheral read of the capture, resolving to one dict"""
     override: dict[str, Any]
     """entries that win over the peripheral dict on a shared key"""
 
@@ -69,8 +65,7 @@ class AcquiredIQ(sa.AcquiredIQ):
     """an acquisition from a sensor source with the metadata and conditioning of the capture.
 
     `x` must not change after the first access of `preprocess`, except that the
-    resampling stage replaces `x` with a `ConsumedBuffer` when `overwrite_x` lets the
-    stage consume the buffer.
+    resampling stage replaces `x` with a `ConsumedBuffer` when `overwrite_x` is True.
     """
 
     info: structs.AcquisitionInfo
@@ -81,18 +76,18 @@ class AcquiredIQ(sa.AcquiredIQ):
     voltage_scale: sw.typing.Array | float = 1
 
     conjugate: tuple[bool, ...] | Literal[False] = False
-    """one flag per port, True to conjugate the IQ of the port; False conjugates none"""
+    """one flag per port, True to conjugate the IQ of that port, or the scalar False
+    for no conjugation"""
     signal_trigger: sa.Trigger | None = None
-    """the trigger that `preprocess` runs for alignment; None selects
-    `info.signal_trigger`"""
+    """the trigger run for alignment, or None to select `info.signal_trigger`"""
     overwrite_x: bool = False
-    """True permits the resampling stage to consume `x`; `x` is a `ConsumedBuffer`
-    when the stage returns another array"""
+    """True permits the resampling stage to consume `x`, leaving a `ConsumedBuffer` in
+    `x` when the stage returns another array"""
     trigger_shifts: sw.typing.Array | None = None
-    """one shift per port (samples at `capture.sample_rate`) that the alignment stage
-    applies in place of running the trigger; None runs the trigger"""
+    """one shift per port, in samples at `capture.sample_rate`, applied in place of
+    running the trigger, or None to run the trigger"""
     pending_extra_data: PendingExtraData | None = None
-    """the peripheral read of the capture when still running; None when `extra_data`
+    """the peripheral read still running for the capture, or None when `extra_data`
     is complete"""
 
     @util.cached_property

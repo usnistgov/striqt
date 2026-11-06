@@ -74,7 +74,6 @@ def _custom_indent(obj, indent_level=2, current_indent=0):
         if not obj:
             return '[]'
         items = [_custom_indent(v, indent_level, current_indent) for v in obj]
-        # lists stay on one line
         return '[' + ', '.join(items) + ']'
 
     else:

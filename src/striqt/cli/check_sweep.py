@@ -28,7 +28,8 @@ def run(yaml_path: str):
 
     print('Opening sensor resources...')
 
-    # `run_spec` writes nothing. The paths printed below come from `spec`.
+    # with a None sink path, `open_resources` writes no store; the paths printed
+    # below come from `spec`
     run_spec = spec.replace(sink=spec.sink.replace(path=None))
 
     manager = ss.open_resources(run_spec, yaml_path, test_only=True)

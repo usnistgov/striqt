@@ -43,7 +43,7 @@ SSBFrequencyOffset = Annotated[
 MinSampleRate = Annotated[
     float,
     Meta(
-        'lower bound on the sample rate derived for the channel; None applies no bound',
+        'lower bound on the sample rate derived for the channel, or None for no bound',
         'S/s',
         gt=0,
     ),
@@ -146,9 +146,7 @@ ChunkBytes = Annotated[
         'Upper bound on the uncompressed size of one chunk of each variable', 'B', gt=0
     ),
 ]
-BatchedWriteCount = Annotated[
-    int, Meta('Ignored; accepted for compatibility until the next release')
-]
+BatchedWriteCount = Annotated[int, Meta('ignored, with no effect on the sink')]
 BurstCount = Annotated[
     int,
     Meta(
@@ -163,7 +161,7 @@ BurstBuffers = Annotated[
 OnGap = Annotated[
     Literal['skip', 'except'],
     Meta(
-        "whether a burst tolerates a timing gap: 'skip' drops a segment when the "
+        "the response to a timing gap in a burst: 'skip' drops a segment when the "
         "queue is full and resumes after a stream overflow; 'except' raises on a "
         'full queue and restarts the burst after a stream overflow'
     ),
@@ -172,7 +170,7 @@ TriggerOn = Annotated[
     Literal['first', 'all'],
     Meta(
         "'first' runs the signal trigger on the first delivered segment of a burst "
-        "and applies that lag to the rest; 'all' runs it on every segment"
+        "and applies that lag to the rest; 'all' runs the trigger on every segment"
     ),
 ]
 SweepStartTime = Annotated['pd.Timestamp', Meta('Capture acquisition start time')]
