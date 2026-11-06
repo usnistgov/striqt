@@ -248,8 +248,8 @@ def cellular_stft_window_fractions(
     if cyclic_prefix == 'normal':
         return Fraction(13, 28), Fraction(15, 28)
     else:
-        # the Literal leaves 'extended' as the only other value
-        return Fraction(11, 24), Fraction(13, 24)
+        # extended CP
+        return Fraction(3, 8), Fraction(5, 8)
 
 
 # %% cellular_5g_pss_correlation and cellular_5g_pss_sync

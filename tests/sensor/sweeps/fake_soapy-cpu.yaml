@@ -1,5 +1,6 @@
 # Measurement sweep against the fake SoapySDR device (tests/sensor/fake_soapy.py).
-# Every capture has a matching grid point in fake_soapy-calibration-cpu.yaml.
+# Every capture has a matching grid point in fake_soapy-calibration-cpu.yaml, and the
+# 2 ms duration follows the FAKE_TOL_DB derivation in test_sensor_compute_cal_lookups.py.
 
 sensor_binding: fake_soapy
 extensions:
@@ -19,14 +20,14 @@ captures:
   - port: [0, 1]
     center_frequency: 1.5e9
     gain: 0
-    duration: 5e-3
+    duration: 2e-3
     sample_rate: 125e6
     analysis_bandwidth: 40e6
     host_resample: false
   - port: 0
     center_frequency: 1.5e9
     gain: -10
-    duration: 5e-3
+    duration: 2e-3
     sample_rate: 62.5e6
     analysis_bandwidth: 40e6
     host_resample: false

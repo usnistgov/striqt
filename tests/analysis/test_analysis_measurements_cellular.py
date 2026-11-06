@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import re
+from fractions import Fraction
 
 import msgspec
 import numpy as np
@@ -179,6 +180,27 @@ def test_autocorrelation_guards_a_waveform_shorter_than_its_capture():
 
     with pytest.raises(ValueError, match=r'lies past the .* samples of the waveform'):
         body(short_iq, capture(), **spec.to_dict())
+
+
+# %% cellular_stft_window_fractions
+
+
+@pytest.mark.parametrize(
+    'cyclic_prefix, symbols_per_slot',
+    [('normal', 14), ('extended', 12)],
+    ids=['normal', 'extended'],
+)
+def test_window_fractions_hop_one_symbol_per_window(cyclic_prefix, symbols_per_slot):
+    """one slot spans 15 subcarrier periods (3GPP TS 38.211 §5.3.1: 30720 kappa 2^-mu
+    at 2048 kappa 2^-mu per period) and one window at half the subcarrier spacing
+    spans 2, so one symbol with its prefix fills 15/(2 * symbols) of the window and
+    the overlap is the rest"""
+    fill = Fraction(15, 2 * symbols_per_slot)
+
+    overlap, window_fill = cellular.cellular_stft_window_fractions(cyclic_prefix)
+
+    assert window_fill == fill
+    assert overlap == 1 - fill
 
 
 # %% cellular_5g_ssb_spectrogram

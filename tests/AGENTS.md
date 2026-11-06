@@ -37,8 +37,9 @@ repository.
 - **The type checker's view** of the keyword-unpacking signatures is pinned by
   `tests/test_typing.py` and the probes under `tests/ty_probes/` (see Typing); import-time
   side effects by `tests/test_imports.py`; the docstring prose gate (no personal pronoun
-  or "whose", no `striqt.<pkg>.lib` path in a public docstring) by
-  `tests/test_docstrings.py`, which has no baseline.
+  or "whose", no `striqt.<pkg>.lib` path in a public docstring) and the registry
+  docstring checks (sentence-case `long_name`, the `Output:` section, a docstring on
+  every coordinate factory) by `tests/test_docstrings.py`, which has no baseline.
 - The downstream project's patterns are reproduced by `tests/sensor/sweeps/src/extensions.py`
   and the `site*` sweep directories; the papers the cyclic-power and sync tests derive their
   expectations from are under `_training_material/papers/` (untracked; locate with a search).
@@ -76,28 +77,35 @@ same thing is invisible until the two drift. Look here before writing setup:
   registers a measurement with the live registries), the array and scalar
   hypothesis primitives (`float_arrays`, `iq_waveforms`, `scalars`, `bounded_ints`,
   `finite_floats`, `short_text`), the sweep-file path constants (`SWEEP_DIR`, `SITE_DIR`,
-  `SITE_SPEC`, `FAKE_SOAPY_SPEC`), and the `construct`/`raises_on_both_paths` helpers for
-  checking a spec on both the direct and the `from_dict` path.
+  `SITE_SPEC`, `FAKE_SOAPY_SPEC`), the `construct`/`raises_on_both_paths`/`construct_both`
+  helpers for checking a spec on both the direct and the `from_dict` path, and
+  `gaussian_iq`, the shape-addressed noise primitive of the kernel tests
+  (`striqt.analysis.testing.circular_awgn` is the duration-, rate-, and port-addressed
+  generator the synthetic sensor sources share).
 - `tests/numeric_checks.py`: only assertions and oracles — `assert_close` (the single entry
   point), `assert_within`, `reference_power`, `cross_backend`, `numpy_and_cupy`,
-  `elementwise_rtol`, `levels`, `populated`. No waveform builders and no tolerance formulas
-  of its own.
+  `elementwise_rtol`, `levels`, `populated`, `blocks` (normalizes a negative axis). No
+  waveform builders and no tolerance formulas of its own.
 - `tests/waveform/waveform_strategies.py`: the comms builders (`FS`, `phy_5g`, `sync_params`,
-  `cp_case`, `embed_pss_ports`, `get_ssb_spans`, …) shared by the `test_waveform_comms_*`
-  modules, and the fourier strategies (`noise_waveforms`, `sample_rates`,
-  `stft_parameters`, `cross_backend_sigma`) shared by the `test_waveform_fourier_*` modules.
+  `cp_case`, `embed_pss_ports`, …) shared by the `test_waveform_comms_*` modules, and the
+  fourier strategies and COLA oracles (`noise_waveforms`, `sample_rates`,
+  `stft_parameters`, `cross_backend_sigma`, `cola_sum`, `cola_ripple_rtol`) shared by the
+  `test_waveform_fourier_*` modules.
 - `tests/analysis/analysis_strategies.py`: analysis spec factories and constants
-  (`POWER_BINS`, `CELL_FS`, `CELL_FRAME`, `capture_of`, `registered_tolerance`, the SSB
-  spectrogram fixtures).
+  (`POWER_BINS`, `CELL_FS`, `CELL_FRAME`, `SSB_WINDOW_FILL`, `capture_of`,
+  `registered_tolerance`, the SSB spectrogram fixtures) and the `RecordingPreprocessor`/
+  `RecordingIQ` doubles that record the preferences of each preprocess call.
 - `tests/sensor/sweep_strategies.py`: sensor spec factories and constants (`SOURCE`, the
   function-generator source spec nine modules share; `make_capture`/`make_sweep`/
   `make_sweep_kws` generic builders; `SPG`, `RESOLUTION_MSG`; the `QuickAnalyses` and
   `CellularAnalyses` groups with the unregistered `quick_binding` and
-  `restricted_cellular_binding`).
+  `restricted_cellular_binding`; `air_sweep`, `make_delayed`, and `spectrogram_result`
+  for the `air7101b` summary and logging tests).
 - `tests/sensor/synthetic_sources.py`: the sensor harness — the four capture presets,
   `preset_capture`, `preset_sweep`, `tone_capture`, `tone_captures`, `tone_sweep`, `fs_sdr`,
   `expected_raw`, `build_acquired_iq`, `acquire_corrected`, `expected_corrected`,
-  `run_in_memory`.
+  `run_in_memory`, and the derived sweeps several modules share (`mixed_rate_sweep`,
+  `cupy_sweep`, `scale_only`, `TONE_OFFSETS`).
 - `tests/sensor/soapy_factories.py`: `MCR` and the soapy spec factories; `fake_soapy.py`: the
   fake `SoapySDR` module (`stub_controller`/`receive_buffers` for buffer tests live in
   `test_sensor_sources_buffers.py`).

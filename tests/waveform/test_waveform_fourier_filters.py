@@ -58,6 +58,25 @@ class TestFilterDesign:
         total = cola_sum(window, nfft_out, hop)
         assert_close(total, total.mean(), rtol=cola_ripple_rtol(nfft_out, hop))
 
+    @pytest.mark.xfail(
+        strict=True,
+        raises=ZeroDivisionError,
+        reason='design_oafilter returns overlap_scale=1 and noverlap=nfft_out for a '
+        'rect window, so oafilter passes stft a hop of 0 samples',
+    )
+    def test_rect_window_filters_without_overlap(self):
+        """a rect window satisfies COLA at a hop of the whole block, so the filter
+        runs and passes a bin-centered in-band tone at unit level"""
+        fs = 1e6
+        nfft = 256
+        t = np.arange(40 * nfft) / fs
+        x = np.exp(2j * np.pi * (fs / nfft) * 4 * t).astype('complex64')
+
+        y = oafilter(x, fs=fs, nfft=nfft, window='rect', passband=(-fs / 8, fs / 8))
+
+        assert y.shape == x.shape
+        assert_close(np.abs(y[nfft:-nfft]), 1.0, rtol=level_tolerance_dB(np.float32))
+
     @pytest.mark.parametrize(
         'size, kws, exc, match',
         [

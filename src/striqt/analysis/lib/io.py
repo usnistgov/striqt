@@ -35,10 +35,6 @@ warnings.filterwarnings(
     'ignore', '.*removed in a Zarr-Python version 3.*', FutureWarning
 )
 
-warnings.filterwarnings(
-    'ignore', '.*Duplicate name.*', UserWarning, module='.*zipfile.*'
-)
-
 
 def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> ZarrStore:
     """return the zarr store at `target`.

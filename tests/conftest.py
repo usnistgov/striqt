@@ -548,23 +548,6 @@ def assert_source_released(lookup, sweep):
     assert not isinstance(lookup._get(sweep.source), ss.lib.controller.Controller)
 
 
-@pytest.fixture
-def run_sweep_to_zarr(tmp_path, fake_source_id):
-    """run a sweep end to end into `tmp_path` through the returned
-    ``run(spec, name='out.zarr.zip') -> (spec as run, store path)``. `open_resources`
-    receives no spec path, so the working directory is unchanged."""
-    import striqt.sensor as ss
-
-    def run(spec, name='out.zarr.zip'):
-        path = tmp_path / name
-        spec = spec.replace(sink=spec.sink.replace(path=str(path)))
-        with ss.open_resources(spec, None) as resources:
-            list(ss.iterate_sweep(resources))
-        return spec, path
-
-    return run
-
-
 # %% Spec construction paths
 
 # `construct` parametrizes a test over the two paths; `raises_on_both_paths` asserts
