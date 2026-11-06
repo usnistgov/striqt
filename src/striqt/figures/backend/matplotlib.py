@@ -11,7 +11,7 @@ import striqt.analysis as sa
 import striqt.waveform as sw
 from striqt.analysis.lib.util import np, xr
 
-from . import specs, util
+from .. import specs, util
 
 if typing.TYPE_CHECKING:
     from multiprocessing.synchronize import RLock
@@ -115,7 +115,7 @@ def plot_cyclic_channel_power(
 ):
     import matplotlib.pyplot as plt
 
-    from . import labels
+    from .. import labels
 
     if plot_kws is None:
         plot_kws = {}
@@ -299,7 +299,7 @@ class PlotBackend:
     ) -> Path | None:
         import matplotlib.pyplot as plt
 
-        from . import labels
+        from .. import labels
 
         data = grid.data
         x = grid._x_var

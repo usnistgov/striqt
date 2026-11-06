@@ -1,0 +1,965 @@
+"""plotly trace and layout dicts for the browser display of sweep results."""
+
+from __future__ import annotations
+
+from typing import Any, Literal, Optional, Union, cast
+
+import striqt.analysis as sa
+from striqt.analysis.lib.util import np, xr
+
+from .. import labels, specs, util
+
+
+def _to_numpy(arr: Any) -> np.ndarray:
+    """return `arr` as a numpy array, with a cupy array transferred to the CPU"""
+    if hasattr(arr, 'get'):
+        return arr.get()
+    return np.asarray(arr)
+
+
+class WebPlotBackend:
+    """a `striqt.figures.backend.PlotBackend` for Plotly trace and layout dicts.
+
+    The results of each `heatmap` and `line` call accumulate until `get_plot_data`.
+    The color and y-axis limits only widen across calls.
+    """
+
+    def __init__(
+        self,
+        opts: specs.SharedPlotOptions,
+    ):
+        self.opts = opts
+        self._pending_traces: list[dict[str, Any]] = []
+        self._layout: dict[str, Any] = {}
+        self._remembered_vmin: Optional[float] = None
+        self._remembered_vmax: Optional[float] = None
+        self._remembered_ymin: Optional[float] = None
+        self._remembered_ymax: Optional[float] = None
+
+    def reset(self) -> None:
+        """Clear per-broadcast state while preserving vmin/vmax memory."""
+        self._pending_traces.clear()
+        self._layout.clear()
+
+    def _get_subplot_key(self, data: xr.DataArray) -> str:
+        """Generate a subplot identifier from column/row coordinates."""
+        parts = []
+        col = self.opts.col
+        row = self.opts.row
+        if col and col in data.coords:
+            parts.append(f'{col}={data[col].values}')
+        if row and row in data.coords:
+            parts.append(f'{row}={data[row].values}')
+        return '_'.join(parts) if parts else 'main'
+
+    def _get_col_dim(self, data: xr.DataArray) -> Optional[str]:
+        """return the dimension for column faceting, or None.
+
+        `opts.col` is returned when `opts.col` is a dimension of `data`. When
+        `opts.col` is a 1-D coordinate of `data`, the dimension of that coordinate is
+        returned if `data` has more than 1 value along that dimension.
+        """
+        col = self.opts.col
+        if not col:
+            return None
+
+        if col in data.dims:
+            return col
+
+        if col in data.coords:
+            coord = data.coords[col]
+            if coord.dims and len(coord.dims) == 1:
+                dim = coord.dims[0]
+                if dim in data.dims and len(data[dim]) > 1:
+                    return cast(str, dim)
+
+        return None
+
+    def heatmap(
+        self,
+        data: xr.DataArray,
+        *,
+        x: str,
+        y: str,
+        cmap: str = 'cubehelix',
+        vmin: Optional[float] = None,
+        vmax: Optional[float] = None,
+        vstep: Optional[float] = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """add a heatmap of `data` to the pending results.
+
+        Every subplot (one per value of the column dimension) shares one colorbar
+        scale. A `vmin` or `vmax` of None is the minimum or maximum of `data`,
+        widened by the values of earlier calls.
+
+        Args:
+            data: the 2-D array to plot, with coordinates `x` and `y`
+            x: the name of the x coordinate
+            y: the name of the y coordinate
+            cmap: a matplotlib colormap name
+            vmin: the lower color limit, or None to infer
+            vmax: the upper color limit, or None to infer
+            vstep: the spacing of quantized color levels; None selects a continuous
+                gradient
+
+        Returns:
+            a dict with keys ``type``, ``traces``, ``layout``, and ``variable``
+        """
+        traces = []
+        col_dim = self._get_col_dim(data)
+
+        # the remembered vmin/vmax span every port and every broadcast, so the
+        # subplots share one colorbar scale
+        data_np = _to_numpy(data.values)
+        if vmin is None:
+            current_vmin = float(np.nanmin(data_np))
+            if self._remembered_vmin is None:
+                self._remembered_vmin = current_vmin
+            else:
+                self._remembered_vmin = min(self._remembered_vmin, current_vmin)
+            vmin = self._remembered_vmin
+        if vmax is None:
+            current_vmax = float(np.nanmax(data_np))
+            if self._remembered_vmax is None:
+                self._remembered_vmax = current_vmax
+            else:
+                self._remembered_vmax = max(self._remembered_vmax, current_vmax)
+            vmax = self._remembered_vmax
+
+        if vstep is not None:
+            colorscale = _make_quantized_colorscale(cmap, vmin, vmax, vstep)
+        else:
+            colorscale = _mpl_to_plotly_colorscale(cmap)
+
+        if col_dim:
+            n_subplots = len(data[col_dim].values)
+            for i, col_val in enumerate(data[col_dim].values):
+                sub = data.sel({col_dim: col_val})
+                # Only show colorbar on the last subplot to avoid duplicates
+                show_colorbar = i == n_subplots - 1
+                trace = self._make_heatmap_trace(
+                    sub,
+                    x,
+                    y,
+                    colorscale,
+                    vmin,
+                    vmax,
+                    subplot_idx=i + 1,
+                    show_colorbar=show_colorbar,
+                )
+                trace['name'] = f'{col_dim}={col_val}'
+                traces.append(trace)
+        else:
+            traces.append(
+                self._make_heatmap_trace(
+                    data, x, y, colorscale, vmin, vmax, show_colorbar=True
+                )
+            )
+
+        result = {
+            'type': 'heatmap',
+            'traces': traces,
+            'layout': self._make_heatmap_layout(data, x, y, len(traces)),
+            'variable': str(data.name),
+        }
+        self._pending_traces.append(result)
+        return result
+
+    def _make_heatmap_trace(
+        self,
+        data: xr.DataArray,
+        x: str,
+        y: str,
+        colorscale: Any,
+        vmin: Optional[float],
+        vmax: Optional[float],
+        subplot_idx: Optional[int] = None,
+        show_colorbar: bool = True,
+    ) -> dict[str, Any]:
+        """Create a single heatmap trace.
+
+        Args:
+            data: The data array to plot
+            x: Name of the x coordinate
+            y: Name of the y coordinate
+            colorscale: Plotly colorscale (string for built-in or list of [pos, color] pairs)
+            vmin: Minimum value for color scale (shared across all subplots)
+            vmax: Maximum value for color scale (shared across all subplots)
+            subplot_idx: Index of the subplot (1-based)
+            show_colorbar: Whether to show the colorbar for this trace
+        """
+        x_data = data[x].values
+        y_data = data[y].values
+        z_data = _to_numpy(data.values)
+
+        # Ensure 2D by selecting first element along extra dimensions
+        while z_data.ndim > 2:
+            z_data = z_data[0]
+        if z_data.ndim == 1:
+            z_data = z_data.reshape(1, -1)
+
+        # Plotly heatmap expects z with shape (len(y), len(x))
+        if z_data.shape != (len(y_data), len(x_data)) and z_data.shape == (
+            len(x_data),
+            len(y_data),
+        ):
+            z_data = z_data.T
+
+        # inf is replaced with NaN, which Plotly draws as a gap
+        if np.issubdtype(z_data.dtype, np.floating):
+            z_data = np.where(np.isinf(z_data), np.nan, z_data)
+
+        # numpy arrays are passed as is. Figure.to_json() encodes a numpy array as a
+        # base64 typed array
+        trace: dict[str, Any] = {
+            'type': 'heatmap',
+            'x': x_data,
+            'y': y_data,
+            'z': z_data,
+            'colorscale': colorscale,
+            'showscale': show_colorbar,
+        }
+
+        if show_colorbar:
+            trace['colorbar'] = {
+                'title': {'text': _colorbar_title(data)},
+            }
+
+        if vmin is not None:
+            trace['zmin'] = vmin
+        if vmax is not None:
+            trace['zmax'] = vmax
+
+        if subplot_idx is not None:
+            trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
+            trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
+
+        return trace
+
+    def _make_heatmap_layout(
+        self, data: xr.DataArray, x: str, y: str, n_subplots: int
+    ) -> dict[str, Any]:
+        """Create layout for heatmap with optional subplots."""
+        layout: dict[str, Any] = {
+            'uirevision': 'constant',  # Preserve zoom/pan on updates
+        }
+
+        if self.opts.col is None or self.opts.col_label_format is None:
+            pass
+        else:
+            layout['annotations'] = _format_subplots(data, self.opts)
+
+        if n_subplots > 1:
+            cols = min(n_subplots, self.opts.col_wrap or 4)
+            rows = (n_subplots + cols - 1) // cols
+
+            for i in range(n_subplots):
+                row_idx = i // cols
+                col_idx = i % cols
+                suffix = str(i + 1) if i > 0 else ''
+
+                x_domain = [col_idx / cols + 0.02, (col_idx + 1) / cols - 0.02]
+                y_domain = [
+                    1 - (row_idx + 1) / rows + 0.02,
+                    1 - row_idx / rows - 0.08,
+                ]
+
+                layout[f'xaxis{suffix}'] = {
+                    'title': {'text': _axis_title(data[x])},
+                    'domain': x_domain,
+                }
+                layout[f'yaxis{suffix}'] = {
+                    'title': {'text': _axis_title(data[y])},
+                    'domain': y_domain,
+                }
+        else:
+            layout['xaxis'] = {'title': {'text': _axis_title(data[x])}}
+            layout['yaxis'] = {'title': {'text': _axis_title(data[y])}}
+
+        return layout
+
+    def line(
+        self,
+        data: xr.DataArray,
+        *,
+        x: str,
+        hue: Optional[str] = None,
+        yscale: Literal['linear', 'log'] = 'linear',
+        ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """add ``scattergl`` lines of `data` to the pending results.
+
+        The y-axis limits are `ylim` where given and the finite extent of `data`
+        otherwise, widened by the values of earlier calls.
+
+        Returns:
+            a dict with keys ``type``, ``traces``, ``layout``, and ``variable``
+        """
+        traces = []
+        col_dim = self._get_col_dim(data)
+
+        if col_dim:
+            for i, col_val in enumerate(data[col_dim].values):
+                sub = data.sel({col_dim: col_val})
+                subplot_traces = self._make_line_traces(sub, x, hue, subplot_idx=i + 1)
+                for t in subplot_traces:
+                    t['legendgroup'] = f'{col_dim}={col_val}'
+                traces.extend(subplot_traces)
+        else:
+            traces.extend(self._make_line_traces(data, x, hue))
+
+        n_subplots = len(data[col_dim].values) if col_dim else 1
+
+        data_np = _to_numpy(data.values)
+        finite_mask = np.isfinite(data_np)
+        if np.any(finite_mask):
+            current_ymin = float(np.nanmin(data_np[finite_mask]))
+            current_ymax = float(np.nanmax(data_np[finite_mask]))
+        else:
+            current_ymin, current_ymax = 0.0, 1.0
+
+        # the remembered limits only widen across broadcasts
+        candidate_ymin = (
+            ylim[0] if (ylim is not None and ylim[0] is not None) else current_ymin
+        )
+        if self._remembered_ymin is None:
+            self._remembered_ymin = candidate_ymin
+        else:
+            self._remembered_ymin = min(self._remembered_ymin, candidate_ymin)
+
+        candidate_ymax = (
+            ylim[1] if (ylim is not None and ylim[1] is not None) else current_ymax
+        )
+        if self._remembered_ymax is None:
+            self._remembered_ymax = candidate_ymax
+        else:
+            self._remembered_ymax = max(self._remembered_ymax, candidate_ymax)
+
+        effective_ylim = (self._remembered_ymin, self._remembered_ymax)
+
+        result = {
+            'type': 'line',
+            'traces': traces,
+            'layout': self._make_line_layout(
+                data, x, yscale, n_subplots, ylim=effective_ylim
+            ),
+            'variable': str(data.name),
+        }
+        self._pending_traces.append(result)
+        return result
+
+    def _make_line_traces(
+        self,
+        data: xr.DataArray,
+        x: str,
+        hue: Optional[str],
+        subplot_idx: Optional[int] = None,
+    ) -> list[dict[str, Any]]:
+        """Create line traces, optionally split by hue dimension."""
+        traces = []
+        x_data = np.asarray(data[x].values).flatten()
+
+        # Plotly default color sequence for consistent colors across subplots
+        plotly_colors = [
+            '#636EFA',
+            '#EF553B',
+            '#00CC96',
+            '#AB63FA',
+            '#FFA15A',
+            '#19D3F3',
+            '#FF6692',
+            '#B6E880',
+            '#FF97FF',
+            '#FECB52',
+        ]
+
+        hue_is_dim = hue and hue in data.dims
+        hue_is_coord = hue and hue in data.coords and hue not in data.dims
+
+        if hue_is_dim:
+            hue_values = data[hue].values
+            for hue_idx, hue_val in enumerate(hue_values):
+                sub = data.sel({hue: hue_val})
+                y_data = _to_numpy(sub.values).squeeze()
+
+                # Ensure x and y have matching lengths
+                if y_data.size != x_data.size:
+                    if x in sub.dims:
+                        y_data = _to_numpy(sub.values)
+                        x_dim_idx = list(sub.dims).index(x)
+                        y_data = np.moveaxis(y_data, x_dim_idx, -1)
+                        y_data = y_data.reshape(-1, y_data.shape[-1])
+                        # only the first row is plotted when more than one remains
+                        if y_data.shape[0] > 1:
+                            y_data = y_data[0]
+                        y_data = y_data.flatten()
+                    else:
+                        y_data = y_data.flatten()
+
+                # Use markers only when there's a single point (lines won't show)
+                mode = 'markers' if len(x_data) == 1 else 'lines'
+
+                # Use consistent color for same hue value across subplots
+                color = plotly_colors[hue_idx % len(plotly_colors)]
+                hue_name = f'{hue}={hue_val}'
+
+                trace: dict[str, Any] = {
+                    'type': 'scattergl',  # WebGL-accelerated scatter
+                    'mode': mode,
+                    'x': _to_json_serializable(x_data),
+                    'y': _to_json_serializable(y_data),
+                    'name': hue_name,
+                    'legendgroup': hue_name,  # Group same hue across subplots
+                    'showlegend': subplot_idx is None
+                    or subplot_idx == 1,  # Only show legend for first subplot
+                    'line': {'color': color},
+                    'marker': {'color': color},
+                }
+
+                if subplot_idx is not None:
+                    trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
+                    trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
+
+                traces.append(trace)
+        elif hue_is_coord:
+            # hue is a coordinate but not a dimension - use it for labeling
+            # but iterate over the coordinate values
+            hue_values = data[hue].values
+            # If hue_values is 0-d or scalar, make it iterable
+            if np.ndim(hue_values) == 0:
+                hue_values = [hue_values.item()]
+            else:
+                hue_values = np.unique(hue_values)
+
+            for hue_idx, hue_val in enumerate(hue_values):
+                # `sel` does not accept a non-dimension coordinate, so the whole
+                # array is plotted
+                y_data = _to_numpy(data.values).squeeze()
+
+                # Ensure x and y have matching lengths
+                if y_data.size != x_data.size:
+                    if x in data.dims:
+                        x_dim_idx = list(data.dims).index(x)
+                        y_data = np.moveaxis(y_data, x_dim_idx, -1)
+                        y_data = y_data.reshape(-1, y_data.shape[-1])
+                        if y_data.shape[0] > 1:
+                            y_data = y_data[0]
+                        y_data = y_data.flatten()
+                    else:
+                        y_data = y_data.flatten()
+
+                mode = 'markers' if len(x_data) == 1 else 'lines'
+                color = plotly_colors[hue_idx % len(plotly_colors)]
+                hue_name = f'{hue}={hue_val}'
+
+                trace: dict[str, Any] = {
+                    'type': 'scattergl',
+                    'mode': mode,
+                    'x': _to_json_serializable(x_data),
+                    'y': _to_json_serializable(y_data),
+                    'name': hue_name,
+                    'legendgroup': hue_name,
+                    'showlegend': subplot_idx is None or subplot_idx == 1,
+                    'line': {'color': color},
+                    'marker': {'color': color},
+                }
+
+                if subplot_idx is not None:
+                    trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
+                    trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
+
+                traces.append(trace)
+                # a non-dimension hue cannot split the data, so one trace is added
+                break
+        else:
+            y_data = _to_numpy(data.values).squeeze()
+
+            # Ensure x and y have matching lengths
+            if y_data.size != x_data.size:
+                if x in data.dims:
+                    x_dim_idx = list(data.dims).index(x)
+                    y_data = np.moveaxis(y_data, x_dim_idx, -1)
+                    y_data = y_data.reshape(-1, y_data.shape[-1])
+                    if y_data.shape[0] > 1:
+                        y_data = y_data[0]
+                    y_data = y_data.flatten()
+                else:
+                    y_data = y_data.flatten()
+
+            # Use markers only when there's a single point (lines won't show)
+            mode = 'markers' if len(x_data) == 1 else 'lines'
+
+            trace_name = str(data.name)
+            trace = {
+                'type': 'scattergl',
+                'mode': mode,
+                'x': _to_json_serializable(x_data),
+                'y': _to_json_serializable(y_data),
+                'name': trace_name,
+                'legendgroup': trace_name,
+                'showlegend': subplot_idx is None or subplot_idx == 1,
+                'line': {'color': plotly_colors[0]},
+                'marker': {'color': plotly_colors[0]},
+            }
+
+            if subplot_idx is not None:
+                trace['xaxis'] = f'x{subplot_idx}' if subplot_idx > 1 else 'x'
+                trace['yaxis'] = f'y{subplot_idx}' if subplot_idx > 1 else 'y'
+
+            traces.append(trace)
+
+        return traces
+
+    def _make_line_layout(
+        self,
+        data: xr.DataArray,
+        x: str,
+        yscale: str,
+        n_subplots: int,
+        *,
+        ylim: Optional[tuple[Optional[float], Optional[float]]] = None,
+    ) -> dict[str, Any]:
+        """Create layout for line plot with optional subplots.
+
+        Subplots in the same row share the same y-axis range.
+        Only the leftmost subplot in each row shows y-axis title and tick labels.
+        """
+        layout: dict[str, Any] = {
+            'uirevision': 'constant',
+            'showlegend': True,
+            'legend': {'orientation': 'h', 'y': -0.15},
+        }
+
+        if self.opts.col is None or self.opts.col_label_format is None:
+            pass
+        else:
+            layout['annotations'] = _format_subplots(data, self.opts)
+
+        if n_subplots > 1:
+            cols = min(n_subplots, self.opts.col_wrap or 4)
+            rows = (n_subplots + cols - 1) // cols
+
+            if ylim is not None and ylim[0] is not None and ylim[1] is not None:
+                y_range: list[Optional[float]] = [ylim[0], ylim[1]]
+            else:
+                # Compute shared y-axis range across all data, excluding inf values
+                data_np = _to_numpy(data.values)
+                finite_mask = np.isfinite(data_np)
+                if np.any(finite_mask):
+                    y_min = float(np.nanmin(data_np[finite_mask]))
+                    y_max = float(np.nanmax(data_np[finite_mask]))
+                else:
+                    # All values are inf/nan - use default range
+                    y_min, y_max = 0.0, 1.0
+                # Add 5% padding
+                y_range_pad = (y_max - y_min) * 0.05
+                y_range = [y_min - y_range_pad, y_max + y_range_pad]
+
+                if ylim is not None:
+                    if ylim[0] is not None:
+                        y_range[0] = ylim[0]
+                    if ylim[1] is not None:
+                        y_range[1] = ylim[1]
+
+            for i in range(n_subplots):
+                row_idx = i // cols
+                col_idx = i % cols
+                suffix = str(i + 1) if i > 0 else ''
+                is_leftmost = col_idx == 0
+
+                x_domain = [col_idx / cols + 0.05, (col_idx + 1) / cols - 0.02]
+                y_domain = [
+                    1 - (row_idx + 1) / rows + 0.1,
+                    1 - row_idx / rows - 0.05,
+                ]
+
+                layout[f'xaxis{suffix}'] = {
+                    'title': {'text': _axis_title(data[x])},
+                    'domain': x_domain,
+                }
+
+                # inf is not valid JSON
+                sanitized_y_range = [
+                    None if (v is not None and np.isinf(v)) else v for v in y_range
+                ]
+                y_axis_config: dict[str, Any] = {
+                    'domain': y_domain,
+                    'type': yscale,
+                    'range': sanitized_y_range,
+                }
+
+                # Only show y-axis title and tick labels on leftmost column
+                if is_leftmost:
+                    y_axis_config['title'] = {'text': _axis_title(data)}
+                else:
+                    y_axis_config['title'] = {'text': ''}
+                    y_axis_config['showticklabels'] = False
+
+                layout[f'yaxis{suffix}'] = y_axis_config
+        else:
+            layout['xaxis'] = {'title': {'text': _axis_title(data[x])}}
+            y_axis_config = {
+                'title': {'text': _axis_title(data)},
+                'type': yscale,
+            }
+            if ylim is not None and (ylim[0] is not None or ylim[1] is not None):
+                y_range_single: list[Optional[float]] = [
+                    ylim[0]
+                    if (ylim[0] is not None and not np.isinf(ylim[0]))
+                    else None,
+                    ylim[1]
+                    if (ylim[1] is not None and not np.isinf(ylim[1]))
+                    else None,
+                ]
+                y_axis_config['range'] = y_range_single
+            layout['yaxis'] = y_axis_config
+
+        return layout
+
+    def _coord_kws(self, **kwargs) -> dict[str, Any]:
+        """return `kwargs` with the `col`, `row`, and `col_wrap` of `opts` added.
+
+        `col` is ``'_view'`` when `opts` sets neither `col` nor `row`.
+        """
+        col = self.opts.col
+        if col is None and self.opts.row is None:
+            col = '_view'
+
+        return {
+            **kwargs,
+            'col_wrap': self.opts.col_wrap,
+            'row': self.opts.row,
+            'col': col,
+        }
+
+    def finish(
+        self,
+        grid: dict[str, Any],
+        xticklabelunits: Union[bool, Literal['auto']] = 'auto',
+    ) -> None:
+        """accept the `PlotBackend.finish` call without effect.
+
+        The traces are collected by `heatmap` and `line`.
+        """
+
+    def mark_noise_level(
+        self,
+        data: xr.Dataset,
+        var_name: str,
+        grid: dict[str, Any],
+        where: Literal['x', 'y', 'colorbar'],
+    ) -> None:
+        """mark the system noise level of `var_name` on the most recent plot.
+
+        `where` of ``'x'`` draws a horizontal line at the level, ``'y'`` a vertical
+        line, and ``'colorbar'`` an annotation at the level on the colorbar. Nothing
+        is added when `data` has no system noise or no plot is pending.
+        """
+        noise = util.get_system_noise(data, var_name)
+        if noise is None:
+            return
+
+        if not self._pending_traces:
+            return
+
+        plot_data = self._pending_traces[-1]
+        layout = plot_data.get('layout', {})
+
+        if 'shapes' not in layout:
+            layout['shapes'] = []
+
+        noise_values = (
+            _to_numpy(noise.values).flat if isinstance(noise, xr.DataArray) else [noise]
+        )
+
+        for i, noise_val in enumerate(noise_values):
+            noise_float = float(noise_val)
+
+            if where == 'x':
+                # Horizontal line at noise level (for line plots with y=power)
+                shape = {
+                    'type': 'line',
+                    'x0': 0,
+                    'x1': 1,
+                    'xref': f'x{i + 1} domain' if i > 0 else 'x domain',
+                    'y0': noise_float,
+                    'y1': noise_float,
+                    'yref': f'y{i + 1}' if i > 0 else 'y',
+                    'line': {'color': '#eec009', 'width': 1, 'dash': 'dot'},
+                }
+            elif where == 'y':
+                # Vertical line at noise level (for histograms with x=power)
+                shape = {
+                    'type': 'line',
+                    'x0': noise_float,
+                    'x1': noise_float,
+                    'xref': f'x{i + 1}' if i > 0 else 'x',
+                    'y0': 0,
+                    'y1': 1,
+                    'yref': f'y{i + 1} domain' if i > 0 else 'y domain',
+                    'line': {'color': '#eec009', 'width': 1, 'dash': 'dot'},
+                }
+            elif where == 'colorbar':
+                # Plotly annotations cannot reference colorbar values, so the marker
+                # is placed in paper coordinates at the normalized (0-1) position
+                # within the colorbar range
+                traces = plot_data.get('traces', [])
+                if traces:
+                    # Get the z range from the first trace with a colorbar
+                    zmin = None
+                    zmax = None
+                    for trace in traces:
+                        if trace.get('showscale', False):
+                            zmin = trace.get('zmin')
+                            zmax = trace.get('zmax')
+                            break
+
+                    if zmin is not None and zmax is not None and zmax > zmin:
+                        # assumed colorbar extent in paper coordinates
+                        colorbar_bottom = 0.1
+                        colorbar_top = 0.9
+                        colorbar_height = colorbar_top - colorbar_bottom
+
+                        clamped_noise = max(zmin, min(zmax, noise_float))
+                        normalized = (clamped_noise - zmin) / (zmax - zmin)
+                        y_paper = colorbar_bottom + normalized * colorbar_height
+
+                        if 'annotations' not in layout:
+                            layout['annotations'] = []
+                        layout['annotations'].append({
+                            'x': 1.02,
+                            'y': y_paper,
+                            'xref': 'paper',
+                            'yref': 'paper',
+                            'text': 'kTB',
+                            'showarrow': True,
+                            'arrowhead': 2,
+                            'arrowsize': 1,
+                            'arrowwidth': 1,
+                            'arrowcolor': '#eec009',
+                            'font': {'color': '#eec009', 'size': 10},
+                            'ax': 20,
+                            'ay': 0,
+                        })
+                continue  # Skip adding to shapes for colorbar
+
+            layout['shapes'].append(shape)
+
+        plot_data['layout'] = layout
+
+    def get_plot_data(self) -> list[dict[str, Any]]:
+        """Return all pending plot data and clear the buffer."""
+        data = self._pending_traces.copy()
+        self._pending_traces.clear()
+        return data
+
+
+def _to_json_serializable(
+    arr: Any, preserve_inf: bool = False
+) -> Union[np.ndarray, list, float, int, str, None]:
+    """convert an array or scalar to a Plotly graph object input.
+
+    Numeric arrays are returned as contiguous numpy arrays, with a cupy array
+    transferred to the CPU. String, object, and datetime64 arrays are returned as
+    lists, and a timedelta64 array as seconds. In arrays, NaN is kept. In lists and
+    scalars, NaN is returned as None.
+
+    Args:
+        arr: the array or scalar
+        preserve_inf: if True, Inf is kept in arrays and returned as ±1e38 in lists
+            and scalars; if False, Inf is NaN in arrays and None in lists and scalars
+    """
+    # Use large but finite values for Inf when preserving
+    _INF_REPLACEMENT = 1e38
+    _NEG_INF_REPLACEMENT = -1e38
+
+    def _sanitize_value(v):
+        """return `v` with NaN as None and Inf as `preserve_inf` selects"""
+        if isinstance(v, float):
+            if np.isnan(v):
+                return None
+            if np.isinf(v):
+                if preserve_inf:
+                    return _INF_REPLACEMENT if v > 0 else _NEG_INF_REPLACEMENT
+                else:
+                    return None  # Skip infinite values in line plots
+        return v
+
+    def _sanitize_list(lst):
+        """Recursively sanitize a list."""
+        result: list[Any] = []
+        for item in lst:
+            if isinstance(item, list):
+                result.append(_sanitize_list(item))
+            elif isinstance(item, float):
+                result.append(_sanitize_value(item))
+            else:
+                result.append(item)
+        return result
+
+    # cupy arrays transfer to the CPU
+    if hasattr(arr, 'get'):
+        arr = arr.get()
+
+    if isinstance(arr, np.ndarray):
+        # String types - must use list format
+        if arr.dtype.kind in ('U', 'S', 'O'):
+            return arr.tolist()
+        # datetime64 must use list format
+        if np.issubdtype(arr.dtype, np.datetime64):
+            return [str(x) for x in arr]
+        if np.issubdtype(arr.dtype, np.timedelta64):
+            arr = (arr / np.timedelta64(1, 's')).astype(np.float64)
+
+        if arr.dtype.kind in ('f', 'i', 'u'):
+            arr = np.ascontiguousarray(arr)
+            if not preserve_inf and np.issubdtype(arr.dtype, np.floating):
+                arr = np.where(np.isinf(arr), np.nan, arr)
+            return arr
+
+        # Fallback to list format for other types
+        return _sanitize_list(arr.tolist())
+
+    if isinstance(arr, (np.floating, np.integer)):
+        val = float(arr)
+        return _sanitize_value(val)
+    if isinstance(arr, float):
+        return _sanitize_value(arr)
+    return arr
+
+
+def _format_subplots(data, opts: specs.SharedPlotOptions):
+    col_titles = labels.label_by_coord(
+        data,
+        opts.col_label_format,
+        coord_or_dim=opts.col or 'port',
+        title_case=True,
+        name=data.name,
+        **data.attrs,
+    )
+
+    return [
+        {
+            'text': t,
+            'showarrow': False,
+            'xref': 'paper',
+            'yref': 'paper',
+            'x': ((i + 0.5) / len(col_titles)),
+            'y': 1.0,  # X/Y placement on canvas
+            'xanchor': 'center',
+            'yanchor': 'bottom',
+        }
+        for i, t in enumerate(col_titles)
+    ]
+
+
+def _measurand(da: xr.DataArray) -> sa.labels.Measurand:
+    name = None if da.name is None else str(da.name)
+    return sa.labels.measurand_from_attrs(da.attrs, name)
+
+
+def _axis_title(da: xr.DataArray) -> str:
+    """return the name of `da` with its units in parentheses, from its attrs."""
+    return sa.labels.quantity_label(_measurand(da))
+
+
+def _colorbar_title(da: xr.DataArray) -> str:
+    """return the units text of `da` from its attrs, or ``''`` without units."""
+    return sa.labels.units_label(_measurand(da)) or ''
+
+
+def _mpl_to_plotly_colorscale(cmap: str) -> Any:
+    """return the Plotly colorscale for the matplotlib colormap name `cmap`.
+
+    Returns:
+        the Plotly name of a colormap that Plotly defines, otherwise a list of 256
+        ``[position, 'rgb(r,g,b)']`` pairs sampled from matplotlib; ``'Viridis'``
+        for a name matplotlib does not define
+    """
+    import matplotlib.pyplot as plt
+
+    # Built-in Plotly colormaps that can be used directly
+    plotly_builtins = {
+        'viridis': 'Viridis',
+        'plasma': 'Plasma',
+        'inferno': 'Inferno',
+        'magma': 'Magma',
+        'cividis': 'Cividis',
+        'jet': 'Jet',
+        'hot': 'Hot',
+        'blues': 'Blues',
+    }
+
+    cmap_lower = cmap.lower()
+    if cmap_lower in plotly_builtins:
+        return plotly_builtins[cmap_lower]
+
+    try:
+        mpl_cmap = plt.get_cmap(cmap)
+    except ValueError:
+        # Fallback to viridis if colormap not found
+        return 'Viridis'
+
+    n_colors = 256
+    colorscale: list[list[Any]] = []
+    for i in range(n_colors):
+        pos = i / (n_colors - 1)
+        rgba = mpl_cmap(pos)
+        r, g, b = int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255)
+        colorscale.append([pos, f'rgb({r},{g},{b})'])
+
+    return colorscale
+
+
+def _make_quantized_colorscale(
+    cmap: str,
+    vmin: float,
+    vmax: float,
+    vstep: float,
+) -> list[list[Any]]:
+    """return a stepped Plotly colorscale with bands of `vstep` from `vmin` to `vmax`.
+
+    The bands follow the matplotlib `BoundaryNorm` over a resampled colormap.
+
+    Args:
+        cmap: a matplotlib colormap name; an undefined name selects viridis
+        vmin: the lower color limit
+        vmax: the upper color limit
+        vstep: the spacing of the color levels, in the units of the data
+
+    Returns:
+        a list of ``[position, color]`` pairs with 2 entries per band
+    """
+    import matplotlib.pyplot as plt
+
+    # data=None is accepted when vmin and vmax are both given
+    levels = util.quantized_value_range(None, vmin, vmax, vstep)  # type: ignore[arg-type]
+    n_levels = len(levels) - 1
+
+    n_levels = max(n_levels, 1)
+
+    try:
+        mpl_cmap = plt.get_cmap(cmap).resampled(n_levels)
+    except ValueError:
+        mpl_cmap = plt.get_cmap('viridis').resampled(n_levels)
+
+    # each band takes 2 entries of the same color, so the colorscale is flat
+    # within a band
+    colorscale: list[list[Any]] = []
+    for i in range(n_levels):
+        pos_start = i / n_levels
+        pos_end = (i + 1) / n_levels
+
+        rgba = mpl_cmap(i / (n_levels - 1) if n_levels > 1 else 0.5)
+        r, g, b = int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255)
+        color = f'rgb({r},{g},{b})'
+
+        colorscale.append([pos_start, color])
+        if i < n_levels - 1:
+            colorscale.append([pos_end, color])
+        else:
+            colorscale.append([1.0, color])
+
+    return colorscale

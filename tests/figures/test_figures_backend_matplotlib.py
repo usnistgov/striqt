@@ -1,4 +1,4 @@
-"""striqt.figures.backend: per-facet noise lines and limits"""
+"""striqt.figures.backend.matplotlib: per-facet noise lines and limits"""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ import pytest
 import xarray as xr
 from figures_datasets import make_dataset, predicted_levels_dBm
 
-from striqt.figures import backend, specs, util
+from striqt.figures import specs, util
+from striqt.figures.backend import matplotlib as mpl_backend
 
 
 def fake_grid(name_dicts: list[dict[str, float] | None]) -> types.SimpleNamespace:
@@ -29,7 +30,7 @@ def test_facet_values_by_dimension_position() -> None:
     values = noise_levels()
     grid = fake_grid([{'capture': 2}, {'capture': 0}, None])
 
-    out = backend._facet_values(values, grid)
+    out = mpl_backend._facet_values(values, grid)
 
     expected = predicted_levels_dBm()
     assert out[0] == pytest.approx(expected[2], abs=1e-4)
@@ -42,7 +43,7 @@ def test_facet_values_reduce_captures_that_share_a_facet() -> None:
     values = noise_levels().set_xindex('center_frequency')
     grid = fake_grid([{'center_frequency': 1e9}, {'center_frequency': 2e9}])
 
-    out = backend._facet_values(values, grid)
+    out = mpl_backend._facet_values(values, grid)
 
     expected = predicted_levels_dBm()
     assert out[0] == pytest.approx(expected[:2].min(), abs=1e-4)
@@ -53,7 +54,7 @@ def test_facet_values_by_non_index_coordinate() -> None:
     values = noise_levels()
     grid = fake_grid([{'center_frequency': 2e9}, {'center_frequency': 1e9}])
 
-    out = backend._facet_values(values, grid)
+    out = mpl_backend._facet_values(values, grid)
 
     expected = predicted_levels_dBm()
     assert out[0] == pytest.approx(expected[2], abs=1e-4)
@@ -64,7 +65,7 @@ def test_facet_values_without_names_follow_the_capture_order() -> None:
     values = noise_levels()
     grid = types.SimpleNamespace(axs=np.empty(4, dtype=object))
 
-    out = backend._facet_values(values, grid)
+    out = mpl_backend._facet_values(values, grid)
 
     np.testing.assert_allclose(out[:3], predicted_levels_dBm(), atol=1e-4)
     assert out[3] is None
@@ -79,7 +80,7 @@ def test_histogram_facet_limits_and_noise_lines_are_per_capture() -> None:
     import matplotlib.pyplot as plt
 
     opts = specs.SharedPlotOptions(col='capture', col_label_format='{capture}')
-    plotter = backend.PlotBackend(opts, output_dir=None)
+    plotter = mpl_backend.PlotBackend(opts, output_dir=None)
     ds = make_dataset()
     name, x = 'spectrogram_histogram', 'spectrogram_power_bin'
     sub = util.select_histogram_bins(ds, name, x)
