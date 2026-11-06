@@ -36,21 +36,3 @@ register.check_group_fields(
         if isinstance(key, str)
     },
 )
-
-__all__ = [
-    'cellular_5g_pss_correlation',
-    'cellular_5g_pss_sync',
-    'cellular_5g_ssb_spectrogram',
-    'cellular_5g_sss_correlation',
-    'cellular_cyclic_autocorrelation',
-    'cellular_resource_power_histogram',
-    'channel_power_histogram',
-    'channel_power_time_series',
-    'cyclic_channel_power',
-    'iq_waveform',
-    'power_spectral_density',
-    'registry',
-    'spectrogram',
-    'spectrogram_histogram',
-    'spectrogram_ratio_histogram',
-]

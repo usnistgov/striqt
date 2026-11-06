@@ -9,15 +9,3 @@ from .matplotlib import (
 )
 from .plotly import PlotlyBackend
 from .protocol import PlotBackend, StepStyle, coerce_column
-
-__all__ = [
-    'MatplotlibBackend',
-    'PlotBackend',
-    'PlotlyBackend',
-    'StepStyle',
-    'TerminalGraphics',
-    'batch_term_images',
-    'coerce_column',
-    'select_mpl_backend',
-    'term_graphics_notice',
-]
