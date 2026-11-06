@@ -22,8 +22,6 @@ from .spectrum import (
 )
 from .waveforms import iq_waveform
 
-# every registered measurement and trigger must have a field on BuiltinAnalyses or
-# BuiltinTriggers
 register.check_group_fields(
     specs.BuiltinAnalyses,
     {info.name: spec_type for spec_type, info in registry.items()},

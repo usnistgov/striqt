@@ -179,12 +179,9 @@ class Tolerance(SpecBase, kw_only=True, frozen=True):
     """the roundoff error budget of one measurement output.
 
     The budget depends on the capture and the spec alone, not on the output
-    values. `on_peak` bounds the error of the elements at the peak of the output.
-    `off_peak_dBc` bounds the error of the other elements as a function of the
-    level of each below the peak. Elements more than `off_peak_dBc.peak` below the
-    peak are not bounded. The peak is the matched-filter bin of the matched input,
-    e.g., the FFT bin at the frequency of a tone or the detector sample at the time
-    of an impulse.
+    values. Elements more than `off_peak_dBc.peak` below the peak are not bounded.
+    The peak is the matched-filter bin of the matched input, e.g., the FFT bin at
+    the frequency of a tone or the detector sample at the time of an impulse.
     """
 
     units: typing.Annotated[
@@ -225,12 +222,12 @@ class FrequencyAnalysisSpecBase(
     """the STFT settings shared by the spectrum measurements.
 
     The FFT size is the capture `sample_rate` divided by `frequency_resolution`,
-    and the quotient must be a whole number. `fractional_overlap` and `window_fill`
-    are the hop and the zero padding of each window as fractions of that size.
-    `integration_bandwidth` is the width of the adjacent bins summed after the FFT,
-    a multiple of `frequency_resolution`, or None for no summing. `trim_stopband`
-    True limits the frequency axis to the `analysis_bandwidth` of the capture when
-    that bandwidth is finite.
+    and the quotient must be a whole number. `fractional_overlap` is the overlap of
+    consecutive windows and `window_fill` the nonzero part of each window, both as
+    fractions of that size. `integration_bandwidth` is the width of the adjacent
+    bins summed after the FFT, a multiple of `frequency_resolution`, or None for no
+    summing. `trim_stopband` True limits the frequency axis to the
+    `analysis_bandwidth` of the capture when that bandwidth is finite.
     """
 
     window: types.WindowType
@@ -462,10 +459,8 @@ class BuiltinTriggers(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=Tr
     """the struct form of the ``signal_trigger:`` field of a source.
 
     One optional field per trigger, and exactly one is set. The set field names the
-    trigger, and the value is the spec of the trigger measurement. With this form,
-    the ``analysis:`` block need not enable the trigger measurement. The string form
-    of ``signal_trigger`` names a registered trigger and takes the spec from the
-    ``analysis:`` block.
+    trigger, and the value is the spec of the trigger measurement. The ``analysis:``
+    block need not enable that measurement.
     """
 
     cellular_5g_pss_sync: Optional[Cellular5GNPSSSync] = None

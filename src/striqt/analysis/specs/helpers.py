@@ -1,5 +1,8 @@
-"""frozen containers, field subsets, conversion caches, and schema hooks for the
-specification structs."""
+"""support for the spec structs.
+
+Conversions between dicts, structs, and other structs go through `msgspec.convert`
+with ``strict=False`` and a decode hook that reads a `fractions.Fraction` from a
+float or a string."""
 
 from __future__ import annotations as __
 
@@ -182,8 +185,7 @@ class SpecValidationError(msgspec.ValidationError):
     `path` is the chain of field accesses from the document root, rendered as
     msgspec renders a path (``$.analysis.spectrogram``) ahead of `message`.
     `locations` are further roots at which the same failure is located, rendered
-    as an ``at ... on ...`` trailer in the order given. msgspec propagates an
-    instance raised in `__post_init__` unchanged.
+    as an ``at ... on ...`` trailer in the order given.
     """
 
     def __init__(
@@ -426,8 +428,8 @@ def lru_cache_on_converted(
         maxsize: the `lru_cache` size, or None for unbounded
 
     Returns:
-        a decorator; the wrapper the decorator returns exposes `cache_clear` and
-        `cache_info` and is registered for `clear_caches`
+        a decorator. The wrapper that the decorator returns exposes `cache_clear`
+        and `cache_info` and is registered for `clear_caches`.
 
     Raises:
         TypeError: from the wrapper, when fewer than ``len(spec_types)`` arguments

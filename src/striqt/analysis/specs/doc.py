@@ -66,7 +66,7 @@ def parse_type_and_meta(hint):
     Returns:
         a ``(hint, metas)`` tuple: `hint` with every `Annotated` wrapper removed,
         recursively through the type arguments, and the list of the `msgspec.Meta`
-        objects found; a `Literal` hint is returned unchanged with an empty list
+        objects found. A `Literal` hint is returned unchanged with an empty list.
     """
 
     origin = typing.get_origin(hint)
@@ -206,7 +206,7 @@ def struct_args_docstring(
     lines = []
     base_indent = ' ' * indent_spaces
 
-    # both dicts have the field names as keys; only the `extra_*` names can differ
+    # both dicts have the field names as keys, and only the `extra_*` names can differ
     for field_name in descriptions:
         type_str = types.get(field_name, 'Any')
         desc = descriptions.get(field_name, '')

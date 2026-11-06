@@ -66,7 +66,7 @@ def iq_waveform_tolerance(
 ) -> specs.Tolerance:
     """bound the error (in dB) of the IQ sample magnitudes.
 
-    The slice adds no error. The bound is `input_error` alone.
+    `input_error` is the only error term.
 
     Args:
         input_error: relative rms error of the IQ amplitude (linear, unitless)
@@ -128,9 +128,9 @@ def iq_waveform(x: Array, capture: specs.Capture, **kwargs: Any) -> Measurement:
 
     spec = specs.IQWaveform.from_dict(kwargs)
 
-    # no noise_bandwidth attr: the bandwidth is the analysis_bandwidth (or sample_rate)
-    # of the capture, which varies between the captures of one sweep, and a variable
-    # attr is written once per store
+    # the noise bandwidth is omitted from the attrs because an attr is written once per
+    # store and the analysis_bandwidth (or sample_rate) of the capture varies between
+    # the captures of one sweep
     metadata = spec.to_dict()
 
     start, stop = _get_start_stop_index(capture, spec)
