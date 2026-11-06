@@ -21,7 +21,13 @@ from numeric_checks import (
     tone_frequency,
 )
 from numpy.testing import assert_allclose, assert_array_equal
-from waveform_strategies import cross_backend_sigma, noise_waveforms, tiled_tone
+from waveform_strategies import (
+    cola_ripple_rtol,
+    cola_sum,
+    cross_backend_sigma,
+    noise_waveforms,
+    tiled_tone,
+)
 
 from striqt.waveform.lib.fourier.fft import fftfreq
 from striqt.waveform.lib.fourier.filters import (
@@ -36,25 +42,21 @@ from striqt.waveform.power_analysis import level_tolerance_dB
 
 # %% design_oafilter, design_fir_lpf, _fir_lowpass_fft
 class TestFilterDesign:
-    @pytest.mark.parametrize(
-        'window, overlap_scale',
-        [
-            ('hann', 1 / 2),
-            ('blackman', 2 / 3),
-            ('blackmanharris', 4 / 5),
-            ('rect', 1),
-            (None, 1),
-        ],
-    )
-    def test_design_oafilter_overlap(self, window, overlap_scale):
+    @pytest.mark.parametrize('window', ['hann', 'blackman', 'blackmanharris'])
+    def test_design_oafilter_overlap_satisfies_cola(self, window):
+        """the window overlapped at the hop ``nfft_out - noverlap`` sums to a
+        constant, and the hop divides the block"""
         nfft = 120
         nfft_out, noverlap, scale, pad_out = design_oafilter(
             40 * nfft, window=window, nfft_out=nfft, nfft=nfft, extend=False
         )
         assert nfft_out == nfft
-        assert scale == overlap_scale
-        assert noverlap == round(nfft * overlap_scale)
         assert pad_out == 0
+        assert scale == pytest.approx(noverlap / nfft_out)
+        hop = nfft_out - noverlap
+        assert nfft_out % hop == 0
+        total = cola_sum(window, nfft_out, hop)
+        assert_close(total, total.mean(), rtol=cola_ripple_rtol(nfft_out, hop))
 
     @pytest.mark.parametrize(
         'size, kws, exc, match',
@@ -97,11 +99,25 @@ class TestFilterDesign:
     @pytest.mark.parametrize('numtaps', [401, 1001, 4001])
     @pytest.mark.parametrize('dtype', FLOAT_DTYPES, ids=dtype_id)
     def test_design_fir_lpf(self, numtaps, dtype):
-        b = design_fir_lpf(10e6, 50e6, numtaps=numtaps, dtype=dtype)
+        """the taps pass the band inside the transition and reject the band beyond
+        it, within `FIR_LEAKAGE`, at frequencies more than the main lobe width
+        ``4 * fs / numtaps`` from the transition edges"""
+        bw, fs, transition = 10e6, 50e6, 250e3
+        b = design_fir_lpf(
+            bw, fs, numtaps=numtaps, transition_bw=transition, dtype=dtype
+        )
         assert b.shape == (numtaps,)
         assert b.dtype == np.dtype(dtype)
         # least-squares passband ripple bounds the DC gain error
         assert abs(level_error_dB(b.sum())) < level_tolerance_dB(FIR_LEAKAGE)
+
+        H = np.abs(np.fft.fft(b.astype(np.float64), n=8 * numtaps))
+        freqs = np.fft.fftfreq(H.size, 1 / fs)
+        margin = 4 * fs / numtaps
+        passband = np.abs(freqs) < bw / 2 - transition / 2 - margin
+        stopband = np.abs(freqs) > bw / 2 + transition / 2 + margin
+        assert np.abs(H[passband] - 1).max() < FIR_LEAKAGE
+        assert H[stopband].max() < FIR_LEAKAGE
 
     def test_fir_lowpass_fft_response(self):
         """the transition band is centered on the cutoff, as in `design_fir_lpf`: unity

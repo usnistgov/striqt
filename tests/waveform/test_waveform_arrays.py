@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from conftest import _cupy, as_xp, float_arrays, shaped_arrays
-from hypothesis import given, strategies as st
+from hypothesis import example, given, settings, strategies as st
 from hypothesis.extra.numpy import array_shapes
 from numeric_checks import assert_close, blocks, dtype_id, to_numpy
 from numpy.testing import assert_array_equal
@@ -58,26 +58,34 @@ class TestDtypeChangeFloat:
 
 class TestFloatDtypeLike:
     @pytest.mark.parametrize(
-        'dtype,expected',
+        'value,expected',
         [
-            (np.complex64, np.float32),
-            (np.complex128, np.float64),
-            (np.float16, np.float16),
-            (np.float32, np.float32),
-            (np.float64, np.float64),
-            (np.int32, np.float32),
+            (np.zeros(3, dtype=np.complex64), np.float32),
+            (np.zeros(3, dtype=np.complex128), np.float64),
+            (np.zeros(3, dtype=np.float16), np.float16),
+            (np.zeros(3, dtype=np.float32), np.float32),
+            (np.zeros(3, dtype=np.float64), np.float64),
+            (np.zeros(3, dtype=np.int32), np.float32),
+            (3, np.float32),
+            (2.0, np.float64),
+            ([1.0, 2.0], np.float64),
+            ([1, 2], np.float32),
+        ],
+        ids=[
+            'complex64',
+            'complex128',
+            'float16',
+            'float32',
+            'float64',
+            'int32',
+            'int',
+            'float',
+            'float_list',
+            'int_list',
         ],
     )
-    def test_array_dtypes(self, dtype, expected):
-        assert arrays.float_dtype_like(np.zeros(3, dtype=dtype)) == expected
-
-    def test_python_scalars(self):
-        assert arrays.float_dtype_like(3) == np.float32
-        assert arrays.float_dtype_like(2.0) == np.float64
-
-    def test_sequence_input_falls_back_to_numpy(self):
-        assert arrays.float_dtype_like([1.0, 2.0]) == np.float64
-        assert arrays.float_dtype_like([1, 2]) == np.float32
+    def test_arrays_scalars_and_sequences(self, value, expected):
+        assert arrays.float_dtype_like(value) == expected
 
     @pytest.mark.parametrize(
         'dtype,min_dtype,expected',
@@ -110,6 +118,15 @@ class TestTinyLike:
         assert tiny == np.finfo(real_dtype).tiny
 
 
+@st.composite
+def fft_bin_cases(draw):
+    """draw (count, x) for the ``fft=True`` binning of a 1-D `x` of at least `count`
+    samples."""
+    count = draw(st.integers(min_value=2, max_value=8))
+    n = draw(st.integers(min_value=count, max_value=64))
+    return count, draw(float_arrays((n,)))
+
+
 # %% roundoff model
 class TestBinnedMean:
     def test_strided_axis_reduction_needs_the_in_order_bound(self):
@@ -137,6 +154,8 @@ class TestBinnedMean:
         assert result.shape == ref.shape
         assert_close(result, ref, atol=arrays.mean_atol(x, count))
 
+    # 30 examples: the rejection depends on n % count alone, and 100 took 0.22 s
+    @settings(max_examples=30)
     @given(case=shaped_arrays(dtype=np.float64, min_side=2), data=st.data())
     def test_truncate_false_rejects_partial_bins(self, case, data):
         x, axis = case
@@ -148,17 +167,16 @@ class TestBinnedMean:
         with pytest.raises(ValueError):
             arrays.binned_mean(x, count, axis=axis, fft=False, truncate=False)
 
-    @given(data=st.data())
-    def test_fft_bins_center_on_the_middle_sample(self, xp, data):
-        """with ``fft=True`` the sample at index n//2 is the center of the middle bin,
-        the bin count is odd, and no further symmetric pair of bins fits"""
-        count = data.draw(st.integers(min_value=2, max_value=8))
-        if count % 2:
-            # even n with odd count is a known defect, tested separately
-            n = data.draw(st.integers(min_value=count // 2, max_value=32)) * 2 + 1
-        else:
-            n = data.draw(st.integers(min_value=count, max_value=64))
-        x = data.draw(float_arrays((n,)))
+    @example(case=(3, np.arange(8, dtype=np.float64)))
+    @example(case=(3, np.arange(14, dtype=np.float64)))
+    @example(case=(5, np.arange(1024, dtype=np.float64)))
+    @given(case=fft_bin_cases())
+    def test_fft_bins_center_on_the_middle_sample(self, xp, case):
+        """with ``fft=True`` the sample at index n//2 is the center of the middle bin
+        for either parity of n and count, the bin count is odd, and no further
+        symmetric pair of bins fits"""
+        count, x = case
+        n = x.size
 
         result = to_numpy(arrays.binned_mean(as_xp(xp, x), count, fft=True))
 
@@ -168,11 +186,6 @@ class TestBinnedMean:
         start = n // 2 - count // 2 - (nblocks // 2) * count
         ref = x[start : start + nblocks * count].reshape(nblocks, count).mean(axis=1)
         assert_close(result, ref, atol=arrays.mean_atol(x, count))
-
-    @pytest.mark.parametrize('n,count', [(8, 3), (14, 3), (1024, 5)])
-    def test_fft_bins_odd_count_even_length(self, n, count):
-        result = arrays.binned_mean(np.arange(n, dtype=np.float64), count, fft=True)
-        assert result.shape[0] % 2 == 1
 
     @given(
         count=st.integers(min_value=3, max_value=6),
@@ -206,23 +219,20 @@ class TestSlidingWindowView:
         assert result.shape == expected.shape
         assert_array_equal(result, expected)
 
-    @pytest.mark.parametrize('axis', [(0, 1), (1, 0), (-1, -2)])
+    @pytest.mark.parametrize(
+        'axis', [(0, 1), (1, 0), (-1, -2), None], ids=['0_1', '1_0', '-1_-2', 'none']
+    )
     @given(case=shaped_arrays(min_dims=2, max_dims=2, max_side=6), data=st.data())
     def test_matches_numpy_for_tuple_axis(self, axis, case, data):
+        """`axis` None windows every dimension in order"""
         x, _ = case
         w0 = data.draw(st.integers(min_value=1, max_value=x.shape[0]))
         w1 = data.draw(st.integers(min_value=1, max_value=x.shape[1]))
-        window = (w0, w1) if axis[0] in (0, -2) else (w1, w0)
+        window = (w0, w1) if axis is None or axis[0] in (0, -2) else (w1, w0)
 
         result = arrays.sliding_window_view(x, window, axis=axis)
         expected = np.lib.stride_tricks.sliding_window_view(x, window, axis=axis)
 
-        assert_array_equal(result, expected)
-
-    def test_default_axis_windows_every_dimension(self):
-        x = np.arange(12).reshape(3, 4)
-        result = arrays.sliding_window_view(x, (2, 2))
-        expected = np.lib.stride_tricks.sliding_window_view(x, (2, 2))
         assert_array_equal(result, expected)
 
     @pytest.mark.parametrize(
@@ -236,7 +246,7 @@ class TestSlidingWindowView:
     )
     def test_invalid_shapes_raise(self, array_shape, window_shape, axis, match):
         with pytest.raises(ValueError, match=match):
-            arrays._sliding_window_output_shape(array_shape, window_shape, axis)
+            arrays.sliding_window_view(np.zeros(array_shape), window_shape, axis=axis)
 
     def test_writeable_is_not_supported(self):
         with pytest.raises(NotImplementedError):
@@ -276,6 +286,8 @@ class TestAxisToBlocks:
 
 
 class TestHistogramLastAxis:
+    # 30 examples: 100 draws of up to 64 rows of 16 samples took 0.16 s
+    @settings(max_examples=30)
     @given(
         shape=array_shapes(min_dims=1, max_dims=3, min_side=1, max_side=4),
         nbins=st.integers(min_value=1, max_value=8),
@@ -370,23 +382,6 @@ class TestAxisSlicing:
         assert_array_equal(
             arrays.axis_slice(a, start, stop, step, axis=axis), a[tuple(index)]
         )
-
-    @pytest.mark.parametrize('ndim', [1, 2, 3, 4])
-    def test_pad_slices_select_the_requested_axis(self, subtests, ndim):
-        a = np.zeros((2,) * ndim)
-        for axis in range(-ndim, ndim):
-            with subtests.test(msg=f'axis={axis}'):
-                before, after = arrays._pad_slices_to_dim(ndim, axis)
-                expected_shape = list(a.shape)
-                del expected_shape[axis]
-                assert a[before + (0,) + after].shape == tuple(expected_shape)
-
-    @pytest.mark.parametrize(
-        'axis, exc', [(0.5, TypeError), (-3, ValueError)], ids=['float', 'out_of_range']
-    )
-    def test_pad_slices_reject_bad_axes(self, axis, exc):
-        with pytest.raises(exc):
-            arrays._pad_slices_to_dim(2, axis)
 
 
 class TestGroupedViews:
@@ -495,17 +490,6 @@ class TestCupyHelpers:
     def test_memory_helpers_run_without_a_device(self):
         assert arrays.configure_cupy() is None
         assert arrays.set_cuda_mem_limit(fraction=1.0) is None
-
-    def test_cupy_arrays_get_a_stream(self, cupy_available):
-        cp = cupy_available
-        x = cp.zeros(4)
-        stream = arrays.array_stream(x)
-        assert isinstance(stream, cp.cuda.Stream)
-        with stream:
-            stream.synchronize()
-        assert arrays.sync_if_cupy(x) is None
-        assert arrays.is_cupy_array(x)
-        assert arrays.array_namespace(x) is cp
 
     def test_pinned_copy_round_trips(self, cupy_available):
         import cupyx

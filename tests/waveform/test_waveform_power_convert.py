@@ -15,7 +15,6 @@ from conftest import (
     positive_power_arrays,
 )
 from hypothesis import given, strategies as st
-from hypothesis.extra.numpy import arrays
 from numeric_checks import (
     FLOAT_DTYPES,
     assert_close,
@@ -44,16 +43,20 @@ from striqt.waveform.lib.power import (
     roundtrip_dB_tol,
     roundtrip_power_rtol,
 )
-from striqt.waveform.lib.power.convert import _arraylike_with_buffer
 
-# strategy factories for the valid inputs of each conversion, keyed by function
-INPUTS = {
-    powtodB: positive_power_arrays,
-    dBtopow: dB_arrays,
-    envtodB: functools.partial(envelope_arrays, include_complex=False),
-    envtopow: functools.partial(envelope_arrays, include_complex=False),
-    dBlinmean: functools.partial(dB_arrays, min_value=-50, max_value=50),
-    dBlinsum: functools.partial(dB_arrays, min_value=-50, max_value=50),
+# deterministic float64 inputs for the tests of a side effect, a type, or the dask
+# dispatch, none of which is a numeric property
+LEVELS = np.array([[-30.0, -3.0, 0.0], [3.0, 10.0, 30.0]])
+POWERS = 10 ** (LEVELS / 10)
+PHASES = np.linspace(0, np.pi, LEVELS.size).reshape(LEVELS.shape)
+ENVELOPES = np.sqrt(POWERS) * np.exp(1j * PHASES)
+VALID_INPUTS = {
+    powtodB: POWERS,
+    dBtopow: LEVELS,
+    envtodB: POWERS,
+    envtopow: POWERS,
+    dBlinmean: LEVELS,
+    dBlinsum: LEVELS,
 }
 
 # 1-D variants of the array strategies used by the elementwise conversion tests
@@ -66,9 +69,6 @@ LINEAR_STAT_LEVELS = one_d_levels(
     min_value=-50, max_value=50, min_size=2, max_size=50, dtype=np.float64
 )
 FLOAT32_POWERS = one_d_powers(min_value=1e-3, max_value=1e3, dtype=np.float32)
-POSITIVE_SCALARS = st.floats(
-    min_value=1e-10, max_value=1e10, allow_nan=False, allow_infinity=False
-)
 
 # (function, dB per decade) for the 2 logarithmic conversions
 LOG_CONVERSIONS = [(powtodB, 10), (envtodB, 20)]
@@ -97,14 +97,16 @@ class TestConversionIdentities:
 
     @by_log_conversion
     @for_each_float_dtype
+    @pytest.mark.parametrize('abs', [True, False], ids=['abs', 'noabs'])
     @given(x=positive_power_arrays(dtype=np.float64))
-    def test_log_conversion_is_scaled_log10(self, func, scale, dtype, x):
-        """``func(x) == scale*log10(x)`` within the exact-math budget of `dtype`, with
-        the oracle evaluated in float64 from the `dtype`-quantized input"""
+    def test_log_conversion_is_scaled_log10(self, func, scale, dtype, abs, x):
+        """``func(x) == scale*log10(x)`` for positive `x` with or without `abs`,
+        within the exact-math budget of `dtype`, with the oracle evaluated in float64
+        from the `dtype`-quantized input"""
         x = x.astype(dtype)
         expected = scale * np.log10(x.astype(np.float64))
         tol = log_conversion_tol(dtype, scale, n_impl=1)
-        assert_close(func(x), expected, **tol)
+        assert_close(func(x, abs=abs), expected, **tol)
 
 
 class TestAlgebraicProperties:
@@ -124,7 +126,6 @@ class TestAlgebraicProperties:
         assert_close(dBlinmean(arr), dB, **tol)
         assert_close(dBlinsum(arr), dB + 10 * np.log10(n), **tol)
 
-    @pytest.mark.namespaces('numpy', 'cupy', 'dask')
     @pytest.mark.parametrize('axis', [None, 0, 1])
     @given(
         dB=dB_arrays(
@@ -156,13 +157,11 @@ class TestAlgebraicProperties:
 
 
 class TestInputPreservation:
-    @pytest.mark.parametrize('func', INPUTS, ids=func_id)
-    @given(data=st.data())
-    def test_overwrite_x_false_leaves_input_unchanged(self, func, data):
-        x = data.draw(INPUTS[func](dtype=np.float64))
-        original = x.copy()
+    @pytest.mark.parametrize('func', VALID_INPUTS, ids=func_id)
+    def test_overwrite_x_false_leaves_input_unchanged(self, func):
+        x = VALID_INPUTS[func].copy()
         func(x, overwrite_x=False)
-        assert_array_equal(x, original)
+        assert_array_equal(x, VALID_INPUTS[func])
 
 
 class TestInPlaceComplexInput:
@@ -206,9 +205,8 @@ class TestEdgeCases:
         assert_close(result, floor, **log_conversion_tol(compute_dtype, scale))
 
 
-@pytest.mark.namespaces('numpy', 'cupy', 'dask')
 class TestMultiBackend:
-    """the properties that hold on every available array namespace"""
+    """the properties that hold on numpy and cupy"""
 
     @pytest.mark.parametrize('func', [powtodB, dBtopow, envtodB, envtopow], ids=func_id)
     @for_each_float_dtype
@@ -274,11 +272,6 @@ class TestMultiBackend:
 class TestAbsAndBoundedBranches:
     """the `abs` and `bounded` arguments of `powtodB` and `envtodB`"""
 
-    @by_log_conversion
-    @given(x=positive_power_arrays(min_value=1e-6, max_value=1e6, dtype=np.float64))
-    def test_noabs_matches_abs_for_positive(self, func, scale, x):
-        assert_array_equal(func(x, abs=False), func(x, abs=True))
-
     @given(power=positive_power_arrays(min_value=1e-6, max_value=1e6, dtype=np.float64))
     def test_noabs_negative_input_is_nan(self, power):
         """without `abs`, log10 of a negative value is nan rather than the value at
@@ -288,20 +281,13 @@ class TestAbsAndBoundedBranches:
         assert np.all(np.isfinite(powtodB(-power, abs=True)))
         assert np.all(np.isfinite(envtodB(-power, abs=True)))
 
-    @pytest.mark.namespaces('numpy', 'cupy', 'dask')
     @by_log_conversion
-    @given(
-        power=positive_power_arrays(min_value=1e-3, max_value=1e3, dtype=np.float64),
-        abs=st.booleans(),
-        data=st.data(),
-    )
-    def test_bound_is_applied_on_every_backend(self, xp, func, scale, power, abs, data):
-        """the floor is applied on the code path of every backend"""
-        zero = data.draw(arrays(np.bool_, power.shape))
-        # force one zero rather than assume(zero.any()), which would reject about
-        # half of the draws for 1-element arrays
-        zero.flat[data.draw(st.integers(0, power.size - 1))] = True
-        power = np.where(zero, 0.0, power)
+    @pytest.mark.parametrize('abs', [True, False], ids=['abs', 'noabs'])
+    def test_bound_is_applied_on_every_backend(self, xp, func, scale, abs):
+        """zeros come out at the floor of the computation dtype and the other samples
+        at their exact-math level, with or without `abs`"""
+        power = np.array([[0.0, 1e-3, 1.0], [1e3, 0.0, 2.0]])
+        zero = power == 0
 
         result = func(as_xp(xp, power), bounded=True, abs=abs)
 
@@ -309,6 +295,78 @@ class TestAbsAndBoundedBranches:
         expected[~zero] = scale * np.log10(power[~zero])
         tol = log_conversion_tol(np.float64, scale, n_impl=2)
         assert_close(result, expected, **tol)
+
+
+@pytest.mark.namespaces('dask')
+class TestDaskNamespace:
+    """one deterministic example per conversion on dask, which evaluates the numpy
+    kernels chunk by chunk and adds no arithmetic of its own"""
+
+    @pytest.mark.parametrize(
+        'func, x, kws, reference, tol',
+        [
+            pytest.param(
+                powtodB,
+                POWERS,
+                {},
+                lambda x: 10 * np.log10(x),
+                log_conversion_tol(np.float64, 10),
+                id='powtodB',
+            ),
+            pytest.param(
+                dBtopow,
+                LEVELS,
+                {},
+                lambda x: 10 ** (x / 10),
+                {'rtol': pow_conversion_rtol(np.float64, 30)},
+                id='dBtopow',
+            ),
+            pytest.param(
+                envtodB,
+                ENVELOPES,
+                {},
+                lambda x: 20 * np.log10(np.abs(x)),
+                log_conversion_tol(np.float64, 20, complex_input=True),
+                id='envtodB',
+            ),
+            pytest.param(
+                envtopow,
+                ENVELOPES,
+                {},
+                lambda x: np.abs(x) ** 2,
+                {'rtol': envelope_power_rtol(np.float64, complex_input=True)},
+                id='envtopow',
+            ),
+            pytest.param(
+                dBlinmean,
+                LEVELS,
+                {'axis': 1},
+                lambda x: 10 * np.log10(np.mean(10 ** (x / 10), axis=1)),
+                linear_stat_tol(np.float64, 30, LEVELS.shape[1]),
+                id='dBlinmean',
+            ),
+            pytest.param(
+                dBlinsum,
+                LEVELS,
+                {'axis': 0},
+                lambda x: 10 * np.log10(np.sum(10 ** (x / 10), axis=0)),
+                linear_stat_tol(np.float64, 30, LEVELS.shape[0]),
+                id='dBlinsum',
+            ),
+        ],
+    )
+    def test_returns_a_dask_array_at_the_exact_math_value(
+        self, xp, func, x, kws, reference, tol
+    ):
+        result = func(as_xp(xp, x), **kws)
+        assert isinstance(result, xp.Array)
+        assert_close(result, reference(x), **tol)
+
+
+class _ValuesOnly:
+    """an object with a `values` attribute that belongs to no array container type"""
+
+    values = np.ones(4)
 
 
 class TestArrayLikeHandling:
@@ -326,128 +384,94 @@ class TestArrayLikeHandling:
     )
     def test_invalid_min_dtype_raises(self, min_dtype, match):
         with pytest.raises(TypeError, match=match):
-            _arraylike_with_buffer(np.ones(3), min_dtype=min_dtype)
+            powtodB(np.ones(3), min_dtype=min_dtype)
 
     @pytest.mark.parametrize('obj', ['text', [1.0, 2.0], (1.0, 2.0), object()])
     def test_unsupported_input_raises(self, obj):
         with pytest.raises(TypeError, match='unable to associate'):
             powtodB(obj)
 
-    def test_promotion_widens_the_input_before_evaluation(self):
-        x = np.ones(4, dtype=np.float16)
-        values, out, xp = _arraylike_with_buffer(x, min_dtype='float32')
-        assert values.dtype == np.float32
-        assert out is values
-        assert x.dtype == np.float16
-        assert xp is np
-
-    def test_overwrite_returns_input_as_buffer(self):
-        x = np.ones(4, dtype=np.float32)
-        values, out, _ = _arraylike_with_buffer(x, overwrite_x=True)
-        assert values is x
-        assert out is x
-
-    def test_no_overwrite_returns_fresh_buffer(self):
-        x = np.ones(4, dtype=np.float32)
-        values, out, _ = _arraylike_with_buffer(x, overwrite_x=False)
-        assert values is x
-        assert out is not x
-        assert out.dtype == x.dtype
-        assert out.shape == x.shape
-
-    def test_scalar_input_never_overwrites(self):
+    def test_scalar_input_is_never_overwritten(self):
         x = np.array(2.0, dtype=np.float32)
-        _, out, _ = _arraylike_with_buffer(x, overwrite_x=True)
-        assert out is not x
+        result = powtodB(x, overwrite_x=True)
+        assert x == 2.0
+        assert_close(result, 10 * np.log10(2.0), **log_conversion_tol(np.float32, 10))
 
     @pytest.mark.parametrize(
         'ctor, result_type',
         [(float, float), (np.float64, float), (np.array, np.ndarray)],
         ids=['float', 'float64', 'array'],
     )
-    @given(value=POSITIVE_SCALARS)
-    def test_scalar_input_returns_a_scalar(self, ctor, result_type, value):
+    def test_scalar_input_returns_a_scalar(self, ctor, result_type):
+        value = 2.5
         result = powtodB(ctor(value))
         assert isinstance(result, result_type)
-        tol = log_conversion_tol(np.float64, 10, n_impl=2)
-        assert_close(result, 10 * np.log10(value), **tol)
+        assert_close(result, 10 * np.log10(value), **log_conversion_tol(np.float64, 10))
 
     def test_python_int_input(self):
         assert isinstance(dBtopow(10), float)
         assert_close(dBtopow(10), 10.0, rtol=pow_conversion_rtol(np.float64, 10))
 
-    def test_pandas_series_roundtrip(self):
+    @pytest.mark.parametrize(
+        'make',
+        [
+            lambda pd: pd.Series(POWERS[0], index=pd.RangeIndex(10, 10 + 3)),
+            lambda pd: pd.DataFrame(POWERS, columns=['a', 'b', 'c']),
+        ],
+        ids=['series', 'frame'],
+    )
+    def test_pandas_container_keeps_its_axes(self, make):
         pd = pytest.importorskip('pandas')
+        obj = make(pd)
 
-        power = np.array([1e-3, 1.0, 2.5, 1e3])
-        index = pd.RangeIndex(10, 10 + power.size)
-        series = pd.Series(power, index=index)
+        result = powtodB(obj)
 
-        result = powtodB(series)
-        assert isinstance(result, pd.Series)
-        assert result.index.equals(index)
-        assert_array_equal(result.values, powtodB(power))
-
-    def test_pandas_dataframe_roundtrip(self):
-        pd = pytest.importorskip('pandas')
-
-        power = np.array([[1e-3, 1.0], [2.5, 1e3], [0.5, 4.0]])
-        columns = [f'c{i}' for i in range(power.shape[1])]
-        frame = pd.DataFrame(power, columns=columns)
-
-        result = powtodB(frame)
-        assert isinstance(result, pd.DataFrame)
-        assert list(result.columns) == columns
-        assert result.index.equals(frame.index)
-        assert_array_equal(result.values, powtodB(power))
+        assert type(result) is type(obj)
+        for axis, expected in zip(result.axes, obj.axes):
+            assert axis.equals(expected)
+        tol = log_conversion_tol(np.float64, 10)
+        assert_close(result.values, 10 * np.log10(obj.values), **tol)
 
     @pytest.mark.parametrize(
         'func,units_in,units_out',
         [
             (powtodB, 'mW', 'dBm'),
             (powtodB, 'W/Hz', 'dBW/Hz'),
+            (powtodB, None, None),
             (dBtopow, 'dBm', 'mW'),
             (dBtopow, 'dB', 'unitless'),
             (envtodB, '√mW', 'dBm'),
             (envtopow, '√W', 'W'),
         ],
+        ids=lambda v: 'none' if v is None else v if isinstance(v, str) else func_id(v),
     )
     def test_xarray_units_transform(self, func, units_in, units_out):
+        """the units attr follows the conversion, and is absent when the input has
+        none"""
         xr = pytest.importorskip('xarray')
 
         data = np.linspace(0.5, 2.0, 8, dtype=np.float64)
-        da = xr.DataArray(
-            data, dims=['t'], coords={'t': np.arange(8)}, attrs={'units': units_in}
-        )
+        attrs = {} if units_in is None else {'units': units_in}
+        da = xr.DataArray(data, dims=['t'], coords={'t': np.arange(8)}, attrs=attrs)
 
         result = func(da)
         assert isinstance(result, xr.DataArray)
         assert result.dims == ('t',)
-        assert result.attrs['units'] == units_out
-        assert da.attrs['units'] == units_in
+        assert result.attrs.get('units') == units_out
+        assert da.attrs.get('units') == units_in
         assert_array_equal(result.values, func(data))
 
-    def test_xarray_without_units(self):
-        xr = pytest.importorskip('xarray')
-
-        da = xr.DataArray(np.ones(4), dims=['t'])
-        assert 'units' not in powtodB(da).attrs
-
-    def test_xarray_dataset_values_raise(self):
-        xr = pytest.importorskip('xarray')
-
-        ds = xr.Dataset({'a': ('t', np.ones(4))})
-        with pytest.raises(TypeError):
-            powtodB(ds)
-
-    def test_unknown_container_with_values_raises(self):
-        class Container:
-            @property
-            def values(self):
-                return np.ones(4)
-
+    @pytest.mark.parametrize(
+        'make',
+        [
+            lambda: pytest.importorskip('xarray').Dataset({'a': ('t', np.ones(4))}),
+            _ValuesOnly,
+        ],
+        ids=['dataset', 'object_with_values'],
+    )
+    def test_container_without_an_array_type_raises(self, make):
         with pytest.raises(TypeError, match='unable to associate an array type'):
-            powtodB(Container())
+            powtodB(make())
 
 
 class TestNumpyCupyCrossComparison:

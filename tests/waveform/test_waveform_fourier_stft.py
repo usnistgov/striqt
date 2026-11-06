@@ -105,13 +105,24 @@ class TestStft:
         sigma = fft_tolerance_rms(np.complex64, [64], n_elementwise=2)
         assert_close(X_array, X_named, sigma=sigma)
 
-    def test_variants(self):
+    @pytest.mark.parametrize('window', [None, 'rect'], ids=['none', 'rect'])
+    def test_unwindowed_constant_fills_the_dc_bin(self, window):
+        """a constant input without a window puts unit gain in the DC bin of every
+        segment, in ascending frequency order, and roundoff alone elsewhere"""
+        nfft, nseg = 64, 8
+        x = np.ones(nfft * nseg, dtype=np.complex64)
+
+        X = stft(
+            x, fs=1.0, window=window, nperseg=nfft, noverlap=0, return_axis_arrays=False
+        )
+
+        expected = np.zeros((nseg, nfft), dtype=np.complex64)
+        expected[:, nfft // 2] = 1
+        sigma = fft_tolerance_rms(np.complex64, [nfft], n_elementwise=1)
+        assert_close(X, expected, sigma=sigma)
+
+    def test_unknown_norm_is_rejected(self):
         x = np.ones(512, dtype=np.complex64)
-
-        X = stft(x, fs=1.0, window=None, nperseg=64, return_axis_arrays=False)
-        _, _, X_rect = stft(x, fs=1.0, window='rect', nperseg=64)
-        assert_array_equal(X, X_rect)
-
         with pytest.raises(TypeError, match='norm'):
             stft(x, fs=1.0, window='hann', nperseg=64, norm='bogus')
 
@@ -139,12 +150,11 @@ class TestIstft:
         # window multiply, fft, ifft, fftshift multiply and the overlap-add
         return fft_tolerance_rms(dtype, [self.NFFT, self.NFFT], n_elementwise=3)
 
-    @settings(max_examples=30)
-    @given(
-        x=iq_waveforms(min_size=8 * NFFT, max_size=16 * NFFT, multiple_of=NFFT),
-        window=st.sampled_from(['hann', 'hamming']),
-        overwrite_x=st.booleans(),
-    )
+    @pytest.mark.parametrize('window', ['hann', 'hamming'])
+    @pytest.mark.parametrize('overwrite_x', [False, True], ids=['copy', 'in_place'])
+    # 10 waveforms per row, 40 in all, against the 30 of one @given over the 4 cases
+    @settings(max_examples=10)
+    @given(x=iq_waveforms(min_size=8 * NFFT, max_size=16 * NFFT, multiple_of=NFFT))
     def test_cola_roundtrip_is_identity(self, x, window, overwrite_x):
         nfft = self.NFFT
         _, _, X = stft(x, fs=1.0, window=window, nperseg=nfft, noverlap=nfft // 2)
@@ -198,12 +208,15 @@ class TestIstft:
         assert y.shape == (size,)
 
     def test_out_buffer_is_used(self):
+        """the reconstruction of a constant is written into `out` at unit level"""
         nfft = self.NFFT
         x = np.ones(8 * nfft, dtype=np.complex64)
         _, _, X = stft(x, fs=1.0, window='hann', nperseg=nfft, noverlap=nfft // 2)
         out = np.empty(X.size, dtype=X.dtype)
         y = istft(X, nfft=nfft, noverlap=nfft // 2, out=out)
         assert np.shares_memory(y, out)
+        sigma = self._roundtrip_sigma(x.dtype)
+        assert_close(interior(y, nfft), interior(x, nfft), sigma=sigma)
 
     @pytest.mark.parametrize('hop_divisor', [2, 4])
     def test_stack_unstack_roundtrip(self, hop_divisor):

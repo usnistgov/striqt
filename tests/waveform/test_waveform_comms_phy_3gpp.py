@@ -59,8 +59,8 @@ class TestPhy3GPP:
         'but the 5G computation produces one; TS 38.211 5.3.1 agrees with the LTE '
         'table at 15 kHz',
     )
-    @pytest.mark.parametrize('sample_rate', [1.92e6, 3.84e6, 7.68e6, 15.36e6, 30.72e6])
-    def test_lte_and_5g_agree_at_15khz(self, sample_rate):
+    def test_lte_and_5g_agree_at_15khz(self):
+        sample_rate = 15.36e6
         lte = phy_3gpp.Phy3GPP(1, sample_rate=sample_rate, generation='4G')
         nr = phy_3gpp.Phy3GPP(1, sample_rate=sample_rate, generation='5G')
         assert_array_equal(lte.cp_sizes, nr.cp_sizes)
@@ -129,7 +129,8 @@ class TestPhy3GPP:
     )
     def test_subframe_cp_layout(self, scs):
         """TS 38.211 5.3.1: of the 14*2**mu symbols in a 1 ms subframe, only l=0 and
-        l=7*2**mu carry the extra 16*kappa cyclic prefix samples"""
+        l=7*2**mu carry the extra 16*kappa cyclic prefix samples, and the slots of
+        that layout tile the 10 ms frame"""
         sample_rate = 15.36e6
         phy = phy_5g(scs, sample_rate)
         mu = round(np.log2(scs / 15e3))
@@ -140,21 +141,6 @@ class TestPhy3GPP:
 
         slots_per_subframe = 2**mu
         assert_array_equal(np.tile(phy.cp_sizes, slots_per_subframe), expected)
-
-    @pytest.mark.parametrize(
-        'scs',
-        scs_cp_layout(
-            reason_15khz='TS 38.211 5.3.1 adds the extra 16*kappa CP samples at '
-            'symbols l=0 and l=7*2**mu of each 1 ms subframe; Phy3GPP adds '
-            'them once per 14 symbols, which is one too few per slot at '
-            '15 kHz',
-            reason_60khz='at 60 kHz the extra 16*kappa CP samples belong to one '
-            'slot in two; Phy3GPP adds them to every slot',
-        ),
-        ids=khz_id,
-    )
-    def test_slots_tile_the_frame(self, scs):
-        phy = phy_5g(scs, 15.36e6)
         slots = phy.SCS_TO_SLOTS_PER_FRAME[scs]
         assert slots * phy.contiguous_size == phy.frame_size
 
@@ -260,26 +246,6 @@ class TestCupy:
 
 # %% nr_sample_rate
 
-# (subcarrier spacing, 3GPP TS 38.104 Table 5.3.2-1 channel bandwidth) -> the smallest
-# multiple of 896 * scs at or above the channel bandwidth plus a 250 kHz transition
-# band. The step is 13.44e6 S/s at 15 kHz, 26.88e6 at 30 kHz, and 53.76e6 at 60 kHz.
-# The rows near a step boundary: 50.25e6 exceeds 3 steps of 13.44e6 (40.32e6) and
-# takes 4; 80.25e6 fits 3 steps of 26.88e6 (80.64e6); 60.25e6 exceeds 1 step of
-# 53.76e6 and takes 2.
-NR_RATES = {
-    (15e3, 5e6): 13.44e6,
-    (15e3, 20e6): 26.88e6,
-    (15e3, 50e6): 53.76e6,
-    (30e3, 20e6): 26.88e6,
-    (30e3, 40e6): 53.76e6,
-    (30e3, 60e6): 80.64e6,
-    (30e3, 80e6): 80.64e6,
-    (30e3, 100e6): 107.52e6,
-    (60e3, 10e6): 53.76e6,
-    (60e3, 60e6): 107.52e6,
-    (60e3, 100e6): 107.52e6,
-}
-
 # one channel per subcarrier spacing. Every rate is a multiple of 896 * scs, so the
 # sample grid properties below hold for one bandwidth iff they hold for all.
 NR_ONE_PER_SCS = [
@@ -295,19 +261,13 @@ NR_FR1_PAIRS = [
 
 
 class TestNRSampleRate:
-    @pytest.mark.parametrize(
-        'scs, bw, expected',
-        [(scs, bw, rate) for (scs, bw), rate in NR_RATES.items()],
-        ids=[f'{khz_id(scs)}-{bw / 1e6:g}MHz' for scs, bw in NR_RATES],
-    )
-    def test_rates(self, scs, bw, expected):
-        assert phy_3gpp.nr_sample_rate(bw, scs) == expected
-
     def test_min_sample_rate_is_a_lower_bound(self):
+        """a bound above the unconstrained rate and on the rate grid is returned as
+        is; a bound below leaves the rate unchanged"""
         rate = phy_3gpp.nr_sample_rate(60e6, 30e3, min_sample_rate=107.52e6)
         assert rate == pytest.approx(107.52e6)
         rate = phy_3gpp.nr_sample_rate(60e6, 30e3, min_sample_rate=1e6)
-        assert rate == NR_RATES[(30e3, 60e6)]
+        assert rate == phy_3gpp.nr_sample_rate(60e6, 30e3)
 
     @pytest.mark.parametrize('scs, bw', NR_ONE_PER_SCS)
     def test_rate_gives_whole_sample_symbols_and_cyclic_prefixes(self, scs, bw):

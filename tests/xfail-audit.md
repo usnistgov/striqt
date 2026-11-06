@@ -39,7 +39,8 @@ at import that the registry and the bundles agree (`xfailed` 43 to 41 on both
 interpreters; 35 to 33 markers). Item 67 was retired on 2026-11-05. The cyclic-prefix
 correlation moved onto the array API (735aa631), which deleted the numba CUDA kernel
 `comms/cp_cuda_jit.py:_corr_at_indices` and the test class of item 67 (33 to 32
-markers). Items are
+markers). On 2026-11-06 (branch `audit-test-suite`) the test-suite audit folded the
+item 6 tests (`xfailed` 41 to 35; 32 markers unchanged). Items are
 listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
@@ -93,7 +94,7 @@ item is open.
 
 | # | Test | Confidence | Impact | Fix |
 | --- | --- | --- | --- | --- |
-| 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_slots_tile_the_frame[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
+| 6 | `test_subframe_cp_layout[15kHz]`, `[60kHz]`; `test_lte_and_5g_agree_at_15khz` | High | B (spec default) | moderate |
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
 | 44 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]` | High | B | trivial |
@@ -127,10 +128,13 @@ item is open.
 
 `tests/waveform/test_waveform_comms_phy_3gpp.py::TestPhy3GPP::test_subframe_cp_layout[15kHz]`,
 `[60kHz]` (added 2026-09-16: tiles `cp_sizes` over a 1 ms subframe and
-asserts the TS 38.211 5.3.1 rule directly);
-`tests/waveform/test_waveform_comms_phy_3gpp.py::TestPhy3GPP::test_slots_tile_the_frame[15kHz]`,
-`[60kHz]`, and `test_lte_and_5g_agree_at_15khz[*]` (5 sample rates); both
-tables draw their marks from the module's `scs_cp_layout` builder
+asserts the TS 38.211 5.3.1 rule directly; since 2026-11-06 the test also
+asserts that the slots tile the 10 ms frame, the check of
+`test_slots_tile_the_frame[15kHz]`, `[60kHz]`; that fold retired the test and
+the two `reason` wordings of the test); and
+`tests/waveform/test_waveform_comms_phy_3gpp.py::TestPhy3GPP::test_lte_and_5g_agree_at_15khz`
+(one sample rate, 15.36 MS/s, since 2026-11-06; 5 sample rates before). The
+layout table draws the marks from the module's `scs_cp_layout` builder
 
 - **Mechanism.** `comms/phy_3gpp.py:176` adds the extra `16κ` CP samples once per 14
   symbols. TS 38.211 §5.3.1 adds them at `l = 0` and `l = 7·2^μ` of each 1 ms

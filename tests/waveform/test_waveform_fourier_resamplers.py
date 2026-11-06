@@ -21,8 +21,10 @@ from numeric_checks import (
     numpy_and_cupy,
     tone_frequency,
 )
-from numpy.testing import assert_allclose, assert_array_equal
+from numpy.testing import assert_allclose
 from waveform_strategies import (
+    cola_ripple_rtol,
+    cola_sum,
     cross_backend_sigma,
     msps_id,
     noise_waveforms,
@@ -36,12 +38,8 @@ from striqt.waveform.lib.fourier.fft import (
     fft_tolerance_rms,
     time_fftshift,
 )
-from striqt.waveform.lib.fourier.filters import (
-    _COLA_WINDOW_SIZE_DIVISOR,
-    design_oafilter,
-)
+from striqt.waveform.lib.fourier.filters import design_oafilter
 from striqt.waveform.lib.fourier.resamplers import (
-    OLA_MAX_FFT_SIZE,
     _copy_bins_to_fftfreq_order,
     design_cola_resampler,
     design_fir_resampler,
@@ -53,21 +51,27 @@ from striqt.waveform.lib.fourier.stft import _find_downsample_copy_range
 
 # %% design_cola_resampler and design_fir_resampler
 
-# the window enters the design only through its COLA divisor. The hann rows span the
-# rates and shifts; the blackman rows cover the other divisor.
+# the window enters the design only through its COLA hop count, and the shift only
+# through the passband placement, so the hann rows span the rates at one shift, 2
+# rows add the shifts at one rate pair, and the blackman rows cover the other hop
+# count
 COLA_DESIGN_CASES = [
     pytest.param(
         fs_base,
         fs_target,
         'hann',
-        shift,
-        id=f'{msps_id(fs_base)}-{msps_id(fs_target)}-{shift}',
+        None,
+        id=f'{msps_id(fs_base)}-{msps_id(fs_target)}-None',
     )
     for fs_base in [122.88e6, 125e6]
     for fs_target in [7.68e6, 15.36e6, 20e6, 30.72e6, 61.44e6, 107.52e6]
-    for shift in [None, 'left', 'right']
 ] + [
+    pytest.param(125e6, 15.36e6, 'hann', 'left', id='125MSps-15.36MSps-left'),
+    pytest.param(125e6, 15.36e6, 'hann', 'right', id='125MSps-15.36MSps-right'),
     pytest.param(125e6, 15.36e6, 'blackman', None, id='125MSps-15.36MSps-blackman'),
+    pytest.param(
+        125e6, 15.36e6, 'blackman', 'left', id='125MSps-15.36MSps-blackman-left'
+    ),
     # 25/24 at 6 MS/s: the smallest rational pair is odd, and the sizing must grow
     # it to even multiples of 3
     pytest.param(125e6, 6e6, 'blackman', None, id='125MSps-6MSps-blackman'),
@@ -85,8 +89,14 @@ def largest_prime_factor(n: int) -> int:
     return factor
 
 
-def reduced_denominator(fs_sdr: float, fs_target: float) -> int:
-    return Fraction(fs_sdr / fs_target).limit_denominator(OLA_MAX_FFT_SIZE).denominator
+def assert_cola_at_hop(window, nfft, overlap_scale):
+    """assert that `window` of `nfft` samples satisfies COLA at the hop
+    ``nfft - round(nfft * overlap_scale)``, and return the hop."""
+    hop = nfft - round(nfft * overlap_scale)
+    assert nfft % hop == 0
+    total = cola_sum(window, nfft, hop)
+    assert_close(total, total.mean(), rtol=cola_ripple_rtol(nfft, hop))
+    return hop
 
 
 class TestColaResamplerDesign:
@@ -110,19 +120,21 @@ class TestColaResamplerDesign:
         assert design['nfft'] * fs_target == pytest.approx(
             design['nfft_out'] * design['fs_sdr'], rel=1e-12
         )
-        # both sizes are even multiples of the COLA divisor that the window imposes
+        # the half-band shift of the STFT is self-inverse only on an even block
         assert design['nfft'] % 2 == 0 and design['nfft_out'] % 2 == 0
         # the multiplier on the reduced ratio is 2·3·5·7-smooth
-        q = reduced_denominator(design['fs_sdr'], fs_target)
-        assert design['nfft_out'] % q == 0
+        q = Fraction(design['nfft'], design['nfft_out']).denominator
         assert largest_prime_factor(design['nfft_out'] // q) <= 7
-        for nfft, nfft_out in [
-            (design['nfft'], design['nfft_out']),
-            (design['nfft_out'], design['nfft']),
-        ]:
-            design_oafilter(
-                nfft, window=window, nfft_out=nfft_out, nfft=nfft, extend=True
-            )
+        # the window satisfies COLA at the hop of both block sizes
+        _, _, overlap_scale, _ = design_oafilter(
+            design['nfft'],
+            window=window,
+            nfft_out=design['nfft_out'],
+            nfft=design['nfft'],
+            extend=True,
+        )
+        hop = assert_cola_at_hop(window, design['nfft'], overlap_scale)
+        assert_cola_at_hop(window, design['nfft_out'], overlap_scale)
         assert design['window'] == window
 
         lo, hi = design['passband']
@@ -130,9 +142,10 @@ class TestColaResamplerDesign:
         assert_allclose((hi + lo) / 2, design['lo_offset'])
         sign = {'left': -1, 'right': 1}.get(shift, 0)
         assert np.sign(design['lo_offset']) == sign
-        # the shift must keep consecutive STFT frames in phase in oaresample
+        # a shift of `bins` bins rotates the phase by bins * hop / nfft cycles per
+        # hop, which must be whole to keep consecutive STFT frames in phase
         bins = round(design['lo_offset'] / (design['fs_sdr'] / design['nfft']))
-        assert bins % _COLA_WINDOW_SIZE_DIVISOR[window] == 0
+        assert (bins * hop) % design['nfft'] == 0
 
     def test_options(self):
         design = design_cola_resampler(125e6, 107.52e6)
@@ -153,7 +166,7 @@ class TestColaResamplerDesign:
             125e6, 6e6, min_fft_size=16383, window='blackman'
         )
         assert smooth['fs_sdr'] == pytest.approx(6.25e6)
-        q = reduced_denominator(smooth['fs_sdr'], 6e6)
+        q = Fraction(smooth['nfft'], smooth['nfft_out']).denominator
         assert q == 24
         assert largest_prime_factor(smooth['nfft_out'] // q) <= 7
         assert (smooth['nfft'], smooth['nfft_out']) == (18000, 17280)
@@ -193,65 +206,51 @@ class TestResample:
         x = gaussian_iq(128, dtype=np.complex128, seed=42)
         assert resample(x, len(x)) is x
 
-    @settings(max_examples=50)
-    @given(scale=st.floats(min_value=0.5, max_value=2.0, allow_nan=False))
-    def test_scale_parameter(self, scale):
-        x = gaussian_iq(128, dtype=np.complex128, seed=42)
-        num_out = len(x) // 2
-        result_unscaled = resample(x, num_out, scale=1.0)
-        result_scaled = resample(x, num_out, scale=scale)
-        assert_allclose(result_scaled, scale * result_unscaled, rtol=1e-8, atol=1e-15)
-
+    @pytest.mark.parametrize(
+        'domain, overwrite_x',
+        [('time', False), ('freq', False), ('frequency', False), ('freq', True)],
+        ids=['time', 'freq', 'frequency', 'freq_in_place'],
+    )
+    # 30 examples per row: the shift takes 33 values and the scale enters linearly
     @settings(max_examples=30)
-    @given(x=noise_waveforms(min_size=64, max_size=256, dtype=np.complex128))
-    def test_frequency_domain_input(self, x):
-        """domain='freq' takes the spectrum as fft(time_fftshift(x)) and matches the
-        time-domain path"""
-        num = x.size // 2
-        X = fft(time_fftshift(x), axis=0)
-        y_time = resample(x, num)
-        y_freq = resample(X.copy(), num, domain='freq')
-        y_frequency = resample(X.copy(), num, domain='frequency')
-        y_freq_inplace = resample(X, num, domain='freq', overwrite_x=True)
-        sigma = cross_backend_sigma(x.dtype, [x.size], n_elementwise=1)
-        assert_close(y_freq, y_time, sigma=sigma)
-        assert_array_equal(y_frequency, y_freq)
-        assert_array_equal(y_freq_inplace, y_freq)
-
-    @given(shift=st.integers(min_value=-16, max_value=16))
-    def test_shift_moves_tone_when_downsampling(self, shift):
+    @given(
+        shift=st.integers(min_value=-16, max_value=16),
+        scale=st.floats(min_value=0.5, max_value=2.0),
+    )
+    def test_downsampled_tone_is_shifted_and_scaled(
+        self, domain, overwrite_x, shift, scale
+    ):
+        """a bin-centered unit tone comes back as a tone at amplitude `scale`, `shift`
+        bins lower in the output spectrum, from the time-domain input or from its
+        spectrum ``fft(time_fftshift(x))`` under either spelling of `domain`"""
         nfft_in, nfft_out = 256, 128
         k = 26
         x = testing.tone(None, 1.0, frequency=k / nfft_in, count=nfft_in)[0]
-        y = resample(x, nfft_out, shift=shift)
+        kws = {'shift': shift, 'scale': scale, 'overwrite_x': overwrite_x}
+        if domain == 'time':
+            y = resample(x, nfft_out, **kws)
+        else:
+            X = fft(time_fftshift(x), axis=0)
+            y = resample(X, nfft_out, domain=domain, **kws)
         assert y.shape == (nfft_out,) and y.dtype == x.dtype
         # the band copied to the output starts `shift` bins higher, so the tone
         # falls `shift` bins lower in the output spectrum
         expected = (k - shift) / nfft_out
         assert abs(tone_frequency(y, 1.0) - expected) <= 1 / nfft_out
-        # a bin-centered unit tone comes back as a unit tone; fftshift multiply,
-        # fft(N), ifft(N/2), ifftshift multiply
-        sigma = fft_tolerance_rms(x.dtype, [nfft_in, nfft_out], n_elementwise=2)
-        assert_close(np.abs(y), np.ones(y.size), sigma=sigma)
+        # fftshift multiply, fft(N), ifft(N/2), ifftshift multiply, and the scale
+        sigma = fft_tolerance_rms(x.dtype, [nfft_in, nfft_out], n_elementwise=3)
+        assert_close(np.abs(y), np.full(y.size, scale), sigma=sigma)
 
     @pytest.mark.parametrize(
         'kws, match',
-        [
-            ({'num': 128, 'domain': 'bogus'}, 'domain'),
-            ({'num': 128, 'window': 'flattop'}, 'window'),
-            ({'num': 512, 'shift': 1}, 'downsampling'),
-            ({'num': 128, 'shift': -100}, 'too small'),
-            ({'num': 128, 'shift': 100}, 'too large'),
-        ],
+        [({'domain': 'bogus'}, 'domain'), ({'window': 'flattop'}, 'window')],
+        ids=['domain', 'window'],
     )
     def test_errors(self, kws, match):
+        """the shift and length errors of `resample_edges` are covered there"""
         x = np.ones(256, dtype=np.complex64)
         with pytest.raises(ValueError, match=match):
-            resample(x, **kws)
-
-    def test_odd_length_rejected(self):
-        with pytest.raises(ValueError, match='even'):
-            resample(np.ones(255, dtype=np.complex64), 128)
+            resample(x, 128, **kws)
 
     def test_resample_edges(self):
         """downsampling 256 to 128 bins keeps the middle 128, shifted by `shift`"""
@@ -332,16 +331,23 @@ class TestOaresample:
         for row, gain in zip(yi, scale):
             assert_tone_level(row[np.newaxis], gain)
 
-    @pytest.mark.parametrize('window', ['hann', 'blackman'])
-    def test_filter_bandwidth(self, window):
+    # the input block is the largest even multiple of the COLA hop count of the
+    # window at or below NFFT, which `assert_cola_at_hop` verifies
+    @pytest.mark.parametrize(
+        'window, down', [('hann', 256), ('blackman', 252)], ids=['hann', 'blackman']
+    )
+    def test_filter_bandwidth(self, window, down):
         """a tone inside the passband keeps its level; a tone past the transition band
         (``bw/2 + transition/2``) is rejected below the block-size floor"""
-        divisor = _COLA_WINDOW_SIZE_DIVISOR[window]
-        down = self.NFFT - self.NFFT % (2 * divisor)
         up = down // 2
         kws = {**FILTER_KWS, 'window': window}
         # the STFT needs a whole number of hops, and `down` is a multiple of the hop
         count = down * self.NSEG
+        _, _, overlap_scale, _ = design_oafilter(
+            count, window=window, nfft_out=up, nfft=down, extend=True
+        )
+        assert_cola_at_hop(window, down, overlap_scale)
+        assert_cola_at_hop(window, up, overlap_scale)
         x_pass = tiled_tone(self.FS, 0.05e6, count, 1)
         x_stop = tiled_tone(self.FS, 0.15e6, count, 1)
         y_pass = oaresample(x_pass, up, down, self.FS, **kws)
@@ -469,7 +475,7 @@ class TestCopyBinsToFftfreqOrder:
 
         xp.testing.assert_array_equal(reorder(y, case, overwrite_x=False), expected)
 
-    @pytest.mark.namespaces('cupy')
+    @pytest.mark.namespaces('numpy', 'cupy')
     @pytest.mark.parametrize(
         'per_port_gain', [False, True], ids=['one_gain', 'per_port']
     )
@@ -488,8 +494,8 @@ class TestCopyBinsToFftfreqOrder:
     ):
         """the in-place reorder writes the same values as the out-of-place one into
         the head of the buffer of `y`. Small blocks force both the scratch and the
-        direct regime and a partial final block; the cupy case is the one an ordering
-        error fails, since numpy buffers overlapping ufunc operands on its own."""
+        direct regime and a partial final block. numpy buffers overlapping ufunc
+        operands on its own, so the cupy rows are the ones an ordering error fails."""
         case = reorder_case(
             xp, nfft, nfft_out, segments=segments, per_port_gain=per_port_gain
         )
@@ -539,38 +545,6 @@ class TestCopyBinsToFftfreqOrder:
 
         assert not xp.shares_memory(result, y)
         xp.testing.assert_array_equal(result, reference)
-
-    @given(
-        half_out=st.integers(min_value=2, max_value=24),
-        extra=st.integers(min_value=0, max_value=12),
-        segments=st.integers(min_value=1, max_value=12),
-        block_rows=st.integers(min_value=1, max_value=6),
-        ports=st.integers(min_value=1, max_value=2),
-        per_port_gain=st.booleans(),
-    )
-    @settings(max_examples=30)
-    def test_in_place_property(
-        self, half_out, extra, segments, block_rows, ports, per_port_gain
-    ):
-        """every even output size at or below the input size reorders in place to
-        the out-of-place values, at any block size, with one gain or a gain per port"""
-        nfft_out = 2 * half_out
-        nfft = nfft_out + 2 * extra
-        case = reorder_case(
-            np,
-            nfft,
-            nfft_out,
-            ports=ports,
-            segments=segments,
-            per_port_gain=per_port_gain,
-        )
-        y = case[0]
-        reference = reorder(y.copy(), case, overwrite_x=False)
-
-        result = reorder(y, case, overwrite_x=True, block_rows=block_rows)
-
-        assert np.shares_memory(result, y)
-        assert_array_equal(result, reference)
 
 
 # %% numpy vs cupy

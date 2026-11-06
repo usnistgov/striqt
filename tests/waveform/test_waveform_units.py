@@ -86,8 +86,6 @@ WAVE_PAIRS = [
 def test_dB_and_linear_forms_are_inverses(dB_unit, linear_unit):
     assert U.to_linear(dB_unit) == linear_unit
     assert U.to_dB(linear_unit) == dB_unit
-    assert U.to_dB(U.to_linear(dB_unit)) == dB_unit
-    assert U.to_linear(U.to_dB(linear_unit)) == linear_unit
 
 
 @pytest.mark.parametrize('dB_unit, wave_unit', WAVE_PAIRS)

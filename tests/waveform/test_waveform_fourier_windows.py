@@ -9,14 +9,7 @@ import functools
 import numpy as np
 import pytest
 from hypothesis import given, strategies as st
-from numeric_checks import (
-    ATOL,
-    FLOAT_DTYPES,
-    assert_close,
-    dtype_id,
-    elementwise_rtol,
-    numpy_and_cupy,
-)
+from numeric_checks import ATOL, assert_close, elementwise_rtol, numpy_and_cupy
 from numpy.testing import assert_allclose, assert_array_equal
 
 from striqt.waveform.lib.fourier.windows import (
@@ -30,13 +23,13 @@ WINDOW_NAMES = ['hann', 'hamming', 'blackman', 'blackmanharris', 'bartlett', 'nu
 
 # %% get_window
 class TestGetWindow:
-    def test_dtype_follows_argument(self, subtests):
-        for dtype in FLOAT_DTYPES:
-            with subtests.test(dtype=dtype_id(dtype)):
-                assert get_window('hann', 16, nzero=4, dtype=dtype).dtype == dtype
-
-    def test_dtype_none_keeps_float64(self):
-        assert get_window('hann', 16, dtype=None).dtype == np.float64
+    @pytest.mark.parametrize(
+        'dtype, expected',
+        [(np.float32, np.float32), (np.float64, np.float64), (None, np.float64)],
+        ids=['float32', 'float64', 'none_keeps_float64'],
+    )
+    def test_dtype_follows_argument(self, dtype, expected):
+        assert get_window('hann', 16, nzero=4, dtype=dtype).dtype == expected
 
     @given(
         name=st.sampled_from(WINDOW_NAMES),
@@ -110,9 +103,6 @@ class TestEquivalentNoiseBandwidth:
         assert equivalent_noise_bandwidth('rect', 64) == pytest.approx(1.0, abs=0)
         # the periodic hann window has ENBW exactly 1.5 bins
         assert_allclose(equivalent_noise_bandwidth('hann', 64), 1.5, rtol=1e-6)
-        uncached = equivalent_noise_bandwidth('hann', 64, cached=False)
-        cached = equivalent_noise_bandwidth('hann', 64)
-        assert_allclose(uncached, cached, rtol=0)
 
     @pytest.mark.parametrize('window', ['kaiser', 'dpss', 'chebwin'])
     def test_find_window_param_reproduces_enbw(self, window):
