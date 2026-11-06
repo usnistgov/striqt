@@ -108,25 +108,40 @@
             flex: 1;
             min-width: 0;
             height: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
         }
-        .plot-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 0.5rem 1rem;
-            background: #16213e;
-            border-radius: 8px;
-            flex-shrink: 0;
+        .plot-stage {
+            position: relative;
+            width: 100%;
+            height: 100%;
         }
         #plot-container {
             width: 100%;
-            flex: 1;
-            min-height: 0;
+            height: 100%;
             background: #16213e;
             border-radius: 8px;
+        }
+        /* the dropdown is centered on the row of the plotly mode bar, which plotly
+           places at top 2px, right 2px, about 30px tall */
+        .plot-title-select {
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            height: 30px;
+            z-index: 2;
+            background: transparent;
+            border: 1px solid transparent;
+            color: #eee;
+            font-size: 1rem;
+            font-weight: 500;
+            line-height: 1;
+            text-align: center;
+            text-align-last: center;
+            padding: 0 1.25rem;
+        }
+        .plot-title-select:hover, .plot-title-select:focus {
+            background: #0f3460;
+            border-color: #e94560;
         }
         .loading {
             display: flex;
@@ -266,16 +281,13 @@
             </div>
         </div>
         <div class="plot-area">
-            <div class="plot-toolbar">
-                <div class="control-group">
-                    <label for="variable-select">Data Variable:</label>
-                    <select id="variable-select">
-                        <option value="">Loading...</option>
-                    </select>
+            <div class="plot-stage">
+                <select id="variable-select" class="plot-title-select" title="Data variable">
+                    <option value="">Loading...</option>
+                </select>
+                <div id="plot-container">
+                    <div class="loading">Waiting for data...</div>
                 </div>
-            </div>
-            <div id="plot-container">
-                <div class="loading">Waiting for data...</div>
             </div>
         </div>
     </div>
@@ -300,7 +312,8 @@
             paper_bgcolor: '#16213e',
             plot_bgcolor: '#1a1a2e',
             font: { color: '#eee' },
-            margin: { t: 50, r: 50, b: 60, l: 70 }
+            // the top margin holds the mode bar row with the variable dropdown
+            margin: { t: 64, r: 50, b: 60, l: 70 }
         };
 
         // Grid styling applied to every axis in the merged layout.
