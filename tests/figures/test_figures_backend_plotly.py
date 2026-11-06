@@ -156,6 +156,46 @@ def test_mark_noise_level_edits_only_the_given_figure_by_facet_value() -> None:
         assert shape.xref == f'{xaxis} domain'
 
 
+# %% reset
+
+
+@pytest.mark.parametrize('limits', [False, True], ids=['keep', 'forget'])
+def test_reset_keeps_the_widened_limits_unless_limits_is_true(limits: bool) -> None:
+    """after a draw of all 3 captures, a draw of the middle capture alone keeps the
+    color and y range of the 3-capture data under ``reset()``, and takes the range
+    of its own data under ``reset(limits=True)``"""
+    wide = make_dataset()
+    narrow = wide.isel(capture=[1])
+    plotter = capture_backend()
+    _, mean_wide, _ = cyclic_statistics(wide)
+    _, mean_narrow, _ = cyclic_statistics(narrow)
+    heat_kws = {'x': X, 'y': HUE}
+    plotter.heatmap(mean_wide, **heat_kws)
+    plotter.line(mean_wide, x=X, hue=HUE)
+    wide_range = (float(np.nanmin(mean_wide)), float(np.nanmax(mean_wide)))
+    narrow_range = (float(np.nanmin(mean_narrow)), float(np.nanmax(mean_narrow)))
+    assert wide_range[0] < narrow_range[0] < narrow_range[1] < wide_range[1]
+
+    plotter.reset(limits=limits)
+    heat = plotter.heatmap(mean_narrow, **heat_kws)
+    line = plotter.line(mean_narrow, x=X, hue=HUE)
+
+    expected = narrow_range if limits else wide_range
+    (trace,) = heat.data
+    assert (trace.zmin, trace.zmax) == pytest.approx(expected)
+    assert tuple(line.layout.yaxis.range) == pytest.approx(expected)
+
+
+def test_reset_clears_the_pending_figures() -> None:
+    _, mean, _ = cyclic_statistics()
+    plotter = capture_backend()
+    plotter.line(mean, x=X, hue=HUE)
+
+    plotter.reset()
+
+    assert plotter.get_plot_data() == []
+
+
 # %% step and validation
 
 

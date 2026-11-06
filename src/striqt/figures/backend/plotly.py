@@ -219,12 +219,19 @@ class PlotlyBackend(PlotBackend['go.Figure']):
         self._remembered_ymin: Optional[float] = None
         self._remembered_ymax: Optional[float] = None
 
-    def reset(self) -> None:
+    def reset(self, *, limits: bool = False) -> None:
         """clear the pending figures.
 
-        The remembered color and y limits are kept.
+        Args:
+            limits: True also clears the remembered color limits of `heatmap` and
+                y limits of `line`; False keeps the remembered limits
         """
         self._pending.clear()
+        if limits:
+            self._remembered_vmin = None
+            self._remembered_vmax = None
+            self._remembered_ymin = None
+            self._remembered_ymax = None
 
     def _get_col_dim(self, data: xr.DataArray) -> Optional[str]:
         """return the dimension for column faceting, or None.

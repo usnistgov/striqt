@@ -220,7 +220,7 @@ def worker_plot(variable: str, sel: dict[str, typing.Any]):
         raise TimeoutError('no data to plot')
 
     kwargs = ctx['opts'].variables[variable]
-    func = sf.data_vars._data_plots[variable]
+    func = sf.data_var_plotters()[variable]
 
     return func(ctx['data'].sel(**sel), ctx['plotter'], **kwargs)
 

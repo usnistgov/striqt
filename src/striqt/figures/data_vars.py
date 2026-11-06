@@ -1,5 +1,6 @@
 from __future__ import annotations as __
 
+import types as _types
 import typing as _typing
 
 import striqt.analysis as sa
@@ -8,6 +9,7 @@ import striqt.waveform as _sw
 from . import util
 
 if _typing.TYPE_CHECKING:
+    from collections.abc import Mapping as _Mapping
     from pathlib import Path as _Path
 
     from xarray import DataArray as _DA, Dataset as _DS
@@ -46,6 +48,22 @@ def _register_data_var_plot(func: _TVP) -> _TVP:
     )
     _data_plots[name] = func
     return func
+
+
+def data_var_plotters() -> _Mapping[str, _DataVariablePlotter]:
+    """return a read-only mapping from data variable name to plotting function.
+
+    Each key is the name of a data variable in an analysis dataset. Each value is
+    the function in this module that draws the variable. A value is called as
+    ``plotter(ds, backend, **options)``: `ds` is the dataset that contains the
+    variable, `backend` a `PlotBackend`, and `options` the keyword arguments of
+    the function.
+
+    Returns:
+        a read-only view of the registered functions; item assignment raises
+        `TypeError`
+    """
+    return _types.MappingProxyType(_data_plots)
 
 
 @_register_data_var_plot

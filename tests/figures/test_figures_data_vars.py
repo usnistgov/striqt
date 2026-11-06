@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -14,6 +16,7 @@ from figures_datasets import (
     predicted_levels_dBm,
 )
 
+import striqt.figures as sf
 from striqt.figures import data_vars, specs
 from striqt.figures.backend import MatplotlibBackend, PlotlyBackend
 
@@ -50,6 +53,51 @@ def noise_lines(ax, level: float) -> list:
         if len(line.get_xdata()) == 2
         and np.allclose(line.get_ydata(), level, atol=1e-3)
     ]
+
+
+def plot_functions() -> dict[str, Any]:
+    """return the public callables of `data_vars` with leading `(data, plotter)`."""
+    found = {}
+    for name, obj in vars(data_vars).items():
+        if name.startswith('_') or inspect.ismodule(obj) or not callable(obj):
+            continue
+        params = list(inspect.signature(obj).parameters)
+        if params[:2] == ['data', 'plotter']:
+            found[name] = obj
+    return found
+
+
+# %% data_var_plotters
+
+
+def test_data_var_plotters_maps_each_plot_function_name_to_the_module_attribute() -> (
+    None
+):
+    """the keys are the names of every `(data, plotter, ...)` function of the
+    module, and each value is the module attribute of that name"""
+    expected = plot_functions()
+
+    plotters = sf.data_var_plotters()
+
+    assert isinstance(plotters, Mapping)
+    assert set(plotters) == set(expected)
+    assert len(expected) > 0
+    for name, func in expected.items():
+        assert plotters[name] is func
+
+
+def test_data_var_plotters_is_exported_from_the_package() -> None:
+    assert sf.data_var_plotters is data_vars.data_var_plotters
+
+
+def test_data_var_plotters_rejects_item_assignment() -> None:
+    plotters = sf.data_var_plotters()
+    name = next(iter(plot_functions()))
+
+    with pytest.raises(TypeError):
+        plotters[name] = plotters[name]
+
+    assert sf.data_var_plotters()[name] is getattr(data_vars, name)
 
 
 # %% cyclic_channel_power
