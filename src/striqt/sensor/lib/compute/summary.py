@@ -1,13 +1,17 @@
-"""per-port summaries of one analyzed capture: overload state and spectrogram SNR."""
+"""per-port summaries of one analyzed capture: overload state, spectrogram SNR, and
+the text of the capture and acquisition fields."""
 
 from __future__ import annotations as __
 
 import dataclasses
 import math
+import numbers
 from collections.abc import Sequence
 from typing import Any, cast
 
+import striqt.analysis as sa
 import striqt.waveform as sw
+from striqt.analysis.lib.util import np
 
 from ... import specs
 from . import cal_lookups, datasets
@@ -212,3 +216,165 @@ def describe_spectrogram_snr(
         entry.capture, fields=fields, source_id=source_id, adjust_spec=adjust_spec
     )
     return f'spectrogram ▮ {snr_desc:<14} ▮ {capture_desc}'
+
+
+@dataclasses.dataclass(frozen=True)
+class FieldValue:
+    """the text of one spec field across the ports of a capture."""
+
+    name: str
+    """the field name"""
+    values: tuple[str, ...]
+    """the formatted value at each port, in `split_capture_ports` order"""
+    units: str
+    """the units of `values` with the shared SI prefix, or ``''`` without units"""
+
+
+@dataclasses.dataclass(frozen=True)
+class FieldGroup:
+    """the field values that one struct class declares."""
+
+    owner: str
+    """the qualified name ``module.Class`` of the struct class that first declares
+    the fields in the MRO"""
+    fields: tuple[FieldValue, ...]
+    """the fields in declaration order"""
+
+
+def capture_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
+    """return the text of the fields of `dd.capture` at each port.
+
+    A field is included when its name is a coordinate of the capture. Finite numbers
+    with units share one SI prefix per field.
+
+    Args:
+        dd: the analyzed capture
+
+    Returns:
+        one group per declaring class in base-to-derived order, or an empty tuple
+        when `dd.capture` has no ports
+    """
+    coords = datasets.build_capture_coords(
+        dd.capture, dd.extra_coords, dd.config.sweep_spec.loops
+    )
+    if coords is None:
+        return ()
+
+    groups: dict[type, list[FieldValue]] = {}
+    for name, owner in _field_owners(type(dd.capture)).items():
+        if name not in coords:
+            continue
+        coord = coords[name]
+        units = str(coord.attrs.get('units', ''))
+        items = _coordinate_items(coord.values)
+        groups.setdefault(owner, []).append(_field_value(name, items, units))
+    return _as_groups(groups)
+
+
+def acquisition_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
+    """return the text of the fields of `dd.extra_coords` that are set.
+
+    `signal_trigger` and fields equal to None are omitted. A finite number with units
+    is formatted with an SI prefix.
+
+    Args:
+        dd: the analyzed capture
+
+    Returns:
+        one group per declaring class in base-to-derived order, each field with a
+        single-element `values`
+    """
+    info = dd.extra_coords
+    attrs = sa.specs.helpers.get_capture_type_attrs(type(info))
+
+    groups: dict[type, list[FieldValue]] = {}
+    for name, owner in _field_owners(type(info)).items():
+        if name == 'signal_trigger':
+            continue
+        value = getattr(info, name)
+        if value is None:
+            continue
+        units = str(attrs.get(name, {}).get('units', ''))
+        groups.setdefault(owner, []).append(_field_value(name, (value,), units))
+    return _as_groups(groups)
+
+
+def analysis_labels(
+    analysis: sa.specs.AnalysisGroup,
+    registry: sa.register.AnalysisRegistry = sa.registry,
+) -> dict[str, str]:
+    """return a label for each enabled field of `analysis`, keyed by field name.
+
+    Args:
+        analysis: the analysis group; a field equal to None is omitted
+        registry: the registry that names the measurements
+
+    Returns:
+        the `standard_name` of the `registry` entry named by the field, or the field
+        name in title case with spaces for underscores when no entry has that name
+    """
+    standard_names = {
+        info.name: str(info.attrs['standard_name']) for info in registry.values()
+    }
+    labels: dict[str, str] = {}
+    for name in analysis.__struct_fields__:
+        if getattr(analysis, name) is None:
+            continue
+        fallback = name.replace('_', ' ').title()
+        labels[name] = standard_names.get(name, fallback)
+    return labels
+
+
+def _field_owners(cls: type) -> dict[str, type]:
+    """return the struct class in the MRO of `cls` that first declares each field,
+    keyed by field name in base-to-derived order."""
+    owners: dict[str, type] = {}
+    for klass in reversed(cls.__mro__):
+        fields = getattr(klass, '__struct_fields__', None)
+        if not isinstance(fields, tuple):
+            continue
+        for name in fields:
+            owners.setdefault(name, klass)
+    return owners
+
+
+def _as_groups(groups: dict[type, list[FieldValue]]) -> tuple[FieldGroup, ...]:
+    return tuple(
+        FieldGroup(f'{cls.__module__}.{cls.__qualname__}', tuple(fields))
+        for cls, fields in groups.items()
+    )
+
+
+def _field_value(name: str, values: Sequence[Any], units: str) -> FieldValue:
+    """return the `FieldValue` of `values` in `units`, with one SI prefix on `units`
+    when `units` is set and every value is a finite number."""
+    if units and all(_is_finite_number(v) for v in values):
+        prefix = sw.units.si_prefix([float(v) for v in values], units)
+        text = tuple(sw.units.format_quantity(v, None, prefix=prefix) for v in values)
+        return FieldValue(name, text, f'{prefix.symbol}{units}')
+    return FieldValue(name, tuple(_describe(v, units) for v in values), units)
+
+
+def _coordinate_items(values: np.ndarray) -> list[Any]:
+    """return the entries of a per-port coordinate as Python values, with datetime
+    and timedelta entries as text."""
+    if values.dtype.kind in 'mM':
+        return [str(v) for v in values.flat]
+    return np.ravel(values).tolist()
+
+
+def _is_finite_number(value: Any) -> bool:
+    return (
+        isinstance(value, numbers.Real)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _describe(value: Any, units: str) -> str:
+    """return `value` as text, through `describe_value` for None, numbers, and tuples."""
+    if isinstance(value, bytes):
+        return value.decode('utf-8', errors='replace')
+    if value is None or isinstance(value, (bool, numbers.Number, tuple)):
+        return sa.labels.describe_value(value, units or None)
+    return str(value)

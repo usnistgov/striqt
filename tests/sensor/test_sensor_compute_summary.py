@@ -1,6 +1,6 @@
 """striqt.sensor.lib.compute.summary: the per-port overload state derived from the
-headroom that a SoapySDR source reports, and the spectrogram SNR above the calibrated
-noise floor"""
+headroom that a SoapySDR source reports, the spectrogram SNR above the calibrated
+noise floor, and the text of the capture, acquisition, and analysis fields"""
 
 from __future__ import annotations
 
@@ -10,10 +10,17 @@ import numpy as np
 import pytest
 from soapy_factories import soapy_capture
 from sweep_strategies import BOLTZMANN_MW, T_REF
-from synthetic_sources import SCALE_ONLY, preset_capture, preset_sweep
+from synthetic_sources import (
+    ANALYSIS,
+    SCALE_ONLY,
+    FakeTrigger,
+    preset_capture,
+    preset_sweep,
+)
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+import striqt.waveform as sw
 from striqt.sensor.lib import compute
 from striqt.sensor.lib.compute import summary
 
@@ -30,14 +37,16 @@ TONE = preset_capture('single_tone', **SCALE_ONLY)
 TONE_SWEEP = preset_sweep('single_tone', (TONE,))
 
 
-def delayed(extra_data, capture=CAPTURE, sweep=SWEEP):
+def delayed(extra_data, capture=CAPTURE, sweep=SWEEP, extra_coords=None):
     config = compute.EvaluationOptions(
         sweep_spec=sweep, registry=sa.registry, as_xarray='delayed', extra_attrs={}
     )
+    if extra_coords is None:
+        extra_coords = ss.specs.AcquisitionInfo()
     return compute.DelayedDataset(
         delayed={},
         capture=capture,
-        extra_coords=ss.specs.AcquisitionInfo(),
+        extra_coords=extra_coords,
         extra_data=extra_data,
         config=config,
     )
@@ -182,3 +191,151 @@ def test_describe_spectrogram_snr_names_the_port(calibration_nc):
     text = summary.describe_spectrogram_snr(entry, source_id='beef')
     assert isinstance(text, str)
     assert 'port' in text
+
+
+# %% capture_fields
+
+
+def qualname(cls) -> str:
+    return f'{cls.__module__}.{cls.__qualname__}'
+
+
+def field_by_name(groups) -> dict[str, summary.FieldValue]:
+    return {f.name: f for g in groups for f in g.fields}
+
+
+def test_capture_fields_groups_follow_the_declaring_classes():
+    """`SoapyCapture` declares `center_frequency` and `gain` on top of `SensorCapture`,
+    which extends `Capture`; a group is one of these classes, base first"""
+    groups = summary.capture_fields(delayed({}))
+
+    hierarchy = (sa.specs.Capture, ss.specs.SensorCapture, ss.specs.SoapyCapture)
+    assert [g.owner for g in groups] == [qualname(cls) for cls in hierarchy]
+    assert [f.name for f in groups[0].fields] == list(
+        sa.specs.Capture.__struct_fields__
+    )
+    assert [f.name for f in groups[2].fields] == ['center_frequency', 'gain']
+
+
+def test_capture_fields_omit_the_fields_that_are_not_coordinates():
+    names = set(field_by_name(summary.capture_fields(delayed({}))))
+    assert 'adjust_analysis' in ss.specs.SoapyCapture.__struct_fields__
+    assert names.isdisjoint({'adjust_analysis', 'signal_trigger', 'capture_index'})
+
+
+@pytest.mark.parametrize(
+    'capture, port_count', [(CAPTURE, 2), (soapy_capture(port=1), 1)], ids=['2', '1']
+)
+def test_capture_fields_list_one_value_per_port(capture, port_count):
+    fields = field_by_name(summary.capture_fields(delayed({}, capture)))
+    assert {len(f.values) for f in fields.values()} == {port_count}
+
+
+def test_capture_fields_list_the_port_values_in_split_order():
+    fields = field_by_name(summary.capture_fields(delayed({})))
+    ports = ss.specs.captures.split_capture_ports(CAPTURE)
+    assert fields['port'].values == tuple(str(c.port) for c in ports)
+    assert fields['port'].units == ''
+
+
+@pytest.mark.parametrize(
+    'name, units, symbol',
+    [('center_frequency', 'Hz', 'G'), ('sample_rate', 'S/s', 'M')],
+    ids=['center_frequency', 'sample_rate'],
+)
+def test_capture_fields_share_one_si_prefix_per_field(name, units, symbol):
+    """1 GHz and 2 GHz share the giga prefix; the 125 MS/s clock of the fake device
+    takes mega. `Meta` of the field gives the base units."""
+    fields = field_by_name(summary.capture_fields(delayed({})))
+    ports = ss.specs.captures.split_capture_ports(CAPTURE)
+    raw = [getattr(c, name) for c in ports]
+
+    prefix = sw.units.si_prefix(raw, units)
+    assert prefix.symbol == symbol
+    assert fields[name].units == f'{symbol}{units}'
+    assert fields[name].values == tuple(
+        sw.units.format_quantity(v, None, prefix=prefix) for v in raw
+    )
+
+
+def test_capture_fields_render_text_and_infinite_values_without_a_prefix():
+    """`lo_shift` is a string with no units, and an infinite `analysis_bandwidth`
+    keeps its base units"""
+    capture = soapy_capture(port=(0, 1), analysis_bandwidth=math.inf)
+    fields = field_by_name(summary.capture_fields(delayed({}, capture)))
+    assert fields['lo_shift'] == summary.FieldValue('lo_shift', ('none', 'none'), '')
+    assert fields['analysis_bandwidth'].values == ('inf', 'inf')
+    assert fields['analysis_bandwidth'].units == 'Hz'
+
+
+# %% acquisition_fields
+
+INFO = ss.specs.SoapyAcquisitionInfo(
+    source_id='beef',
+    sweep_index=2,
+    capture_index=3,
+    start_time=None,
+    backend_sample_rate=15.36e6,
+    signal_trigger=FakeTrigger(0.0),
+)
+
+
+def test_acquisition_fields_groups_follow_the_declaring_classes():
+    """`source_id` is redeclared by `SoapyAcquisitionInfo` and stays with
+    `AcquisitionInfo`, which first declares it"""
+    groups = summary.acquisition_fields(delayed({}, extra_coords=INFO))
+    hierarchy = (ss.specs.AcquisitionInfo, ss.specs.SoapyAcquisitionInfo)
+    assert [g.owner for g in groups] == [qualname(cls) for cls in hierarchy]
+    assert [f.name for f in groups[0].fields] == [
+        'source_id',
+        'sweep_index',
+        'capture_index',
+        'burst_index',
+    ]
+    assert [f.name for f in groups[1].fields] == ['backend_sample_rate']
+
+
+def test_acquisition_fields_skip_the_trigger_and_none_values():
+    names = set(
+        field_by_name(summary.acquisition_fields(delayed({}, extra_coords=INFO)))
+    )
+    assert INFO.signal_trigger is not None
+    assert names.isdisjoint({'signal_trigger', 'start_time', 'sweep_start_time'})
+
+
+def test_acquisition_fields_have_one_value_each():
+    fields = field_by_name(summary.acquisition_fields(delayed({}, extra_coords=INFO)))
+    assert fields['capture_index'] == summary.FieldValue('capture_index', ('3',), '')
+    assert fields['sweep_index'] == summary.FieldValue('sweep_index', ('2',), '')
+    assert fields['source_id'] == summary.FieldValue('source_id', ('beef',), '')
+
+    prefix = sw.units.si_prefix(INFO.backend_sample_rate, 'S/s')
+    assert fields['backend_sample_rate'] == summary.FieldValue(
+        'backend_sample_rate',
+        (sw.units.format_quantity(INFO.backend_sample_rate, None, prefix=prefix),),
+        f'{prefix.symbol}S/s',
+    )
+
+
+# %% analysis_labels
+
+
+def test_analysis_labels_are_the_registered_standard_names():
+    """the registry is keyed by spec type. The expected label of each enabled field
+    is read from the registration of the type of the field value."""
+    expected = {
+        name: sa.registry[type(getattr(ANALYSIS, name))].attrs['standard_name']
+        for name in ANALYSIS.__struct_fields__
+        if getattr(ANALYSIS, name) is not None
+    }
+    assert len(expected) == 3
+    assert summary.analysis_labels(ANALYSIS) == expected
+
+
+def test_analysis_labels_fall_back_to_the_title_cased_field_name():
+    labels = summary.analysis_labels(ANALYSIS, sa.register.AnalysisRegistry())
+    assert labels == {
+        'iq_waveform': 'Iq Waveform',
+        'power_spectral_density': 'Power Spectral Density',
+        'channel_power_time_series': 'Channel Power Time Series',
+    }
