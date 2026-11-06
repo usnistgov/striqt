@@ -1,4 +1,4 @@
-"""Transformations and statistical tools for power time series"""
+"""Power scale conversions and time-binned power detectors, with roundoff models."""
 
 from .convert import (
     dB_tolerance,

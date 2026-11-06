@@ -16,11 +16,11 @@ def correlate_cyclic_shift(
 ) -> Array:
     """correlate `x` with a copy of `x` delayed `nfft` samples at the index sets `inds`.
 
-    At lag ``j``, the result sums ``x[i + j] * conj(x[i + j + nfft])`` over every
-    index ``i`` in `inds`. Index pairs that run past the end of `x` contribute zero
-    to the sum and to the powers of the normalization. The sum accumulates in
-    complex128 and is rounded once into the dtype of `x`. With ``norm=True``, a lag
-    at which every pair runs past the end of `x` is ``nan``.
+    The value at lag ``j`` is the sum of ``x[i + j] * conj(x[i + j + nfft])`` over
+    every index ``i`` in `inds`. Index pairs that run past the end of `x` contribute
+    zero to the sum and to the powers of the normalization. The sum is accumulated in
+    complex128 and rounded once into the dtype of `x`. With ``norm=True``, a lag at
+    which every pair runs past the end of `x` is ``nan``.
 
     Args:
         inds: integer sample indices into `x` of cyclic-prefix samples, in the array
@@ -44,9 +44,9 @@ def correlate_cyclic_shift(
     n_lags = nfft + ncp
     rows = inds.reshape(-1, ncp)
 
-    # rows of consecutive samples are gathered once from the first index of each row
-    # and window-summed over the run length. The gathered array is then
-    # (rows, run + lags)
+    # a row of consecutive indices is gathered once from its first index and summed
+    # over the run length by a sliding window. The gathered array is
+    # (rows, run + lags - 1) rather than (rows * ncp, lags)
     if bool(xp.all(rows == rows[:, :1] + xp.arange(ncp))):
         starts, run = rows[:, 0], ncp
     else:
@@ -59,7 +59,7 @@ def correlate_cyclic_shift(
     a = seg[:n_valid]
     b = seg[nfft : nfft + n_valid]
 
-    # the window sum over the run reads run - 1 lags past the last output lag
+    # the sliding sum over the run requires run - 1 lags past the last output lag
     start_gather = (starts - lo)[:, None] + xp.arange(run + n_lags - 1)[None, :]
     run_gather = xp.arange(run)[:, None] + xp.arange(n_lags)[None, :]
 
@@ -91,21 +91,23 @@ def corr_atol(
 ) -> float:
     """bound the absolute roundoff of `correlate_cyclic_shift` against exact arithmetic.
 
-    The bound grows linearly with `n_inds` in unit roundoffs of `dtype`. With
-    ``norm=True`` the output is unit-scale and `scale` is ignored. With ``norm=False``
-    the bound is relative to the largest product magnitude `scale`.
+    The bound grows linearly with `n_inds` in unit roundoffs of `dtype`, scaled by
+    `scale` when `norm` is False.
 
     Args:
         dtype: the input dtype (real or complex)
         n_inds: the number of index pairs summed at each lag
-        norm: the `correlate_cyclic_shift` normalization flag
-        scale: ``max|x|**2`` when `norm` is False
+        norm: the `norm` passed to `correlate_cyclic_shift`
+        scale: ``max|x|**2`` when `norm` is False; ignored when `norm` is True
         n_impl: 1 against exact arithmetic, 2 against a second implementation
+
+    Returns:
+        the absolute tolerance, in the units of the correlation
     """
-    # each product a*conj(b) and each power term is rounded once at the input
-    # precision before the complex128 accumulation, and the output is rounded once
-    # more; with norm=True the Cauchy-Schwarz bound sum|a||b| <= sqrt(Pa*Pb) keeps
-    # the output at unit scale
+    # the bound allows one rounding at the input precision for each product a*conj(b)
+    # and each power term, and one for the output. The complex128 accumulation in
+    # `correlate_cyclic_shift` rounds by less than that. With norm=True, |output| <= 1
+    # by Cauchy-Schwarz: sum|a||b| <= sqrt(Pa*Pb)
     u = unit_roundoff(dtype)
     scale = 1.0 if norm else scale
     return ROUNDOFF_SAFETY * n_impl * (n_inds + 3) * u * scale

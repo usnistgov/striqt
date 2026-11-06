@@ -73,11 +73,17 @@ def stat_ufunc_from_shorthand(kind: str | float, xp=None, axis=0) -> typing.Call
 def stat_rtol(dtype: DTypeLike, kind: str | float, n_impl: int = 1) -> float:
     """return the worst-case rtol of the `kind` statistic applied to exact samples.
 
-    `kind` is a shorthand of `stat_ufunc_from_shorthand`. The result is 0 for a
-    selection or a mean; `bin_power_rms` bounds the accumulation roundoff of a mean.
-    A quantile or the median interpolates once, for a fixed multiple of the unit
-    roundoff of `dtype`. `n_impl` is 1 against exact math and 2 against a second
-    implementation.
+    The accumulation roundoff of a mean is `bin_power_rms`.
+
+    Args:
+        dtype: the computation dtype
+        kind: a statistic shorthand of `stat_ufunc_from_shorthand`
+        n_impl: 1 against exact math, 2 against a second implementation
+
+    Returns:
+        0 for ``'min'``, ``'max'``, ``'peak'``, ``'mean'``, and ``'rms'``; a fixed
+        multiple of the unit roundoff of `dtype` for the median or a quantile, which
+        interpolate once
 
     Raises:
         ValueError: if `kind` is an unknown statistic name
@@ -95,8 +101,8 @@ def bin_power_rtol(
     """return the pre-accumulation rtol of the `kind` statistic of ``|x|**2``.
 
     The bound covers the squared magnitude of complex samples and `stat_rtol` for
-    the `kind` shorthand of `stat_ufunc_from_shorthand`; the mean's accumulation
-    roundoff is `bin_power_rms`.
+    the `kind` shorthand of `stat_ufunc_from_shorthand`. The accumulation roundoff
+    of a mean is `bin_power_rms`.
     """
     envelope = envelope_power_rtol(dtype, complex_input=True, n_impl=n_impl)
     return envelope + stat_rtol(dtype, kind, n_impl)
@@ -174,7 +180,6 @@ def iq_to_bin_power(
             f'bin period ({Tbin} s) must be multiple of waveform sample period ({Ts})'
         )
 
-    # instantaneous power, reshaped into bins
     if randomize:
         if axis != 0:
             raise ValueError('only axis=0 is currently supported when randomize=True')
@@ -212,33 +217,31 @@ def iq_to_cyclic_power(
 ) -> dict[str, dict[str, Array]]:
     """return cyclic statistics of the channel power of `x` binned along `axis`.
 
-    Channel power along `axis` is first binned with each power detector on
-    `detector_period`, giving a time series of ``K`` detector samples. That series
-    is re-indexed as a matrix of cycles and cycle lags: detector sample ``k`` is in
-    cycle ``k // L`` at lag ``(k % L) * detector_period``, where
-    ``L = cyclic_period / detector_period`` is the number of detector bins per
-    cycle and ``M = K / L`` is the number of cycles in the capture. Each cyclic
-    statistic then reduces the cycle axis. The value at lag index ``m`` summarizes
-    the ``M`` power samples at the same time offset from the start of a cycle. The
-    result spans one `cyclic_period` at the resolution of `detector_period` with
-    ``L`` samples per detector and statistic, independent of the capture length.
+    Each detector in `detectors` bins the power of `x` along `axis` into ``K``
+    samples of `detector_period`. The detector series is indexed as a matrix of
+    cycles and lags: sample ``k`` is in cycle ``k // L`` at lag
+    ``(k % L) * detector_period``, where ``L = cyclic_period / detector_period`` is
+    the number of detector bins per cycle and ``M = K / L`` is the number of cycles.
+    Each cyclic statistic reduces the cycle axis, so the value at lag ``m``
+    summarizes the ``M`` samples at the same offset from the start of a cycle. The
+    result spans one `cyclic_period` at the resolution of `detector_period`, with
+    ``L`` samples per detector and statistic, for any capture length.
 
-    A `cyclic_period` that is a common multiple of the periods of the expected
+    With a `cyclic_period` that is a common multiple of the periods of the expected
     signals (e.g., 10 ms for TDD cellular frames, 5 ms WiMAX frames, and the 1 ms
-    pulse repetition interval of the SPN-43 radar) aligns the features of those
-    signals across cycles. Each feature then resolves at fixed lags, while occupancy
-    with an incommensurate period is spread across all lags. Uplink and downlink
-    levels of a TDD network are then separated into disjoint lag windows.
-    Statistics are evaluated in linear power units, not dB.
+    pulse repetition interval of the SPN-43 radar), the features of those signals
+    fall at the same lags in every cycle. Occupancy with an incommensurate period is
+    spread across all lags. The uplink and downlink levels of a TDD network fall in
+    disjoint lag windows.
 
-    A mismatch ``dT`` between `cyclic_period` and the true signal period, such as
-    a sample clock offset, drifts features by ``M * dT / detector_period`` lags by
-    the end of the capture and bleeds power between neighboring lags. Features
-    stay within one lag while ``M * dT`` is below `detector_period`. This bounds
-    the number of cycles ``M``.
+    With a mismatch ``dT`` between `cyclic_period` and the signal period, such as
+    from a sample clock offset, a feature drifts by ``M * dT / detector_period`` lags
+    over the capture and bleeds into neighboring lags. The drift stays within one
+    lag while ``M * dT`` is below `detector_period`, which bounds the usable number
+    of cycles ``M``.
 
     Args:
-        x: complex-valued IQ waveform samples
+        x: the IQ waveform, complex or real, with time on `axis`
         Ts: sample period of the waveform (in s)
         detector_period: duration of each power detector bin (in s), an integer
             multiple of `Ts`
@@ -255,7 +258,7 @@ def iq_to_cyclic_power(
     Returns:
         dict keyed on detector, of dicts keyed on cyclic statistic, of arrays in the
         namespace of `x` with the `axis` dimension replaced by the ``L`` cycle lags,
-        in linear power units
+        in linear power units; each statistic is evaluated on the linear power
 
     Raises:
         ValueError: if `detectors` is None; if `cyclic_period` is not an integer
@@ -267,13 +270,11 @@ def iq_to_cyclic_power(
         D.G. Kuester et al., "Cyclic Analysis of Power in Radio Channels".
     """
 
-    # apply the detector statistic
     xp = array_namespace(x)
 
     if axis < 0:
         axis = x.ndim + axis
 
-    # the binned power is computed here from the IQ, which needs at least one detector
     if detectors is None:
         raise ValueError(
             'supply detectors argument to evaluate binned power from time domain IQ'
@@ -316,8 +317,6 @@ def iq_to_cyclic_power(
         kind: stat_ufunc_from_shorthand(kind, xp=xp) for kind in cycle_stats
     }
 
-    # apply the cyclic statistic
-
     ret = {}
 
     for detector, pw in power.items():
@@ -329,22 +328,22 @@ def iq_to_cyclic_power(
 
 
 def sample_ccdf(a: _AT, edges: _AT, density: bool = True) -> _AT:
-    """computes the fraction (or total number) of samples in `a` that
-    exceed each edge value.
+    """return the fraction (or count) of samples in `a` above each value of `edges`.
 
     Args:
-        a: the vector of input samples
-        edges: sample threshold values at which to characterize the distribution
-        density: if True, the sample counts are normalized by `a.size`
+        a: the samples, 1-D
+        edges: the thresholds, 1-D and sorted ascending
+        density: True divides each count by ``a.shape[0]``; False returns the counts
 
     Returns:
-        the empirical complementary cumulative distribution
+        the empirical complementary cumulative distribution at each edge, of shape
+        ``edges.shape`` in the array namespace of `a`: float64 when `density`,
+        otherwise the integer count dtype of the namespace
     """
 
     xp = array_namespace(a)
 
-    # 'left' makes the bin interval open-ended on the left side
-    # (the CCDF is "number of samples exceeding interval", and not equal to)
+    # side='left' counts a sample equal to an edge as not exceeding it
     edge_inds = xp.searchsorted(edges, a, side='left')
 
     bin_counts = xp.bincount(edge_inds, minlength=edges.shape[0] + 1)

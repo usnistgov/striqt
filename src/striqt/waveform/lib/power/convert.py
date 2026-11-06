@@ -1,7 +1,9 @@
-"""Elementwise conversions between linear and dB scales for array-like inputs
-(numbers, arrays, and pandas or xarray objects that wrap an array), evaluated
-through numexpr on numpy and fused kernels on cupy, with the roundoff models that
-bound the results on both backends."""
+"""Elementwise conversions between linear and dB scales for numbers, arrays, and the
+pandas and xarray objects that wrap an array, with the roundoff models that bound the
+results.
+
+The conversions evaluate through numexpr on numpy and through fused kernels on cupy.
+"""
 
 from __future__ import annotations as __
 
@@ -43,9 +45,9 @@ warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
 # %% roundoff model
 #
 # Roundoff budgets for the dB conversions, in ulps per library call (1 ulp <= 2u
-# relative, u = unit roundoff). Sized to cover CUDA's single-precision bounds (logf 1,
-# powf 8, hypotf 3 ulp) as well as libm (~1 ulp), so the tolerances below hold on both
-# backends and take no array namespace. The dB conversions evaluate
+# relative, u = unit roundoff). The budgets cover CUDA's single-precision bounds (logf
+# 1, powf 8, hypotf 3 ulp) as well as libm (~1 ulp), so the tolerances below hold on
+# both backends and take no array namespace. The dB conversions evaluate
 # `scale_ln*log(x)` rather than `scale*log10(x)`. On the Jetson TX2i (glibc 2.27) that
 # is 0.55-0.65x the numexpr time in float32 and 0.82x in float64, neutral on the GPU,
 # and more accurate in float64 (tests/profiling/log_scaling.py, 2026-10-19).
@@ -55,9 +57,9 @@ warnings.filterwarnings('ignore', message='.*invalid value encountered.*')
 # (|x| <= 30 dB), complex |z| 1.6 input ulps.
 HYPOT_ULP = 3
 LOG_ULP = 1
-# DB_PER_NEPER rounded to the computation dtype; float32 rounds it by 0.41 ulp
+# the rounding of DB_PER_NEPER to the computation dtype, 0.41 ulp in float32
 SCALE_CONST_ULP = 0.5
-# 10/ln(10) correctly rounded; the computed `10 / math.log(10)` is 0.87 ulp off
+# 10/ln(10) correctly rounded in float64; `10 / math.log(10)` evaluates 0.87 ulp off
 DB_PER_NEPER = 4.342944819032518
 
 
@@ -66,10 +68,18 @@ def log_conversion_tol(
 ) -> dict[str, float]:
     """return the ``rtol`` and ``atol`` (in dB) on ``scale*log10(|x|)`` as a dict.
 
-    Both are fixed multiples of the unit roundoff of `dtype`, and ``atol`` also
-    scales with `scale`. `n_impl` is 1 against exact math and 2 against a second
-    implementation; `complex_input` adds the roundoff of ``|x|``. Roundoff on the
-    input side of the log is an absolute dB error.
+    Roundoff on the input side of the log is an absolute dB error.
+
+    Args:
+        dtype: the computation dtype
+        scale: 10 for a power conversion or 20 for an amplitude conversion;
+            ``atol`` scales with it
+        complex_input: True adds the roundoff of ``|x|`` to ``atol``
+        n_impl: 1 against exact math, 2 against a second implementation
+
+    Returns:
+        ``{'rtol': ..., 'atol': ...}``, both fixed multiples of the unit roundoff of
+        `dtype`; ``rtol`` is relative to the dB value and ``atol`` is in dB
     """
     u = unit_roundoff(dtype)
     # the log call, the rounded scale constant, and the product rounding
@@ -86,8 +96,12 @@ def pow_conversion_rtol(dtype: DTypeLike, max_abs_dB: float, n_impl: int = 1) ->
     """return the rtol on ``10**(x/10)`` for ``|x| <= max_abs_dB``.
 
     The bound grows linearly with `max_abs_dB` from a floor of a fixed number of unit
-    roundoffs of `dtype`. `n_impl` is 1 against exact math and 2 against a second
-    implementation.
+    roundoffs of `dtype`.
+
+    Args:
+        dtype: the computation dtype
+        max_abs_dB: the bound (in dB) on ``|x|``
+        n_impl: 1 against exact math, 2 against a second implementation
     """
     pow_ulp = 8
     u = unit_roundoff(dtype)
@@ -100,9 +114,12 @@ def envelope_power_rtol(
 ) -> float:
     """return the rtol on ``|x|**2``.
 
-    The bound is a fixed multiple of the unit roundoff of `dtype`, larger when
-    `complex_input` adds the roundoff of ``|x|``. `n_impl` is 1 against exact math
-    and 2 against a second implementation.
+    The bound is a fixed multiple of the unit roundoff of `dtype`.
+
+    Args:
+        dtype: the computation dtype
+        complex_input: True adds the roundoff of ``|x|``
+        n_impl: 1 against exact math, 2 against a second implementation
     """
     u = unit_roundoff(dtype)
     rtol = 2 * u * (0.5 + (2 * HYPOT_ULP if complex_input else 0))
@@ -114,10 +131,16 @@ def linear_stat_tol(
 ) -> dict[str, float]:
     """return the ``rtol`` and ``atol`` in dB on `dBlinmean`/`dBlinsum` over `n` terms.
 
-    `max_abs_dB` bounds ``|x|`` of the dB-valued input. ``rtol`` is that of the final
-    dB conversion; ``atol`` grows with `max_abs_dB` and linearly with `n` for the
-    accumulation of the linear terms. `n_impl` is 1 against exact math and 2 against
-    a second implementation.
+    Args:
+        dtype: the computation dtype
+        max_abs_dB: the bound (in dB) on ``|x|`` of the dB-valued input
+        n: the number of linear terms accumulated
+        n_impl: 1 against exact math, 2 against a second implementation
+
+    Returns:
+        ``{'rtol': ..., 'atol': ...}``; ``rtol`` is that of the final dB conversion,
+        and ``atol`` grows with `max_abs_dB` and linearly with `n` for the
+        accumulation of the linear terms
     """
     u = unit_roundoff(dtype)
     rel_linear = pow_conversion_rtol(dtype, max_abs_dB) + ROUNDOFF_SAFETY * n * u
@@ -138,7 +161,12 @@ def roundtrip_power_rtol(dtype: DTypeLike, max_abs_dB: float) -> float:
 def roundtrip_dB_tol(dtype: DTypeLike, max_abs_dB: float) -> dict[str, float]:
     """return the ``rtol`` and ``atol`` in dB on ``powtodB(dBtopow(x))``.
 
-    `max_abs_dB` bounds ``|x|``. ``atol`` grows with `max_abs_dB`.
+    Args:
+        dtype: the computation dtype
+        max_abs_dB: the bound (in dB) on ``|x|``
+
+    Returns:
+        ``{'rtol': ..., 'atol': ...}``; ``atol`` grows with `max_abs_dB`
     """
     tol = log_conversion_tol(dtype, 10)
     return {
@@ -150,9 +178,14 @@ def roundtrip_dB_tol(dtype: DTypeLike, max_abs_dB: float) -> dict[str, float]:
 def level_tolerance_dB(sigma: float, power: bool = False) -> float:
     """convert a relative tolerance `sigma` on an output to a level uncertainty in dB.
 
-    `sigma` bounds an amplitude ratio (20 dB per decade) unless `power` is True for a
-    power ratio (10 dB per decade, e.g., spectrogram bins). The result is
-    non-negative for non-negative `sigma`.
+    Args:
+        sigma: the relative tolerance on an amplitude ratio, or on a power ratio
+            when `power` is True
+        power: True for a power ratio (10 dB per decade); False for an amplitude
+            ratio (20 dB per decade)
+
+    Returns:
+        the level uncertainty (in dB), non-negative for non-negative `sigma`
     """
     return (10 if power else 20) * np.log10(1 + sigma)
 
@@ -165,8 +198,13 @@ def linear_tolerance_dB(rtol: float) -> float:
 def dB_tolerance(rtol: float, atol: float, max_abs_dB: float) -> float:
     """return the worst-case tolerance in dB of ``(rtol, atol)`` on a dB-valued output.
 
-    `max_abs_dB` bounds the magnitude of the output. The result grows with
-    `max_abs_dB`.
+    Args:
+        rtol: the tolerance relative to the dB value
+        atol: the absolute tolerance (in dB)
+        max_abs_dB: the bound (in dB) on the magnitude of the output
+
+    Returns:
+        the tolerance (in dB), which grows with `max_abs_dB`
     """
     return atol + rtol * max_abs_dB
 
@@ -178,12 +216,19 @@ def off_peak_dB_tolerance(depth_dBc: Array, err: float) -> Array: ...
 def off_peak_dB_tolerance(depth_dBc: float | Array, err: float) -> float | Array:
     """bound the dB error of an output element `depth_dBc` (>= 0) below the output peak.
 
-    The tolerance is two-sided, given a relative amplitude error `err` at the peak.
     The peak is the matched-filter bin of the matched input: the FFT bin of a tone or
-    the detector bin of an impulse. The result is non-negative and grows with
-    `depth_dBc`: a float for a scalar `depth_dBc` and a float64 numpy array
-    otherwise. The bound is ``-20*log10(1 - r)`` for the relative amplitude error
-    ``r = err * 10**(depth_dBc/20)`` of the element, and is infinite where ``r >= 1``.
+    the detector bin of an impulse.
+
+    Args:
+        depth_dBc: the depth (in dB, >= 0) of the element below the peak, a scalar
+            or an array
+        err: the relative amplitude error at the peak
+
+    Returns:
+        the two-sided bound ``-20*log10(1 - r)`` (in dB) for the relative amplitude
+        error ``r = err * 10**(depth_dBc/20)`` of the element, infinite where
+        ``r >= 1``; a float for a scalar `depth_dBc` and a float64 numpy array
+        otherwise
     """
     r = err * 10 ** (np.asarray(depth_dBc, dtype='float64') / 20)
     with np.errstate(divide='ignore'):
@@ -223,9 +268,9 @@ def _lin_to_dB(
 
     if xp is np:
         # the expression is one of 6 constant strings so the numexpr compile cache
-        # hits; `values`, `scale_ln`, and `eps` are looked up from this frame by name.
+        # hits. `values`, `scale_ln`, and `eps` are looked up from this frame by name.
         # numexpr's `real` and `abs` of a complex operand both yield complex128, so
-        # complex input needs `real(...)` and is always converted by magnitude; on a
+        # complex input needs `real(...)` and is always converted by magnitude. On a
         # real operand `real` would upcast through complex128, so it is omitted there
         eps_str = '' if eps is None else '+eps'
         if np.iscomplexobj(values):
@@ -248,7 +293,6 @@ def _lin_to_dB(
             kernel(values, out, scale_ln, eps)
         values = out
     else:
-        # other array namespaces (torch, dask)
         if abs:
             values = xp.abs(values, out=out)
         if eps is not None:
@@ -282,7 +326,7 @@ def powtodB(
             either case
         bounded: True to floor the result at ``10*log10(tiny)``, where ``tiny`` is the
             smallest normal value of the computation dtype (about -379 dB in float32
-            and -3077 dB in float64); zeros then map to the floor instead of ``-inf``
+            and -3077 dB in float64), so zeros map to the floor instead of ``-inf``
         overwrite_x: True to write the result into `x` when the dtype of `x` is at
             least `min_dtype`; a complex `x` is then returned as the real view of the
             buffer of `x`
@@ -345,7 +389,6 @@ def dBtopow(
         cuda_jit.get_kernel('dBtopow')(values, out)
         values = out
     else:
-        # other array namespaces (torch, dask)
         values = xp.divide(
             values,
             10,
@@ -399,7 +442,6 @@ def envtopow(
         cuda_jit.get_kernel('envtopow')(values, out)
         values = out
     else:
-        # other array namespaces (torch, dask)
         values = xp.abs(values, out=out)
         values *= values
 
@@ -424,9 +466,9 @@ def envtodB(
             pandas/xarray object
         abs: True to convert ``abs(x)``; a complex `x` is converted by magnitude in
             either case
-        bounded: True to floor the result at the same dB value as `powtodB` with
-            `bounded`, ``10*log10(tiny)`` for the smallest normal value ``tiny`` of the
-            computation dtype; zeros then map to the floor instead of ``-inf``
+        bounded: True to floor the result at ``10*log10(tiny)`` for the smallest
+            normal value ``tiny`` of the computation dtype, the floor of `powtodB`,
+            so zeros map to the floor instead of ``-inf``
         overwrite_x: True to write the result into `x` when the dtype of `x` is at
             least `min_dtype`; a complex `x` is then returned as the real view of the
             buffer of `x`
@@ -497,7 +539,8 @@ def dBlinsum(
 # %% module-local helper functions
 def _infer_contained_array(x: Any) -> Array:
     if hasattr(type(x), 'values'):
-        # the attribute checks run before the lazy xarray and pandas imports are forced
+        # the `hasattr` checks run before the `isinstance` checks force the lazy xarray
+        # and pandas imports
         if hasattr(type(x), 'data') and isinstance(x, (xr.DataArray, xr.Dataset)):
             return x.data
         elif isinstance(x, (pd.DataFrame, pd.Series)):
@@ -568,7 +611,7 @@ def _arraylike_with_buffer(
         return values, values, xp
     elif xp is np or _use_cuda_kernels(values):
         # numexpr promotes to float64 if out=None, and the cupy fused kernels
-        # assign into `out` in place. the results are real even for complex input
+        # assign into `out` in place. The results are real even for complex input
         out = xp.empty_like(values, dtype=float_dtype_like(values))
         return values, out, xp
     else:
@@ -583,11 +626,8 @@ def _real_buffer(out: Array) -> Array:
 
 
 def _use_cuda_kernels(values: Array) -> bool:
-    """return True when `values` is evaluated with the fused kernels in `cuda_jit`.
-
-    The kernels assign through ``out[:]``, which a 0-d array does not support. A cupy
-    scalar takes the generic array-API path.
-    """
+    """return whether `values` is a cupy array of 1 or more dimensions."""
+    # the fused kernels assign through out[:], which a 0-d array does not support
     return is_cupy_array(values) and values.ndim > 0
 
 

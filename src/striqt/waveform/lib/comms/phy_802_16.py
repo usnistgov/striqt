@@ -34,7 +34,7 @@ def get_802_16_phy(
 
 
 class Phy802_16(PhyOFDM):
-    """Sampling and index parameters and lookup tables for IEEE 802.16-2017 OFDMA"""
+    """an IEEE 802.16-2017 OFDMA frame model: FFT size, sample rate, cyclic prefixes."""
 
     VALID_CP_RATIOS: typing.ClassVar[set[float]] = {1 / 32, 1 / 16, 1 / 8, 1 / 4}
     VALID_FFT_SIZES: typing.ClassVar[set[int]] = {128, 512, 1024, 2048}
@@ -122,7 +122,8 @@ class Phy802_16(PhyOFDM):
                 sampling_factor = self.sampling_factor = n
                 break
         else:
-            # no match with the table - standardized default
+            # 8/7 is the IEEE 802.16-2017 sampling factor for a bandwidth outside the
+            # table
             sampling_factor = self.sampling_factor = 8 / 7
 
         std_sample_rate = np.floor(sampling_factor * channel_bandwidth / 8000) * 8000
@@ -198,18 +199,13 @@ def _802_16_index_cyclic_prefix(
     )
 
     grid = [
-        # axis 0: symbol number in each frame
         phy.cp_start_idx[symbol_inds],
-        # axis 1: frame number
         frames * phy.frame_size,
-        # axis 2: cp index
         xp.ogrid[0 : phy.cp_sizes[1]],
     ]
 
-    # pad the axis dimensions so they can be broadcast together
     a = xp.meshgrid(*grid, indexing='ij', copy=False)
 
-    # sum all of the index offsets
     inds = a[0].copy()
     for sub in a[1:]:
         inds += sub

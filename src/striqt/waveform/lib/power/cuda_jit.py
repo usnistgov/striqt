@@ -1,6 +1,6 @@
-"""cupy.fuse kernels for the dB and power conversions, reached through `get_kernel`.
+"""cupy kernels for the dB and power conversions and for the binned power statistics.
 
-Each kernel assigns through ``out[:]`` and requires ``out.ndim > 0``.
+The fused conversion kernels assign through ``out[:]`` and require ``out.ndim > 0``.
 """
 
 from __future__ import annotations as __
@@ -67,7 +67,8 @@ def bin_power_kernel(
     """return the reduction kernel of the `stat` of ``|x|**2`` over one axis.
 
     The kernel squares each sample and reduces in one pass, with no buffer of the
-    size of the input. The accumulation runs in `out_dtype`.
+    size of the input. The kernel is compiled once per argument set and held in a
+    module-level table.
 
     Args:
         stat: ``'mean'`` or ``'max'``
@@ -90,7 +91,7 @@ def bin_power_kernel(
         # _in_ind.size() / _out_ind.size() is the length of the reduced axis
         reduce_expr, post = 'a + b', 'y = a / (_in_ind.size() / _out_ind.size())'
     elif stat == 'max':
-        # 0 is the identity because every mapped value is a power
+        # 0 is the identity of max because every mapped value is a power, hence >= 0
         reduce_expr, post = 'max(a, b)', 'y = a'
     else:
         raise ValueError(f"stat must be 'mean' or 'max', not {stat!r}")
