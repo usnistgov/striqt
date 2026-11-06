@@ -9,20 +9,25 @@ import threading
 
 import plotly.graph_objects as go
 import pytest
-from synthetic_sources import ANALYSIS, SPECTROGRAM, preset_sweep, tone_captures
+from synthetic_sources import (
+    ANALYSIS,
+    SPECTROGRAM,
+    TONE_OFFSETS,
+    preset_sweep,
+    tone_captures,
+)
 
 import striqt.sensor as ss
 from striqt.cli import web_plotter
 from striqt.sensor.specs import sequencing
 
-OFFSETS = (1e6, 2e6, 3e6)
 SNR_LOOP = ss.specs.List(field='snr', values=(10.0, 20.0))
 
 
 def looped_sweep(analysis=SPECTROGRAM):
     return preset_sweep(
         'single_tone',
-        tone_captures(OFFSETS),
+        tone_captures(TONE_OFFSETS),
         analysis=analysis,
         loops=(ss.specs.Repeat(count=2), SNR_LOOP),
     )
@@ -40,7 +45,7 @@ def preview_state(sweep) -> web_plotter.PreviewState:
 def analyzed():
     """the `DelayedDataset` of one spectrogram capture"""
     sweep = preset_sweep(
-        'single_tone', tone_captures(OFFSETS[:1]), analysis=SPECTROGRAM
+        'single_tone', tone_captures(TONE_OFFSETS[:1]), analysis=SPECTROGRAM
     )
     with ss.open_resources(sweep, None) as res:
         results = ss.iterate_sweep(res, sink=ss.sinks.NoSink(sweep))
@@ -52,7 +57,7 @@ def analyzed():
 
 def test_select_displayed_narrows_to_the_selected_variable(monkeypatch):
     monkeypatch.setattr(web_plotter.STATE, 'selected_variable', 'iq_waveform')
-    (capture,) = tone_captures(OFFSETS[:1])
+    (capture,) = tone_captures(TONE_OFFSETS[:1])
     narrowed = web_plotter.select_displayed(capture, ANALYSIS)
     assert type(narrowed) is type(ANALYSIS)
     assert list(narrowed.to_dict()) == ['iq_waveform']
@@ -61,7 +66,7 @@ def test_select_displayed_narrows_to_the_selected_variable(monkeypatch):
 
 def test_select_displayed_passes_an_unknown_selection_through(monkeypatch):
     monkeypatch.setattr(web_plotter.STATE, 'selected_variable', 'spectrogram')
-    (capture,) = tone_captures(OFFSETS[:1])
+    (capture,) = tone_captures(TONE_OFFSETS[:1])
     assert web_plotter.select_displayed(capture, ANALYSIS) is ANALYSIS
 
 
@@ -135,7 +140,7 @@ def test_selected_captures_waits_through_an_empty_selection():
 def test_capture_options_list_one_entry_per_loop_and_capture():
     state = preview_state(looped_sweep())
     options = web_plotter.capture_options(state.choices)
-    assert len(options['captures']) == len(OFFSETS)
+    assert len(options['captures']) == len(TONE_OFFSETS)
     assert [loop['field'] for loop in options['loops']] == ['snr']
     assert options['loops'][0]['labels'] == list(state.choices.loops[0].labels)
 
@@ -158,7 +163,7 @@ def test_apply_capture_selection_round_trips():
 def test_apply_capture_selection_clamps_indexes_to_the_choices():
     state = preview_state(looped_sweep())
     web_plotter.apply_capture_selection(state, {'capture': 99, 'loops': [-3]})
-    assert state.selected_capture == len(OFFSETS) - 1
+    assert state.selected_capture == len(TONE_OFFSETS) - 1
     assert state.selected_loops == {('capture', 'snr'): SNR_LOOP.values[0]}
 
 

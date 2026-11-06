@@ -9,7 +9,7 @@ import pytest
 from conftest import _cupy, as_xp, float_arrays, shaped_arrays
 from hypothesis import given, strategies as st
 from hypothesis.extra.numpy import array_shapes
-from numeric_checks import assert_close, dtype_id, reference_binned_mean, to_numpy
+from numeric_checks import assert_close, blocks, dtype_id, to_numpy
 from numpy.testing import assert_array_equal
 
 from striqt.waveform.fourier import peak_factor
@@ -132,7 +132,7 @@ class TestBinnedMean:
         count = data.draw(st.integers(min_value=1, max_value=x.shape[axis]))
 
         result = arrays.binned_mean(as_xp(xp, x), count, axis=axis, fft=False)
-        ref = reference_binned_mean(x, count, axis)
+        ref = blocks(x, count, axis).mean(axis=axis % x.ndim + 1)
 
         assert result.shape == ref.shape
         assert_close(result, ref, atol=arrays.mean_atol(x, count))

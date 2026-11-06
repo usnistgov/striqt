@@ -13,13 +13,12 @@ from __future__ import annotations
 
 import dataclasses
 import gc
-from functools import cached_property
 from typing import Any
 
 import numpy as np
 import pytest
 import xarray as xr
-from analysis_strategies import POWER_BINS
+from analysis_strategies import POWER_BINS, RecordingIQ
 
 import striqt.analysis as sa
 import striqt.waveform as sw
@@ -52,26 +51,6 @@ def raw_measurement(iq: np.ndarray, name: str) -> np.ndarray:
 
 
 # %% Preprocessor
-
-
-class RecordingPreprocessor(sa.Preprocessor):
-    """a `Preprocessor` that returns ``x + 1`` and records the preferences of each call"""
-
-    def __init__(self, iq: sa.AcquiredIQ) -> None:
-        super().__init__(iq)
-        self.calls: list[tuple[bool, bool]] = []
-
-    def __call__(
-        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
-    ) -> np.ndarray:
-        self.calls.append((prefer_filtered, prefer_aligned))
-        return self.iq.x + 1
-
-
-class RecordingIQ(sa.AcquiredIQ):
-    @cached_property
-    def preprocess(self) -> RecordingPreprocessor:
-        return RecordingPreprocessor(self)
 
 
 @pytest.mark.parametrize('prefer_filtered', [True, False])

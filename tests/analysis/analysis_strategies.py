@@ -7,9 +7,11 @@ the other test directories import by name.
 from __future__ import annotations
 
 from fractions import Fraction
+from functools import cached_property
 from math import inf
 from typing import Any
 
+import numpy as np
 from conftest import scalars
 from hypothesis import strategies as st
 
@@ -512,3 +514,26 @@ def json_trees(max_leaves: int = 25):
 
 hashable_values = st.one_of(scalars, st.tuples(scalars, scalars))
 frozendict_dicts = st.dictionaries(dict_keys, hashable_values, max_size=6)
+
+
+# %% preprocessor doubles
+
+
+class RecordingPreprocessor(sa.Preprocessor):
+    """a `Preprocessor` that returns ``x + 1`` and records the preferences of each call"""
+
+    def __init__(self, iq: sa.AcquiredIQ) -> None:
+        super().__init__(iq)
+        self.calls: list[tuple[bool, bool]] = []
+
+    def __call__(
+        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
+    ) -> np.ndarray:
+        self.calls.append((prefer_filtered, prefer_aligned))
+        return self.iq.x + 1
+
+
+class RecordingIQ(sa.AcquiredIQ):
+    @cached_property
+    def preprocess(self) -> RecordingPreprocessor:
+        return RecordingPreprocessor(self)

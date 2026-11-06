@@ -19,8 +19,8 @@ from synthetic_sources import (
     IQ_ONLY,
     ONE_PORT,
     SPECTROGRAM,
+    mixed_rate_sweep,
     preset_capture,
-    preset_sweep,
     spectrogram_frames,
     tone_capture,
     tone_captures,
@@ -124,16 +124,6 @@ def json_attrs(attrs):
     import json
 
     return json.loads(json.dumps(dict(attrs)))
-
-
-def mixed_rate_sweep(path, **sink_kws):
-    """2 single-tone captures at 2 sample rates, so the PSD frequency grids differ"""
-    captures = (
-        preset_capture('single_tone', sample_rate=6.144e6),
-        preset_capture('single_tone', sample_rate=3.072e6, analysis_bandwidth=2.5e6),
-    )
-    sweep = preset_sweep('single_tone', captures)
-    return sweep.replace(sink=ss.specs.ZarrSink(path=str(path), **sink_kws))
 
 
 def test_zarr_capture_sink_store_equals_the_concatenated_captures(tmp_path):

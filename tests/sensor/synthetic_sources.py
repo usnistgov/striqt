@@ -392,3 +392,43 @@ class FakeTrigger:
         xp = sw.array_namespace(x)
         lags = xp.asarray(self.lags, dtype='float64')
         return xp.broadcast_to(lags, (x.shape[0],)).copy()
+
+
+# %% derived sweeps shared by several sensor test modules
+
+TONE_OFFSETS = (1e6, 2e6, 3e6)
+CUPY_SOURCE = SOURCE.replace(array_backend='cupy')
+
+
+def scale_only(**kws):
+    """return a `single_tone` capture on the `SCALE_ONLY` path with fields replaced by `kws`"""
+    return preset_capture('single_tone', **{**SCALE_ONLY, **kws})
+
+
+def cupy_sweep(captures, *, analysis=IQ_ONLY, loops=(), **kws):
+    """return a `single_tone` sweep over `captures` on the cupy array backend"""
+    return preset_sweep(
+        'single_tone',
+        captures,
+        analysis=analysis,
+        loops=loops,
+        source=CUPY_SOURCE,
+        **kws,
+    )
+
+
+def mixed_rate_sweep(path=None, **sink_kws):
+    """return a sweep of 2 single-tone captures at 2 sample rates and bandwidths, so
+    that the PSD frequency grids and the IQ time axes differ between the captures.
+
+    With `path`, the sink is a `ZarrSink` at `path` with `sink_kws`; otherwise the
+    preset sink.
+    """
+    captures = (
+        preset_capture('single_tone', sample_rate=6.144e6),
+        preset_capture('single_tone', sample_rate=3.072e6, analysis_bandwidth=2.5e6),
+    )
+    sweep = preset_sweep('single_tone', captures)
+    if path is None:
+        return sweep
+    return sweep.replace(sink=ss.specs.ZarrSink(path=str(path), **sink_kws))

@@ -315,7 +315,12 @@ def shaped_arrays(
 
 def gaussian_iq(shape, dtype=np.complex64, seed: int = 0):
     """return standard normal noise of `shape` from `seed`, complex unless `dtype` is
-    real."""
+    real.
+
+    This is the shape-addressed primitive for kernel tests; `striqt.analysis.testing.circular_awgn`
+    is the duration-, rate-, and port-addressed generator that the synthetic sensor
+    sources share.
+    """
     rng = np.random.default_rng(seed)
     x = rng.standard_normal(shape)
     if np.dtype(dtype).kind == 'c':
@@ -561,6 +566,9 @@ def run_sweep_to_zarr(tmp_path, fake_source_id):
 
 
 # %% Spec construction paths
+
+# `construct` parametrizes a test over the two paths; `raises_on_both_paths` asserts
+# one rejection on both; `construct_both` returns both instances for one assertion
 
 
 @pytest.fixture(params=('direct', 'from_dict'))

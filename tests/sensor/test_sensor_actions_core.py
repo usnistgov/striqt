@@ -25,6 +25,7 @@ from synthetic_sources import (
     BINDINGS,
     IQ_ONLY,
     SPECTROGRAM,
+    TONE_OFFSETS,
     FakeTrigger,
     expected_corrected,
     generator,
@@ -39,8 +40,6 @@ import striqt.sensor as ss
 from striqt.sensor.lib import compute, util
 from striqt.sensor.lib.actions import core
 from striqt.waveform import fourier
-
-OFFSETS = (1e6, 2e6, 3e6)
 
 
 def index_values(datasets, name) -> list[int]:
@@ -64,8 +63,8 @@ def burst_sweep(offsets, *, burst, analysis=IQ_ONLY, source=SOURCE, **bursts):
 
 
 def test_results_follow_the_capture_order(subtests):
-    captures = tone_captures(OFFSETS)
-    datasets = run_in_memory(tone_sweep(OFFSETS))
+    captures = tone_captures(TONE_OFFSETS)
+    datasets = run_in_memory(tone_sweep(TONE_OFFSETS))
 
     assert index_values(datasets, 'capture_index') == list(range(len(captures)))
     assert index_values(datasets, 'sweep_index') == [0] * len(captures)
@@ -81,9 +80,9 @@ def test_results_follow_the_capture_order_cupy(array_backend, subtests):
     leaves the tone samples as the complex exponential of the generator. The
     tolerance budgets 4 roundings per backend: the phase product, the cosine, the
     sine, and the float32 cast."""
-    captures = tone_captures(OFFSETS)
+    captures = tone_captures(TONE_OFFSETS)
     source = SOURCE.replace(array_backend=array_backend)
-    datasets = run_in_memory(tone_sweep(OFFSETS, source=source))
+    datasets = run_in_memory(tone_sweep(TONE_OFFSETS, source=source))
     sigma = cross_backend(
         fourier.fft_tolerance_rms(np.complex64, [], n_elementwise=4),
         fourier.fft_tolerance_rms(
@@ -99,8 +98,8 @@ def test_results_follow_the_capture_order_cupy(array_backend, subtests):
 
 
 def test_leading_repeat_multiplies_the_captures():
-    n = len(OFFSETS)
-    sweep = tone_sweep(OFFSETS, loops=(ss.specs.Repeat(count=2),))
+    n = len(TONE_OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS, loops=(ss.specs.Repeat(count=2),))
     datasets = run_in_memory(sweep)
 
     assert index_values(datasets, 'capture_index') == list(range(n)) * 2
@@ -108,8 +107,8 @@ def test_leading_repeat_multiplies_the_captures():
 
 
 def test_loop_cycles_with_an_incrementing_sweep_index():
-    n = len(OFFSETS)
-    datasets = run_in_memory(tone_sweep(OFFSETS), loop=True, take=2 * n + 1)
+    n = len(TONE_OFFSETS)
+    datasets = run_in_memory(tone_sweep(TONE_OFFSETS), loop=True, take=2 * n + 1)
 
     assert index_values(datasets, 'capture_index') == (list(range(n)) * 3)[: 2 * n + 1]
     assert index_values(datasets, 'sweep_index') == [0] * n + [1] * n + [2]
@@ -138,8 +137,8 @@ def test_yield_modes(mode, burst):
     stages before the first acquisition reaches the sink. With only `always_yield`
     set, every stage yields None. With neither, nothing is yielded."""
     (yield_values, always_yield), expect = YIELD_MODES[mode]
-    expected = expect(burst * len(OFFSETS))
-    sweep = burst_sweep(OFFSETS, burst=burst)
+    expected = expect(burst * len(TONE_OFFSETS))
+    sweep = burst_sweep(TONE_OFFSETS, burst=burst)
     modes = {'yield_values': yield_values, 'always_yield': always_yield}
     with ss.open_resources(sweep, None) as res:
         items = list(ss.iterate_sweep(res, sink=ss.sinks.NoSink(sweep), **modes))
@@ -160,7 +159,7 @@ class TaggingPeripherals(ss.peripherals.NoPeripherals):
 
 @pytest.mark.parametrize('burst', [1, 3], ids=['single', 'burst'])
 def test_extra_data_reaches_every_acquisition_and_wins_over_the_peripherals(burst):
-    sweep = burst_sweep(OFFSETS, burst=burst)
+    sweep = burst_sweep(TONE_OFFSETS, burst=burst)
     with ss.open_resources(sweep, None) as res:
         items = core.iterate_captures(
             res,
@@ -170,7 +169,7 @@ def test_extra_data_reaches_every_acquisition_and_wins_over_the_peripherals(burs
         )
         results = [item for item in items if item is not None]
 
-    assert len(results) == burst * len(OFFSETS)
+    assert len(results) == burst * len(TONE_OFFSETS)
     for result in results:
         # the peripheral entries join when a sink resolves the pending read
         assert 'from_peripheral' not in result.extra_data
@@ -195,7 +194,7 @@ def test_a_peripheral_read_may_last_the_whole_burst(caplog):
     read longer than the burst drops no segment under a 1-slot queue, and every
     segment carries the peripheral data once the read resolves"""
     burst = 4
-    sweep = burst_sweep(OFFSETS[:1], burst=burst, buffers=1)
+    sweep = burst_sweep(TONE_OFFSETS[:1], burst=burst, buffers=1)
     with (
         caplog.at_level(logging.WARNING, logger='striqt.source'),
         ss.open_resources(sweep, None) as res,
@@ -228,7 +227,7 @@ class RecordingSink(ss.sinks.NoSink):
 def test_on_analyzed_sees_each_capture_in_order_before_the_sink():
     """the callback for capture i runs in the analysis step of i. The sink append of
     i is submitted one step later, concurrently with the callback of i + 1."""
-    sweep = tone_sweep(OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS)
     events = []
     on_analyzed = lambda dd: events.append(('callback', dd.capture))
     with ss.open_resources(sweep, None, on_analyzed=on_analyzed) as res:
@@ -236,14 +235,14 @@ def test_on_analyzed_sees_each_capture_in_order_before_the_sink():
         results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
 
     captures = [r.capture for r in results]
-    assert len(captures) == len(OFFSETS)
+    assert len(captures) == len(TONE_OFFSETS)
     assert [c for kind, c in events if kind == 'callback'] == captures
     for c in captures:
         assert events.index(('callback', c)) < events.index(('sink', c))
 
 
 def test_iterate_sweep_replaces_the_callbacks_for_one_run():
-    sweep = tone_sweep(OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS)
     seen = []
     callbacks = ss.lib.resources.SweepCallbacks(
         on_analyzed=lambda dd: seen.append(dd.capture)
@@ -251,13 +250,13 @@ def test_iterate_sweep_replaces_the_callbacks_for_one_run():
     with ss.open_resources(sweep, None) as res:
         sink = ss.sinks.NoSink(sweep)
         list(ss.iterate_sweep(res, sink=sink, callbacks=callbacks))
-        assert len(seen) == len(OFFSETS)
+        assert len(seen) == len(TONE_OFFSETS)
         list(ss.iterate_sweep(res, sink=sink))
-    assert len(seen) == len(OFFSETS)
+    assert len(seen) == len(TONE_OFFSETS)
 
 
 def test_an_on_analyzed_exception_ends_the_pipeline():
-    sweep = tone_sweep(OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS)
 
     def fail(dd):
         raise RuntimeError('callback failed')
@@ -273,8 +272,8 @@ def test_a_shared_indexer_numbers_two_runs_consecutively():
     """one indexer passed to 2 pipeline runs over the same open resources numbers
     the captures of the second run after those of the first. The first run leaves
     the last capture armed, and the second run re-arms the first capture."""
-    n = len(OFFSETS)
-    sweep = tone_sweep(OFFSETS)
+    n = len(TONE_OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS)
     indexer = core.AcquisitionIndexer(2 * n)
 
     with ss.open_resources(sweep, None) as res:
@@ -287,7 +286,7 @@ def test_a_shared_indexer_numbers_two_runs_consecutively():
     ]
     assert index_values(datasets, 'capture_index') == list(range(2 * n))
     assert index_values(datasets, 'sweep_index') == [0] * (2 * n)
-    for capture, ds in zip(tone_captures(OFFSETS) * 2, datasets):
+    for capture, ds in zip(tone_captures(TONE_OFFSETS) * 2, datasets):
         assert np.array_equal(
             ds.iq_waveform.values, expected_corrected('single_tone', capture)
         )
@@ -304,8 +303,8 @@ def test_select_analysis_evaluates_only_the_returned_group():
     """with a 3-measurement analysis and a hook that keeps `iq_waveform`, each
     result has that one variable. The values are the generator oracle of the
     capture."""
-    captures = tone_captures(OFFSETS[:2])
-    sweep = tone_sweep(OFFSETS[:2], analysis=ANALYSIS)
+    captures = tone_captures(TONE_OFFSETS[:2])
+    sweep = tone_sweep(TONE_OFFSETS[:2], analysis=ANALYSIS)
     with ss.open_resources(
         sweep, None, test_only=True, select_analysis=keep_iq_waveform
     ) as res:
@@ -322,7 +321,7 @@ def test_select_analysis_evaluates_only_the_returned_group():
 
 
 def test_a_select_analysis_exception_ends_the_pipeline():
-    sweep = tone_sweep(OFFSETS, analysis=ANALYSIS)
+    sweep = tone_sweep(TONE_OFFSETS, analysis=ANALYSIS)
 
     def fail(capture, analysis):
         raise RuntimeError('selector failed')
@@ -339,7 +338,7 @@ def test_alignment_runs_with_the_trigger_outside_the_selected_group(monkeypatch)
     group. With and without the hook, `iq_waveform` is the tone generator from
     index 8, not from index 0."""
     shift = 8
-    (capture,) = tone_captures(OFFSETS[:1])
+    (capture,) = tone_captures(TONE_OFFSETS[:1])
     trigger = FakeTrigger(shift / capture.sample_rate)
     analyze_module = sys.modules['striqt.sensor.lib.compute.analyze']
     for module in (ss.lib.compute, analyze_module):
@@ -349,7 +348,7 @@ def test_alignment_runs_with_the_trigger_outside_the_selected_group(monkeypatch)
     # the overlap cache keys on the capture, source, and analysis, not on the
     # trigger installed above. An entry from an earlier test omits the lag pad.
     ss.lib.compute.corrections.get_correction_overlaps.cache_clear()
-    sweep = tone_sweep(OFFSETS[:1], analysis=ANALYSIS)
+    sweep = tone_sweep(TONE_OFFSETS[:1], analysis=ANALYSIS)
 
     def run(select_analysis):
         with ss.open_resources(
@@ -382,13 +381,13 @@ def test_alignment_runs_with_the_trigger_outside_the_selected_group(monkeypatch)
 def test_captures_runs_the_given_captures_in_the_given_order():
     """the results follow the reversed capture tuple, not the sweep. The indexer
     counts from 0 over the plan of the sweep."""
-    captures = tone_captures(OFFSETS)[::-1]
-    sweep = tone_sweep(OFFSETS)
+    captures = tone_captures(TONE_OFFSETS)[::-1]
+    sweep = tone_sweep(TONE_OFFSETS)
     datasets = run_in_memory(sweep, captures=captures)
 
     assert len(datasets) == len(captures)
     assert index_values(datasets, 'capture_index') == list(range(len(captures)))
-    assert [ds.frequency_offset.item() for ds in datasets] == list(OFFSETS[::-1])
+    assert [ds.frequency_offset.item() for ds in datasets] == list(TONE_OFFSETS[::-1])
     for capture, ds in zip(captures, datasets):
         assert np.array_equal(
             ds.iq_waveform.values, expected_corrected('single_tone', capture)
@@ -398,11 +397,11 @@ def test_captures_runs_the_given_captures_in_the_given_order():
 def test_a_finite_capture_generator_ends_the_run_after_its_items():
     """the sweep has one capture. The generator supplies 2 others. The run ends
     after the 2 captures of the generator."""
-    captures = tone_captures(OFFSETS[1:])
-    sweep = tone_sweep(OFFSETS[:1])
+    captures = tone_captures(TONE_OFFSETS[1:])
+    sweep = tone_sweep(TONE_OFFSETS[:1])
     datasets = run_in_memory(sweep, captures=(c for c in captures))
 
-    assert [ds.frequency_offset.item() for ds in datasets] == list(OFFSETS[1:])
+    assert [ds.frequency_offset.item() for ds in datasets] == list(TONE_OFFSETS[1:])
     for capture, ds in zip(captures, datasets):
         assert np.array_equal(
             ds.iq_waveform.values, expected_corrected('single_tone', capture)
@@ -414,8 +413,8 @@ def test_an_endless_capture_generator_ends_when_the_consumer_closes_the_run():
     a plan of one capture, `capture_index` stays 0 and `sweep_index` counts the
     repeats. Closing the pipeline generator joins the acquisition thread."""
     take = 3
-    (capture,) = tone_captures(OFFSETS[:1])
-    sweep = tone_sweep(OFFSETS[:1])
+    (capture,) = tone_captures(TONE_OFFSETS[:1])
+    sweep = tone_sweep(TONE_OFFSETS[:1])
     done = threading.Event()
 
     def repeat():
@@ -443,12 +442,12 @@ def test_an_endless_capture_generator_ends_when_the_consumer_closes_the_run():
 
 
 def test_captures_with_loop_is_rejected():
-    sweep = tone_sweep(OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS)
     with (
         ss.open_resources(sweep, None) as res,
         pytest.raises(ValueError, match='loop'),
     ):
-        next(ss.iterate_sweep(res, loop=True, captures=tone_captures(OFFSETS)))
+        next(ss.iterate_sweep(res, loop=True, captures=tone_captures(TONE_OFFSETS)))
 
 
 # %% iterate_captures: failure propagation
@@ -460,7 +459,7 @@ class FailingSink(ss.sinks.NoSink):
 
 
 def test_sink_exception_propagates_and_closes_the_source(isolated_lookup):
-    sweep = tone_sweep(OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS)
     with (
         pytest.raises(RuntimeError, match='simulated sink failure'),
         ss.open_resources(sweep, None) as res,
@@ -483,7 +482,7 @@ def acquisition_threads() -> list:
 def test_acquisition_thread_exception_reaches_the_caller(isolated_lookup):
     """an exception in the acquisition thread ends the pipeline in the calling
     thread, and the acquisition thread has exited by then"""
-    sweep = tone_sweep(OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS)
     with (
         pytest.raises(RuntimeError, match='simulated peripheral failure'),
         ss.open_resources(sweep, None) as res,
@@ -509,7 +508,7 @@ def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
     only item yielded is the leading None. Leaving `share_thread_interrupts` clears
     the flag. `propagate_thread_interrupts` is a no-op in the main thread, and the
     sweep is therefore consumed in a worker."""
-    sweep = tone_sweep(OFFSETS)
+    sweep = tone_sweep(TONE_OFFSETS)
     yielded = []
 
     def consume(res):
@@ -533,7 +532,7 @@ def test_peripheral_cancel_interrupts_a_worker_thread_sweep():
 
 
 def test_on_cached_fires_once_per_capture_when_the_spectrogram_cache_fills():
-    sweep = tone_sweep(OFFSETS, analysis=SPECTROGRAM)
+    sweep = tone_sweep(TONE_OFFSETS, analysis=SPECTROGRAM)
     calls = []
 
     def on_cached(resources, cache, capture, result, **kwargs):
@@ -563,7 +562,7 @@ def test_no_cache_callback_is_installed_without_on_cached(monkeypatch):
         return original(self, func, capture)
 
     monkeypatch.setattr(KwArgCache, 'set_callback', set_callback)
-    sweep = tone_sweep(OFFSETS, analysis=SPECTROGRAM)
+    sweep = tone_sweep(TONE_OFFSETS, analysis=SPECTROGRAM)
     with ss.open_resources(sweep, None) as res:
         list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
     assert installed == []
@@ -592,7 +591,7 @@ def test_one_arm_per_capture_and_one_read_per_segment(monkeypatch, isolated_look
     """the function source has no transient holdoff, so each segment is one read"""
     monkeypatch.setattr(BINDINGS['single_tone'].sensor, 'source_cls', RecordingSource)
     monkeypatch.setattr(RecordingSource, 'events', [])
-    sweep = burst_sweep(OFFSETS[:2], burst=3)
+    sweep = burst_sweep(TONE_OFFSETS[:2], burst=3)
     datasets = run_in_memory(sweep)
 
     assert RecordingSource.events == ['arm'] + ['read'] * 3 + ['arm'] + ['read'] * 3
@@ -607,7 +606,7 @@ def test_slow_analysis_overruns_a_one_buffer_burst(on_gap, caplog):
     is dropped under skip, with one warning per dropped segment, or raises under
     except. The delivered segments keep their burst indexes."""
     burst = 4
-    sweep = burst_sweep(OFFSETS[:1], burst=burst, on_gap=on_gap, buffers=1)
+    sweep = burst_sweep(TONE_OFFSETS[:1], burst=burst, on_gap=on_gap, buffers=1)
     on_analyzed = lambda dd: time.sleep(0.05)
 
     with (
@@ -654,7 +653,7 @@ def test_trigger_on_selects_the_members_that_run_the_trigger(
         monkeypatch.setattr(
             module, 'get_trigger_from_spec', lambda setup, analysis=None: trigger
         )
-    sweep = burst_sweep(OFFSETS[:2], burst=3, trigger_on=trigger_on)
+    sweep = burst_sweep(TONE_OFFSETS[:2], burst=3, trigger_on=trigger_on)
     datasets = run_in_memory(sweep)
 
     assert len(datasets) == 6
@@ -671,7 +670,7 @@ def test_trigger_on_selects_the_members_that_run_the_trigger(
 def test_indexer_advances_once_per_capture():
     """`capture_index` advances after the last segment of a capture, and
     `sweep_start_time` is the start time of segment 0 of capture 0 of each sweep"""
-    burst_capture, single = tone_captures(OFFSETS[:2])
+    burst_capture, single = tone_captures(TONE_OFFSETS[:2])
     burst_capture = burst_capture.replace(burst=3)
     indexer = core.AcquisitionIndexer(2)
 

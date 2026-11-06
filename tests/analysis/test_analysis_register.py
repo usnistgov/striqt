@@ -12,7 +12,6 @@ from __future__ import annotations
 import re
 import weakref
 from fractions import Fraction
-from functools import cached_property
 from typing import Optional
 
 import msgspec
@@ -21,6 +20,7 @@ import pytest
 from analysis_strategies import (
     POWER_BINS,
     VALIDATOR_DOMAINS,
+    RecordingIQ,
     capture_of,
     registered_tolerance,
 )
@@ -74,26 +74,6 @@ def build_registry(validate=None, *, spec_type=ToySpec, calls=None, tolerance=No
 
 
 # %% prefer_filtered= and prefer_aligned= on measurement registration
-
-
-class RecordingPreprocessor(sa.Preprocessor):
-    """a `Preprocessor` that returns ``x + 1`` and records the preferences of each call"""
-
-    def __init__(self, iq: sa.AcquiredIQ) -> None:
-        super().__init__(iq)
-        self.calls: list[tuple[bool, bool]] = []
-
-    def __call__(
-        self, *, prefer_filtered: bool = True, prefer_aligned: bool = True
-    ) -> np.ndarray:
-        self.calls.append((prefer_filtered, prefer_aligned))
-        return self.iq.x + 1
-
-
-class RecordingIQ(sa.AcquiredIQ):
-    @cached_property
-    def preprocess(self) -> RecordingPreprocessor:
-        return RecordingPreprocessor(self)
 
 
 def build_preference_registry(**preferences: bool):

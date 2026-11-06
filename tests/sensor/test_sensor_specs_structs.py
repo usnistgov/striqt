@@ -26,6 +26,7 @@ from sweep_strategies import (
     make_calibration_sweep,
     make_calibration_sweep_kws,
     make_capture,
+    make_cell_channel,
     make_sweep,
     make_sweep_kws,
     port_scalars,
@@ -697,17 +698,12 @@ CellularSweepCls = ss.bindings.air7101b_cellular.sensor.sweep_spec_cls
 CELL_FREQ = 3750e6
 
 
-def make_cell_channel(**kws):
-    kws = {'center_frequency': CELL_FREQ, 'channel_bandwidth': 100e6, **kws}
-    return CellChannel(**kws)
-
-
 def make_cell_capture(**kws):
     kws = {'center_frequency': CELL_FREQ, 'port': (0, 1), 'gain': -10, **kws}
     return ss.specs.SoapyCapture(duration=0.1, **kws)
 
 
-def make_cellular_sweep_kws(**kws):
+def air_cellular_sweep_kws(**kws):
     return {
         'source': ss.bindings.air7101b.schema.source(),
         'captures': (make_cell_capture(),),
@@ -754,7 +750,7 @@ class TestCellular5GNRSweep:
             CellularSweepCls,
             msgspec.ValidationError,
             r"cell_channels\['b'\]\.center_frequency.*'a' and 'b'",
-            **make_cellular_sweep_kws(cell_channels=channels),
+            **air_cellular_sweep_kws(cell_channels=channels),
         )
 
     def test_capture_without_a_channel_is_rejected(self):
@@ -763,7 +759,7 @@ class TestCellular5GNRSweep:
             CellularSweepCls,
             msgspec.ValidationError,
             r'captures\[0\]\.center_frequency',
-            **make_cellular_sweep_kws(captures=captures),
+            **air_cellular_sweep_kws(captures=captures),
         )
 
 
