@@ -35,6 +35,7 @@ from striqt.waveform.lib import util
 
 _T = TypeVar('_T')
 _S = TypeVar('_S', bound=msgspec.Struct)
+_G = TypeVar('_G', bound='structs.AnalysisGroup')
 _K = TypeVar('_K')
 _V = TypeVar('_V')
 
@@ -331,6 +332,28 @@ def subset_of(
 def spec_subset(cls: type[msgspec.Struct]) -> SpecSubset | None:
     """return the `SpecSubset` that `subset_of` recorded for `cls`, or None."""
     return _spec_subsets.get(cls)
+
+
+def narrow_analysis_group(group: _G, names: Iterable[str]) -> _G:
+    """return a copy of `group` with only the measurements in `names` enabled.
+
+    Args:
+        group: the analysis group to narrow, with ``omit_defaults=True``
+        names: the field names to keep; each must be an enabled field of `group`
+
+    Returns:
+        an instance of ``type(group)`` with the kept fields at the values of `group`
+        and every other field at the default None
+
+    Raises:
+        KeyError: if a name in `names` is not an enabled field of `group`
+    """
+    enabled = group.to_dict()
+    missing = [name for name in names if name not in enabled]
+    if missing:
+        raise KeyError(f'{missing!r} are not enabled fields of {type(group).__name__}')
+    kept = {name: enabled[name] for name in names}
+    return type(group).from_dict(kept)
 
 
 @util.lru_cache(4096)

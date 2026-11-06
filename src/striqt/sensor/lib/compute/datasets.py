@@ -25,6 +25,9 @@ class EvaluationOptions(sa.EvaluationOptions[TAR], kw_only=True):
     sweep_spec: specs.Sweep
     extra_attrs: dict[str, Any] = msgspec.field(default_factory=dict)
     cache_callback: Callable | None = None
+    select_analysis: (
+        Callable[[specs.SensorCapture, specs.AnalysisGroup], specs.AnalysisGroup] | None
+    ) = None
     expand_dims: Sequence[str] = (CAPTURE_DIM,)
 
     def __post_init__(self):

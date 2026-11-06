@@ -610,6 +610,11 @@ class ZarrCaptureSink(ZarrSinkBase):
         self, dd: compute.DelayedDataset, extra_data: dict[str, Any]
     ) -> None:
         ports = len(specs.captures.split_capture_ports(dd.capture))
+        missing = sorted(self._grids.keys() - dd.delayed.keys())
+        if missing:
+            raise ValueError(
+                f'the dataset lacks the variables {missing!r} that the store allocated'
+            )
         if self._row + ports > self._rows_total:
             self._grow(self._row + ports)
 
