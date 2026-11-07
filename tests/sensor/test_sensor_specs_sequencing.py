@@ -953,8 +953,15 @@ def test_multi_field_key_with_per_port_values(site_sweep):
     reason='_convert_label_lookup_keys prunes remaps keyed on unknown fields with a '
     '`continue` that precedes the intended raise',
 )
-def test_remap_keyed_on_an_unknown_field_is_rejected():
-    remap = Remap(key='centre_frequency', lookup={1.0: 'x'})
+@pytest.mark.parametrize(
+    'key, lookup_key',
+    [('centre_frequency', 1.0), (('centre_frequency', 'port'), (1.0, 0))],
+    ids=['scalar_key', 'tuple_key'],
+)
+def test_remap_keyed_on_an_unknown_field_is_rejected(key, lookup_key):
+    """an unknown remap key is rejected like an unknown field name, on the scalar
+    and the tuple key branches alike."""
+    remap = Remap(key=key, lookup={lookup_key: 'x'})
     with pytest.raises(msgspec.ValidationError, match='centre_frequency'):
         make_site_sweep(adjust_captures={'defaults': {'channel_name': remap}})
 

@@ -42,8 +42,13 @@ correlation moved onto the array API (735aa631), which deleted the numba CUDA ke
 markers). On 2026-11-06 (branch `audit-test-suite`) the test-suite audit folded the
 item 6 tests (`xfailed` 41 to 35; 32 markers unchanged) and added item 92
 (`xfailed` 36; 33 markers); the suite then ran 2417 passed, 276 skipped, 36
-xfailed on py39 (3044 to 2729 collected items) and 2417, 274, 36 on py315. Items are
-listed in priority order, not numeric order.
+xfailed on py39 (3044 to 2729 collected items) and 2417, 274, 36 on py315. On
+2026-11-07 (branch `prose-pass-2026-11`) the defect verification after the prose pass
+added items 93 to 96 and parametrized item 9 over both of its branches (`xfailed` 36
+to 41; 33 to 37 markers), and fixed 5 defects without a ledger number (listed under
+"Fixed on 2026-11-07 without a ledger number" below); the suite then ran 2431 passed,
+276 skipped, 41 xfailed on py39 and 2431, 274, 41 on py315. Items are listed in
+priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -187,13 +192,15 @@ layout table draws the marks from the module's `scs_cp_layout` builder
 
 ### 9. A remap keyed on an unknown field is pruned, not rejected
 
-`tests/sensor/test_sensor_specs_sequencing.py::test_remap_keyed_on_an_unknown_field_is_rejected`
+`tests/sensor/test_sensor_specs_sequencing.py::test_remap_keyed_on_an_unknown_field_is_rejected[scalar_key]`
+and `[tuple_key]` (parametrized over both branches on 2026-11-07)
 
-- **Mechanism.** `helpers.py:562` and `:575`: `continue` immediately precedes
-  the `raise msgspec.ValidationError(...)` in both the scalar and tuple-key
-  branches, so the raise is unreachable.
+- **Mechanism.** `sensor/specs/sequencing.py` `_convert_label_lookup_keys`:
+  `continue` immediately precedes the `raise msgspec.ValidationError(...)` in
+  both the scalar and tuple-key branches, so the raise is unreachable.
 - **Why the test is right.** The dead error messages show validation was
-  intended; the sweep structs are `forbid_unknown_fields=True` everywhere else.
+  intended; an unknown field name in the same table raises a few lines above,
+  and the sweep structs are `forbid_unknown_fields=True` everywhere else.
 - **Impact.** A typo such as `centre_frequency` deletes the whole remap and the
   coordinate goes missing from the output with no diagnostic.
 - **Fix.** Delete the two `continue` lines. Trivial.
@@ -500,10 +507,9 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 (added 2026-11-06 by the test-suite audit)
 
 - **Mechanism.** `fourier/filters.py` `design_oafilter` returns `overlap_scale=1`
-  and `noverlap=nfft_out` for `window='rect'` and `window=None`, and uses that
-  `noverlap` as the block-multiple check of the array size. `oafilter` and
-  `oaresample` pass `round(nfft * overlap_scale)` to `stft` as `noverlap`, so the
-  hop `nfft - noverlap` is 0 and `stft` raises `ZeroDivisionError`.
+  and `noverlap=nfft_out` for `window='rect'` and `window=None`, so the input hop
+  `nfft - round(nfft * overlap_scale)` is 0 and the hop check of the axis length
+  raises `ZeroDivisionError`.
 - **Why the test is right.** A rect window sums to a constant at every hop that
   divides the block, including the whole block (overlap 0), so the overlap-add
   filter is defined for it; the other windows in the same table (`hann` 1/2,
@@ -511,10 +517,110 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
 - **Impact.** Python API only as far as the audit established: the in-tree sweeps
   and the resampler defaults select `hann` or `blackman`, and no spec field was
   found that reaches `oafilter` with a rect window.
-- **Fix.** Return `overlap_scale=0` for the rect window and keep the array-size
-  check on the block size rather than on `noverlap`; `noverlap` then has one
-  meaning. Which overlap the filter should use for a rect window is a design
+- **Fix.** Return `overlap_scale=0` for the rect window, so the hop is the whole
+  block. Which overlap the filter should use for a rect window is a design
   decision (0 is the COLA minimum; a larger overlap trades time for leakage).
+
+### 93. `design_cola_resampler` rounds the LO offset for the window argument but returns `'hann'`
+
+`tests/waveform/test_waveform_fourier_resamplers.py::TestColaResamplerDesign::test_default_window_design_is_accepted_by_oaresample`
+(added 2026-11-07 by the defect verification after the prose pass)
+
+- **Mechanism.** `fourier/resamplers.py` `design_cola_resampler` takes the frames
+  per hop from `_COLA_WINDOW_SIZE_DIVISOR[window]`, 1 for the default
+  `window=None`, rounds the LO bin count up to a multiple of it, and returns
+  `window=window or 'hann'`. `oaresample` reads the frames per hop of the window
+  it is given, 2 for `'hann'`, and raises `ValueError` for an odd bin offset. A
+  shifted design made with the default window carries an odd `lo_offset` in 68
+  of 240 rate, bandwidth, and shift combinations searched at the default
+  `min_fft_size`; `design_cola_resampler(122.88e6, 30.72e6, bw=5e6,
+  shift='left', min_fft_size=31)` gives 3 bins.
+- **Why the test is right.** The `oaresample` docstring requires
+  `frequency_shift` to be a multiple of ``fs / down`` times the frames per hop of
+  `window`, and the `design_cola_resampler` docstring states that `lo_offset` is
+  rounded to a multiple of the frames per hop of the window; a design with a
+  `window` and an `lo_offset` that disagree satisfies neither. The same call
+  with `window='hann'` rounds to 4 bins and runs.
+- **Impact.** Python API only. `design_resampler`
+  (`sensor/lib/compute/corrections.py`) passes `window='hann'`, and
+  `design_fir_resampler` designs without a shift, so no sweep reaches the path.
+  The failure is a `ValueError` before any compute, not wrong samples.
+- **Fix.** Round `lo_offset` with the divisor of the returned window, or return
+  `window=None` once item 92 lets `oaresample` accept it. Small, once the
+  intended default window is decided.
+
+### 94. The repeated-parameter type check of `AnalysisRegistry.measurement` never runs
+
+`tests/analysis/test_analysis_register.py::test_a_repeated_parameter_name_of_another_type_is_rejected`
+(added 2026-11-07 by the defect verification after the prose pass)
+
+- **Mechanism.** `analysis/lib/register.py` `measurement` tests `coord_default`,
+  the zero value of the field type from `infer_coord_info`, for membership in
+  the field-name keys of `parameter_defaults`, and compares its type with
+  `type(self.parameter_defaults)`, the `dict` class. The membership test holds
+  for no field name in use, so the `TypeError` is never raised and a repeated
+  field name falls to the `else` branch, where the later `FieldInfo` replaces
+  the earlier entry of `parameter_fields`.
+- **Why the test is right.** `_coords_template`
+  (`sensor/lib/compute/datasets.py`) builds the coordinate of an analysis loop
+  from the one `parameter_fields` entry of the loop field, so two measurements
+  that share a field name must agree on its type; the message of the dead
+  branch states that contract.
+- **Impact.** Python API: an extension that registers a measurement with a
+  field name already in the registry under another type is accepted, and a
+  sweep loop over that field takes the dtype of whichever measurement
+  registered last. No in-tree pair conflicts on a non-numeric type.
+- **Fix.** Key the check on `field.name` and compare with
+  `type(self.parameter_defaults[field.name])`. The live registry then conflicts
+  on `window_fill` (`Spectrogram.window_fill: fractions.Fraction` against the
+  `float` `types.WindowFill` of the sync specs), so the fix also unifies that
+  declaration or treats the numeric zero values as one type. Small.
+
+### 95. `unstack_dataset` selects sweep 0 on `sweep_start_time` for a `sweep_index` dimension
+
+`tests/sensor/test_sensor_compute_datasets.py::test_unstack_dataset_drops_the_sweep_index_from_the_capture_coordinates`
+(added 2026-11-07 by the defect verification after the prose pass)
+
+- **Mechanism.** `sensor/lib/compute/datasets.py` `unstack_dataset` resolves
+  `sweep_dim` to `'sweep_start_time'` or `'sweep_index'` and then calls
+  `unstacked.isel(sweep_start_time=0)` for both, so a `dim_coords` with
+  `sweep_index` and without `sweep_start_time` raises `ValueError` in xarray at
+  the `isel`.
+- **Why the test is right.** The `elif 'sweep_index'` branch and the docstring
+  accept `sweep_index`, and the datasets of every non-soapy source carry
+  `sweep_index` and no `sweep_start_time` (`AcquisitionIndexer.apply` sets
+  `sweep_start_time` on a `SoapyAcquisitionInfo` only), so `sweep_index` is the
+  only sweep dimension they can be unstacked over.
+- **Impact.** `unstack_dataset` (re-exported by `striqt.figures`) cannot unstack
+  a repeated sweep from a function, file, or virtual source along its sweep
+  dimension; a soapy dataset works through `sweep_start_time`.
+- **Fix.** `unstacked.isel({sweep_dim: 0})`. Trivial.
+
+### 96. A measurement name as `signal_trigger` escapes the cellular trigger check
+
+`tests/sensor/test_sensor_actions_cellular.py::test_measurement_name_trigger_with_its_block_is_rejected_at_the_trigger_field`
+(added 2026-11-07 by the defect verification after the prose pass)
+
+- **Mechanism.** `sensor/lib/actions/cellular.py` `cellular_analysis` accepts a
+  string `signal_trigger` that names any enabled block (`trigger not in
+  result`), and the base `Source.__post_init__` (`sensor/specs/structs.py`) does
+  not check the trigger registry (only `SoapySource.__post_init__` does). A
+  `signal_trigger: spectrogram` with a `spectrogram` block reaches
+  `registry.signal_trigger[name]` in `Trigger.from_spec`
+  (`analysis/lib/register.py`) through `validate_sweep`, and the `KeyError`
+  passes `validation_path` (`analysis/specs/helpers.py`), which converts
+  `ValueError`, `TypeError`, and `msgspec.ValidationError` only.
+- **Why the test is right.** The cellular error text states that a string
+  trigger must be `cellular_5g_pss_sync` or the struct form, `validate_sweep`
+  documents a `SpecValidationError` at `$.source.signal_trigger` for trigger
+  problems, and `SoapySource` rejects the same name at the field.
+- **Impact.** On a function, file, or virtual source the sweep fails at
+  construction with `KeyError: 'spectrogram'` and no field path; a soapy source
+  is unaffected.
+- **Fix.** Compare the string against `PSS_SYNC_TRIGGER` in `cellular_analysis`,
+  or move the registry check from `SoapySource.__post_init__` to
+  `Source.__post_init__`; either way add `KeyError` to the exceptions
+  `validation_path` converts. Easy.
 
 ## Tier D: cosmetic
 
@@ -664,6 +770,20 @@ it was standing in for is enabled.
   facet.** `_facet_subsets` is a generator, so facets before the one the data
   lacks are drawn on the `target` grid before the `ValueError`. The figures
   tests keep function-scoped grids for those cases (noted 2026-11-06).
+
+- **Fixed on 2026-11-07 without a ledger number.** `compute.analyze(as_xarray=False)`
+  is annotated as the `dict[str, DelayedDataArray]` it returns. The plotly
+  `heatmap` with `vstep` sets `zmin` and `zmax` to the rounded level edges, so the
+  bands fall on multiples of `vstep` as the matplotlib `BoundaryNorm` bands do
+  (`test_figures_backend_plotly.py::test_heatmap_vstep_bands_fall_on_multiples_of_vstep`).
+  The `Phy802_16` sampling-factor table mixed MHz and Hz keys, so every bandwidth
+  took 28/25 and a 3.5 MHz channel got 3.92 MS/s; the table is in Hz with the
+  1.75 MHz rule first (IEEE Std 802.16-2017 §8.4.2.4;
+  `test_waveform_comms_phy_802_16.py`). `null_lo` ignored its `nfft` argument,
+  which is removed. `oafilter` sized the hop check on `x.size` and discarded the
+  pad under `extend`; the design reads the axis length and `extend` zero pads a
+  partial hop (`test_waveform_fourier_filters.py::TestOafilter::test_extend_pads_a_partial_hop`).
+  The `stft` normalization error names the accepted values.
 
 - **Fixed on 2026-11-06 without a ledger number.** `cellular_stft_window_fractions('extended')`
   returned `(11/24, 13/24)`; 12 symbols of `2560 kappa 2^-mu` span the 15 subcarrier

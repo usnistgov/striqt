@@ -339,6 +339,27 @@ def test_unstack_dataset_forms_the_2x2_grid():
     assert np.array_equal(cell.values, ds.iq_waveform.values[3])
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=ValueError,
+    reason='unstack_dataset selects the first sweep with `isel(sweep_start_time=0)` '
+    'for both sweep dimensions, so a `sweep_index` dimension without '
+    '`sweep_start_time` raises in xarray',
+)
+def test_unstack_dataset_drops_the_sweep_index_from_the_capture_coordinates():
+    """an acquisition from a function source carries `sweep_index` and no
+    `sweep_start_time`, so `sweep_index` is the only sweep dimension of the dataset.
+    The data keep that dimension and the capture coordinates span the loop
+    dimensions alone."""
+    ds = full_run()
+    dims = ['sweep_index', 'frequency_offset', 'port']
+    unstacked = compute.unstack_dataset(ds, dims)
+    assert [unstacked.sizes[d] for d in dims] == [1, 2, 2]
+    assert unstacked.snr.dims == ('frequency_offset', 'port')
+    cell = unstacked.iq_waveform.sel(sweep_index=0, frequency_offset=OFFSETS[1], port=1)
+    assert np.array_equal(cell.values, ds.iq_waveform.values[3])
+
+
 def test_index_dataset_selects_by_the_coordinate_pair():
     ds = full_run()
     indexed = compute.index_dataset(ds, ['frequency_offset', 'port'])

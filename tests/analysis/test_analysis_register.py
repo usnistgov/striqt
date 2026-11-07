@@ -912,6 +912,53 @@ def test_registered_attrs_are_the_names_and_units():
     assert registry[OtherToySpec].name == 'other_toy'
 
 
+class IntScaleSpec(sa.specs.Analysis, frozen=True, kw_only=True):
+    scale: int = 1
+
+
+class StrScaleSpec(sa.specs.Analysis, frozen=True, kw_only=True):
+    scale: str = 'a'
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        'the repeated-parameter check of measurement() tests the zero value of the '
+        'field type against the field-name keys of parameter_defaults and compares '
+        'its type with the dict type, so the TypeError for a repeated parameter name '
+        'of another type is never raised and the later field replaces the earlier '
+        'one in parameter_fields'
+    ),
+)
+def test_a_repeated_parameter_name_of_another_type_is_rejected():
+    """the sweep coordinate of an analysis loop is built from the one
+    `parameter_fields` entry of the loop field, so two measurements share a field name
+    only with one type. The second registration raises `TypeError`."""
+    registry = register.AnalysisRegistry()
+
+    @registry.measurement(
+        IntScaleSpec,
+        dtype='float32',
+        standard_name='Toy',
+        long_name='Toy',
+        dims=('toy',),
+    )
+    def int_scale(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    with pytest.raises(TypeError, match='different type'):
+
+        @registry.measurement(
+            StrScaleSpec,
+            dtype='float32',
+            standard_name='Toy',
+            long_name='Toy',
+            dims=('toy',),
+        )
+        def str_scale(iq, capture, **kwargs):
+            return np.zeros((1, 2), dtype='float32')
+
+
 def test_coordinate_registration_names_itself_and_keeps_its_units():
     coords = register.CoordRegistry()
 

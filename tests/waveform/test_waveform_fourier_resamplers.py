@@ -174,6 +174,35 @@ class TestColaResamplerDesign:
         assert fs_sdr == pytest.approx(125e6)
         assert_allclose(fir['down'] / fir['up'], 125e6 / 107.52e6)
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason='design_cola_resampler rounds lo_offset to the frames per hop of the '
+        'window argument (1 for the default None) but returns window="hann" (2), so a '
+        'shifted default-window design can carry an odd bin offset that oaresample '
+        'rejects for the hann window',
+    )
+    def test_default_window_design_is_accepted_by_oaresample(self):
+        """`oaresample` accepts the ``window`` and ``lo_offset`` of a shifted design
+        made with the default window: the offset is a whole number of ``fs_sdr / nfft``
+        bins and a multiple of the frames per hop of the returned window."""
+        # the half band of 2.5 MHz spans 2.93 bins of 853.3 kHz at 40.96 MS/s with
+        # 48-point blocks, so rounding up to whole bins alone gives 3, an odd count
+        design = design_cola_resampler(
+            122.88e6, 30.72e6, bw=5e6, shift='left', min_fft_size=31
+        )
+        assert design['nfft'] == 48
+
+        x = np.zeros((1, 2 * design['nfft']), dtype=np.complex64)
+        y = oaresample(
+            x,
+            design['nfft_out'],
+            design['nfft'],
+            design['fs_sdr'],
+            window=design['window'],
+            frequency_shift=design['lo_offset'],
+        )
+        assert y.shape == (1, 2 * design['nfft_out'])
+
     @pytest.mark.parametrize(
         'kws, match',
         [

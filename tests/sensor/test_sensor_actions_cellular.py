@@ -371,6 +371,22 @@ def test_other_string_trigger_is_rejected():
         one_block_sweep('iq_waveform', source=source)
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=KeyError,
+    reason='cellular_analysis accepts a string signal_trigger that names any enabled '
+    'block, so a measurement name that is not a registered trigger reaches '
+    '`registry.signal_trigger[name]` in Trigger.from_spec',
+)
+def test_measurement_name_trigger_with_its_block_is_rejected_at_the_trigger_field():
+    """``spectrogram`` is a measurement and not a registered trigger. With the block
+    of that name enabled, the spec is rejected at ``$.source.signal_trigger`` as
+    every string trigger other than ``cellular_5g_pss_sync`` is."""
+    source = SOURCE.replace(signal_trigger='spectrogram')
+    with pytest.raises(msgspec.ValidationError, match=r'source\.signal_trigger'):
+        one_block_sweep('spectrogram', source=source)
+
+
 # %% check_block_fields
 
 
