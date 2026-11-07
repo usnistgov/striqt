@@ -151,6 +151,39 @@ def test_mark_noise_level_edits_only_the_given_figure_by_facet_value() -> None:
         assert shape.xref == f'{xaxis} domain'
 
 
+# %% heatmap
+
+
+def test_heatmap_vstep_bands_fall_on_multiples_of_vstep() -> None:
+    """with `vstep`, the color range runs from `vmin` rounded down to `vmax` rounded
+    up to multiples of `vstep`, each colorscale band spans one `vstep`, and the
+    band edges equal the `BoundaryNorm` boundaries of the matplotlib backend"""
+    from striqt.figures.backend import MatplotlibBackend
+
+    _, mean, _ = cyclic_statistics(make_dataset())
+    # matplotlib `imshow` requires numeric axes
+    mean = mean.assign_coords({HUE: np.arange(mean.sizes[HUE])})
+    kws = {'x': X, 'y': HUE, 'vmin': -73.4, 'vmax': -61.2, 'vstep': 2.0}
+    expected_edges = -74.0 + 2.0 * np.arange(8)
+
+    fig = capture_backend().heatmap(mean, **kws)
+    assert len(fig.data) == 3
+    for trace in fig.data:
+        assert (trace.zmin, trace.zmax) == (expected_edges[0], expected_edges[-1])
+        positions = np.array([pos for pos, _ in trace.colorscale])
+        starts = positions[::2]
+        assert len(starts) == 7
+        edges = trace.zmin + starts * (trace.zmax - trace.zmin)
+        np.testing.assert_allclose(edges, expected_edges[:-1])
+
+    mpl_opts = specs.SharedPlotOptions(
+        col='capture', col_label_format='{center_frequency}', suptitle_fmt='title'
+    )
+    grid = MatplotlibBackend(mpl_opts, output_dir=None).heatmap(mean, **kws)
+    norm = grid.axs.flat[0].images[0].norm
+    np.testing.assert_allclose(norm.boundaries, expected_edges)
+
+
 # %% reset
 
 

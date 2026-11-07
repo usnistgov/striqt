@@ -370,7 +370,10 @@ class PlotlyBackend(PlotBackend['go.Figure']):
             vmax = self._remembered_vmax
 
         if vstep is not None:
-            colorscale = _make_quantized_colorscale(cmap, vmin, vmax, vstep)
+            levels = util.quantized_value_range(data, vmin, vmax, vstep)
+            colorscale = _make_quantized_colorscale(cmap, len(levels) - 1)
+            # the color range is the rounded edges, so each band spans one `vstep`
+            vmin, vmax = levels[0], levels[-1]
         else:
             colorscale = _mpl_to_plotly_colorscale(cmap)
 
@@ -804,34 +807,19 @@ def _mpl_to_plotly_colorscale(cmap: str) -> Any:
     return colorscale
 
 
-def _make_quantized_colorscale(
-    cmap: str,
-    vmin: float,
-    vmax: float,
-    vstep: float,
-) -> list[list[Any]]:
-    """return a stepped Plotly colorscale with bands of `vstep` from `vmin` to `vmax`.
-
-    The band count is the number of `vstep` intervals between `vmin` rounded down
-    and `vmax` rounded up to multiples of `vstep`, and the bands divide the color
-    range evenly.
+def _make_quantized_colorscale(cmap: str, n_bands: int) -> list[list[Any]]:
+    """return a stepped Plotly colorscale of `n_bands` equal bands over ``[0, 1]``.
 
     Args:
         cmap: a matplotlib colormap name; an undefined name selects viridis
-        vmin: the lower color limit, in the units of the data
-        vmax: the upper color limit, in the units of the data
-        vstep: the spacing of the color levels, in the units of the data
+        n_bands: the number of color bands; a value below 1 selects 1
 
     Returns:
         a list of ``[position, color]`` pairs with 2 entries per band
     """
     import matplotlib.pyplot as plt
 
-    # `quantized_value_range` reads `data` only when `vmin` or `vmax` is None
-    levels = util.quantized_value_range(cast('xr.DataArray', None), vmin, vmax, vstep)
-    n_levels = len(levels) - 1
-
-    n_levels = max(n_levels, 1)
+    n_levels = max(n_bands, 1)
 
     try:
         mpl_cmap = plt.get_cmap(cmap).resampled(n_levels)
