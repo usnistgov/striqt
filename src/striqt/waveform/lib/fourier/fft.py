@@ -406,19 +406,25 @@ def truncate_freqs(
 
 def null_lo(
     x: Array,
-    nfft: int,
     fs: float,
     bandwidth: float,
     *,
     offset: float = 0,
     axis: int = 0,
-):
+) -> None:
     """set the bins of `x` within `bandwidth` about `offset` on `axis` to nan in place.
 
-    `nfft` is ignored, and the bin count is ``x.shape[axis]``.
+    The frequency grid is the ascending `fftfreq` axis of ``x.shape[axis]`` bins at
+    sample rate `fs`.
+
+    Args:
+        x: the spectrum, with frequency on `axis`
+        fs: the sample rate (in S/s)
+        bandwidth: the width (in Hz) of the nulled band
+        offset: the center frequency (in Hz) of the band, on the ``fs/nfft`` grid
+        axis: the frequency axis of `x`
     """
-    nfft = x.shape[axis]
-    s = slice_freqs(nfft, fs, bandwidth, offset=offset)
+    s = slice_freqs(x.shape[axis], fs, bandwidth, offset=offset)
     view = axis_slice(x, s.start, s.stop, axis=axis)
     view[:] = float('nan')
 

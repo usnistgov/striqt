@@ -243,9 +243,7 @@ def _cached_spectrogram(
     )
 
     if spec.lo_bandstop is not None:
-        sw.fourier.null_lo(
-            spg, sizing.nfft, capture.sample_rate, spec.lo_bandstop, axis=2
-        )
+        sw.fourier.null_lo(spg, capture.sample_rate, spec.lo_bandstop, axis=2)
 
     if spec.trim_stopband and np.isfinite(capture.analysis_bandwidth):
         spg = sw.fourier.truncate_freqs(

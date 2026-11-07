@@ -176,7 +176,7 @@ class TestFrequencySlicing:
         trimmed = truncate_freqs(x, nfft, fs, bandwidth, offset=offset, axis=2)
         assert_array_equal(trimmed, x[:, :, s])
 
-        null_lo(x, nfft, fs, bandwidth, offset=offset, axis=2)
+        null_lo(x, fs, bandwidth, offset=offset, axis=2)
         assert np.isnan(x[:, :, s]).all()
         assert np.isnan(x).sum() == 2 * 3 * bw_bins
 
@@ -422,7 +422,7 @@ class TestNumpyCupyCrossComparison:
 
         def nulled(x):
             x = x.copy()
-            null_lo(x, 64, 1.0, 0.25, axis=2)
+            null_lo(x, 1.0, 0.25, axis=2)
             return x
 
         n_np, n_cp = numpy_and_cupy(cupy_available, nulled, x)
