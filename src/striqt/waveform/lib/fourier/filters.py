@@ -8,7 +8,13 @@ from __future__ import annotations as __
 import typing
 
 from .. import util
-from ..arrays import array_namespace, convert_np_to_xp, is_cupy_array
+from ..arrays import (
+    array_namespace,
+    axis_slice,
+    convert_np_to_xp,
+    is_cupy_array,
+    pad_along_axis,
+)
 from ..util import np
 from .fft import _broadcast_onto
 from .stft import downsample_stft, istft, stft, zero_stft_by_freq
@@ -30,7 +36,31 @@ _COLA_WINDOW_SIZE_DIVISOR = {
 @util.lru_cache()
 def design_oafilter(
     array_size: int, *, window, nfft_out: int, nfft: int, extend: bool
-) -> tuple:
+) -> tuple[int, int, float, int]:
+    """return the block sizes, overlap, and zero pad of an STFT overlap-add filter.
+
+    Args:
+        array_size: the number of input samples along the filter axis
+        window: the COLA window, ``'hann'``, ``'blackman'``, ``'blackmanharris'``,
+            ``'rect'``, or None for ``'rect'``
+        nfft_out: the output block size (in samples), an even multiple of the COLA
+            divisor of `window`; None selects `nfft`
+        nfft: the input block size (in samples), an even multiple of the COLA
+            divisor of `window`
+        extend: True pads a partial trailing hop with zeros; False rejects it
+
+    Returns:
+        ``(nfft_out, noverlap, overlap_scale, pad)``: the output block size, the
+        overlap (in samples) of consecutive output blocks, the overlap as a
+        fraction of the block, and the number of zeros that bring `array_size` to a
+        whole number of input hops (0 without `extend`)
+
+    Raises:
+        TypeError: if `window` is not a key of the COLA divisor table
+        ValueError: if `nfft` or `nfft_out` is odd or not a multiple of the COLA
+            divisor, or if `array_size` is not a whole number of input hops without
+            `extend`
+    """
     if nfft_out is None:
         nfft_out = nfft
 
@@ -65,18 +95,15 @@ def design_oafilter(
         )
 
     noverlap = round(nfft_out * overlap_scale)
+    hop = nfft - round(nfft * overlap_scale)
 
-    if array_size % noverlap != 0:
-        if extend:
-            pad_out = array_size % noverlap
-        else:
-            raise ValueError(
-                f'x.size ({array_size}) is not an integer multiple of noverlap ({noverlap})'
-            )
-    else:
-        pad_out = 0
+    pad = (-array_size) % hop
+    if pad and not extend:
+        raise ValueError(
+            f'x.shape[axis] ({array_size}) is not an integer multiple of the hop ({hop})'
+        )
 
-    return nfft_out, noverlap, overlap_scale, pad_out
+    return nfft_out, noverlap, overlap_scale, pad
 
 
 @convert_np_to_xp
@@ -267,8 +294,9 @@ def oafilter(
         frequency_shift: True centers the passband on the output DC bin when
             `nfft_out` equals `nfft`
         axis: the time axis of `x`
-        extend: False raises `ValueError` when ``x.size`` is not a multiple of the
-            overlap; True skips that check
+        extend: True pads `x` with zeros along `axis` to a whole number of STFT
+            hops and trims the output to ``round(x.shape[axis] * nfft_out / nfft)``
+            samples; False raises `ValueError` for a partial trailing hop
         overwrite_x: True permits the STFT to consume the buffer of `x`
 
     Returns:
@@ -278,17 +306,23 @@ def oafilter(
     Raises:
         TypeError: if `window` is not a key of the COLA divisor table
         ValueError: if `nfft` or `nfft_out` is odd or not a multiple of the COLA
-            divisor, if ``x.size`` is not a multiple of the overlap without `extend`,
-            or if ``x.shape[axis]`` is not a whole number of STFT segments
+            divisor, or if ``x.shape[axis]`` is not a whole number of STFT hops
+            without `extend`
     """
 
-    nfft_out, noverlap, overlap_scale, _ = design_oafilter(
-        x.size,
+    size_in = x.shape[axis]
+    nfft_out, noverlap, overlap_scale, pad = design_oafilter(
+        size_in,
         window=window,
         nfft_out=nfft_out or nfft,
         nfft=nfft,
         extend=extend,
     )
+
+    if pad:
+        x = pad_along_axis(x, [[0, pad]], axis=axis)
+        # the padded array is a fresh allocation
+        overwrite_x = True
 
     # the ENBW is in bins of fs / nfft_out, and the passband edges are in Hz
     enbw_bins = equivalent_noise_bandwidth(window, nfft_out, fftbins=False)
@@ -321,12 +355,15 @@ def oafilter(
 
     x = istft(
         y,
-        round(x.shape[axis] * nfft_out / nfft),
+        round((size_in + pad) * nfft_out / nfft),
         nfft=nfft_out or nfft,
         noverlap=noverlap,
         overwrite_x=True,
         axis=axis,
     )
+
+    if pad:
+        x = axis_slice(x, 0, round(size_in * nfft_out / nfft), axis=axis)
 
     if nfft_out != nfft:
         x *= nfft_out / nfft

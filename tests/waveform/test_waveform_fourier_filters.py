@@ -87,14 +87,14 @@ class TestFilterDesign:
                 "'blackmanharris'.*, not 'flattop'",
             ),
             (1210, {'window': 'blackman', 'nfft_out': 121}, ValueError, '% 3'),
-            (1000, {'window': 'hann'}, ValueError, 'integer multiple of noverlap'),
+            (1000, {'window': 'hann'}, ValueError, 'integer multiple of the hop'),
             (1230, {'window': 'blackman', 'nfft_out': 123}, ValueError, 'must be even'),
             (1200, {'window': 'rect', 'nfft': 125}, ValueError, 'must be even'),
         ],
         ids=[
             'unsupported_window',
             'nfft_out_off_divisor',
-            'size_off_noverlap',
+            'size_off_hop',
             'odd_nfft_out',
             'odd_nfft',
         ],
@@ -105,10 +105,11 @@ class TestFilterDesign:
             design_oafilter(size, **kws)
 
     def test_design_oafilter_options(self):
-        pad_out = design_oafilter(
-            1000, window='hann', nfft_out=120, nfft=120, extend=True
-        )[3]
-        assert pad_out == 1000 % 60
+        """the hann hop is half the block, so 1000 samples pad by 20 to 17 hops of 60"""
+        pad = design_oafilter(1000, window='hann', nfft_out=120, nfft=120, extend=True)[
+            3
+        ]
+        assert pad == 20
 
         nfft_out = design_oafilter(
             1200, window='hann', nfft_out=None, nfft=120, extend=False
@@ -246,6 +247,28 @@ class TestOafilter:
         y = self._oafilter(x, nfft_out=nfft_out)
         assert y.shape == (round(x.size * nfft_out / self.NFFT),)
         assert_tone_level(interior(y, nfft_out))
+
+    @pytest.mark.parametrize('rows', [None, 2], ids=['1d', '2d_axis_1'])
+    def test_extend_pads_a_partial_hop(self, rows):
+        """with `extend`, an input 37 samples short of a whole hop filters to its own
+        length with the in-band tone at unit level; without `extend`, the partial hop
+        is rejected on the axis length rather than on ``x.size``"""
+        f0 = 4 * self.FS / self.NFFT
+        x = self._tone(f0)[:-37]
+        axis = 0
+        if rows is not None:
+            x = np.stack([x] * rows)
+            axis = 1
+
+        with pytest.raises(ValueError, match='integer multiple of the hop'):
+            self._oafilter(x, axis=axis)
+
+        y = self._oafilter(x, axis=axis, extend=True)
+        assert y.shape == x.shape and y.dtype == x.dtype
+        for row in y.reshape(-1, x.shape[axis]):
+            yi = interior(row, self.NFFT)
+            assert_tone_level(yi)
+            assert abs(tone_frequency(yi, self.FS) - f0) <= self.FS / yi.size
 
 
 # %% numpy vs cupy
