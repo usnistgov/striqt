@@ -660,14 +660,6 @@ it was standing in for is enabled.
   `fragments/analysis/quick.yaml`, so every `site-cpu` run logs an unused-key
   warning.
 
-- **`analyze(..., as_xarray=False)` returns `DelayedDataArray` values, not arrays.**
-  `sensor/lib/compute/analyze.py` casts the delayed dict to `dict[str, Array]` for
-  the `False` branch, so the overload annotation and the `Returns:` section
-  disagree with the returned type. Pinned as current behavior in
-  `test_sensor_compute_analyze.py::test_as_xarray_false_returns_the_delayed_arrays`;
-  whether the branch should evaluate the arrays or the annotation should change
-  is a design decision (noted 2026-11-06).
-
 - **`MatplotlibBackend.line` and `fill_between` draw before rejecting a missing
   facet.** `_facet_subsets` is a generator, so facets before the one the data
   lacks are drawn on the `target` grid before the `ValueError`. The figures

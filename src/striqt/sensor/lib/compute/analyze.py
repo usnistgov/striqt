@@ -17,7 +17,6 @@ from . import corrections, datasets
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from ..typing import Array
     from .datasets import DelayedDataset
 
 
@@ -93,14 +92,14 @@ def analyze(
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[False]],
-) -> dict[str, Array]: ...
+) -> dict[str, sa.dataarrays.DelayedDataArray]: ...
 
 
 @sa.util.stopwatch('', 'analysis')
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
-) -> dict[str, Array] | xr.Dataset | datasets.DelayedDataset:
+) -> dict[str, sa.dataarrays.DelayedDataArray] | xr.Dataset | datasets.DelayedDataset:
     """run the analysis of ``options.sweep_spec`` on `iq`.
 
     The analysis is ``options.sweep_spec.analysis`` adjusted by
@@ -162,7 +161,7 @@ def analyze(
                 iq.extra_data[name] = value.get()
 
     if not options.as_xarray:
-        return cast('dict[str, Array]', da_delayed)
+        return da_delayed
 
     assert isinstance(iq.capture, specs.SensorCapture)
 

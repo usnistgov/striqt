@@ -85,8 +85,7 @@ def test_analyze_carries_the_pending_peripheral_read(stages):
 
 
 def test_as_xarray_false_returns_the_delayed_arrays(stages):
-    """current behavior, not a contract: the values are `DelayedDataArray` results
-    keyed by measurement name, not the bare arrays of the annotation"""
+    """the values are `DelayedDataArray` results keyed by measurement name"""
     result = compute.analyze(fresh_raw(stages), options(as_xarray=False))
     assert isinstance(result, dict)
     assert set(result) == {'iq_waveform'}
