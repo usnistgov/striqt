@@ -645,7 +645,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             ``(samples, start_time_ns)``: the samples as a C-contiguous complex64
             array with shape (ports, count) in the namespace of the source
             `array_backend`, and the time (in ns) of the first record sample, or
-            None when the backend returns no time stamp
+            None when the record is filled from the carryover without a backend read
 
         Raises:
             ValueError: if `overlaps` is not 2 non-negative integers

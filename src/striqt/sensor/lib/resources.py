@@ -44,8 +44,9 @@ if TYPE_CHECKING:
 class SweepCallbacks:
     """the hooks of one run of an action.
 
-    An exception from any hook ends the run. `on_analyzed` and `on_sink_cached` run
-    in the analysis thread. That thread blocks until the hook returns.
+    An exception from any hook ends the run. `select_analysis`, `on_analyzed`, and
+    `on_sink_cached` run in the analysis thread. That thread blocks until the hook
+    returns.
     """
 
     on_source_opened: SourceOpenCallback | None = None
