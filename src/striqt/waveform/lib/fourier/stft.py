@@ -283,7 +283,7 @@ def _stack_stft_windows(
         scale = 1
     else:
         raise ValueError(
-            f"invalid normalization argument '{norm}' (should be 'cola' or 'psd')"
+            f"invalid normalization argument '{norm}' (should be None or 'power')"
         )
 
     w = _broadcast_onto(window / scale, xstacked, axis=axis + 1)
