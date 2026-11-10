@@ -145,6 +145,7 @@ class FakeStream:
     active: bool = False
     activate_time_ns: int = 0
     delivered: int = 0
+    faulted: bool = False
 
 
 class FakeDevice:
@@ -180,6 +181,10 @@ class FakeDevice:
         # one entry is popped per readStream call; an int is returned as its ret
         self.fault_queue: list = []
         self.max_read: int | None = None
+        # True stamps only the first read after an activation, as AirStack 1.0 does
+        self.stamp_first_read_only = False
+        # samples lost from the stream at each OVERFLOW fault
+        self.overflow_loss = 0
 
     def _record(self, *call):
         self.calls.append(call)
@@ -362,6 +367,7 @@ class FakeDevice:
         self._check_stream(stream)
         stream.active = True
         stream.delivered = 0
+        stream.faulted = False
         stream.activate_time_ns = timeNs or self.getHardwareTime('now')
 
     def deactivateStream(self, stream, flags=0, timeNs=0):
@@ -381,7 +387,11 @@ class FakeDevice:
         if self.fault_queue:
             fault = self.fault_queue.pop(0)
             if fault is not None:
-                return StreamResult(fault, 0, self._stream_time(stream))
+                stream.faulted = True
+                result = StreamResult(fault, 0, self._stream_time(stream))
+                if fault == CONSTANTS['SOAPY_SDR_OVERFLOW']:
+                    stream.delivered += self.overflow_loss
+                return result
         if not stream.active:
             return StreamResult(CONSTANTS['SOAPY_SDR_TIMEOUT'], 0, 0)
 
@@ -407,9 +417,13 @@ class FakeDevice:
             else:
                 raise ValueError(f'unsupported stream format {stream.format!r}')
 
+        if self.stamp_first_read_only and (stream.delivered > 0 or stream.faulted):
+            flags, time_ns = 0, 0
+        else:
+            flags = CONSTANTS['SOAPY_SDR_HAS_TIME']
         stream.delivered += count
         mask = sum(1 << ch for ch in stream.channels)
-        return StreamResult(count, CONSTANTS['SOAPY_SDR_HAS_TIME'], time_ns, mask)
+        return StreamResult(count, flags, time_ns, mask)
 
     def _stream_time(self, stream):
         return stream.activate_time_ns + round(

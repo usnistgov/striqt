@@ -320,6 +320,21 @@ def log_verbosity(verbose: int = 0):
         sa.util.show_messages(logging.DEBUG, logger_names=names)
 
 
+def log_record(name_suffix: str, level: int, msg: str, **fields: Any) -> None:
+    """log `msg` at `level` on the ``striqt.<name_suffix>`` logger with `fields` as
+    attributes of the record.
+
+    The capture fields of the logger adapter (`capture_index`, `capture_progress`)
+    stay on the record. Nothing is logged when `level` is disabled.
+    """
+    logger = sa.util.get_logger(name_suffix)
+    if not logger.isEnabledFor(level):
+        return
+    extra = dict(logger.extra) if isinstance(logger.extra, dict) else {}
+    extra.update(fields)
+    logger.logger.log(level, msg, extra=extra)
+
+
 @contextlib.contextmanager
 def log_capture_context(name_suffix, /, capture_index=0, capture_count=None):
     logger = sa.util.get_logger(name_suffix)

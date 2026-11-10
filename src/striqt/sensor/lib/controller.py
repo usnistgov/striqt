@@ -4,6 +4,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
+import logging
 import weakref
 from collections import defaultdict, deque
 from collections.abc import Generator
@@ -235,8 +236,11 @@ def read_retries(source: Controller) -> Generator[None]:
         return
 
     def prepare_retrigger(*args, **kws):
+        # a stream error ends the continuity of the stream and of its time stamps
+        source.backend.prepare_retrigger()
         source._buffers.clear()
         source._buffers.skip_next_buffer_swap()
+        source._retry_count += 1
 
     initial = source.read_iq
     retry = util.retry(EXC_TYPES, tries=max_count + 1, exception_func=prepare_retrigger)
@@ -428,6 +432,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             if not hasattr(self, 'sensor'):
                 raise TypeError('access controller from a binding')
             self._buffers = buffers.ReceiveBuffers(self)
+            self._retry_count = 0
             self.backend = self.sensor.source_cls(spec)
             lookup._set_id(spec, self.source_id)
         except BaseException as ex:
@@ -508,6 +513,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
 
         # a carryover belongs to the burst of the armed capture alone
         self._buffers.clear()
+        self._retry_count = 0
 
         if spec == self._capture and self._capture is not None:
             return
@@ -720,12 +726,12 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                     f'overfilled receive buffer by {(this_count + received_count) - samples.size}'
                 )
 
-            if stream_time_ns is None:
-                # after the first stream read, subsequent reads are treated as
-                # contiguous unless TimeoutError is raised
+            if stream_time_ns is None and this_count > 0:
+                # an overflow tolerated before any sample carries no stamp of the
+                # samples that follow; later reads are treated as contiguous
                 stream_time_ns = ret_time_ns
 
-            if missing_start_time:
+            if missing_start_time and stream_time_ns is not None:
                 included_holdoff = buffers.find_trigger_holdoff(
                     self.source_spec,
                     self.capture_spec,
@@ -737,6 +743,9 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
 
                 start_ns = stream_time_ns + round(included_holdoff * 1e9 / fs)
                 missing_start_time = False
+                self._log_record_start(
+                    burst_index, resume, stream_time_ns, included_holdoff, start_ns
+                )
 
             remaining = remaining - this_count
             received_count += this_count
@@ -763,6 +772,44 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         )
 
         return samples, start_ns
+
+    def _log_record_start(
+        self,
+        burst_index: int,
+        resume: bool,
+        stream_time_ns: int,
+        holdoff: int,
+        start_ns: int,
+    ) -> None:
+        """log the record start of a segment on the ``source`` logger.
+
+        A DEBUG record carries `burst_index`, `resumed`, `stream_time_ns`,
+        `holdoff_samples`, `start_time_ns`, and `strobe_residual_ns`, the distance
+        (in ns) of the record start from the nearest `trigger_strobe` edge, 0 without
+        a strobe. The record is a WARNING when that distance exceeds one source
+        sample period.
+        """
+        strobe = self.source_spec.trigger_strobe
+        residual_ns = 0
+        msg = f'segment {burst_index} starts after a holdoff of {holdoff} samples'
+        if strobe:
+            strobe_ns = round(strobe * 1e9)
+            residual_ns = start_ns % strobe_ns
+            residual_ns = min(residual_ns, strobe_ns - residual_ns)
+            msg += f', {residual_ns} ns from the strobe edge'
+        sample_ns = 1e9 / self.get_resampler()['fs_sdr']
+        level = logging.WARNING if residual_ns > sample_ns else logging.DEBUG
+        util.log_record(
+            'source',
+            level,
+            msg,
+            burst_index=burst_index,
+            resumed=resume,
+            stream_time_ns=stream_time_ns,
+            holdoff_samples=holdoff,
+            start_time_ns=start_ns,
+            strobe_residual_ns=residual_ns,
+        )
 
     @sa.util.stopwatch('acquire', 'source')
     def acquire(
@@ -832,7 +879,9 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                 samples, time_ns = self.read_iq(overlaps, burst_index=burst_index)
 
             info = specs.AcquisitionInfo(
-                source_id=self.source_id, burst_index=burst_index
+                source_id=self.source_id,
+                burst_index=burst_index,
+                retry_count=self._retry_count,
             )
 
             iq = specs.AcquiredIQ(
@@ -879,7 +928,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         ``'except'`` the segments of the burst still in `queue` are removed and the
         burst restarts from segment 0. With no retries the error is raised.
 
-        Each segment passes through `finalize` before it is queued or returned. A
+        Each segment passes through `finalize` before it is queued or returned, with
+        ``info.retry_count`` equal to the re-triggers since the arm. A
         segment that finds `queue` full is dropped with a WARNING on the ``source``
         logger under ``'skip'``, and raises under ``'except'``. The acquisition of a
         capture with `burst` 1 waits for a free slot instead.
@@ -930,6 +980,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                 self.backend.prepare_retrigger()
                 self._buffers.clear()
                 self._buffers.skip_next_buffer_swap()
+                self._retry_count += 1
                 if bursts.on_gap == 'skip':
                     resume = True
                 else:
