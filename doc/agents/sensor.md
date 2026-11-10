@@ -292,9 +292,10 @@ burst_index)` can repeat with a later `start_time`. With `receive_retries` exhau
 either mode raises. Every re-trigger, by `acquire_burst` or by the `read_retries`
 wrapper around a first segment, runs `backend.prepare_retrigger` (the Soapy backend
 deactivates the stream, so the next read activates it again) and advances
-`Controller._retry_count`, which `acquire` stamps on `info.retry_count`; `_arm_spec`
-resets the count, so the coordinate is the number of re-triggers since the capture was
-armed. `source.bursts.trigger_on` governs the signal trigger only: `'first'`
+`Controller._retry_count`, which `_arm_spec` resets. The count is a field of the record
+start log (below) and not of `AcquisitionInfo`: a coordinate of the dataset is an
+independent variable of the measurement, and an event during the acquisition is a log
+record. `source.bursts.trigger_on` governs the signal trigger only: `'first'`
 computes the lag on the first delivered segment of a burst and applies it to the rest;
 `'all'` runs the trigger on every segment. The hardware clock syncs once per burst, on
 segment 0.
@@ -339,8 +340,8 @@ overflow preceded them, and raises `ReceiveStreamError` otherwise, because AirSt
 stamps the first read after an activation alone. Each `readStream` return is a DEBUG
 record on the `source` logger with the fields `stream_ret`, `stream_has_time`,
 `stream_time_ns`, `stream_request`, and `stream_elapsed`; each record start is a DEBUG
-record with `burst_index`, `resumed`, `stream_time_ns`, `holdoff_samples`,
-`start_time_ns`, and `strobe_residual_ns`, promoted to WARNING when the start is more
+record with `burst_index`, `resumed`, `retry_count`, `stream_time_ns`,
+`holdoff_samples`, `start_time_ns`, and `strobe_residual_ns`, promoted to WARNING when the start is more
 than one source sample from a strobe edge (`Controller._log_record_start`).
 `lib/util.py:log_record` writes these records with the adapter's capture fields kept.
 

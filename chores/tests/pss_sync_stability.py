@@ -16,8 +16,8 @@ an acquisition timing fault, so a shift can be attributed to a mechanism:
 
 Usage:
     pixi run -e test39 python chores/tests/pss_sync_stability.py <store.zarr>
-        [--variable cellular_5g_pss_sync] [--group channel_name port burst_index
-        retry_count] [--resolution 6.5e-8] [--sdr-rate 125e6]
+        [--variable cellular_5g_pss_sync] [--group channel_name port burst_index]
+        [--resolution 6.5e-8] [--sdr-rate 125e6]
 
 Rows are grouped by the coordinates of --group that the store has. Levels are the
 clusters of delay values that are closer than --resolution (one sample of the
@@ -33,13 +33,7 @@ from collections.abc import Iterable, Sequence
 import numpy as np
 import pandas as pd
 
-DEFAULT_GROUP = (
-    'channel_name',
-    'center_frequency',
-    'port',
-    'burst_index',
-    'retry_count',
-)
+DEFAULT_GROUP = ('channel_name', 'center_frequency', 'port', 'burst_index')
 
 
 def quanta(sdr_rate: float) -> dict[str, float]:

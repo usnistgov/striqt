@@ -191,20 +191,17 @@ def test_build_capture_coords_splits_tuple_fields_per_port():
 
 
 def test_build_capture_coords_carries_burst_and_burst_index():
-    """`burst` is a capture field and `burst_index` and `retry_count` acquisition
-    info fields, so all three are ``capture`` coordinates. `burst` takes the `Meta`
-    description of the field as its ``standard_name``; the info fields have no `Meta`
-    and no attrs."""
+    """`burst` is a capture field and `burst_index` an acquisition info field, so both
+    are ``capture`` coordinates. `burst` takes the `Meta` description of the field as
+    its ``standard_name``; `burst_index` has no `Meta` and no attrs."""
     capture = two_port_captures(burst=3)[0]
-    info = ss.specs.AcquisitionInfo(burst_index=2, retry_count=1)
+    info = ss.specs.AcquisitionInfo(burst_index=2)
     coords = datasets.build_capture_coords(capture, info, ())
     assert coords['burst'].values.tolist() == [3, 3]
     assert coords['burst_index'].values.tolist() == [2, 2]
-    assert coords['retry_count'].values.tolist() == [1, 1]
     (meta,) = ss.specs.types.BurstCount.__metadata__
     assert coords['burst'].attrs == {'standard_name': meta.description}
     assert coords['burst_index'].attrs == {}
-    assert coords['retry_count'].attrs == {}
 
 
 def test_build_capture_coords_adds_an_analysis_loop_coordinate():

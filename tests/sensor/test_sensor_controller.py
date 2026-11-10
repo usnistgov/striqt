@@ -190,11 +190,15 @@ def test_failed_setup_entry_is_cleared_for_the_next_open(monkeypatch, caplog):
 class TestReadRetries:
     @pytest.mark.parametrize('time_sync_at', ['acquire', 'open'])
     def test_overflow_after_the_first_read_retriggers(
-        self, time_sync_at, fake_soapy, fake_controller
+        self, time_sync_at, fake_soapy, fake_controller, caplog
     ):
         """the retry re-enables the stream whether or not the trigger syncs the
-        clock, and stamps the retried read from the new activation"""
-        with fake_controller(receive_retries=3, time_sync_at=time_sync_at) as ctrl:
+        clock, stamps the retried read from the new activation, and counts the
+        re-trigger on the record start log"""
+        with (
+            fake_controller(receive_retries=3, time_sync_at=time_sync_at) as ctrl,
+            caplog.at_level(logging.DEBUG, logger='striqt.source'),
+        ):
             device = fake_soapy.devices[0]
             ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, 0)))
             # the first read tolerates overflow; the second (holdoff) read does not
@@ -208,7 +212,9 @@ class TestReadRetries:
             assert iq.x.all()
             # the retried acquisition restarted the holdoff from its own activation
             assert iq.info.start_time.value > device.streams[0].activate_time_ns
-            assert iq.info.retry_count == 1
+
+        starts = [r for r in caplog.records if hasattr(r, 'strobe_residual_ns')]
+        assert [r.retry_count for r in starts] == [0, 1]
 
     def test_overflow_before_the_first_samples_is_stamped_by_the_samples(
         self, fake_soapy, fake_controller
@@ -227,7 +233,6 @@ class TestReadRetries:
             activated = device.streams[0].activate_time_ns
 
         assert len(device.calls_named('activateStream')) == 1
-        assert iq.info.retry_count == 0
         assert iq.info.start_time.value >= activated + round(lost * 1e9 / fs)
 
     @pytest.mark.parametrize('receive_retries', [0, 1])
@@ -256,7 +261,6 @@ class TestReadRetries:
             activated = device.streams[0].activate_time_ns
 
         assert len(device.calls_named('activateStream')) == 2
-        assert iq.info.retry_count == 1
         assert iq.info.start_time.value >= activated
 
     def test_persistent_timeout_exhausts_the_retries(self, fake_soapy, fake_controller):
@@ -319,7 +323,6 @@ def test_acquire_metadata_defaults(isolated_lookup, subtests):
         with subtests.test('info'):
             assert iq.info.source_id == ctrl.source_id
             assert iq.info.capture_index == 0
-            assert iq.info.retry_count == 0
             assert iq.info.signal_trigger is None
         with subtests.test('no conditioning is attached'):
             assert iq.signal_trigger is None and not iq.overwrite_x
@@ -611,17 +614,14 @@ class TestBurst:
         assert burst_indexes(segments) == [0, 1, 2]
         assert len(device.calls_named('activateStream')) == 2
         deltas = start_deltas_ns(segments)
-        retries = [m.info.retry_count for m in segments]
         if on_gap == 'skip':
             assert finalized == [0, 1, 2]
             assert segments[1].info.start_time.value >= retrigger_ns
             assert deltas[1] == period
-            assert retries == [0, 1, 1]
         else:
             assert finalized == [0, 0, 1, 2]
             assert segments[0].info.start_time.value >= retrigger_ns
             assert deltas == [period, period]
-            assert retries == [1, 1, 1]
 
     def test_overflow_at_member_1_without_retries_raises(
         self, fake_soapy, fake_controller

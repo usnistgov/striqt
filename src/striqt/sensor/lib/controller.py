@@ -783,7 +783,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     ) -> None:
         """log the record start of a segment on the ``source`` logger.
 
-        A DEBUG record carries `burst_index`, `resumed`, `stream_time_ns`,
+        A DEBUG record carries `burst_index`, `resumed`, `retry_count` (the stream
+        re-triggers since the capture was armed), `stream_time_ns`,
         `holdoff_samples`, `start_time_ns`, and `strobe_residual_ns`, the distance
         (in ns) of the record start from the nearest `trigger_strobe` edge, 0 without
         a strobe. The record is a WARNING when that distance exceeds one source
@@ -805,6 +806,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             msg,
             burst_index=burst_index,
             resumed=resume,
+            retry_count=self._retry_count,
             stream_time_ns=stream_time_ns,
             holdoff_samples=holdoff,
             start_time_ns=start_ns,
@@ -879,9 +881,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
                 samples, time_ns = self.read_iq(overlaps, burst_index=burst_index)
 
             info = specs.AcquisitionInfo(
-                source_id=self.source_id,
-                burst_index=burst_index,
-                retry_count=self._retry_count,
+                source_id=self.source_id, burst_index=burst_index
             )
 
             iq = specs.AcquiredIQ(
@@ -928,8 +928,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         ``'except'`` the segments of the burst still in `queue` are removed and the
         burst restarts from segment 0. With no retries the error is raised.
 
-        Each segment passes through `finalize` before it is queued or returned, with
-        ``info.retry_count`` equal to the re-triggers since the arm. A
+        Each segment passes through `finalize` before it is queued or returned. A
         segment that finds `queue` full is dropped with a WARNING on the ``source``
         logger under ``'skip'``, and raises under ``'except'``. The acquisition of a
         capture with `burst` 1 waits for a free slot instead.

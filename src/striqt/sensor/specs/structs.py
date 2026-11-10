@@ -918,8 +918,6 @@ class AcquisitionInfo(msgspec.Struct, kw_only=True, frozen=True):
     sweep_index: int = 0
     capture_index: int = 0
     burst_index: int = 0
-    retry_count: int = 0
-    """the number of stream re-triggers since the capture was armed"""
 
     signal_trigger: Union[Trigger, None] = None
 

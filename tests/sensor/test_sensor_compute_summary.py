@@ -247,7 +247,6 @@ def test_acquisition_fields_groups_follow_the_declaring_classes():
         'sweep_index',
         'capture_index',
         'burst_index',
-        'retry_count',
     ]
     assert [f.name for f in groups[1].fields] == ['backend_sample_rate']
 
