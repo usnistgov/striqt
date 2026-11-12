@@ -65,8 +65,8 @@ The following assume access to the open internet.
 The repository carries a [`pixi`](https://pixi.sh) manifest with the conda-forge dependencies, including `SoapySDR`, and a `cupy` environment for CUDA GPUs:
 
 1. Install `pixi` and clone this repository
-2. In the repository, run `pixi install -e test315` (CPU) or `pixi install -e cupy` (CUDA GPU, linux or windows)
-3. Run the tools through the environment, for example `pixi run -e test315 sensor-sweep --help`
+2. In the repository, run `pixi install -e py315` (CPU) or `pixi install -e cupy` (CUDA GPU, linux or windows)
+3. Run the tools through the environment, for example `pixi run -e py315 sensor-sweep --help`
 
 #### Option 2: pip installation
 An environment for post-analysis, plotting, and testing can be installed from the repository:
