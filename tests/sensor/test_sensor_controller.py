@@ -188,10 +188,17 @@ def test_failed_setup_entry_is_cleared_for_the_next_open(monkeypatch, caplog):
 
 
 class TestReadRetries:
+    @pytest.mark.parametrize('time_sync_at', ['acquire', 'open'])
     def test_overflow_after_the_first_read_retriggers(
-        self, fake_soapy, fake_controller
+        self, time_sync_at, fake_soapy, fake_controller, caplog
     ):
-        with fake_controller(receive_retries=3) as ctrl:
+        """the retry re-enables the stream whether or not the trigger syncs the
+        clock, stamps the retried read from the new activation, and counts the
+        re-trigger on the record start log"""
+        with (
+            fake_controller(receive_retries=3, time_sync_at=time_sync_at) as ctrl,
+            caplog.at_level(logging.DEBUG, logger='striqt.source'),
+        ):
             device = fake_soapy.devices[0]
             ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, 0)))
             # the first read tolerates overflow; the second (holdoff) read does not
@@ -200,10 +207,61 @@ class TestReadRetries:
             iq = ctrl.acquire()
 
             assert len(device.calls_named('activateStream')) == 2
+            assert len(device.calls_named('deactivateStream')) >= 1
             assert iq.x.shape[0] == 2
             assert iq.x.all()
             # the retried acquisition restarted the holdoff from its own activation
             assert iq.info.start_time.value > device.streams[0].activate_time_ns
+
+        starts = [r for r in caplog.records if hasattr(r, 'strobe_residual_ns')]
+        assert [r.retry_count for r in starts] == [0, 1]
+
+    def test_overflow_before_the_first_samples_is_stamped_by_the_samples(
+        self, fake_soapy, fake_controller
+    ):
+        """an overflow on the first read is tolerated, and the record start follows
+        the time of the samples that arrive after it, not the time of the overflow"""
+        lost = 4096
+        with fake_controller(receive_retries=0, time_sync_at='open') as ctrl:
+            device = fake_soapy.devices[0]
+            device.overflow_loss = lost
+            ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, 0)))
+            device.fault_queue = [fake_soapy.SOAPY_SDR_OVERFLOW]
+
+            iq = ctrl.acquire()
+            fs = ctrl.get_resampler()['fs_sdr']
+            activated = device.streams[0].activate_time_ns
+
+        assert len(device.calls_named('activateStream')) == 1
+        assert iq.info.start_time.value >= activated + round(lost * 1e9 / fs)
+
+    @pytest.mark.parametrize('receive_retries', [0, 1])
+    def test_unstamped_samples_after_an_overflow_retrigger(
+        self, receive_retries, fake_soapy, fake_controller
+    ):
+        """a device that stamps the first read alone gives no time for the samples
+        after a tolerated overflow, so the read is an error that a retry recovers
+        from a new activation"""
+        with fake_controller(
+            receive_retries=receive_retries, time_sync_at='open'
+        ) as ctrl:
+            device = fake_soapy.devices[0]
+            device.stamp_first_read_only = True
+            ctrl._arm_spec(soapy_capture(port=(0, 1), gain=(0, 0)))
+            device.fault_queue = [fake_soapy.SOAPY_SDR_OVERFLOW]
+
+            if receive_retries == 0:
+                with pytest.raises(
+                    ss.lib.sources.base.ReceiveStreamError, match='no time stamp'
+                ):
+                    ctrl.acquire()
+                return
+
+            iq = ctrl.acquire()
+            activated = device.streams[0].activate_time_ns
+
+        assert len(device.calls_named('activateStream')) == 2
+        assert iq.info.start_time.value >= activated
 
     def test_persistent_timeout_exhausts_the_retries(self, fake_soapy, fake_controller):
         with fake_controller(receive_retries=1) as ctrl:
@@ -436,14 +494,19 @@ class TestBurst:
         assert stashed is None, 'the carryover is cleared after the last segment'
 
     def test_members_under_a_dividing_strobe_stay_contiguous(
-        self, fake_soapy, fake_controller
+        self, fake_soapy, fake_controller, caplog
     ):
         """with a strobe that divides the duration, the next edge falls at the end of
-        the previous record, so the segments are one record apart with one enable"""
+        the previous record, so the segments are one record apart with one enable.
+        Each segment logs its strobe residual at DEBUG and each stream read its
+        return, with no WARNING."""
         strobe = BURST_CAPTURE.duration / 2
-        with fake_controller(
-            time_sync_at='open', receive_retries=0, trigger_strobe=strobe
-        ) as ctrl:
+        with (
+            fake_controller(
+                time_sync_at='open', receive_retries=0, trigger_strobe=strobe
+            ) as ctrl,
+            caplog.at_level(logging.DEBUG, logger='striqt.source'),
+        ):
             ctrl._arm_spec(BURST_CAPTURE)
             segments = ctrl.acquire_burst()
             period = record_ns(ctrl, BURST_CAPTURE)
@@ -455,6 +518,15 @@ class TestBurst:
         sample_ns = 1e9 / ctrl.get_resampler()['fs_sdr']
         residual = segments[0].info.start_time.value % round(strobe * 1e9)
         assert min(residual, round(strobe * 1e9) - residual) < sample_ns
+
+        starts = [r for r in caplog.records if hasattr(r, 'strobe_residual_ns')]
+        assert [r.burst_index for r in starts] == [0, 1, 2]
+        assert all(r.strobe_residual_ns <= sample_ns for r in starts)
+        assert [r.resumed for r in starts] == [False] * 3
+        reads = [r for r in caplog.records if hasattr(r, 'stream_ret')]
+        assert len(reads) == len(device.calls_named('readStream'))
+        assert all(r.stream_has_time for r in reads)
+        assert all(r.levelno == logging.DEBUG for r in starts + reads)
 
     def test_a_strobe_with_a_remainder_is_rejected(self, fake_controller):
         strobe = BURST_CAPTURE.duration / 3.5

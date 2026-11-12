@@ -1,6 +1,7 @@
 from __future__ import annotations as __
 
 import contextlib
+import logging
 import time
 import typing
 
@@ -313,6 +314,7 @@ class RxStream:
         self.info = info
 
         self.checked_timestamp = False
+        self.overflow_before_samples = False
         self.stream = None
         self._enabled: bool = False
         self._on_overflow: specs.types.OnOverflow = on_overflow
@@ -407,6 +409,7 @@ class RxStream:
                 kws['timeNs'] = time_ns
 
             self.checked_timestamp = False
+            self.overflow_before_samples = False
             device.activateStream(self.stream, **kws)
 
         elif self.stream is not None:
@@ -425,29 +428,67 @@ class RxStream:
         last_sync_time: int | None,
         on_overflow: specs.types.OnOverflow | None = None,
     ) -> tuple[int, int]:
+        """read up to `count` samples per port into `buffers` from `offset`.
+
+        The first read that returns samples after an enable is checked against
+        `last_sync_time` and must carry ``SOAPY_SDR_HAS_TIME`` when an overflow was
+        tolerated before it. One DEBUG record per call on the ``source`` logger
+        carries `stream_ret`, `stream_has_time`, `stream_time_ns`, `stream_request`,
+        and `stream_elapsed` (in s).
+
+        Returns:
+            ``(samples received, time (ns) of the first sample received)``
+
+        Raises:
+            OverflowError: on an overflow return under ``on_overflow='except'``
+            ReceiveStreamError: on any other error return, on a time stamp before
+                `last_sync_time`, or on first samples without a time stamp after a
+                tolerated overflow
+        """
         total_timeout = self.source_spec.rx_enable_delay + timeout_sec + 0.5
 
         offset_bufs = [buf[offset * 2 :] for buf in buffers]
+        t0 = time.perf_counter()
         rx_result = device.readStream(
             self.stream,
             offset_bufs,
             count,
             timeoutUs=round(total_timeout * 1e6),
         )
+        elapsed = time.perf_counter() - t0
 
-        if not self.checked_timestamp and device.hasHardwareTime():
-            # require a valid timestamp only for the first read after channel enables.
-            # subsequent reads are treated as contiguous unless TimeoutError is raised
+        has_time = bool(rx_result.flags & SoapySDR.SOAPY_SDR_HAS_TIME)
+        util.log_record(
+            'source',
+            logging.DEBUG,
+            f'readStream returned {rx_result.ret} of {count} samples',
+            stream_ret=rx_result.ret,
+            stream_has_time=has_time,
+            stream_time_ns=rx_result.timeNs,
+            stream_request=count,
+            stream_elapsed=elapsed,
+        )
+
+        first_samples = not self.checked_timestamp and device.hasHardwareTime()
+        if first_samples and rx_result.ret > 0:
+            # these samples carry the time stamp of the stream until the next enable
             sync_time_ns = last_sync_time
             self.checked_timestamp = True
+            if not has_time and self.overflow_before_samples:
+                raise base.ReceiveStreamError(
+                    'the first samples after a tolerated overflow carry no time stamp'
+                )
         else:
             sync_time_ns = None
 
-        return self.validate_stream_read(
+        result = self.validate_stream_read(
             rx_result,
             on_overflow=on_overflow or self._on_overflow,
             sync_time_ns=sync_time_ns,
         )
+        if first_samples and rx_result.ret == SoapySDR.SOAPY_SDR_OVERFLOW:
+            self.overflow_before_samples = True
+        return result
 
     @staticmethod
     def validate_stream_read(

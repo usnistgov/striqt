@@ -289,7 +289,13 @@ raises `AcquisitionOverrunError` and ends the run, and a stream overflow re-trig
 restarts the burst from segment 0 after purging the segments of that burst still in the
 queue. Segments already consumed by analysis stay in the output: `(capture_index,
 burst_index)` can repeat with a later `start_time`. With `receive_retries` exhausted,
-either mode raises. `source.bursts.trigger_on` governs the signal trigger only: `'first'`
+either mode raises. Every re-trigger, by `acquire_burst` or by the `read_retries`
+wrapper around a first segment, runs `backend.prepare_retrigger` (the Soapy backend
+deactivates the stream, so the next read activates it again) and advances
+`Controller._retry_count`, which `_arm_spec` resets. The count is a field of the record
+start log (below) and not of `AcquisitionInfo`: a coordinate of the dataset is an
+independent variable of the measurement, and an event during the acquisition is a log
+record. `source.bursts.trigger_on` governs the signal trigger only: `'first'`
 computes the lag on the first delivered segment of a burst and applies it to the rest;
 `'all'` runs the trigger on every segment. The hardware clock syncs once per burst, on
 segment 0.
@@ -326,7 +332,18 @@ by passing an instance through `iterate_sweep(res, sink=...)`; `Zipper` remains 
 
 `SourceBackend.read` returns the time (ns) of the sample at ``buffers[i][offset]``. The
 first read of a capture begins one lead overlap before the record, so the stamp precedes
-corrected sample 0 by `lead / fs_sdr`.
+corrected sample 0 by `lead / fs_sdr`. `read_iq` takes the stamp of the stream from the
+first read that returns samples: an overflow tolerated on the first read of a first
+segment (`on_overflow='ignore'`) returns no samples and no stamp. `RxStream.read`
+(`sources/soapy.py`) requires ``SOAPY_SDR_HAS_TIME`` on those first samples when an
+overflow preceded them, and raises `ReceiveStreamError` otherwise, because AirStack 1.0
+stamps the first read after an activation alone. Each `readStream` return is a DEBUG
+record on the `source` logger with the fields `stream_ret`, `stream_has_time`,
+`stream_time_ns`, `stream_request`, and `stream_elapsed`; each record start is a DEBUG
+record with `burst_index`, `resumed`, `retry_count`, `stream_time_ns`,
+`holdoff_samples`, `start_time_ns`, and `strobe_residual_ns`, promoted to WARNING when the start is more
+than one source sample from a strobe edge (`Controller._log_record_start`).
+`lib/util.py:log_record` writes these records with the adapter's capture fields kept.
 
 `Controller.read_iq` passes that stamp and `overlaps[0]` to
 `sources/buffers.py:find_trigger_holdoff`, which returns the number of source samples
