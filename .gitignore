@@ -69,3 +69,6 @@ pixi.lock
 .claude/
 .cospec/
 .vscode
+
+# zensical site output
+/site/
