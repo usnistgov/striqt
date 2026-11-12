@@ -75,6 +75,12 @@ class SensorCapture(Capture, frozen=True, kw_only=True):
 
 
 class SoapyCapture(SensorCapture, frozen=True, kw_only=True):
+    """the capture of a SoapySDR source: a `SensorCapture` with a tuned frequency and gain.
+
+    Construction rejects a gain tuple when the port is a scalar, and a gain tuple
+    with a length other than the port count.
+    """
+
     center_frequency: types.CenterFrequency
     gain: types.Gain
 
@@ -84,21 +90,45 @@ class SoapyCapture(SensorCapture, frozen=True, kw_only=True):
 
 
 class SingleToneCapture(SensorCapture, frozen=True, kw_only=True):
+    """the capture of a `FunctionSource` that generates one unit-amplitude tone.
+
+    The tone is offset from the center frequency by a baseband frequency. White noise
+    is added at the SNR below the tone power, and an SNR of None adds no noise.
+    """
+
     frequency_offset: types.FrequencyOffset = 0
     snr: Optional[types.SNR] = None
 
 
 class DiracDeltaCapture(SensorCapture, frozen=True, kw_only=True):
+    """the capture of a `FunctionSource` that generates one impulse in a field of zeros.
+
+    The impulse is at the sample nearest the time offset from the start of the
+    capture, with an amplitude in dB relative to 1.
+    """
+
     time: types.TimeOffset = 0
     power: types.Power = 0
 
 
 class SawtoothCapture(SensorCapture, kw_only=True, frozen=True, dict=True):
+    """the capture of a `FunctionSource` that generates a real sawtooth ramp.
+
+    Each ramp rises from 0 toward the peak amplitude over one period, and the ramps
+    reset at the start of the capture.
+    """
+
     period: types.Period = 0.01
     power: types.Power = 0
 
 
 class NoiseCapture(SensorCapture, kw_only=True, frozen=True, dict=True):
+    """the capture of a `FunctionSource` that generates circular white Gaussian noise.
+
+    The noise is drawn independently on each port, with a total power (mW) equal to
+    the power spectral density times the source sample rate.
+    """
+
     noise_psd: types.PSD = 1e-17
 
 
@@ -161,6 +191,14 @@ class Source(SpecBase, frozen=True, kw_only=True):
 
 
 class SoapySource(Source, frozen=True, kw_only=True):
+    """the ``source`` block of a sweep for a SoapySDR device.
+
+    The time and clock sources, the time sync point, and the overload limits are set
+    on the device when the source opens, and the IQ is in full-scale units unless a
+    calibration path is set. Construction rejects a signal trigger that names no
+    registered trigger or that enables more than one.
+    """
+
     calibration: Optional[str] = None
     time_source: types.TimeSource = 'host'
     time_sync_at: types.TimeSyncOn = 'acquire'
@@ -190,6 +228,12 @@ class SoapySource(Source, frozen=True, kw_only=True):
 
 
 class FunctionSource(Source, kw_only=True, frozen=True):
+    """the ``source`` block of a sweep for a synthetic waveform generator.
+
+    The source generates the waveform of each capture at the declared port count, in
+    ``complex64``, and a squared magnitude of 1 is 1 mW.
+    """
+
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: ClassVar[Union[bool, None]] = False
@@ -197,12 +241,26 @@ class FunctionSource(Source, kw_only=True, frozen=True):
 
 
 class NoSource(Source, frozen=True, kw_only=True):
+    """the ``source`` block of a sweep that acquires empty buffers.
+
+    The number of buffer rows is the declared port count, so the buffers of a warmup
+    sweep match those of the hardware sweep that follows.
+    """
+
     # make these configurable, to support matching hardware for warmup sweeps
     num_rx_ports: int
     stream_all_rx_ports: ClassVar[Union[bool, None]] = False
 
 
 class MATSource(Source, kw_only=True, frozen=True):
+    """the ``source`` block of a sweep that reads IQ from a MATLAB ``.mat`` file.
+
+    The file is opened when the source opens and each capture is read from the
+    array at the declared key, in ``complex64``, with the squared magnitude in the
+    declared power units. The backend sample rate is read from the file, so a
+    capture that sets one is rejected.
+    """
+
     path: types.WaveformInputPath
     file_format: types.Format = 'auto'
     file_metadata: Union[types.FileMetadata, None] = None
@@ -225,6 +283,14 @@ class TDMSSource(Source, frozen=True, kw_only=True):
 
 
 class ZarrIQSource(Source, frozen=True, kw_only=True):
+    """the ``source`` block of a sweep that reads IQ from the ``iq_waveform`` variable of a zarr store.
+
+    The selection narrows the variable to a 2-D array of ``(port, iq_sample)``, and
+    the center frequency, gain, port, and sample rate coordinates of the store are
+    the radio settings of each acquisition. A selection that leaves another number of dimensions is
+    rejected when the source opens.
+    """
+
     path: types.WaveformInputPath
     center_frequency: types.CenterFrequency
     select: types.ZarrSelect = msgspec.field(default_factory=dict)
@@ -235,6 +301,8 @@ class ZarrIQSource(Source, frozen=True, kw_only=True):
 
 
 class Description(SpecBase, frozen=True, kw_only=True):
+    """the ``description`` block of an action spec: free-text metadata stored with the spec"""
+
     summary: Optional[str] = None
     version: str = 'unversioned'
 
@@ -242,6 +310,13 @@ class Description(SpecBase, frozen=True, kw_only=True):
 class SharedPlotOptions(
     SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=True
 ):
+    """the ``plotter`` block of a plot hint: the facet layout and the title and filename templates.
+
+    The column and row facets are distinct dataset dimensions, and the title,
+    label, and filename templates are formatted from the coordinates of the plotted
+    dataset.
+    """
+
     # further validation in striqt.figures.specs subclass
     style: Union[str, None] = None
     col: Union[str, None] = 'port'
@@ -254,6 +329,12 @@ class SharedPlotOptions(
 
 
 class DataOptions(SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=True):
+    """the ``data`` block of a plot hint: the subset of a dataset that one figure plots.
+
+    The dataset is narrowed by the sweep index, the query, and the selection, and
+    is split by the grouping dimensions into one figure per group.
+    """
+
     # further validation in striqt.figures.specs subclass
     groupby_dims: tuple[str, ...] = ()
     sweep_index: int
@@ -262,6 +343,11 @@ class DataOptions(SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=Tru
 
 
 class PlotOptions(SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=True):
+    """the ``plot_hint`` block of a `Sweep`: the data subset, the facet layout, and the plot function arguments of each variable.
+
+    One figure is drawn per group of the data block for each variable entry.
+    """
+
     # further validation in striqt.figures.specs subclass
     data: DataOptions
     plotter: SharedPlotOptions
@@ -272,6 +358,13 @@ class PlotOptions(SpecBase, frozen=True, kw_only=True, forbid_unknown_fields=Tru
 
 
 class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=True):
+    """the base of the entries in the ``loops`` block of a `CapturePlan`.
+
+    A loop names a field of either the capture or the analysis, and `get_points`
+    returns the values that the field takes, one expanded capture per point. Loops
+    are nested in declaration order, outermost first.
+    """
+
     field: Union[str, None]
     isin: types.IsIn = 'capture'
 
@@ -280,6 +373,12 @@ class LoopBase(SpecBase, tag=str.lower, tag_field='kind', frozen=True, kw_only=T
 
 
 class Range(LoopBase, frozen=True, kw_only=True):
+    """a loop over the values of a field from a start to a stop in equal steps.
+
+    The stop is included when the span is a whole number of steps, and the loop has
+    one point when the start equals the stop.
+    """
+
     field: str
     start: float
     stop: float
@@ -296,6 +395,11 @@ class Range(LoopBase, frozen=True, kw_only=True):
 
 
 class Repeat(LoopBase, frozen=True, kw_only=True):
+    """a loop that repeats the whole expanded capture sequence a number of times.
+
+    A `Repeat` is accepted only as the first (outermost) loop, and names no field.
+    """
+
     field: None = None
     count: int = 1
 
@@ -304,6 +408,8 @@ class Repeat(LoopBase, frozen=True, kw_only=True):
 
 
 class List(LoopBase, frozen=True, kw_only=True):
+    """a loop over an explicit list of values of a field, in the listed order."""
+
     field: str
     values: tuple[Union[AdjustCapturesType, str, float, int, bool, None], ...]
 
@@ -312,6 +418,14 @@ class List(LoopBase, frozen=True, kw_only=True):
 
 
 class FrequencyBinRange(LoopBase, frozen=True, kw_only=True):
+    """a loop over a field on a grid of equal steps symmetric about 0.
+
+    The points are spaced by `step` on a grid centered on 0 that spans
+    ``ceil((stop - start) / step)`` steps, and a point outside `start` to `stop` at
+    either end of the grid is dropped. Each point is a multiple of the step or of
+    half the step.
+    """
+
     field: str
     start: float
     stop: float
@@ -338,11 +452,11 @@ LoopSpec = Union[Repeat, List, Range, FrequencyBinRange]
 
 # %% Peripheral specs
 class Peripherals(SpecBase, frozen=True, kw_only=True):
-    pass
+    """the base of the ``peripherals`` block of an action spec, with no fields of its own"""
 
 
 class NoPeripherals(Peripherals, frozen=True, kw_only=True):
-    pass
+    """the ``peripherals`` block of a sensor binding without peripheral hardware, with no fields"""
 
 
 class ManualYFactorSpec(Peripherals, frozen=True, kw_only=True):
@@ -417,6 +531,14 @@ class Extension(SpecBase, frozen=True, kw_only=True):
 
 
 class SweepOptions(SpecBase, frozen=True, kw_only=True):
+    """the ``options`` block of a `Sweep`: IQ reuse, the Nyquist filter of the expansion, and the GPU warmup.
+
+    With IQ reuse, the IQ of the previous acquisition serves a capture with the same
+    radio settings, and the Nyquist filter drops each expanded capture with a finite
+    analysis bandwidth above the sample rate of the capture. The warmup runs the sweep once
+    over empty buffers before the first acquisition when a GPU backend is in use.
+    """
+
     reuse_iq: bool = False
     loop_only_nyquist: bool = False
     skip_warmup: types.SkipWarmup = True
@@ -426,6 +548,15 @@ SWEEP_TAG_FIELD = 'sensor_binding'
 
 
 class CaptureRemap(SpecBase, frozen=True, kw_only=True):
+    """an entry of the ``adjust_captures`` block: a capture field set by lookup from the value of other capture fields.
+
+    The key names one or more fields of the capture after the loop point is applied,
+    and the lookup maps each key value (a tuple, or its JSON array string in YAML,
+    for several key fields) to the value of the adjusted field. A key value absent
+    from the lookup takes the default when one is set; otherwise the field is left
+    unset for an optional remap, and the spec is rejected for a required one.
+    """
+
     key: Union[str, tuple[str, ...]]
     lookup: dict[Union[tuple[Any, ...], Any], Any]
     required: bool = True
@@ -959,6 +1090,12 @@ class SoapyAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
 
 
 class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
+    """the `AcquisitionInfo` of a file source: the radio settings read from the file.
+
+    The center frequency, gain, port, and backend sample rate are read from the file
+    header or coordinates, in place of the settings that a hardware source tunes.
+    """
+
     center_frequency: types.CenterFrequency = float('nan')
     backend_sample_rate: types.BackendSampleRate
     port: types.Port = 0
@@ -967,6 +1104,12 @@ class FileAcquisitionInfo(AcquisitionInfo, kw_only=True, frozen=True):
 
 
 class SourceInfo(SpecBase, kw_only=True, frozen=True, cache_hash=True):
+    """the capabilities of an open source, as returned by `get_info`.
+
+    With a port count of None, a port tuple of any length is accepted. The retry
+    count is the receive retry setting in force during the probe.
+    """
+
     num_rx_ports: Union[int, None]
     retries: Union[int, None] = None
 
