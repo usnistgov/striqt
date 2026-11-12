@@ -71,6 +71,61 @@ def test_docstrings_are_clean() -> None:
     assert not hits, 'docstrings that break a prose rule:\n' + '\n'.join(lines)
 
 
+# %% spec struct class docstrings
+
+TICKED_NAME = re.compile(r'(?<!`)`([A-Za-z_][\w.]*)`(?!`)')
+SECTION = re.compile(
+    r'^\s*(Args|Returns|Yields|Raises|Examples|References|Output):\s*$', re.MULTILINE
+)
+
+
+def one_field_sentences(cls: type) -> list[str]:
+    """return the sentences of the class docstring of `cls` that name exactly one
+    backticked identifier, that identifier being a field of `cls`.
+
+    Only the prose above the first Google section is scanned. A sentence that names
+    a second identifier states an interaction and is kept.
+    """
+    import msgspec
+
+    doc = cls.__doc__ or ''
+    match = SECTION.search(doc)
+    prose = ' '.join((doc[: match.start()] if match else doc).split())
+    fields = {f.name for f in msgspec.structs.fields(cls)}
+    hits = []
+    for sentence in re.split(r'(?<=[.!?])\s+', prose):
+        names = set(TICKED_NAME.findall(sentence))
+        if len(names) == 1 and names <= fields:
+            hits.append(sentence)
+    return hits
+
+
+def test_spec_class_docstrings_name_no_single_field(subtests) -> None:
+    """a sentence of a spec-struct class docstring names 2 identifiers or none; a fact
+    about one field belongs in that field's `Meta` description"""
+    import sys
+
+    import msgspec
+
+    import striqt.analysis  # noqa: F401
+    import striqt.figures  # noqa: F401
+    import striqt.sensor  # noqa: F401
+
+    classes = {
+        obj
+        for name, mod in list(sys.modules.items())
+        if name.startswith('striqt.')
+        for obj in list(vars(mod).values())
+        if isinstance(obj, type)
+        and issubclass(obj, msgspec.Struct)
+        and obj.__module__ == name
+        and vars(obj).get('__doc__')
+    }
+    for cls in sorted(classes, key=lambda c: f'{c.__module__}.{c.__qualname__}'):
+        with subtests.test(msg=f'{cls.__module__}.{cls.__qualname__}'):
+            assert one_field_sentences(cls) == []
+
+
 # %% registry docstrings
 
 
