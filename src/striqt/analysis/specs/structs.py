@@ -147,12 +147,22 @@ class AnalysisCapture(Capture, kw_only=True, frozen=True):
 
 
 class AnalysisFilter(SpecBase, kw_only=True, frozen=True):
+    """the overlap-add filter and resampler design applied to the IQ of a capture.
+
+    `nfft` is the block size (in samples) of the filter and `nfft_out` the block size
+    of its output, so a `nfft_out` other than `nfft` resamples by ``nfft_out / nfft``
+    and None selects `nfft`. `window` and `nfft` set the transition band of the
+    filter.
+    """
+
     nfft: int = 8192
     window: types.WindowType = 'hamming'
     nfft_out: int | None = None
 
 
 class FilteredCapture(Capture, kw_only=True, frozen=True):
+    """a `Capture` with the overlap-add filter and resampler design of its IQ."""
+
     # filtering and resampling
     analysis_filter: AnalysisFilter = msgspec.field(default_factory=AnalysisFilter)
 
@@ -289,11 +299,35 @@ class _Cellular5GNRSSBCorrelator(Analysis, kw_only=True, frozen=True):
 
 
 class Cellular5GNRPSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
+    """the keyword block of `cellular_5g_pss_correlation`.
+
+    The band at `frequency_offset` is shifted to baseband and resampled to
+    `sample_rate`, and ``delay * sample_rate`` must be a whole number. With
+    `symbol_indexes` set to ``'auto'``, the SSB case (3GPP TS 38.213 §4.1) is
+    determined by `subcarrier_spacing`, `shared_spectrum`, and the capture center
+    frequency, and a `max_lag_symbols` of None selects a lag span of 4 symbols, or 5
+    when the candidate blocks of the case are 5 or more symbols apart. The output
+    holds one block per `discovery_periodicity` in the capture up to
+    `max_block_count`, or every block when that count is None.
+    """
+
     # same as SSS, but the registry requires unique spec types
     max_block_count: typing.Optional[int] = 1
 
 
 class Cellular5GNRSSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen=True):
+    """the keyword block of `cellular_5g_sss_correlation`.
+
+    The band at `frequency_offset` is shifted to baseband and resampled to
+    `sample_rate`, and ``delay * sample_rate`` must be a whole number. With
+    `symbol_indexes` set to ``'auto'``, the SSS symbol of each block in the SSB case
+    (3GPP TS 38.213 §4.1) is determined by `subcarrier_spacing`, `shared_spectrum`,
+    and the capture center frequency, and a `max_lag_symbols` of None selects a lag
+    span of 4 symbols, or 5 when the candidate blocks of the case are 5 or more
+    symbols apart. The output holds one block per `discovery_periodicity` in the
+    capture up to `max_block_count`, or every block when that count is None.
+    """
+
     max_block_count: typing.Optional[int] = 1
 
 
@@ -304,12 +338,29 @@ class _Cellular5GNRSSBSync(_Cellular5GNRSSBCorrelator, frozen=True, kw_only=True
 
 
 class Cellular5GNPSSSync(_Cellular5GNRSSBSync, kw_only=True, frozen=True):
+    """the keyword block of the `cellular_5g_pss_sync` measurement and signal trigger.
+
+    The correlator fields are those of `Cellular5GNRPSSCorrelator` without
+    `max_block_count`, and the correlation includes every block in the capture. The
+    peak search averages the correlation power over the first `max_beams` candidate
+    blocks of the burst set, or every candidate block when None, and over the ports
+    when `per_port` is False, and weights the lags of each symbol by a window that
+    spans `window_fill` of one symbol period.
+    """
+
     # same as SSS, but the registry requires unique spec types
-    pass
 
 
 class Cellular5GNSSSSync(_Cellular5GNRSSBSync, kw_only=True, frozen=True):
-    pass
+    """the keyword block of the `cellular_5g_sss_sync` measurement and signal trigger.
+
+    The correlator fields are those of `Cellular5GNRSSSCorrelator` without
+    `max_block_count`, and the correlation includes every block in the capture. The
+    peak search averages the correlation power over the first `max_beams` candidate
+    blocks of the burst set, or every candidate block when None, and over the ports
+    when `per_port` is False, and weights the lags of each symbol by a window that
+    spans `window_fill` of one symbol period.
+    """
 
 
 class Spectrogram(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
@@ -342,6 +393,16 @@ def _validate_range(
 
 
 class CellularCyclicAutocorrelator(Analysis, kw_only=True, frozen=True):
+    """the keyword block of `cellular_cyclic_autocorrelation`.
+
+    `frame_range` and `symbol_range` are a count of indexes from 0 or a
+    ``(start, stop)`` pair as for the Python builtin `range`, and must select at least
+    one 10 ms frame inside the capture and at least one symbol in ``[-14, 13]``.
+    `generation` and `subcarrier_spacings` select the OFDM numerologies correlated,
+    one symbol lag per spacing, and `frame_slots` must hold a downlink slot at each
+    spacing, where None fills the frame with downlink.
+    """
+
     subcarrier_spacings: types.CellularSubcarrierSpacingTuple = (15e3, 30e3, 60e3)
     frame_range: Union[int, tuple[int, int]] = (0, 1)
     frame_slots: types.CellularFrame = None
@@ -360,6 +421,18 @@ class CellularResourcePowerHistogram(
     frozen=True,
     dict=True,
 ):
+    """the keyword block of `cellular_resource_power_histogram`.
+
+    `subcarrier_spacing` and `cyclic_prefix` set the resource grid of the STFT: one
+    bin per subcarrier, or per 6 or 12 subcarriers when `average_rbs` is ``'half'``
+    or True, and one hop of `window` per OFDM symbol. The symbols are split into
+    downlink and uplink by `frame_slots`, where None fills the frame with downlink
+    and an ``'s'`` slot requires `special_symbols`. With `average_slots`, the power
+    is averaged over each slot, which must span a whole number of hops, and
+    `power_low`, `power_high`, and `power_resolution` set the bin edges of the
+    histogram of the grid elements outside the `guard_bandwidths`.
+    """
+
     window: types.WindowType
     subcarrier_spacing: types.CellularSubcarrierSpacing
     power_low: types.PowerBinMin
@@ -379,6 +452,13 @@ class ChannelPowerTimeSeries(
     kw_only=True,
     frozen=True,
 ):
+    """the keyword block of `channel_power_time_series`.
+
+    `detector_period` must be a whole number of samples at the capture `sample_rate`
+    and must divide the capture `duration`, and the output holds one trace of
+    readings on that period per entry of `power_detectors`.
+    """
+
     detector_period: types.DetectorPeriod
     power_detectors: types.PowerDetectors = ('rms', 'peak')
 
@@ -388,12 +468,30 @@ class ChannelPowerHistogram(
     kw_only=True,
     frozen=True,
 ):
+    """the keyword block of `channel_power_histogram`.
+
+    `detector_period` and `power_detectors` are those of `channel_power_time_series`,
+    and `power_low`, `power_high`, and `power_resolution` set the bin edges of the
+    histogram of those readings, with ``-inf`` and ``inf`` bins for the readings
+    outside that range.
+    """
+
     power_low: types.PowerBinMin
     power_high: types.PowerBinMax
     power_resolution: types.PowerBinStep
 
 
 class CyclicChannelPower(Analysis, kw_only=True, frozen=True):
+    """the keyword block of `cyclic_channel_power`.
+
+    `detector_period` must be a whole number of samples at the capture `sample_rate`,
+    `cyclic_period` a whole number of detector periods, and the capture `duration` a
+    whole number of cycles. The output holds one trace of
+    ``cyclic_period / detector_period`` lags per entry of `power_detectors` and of
+    `cyclic_statistics`, and the trace length does not depend on the capture
+    `duration`.
+    """
+
     cyclic_period: types.CyclicPeriod
     detector_period: types.DetectorPeriod
     power_detectors: types.PowerDetectors = ('rms', 'peak')
@@ -405,11 +503,27 @@ class IQWaveform(
     kw_only=True,
     frozen=True,
 ):
+    """the keyword block of `iq_waveform`.
+
+    The returned samples run from `start_time_sec` to `stop_time_sec`, in s from the
+    start of the capture and truncated to a whole sample at the capture
+    `sample_rate`; None selects the start or the end of the capture, and a bound
+    outside the capture is clamped to the capture.
+    """
+
     start_time_sec: typing.Optional[float] = None
     stop_time_sec: typing.Optional[float] = None
 
 
 class PowerSpectralDensity(FrequencyAnalysisSpecBase, kw_only=True, frozen=True):
+    """the keyword block of `power_spectral_density`.
+
+    The STFT fields are those of `FrequencyAnalysisSpecBase`. `power_spectral_density`
+    reduces the spectrogram of those fields over time once per entry of
+    `time_statistic`, so the output holds one trace per entry. ``'mean'`` is the
+    Welch estimate, and a float in ``[0, 1]`` a quantile.
+    """
+
     time_statistic: tuple[Union[str, float], ...] = ('mean',)
 
 
@@ -418,6 +532,14 @@ class SpectrogramHistogram(
     kw_only=True,
     frozen=True,
 ):
+    """the keyword block of `spectrogram_histogram`.
+
+    The STFT fields are those of `Spectrogram`, including `time_aperture`.
+    `power_low`, `power_high`, and `power_resolution` set the bin edges of the
+    histogram over the spectrogram pixels, and the ``-inf`` and ``inf`` bins collect
+    the pixels outside that range.
+    """
+
     power_low: types.PowerBinMin
     power_high: types.PowerBinMax
     power_resolution: types.PowerBinStep
@@ -428,7 +550,12 @@ class SpectrogramHistogramRatio(
     kw_only=True,
     frozen=True,
 ):
-    pass
+    """the keyword block of `spectrogram_ratio_histogram`.
+
+    The fields are those of `SpectrogramHistogram`, and `power_low`, `power_high`,
+    and `power_resolution` set the bin edges of the histogram of the pixel-by-pixel
+    ratio (in dB) of the spectrograms of the 2 ports, rather than of the pixel power.
+    """
 
 
 class BuiltinAnalyses(AnalysisGroup, kw_only=True, frozen=True, omit_defaults=True):

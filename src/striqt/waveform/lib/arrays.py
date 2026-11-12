@@ -25,7 +25,19 @@ if TYPE_CHECKING:
 # %% rounding
 
 
-def isroundmod(value: float | np.ndarray, div, atol=1e-6) -> bool:
+def isroundmod(value: float | np.ndarray, div: float, atol: float = 1e-6) -> bool:
+    """return whether `value` is within `atol` of a whole multiple of `div`.
+
+    Args:
+        value: the quantity tested, a float or a numpy array of floats
+        div: the divisor, in the units of `value`
+        atol: the largest distance of ``value / div`` from the nearest whole number
+            that counts as a multiple
+
+    Returns:
+        a bool for a scalar `value`, or a bool array of the shape of `value` for an
+        array; the result is False for a ratio that is not finite
+    """
     ratio = value / div
     try:
         if not math.isfinite(ratio):
@@ -619,7 +631,14 @@ def sync_if_cupy(x: Array):
 
 
 @functools.cache
-def configure_cupy():
+def configure_cupy() -> None:
+    """set the cupy FFT plan cache size to 0 and disable the pinned-memory pool.
+
+    Both settings are global to the process: the cuFFT plan cache of the current
+    device holds no plans, and each pinned host allocation is made by the CUDA driver
+    rather than reused from a pool. The settings are applied once per process; later
+    calls, and any call without cupy installed, return with no effect.
+    """
     if cp is not None:
         from cupy import fft  # ty: ignore[import-not-found]
 
@@ -642,6 +661,12 @@ def set_cuda_mem_limit(fraction=0.75):
 
 
 def is_cupy_array(x: object) -> TypeIsCupy:
+    """return whether `x` is a `cupy.ndarray`, without importing cupy.
+
+    Returns:
+        True for a cupy array, and False otherwise, including when cupy is not
+        installed; the result narrows the type of `x` for a type checker
+    """
     return array_api_compat.is_cupy_array(x)
 
 
@@ -675,7 +700,20 @@ def array_stream(
         return NonStreamContext()
 
 
-def array_namespace(a, use_compat=False) -> ModuleType:
+def array_namespace(a: Array, use_compat: bool = False) -> ModuleType:
+    """return the array API namespace of `a`.
+
+    Args:
+        a: a numpy or cupy array
+        use_compat: True returns the `array_api_compat` wrapper of the namespace;
+            False returns the `numpy` or `cupy` module itself
+
+    Returns:
+        the module that implements the array API for `a`
+
+    Raises:
+        TypeError: if `a` is not an array of a supported library
+    """
     return array_api_compat.array_namespace(a, use_compat=use_compat)
 
 
