@@ -968,8 +968,8 @@ def plan_choices(
 ) -> PlanChoices:
     """list the capture entries and loop values of `sweep` as labeled choices.
 
-    The loop values are read from the origins that `loop_capture_origins` returns,
-    in expansion order. A loop that contributes no point to the expanded plan is
+    The loop values are read in expansion order from the origins returned by
+    `loop_capture_origins`. A loop that contributes no point to the expanded plan is
     listed with empty `values` and `labels`.
 
     Args:

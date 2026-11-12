@@ -30,7 +30,7 @@ class AcquisitionOverrunError(RuntimeError):
 def acquisition_info_cls(
     source_cls: type[SourceBackend[Any, Any]] | None,
 ) -> type[specs.AcquisitionInfo]:
-    """return the `AcquisitionInfo` subclass that `source_cls` produces.
+    """return the `AcquisitionInfo` subclass produced by `source_cls`.
 
     Args:
         source_cls: a source backend class, or `None`

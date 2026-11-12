@@ -236,7 +236,7 @@ def _validate_sweep_analysis(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
-    """validate each unique (capture, analysis) combination that `sweep` runs.
+    """validate each unique (capture, analysis) combination run by `sweep`.
 
     A sweep with no measurement enabled in `analysis` is not expanded or checked.
 

@@ -154,8 +154,9 @@ def validated_spectrogram_sizing(
             f'hop_period: {hop_period}, STFT windows: {window_count})'
         )
 
-    # the result is discarded. The call rejects a bad window early and fills the
-    # disk-backed window cache that `sw.spectrogram` reads.
+    # `get_window` is called for 2 side effects: ValueError on an invalid window name
+    # during validation rather than at the first analysis, and the window design
+    # written to the disk-backed cache read by `sw.spectrogram`.
     sw.get_window(
         spec.window,
         nfft - nzero,

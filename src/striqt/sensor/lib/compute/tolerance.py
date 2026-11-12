@@ -1,7 +1,7 @@
 """budget the roundoff error of a sweep, capture by capture.
 
 The `input_error` of each measurement's tolerance function is the roundoff of the
-conditioning stages, set by the FFT sizes that `AcquiredIQ.preprocess` runs on a
+conditioning stages, set by the FFT sizes used by `AcquiredIQ.preprocess` on a
 capture.
 """
 
@@ -38,7 +38,7 @@ def _next_fast_len(n: int, array_backend: specs.types.ArrayBackend) -> int:
 def _oaconvolve_nfft(
     signal_size: int, filter_size: int, array_backend: specs.types.ArrayBackend
 ) -> int:
-    """return the FFT size (in samples) that `scipy.signal.oaconvolve` uses.
+    """return the FFT size (in samples) used by `scipy.signal.oaconvolve`.
 
     The size is that of `scipy.signal._signaltools._calc_oa_lens`, shared by the
     cupyx port: a fast length for `array_backend` that depends on `filter_size`

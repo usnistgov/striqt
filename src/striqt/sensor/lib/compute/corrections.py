@@ -56,7 +56,7 @@ def attach_corrections(
     The copy has a `Preprocessor` of its own with every stage empty.
 
     Args:
-        signal_trigger: the trigger that `preprocess` runs for alignment, or None
+        signal_trigger: the trigger run by `preprocess` for alignment, or None
             for `iq.info.signal_trigger`
         overwrite_x: True lets the resampling stage consume `iq.x` in place and
             replace `x` of the copy with a `ConsumedBuffer`
@@ -768,10 +768,10 @@ def _get_max_trigger_lag(
 def _get_oaresample_overlaps(
     capture: specs.SensorCapture, master_clock_rate: float, min_overlap: int = 0
 ) -> tuple[int, int]:
-    """return the (lead, tail) pads, in source samples, that `_oaresample` needs.
+    """return the (lead, tail) pads, in source samples, required by `_oaresample`.
 
     Each pad covers one STFT overlap: the span at either end of the `sw.oaresample`
-    output that fewer than the full count of COLA windows reach. No pad is reserved
+    output reached by fewer than the full count of COLA windows. No pad is reserved
     for a filter transient. The lead is a whole number of output samples after
     resampling. The tail includes `min_overlap` source samples for the trigger lag,
     plus the samples that make the padded acquisition a whole number of STFT hops.
