@@ -684,7 +684,7 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
         STATE.thread.join()
 
 
-@click.command('Web-based real-time radio diagnostic display')
+@click.command()
 @click.argument('path', type=click.Path(exists=True, dir_okay=False), required=True)
 @click.option(
     '--host',
@@ -701,8 +701,7 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     help='Port to bind the server to',
 )
 def cli(path: str, host: str, port: int) -> None:
-    """
-    Run a web-based real-time display for radio diagnostics.
+    """run a web-based real-time display for radio diagnostics.
 
     PATH is the path to a JSON or YAML acquisition specification file.
     """

@@ -7,7 +7,7 @@ if typing.TYPE_CHECKING:
     from pathlib import Path
 
 
-@click.command('convert a yaml sweep spec file to json format')
+@click.command()
 @click.argument('path', type=click.Path(exists=True, dir_okay=False))
 @click.option(
     '--yaml/',
@@ -18,6 +18,12 @@ if typing.TYPE_CHECKING:
     help='output a flattened yaml file instead of json',
 )
 def cli(path, yaml: bool):
+    """convert the sweep specification at PATH between YAML and JSON.
+
+    PATH is a YAML (`.yaml`, `.yml`) or JSON (`.json`) sweep specification. The
+    output is written beside PATH with the suffix `.json`, or `.yaml` with
+    `--yaml`; a YAML input written as YAML takes the stem suffix `-flat`.
+    """
     out_path = run(path, yaml)
     print(f'wrote "{out_path!s}"')
 

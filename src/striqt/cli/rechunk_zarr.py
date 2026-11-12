@@ -8,10 +8,17 @@ from typing import Any
 import click
 
 
-@click.command('plot signal analysis from .zarr or .zarr.zip files')
+@click.command()
 @click.argument('zarr_input', type=click.Path(exists=True, dir_okay=True))
 @click.argument('zarr_output', type=click.Path(exists=False), required=False)
-@click.option('--chunk-size', type=int, required=False, show_default=True, default=100)
+@click.option(
+    '--chunk-size',
+    type=int,
+    required=False,
+    show_default=True,
+    default=100,
+    help='size of each chunk (MB)',
+)
 @click.option(
     '--compression',
     type=int,
@@ -21,6 +28,14 @@ import click
     help='compression level (0-9)',
 )
 def cli(zarr_input: str, zarr_output: str | None, chunk_size, compression):
+    """rechunk and recompress the zarr store at ZARR_INPUT into ZARR_OUTPUT.
+
+    ZARR_INPUT is a `.zarr` directory or `.zarr.zip` archive. ZARR_OUTPUT is the
+    output store; when omitted, the output is written beside ZARR_INPUT with a
+    timestamp suffix from the first `start_time` in the data. Each chunk holds
+    `--chunk-size` MB, and a `--compression` level above 1 selects blosc zstd at
+    that level.
+    """
     import warnings
 
     warnings.filterwarnings('ignore', message='.*may change without warning.*')

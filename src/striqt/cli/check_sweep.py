@@ -5,9 +5,14 @@ import click
 from striqt.sensor.lib.compute import cal_lookups
 
 
-@click.command('runtime information about running a sweep')
+@click.command()
 @click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
 def cli(yaml_path):
+    """report the resources, paths, tolerances, and memory of the sweep at YAML_PATH.
+
+    YAML_PATH is a YAML sweep specification. The command opens the source, acquires
+    no capture, and writes no store.
+    """
     import striqt.analysis as sa
 
     sa.util.show_messages(sa.util.logging.WARNING)

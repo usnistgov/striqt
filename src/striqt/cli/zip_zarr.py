@@ -5,12 +5,30 @@ from __future__ import annotations
 import click
 
 
-@click.command('archive a .zarr directory into a .zarr.zip file')
+@click.command()
 @click.argument('zarr_input', type=click.Path(exists=True, dir_okay=True))
 @click.argument('zarr_output', type=click.Path(exists=False), required=False)
-@click.option('--remove/-r', type=bool, is_flag=True, default=False)
-@click.option('--force/-f', type=bool, is_flag=True, default=False)
+@click.option(
+    '--remove/-r',
+    type=bool,
+    is_flag=True,
+    default=False,
+    help='delete ZARR_INPUT after the archive is written',
+)
+@click.option(
+    '--force/-f',
+    type=bool,
+    is_flag=True,
+    default=False,
+    help='overwrite an existing archive at the output path',
+)
 def cli(zarr_input: str, zarr_output: str | None, remove: bool, force: bool):
+    """archive the zarr directory at ZARR_INPUT into a `.zarr.zip` file.
+
+    ZARR_INPUT is a `.zarr` store directory. ZARR_OUTPUT is the archive path; when
+    omitted, the archive is written beside ZARR_INPUT with the `.zip` extension and
+    a timestamp suffix from the first `start_time` in the data.
+    """
     import warnings
 
     warnings.filterwarnings('ignore', message='.*may change without warning.*')
