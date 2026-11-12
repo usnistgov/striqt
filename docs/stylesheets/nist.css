@@ -1,5 +1,5 @@
-/* The zensical header renders as one black band with the NIST logo, which
-   javascripts/nist-header.js moves into it from the NIST boilerplate header. */
+/* The zensical header renders as one black band with the NIST logo link, which
+   overrides/partials/header.html places in it. */
 .md-header {
   --md-default-fg-color: #fff;
   --md-default-fg-color--light: rgba(255, 255, 255, 0.75);
@@ -15,10 +15,6 @@
   color: #fff;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-}
-
-.md-header .md-logo {
-  display: none;
 }
 
 .md-header .nist-header__logo-link {
