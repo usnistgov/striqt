@@ -830,6 +830,11 @@ class CellChannel(SpecBase, frozen=True, kw_only=True):
     ),
 )
 class CellularSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `Spectrogram` measurement in a `Cellular5GNRSweep`.
+
+    The fields of `Spectrogram` absent here are set by the sweep from the cell channel.
+    """
+
     window: types.WindowType
     lo_bandstop: Optional[types.LOBandstop] = None
     time_aperture: Optional[float] = None
@@ -846,6 +851,11 @@ class CellularSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
     ),
 )
 class CellularPowerSpectralDensitySpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `PowerSpectralDensity` measurement in a `Cellular5GNRSweep`.
+
+    The fields of `PowerSpectralDensity` absent here are set by the sweep from the cell channel.
+    """
+
     window: types.WindowType
     time_statistic: tuple[Union[str, float], ...] = ('mean',)
     lo_bandstop: Optional[types.LOBandstop] = None
@@ -862,6 +872,11 @@ class CellularPowerSpectralDensitySpec(SpecBase, frozen=True, kw_only=True):
     ),
 )
 class CellularResourcePowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `CellularResourcePowerHistogram` measurement in a `Cellular5GNRSweep`.
+
+    The fields of `CellularResourcePowerHistogram` absent here are set by the sweep from the cell channel.
+    """
+
     window: types.WindowType
     power_low: types.PowerBinMin
     power_high: types.PowerBinMax
@@ -883,6 +898,11 @@ class CellularResourcePowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
     ),
 )
 class CellularPSSCorrelationSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `Cellular5GNRPSSCorrelator` measurement in a `Cellular5GNRSweep`.
+
+    The fields of `Cellular5GNRPSSCorrelator` absent here are set by the sweep from the cell channel.
+    """
+
     discovery_periodicity: float = 20e-3
     delay: float = 0.0
     shared_spectrum: bool = False
@@ -901,6 +921,11 @@ class CellularPSSCorrelationSpec(SpecBase, frozen=True, kw_only=True):
     ),
 )
 class CellularPSSSyncSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `Cellular5GNPSSSync` measurement in a `Cellular5GNRSweep`.
+
+    The fields of `Cellular5GNPSSSync` absent here are set by the sweep from the cell channel.
+    """
+
     discovery_periodicity: float = 20e-3
     delay: float = 0.0
     shared_spectrum: bool = False
@@ -913,6 +938,11 @@ class CellularPSSSyncSpec(SpecBase, frozen=True, kw_only=True):
     without=('subcarrier_spacing', 'sample_rate', 'frequency_offset'),
 )
 class CellularSSBSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `Cellular5GNRSSBSpectrogram` measurement in a `Cellular5GNRSweep`.
+
+    The fields of `Cellular5GNRSSBSpectrogram` absent here are set by the sweep from the cell channel.
+    """
+
     window: types.WindowType = 'blackmanharris'
     discovery_periodicity: float = 20e-3
     max_block_count: Optional[int] = None
@@ -921,18 +951,27 @@ class CellularSSBSpectrogramSpec(SpecBase, frozen=True, kw_only=True):
 
 @subset_of(sa.specs.CyclicChannelPower, without=('cyclic_period', 'detector_period'))
 class CellularCyclicChannelPowerSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `CyclicChannelPower` measurement in a `Cellular5GNRSweep`.
+
+    The fields of `CyclicChannelPower` absent here are set by the sweep from the cell channel.
+    """
+
     power_detectors: types.PowerDetectors = ('rms', 'peak')
     cyclic_statistics: types.CyclicStatistics = ('min', 'mean', 'max')
 
 
 @subset_of(sa.specs.ChannelPowerTimeSeries, optional=('detector_period',))
 class CellularChannelPowerTimeSeriesSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `ChannelPowerTimeSeries` measurement in a `Cellular5GNRSweep`."""
+
     detector_period: Optional[types.DetectorPeriod] = None
     power_detectors: types.PowerDetectors = ('rms', 'peak')
 
 
 @subset_of(sa.specs.ChannelPowerHistogram, optional=('detector_period',))
 class CellularChannelPowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `ChannelPowerHistogram` measurement in a `Cellular5GNRSweep`."""
+
     power_low: types.PowerBinMin
     power_high: types.PowerBinMax
     power_resolution: types.PowerBinStep
@@ -945,12 +984,23 @@ class CellularChannelPowerHistogramSpec(SpecBase, frozen=True, kw_only=True):
     without=('subcarrier_spacings', 'frame_slots', 'generation'),
 )
 class CellularCyclicAutocorrelationSpec(SpecBase, frozen=True, kw_only=True):
+    """the settings of the `CellularCyclicAutocorrelator` measurement in a `Cellular5GNRSweep`.
+
+    The fields of `CellularCyclicAutocorrelator` absent here are set by the sweep from the cell channel.
+    """
+
     frame_range: Union[int, tuple[int, int]] = (0, 1)
     symbol_range: Union[int, tuple[int, Union[int, None]]] = (0, None)
 
 
 @subset_of(sa.specs.IQWaveform)
 class CellularIQWaveformSpec(SpecBase, frozen=True, kw_only=True):
+    """the `IQWaveform` settings that a `Cellular5GNRSweep` sets directly.
+
+    The remaining fields of `IQWaveform` are derived from the cell channel of the
+    sweep.
+    """
+
     start_time_sec: Optional[float] = None
     stop_time_sec: Optional[float] = None
 
