@@ -1,9 +1,0 @@
-#######################
-Schemas
-#######################
-
-.. toctree::
-   :maxdepth: 2
-   :glob:
-
-   schemas/schema.rst

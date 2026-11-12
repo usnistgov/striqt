@@ -1,0 +1,36 @@
+/* The zensical header renders as one black band with the NIST logo link, which
+   overrides/partials/header.html places in it. */
+.md-header {
+  --md-default-fg-color: #fff;
+  --md-default-fg-color--light: rgba(255, 255, 255, 0.75);
+  --md-default-fg-color--lighter: rgba(255, 255, 255, 0.45);
+  --md-default-fg-color--lightest: rgba(255, 255, 255, 0.15);
+  --md-default-bg-color: #000;
+  --md-default-bg-color--light: #000;
+  --md-default-bg-color--lighter: #000;
+  --md-default-bg-color--lightest: #000;
+  --md-primary-fg-color: #fff;
+  --md-accent-fg-color: #fff;
+  background-color: #000;
+  color: #fff;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.md-header .nist-header__logo-link {
+  display: inline-flex;
+  align-items: center;
+  height: auto;
+  padding: 0.4rem;
+  margin: 0.2rem 0.2rem 0.2rem 0;
+}
+
+.md-header .nist-header__logo-icon {
+  top: 0;
+}
+
+/* the empty wrapper of the boilerplate header, after the logo link moves */
+#nistheadergoeshere:empty,
+#nistheadergoeshere .nist-header:empty {
+  display: none;
+}
