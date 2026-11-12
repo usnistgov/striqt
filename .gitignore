@@ -52,7 +52,6 @@ coverage.xml
 .pytest_cache/
 cover/
 tests/sensor/sweeps/outputs
-doc/html
 uv.lock
 pixi.lock
 
