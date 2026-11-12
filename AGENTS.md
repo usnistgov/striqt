@@ -19,9 +19,10 @@ pixi run -e test39 ruff check src tests docs
 pixi run -e test315 ty check src                                  # type check (must pass on test39 and test315)
 pixi run -e test315 pyright src                                   # advisory; accepted count in Conventions → Typing
 pixi run -e test315 pyrefly check                                 # advisory; accepted count in Conventions → Typing
-pixi run -e doc docs                                              # API pages, then the zensical site into site/ (chores/push-docs.sh deploys)
+pixi run -e doc docs                                              # API pages, then the zensical site into site/
 pixi run -e doc docs-api                                          # regenerate docs/api/**/*.md from the public namespaces
 pixi run -e doc docs-serve                                        # zensical preview on localhost:8000
+pixi run -e doc docs-deploy                                       # build, then push site/ to the nist-pages branch (docs/deploy.py)
 pixi run -e cupy pytest                                          # GPU path, Jetson only
 STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/pipeline_sync.py --buffers 2  # own disk caches
 ```

@@ -11,6 +11,7 @@ extra_javascript = ["javascripts/nist-header.js"]
 exclude_docs = """
 griffe_striqt.py
 gen_api.py
+deploy.py
 __pycache__/
 templates/
 overrides/
