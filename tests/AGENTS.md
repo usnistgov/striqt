@@ -40,6 +40,10 @@ repository.
   or "whose", no `striqt.<pkg>.lib` path in a public docstring) and the registry
   docstring checks (sentence-case `long_name`, the `Output:` section, a docstring on
   every coordinate factory) by `tests/test_docstrings.py`, which has no baseline.
+- **The documentation site** is gated by `tests/test_cli_help.py` (every console script
+  carries a description) and `tests/test_gen_api.py` (the committed `docs/api/**/*.md`
+  pages equal the output of `docs/gen_api.py`, so a public name added to a namespace
+  fails until `pixi run -e doc docs-api` is rerun).
 - The downstream project's patterns are reproduced by `tests/sensor/sweeps/src/extensions.py`
   and the `site*` sweep directories; the papers the cyclic-power and sync tests derive their
   expectations from are under `_training_material/papers/` (untracked; locate with a search).

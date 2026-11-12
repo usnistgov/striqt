@@ -51,13 +51,6 @@ dev = [
     "ruff",
     "ty==0.0.98"
 ]
-doc = [
-    "sphinx",
-    "sphinx-click",
-    "sphinx-jsonschema",
-    "toml",
-    "myst_nb"
-]
 gpu = [
     "cupy >= 12.2",
 ]
@@ -129,7 +122,7 @@ exclude_also = [
 
 [tool.ruff.lint]
 ignore = [
-    "BLE001",  # catching Exception is the cleanup and logging idiom in sinks, util, and doc
+    "BLE001",  # catching Exception is the cleanup and logging idiom in sinks and util
     "FURB189", # the measurement and action registries subclass dict
     "PLC0105", # TypeVar names are the 2-3 letter codes (PS, PC, SS, ...) in AGENTS.md
     "PLC0414", # `import x as x` is the explicit re-export idiom that ty and pyright honor

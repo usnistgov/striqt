@@ -377,6 +377,22 @@ def read_calibration(
 def read_calibration(
     path: str | Path | None, format_path: specs.paths.PathFormatter | None = None
 ) -> xr.Dataset | None:
+    """read the Y-factor corrections dataset at `path` into memory.
+
+    The dataset is loaded and the file handle is closed before return. Repeated
+    calls with equal arguments return the cached dataset.
+
+    Args:
+        path: the netCDF file written by `save_calibration`, or None
+        format_path: the formatter of the ``{field}`` templates in `path`, or None to
+            open `path` as written
+
+    Returns:
+        the loaded `Dataset`, or None when `path` is None
+
+    Raises:
+        FileNotFoundError: if the formatted path does not exist
+    """
     if path is None:
         return None
 

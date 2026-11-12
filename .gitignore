@@ -52,7 +52,6 @@ coverage.xml
 .pytest_cache/
 cover/
 tests/sensor/sweeps/outputs
-doc/html
 uv.lock
 pixi.lock
 
@@ -69,3 +68,6 @@ pixi.lock
 .claude/
 .cospec/
 .vscode
+
+# zensical site output
+/site/

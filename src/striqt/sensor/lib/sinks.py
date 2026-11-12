@@ -209,6 +209,13 @@ class SinkBase(Generic[specs.SC]):
 
 
 class NoSink(SinkBase):
+    """a sink that discards the analyzed dataset of each acquisition.
+
+    `append` counts the acquisition and returns `capture_result` unchanged, and
+    nothing is written. `flush` logs the acquisition count on the ``sink`` logger at
+    INFO.
+    """
+
     def open(self):
         pass
 

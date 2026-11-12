@@ -119,7 +119,7 @@ def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None
             pass
 
 
-@click.command('run a sweep from a json/yaml specification')
+@click.command()
 @click.argument('path', type=click.Path(exists=True, dir_okay=False))
 @click.option(
     '--debug/',
@@ -153,6 +153,12 @@ def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None
     help='override the output file path in the yaml specification',
 )
 def cli(*, path: str, debug: bool, verbose: bool, skip_confirm: bool, output_path):
+    """run the sweep specified at PATH.
+
+    PATH is a YAML or JSON sweep specification. The results are written to the sink
+    path in the specification, or to `--output-path`. A y/n prompt on the capture
+    adjustments precedes a sweep that has any, unless `--skip-confirm` is given.
+    """
     import sys
 
     import striqt.sensor as ss

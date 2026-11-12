@@ -28,6 +28,12 @@ class PeripheralsBase(Peripherals[SP, SC]):
 
 
 class NoPeripherals(PeripheralsBase[SP, SC]):
+    """a `Peripherals` implementation for a sensor without peripheral hardware.
+
+    `open`, `close`, `setup`, and `arm` return None and access no device, and
+    `acquire` returns an empty dict.
+    """
+
     def open(self):
         return
 

@@ -20,7 +20,25 @@ from .. import io
 from . import corrections
 
 
-def summarize_calibration(corrections: xr.Dataset, **sel) -> pd.DataFrame:
+def summarize_calibration(corrections: xr.Dataset, **sel: Any) -> pd.DataFrame:
+    """tabulate the noise figure and power correction of `corrections` at the maximum gain.
+
+    Args:
+        corrections: the calibration dataset read by `read_calibration`, with the
+            `noise_figure` (dB) and `power_correction` (mW/FS) variables on the
+            calibration grid
+        **sel: coordinate values that each select one entry on a dimension of the
+            grid (``port=0``), passed to ``Dataset.sel``
+
+    Returns:
+        a `DataFrame` with the columns ``'NF (dB)'`` and ``'Power Corr (dB)'``, which
+        hold the `noise_figure` and `power_correction` values as stored, indexed by
+        the remaining grid coordinates as a ``condition`` MultiIndex; a row that is
+        ``nan`` in the noise figure is dropped
+
+    Raises:
+        KeyError: if a value in `sel` is not on the grid
+    """
     summaries = {
         'NF (dB)': _summarize_calibration_field(corrections, 'noise_figure', **sel),
         'Power Corr (dB)': _summarize_calibration_field(
@@ -40,6 +58,32 @@ def lookup_power_correction(
     *,
     xp=None,
 ):
+    """return the power correction (mW per full-scale power unit) of each port of `capture`.
+
+    The correction is the factor that scales the squared magnitude of full-scale IQ
+    to mW, interpolated in center frequency from the calibration rows at the port,
+    gain, LO shift, backend sample rate, and analysis bandwidth of `capture`.
+
+    Args:
+        cal_data: the path of the calibration corrections file, or None for no
+            calibration
+        capture: the capture that selects the calibration row, one row per port
+        master_clock_rate: the SDR master clock rate (S/s), which sets the backend
+            sample rate of the row
+        format_path: the formatter of the ``{field}`` templates in `cal_data`, or None
+        xp: the array namespace of the result, or None for numpy
+
+    Returns:
+        a 1-D ``float32`` array in the namespace `xp` with one value per port, or
+        None when `cal_data` is None
+
+    Raises:
+        TypeError: if `cal_data` is neither a path nor None
+        KeyError: if the port, gain, LO shift, backend sample rate, or analysis
+            bandwidth of a port is not in the calibration grid
+        ValueError: if the center frequency of a port is outside the calibrated
+            range, or no calibrated row remains for the port
+    """
     if cal_data is None:
         return None
     elif isinstance(cal_data, (str, Path)):

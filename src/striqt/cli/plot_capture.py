@@ -25,7 +25,7 @@ else:
 worker_ctx: WorkerData | None = None
 
 
-@click.command('plot signal analysis from .zarr or .zarr.zip files')
+@click.command()
 @click.argument('zarr_path', type=click.Path(exists=True, dir_okay=True))
 @click.argument(
     'yaml_path',
@@ -39,7 +39,7 @@ worker_ctx: WorkerData | None = None
     type=click.Choice(['sixel', 'kitty']),
     default=None,
     show_default=True,
-    help='',
+    help='render the plots in the terminal through this graphics protocol',
 )
 @click.option(
     '--no-save/',
@@ -50,6 +50,12 @@ worker_ctx: WorkerData | None = None
     help="don't save the resulting plots",
 )
 def cli(zarr_path: str, yaml_path: str, interactive=None, no_save=False):
+    """plot the analysis results in the dataset at ZARR_PATH.
+
+    ZARR_PATH is a `.zarr` directory or `.zarr.zip` archive written by a sweep.
+    YAML_PATH is a plot options file; when omitted, the plot options come from the
+    `plot_hint` attribute of the dataset.
+    """
     run(**locals())
 
 

@@ -670,10 +670,10 @@ def analyze_by_spec(
         by `options.as_xarray`:
 
         - ``True``: an `xarray.Dataset` of the measurements, with the `capture`
-          fields as attrs and `options.expand_dims` as the leading dimension
+            fields as attrs and `options.expand_dims` as the leading dimension
         - ``'delayed'``: a dict of `DelayedDataArray` keyed by measurement name
         - ``False``: a dict of bare arrays keyed by measurement name, in the array
-          namespace of `iq`
+            namespace of `iq`
 
     Raises:
         TypeError: when `spec` is not an `AnalysisGroup`

@@ -77,6 +77,10 @@ def select_mpl_backend(style: str | None, interactive: TerminalGraphics | None) 
 
 
 def term_graphics_notice(interactive: str | None) -> None:
+    """print the terminal requirements of the graphics protocol `interactive`.
+
+    Nothing is printed for None.
+    """
     if interactive is None:
         pass
     elif interactive == 'sixel':
@@ -105,6 +109,12 @@ class _FakeLock:
 def batch_term_images(
     interactive: TerminalGraphics | None,
 ) -> Generator[None, None, None]:
+    """buffer the terminal graphics written in the context and emit the batch on exit.
+
+    The standard output of the block is collected and written as one payload; for
+    the kitty protocol, a delete-all-images command and a cursor-home escape precede
+    the payload, so the images of the block replace the previous ones.
+    """
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer):
         yield

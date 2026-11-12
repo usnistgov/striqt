@@ -173,14 +173,36 @@ def get_max_cupy_fft_chunk() -> int | None:
 
 
 def fft(
-    x,
-    n=None,
-    axis=-1,
-    out=None,
-    overwrite_x=False,
-    plan=None,
+    x: _AT,
+    n: int | None = None,
+    axis: int = -1,
+    out: _AT | None = None,
+    overwrite_x: bool = False,
+    plan: typing.Any = None,
     workers: int | None = None,
 ):
+    """return the discrete Fourier transform of `x` along `axis`, on numpy or cupy.
+
+    Args:
+        x: the input array, real or complex
+        n: the transform length on numpy, zero-padding or cropping `x` on `axis`;
+            None selects ``x.shape[axis]``
+        axis: the axis transformed
+        out: on cupy, the buffer written, with the element count of the output and
+            its complex dtype; None allocates the output, and numpy ignores a buffer
+        overwrite_x: True allows the transform to use `x` as scratch space
+        plan: on cupy, the cuFFT plan of the transform; numpy accepts and ignores a
+            plan
+        workers: on numpy, the thread count of `scipy.fft`; None selects half the
+            CPU count, and cupy ignores the count
+
+    Returns:
+        the transform, in the complex dtype of the precision of `x` and the array
+        namespace of `x`; on cupy with `out`, a view of `out` with the shape of `x`
+
+    Raises:
+        NotImplementedError: on cupy when `n` is not None
+    """
     if is_cupy_array(x):
         assert cp is not None, ImportError('cupy is not installed')
 
@@ -203,14 +225,38 @@ def fft(
 
 
 def ifft(
-    x,
-    n=None,
-    axis=-1,
-    out=None,
-    overwrite_x=False,
-    plan=None,
-    workers=None,
+    x: _AT,
+    n: int | None = None,
+    axis: int = -1,
+    out: _AT | None = None,
+    overwrite_x: bool = False,
+    plan: typing.Any = None,
+    workers: int | None = None,
 ):
+    """return the inverse of `fft` along `axis`, on numpy or cupy.
+
+    The output is scaled by ``1 / n`` so that `ifft` inverts `fft`.
+
+    Args:
+        x: the input array, real or complex
+        n: the transform length on numpy, zero-padding or cropping `x` on `axis`;
+            None selects ``x.shape[axis]``
+        axis: the axis transformed
+        out: on cupy, the buffer written, with the element count of the output and
+            its complex dtype; None allocates the output, and numpy ignores a buffer
+        overwrite_x: True allows the transform to use `x` as scratch space
+        plan: on cupy, the cuFFT plan of the transform; numpy accepts and ignores a
+            plan
+        workers: on numpy, the thread count of `scipy.fft`; None selects half the
+            CPU count, and cupy ignores the count
+
+    Returns:
+        the transform, in the complex dtype of the precision of `x` and the array
+        namespace of `x`; on cupy with `out`, a view of `out` with the shape of `x`
+
+    Raises:
+        NotImplementedError: on cupy when `n` is not None
+    """
     if is_cupy_array(x):
         assert cp is not None, ImportError('cupy is not installed')
 
