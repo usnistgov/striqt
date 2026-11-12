@@ -113,7 +113,7 @@ def analyze(
     a measurement fills a cache.
 
     Returns:
-        the result that `options.as_xarray` selects: a dict of `DelayedDataArray`
+        the result selected by `options.as_xarray`: a dict of `DelayedDataArray`
         by measurement name for False, a `DelayedDataset` for ``'delayed'``, or an
         `xr.Dataset` for True. The `DelayedDataset` and the `xr.Dataset` carry the
         capture fields and acquisition info as coordinates and `iq.extra_data` as

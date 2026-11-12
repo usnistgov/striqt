@@ -126,7 +126,7 @@ class MatplotlibBackend(PlotBackend['xarray.plot.FacetGrid']):
     """
 
     output_dir: Path | None
-    """the directory of the figure files that `finish` writes; `None` writes no file"""
+    """the directory of the figure files written by `finish`; `None` writes no file"""
     interactive: bool | str | None
     """True leaves pyplot interactive after `finish`; a `TerminalGraphics` name
     shows each figure in the terminal; False or `None` does neither"""

@@ -360,7 +360,7 @@ def narrow_analysis_group(group: _G, names: Iterable[str]) -> _G:
 
 @util.lru_cache(4096)
 def convert_spec_cached(spec_cls: type[_T], spec: Any) -> _T:
-    """project `spec` onto the fields that `spec_cls` declares.
+    """project `spec` onto the fields declared by `spec_cls`.
 
     Results are cached in a process-global `lru_cache` of 4096 entries.
     `clear_caches` empties the cache.

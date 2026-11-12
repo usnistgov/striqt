@@ -104,7 +104,7 @@ def check_frequency_band(
     offset: float = 0.0,
     offset_field: str = 'frequency_offset',
 ) -> int:
-    """return the number of bins in the band that `field` selects.
+    """return the number of bins in the band selected by `field`.
 
     The band must lie within ``±sample_rate / 2``.
 

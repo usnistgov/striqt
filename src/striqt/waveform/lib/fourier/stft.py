@@ -200,7 +200,7 @@ def istft(
             `out`
         overwrite_x: True overwrites `y` with the inverse FFT of each window
         axis: the window axis of `y`
-        fftshift: True for bins in the ascending-frequency order that `stft` returns;
+        fftshift: True for bins in the ascending-frequency order returned by `stft`;
             False for bins in `fftfreq` order
 
     Returns:
