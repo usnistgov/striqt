@@ -5,9 +5,6 @@ name = "striqt"
 platforms = ["osx-arm64","linux-aarch64", "linux-64", "win-64"]
 version = "0.1.0"
 
-[tasks]
-warmup = "_warmup_striqt"
-
 [dependencies]
 
 # general development
