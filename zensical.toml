@@ -5,6 +5,8 @@ repo_url = "https://github.com/usnistgov/striqt"
 docs_dir = "docs"
 site_dir = "site"
 strict = true
+extra_css = ["stylesheets/nist.css"]
+extra_javascript = ["javascripts/nist-header.js"]
 # the griffe extension lives beside the pages and is not a page
 exclude_docs = """
 griffe_striqt.py
@@ -42,6 +44,10 @@ nav = [
       { "striqt.figures.backend" = "api/figures/backend.md" },
   ] },
 ]
+
+[project.extra]
+# the footer carries the NIST footer, not the zensical attribution
+generator = false
 
 [project.theme]
 # docs/overrides/main.html adds the pages.nist.gov analytics, header, footer, and exit script
