@@ -157,6 +157,9 @@ def describe_msgspec_fields(obj: type[msgspec.Struct]):
                 if meta.extra and 'units' in meta.extra:
                     constraints.append(f'units: {meta.extra["units"]}')
 
+            # a field alias nested in another `Annotated` repeats its `Meta`
+            constraints = list(dict.fromkeys(constraints))
+
             if constraints:
                 constraint_str = f' *(Constraints: {", ".join(constraints)})*'
                 if description:

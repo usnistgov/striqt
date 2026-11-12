@@ -809,6 +809,14 @@ def check_group_registered(
 
 
 class Trigger:
+    """a signal trigger bound to the measurement spec that locates the trigger event.
+
+    Construction requires the name or function of a trigger registered in `registry`
+    and an instance of the measurement spec type registered with it; `from_spec`
+    takes the spec from the matching field of an `AnalysisGroup`. An instance
+    evaluates the measurement and returns the sample index of the trigger event.
+    """
+
     def __init__(
         self,
         name_or_func: str | Callable,
@@ -886,9 +894,11 @@ registry: AnalysisRegistry = AnalysisRegistry()
 
 
 @util.lru_cache()
-def _make_measurement_signature(spec_cls):
-    """
-    Generates an inspect.Signature object from a specs.Analysis subclass.
+def _make_measurement_signature(spec_cls: type[specs.Analysis]) -> inspect.Signature:
+    """return the signature of a measurement wrapper from the fields of `spec_cls`.
+
+    The parameters are `iq`, `capture`, one keyword-only parameter per field of
+    `spec_cls`, and `as_xarray`.
     """
     kw_parameters = inspect.signature(spec_cls).parameters
 
@@ -904,8 +914,17 @@ def _make_measurement_signature(spec_cls):
             annotation=specs.Capture,
         ),
     ]
+    field_parameters = [
+        p.replace(kind=inspect.Parameter.KEYWORD_ONLY) for p in kw_parameters.values()
+    ]
+    as_xarray = inspect.Parameter(
+        'as_xarray',
+        inspect.Parameter.KEYWORD_ONLY,
+        default=True,
+        annotation="bool | Literal['delayed']",
+    )
 
-    return inspect.Signature(parameters + list(kw_parameters.values()))
+    return inspect.Signature(parameters + field_parameters + [as_xarray])
 
 
 def coordinate_dims(
