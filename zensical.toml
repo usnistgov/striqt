@@ -5,6 +5,12 @@ repo_url = "https://github.com/usnistgov/striqt"
 docs_dir = "docs"
 site_dir = "site"
 strict = true
+# the griffe extension lives beside the pages and is not a page
+exclude_docs = """
+griffe_striqt.py
+__pycache__/
+templates/
+"""
 
 nav = [
   { Home = "index.md" },
@@ -60,6 +66,7 @@ toc = { permalink = true, toc_depth = 3 }
 [project.plugins.mkdocstrings]
 default_handler = "python"
 enable_inventory = true
+custom_templates = "docs/templates"
 
 [project.plugins.mkdocstrings.handlers.python]
 paths = ["src"]

@@ -1,0 +1,10 @@
+{#- A page lists one module in several `:::` directives, one per group of members, and
+    the base template renders the module docstring in each of them. A directive with
+    `extra: {module_docstring: false}` renders its members only. -#}
+{% extends "_base/module.html.jinja" %}
+
+{% block docstring scoped %}
+  {% if config.extra.get("module_docstring", true) %}
+    {{ super() }}
+  {% endif %}
+{% endblock docstring %}
