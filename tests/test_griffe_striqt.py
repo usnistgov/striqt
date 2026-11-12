@@ -25,7 +25,9 @@ def runtime_path(obj: Any) -> str:
 @pytest.fixture(scope='module')
 def tree() -> griffe.ModulesCollection:
     loader = griffe.GriffeLoader(
-        search_paths=[ROOT / 'src'], extensions=griffe.load_extensions(EXTENSION)
+        search_paths=[ROOT / 'src'],
+        extensions=griffe.load_extensions(EXTENSION),
+        docstring_parser=griffe.Parser.google,
     )
     loader.load('striqt.analysis')
     loader.load('striqt.sensor')
@@ -57,6 +59,20 @@ def test_every_registered_measurement_is_filled(tree: griffe.ModulesCollection) 
         func = tree[runtime_path(info.func)]
         assert func.docstring.value == inspect.getdoc(info.func), info.name
         assert not any(p in func.docstring.value for p in PLACEHOLDERS), info.name
+
+
+def test_measurement_docstring_parses_into_sections(
+    tree: griffe.ModulesCollection,
+) -> None:
+    # a docstring substituted without the loader's parser renders as one text block
+    sections = tree[runtime_path(striqt.analysis.spectrogram)].docstring.parsed
+    kinds = {s.kind.value: s for s in sections}
+
+    assert 'parameters' in kinds
+    assert 'admonition' in kinds and kinds['admonition'].title == 'Output'
+    assert {p.name for p in kinds['parameters'].value} >= {
+        f.name for f in msgspec.structs.fields(striqt.analysis.specs.Spectrogram)
+    }
 
 
 def test_unregistered_function_keeps_static_docstring(

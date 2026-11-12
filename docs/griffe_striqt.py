@@ -126,6 +126,21 @@ def _binding_docstring(obj: Any) -> str | None:
     )
 
 
+def _docstring(
+    text: str, parent: griffe.Object, agent: griffe.Visitor | griffe.Inspector
+) -> griffe.Docstring:
+    """return a docstring of `text` on `parent` with the parser of `agent`.
+
+    A docstring built without a parser is rendered as one block of text.
+    """
+    return griffe.Docstring(
+        text,
+        parent=parent,
+        parser=agent.docstring_parser,
+        parser_options=agent.docstring_options,
+    )
+
+
 class StriqtRuntimeDocs(griffe.Extension):
     """substitute the runtime docstrings and signatures of striqt into the static tree.
 
@@ -154,12 +169,10 @@ class StriqtRuntimeDocs(griffe.Extension):
             return
 
         doc = inspect.getdoc(runtime)
-        if doc:
-            lineno = func.docstring.lineno if func.docstring else None
-            endlineno = func.docstring.endlineno if func.docstring else None
-            func.docstring = griffe.Docstring(
-                doc, lineno=lineno, endlineno=endlineno, parent=func
-            )
+        if doc and func.docstring is not None:
+            func.docstring.value = doc
+        elif doc:
+            func.docstring = _docstring(doc, func, agent)
         func.parameters = _measurement_parameters(runtime, spec_type, func.parameters)
 
     def on_class_members(
@@ -183,7 +196,7 @@ class StriqtRuntimeDocs(griffe.Extension):
             if name in types:
                 member.annotation = types[name]
             if member.docstring is None and descriptions.get(name):
-                member.docstring = griffe.Docstring(descriptions[name], parent=member)
+                member.docstring = _docstring(descriptions[name], member, agent)
 
     def on_attribute_instance(
         self,
@@ -205,4 +218,4 @@ class StriqtRuntimeDocs(griffe.Extension):
             return
         doc = _binding_docstring(_runtime_object(attr.path))
         if doc:
-            attr.docstring = griffe.Docstring(doc, parent=attr)
+            attr.docstring = _docstring(doc, attr, agent)
