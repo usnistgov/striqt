@@ -32,15 +32,16 @@ def open_store(
 ) -> ZarrStore:
     """open a new zarr store at `spec.path` for writing.
 
-    A path ending in ``.zip``, or any path when `spec.store` is ``'zip'``, opens a
-    zip store at a ``.zarr.zip`` path; any other path opens a directory store at a
+    A zip store is opened at a ``.zarr.zip`` path when `spec.path` ends in ``.zip``
+    or `spec.store` is ``'zip'``. Otherwise a directory store is opened at a
     ``.zarr`` path. Missing parent directories are created.
 
     Args:
         spec: the sink block with the `path` and `store` type
         format_path: expands the ``{fields}`` of `spec.path`; None leaves the path
             as is
-        force: if True, remove a store already at the path; if False, refuse one
+        force: if True, a store already at the path is removed; if False, an
+            occupied path is rejected
 
     Raises:
         ValueError: if `spec.path` is None
@@ -226,8 +227,8 @@ def read_zarr_spec(
 def _drop_removed_extension_sink(attrs: dict[str, Any]) -> dict[str, Any]:
     """return `attrs` without the ``extensions.sink`` key.
 
-    A `DeprecationWarning` is emitted when the key is present. The sink class the
-    key named is not applied.
+    A `DeprecationWarning` is emitted when the key is present. The sink class that
+    the key names is not applied.
     """
     extensions = attrs.get('extensions')
     if not isinstance(extensions, dict) or 'sink' not in extensions:
@@ -268,7 +269,7 @@ def _resolve_sweep_cls(
 ) -> type[specs.ActionSpec] | None:
     """return the spec class of `tree` after importing the `extensions` block of `tree`.
 
-    A binding registered by the imported extension module is found. A
+    The tag of `tree` is looked up in the registry after the import. A
     ``mock_source`` entry with a registered tag selects the mock class of that
     binding, rewrites ``tree['sensor_binding']`` in place to the mock class name,
     and overrides `type`. Otherwise `type` is returned when given, and None when the
@@ -379,8 +380,8 @@ def read_calibration(
     if path is None:
         return None
 
-    # `format_path` blocks on the source id until the radio opens; the modules that
-    # the read needs load during that wait
+    # `format_path` blocks on the source id until the radio opens, so the modules
+    # that the read needs are loaded during that wait
     _ = xr.__version__
     with contextlib.suppress(ImportError):
         import netCDF4  # noqa: F401

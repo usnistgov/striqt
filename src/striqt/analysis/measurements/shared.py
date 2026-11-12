@@ -54,9 +54,9 @@ def bandwidth_attrs(
     Args:
         noise_bandwidth: in Hz
         units: the power form of the output, `striqt.waveform.units.DB_POWER` or
-            `AMPLITUDE`, resolved into the power unit of the acquisition
+            `AMPLITUDE`
         resolution_bandwidth: the equivalent noise bandwidth (in Hz) of the analysis
-            window, which sets the output level of a CW tone; None omits the key
+            window, or None to omit the key
 
     Returns:
         a dict with ``'units'``, ``'noise_bandwidth'`` in Hz, and
@@ -104,18 +104,18 @@ def check_frequency_band(
     offset: float = 0.0,
     offset_field: str = 'frequency_offset',
 ) -> int:
-    """return the number of bins in the band that `field` selects.
+    """return the number of bins in the band selected by `field`.
 
-    `offset` must fall on the ``sample_rate / nfft`` grid. The band must lie within
-    ``±sample_rate / 2``. A `bandwidth` between grid multiples is accepted and
-    rounded to the nearest whole number of bins.
+    The band must lie within ``±sample_rate / 2``.
 
     Args:
         field: name of the spec field that set `bandwidth`, named in the error
         nfft: number of bins across `sample_rate`, which sets the grid spacing
         sample_rate: in S/s
-        bandwidth: width of the band in Hz
-        offset: center of the band in Hz relative to baseband DC
+        bandwidth: width of the band in Hz, rounded to the nearest whole number of
+            bins
+        offset: center of the band in Hz relative to baseband DC, on the
+            ``sample_rate / nfft`` grid
         offset_field: name of the spec field that set `offset`, named in the error
 
     Returns:
@@ -186,8 +186,8 @@ def level_tolerance(
     of an element.
 
     Args:
-        amplitude_rms: relative rms error of the amplitude underlying the power
-            (input roundoff and FFT roundoff, combined in quadrature by the caller)
+        amplitude_rms: relative rms error of the amplitude underlying the power,
+            with input roundoff and FFT roundoff combined in quadrature
         size: number of output elements covered by the bound
         power_rtol: worst-case relative error of squaring the amplitude and of any
             reduction summed in order (`sw.power_analysis.bin_power_rtol`,

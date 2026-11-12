@@ -65,7 +65,7 @@ def _pss_m_sequence(N_id2: int) -> list[int]:
         127 values in {-1, 1}, one per active subcarrier in frequency-domain order
 
     References:
-        3GPP TS 38.211 §7.4.2.2
+        3GPP TS 38.211, "NR; Physical channels and modulation", §7.4.2.2.
     """
     x = m_sequence([0, 1, 1, 0, 1, 1, 1], (3, 7), 127)
 
@@ -89,7 +89,7 @@ def _sss_m_sequence(N_id: int) -> list[int]:
         127 values in {-1, 1}, one per active subcarrier in frequency-domain order
 
     References:
-        3GPP TS 38.211 §7.4.2.3
+        3GPP TS 38.211, "NR; Physical channels and modulation", §7.4.2.3.
     """
     x_0 = m_sequence([1, 0, 0, 0, 0, 0, 0], (3, 7), 127)
     x_1 = m_sequence([1, 0, 0, 0, 0, 0, 0], (6, 7), 127)
@@ -118,7 +118,7 @@ def _generate_5g_nr_sync_sequence(
     xp=None,
     dtype='complex64',
 ):
-    """return time-domain sync sequences for every id from an m-sequence generator.
+    """return the time-domain synchronization sequences of ids 0 through `max_id`.
 
     Each sequence is normalized to unit mean power over the 127 active subcarriers
     of the sequence and placed on the `sample_rate` FFT grid, centered at
@@ -127,7 +127,7 @@ def _generate_5g_nr_sync_sequence(
     Args:
         seq_func: maps a sequence id to the 127 bipolar frequency-domain values of
             that sequence
-        max_id: sequences are built for ids 0 through `max_id`
+        max_id: the largest sequence id; ids 0 through `max_id` are built
         sample_rate: in S/s; a multiple of `subcarrier_spacing` and at least
             ``127 * subcarrier_spacing``
         subcarrier_spacing: in Hz; a multiple of 15e3
@@ -309,22 +309,20 @@ def index_pss_symbols(
 ) -> tuple[int, ...]:
     """return the symbol indexes of the PSS within a 3GPP TS 38.213 §4.1 SSB burst.
 
-    A tuple or list in `symbol_indexes` is returned unchanged. ``'auto'`` selects
-    the cell search case from `subcarrier_spacing`: 15 kHz is case A, 30 kHz is
-    case C and requires `shared_spectrum`, 120 kHz is case D, 240 kHz is case E,
-    480 kHz is case F, and 960 kHz is case G. The strings ``'a'``, ``'b'``, and
-    ``'c'`` select that case directly. `shared_spectrum` is accepted for cases A
-    and C only. For cases A, B, and C, `center_frequency` at or below 3 GHz (1.88 GHz
-    for case C) selects the reduced candidate count of the standard.
+    ``'auto'`` in `symbol_indexes` selects the cell search case from
+    `subcarrier_spacing`: 15 kHz is case A, 30 kHz is case C and requires
+    `shared_spectrum`, 120 kHz is case D, 240 kHz is case E, 480 kHz is case F, and
+    960 kHz is case G. For cases A, B, and C, a `center_frequency` at or below 3 GHz
+    (1.88 GHz for case C) selects the reduced candidate count of the standard.
 
     Args:
         subcarrier_spacing: in Hz; one of the SSB subcarrier spacings of the standard
         shared_spectrum: True selects the shared-spectrum candidate count of cases
-            A and C
-        symbol_indexes: ``'auto'``, a case letter, or an explicit sequence of
-            symbol indexes
-        center_frequency: in Hz; the maximum is used when given as a tuple, and
-            ``None`` selects the full candidate count
+            A and C; accepted for those cases only
+        symbol_indexes: ``'auto'``; ``'a'``, ``'b'``, or ``'c'`` to select that case;
+            or a tuple or list of symbol indexes, returned unchanged
+        center_frequency: in Hz, the maximum when given as a tuple; ``None`` selects
+            the full candidate count
 
     Returns:
         tuple of symbol indexes relative to the start of the half-frame, in
@@ -337,7 +335,7 @@ def index_pss_symbols(
             `shared_spectrum` with a case other than A or C
 
     References:
-        3GPP TS 38.213 §4.1
+        3GPP TS 38.213, "NR; Physical layer procedures for control", §4.1.
     """
     if isinstance(symbol_indexes, str):
         symbol_indexes = symbol_indexes.lower()  # type: ignore
@@ -385,8 +383,7 @@ def index_pss_symbols(
         if shared_spectrum:
             nrange = range(5)
         else:
-            # the upper 2 candidates are unused below 3 GHz (1.88 GHz in unpaired
-            # operation)
+            # TS 38.213 §4.1 uses the upper 2 candidates above 3 GHz only
             if center_frequency is None or center_frequency > 3e9:
                 nrange = range(4)
             else:
@@ -407,8 +404,8 @@ def index_pss_symbols(
             if center_frequency is None or center_frequency > 1.88e9:
                 nrange = range(4)
             else:
-                # TS 38.213 §4.1 also assigns paired-spectrum operation between 1.88
-                # and 3 GHz to this branch, which the center frequency alone cannot
+                # TS 38.213 §4.1 also assigns 2 candidates to paired-spectrum operation
+                # between 1.88 and 3 GHz, which the center frequency alone cannot
                 # identify
                 nrange = range(2)
     # cases D through G are FR2
@@ -580,8 +577,8 @@ def sync_frame_count(sample_count: int, params: SyncParams) -> int:
             f'{span} does not fit in a 10 ms frame ({params.frame_size} samples)'
         )
 
-    # the correlator splits the span into slots and trims the excess cyclic prefix of
-    # each slot before the lag search
+    # `correlate_sync_spans` splits the span into slots and trims the excess cyclic
+    # prefix of each slot before the lag search
     per_slot = params.corr_size // params.slot_count - max(params.cp_offsets)
     available = params.slot_count * per_slot
     if available < params.lag_count:
@@ -603,16 +600,16 @@ def get_5g_ssb_spans(
     max_block_count: int | None = None,
     margin: int | None = None,
 ) -> Array:
-    """return the correlated span of each synchronization block of `iq` at baseband.
+    """return the baseband span of each synchronization block of `iq`.
 
     A synchronization block begins every ``params.frames_per_sync`` frames of
     ``params.frame_size`` samples at ``params.sample_rate``, and a span is the first
-    ``params.corr_size`` samples of a block, the samples that `correlate_sync_spans`
-    reads. Each span is cut from `iq` with `margin` input samples at each end, shifted
-    and resampled by FFT in one batch over the ports and blocks, and trimmed to the
-    span. The margin absorbs the edge ringing of the FFT resampler. Where the record
-    ends inside a margin, the missing samples are zero. The frequency shift is a whole
-    number of bins of ``fs_in / (span + 2 * margin)``.
+    ``params.corr_size`` samples of a block. Each span is cut from `iq` with `margin`
+    input samples at each end, shifted by `frequency_offset` and resampled by FFT to
+    ``params.sample_rate``, and trimmed to ``params.corr_size``. The margin absorbs
+    the edge ringing of the FFT resampler. Where the record ends inside a margin, the
+    missing samples are zero. The frequency shift is a whole number of bins of
+    ``fs_in / (span + 2 * margin)``.
 
     Args:
         iq: the waveform of shape ``(port, sample)`` at `fs_in`
@@ -649,8 +646,9 @@ def get_5g_ssb_spans(
     frame_in, corr_in = int(frame_in), int(corr_in)
     block_in = frame_in * params.frames_per_sync
 
-    # the margin is an even input count and a whole number of output samples: the
-    # trim lands on output samples and `resample` takes an even span
+    # the margin is rounded up to an even input count that is a whole number of
+    # output samples, so that the trim lands on output samples and `resample` takes
+    # an even span
     step = math.lcm(2, p)
     if margin is None:
         margin = round(slot_period(params.subcarrier_spacing) * fs_in)
@@ -717,7 +715,8 @@ class _TemplateSpectra:
         if spectra.nbytes <= self.MAX_BYTES:
             while len(self._entries) >= self.MAX_ENTRIES:
                 self._entries.pop(next(iter(self._entries)))
-            # the array reference keeps the id valid for the life of the entry
+            # holding the array in the entry keeps its id from being reused while the
+            # entry lives
             self._entries[key] = (sync_seq, spectra)
         return spectra
 
@@ -737,8 +736,8 @@ def _lag_window_pieces(
     The correlation of one span is the full linear convolution rolled by ``-offs`` and
     cut to ``params.corr_size``, with the excess cyclic-prefix samples of each slot
     removed. A lag window starts at ``symbol * params.short_symbol_size`` in that
-    trimmed sequence and runs for ``params.lag_count`` lags. A window splits into a
-    new piece at each slot boundary and at the roll boundary within the window.
+    trimmed sequence and runs for ``params.lag_count`` lags. A window is split into
+    pieces at each slot boundary and at the roll boundary within the window.
 
     Args:
         params: the synchronization parameters from `pss_params` or `sss_params`
@@ -800,12 +799,9 @@ def correlate_sync_spans(
 ) -> Array:
     """correlate the span of each synchronization block against synchronization templates.
 
-    The correlation is a linear convolution by FFT. The spectrum of the spans is
-    computed once and multiplied by the spectrum of every template, in chunks of cell
-    IDs of at most `max_chunk_bytes`. The template spectra are memoized on the
-    identity of `sync_seq` in a cache that `clear_caches` empties. `pss_5g_nr` and
-    `sss_5g_nr` return one array object per argument set, so the memo applies to the
-    templates from either.
+    The correlation is a linear convolution by FFT. The template spectra are memoized
+    on the identity of `sync_seq` in a process-wide cache that `clear_caches`
+    empties.
 
     Args:
         spans: the waveform of shape ``(port, sync block, corr_size)`` at
@@ -813,8 +809,8 @@ def correlate_sync_spans(
         sync_seq: the templates of shape ``(cell id, sample)`` from `pss_5g_nr` or
             `sss_5g_nr` at the same sample rate
         params: the synchronization parameters from `pss_params` or `sss_params`
-        max_chunk_bytes: the size of the product buffer that bounds the cell IDs
-            correlated at once
+        max_chunk_bytes: the size (in bytes) of the product buffer, which bounds the
+            number of cell IDs correlated at once
 
     Returns:
         complex64 correlation of shape ``(port, cell id, sync block, beam, lag)``
@@ -974,8 +970,8 @@ def weighted_ssb_detect(
     r = xp.median(r, axis=SYNC_DIM, keepdims=True)
     rmed = xp.median(r, axis=(FINE_LAG_DIM), keepdims=True)
 
-    # only peaks with at least 3 dB prominence count, which limits spectral bleeding
-    # from individual strong sources
+    # only lags at least 3 dB above the median and within 3 dB of the peak count,
+    # which limits bleeding from a single strong source
     rpeak = r.copy()
     limits = r.max((FINE_LAG_DIM, COARSE_LAG_DIM), keepdims=True)
     threshold = xp.clip(2 * rmed, a_min=limits / 2, a_max=None)
@@ -983,8 +979,8 @@ def weighted_ssb_detect(
 
     # evaluate the sub-symbol IQ offset
     nfine = rpeak.shape[FINE_LAG_DIM]
-    # an odd window has a single peak sample, so neighboring lags never tie;
-    # even zero padding keeps that peak at the correlate1d origin
+    # an odd window has a single peak sample, so neighboring lags never tie. Even
+    # zero padding keeps that peak at the correlate1d origin
     nfill = max(1, 2 * ((round(window_fill * nfine) - 1) // 2) + 1)
     nzero = nfine - nfill
     nzero -= nzero % 2
@@ -1016,13 +1012,13 @@ def choose_ssb_offset(
 ) -> Array:
     """return the SSB start offset (in samples) from the correlator output `rssb`.
 
-    The correlation power is averaged over the cell id, sync block, and beam axes
-    and weighted across lag by `window`. The offset is the start of the symbol lag
-    with the largest weighted peak plus the fine lag with the largest mean across
-    symbol lags.
+    The correlation power is averaged over the cell id and beam axes, reduced by the
+    median over sync blocks, and weighted across lag by `window`. The offset is the
+    start of the symbol lag with the largest weighted peak plus the fine lag with
+    the largest mean across symbol lags.
 
     Args:
-        rssb: the output of `correlate_sync_sequence`
+        rssb: the output of `correlate_sync_sequence` or `correlate_sync_spans`
         params: the synchronization parameters that produced `rssb`
         per_port: True returns one offset per port; False averages the ports first
         max_beams: the number of leading beams averaged; None averages all
@@ -1041,7 +1037,6 @@ def choose_ssb_offset(
     weighted_fine = offsets.mean(axis=COARSE_LAG_DIM)
     ifine = weighted_fine.argmax(-1)
 
-    # evaluate the symbol index offset: the symbol with the largest peak, or 0
     isymbol = nfine * offsets.max(FINE_LAG_DIM).argmax(-1)
 
     return ifine + isymbol

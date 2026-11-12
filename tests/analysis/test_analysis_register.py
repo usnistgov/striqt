@@ -2,8 +2,7 @@
 tolerance walks over an analysis group, and the contract every registered measurement
 follows (dtype, dims, coords, and attrs reach the DataArray).
 
-The hook tests build a private `AnalysisRegistry`. A measurement registered with the
-live registry would leak into every other test module.
+The hook tests build a private `AnalysisRegistry`.
 """
 
 from __future__ import annotations
@@ -306,7 +305,7 @@ def test_registry_validate_annotates_the_analysis_field_path():
 
 def test_validator_errors_are_msgspec_validation_errors():
     """the sweep decode path reports validator errors as decode failures, so a
-    `SpecValidationError` is a `msgspec.ValidationError`"""
+    `SpecValidationError` is a `msgspec.ValidationError`."""
     registry = build_group_registry(
         lambda capture, spec: (_ for _ in ()).throw(ValueError('nope')), None
     )
@@ -383,19 +382,18 @@ OTHERS = [info for info in VALIDATED if 'sss' not in info.name]
 
 
 def test_every_validated_measurement_has_a_strategy():
-    """the property test below covers only the measurements with a domain in
-    `VALIDATOR_DOMAINS`"""
+    """every measurement with a validator has a domain in `VALIDATOR_DOMAINS`, and no
+    domain names a measurement without a validator."""
     assert set(VALIDATOR_DOMAINS) == set(VALIDATED_IDS)
 
 
 def check_accepted_pair_runs(info, data):
-    """draw a (capture, spec) pair for `info` and fail if the validator accepts the
-    pair but the measurement raises on white noise.
+    """draw a (capture, spec) pair for `info` and fail the test when the validator
+    accepts the pair but the measurement raises on white noise.
 
     `Sweep.__post_init__` runs the validators on every capture before acquisition, so
-    an accepted pair must not fail on shape or scalar arithmetic once IQ arrives. A
-    rejected pair returns without a check. The `REJECTED` table below covers
-    rejection.
+    an accepted pair must not raise on shape or scalar arithmetic once IQ arrives. A
+    rejected pair returns without a check.
     """
     capture, spec = data.draw(VALIDATOR_DOMAINS[info.name], label=info.name)
     group = sa.specs.BuiltinAnalyses(**{info.name: spec})
@@ -429,10 +427,10 @@ SAMPLES = 64
 SPG = {'window': 'boxcar', 'frequency_resolution': FS / NFFT}
 
 # (capture, spec, the spec or capture field the message must name). Every registered
-# validator raises a bare ValueError, so `registry.validate` has one mechanism to
-# exercise here: `validation_path` wrapping the error at the measurement key. One row
-# names a capture field and one a spec field. The per-measurement rejection tables are
-# in the test_analysis_measurements_* modules.
+# validator raises a bare ValueError, so `registry.validate` adds one step,
+# `validation_path` wrapping the error at the measurement key. One row names a
+# capture field and one a spec field. The per-measurement rejection tables are in the
+# test_analysis_measurements_* modules.
 REJECTED = {
     'spectrogram_shorter_than_nfft': (
         capture_of(NFFT - 1, FS),
@@ -450,7 +448,7 @@ REJECTED = {
 @pytest.mark.parametrize('case', list(REJECTED), ids=list(REJECTED))
 def test_validator_rejects_at_the_analysis_path_naming_the_field(case):
     """a pair the registered validator rejects is reported at the measurement key
-    under `$.analysis`, and the message names the spec or capture field at fault"""
+    under `$.analysis`, and the message names the spec or capture field at fault."""
     capture, spec, field = REJECTED[case]
     name = sa.registry[type(spec)].name
     group = sa.specs.BuiltinAnalyses(**{name: spec})
@@ -506,8 +504,8 @@ SPEC_IDS = [type(spec).__name__ for spec in CONTRACT_SPECS]
 
 
 def measure(spec, as_xarray):
-    """run the measurement registered for `type(spec)` on a unit tone over
-    `CONTRACT_CAPTURE`, acquired in mW, and return the registration with the result."""
+    """return the registration and the result of the measurement registered for
+    `type(spec)` on a unit tone over `CONTRACT_CAPTURE`, acquired in mW."""
     info = sa.registry[type(spec)]
     ports = 2 if isinstance(spec, sa.specs.SpectrogramHistogramRatio) else 1
     x = sa.testing.tone(
@@ -558,7 +556,7 @@ def test_measurement_attrs(spec):
 @pytest.mark.parametrize('spec', CONTRACT_SPECS, ids=SPEC_IDS)
 def test_registered_power_units_are_form_tokens(spec):
     """a registered or returned `units` that resolves to a power family is declared
-    as a form token, never as a literal family"""
+    as a form token, never as a literal family."""
     info, (_, body_attrs) = measure(spec, as_xarray=False)
     for attrs, what in [(info.attrs, info.name), (body_attrs, f'{info.name} body')]:
         units = attrs.get('units')
@@ -608,7 +606,7 @@ def test_absolute_power_outputs_name_their_noise_bandwidth(spec):
 def test_measurement_geometry_matches_the_measured_dataarray(spec):
     """the dims, shape, coordinate values, and coordinate attrs that a sink computes
     from ``(capture, spec)`` before any acquisition equal those of the measured
-    DataArray"""
+    DataArray."""
     info, da = measure(spec, as_xarray=True)
     spec = spec.validate()
 
@@ -650,8 +648,8 @@ NO_VALIDATOR = {'iq_waveform'}
 
 
 def test_every_measurement_has_a_validator():
-    """a measurement without a validator skips pre-sweep validation, so a new
-    measurement must register `validate=` or be listed in `NO_VALIDATOR`"""
+    """a measurement without a validator skips pre-sweep validation, so every
+    registered measurement has `validate=` or is listed in `NO_VALIDATOR`."""
     missing = {
         info.name for info in sa.registry.values() if info.validate is None
     } - NO_VALIDATOR
@@ -776,7 +774,7 @@ def test_group_checks_accept_matching_groups_and_name_the_rejected_field(case):
 def test_registry_and_any_analysis_agree():
     """the import-time guard of `striqt.analysis.measurements`: every registered
     measurement is a `BuiltinAnalyses` field of the same name, and no other field
-    exists"""
+    exists."""
     expected = {info.name: spec_type for spec_type, info in sa.registry.items()}
     register.check_group_fields(sa.specs.BuiltinAnalyses, expected)
     assert set(sa.specs.BuiltinAnalyses.__struct_fields__) == set(expected)
@@ -884,7 +882,7 @@ def test_registration_requires_both_names(given):
 
 def test_registered_attrs_are_the_names_and_units():
     """the attrs of a registration are `standard_name`, `long_name`, and `units` when
-    given; `units` None is absent rather than null"""
+    given, and a `units` of None sets no key."""
     registry = register.AnalysisRegistry()
 
     @registry.measurement(
@@ -912,6 +910,53 @@ def test_registered_attrs_are_the_names_and_units():
     }
     assert registry[ToySpec].name == 'toy'
     assert registry[OtherToySpec].name == 'other_toy'
+
+
+class IntScaleSpec(sa.specs.Analysis, frozen=True, kw_only=True):
+    scale: int = 1
+
+
+class StrScaleSpec(sa.specs.Analysis, frozen=True, kw_only=True):
+    scale: str = 'a'
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        'the repeated-parameter check of measurement() tests the zero value of the '
+        'field type against the field-name keys of parameter_defaults and compares '
+        'its type with the dict type, so the TypeError for a repeated parameter name '
+        'of another type is never raised and the later field replaces the earlier '
+        'one in parameter_fields'
+    ),
+)
+def test_a_repeated_parameter_name_of_another_type_is_rejected():
+    """the sweep coordinate of an analysis loop is built from the one
+    `parameter_fields` entry of the loop field, so two measurements share a field name
+    only with one type. The second registration raises `TypeError`."""
+    registry = register.AnalysisRegistry()
+
+    @registry.measurement(
+        IntScaleSpec,
+        dtype='float32',
+        standard_name='Toy',
+        long_name='Toy',
+        dims=('toy',),
+    )
+    def int_scale(iq, capture, **kwargs):
+        return np.zeros((1, 2), dtype='float32')
+
+    with pytest.raises(TypeError, match='different type'):
+
+        @registry.measurement(
+            StrScaleSpec,
+            dtype='float32',
+            standard_name='Toy',
+            long_name='Toy',
+            dims=('toy',),
+        )
+        def str_scale(iq, capture, **kwargs):
+            return np.zeros((1, 2), dtype='float32')
 
 
 def test_coordinate_registration_names_itself_and_keeps_its_units():

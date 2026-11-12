@@ -1,9 +1,8 @@
 """striqt.analysis.measurements.power: the channel power measurements.
 
-`tests/waveform/test_waveform_power_convert.py` and `test_waveform_power_detect.py`
-property-test the underlying kernels, so these tests cover what the measurement wrapping
-adds: coordinates, axis order, dtype, the dB conversion, and detector and statistic
-selection. A unit-amplitude tone has mean ``|x|**2 == 1``, so the dBm scale is
+The tests cover what the measurement wrapping adds to the kernels: coordinates, axis
+order, dtype, the dB conversion, and detector and statistic selection. A
+unit-amplitude tone has mean ``|x|**2 == 1``, so the dBm scale is
 ``10*log10(mean |x|**2)`` with no offset. Tolerances are the ones each measurement
 registers.
 """
@@ -257,11 +256,11 @@ class TestCyclicChannelPower:
         ],
     )
     def test_unevenly_nested_periods_are_rejected(self, kwargs, duration, message):
-        """the 3 couplings the measurement docstring states: a `duration` of 1.5
-        cycles, a `cyclic_period` of 2.5 detector periods, and a `detector_period` of
-        10/3 samples at `sample_rate`. The 2 remaining cases are a detector and a
-        quantile that the statistic table does not implement. Each case is rejected
-        before any IQ is read, at the field path of the measurement."""
+        """the cases are the 3 period couplings of the measurement (a `duration` of
+        1.5 cycles, a `cyclic_period` of 2.5 detector periods, and a `detector_period`
+        of 10/3 samples at `sample_rate`), and a detector and a quantile that the
+        statistic table does not implement. Each case is rejected before any IQ is
+        read, at the field path of the measurement."""
         iq = testing.tone(duration, FS, frequency=1e5)
         with pytest.raises(
             msgspec.ValidationError, match=re.escape(message)
@@ -312,7 +311,7 @@ HIST_CAPTURE = sa.specs.Capture(duration=HIST_DURATION, sample_rate=FS)
 def test_channel_power_histogram_constant_level_fills_one_bin(level, expected_bin):
     """every detector output of a constant-envelope tone is the same level, so the
     whole normalized fraction is in the bin centered on that level, or in the infinite
-    catch-all bin when the level is outside the grid"""
+    catch-all bin when the level is outside the grid."""
     iq = sa.testing.tone(HIST_DURATION, FS) * 10 ** (level / 20)
 
     da = sa.measurements.channel_power_histogram(
@@ -329,8 +328,9 @@ def test_channel_power_histogram_constant_level_fills_one_bin(level, expected_bi
 
 
 def test_channel_power_histogram_fractions_sum_to_one():
-    """each (port, detector) row of the normalized counts sums to 1. The normalizing
-    sum in the source runs over both detectors at once."""
+    """each (port, detector) row of the normalized counts sums to 1. The measurement
+    normalizes by one count summed over both detectors and divided by the detector
+    count."""
     # one ramp across the whole capture, so each detector period has a different
     # level rather than repeating one bin
     iq = sa.testing.sawtooth(HIST_DURATION, FS, period=HIST_DURATION, ports=2)
@@ -364,7 +364,7 @@ def test_channel_power_histogram_bin_coordinate(
     power_low, power_high, power_resolution, centers
 ):
     """the bin centers step from `power_low` to `power_high` inclusive, bracketed by
-    the catch-all bins at -inf and inf"""
+    the catch-all bins at -inf and inf."""
     iq = sa.testing.tone(HIST_DURATION, FS)
     bins = {
         'power_low': power_low,
@@ -382,7 +382,7 @@ def test_channel_power_histogram_bin_coordinate(
 
 def test_channel_power_histogram_rejects_an_unknown_detector_at_its_own_path():
     """the histogram bins the time series, so the detector names and tiling rules
-    that reject the time series reject the histogram, at the path of the histogram"""
+    that reject the time series reject the histogram, at the path of the histogram."""
     iq = sa.testing.tone(HIST_DURATION, FS)
     with pytest.raises(
         msgspec.ValidationError, match="power_detectors entry 'bogus'"

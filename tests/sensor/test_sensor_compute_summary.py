@@ -170,7 +170,7 @@ def field_by_name(groups) -> dict[str, summary.FieldValue]:
 
 def test_capture_fields_groups_follow_the_declaring_classes():
     """`SoapyCapture` declares `center_frequency` and `gain` on top of `SensorCapture`,
-    which extends `Capture`; a group is one of these classes, base first"""
+    which extends `Capture`. A group is one of these classes, base first."""
     groups = summary.capture_fields(delayed({}))
 
     hierarchy = (sa.specs.Capture, ss.specs.SensorCapture, ss.specs.SoapyCapture)
@@ -208,8 +208,8 @@ def test_capture_fields_list_the_port_values_in_split_order():
     ids=['center_frequency', 'sample_rate'],
 )
 def test_capture_fields_share_one_si_prefix_per_field(name, units, values):
-    """1 GHz and 2 GHz share the giga prefix; the 125 MS/s clock of the fake device
-    takes mega. `Meta` of the field gives the base units."""
+    """1 GHz and 2 GHz share the giga prefix. The 125 MS/s clock of the fake device
+    has the mega prefix. `Meta` of the field gives the base units."""
     fields = field_by_name(summary.capture_fields(delayed({})))
     assert fields[name] == summary.FieldValue(name, values, units)
 

@@ -1,5 +1,5 @@
-# structs has no __all__, so the star import also binds its `helpers` and `types`
-# imports; ty resolves the explicit module imports below only when they come after it
+# `structs` has no `__all__`, so the star import also binds its `helpers` and `types`
+# imports. ty resolves the explicit module imports below only after the star import.
 from .structs import *
 
 # isort: split

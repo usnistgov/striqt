@@ -1,8 +1,8 @@
 """budget the roundoff error of a sweep, capture by capture.
 
-The roundoff of the conditioning stages, set by the FFT sizes that
-`AcquiredIQ.preprocess` runs on a capture, is the `input_error` passed to the tolerance
-function of each measurement.
+The `input_error` of each measurement's tolerance function is the roundoff of the
+conditioning stages, set by the FFT sizes used by `AcquiredIQ.preprocess` on a
+capture.
 """
 
 from __future__ import annotations as __
@@ -27,9 +27,7 @@ else:
 def _next_fast_len(n: int, array_backend: specs.types.ArrayBackend) -> int:
     """return the fast FFT length (in samples) at or above `n` for `array_backend`.
 
-    The scipy rule is used when the cupy rule is not importable. The 2 rules differ
-    by a few samples at most, below the resolution of the sqrt(log2 N) roundoff
-    model.
+    The scipy rule applies when the cupy rule is not importable.
     """
     try:
         return corrections._get_next_fast_len(n, array_backend)
@@ -40,12 +38,12 @@ def _next_fast_len(n: int, array_backend: specs.types.ArrayBackend) -> int:
 def _oaconvolve_nfft(
     signal_size: int, filter_size: int, array_backend: specs.types.ArrayBackend
 ) -> int:
-    """return the FFT size (in samples) that `scipy.signal.oaconvolve` picks.
+    """return the FFT size (in samples) used by `scipy.signal.oaconvolve`.
 
-    The size follows `scipy.signal._signaltools._calc_oa_lens`, which the cupyx port
-    shares: a fast length for `array_backend` that depends on `filter_size` alone,
-    capped at the fast length of one transform over the whole convolution of a
-    `signal_size`-sample input.
+    The size is that of `scipy.signal._signaltools._calc_oa_lens`, shared by the
+    cupyx port: a fast length for `array_backend` that depends on `filter_size`
+    alone, capped at the fast length of one transform over the whole convolution of
+    a `signal_size`-sample input.
     """
     from scipy.special import lambertw
 
@@ -65,8 +63,8 @@ def _correction_overlaps(
     """return the (leading, trailing) overlap sample counts of the correction stage.
 
     The counts are those of `corrections.get_correction_overlaps` for `array_backend`
-    in place of `source.array_backend`, falling back to numpy when the backend is not
-    importable.
+    in place of `source.array_backend`. The numpy rule applies when `array_backend`
+    is not importable.
     """
     source = source.replace(array_backend=array_backend)
     try:
@@ -86,7 +84,7 @@ def correction_error(
 ) -> float:
     """bound the rms amplitude error of the conditioned IQ of `capture`.
 
-    The bound grows with the FFT sizes the conditioning runs, which follow from
+    The bound is set by the FFT sizes of the conditioning, which follow from
     `capture.duration`, the ratio of `source.master_clock_rate` to
     `capture.sample_rate`, whether `capture.analysis_bandwidth` is finite, and the
     alignment overlap of the trigger in `analysis`. A capture that is neither
@@ -98,11 +96,10 @@ def correction_error(
         source: the source with the `master_clock_rate` that fixes the resampler
             design, and the default `array_backend`
         analysis: the measurements the sweep runs, with the `signal_trigger` that
-            sets the alignment overlap; None budgets no trigger
+            sets the alignment overlap, or None for no trigger
         array_backend: the backend with the FFT roundoff model that applies, or
             None for `source.array_backend`
-        filtered: False for the error of the waveform before the low-pass; on the
-            oaresample path the low-pass is one multiply per STFT bin
+        filtered: False budgets the waveform before the low-pass
 
     Returns:
         the rms error relative to the output rms (dimensionless and positive),
@@ -145,16 +142,16 @@ def capture_tolerances(
 ) -> dict[str, sa.specs.Tolerance]:
     """budget the roundoff error of each measurement in `analysis` for one capture.
 
-    The `correction_error` of the capture enters as the `input_error` of every
-    measurement's tolerance function.
+    The `correction_error` of the capture is the `input_error` of every measurement's
+    tolerance function.
 
     Args:
         array_backend: the backend with the roundoff model that applies, or None for
             `source.array_backend`
 
     Returns:
-        a `Tolerance` per measurement, keyed by measurement name; a measurement
-        without a tolerance function is omitted
+        a `Tolerance` per measurement, keyed by measurement name, with a measurement
+        without a tolerance function omitted
     """
     if array_backend is None:
         array_backend = source.array_backend
@@ -171,10 +168,8 @@ def sweep_tolerances(
 ) -> list[tuple[specs.SensorCapture, dict[str, sa.specs.Tolerance]]]:
     """budget the roundoff error of every capture the sweep runs, in run order.
 
-    The captures are exactly those `specs.sequencing.loop_captures` expands for
-    `source_id`: the per-source `adjust_captures` overrides are applied there, a
-    looped field keeps the loop value over any adjustment, and a `repeat` loop is
-    listed once.
+    The captures are those that `specs.sequencing.loop_captures` expands for
+    `source_id`, with a `Repeat` loop listed once.
 
     Returns:
         ``(capture, tolerances)`` pairs, with `tolerances` as `capture_tolerances`
@@ -203,9 +198,9 @@ def worst_case_tolerances(
 
     Every field of the result is at least as loose as that field in each entry.
     `rtol` and both bounds of `on_peak` are the maximum over the entries.
-    `off_peak_dBc` is no deeper below the peak than in any entry. None (everything
-    resolved) is the strictest depth and is replaced by any finite depth. `units`
-    are those of the first entry.
+    `off_peak_dBc` is no deeper below the peak than in any entry. A None depth, the
+    strictest, is replaced by any finite depth. `units` are those of the first
+    entry.
 
     Args:
         entries: ``(capture, tolerances)`` pairs as `sweep_tolerances` returns

@@ -470,7 +470,7 @@ class TestSweepCaptures:
 # %% Sweep: (capture, analysis) validation
 
 # (capture, loops, message tail): each row breaks SPG's resolution rule at a different
-# origin, and the error names the values it compared and then that origin
+# origin, and the error names the compared values and then that origin
 INVALID_RESOLUTION_ORIGINS = {
     'looped_capture': (
         make_capture(),

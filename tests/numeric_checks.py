@@ -3,9 +3,7 @@ by the suite.
 
 The roundoff models are defined in the library beside the functions the models
 describe, and the per-measurement budgets are registered with
-`striqt.analysis.registry`. Tests take pass criteria from those models, so the model
-the suite enforces is the one the library reports. This module is not a conftest and
-is imported by bare name from every test module.
+`striqt.analysis.registry`. The assertions here take pass criteria from those models.
 """
 
 from __future__ import annotations
@@ -89,14 +87,14 @@ def assert_close(
 ):
     """assert that `actual` and `expected` are close after `to_numpy` on both sides.
 
-    With `sigma`, an rms bound relative to `scale` (the rms of `expected` unless
-    given), also require ``rms(actual - expected) < sigma * scale``, and widen `atol`
-    to at least ``peak_factor(size) * sigma * scale``, the peak that `sigma` implies
-    over the output size.
+    `sigma` is an rms bound relative to `scale`, which defaults to the rms of
+    `expected`. With `sigma`, the assertion also requires
+    ``rms(actual - expected) < sigma * scale`` and widens `atol` to at least
+    ``peak_factor(size) * sigma * scale``.
 
-    `atol` may be an array for an output with a tolerance that varies element by
-    element (`striqt.analysis.util.elementwise_atol`). `assert_allclose` cannot take
-    an array `atol`, so an array `atol` is compared through `assert_within`.
+    `atol` may be an array broadcastable to `expected`, for an output with a tolerance
+    that varies element by element. An array `atol` is compared through
+    `assert_within`.
     """
     actual = to_numpy(actual)
     expected = to_numpy(expected)
@@ -171,14 +169,14 @@ ATOL = 1e-10
 COLA_LEVEL_DB = 0.05
 COLA_RIPPLE_DB = 0.5
 
-# scipy.signal.firwin2 with a hamming window reaches about -53 dB in the stopband,
-# and the passband ripple is far below that. Both are bounded at -40 dB
+# scipy.signal.firwin2 with a hamming window reaches about -53 dB in the stopband.
+# Both the stopband leakage and the passband ripple are bounded at -40 dB
 FIR_LEAKAGE = 1e-2
 # the STFT low-pass of `oaresample` multiplies each block by the response, a circular
 # convolution of the block. At the 128-bin blocks of the kernel tests the wrapped
-# tails break the COLA sum and leave spurs at multiples of the hop rate near -34 dB;
-# the floor falls with the block size and is below -110 dB at the sensor's 16383-bin
-# minimum
+# tails break the COLA sum and leave spurs at multiples of the hop rate near -34 dB.
+# The floor falls with the block size and is below -110 dB at the 16383-bin minimum
+# of the sensor
 FIR_RECT_STOPBAND_DB = -20
 
 
@@ -192,10 +190,10 @@ def cross_backend(numpy_budget, cupy_budget):
     """return the tolerance on the difference between a numpy and a cupy evaluation,
     each within an exact-math budget.
 
-    Independent roundoff adds in quadrature (measured at 0.83 to 1.0 of the
-    quadrature sum, chores/tests/measure_fft_accuracy.py). The budgets are 2 floats,
-    or 2 `striqt.analysis.specs.Tolerance` of the same units. The `off_peak_dBc`
-    bounds combine as the amplitude errors the bounds encode.
+    The budgets add in quadrature. Measured independent roundoff is 0.83 to 1.0 of
+    the quadrature sum (chores/tests/measure_fft_accuracy.py). The budgets are 2
+    floats, or 2 `striqt.analysis.specs.Tolerance` of the same units, and the
+    `off_peak_dBc` bounds combine as the amplitude errors the bounds encode.
     """
     if isinstance(numpy_budget, (int, float)):
         return float(np.hypot(numpy_budget, cupy_budget))

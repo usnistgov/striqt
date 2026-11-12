@@ -37,8 +37,7 @@ def get_path_fields(
     """return the ``{field_name}`` values for sink and calibration path templates.
 
     Args:
-        sweep: the action spec; the type name and `adjust_captures` of `sweep`
-            supply the fields
+        sweep: the action spec
         source_id: hex id of the open source, or a callable that returns the id
         spec_path: the path of the file that defined `sweep`, or None for a spec
             constructed in code
@@ -48,8 +47,8 @@ def get_path_fields(
         ``sensor_binding`` (the type name of `sweep`), ``source_id``, and when
         `spec_path` is given ``spec_name`` and ``parent_name``. When `sweep` is a
         `CapturePlan`, each fixed string value in the `adjust_captures` block of
-        `sweep` for `source_id`, falling back to ``'defaults'``, is added under the
-        field name.
+        `source_id`, applied over the ``'defaults'`` block, is added under the field
+        name.
     """
 
     assert isinstance(sweep, structs.ActionSpec)

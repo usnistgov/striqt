@@ -1,5 +1,5 @@
 """striqt.waveform.lib.units: units strings, dB and linear forms, the shared SI prefix,
-and engineering notation
+and engineering notation.
 """
 
 from __future__ import annotations

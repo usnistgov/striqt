@@ -390,9 +390,9 @@
             return v !== null && typeof v === 'object' && !Array.isArray(v);
         }
 
-        // Recursive merge: recurse into plain objects, let arrays/primitives from
-        // the source win. Arrays (annotations, shapes) are replaced wholesale
-        // because the backend regenerates them every frame.
+        // Recursive merge: recurse into plain objects; an array or primitive in the
+        // source replaces the target value. Arrays (annotations, shapes) are replaced
+        // wholesale because the backend regenerates them every frame.
         function deepMerge(target, source) {
             const out = { ...target };
             for (const key of Object.keys(source)) {
@@ -400,14 +400,14 @@
                 const tv = out[key];
                 out[key] = (isPlainObject(sv) && isPlainObject(tv))
                     ? deepMerge(tv, sv)   // both objects -> recurse
-                    : sv;                 // arrays & primitives -> source wins
+                    : sv;                 // arrays and primitives: the source value is kept
             }
             return out;
         }
 
         // Merge dark theme with incoming layout, then apply grid styling to every
-        // axis key present (xaxis, yaxis, xaxis2, yaxis2, ...). Backend-provided
-        // title/domain/range/type win over axisDefaults since they spread last.
+        // axis key present (xaxis, yaxis, xaxis2, yaxis2, ...). A backend-provided
+        // title/domain/range/type replaces the axisDefaults entry because it spreads last.
         function buildLayout(incoming) {
             const merged = deepMerge(darkLayout, incoming);
             for (const key of Object.keys(merged)) {

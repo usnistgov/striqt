@@ -16,17 +16,17 @@ import platformdirs
 
 _user_cache_dir = Path(platformdirs.user_cache_dir('striqt'))
 
-# the striqt on-disk caches go to a directory of this session. The collection-time
-# spec validation below, and a shelf fault that deletes the cache files, then touch no
-# cache of the developer or of a concurrent test run
+# STRIQT_CACHE_DIR names a directory of this session, so the collection-time spec
+# validation below and a shelf fault that deletes the cache files touch no cache of the
+# developer or of a concurrent test run
 _session_cache_dir = None
 if not os.environ.get('STRIQT_CACHE_DIR'):
     _session_cache_dir = tempfile.mkdtemp(prefix='striqt-tests-')
     os.environ['STRIQT_CACHE_DIR'] = _session_cache_dir
 
 # matplotlib reads the backend and config dir on first import. The figures tests plot
-# headless. The font cache goes in the user cache directory because a sandbox without
-# write access to ~/.matplotlib rebuilds the cache on every run otherwise
+# headless. The font cache is written under the user cache directory because a sandbox
+# without write access to ~/.matplotlib rebuilds the cache on every run
 os.environ.setdefault('MPLBACKEND', 'agg')
 if not os.environ.get('MPLCONFIGDIR'):
     (_user_cache_dir / 'matplotlib').mkdir(parents=True, exist_ok=True)
@@ -146,7 +146,7 @@ def cupy_available():
 @pytest.fixture(scope='module')
 def real_soapy():
     """return the SoapySDR module that striqt imported, or skip the test when the
-    bindings are absent (the uv fallback environment)."""
+    bindings are absent."""
     from striqt.sensor.lib.sources import soapy
 
     pytest.importorskip('SoapySDR')
@@ -160,7 +160,7 @@ def real_soapy():
 
 def pytest_generate_tests(metafunc):
     """parametrize `xp` over the namespaces named by a `namespaces` marker, or numpy
-    and cupy by default"""
+    and cupy by default."""
     if 'xp' in metafunc.fixturenames:
         marker = metafunc.definition.get_closest_marker('namespaces')
         names = marker.args if marker else ('numpy', 'cupy')
@@ -175,8 +175,8 @@ def xp(request):
 
 
 def as_xp(xp, *arrays):
-    """convert numpy `arrays` into the namespace `xp`. One array returns one array,
-    several return a tuple."""
+    """convert numpy `arrays` into the namespace `xp`. The return is one array for one
+    input and a tuple for several."""
 
     def convert(arr):
         if xp is np:
@@ -299,8 +299,7 @@ def shaped_arrays(
 ):
     """draw (array, axis) pairs with `axis` in [-ndim, ndim).
 
-    Negative axes are drawn as often as positive ones, so the axis-normalization
-    branches are exercised.
+    Negative axes are drawn as often as positive ones.
     """
 
     @st.composite
@@ -315,12 +314,7 @@ def shaped_arrays(
 
 def gaussian_iq(shape, dtype=np.complex64, seed: int = 0):
     """return standard normal noise of `shape` from `seed`, complex unless `dtype` is
-    real.
-
-    This is the shape-addressed primitive for kernel tests; `striqt.analysis.testing.circular_awgn`
-    is the duration-, rate-, and port-addressed generator that the synthetic sensor
-    sources share.
-    """
+    real."""
     rng = np.random.default_rng(seed)
     x = rng.standard_normal(shape)
     if np.dtype(dtype).kind == 'c':
@@ -338,16 +332,20 @@ def iq_waveforms(
 ):
     """draw gaussian noise waveforms, complex unless `dtype` is a real float type.
 
-    The draw selects the dtype, the sample count (a multiple of `multiple_of` in
-    [`min_size`, `max_size`]), the power in decades from the `log_power` range, and
-    a seed. The samples come from a generator with that seed, so examples are
-    reproducible and shrink toward short waveforms.
+    Each example draws a dtype, a sample count, a power, and the seed of the
+    generator.
 
     Args:
+        min_size: lower bound on the sample count, floored to a multiple of
+            `multiple_of`
+        max_size: upper bound on the sample count, floored to a multiple of
+            `multiple_of`
+        multiple_of: the sample count is a multiple of this value
         channels: `None` for a 1-D waveform, or the row count of a 2-D
             (channel, sample) array
         dtype: a dtype, a sequence of dtypes to draw from, or `None` for complex64
             and complex128
+        log_power: (low, high) inclusive range of the waveform power in decades
     """
     if dtype is None:
         dtype = [np.complex64, np.complex128]
@@ -415,8 +413,8 @@ def array_backend(xp) -> str:
 
 @pytest.fixture
 def isolated_lookup(monkeypatch):
-    """replace the controller registries with empty ones for the test, so sources
-    opened by the test do not read or alter the process-global lookup entries."""
+    """replace the controller registries with empty ones for the test and return the
+    `lookup` module."""
     from collections import defaultdict
     from threading import Event
 
@@ -447,7 +445,7 @@ def scripted_input(monkeypatch):
 @pytest.fixture
 def isolated_bindings(monkeypatch):
     """restore the module globals `registry` and `tagged_sweeps` of `ss.lib.bindings`
-    after the test. `bind_sensor` updates both."""
+    after the test and return the module."""
     import striqt.sensor as ss
 
     bindings = ss.lib.bindings
@@ -460,10 +458,10 @@ def isolated_bindings(monkeypatch):
 def isolated_analysis_registry():
     """restore the live `sa.registry` after a test registers a measurement.
 
-    `registry.measurement` writes the dict items and the `names`, `caches`,
-    `coordinates`, `signal_trigger`, `parameter_defaults`, and `parameter_fields`
-    attributes. Teardown also clears every `sw.util.lru_cache`. The group validation
-    and tolerance caches key on the registered spec types."""
+    Teardown restores the dict items and the `names`, `caches`, `coordinates`,
+    `signal_trigger`, `parameter_defaults`, and `parameter_fields` attributes, and
+    clears every `sw.util.lru_cache`.
+    """
     import striqt.analysis as sa
     import striqt.waveform as sw
 
@@ -497,8 +495,8 @@ def corrections_flags(monkeypatch):
     `striqt.sensor.lib.compute.corrections` for one test through the returned
     ``set(use_oaresample=None, ignore_highside_lo=None)``.
 
-    The resampler and overlap designs are lru-cached on arguments without the flags,
-    so the caches are cleared on every call of `set` and again at teardown.
+    `None` leaves a switch unchanged. Every `sw.util.lru_cache` is cleared on each
+    call of `set` and at teardown.
     """
     import striqt.waveform as sw
     from striqt.sensor.lib.compute import corrections
@@ -521,7 +519,7 @@ def corrections_flags(monkeypatch):
 def resample_path(request, corrections_flags):
     """run the test on each resampler path in turn and return the name of the path:
     ``'resample'`` for the whole-record FFT resampler and the FIR, ``'oaresample'``
-    for the STFT overlap-add resampler with the low-pass on its bins"""
+    for the STFT overlap-add resampler with the low-pass on its bins."""
     corrections_flags(use_oaresample=request.param == 'oaresample')
     return request.param
 
@@ -541,8 +539,7 @@ def armed_tone_controller(isolated_lookup):
 
 
 def assert_source_released(lookup, sweep):
-    """assert that `lookup` has no controller for the source of `sweep`, so the next
-    open does not find a closed one."""
+    """assert that `lookup` has no controller for the source of `sweep`."""
     import striqt.sensor as ss
 
     assert not isinstance(lookup._get(sweep.source), ss.lib.controller.Controller)
@@ -550,13 +547,11 @@ def assert_source_released(lookup, sweep):
 
 # %% Spec construction paths
 
-# `construct` parametrizes a test over the two paths; `raises_on_both_paths` asserts
-# one rejection on both; `construct_both` returns both instances for one assertion
-
 
 @pytest.fixture(params=('direct', 'from_dict'))
 def construct(request):
-    """build a spec either directly or through msgspec conversion"""
+    """return ``build(cls, **kws)``, a spec constructor on the direct or the
+    `from_dict` path."""
     if request.param == 'direct':
         return lambda cls, **kws: cls(**kws)
     return lambda cls, **kws: cls.from_dict(kws)
@@ -566,10 +561,8 @@ def raises_on_both_paths(cls, exc, match, **kws):
     """assert that constructing `cls` from `kws` raises `exc` matching `match`, both
     directly and through `from_dict`.
 
-    msgspec re-raises `ValueError` and `TypeError` from `__post_init__` as
-    `msgspec.ValidationError` on the conversion path, so either exception is accepted
-    there. Nested spec values in `kws` are converted to builtins for the `from_dict`
-    path.
+    On the `from_dict` path, `msgspec.ValidationError` is accepted in place of `exc`,
+    and nested spec values in `kws` are converted to builtins.
     """
     with pytest.raises(exc, match=match):
         cls(**kws)
@@ -649,11 +642,9 @@ def write_yaml(tmp_path):
 
 @pytest.fixture
 def isolated_extension_import():
-    """hide the `extensions` module of the test suite so a spec can import a
-    different module of that name.
+    """hide the `extensions` module of the test suite for one test.
 
-    `sys.path` and `sys.modules` are restored at teardown. A temporary module left
-    cached as `extensions` would break every later site YAML read.
+    `sys.path` and ``sys.modules['extensions']`` are restored at teardown.
     """
     import sys
 
@@ -707,8 +698,8 @@ def fake_controller(fake_soapy_ext):
     """return ``open(**kws)``, a factory of `Controller` context managers for the
     `fake_soapy` binding on rx ports (0, 1).
 
-    `reuse_iq` and `rx_ports` go to the controller. Every other keyword goes to the
-    source spec.
+    `reuse_iq` and `rx_ports` are passed to the controller and every other keyword to
+    the source spec.
     """
     import striqt.sensor as ss
 
@@ -743,8 +734,7 @@ def soapy_stream(soapy_device):
 
 @pytest.fixture
 def clear_function_caches():
-    """clear the `striqt.waveform` function caches at teardown. `read_calibration`
-    and the lookups cache by path."""
+    """clear the `striqt.waveform` function caches at teardown."""
     import striqt.waveform as sw
 
     yield
@@ -794,7 +784,7 @@ def fake_sweep_runner(tmp_path_factory):
     concatenated along `capture`, or an empty list when the sink yields nothing.
 
     A module that uses this fixture must not also use the function-scoped
-    `fake_soapy` fixture. A second `install_fake_soapy` shadows the first.
+    `fake_soapy` fixture.
     """
     import re
     from pathlib import Path
@@ -856,9 +846,7 @@ def restore_logging_state():
     `log_to_file`, `log_capture_context`, and `StriqtLogger` mutate.
 
     Only the adapters that existed at setup are restored. An adapter created during
-    the test is left in place. Such an adapter comes from the lazy import of a striqt
-    package, and a module that imported the adapter at module level would find the
-    adapter deleted.
+    the test is left in place.
     """
     import logging
 

@@ -32,10 +32,9 @@ def scs_cp_layout(reason_15khz, reason_60khz):
 
 
 def cp_index_reference(phy, frames, symbols, slots):
-    """build the cyclic prefix index tensor by loops.
+    """return the cyclic prefix index tensor built by loops.
 
-    The axis order is (symbol, slot, frame, cp sample), with singleton axes removed as
-    the library does.
+    The axis order is (symbol, slot, frame, cp sample), with singleton axes removed.
     """
     slots_per_frame = phy.SCS_TO_SLOTS_PER_FRAME[phy.subcarrier_spacing]
     symbols = range(phy.FFT_PER_SLOT) if symbols == 'all' else symbols
@@ -74,8 +73,8 @@ class TestPhy3GPP:
         """3GPP TS 38.211 5.3.1: normal CP is 144*kappa*2**-mu samples, with an
         extra 16*kappa in the first symbol of a subframe.
 
-        Symbol 7 is left to `test_subframe_cp_layout`. At 15 kHz that symbol has the
-        second extra CP of the subframe. `Phy3GPP` omits that CP.
+        Symbol 7 is excluded. At 15 kHz that symbol has the second extra CP of the
+        subframe, which `Phy3GPP` omits.
         """
         nfft = round(sample_rate / scs)
         mu = round(np.log2(scs / 15e3))
@@ -263,7 +262,7 @@ NR_FR1_PAIRS = [
 class TestNRSampleRate:
     def test_min_sample_rate_is_a_lower_bound(self):
         """a bound above the unconstrained rate and on the rate grid is returned as
-        is; a bound below leaves the rate unchanged"""
+        is, and a bound below leaves the rate unchanged"""
         rate = phy_3gpp.nr_sample_rate(60e6, 30e3, min_sample_rate=107.52e6)
         assert rate == pytest.approx(107.52e6)
         rate = phy_3gpp.nr_sample_rate(60e6, 30e3, min_sample_rate=1e6)
@@ -278,8 +277,8 @@ class TestNRSampleRate:
 
     @pytest.mark.parametrize('scs, bw', NR_ONE_PER_SCS)
     def test_rate_fits_the_symbol_grid_at_half_spacing(self, scs, bw):
-        """the cellular spectrograms at SCS/2 resolution fill 15/28 of each hop.
-        A whole-sample window needs a bin period that is a multiple of 28 samples."""
+        """the sample count of one bin period at SCS/2 resolution is a multiple of
+        28"""
         rate = phy_3gpp.nr_sample_rate(bw, scs)
         assert (rate / (scs / 2)) % 28 == 0
 
@@ -312,6 +311,6 @@ class TestNROccupiedBandwidth:
     @pytest.mark.parametrize('scs, bw', NR_FR1_PAIRS)
     def test_occupied_bandwidth_leaves_a_guard_band(self, scs, bw):
         """3GPP TS 38.104 Table 5.3.3-1 lists a positive guard band for every
-        entry: the transmission bandwidth is below the channel bandwidth"""
+        entry, so the transmission bandwidth is below the channel bandwidth"""
         occupied = phy_3gpp.nr_occupied_bandwidth(bw, scs)
         assert 0.75 * bw < occupied < bw

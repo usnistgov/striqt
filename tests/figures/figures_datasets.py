@@ -53,8 +53,8 @@ def capture_bandwidth() -> np.ndarray:
 def cyclic_mean_dBm() -> np.ndarray:
     """return the mean cyclic channel power (dBm) of each capture and detector.
 
-    The ``rms`` detector is at the system noise in the capture bandwidth, and the
-    ``peak`` detector `PEAK_OFFSET_DB` above. The array has shape
+    The ``rms`` level equals the system noise in the capture bandwidth, and the
+    ``peak`` level is `PEAK_OFFSET_DB` above. The array has shape
     ``(capture, power_detector)``.
     """
     offsets = np.array([

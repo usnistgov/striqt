@@ -84,8 +84,9 @@ def test_fill_between_appends_a_lower_then_upper_trace_per_hue_per_facet() -> No
 
 
 def test_fill_between_on_target_appends_traces_in_the_line_colors() -> None:
-    """bands drawn onto the figure of `line` extend its traces, add no pending
-    figure, and the band of hue index `i` has the RGB of the `i`th line"""
+    """`fill_between` with the figure of `line` as `target` extends the traces of
+    that figure and leaves one pending figure, and the band of hue index `i` has the
+    RGB of the `i`th line."""
     low, mean, high = cyclic_statistics()
     plotter = capture_backend()
 
@@ -128,7 +129,8 @@ def test_limit_facets_sets_a_range_per_facet_from_the_capture_values() -> None:
 
 def test_mark_noise_level_edits_only_the_given_figure_by_facet_value() -> None:
     """the shapes of the given figure are at the system noise of the capture of
-    each facet, in the facet order of that figure; another figure is unchanged"""
+    each facet, in the facet order of that figure. Another figure of the same
+    backend is unchanged."""
     plotter = capture_backend()
     _, mean_all, _ = cyclic_statistics()
     other = plotter.line(mean_all, x=X, hue=HUE)
@@ -147,6 +149,39 @@ def test_mark_noise_level_edits_only_the_given_figure_by_facet_value() -> None:
         assert shape.y0 == shape.y1 == pytest.approx(expected[i_capture], abs=1e-3)
         assert shape.yref == yaxis
         assert shape.xref == f'{xaxis} domain'
+
+
+# %% heatmap
+
+
+def test_heatmap_vstep_bands_fall_on_multiples_of_vstep() -> None:
+    """with `vstep`, the color range runs from `vmin` rounded down to `vmax` rounded
+    up to multiples of `vstep`, each colorscale band spans one `vstep`, and the
+    band edges equal the `BoundaryNorm` boundaries of the matplotlib backend"""
+    from striqt.figures.backend import MatplotlibBackend
+
+    _, mean, _ = cyclic_statistics(make_dataset())
+    # matplotlib `imshow` requires numeric axes
+    mean = mean.assign_coords({HUE: np.arange(mean.sizes[HUE])})
+    kws = {'x': X, 'y': HUE, 'vmin': -73.4, 'vmax': -61.2, 'vstep': 2.0}
+    expected_edges = -74.0 + 2.0 * np.arange(8)
+
+    fig = capture_backend().heatmap(mean, **kws)
+    assert len(fig.data) == 3
+    for trace in fig.data:
+        assert (trace.zmin, trace.zmax) == (expected_edges[0], expected_edges[-1])
+        positions = np.array([pos for pos, _ in trace.colorscale])
+        starts = positions[::2]
+        assert len(starts) == 7
+        edges = trace.zmin + starts * (trace.zmax - trace.zmin)
+        np.testing.assert_allclose(edges, expected_edges[:-1])
+
+    mpl_opts = specs.SharedPlotOptions(
+        col='capture', col_label_format='{center_frequency}', suptitle_fmt='title'
+    )
+    grid = MatplotlibBackend(mpl_opts, output_dir=None).heatmap(mean, **kws)
+    norm = grid.axs.flat[0].images[0].norm
+    np.testing.assert_allclose(norm.boundaries, expected_edges)
 
 
 # %% reset
@@ -201,7 +236,8 @@ def test_line_rejects_a_yscale_other_than_linear_or_log() -> None:
 
 @pytest.mark.parametrize('method', ['line', 'fill_between'])
 def test_target_with_other_facets_raises(method: str) -> None:
-    """a figure of 3 captures rejects data with 2 captures"""
+    """`line` and `fill_between` raise `ValueError` for data with 2 captures on a
+    `target` figure of 3 captures."""
     low, mean, high = cyclic_statistics()
     plotter = capture_backend()
     fig = plotter.line(mean, x=X, hue=HUE)

@@ -1,7 +1,7 @@
-"""the docstring gate: no personal pronouns or "whose", and no `.lib` paths in public
-docstrings; and the structure of the generated measurement docstrings.
+"""the docstring gate: no personal pronoun or "whose", no `.lib` path in a public
+docstring, and the structure of the generated measurement docstrings.
 
-The AST scan imports nothing from `striqt`; the registry cell imports
+The AST scan imports nothing from `striqt`. The registry tests import
 `striqt.analysis` inside each test.
 """
 
@@ -71,6 +71,61 @@ def test_docstrings_are_clean() -> None:
     assert not hits, 'docstrings that break a prose rule:\n' + '\n'.join(lines)
 
 
+# %% spec struct class docstrings
+
+TICKED_NAME = re.compile(r'(?<!`)`([A-Za-z_][\w.]*)`(?!`)')
+SECTION = re.compile(
+    r'^\s*(Args|Returns|Yields|Raises|Examples|References|Output):\s*$', re.MULTILINE
+)
+
+
+def one_field_sentences(cls: type) -> list[str]:
+    """return the sentences of the class docstring of `cls` that name exactly one
+    backticked identifier, that identifier being a field of `cls`.
+
+    Only the prose above the first Google section is scanned. A sentence that names
+    a second identifier states an interaction and is kept.
+    """
+    import msgspec
+
+    doc = cls.__doc__ or ''
+    match = SECTION.search(doc)
+    prose = ' '.join((doc[: match.start()] if match else doc).split())
+    fields = {f.name for f in msgspec.structs.fields(cls)}
+    hits = []
+    for sentence in re.split(r'(?<=[.!?])\s+', prose):
+        names = set(TICKED_NAME.findall(sentence))
+        if len(names) == 1 and names <= fields:
+            hits.append(sentence)
+    return hits
+
+
+def test_spec_class_docstrings_name_no_single_field(subtests) -> None:
+    """a sentence of a spec-struct class docstring names 2 identifiers or none; a fact
+    about one field belongs in that field's `Meta` description"""
+    import sys
+
+    import msgspec
+
+    import striqt.analysis  # noqa: F401
+    import striqt.figures  # noqa: F401
+    import striqt.sensor  # noqa: F401
+
+    classes = {
+        obj
+        for name, mod in list(sys.modules.items())
+        if name.startswith('striqt.')
+        for obj in list(vars(mod).values())
+        if isinstance(obj, type)
+        and issubclass(obj, msgspec.Struct)
+        and obj.__module__ == name
+        and vars(obj).get('__doc__')
+    }
+    for cls in sorted(classes, key=lambda c: f'{c.__module__}.{c.__qualname__}'):
+        with subtests.test(msg=f'{cls.__module__}.{cls.__qualname__}'):
+            assert one_field_sentences(cls) == []
+
+
 # %% registry docstrings
 
 
@@ -88,9 +143,10 @@ def test_registered_long_names_are_sentence_case_titles(subtests) -> None:
 
 
 def test_registered_measurement_docstrings_render_the_output_section(subtests) -> None:
-    """every builtin measurement writes the `Output:` section with the placeholders,
-    the registry renders the dtype, every dimension, and every coordinate factory into
-    the section, and the prose above the section names no attr"""
+    """every registered measurement docstring has an `Output:` section with no
+    placeholder left, with the dtype, every dimension, and every coordinate factory
+    rendered into the section, and with no attr named in the prose above the
+    section"""
     import striqt.analysis as sa
     from striqt.analysis.lib import dataarrays
 
@@ -119,9 +175,8 @@ def test_registered_measurement_docstrings_render_the_output_section(subtests) -
 
 
 def test_registered_coordinate_factories_have_a_docstring(subtests) -> None:
-    """the first paragraph of the factory docstring is the description of the
-    coordinate in every measurement docstring that lists the coordinate, so the
-    paragraph is a noun phrase rather than a `Returns` sentence"""
+    """every registered coordinate factory has a docstring, and the first paragraph
+    is a noun phrase, not a `Returns` sentence"""
     import inspect
 
     import striqt.analysis as sa

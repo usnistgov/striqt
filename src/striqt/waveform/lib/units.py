@@ -1,4 +1,4 @@
-"""units strings and SI prefixes of the quantities that striqt measures and labels.
+"""Units strings and SI prefixes of the quantities that striqt measures and labels.
 
 A units string is the unit of stored values, such as ``'dBm'``, ``'mW'``, ``'√mW'``,
 ``'Hz'``, ``'S/s'``, or ``'dBm/Hz'``. The text left of the first ``/`` is the base
@@ -96,9 +96,9 @@ def parse_units(units: str) -> Units:
 def is_prefixable(units: Union[str, None]) -> bool:
     """return whether an SI prefix may scale the base unit of `units`.
 
-    A dB unit (any base that begins ``dB``), a base that already carries a prefix
-    (``'mW'``, ``'√mW'``), ``'unitless'``, and None are not prefixable. The empty
-    string is a bare number that takes a prefix.
+    A base that begins ``dB``, the bases ``'mW'``, ``'FS'``, ``'a.u.'``, and
+    ``'unitless'`` (with or without a leading ``√``), and None are not prefixable.
+    The empty string is a bare number that takes a prefix.
     """
     if units is None:
         return False
@@ -185,7 +185,7 @@ def resolve_power_units(units: str, power_units: PowerUnits) -> str:
     """return `units` with its power form fields filled by `power_units`.
 
     `DB_POWER` becomes the dB unit of `power_units` (``'dBm'`` for ``'mW'``), `POWER`
-    becomes `power_units`, and `AMPLITUDE` the square root form; a denominator such
+    becomes `power_units`, and `AMPLITUDE` the square root form. A denominator such
     as ``'{dB}/Hz'`` is kept. A string without a form field is returned unchanged.
     """
     if not has_power_form(units):
@@ -217,11 +217,11 @@ def si_prefix(
     """return one SI prefix for every value of `values` in `units`.
 
     The prefix is that of the largest finite nonzero magnitude, with a mantissa that
-    rounds to 1000 under `places` carried to the next prefix. Two or more distinct
-    magnitudes lower the prefix to the step between the closest pair, by at most one
-    prefix, so that a sequence such as 3.7 and 3.75 GHz reads in MHz while every
-    mantissa stays below 10⁶. Units that are not `is_prefixable`, and values with no
-    finite nonzero magnitude, give the exponent 0.
+    rounds to 1000 under `places` carried to the next prefix. With two or more
+    distinct magnitudes, the prefix is lowered to that of the step between the
+    closest pair, by at most one prefix. Thus 3.7 and 3.75 GHz read as 3700 and
+    3750 MHz, and every mantissa stays below 10⁶. Units that are not `is_prefixable`,
+    and values with no finite nonzero magnitude, give the exponent 0.
 
     Args:
         values: one value, or the values to share the prefix; zero, NaN, and
@@ -279,8 +279,9 @@ def format_quantity(
             `float`
         units: the units string of `value`, ``''`` for a bare prefix, or None to
             return the scaled mantissa alone
-        prefix: ``'auto'`` selects `si_prefix` of `value`; a prefix symbol such as
-            ``'M'`` or ``'u'`` forces that prefix; an `SIPrefix` is applied as given
+        prefix: ``'auto'`` selects `si_prefix` of `value`, a prefix symbol such as
+            ``'M'`` or ``'u'`` forces that prefix, and an `SIPrefix` is applied as
+            given
         places: the decimal places of the mantissa, or None for the shortest
             representation (``'g'``)
         sep: the text between the mantissa and the suffix

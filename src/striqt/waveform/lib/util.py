@@ -13,13 +13,14 @@ from typing import TYPE_CHECKING, Any, Callable, cast
 _lazy_import_locks = collections.defaultdict(threading.RLock)
 
 
+# Python 3.9 to 3.11 swap the class of a lazy module before running the body, so a
+# second thread that reads an attribute during the load sees a module with an empty
+# namespace. Python 3.12 holds a lock through the load instead
 class _LazyModule(ModuleType):
     """a module that runs its body on the first attribute access, once, under a lock.
 
-    Python 3.9 to 3.11 swap the class of a lazy module before running the body, so a
-    second thread that reads an attribute during the load sees a module with an
-    empty namespace. This class holds the module lock through the load, and the
-    loading thread re-enters without triggering a second load, as in Python 3.12.
+    The module lock is held through the load, and the loading thread re-enters
+    without a second load.
     """
 
     def __getattribute__(self, attr: str) -> Any:
@@ -176,8 +177,7 @@ def cache_dir() -> Path:
 
     The directory is ``STRIQT_CACHE_DIR`` when that environment variable is set and
     not empty, otherwise the platformdirs user cache directory for ``striqt``. The
-    directory is created if absent. Two processes with different directories share no
-    cache files.
+    directory is created if absent.
 
     Raises:
         OSError: if the directory cannot be created
@@ -203,8 +203,8 @@ def _cache_shelf_path() -> str:
 _cache_shelf_disabled = False
 
 
-# any exception from the shelf disables the cache for the process: the macOS dbm
-# backend corrupts the shelf under eviction and then raises UnicodeDecodeError, a
+# any exception from the shelf disables the cache for the process, because the macOS
+# dbm backend corrupts the shelf under eviction and then raises UnicodeDecodeError, a
 # ValueError that would otherwise be mistaken for a bad argument to the wrapped
 # function
 def _discard_cache_shelf(ex: BaseException) -> None:
@@ -276,10 +276,10 @@ def persistent_cache(
     """memoize the results of a function in a disk shelf shared across processes.
 
     The shelf holds at most `maxsize` entries. The entry evicted past that limit is
-    unspecified. A fault reading or writing the shelf, an unpicklable result
-    included, disables the cache for the process, deletes the cache files with a
-    `UserWarning`, and lets the call proceed uncached. Only the exceptions of the
-    wrapped function reach the caller.
+    unspecified. A fault reading or writing the shelf disables the cache for the
+    process, deletes the cache files with a `UserWarning`, and lets the call proceed
+    uncached. An unpicklable result counts as a write fault. Only the exceptions of
+    the wrapped function reach the caller.
 
     Args:
         maxsize: the number of entries kept in the shelf
@@ -317,7 +317,8 @@ def persistent_cache(
                     _discard_cache_shelf(ex)
                     return func(*args, **kwargs)
 
-                # outside the try, so that its exceptions propagate as themselves
+                # outside the try, where the exceptions of `func` would be mistaken
+                # for shelf faults
                 result = func(*args, **kwargs)
 
                 try:

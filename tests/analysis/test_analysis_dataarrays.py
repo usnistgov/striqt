@@ -1,13 +1,11 @@
 """striqt.analysis.lib.dataarrays: the result containers that `EvaluationOptions`
 selects when an analysis group is evaluated on a waveform.
 
-The measurements are chosen for cost: a 1000-sample tone through the IQ passthrough
-and the channel power detectors, which run without a window design or a resampler.
-`Preprocessor` is checked on the base class, which returns `x` for every preference,
-and through a recording subclass that records the preferences the registry passes.
-The power-units cell runs a 10 ms tone at 1.92 MS/s through one group with an output
-in each form of a power unit: dB, amplitude, linear power, and a power-bin coordinate,
-once per power unit in a module-scoped fixture.
+The input is a 1000-sample tone through the IQ passthrough and the channel power
+detectors, which run without a window design or a resampler. The power-units tests
+run a 10 ms tone at 1.92 MS/s through one group with an output in each form of a
+power unit (dB, amplitude, linear power, and a power-bin coordinate), once per power
+unit in a module-scoped fixture.
 """
 
 from __future__ import annotations
@@ -81,7 +79,7 @@ def test_a_preprocessor_outliving_its_acquisition_raises() -> None:
 def test_raw_and_delayed_results_are_the_registered_arrays(iq: np.ndarray) -> None:
     """``as_xarray=False`` returns the raw array of each measurement of the group in
     group order, ``'delayed'`` returns a `DelayedDataArray` with that array as the
-    result, and `analyze_by_spec` dispatches to the same results"""
+    result, and `analyze_by_spec` dispatches to the same results."""
     raw = sa.dataarrays.evaluate_by_spec(iq, GROUP, CAPTURE, options(as_xarray=False))
     delayed = sa.dataarrays.evaluate_by_spec(
         iq, GROUP, CAPTURE, options(as_xarray='delayed')
@@ -101,7 +99,7 @@ def test_raw_and_delayed_results_are_the_registered_arrays(iq: np.ndarray) -> No
 
 def test_evaluate_by_spec_hands_the_acquisition_to_the_measurement() -> None:
     """a measurement given an `AcquiredIQ` receives the array that the `preprocess` of
-    the acquisition returns for the preferences registered with the measurement"""
+    the acquisition returns for the preferences registered with the measurement."""
     capture = sa.specs.Capture(duration=16e-6, sample_rate=1e6)
     x = np.arange(32, dtype='complex64').reshape(2, 16)
     iq = RecordingIQ(x=x, capture=capture, power_units='a.u.')
@@ -192,8 +190,8 @@ def units_of(iq: np.ndarray | sa.AcquiredIQ) -> dict[str, str]:
 
 @pytest.fixture(scope='module')
 def units_by_power_units(power_units_x: np.ndarray) -> dict[str, dict[str, str]]:
-    """the `units_of` result for an acquisition in each power unit, evaluated in the
-    order FS, a.u., mW, and then for the bare array under ``'bare'``"""
+    """return the `units_of` result for an acquisition in each power unit, evaluated
+    in the order FS, a.u., mW, and then for the bare array under ``'bare'``."""
     results = {}
     for power_units in ('FS', 'a.u.', 'mW'):
         iq = sa.AcquiredIQ(power_units_x, POWER_UNITS_CAPTURE, power_units=power_units)
@@ -207,7 +205,7 @@ def test_power_units_of_the_acquisition_label_every_power_output(
     units_by_power_units: dict[str, dict[str, str]], power_units: sw.units.PowerUnits
 ) -> None:
     """the dB, amplitude, and linear power outputs and the power-bin coordinate take
-    the family of `AcquiredIQ.power_units`; the ratio coordinate stays in dB"""
+    the family of `AcquiredIQ.power_units`, and the ratio coordinate stays in dB."""
     assert units_by_power_units[power_units] == POWER_UNITS_EXPECTED[power_units]
 
 
@@ -220,9 +218,8 @@ def test_a_bare_array_is_in_arbitrary_units(
 def test_power_units_leave_the_registered_and_cached_attrs_in_mW(
     units_by_power_units: dict[str, dict[str, str]],
 ) -> None:
-    """an evaluation in full scale resolves copies: the registered attrs and the cached
-    coordinate factory result keep the form token after the evaluations of the
-    fixture"""
+    """the registered attrs and the cached coordinate factory result keep the form
+    token after the fixture evaluates the group in full scale."""
     info = sa.registry[sa.specs.ChannelPowerTimeSeries]
     assert info.attrs['units'] == sa.units.DB_POWER
     info = sa.registry[sa.specs.SpectrogramHistogram]
@@ -236,7 +233,7 @@ def test_to_xarray_leaves_the_delayed_attrs_as_the_form(
     power_units_x: np.ndarray,
 ) -> None:
     """the attrs that a measurement body returns keep the form token after the
-    DataArray is built in a family"""
+    DataArray is built in a family."""
     iq = sa.AcquiredIQ(power_units_x, POWER_UNITS_CAPTURE, power_units='FS')
     results = sa.analyze_by_spec(
         iq, POWER_UNITS_GROUP, POWER_UNITS_CAPTURE, options(as_xarray='delayed')
@@ -266,7 +263,7 @@ def test_compute_keeps_the_power_units(power_units_x: np.ndarray) -> None:
 
 def test_measurement_attrs_layers_and_resolves_the_form():
     """the registered attrs, the spec fields, and the body attrs merge in that order,
-    and a power form in `units` resolves into the family"""
+    and a power form in `units` resolves into the family."""
     info = sa.registry[sa.specs.ChannelPowerTimeSeries]
     spec = sa.specs.ChannelPowerTimeSeries(detector_period=1e-3)
     attrs = sa.dataarrays.measurement_attrs(

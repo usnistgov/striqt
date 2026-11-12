@@ -2,10 +2,10 @@
 
 The grid of this backend is a `go.Figure` from `plotly.subplots.make_subplots`
 with one subplot cell per facet. Facet `i` is the cell ``(1 + i // cols, 1 + i %
-cols)``, with `cols` the smaller of the facet count and `col_wrap`, and the
-traces of facet `i` reference the plotly axes ``x``/``y`` for ``i == 0`` and
-``x{i+1}``/``y{i+1}`` after. ``layout.meta`` of each figure records the
-``variable`` name, the ``col_dim``, and the ``facets`` values in facet order.
+cols)``, with `cols` the smaller of the facet count and `col_wrap`, or 4 without
+`col_wrap`. The traces of facet `i` reference the plotly axes ``x``/``y`` for
+``i == 0`` and ``x{i+1}``/``y{i+1}`` after. ``layout.meta`` of each figure is set
+to the ``variable`` name, the ``col_dim``, and the ``facets`` values in facet order.
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def _rgba(hex_color: str, alpha: float) -> str:
 
 
 def _axis_values(values: Any) -> np.ndarray:
-    """return the 1-D axis coordinate `values`, with a timedelta64 array in seconds"""
+    """return `values` flattened to 1-D, with a timedelta64 array in seconds"""
     arr = _to_numpy(values).flatten()
     if np.issubdtype(arr.dtype, np.timedelta64):
         # the plotly JSON encoder rejects datetime.timedelta
@@ -77,8 +77,8 @@ def _axis_values(values: Any) -> np.ndarray:
 def _y_along(data: xr.DataArray, x: str) -> np.ndarray:
     """return the values of `data` as a 1-D array along the `x` dimension.
 
-    When `data` has values on dimensions other than `x`, only the first row along
-    the remaining dimensions is returned. Inf entries are returned as NaN.
+    With more than 1 entry along the dimensions other than `x`, the first entry
+    along those dimensions is returned. Inf entries are returned as NaN.
     """
     y_data = _to_numpy(data.values).squeeze()
     x_size = data[x].size
@@ -116,7 +116,10 @@ def _heatmap_z(data: xr.DataArray, x: str, y: str) -> np.ndarray:
 
 
 def _finite_extent(values: Any) -> tuple[float, float]:
-    """return the (min, max) of the finite entries of `values`, or (0, 1) if none"""
+    """return the (min, max) of the finite entries of `values`, or (0, 1) without any.
+
+    A non-numeric dtype gives (0, 1).
+    """
     arr = _to_numpy(values)
     if arr.dtype.kind not in 'fiu':
         return 0.0, 1.0
@@ -134,7 +137,10 @@ def _finite_or_none(value: float | None) -> float | None:
 
 
 def _grid_shape(n_facets: int, col_wrap: int | None) -> tuple[int, int]:
-    """return the ``(rows, cols)`` of the subplot grid of `n_facets` facets"""
+    """return the ``(rows, cols)`` of the subplot grid of `n_facets` facets.
+
+    `cols` is the smaller of `n_facets` and `col_wrap`, or 4 without `col_wrap`.
+    """
     cols = min(n_facets, col_wrap or 4)
     return math.ceil(n_facets / cols), cols
 
@@ -172,8 +178,8 @@ def _subplot_grid(rows: int, cols: int, titles: tuple[str, ...]) -> go.Figure:
 def _split_hue(data: xr.DataArray, hue: str | None) -> list[tuple[str, xr.DataArray]]:
     """return the ``(name, values)`` of each line of `data`, one per `hue` value.
 
-    A `hue` that is a coordinate without a dimension selects one line labeled by the
-    first coordinate value, and `None` one line labeled by the name of `data`.
+    A `hue` that is a coordinate but not a dimension selects one line labeled by the
+    first unique coordinate value, and `None` one line labeled by the name of `data`.
     """
     if hue is not None and hue in data.dims:
         return [
@@ -192,7 +198,10 @@ def _split_hue(data: xr.DataArray, hue: str | None) -> list[tuple[str, xr.DataAr
 def _facet_arrays(
     data: xr.DataArray, col_dim: str | None, facets: list[Any]
 ) -> Iterator[tuple[Any, xr.DataArray]]:
-    """yield the ``(facet value, values)`` of `data` on each facet, in facet order"""
+    """yield the ``(facet value, values)`` of `data` on each facet, in facet order.
+
+    `col_dim` None yields `data` once with the facet value None.
+    """
     if col_dim is None:
         yield None, data
         return
@@ -205,7 +214,8 @@ class PlotlyBackend(PlotBackend['go.Figure']):
 
     Each drawing call without `target` appends one figure to a pending list that
     `get_plot_data` returns and clears. The color limits of `heatmap` and the y
-    limits of `line` only widen across calls, and `sharex` has no effect.
+    limits of `line` and `fill_between` widen across calls and narrow only at
+    `reset`. `sharex` has no effect.
     """
 
     def __init__(
@@ -236,9 +246,10 @@ class PlotlyBackend(PlotBackend['go.Figure']):
     def _get_col_dim(self, data: xr.DataArray) -> Optional[str]:
         """return the dimension for column faceting, or None.
 
-        `opts.col` is returned when `opts.col` is a dimension of `data`. When
-        `opts.col` is a 1-D coordinate of `data`, the dimension of that coordinate is
-        returned if `data` has more than 1 value along that dimension.
+        `opts.col` is returned when `opts.col` is a dimension of `data`. The
+        dimension of a 1-D coordinate `opts.col` is returned when `data` has more
+        than 1 value along that dimension. None is returned otherwise, and without
+        `opts.col`.
         """
         col = self.opts.col
         if not col:
@@ -269,7 +280,10 @@ class PlotlyBackend(PlotBackend['go.Figure']):
     def _new_figure(
         self, data: xr.DataArray, col_dim: str | None, facets: list[Any]
     ) -> go.Figure:
-        """append and return the subplot grid of one drawing call on `data`"""
+        """return the subplot grid of one drawing call on `data`.
+
+        The grid is appended to the pending figures.
+        """
         n_facets = len(facets)
         rows, cols = _grid_shape(n_facets, self.opts.col_wrap)
         if self.opts.col is None or self.opts.col_label_format is None:
@@ -277,11 +291,11 @@ class PlotlyBackend(PlotBackend['go.Figure']):
         else:
             titles = tuple(_facet_titles(data, self.opts)[:n_facets])
 
-        # make_subplots costs 4-6 ms per call; `go.Figure(grid)` copies a cached grid
-        # in 1 ms and brings the subplot references over
+        # make_subplots costs 4-6 ms per call, and `go.Figure(grid)` copies a cached
+        # grid with its subplot references in 1 ms
         fig = go.Figure(_subplot_grid(rows, cols, titles))
         # the figure constructor applies the default template, which adds 6 kB to
-        # every `to_json` message; the browser page sets its own colors
+        # every `to_json` message, and the browser page sets its own colors
         fig.layout.template = None
         fig.update_layout(
             uirevision='constant',
@@ -356,7 +370,10 @@ class PlotlyBackend(PlotBackend['go.Figure']):
             vmax = self._remembered_vmax
 
         if vstep is not None:
-            colorscale = _make_quantized_colorscale(cmap, vmin, vmax, vstep)
+            levels = util.quantized_value_range(data, vmin, vmax, vstep)
+            colorscale = _make_quantized_colorscale(cmap, len(levels) - 1)
+            # the color range is the rounded edges, so each band spans one `vstep`
+            vmin, vmax = levels[0], levels[-1]
         else:
             colorscale = _mpl_to_plotly_colorscale(cmap)
 
@@ -399,8 +416,9 @@ class PlotlyBackend(PlotBackend['go.Figure']):
     def _y_range(self, axis_type: str | None) -> list[float | None]:
         """return the remembered y limits as a plotly axis range for `axis_type`.
 
-        A log axis takes the range as log10 of the limits, and a limit at or below 0
-        is left to autorange. A `None` entry stands for an unset or infinite limit.
+        For a ``'log'`` `axis_type`, each entry is log10 of the limit. A `None` entry
+        leaves that limit to autorange, and is returned for an unset limit, an
+        infinite limit, or a limit at or below 0 on a log axis.
         """
         limits = [
             _finite_or_none(self._remembered_ymin),
@@ -517,8 +535,7 @@ class PlotlyBackend(PlotBackend['go.Figure']):
     ) -> list[go.Scattergl]:
         """return the lower- and upper-edge trace pair of each band on one facet.
 
-        The 2 traces of each band are consecutive in the returned list. Plotly fills
-        ``tonexty`` to the preceding trace in ``data`` order.
+        The 2 traces of each band are consecutive in the returned list.
         """
         x_data = _axis_values(low[x].values)
         shape = None if step is None else _STEP_SHAPES[step]
@@ -696,10 +713,10 @@ class PlotlyBackend(PlotBackend['go.Figure']):
 def _facet_noise(noise: xr.DataArray, grid: go.Figure) -> list[float | None]:
     """return one value of `noise` per facet of `grid`, in facet order.
 
-    When the ``col_dim`` of `grid` is a dimension of `noise`, the value of a facet is
-    the entry of `noise` at the matching coordinate value along that dimension, or
-    None without a match. Otherwise the values of `noise` are returned in order, one
-    per facet, with None for each facet beyond the last value.
+    The value of a facet is the minimum of `noise` at the facet value along the
+    ``col_dim`` of `grid`, or None without a match. Without ``col_dim`` among the
+    dimensions of `noise`, the values of `noise` are returned in order, one per
+    facet, and None for each facet beyond the last value.
     """
     meta = grid.layout.meta or {}
     facets: list[Any] = meta.get('facets', [None])
@@ -759,7 +776,6 @@ def _mpl_to_plotly_colorscale(cmap: str) -> Any:
     """
     import matplotlib.pyplot as plt
 
-    # Built-in Plotly colormaps that can be used directly
     plotly_builtins = {
         'viridis': 'Viridis',
         'plasma': 'Plasma',
@@ -778,7 +794,6 @@ def _mpl_to_plotly_colorscale(cmap: str) -> Any:
     try:
         mpl_cmap = plt.get_cmap(cmap)
     except ValueError:
-        # Fallback to viridis if colormap not found
         return 'Viridis'
 
     n_colors = 256
@@ -792,39 +807,26 @@ def _mpl_to_plotly_colorscale(cmap: str) -> Any:
     return colorscale
 
 
-def _make_quantized_colorscale(
-    cmap: str,
-    vmin: float,
-    vmax: float,
-    vstep: float,
-) -> list[list[Any]]:
-    """return a stepped Plotly colorscale with bands of `vstep` from `vmin` to `vmax`.
-
-    The bands follow the matplotlib `BoundaryNorm` over a resampled colormap.
+def _make_quantized_colorscale(cmap: str, n_bands: int) -> list[list[Any]]:
+    """return a stepped Plotly colorscale of `n_bands` equal bands over ``[0, 1]``.
 
     Args:
         cmap: a matplotlib colormap name; an undefined name selects viridis
-        vmin: the lower color limit
-        vmax: the upper color limit
-        vstep: the spacing of the color levels, in the units of the data
+        n_bands: the number of color bands; a value below 1 selects 1
 
     Returns:
         a list of ``[position, color]`` pairs with 2 entries per band
     """
     import matplotlib.pyplot as plt
 
-    # data=None is accepted when vmin and vmax are both given
-    levels = util.quantized_value_range(cast('xr.DataArray', None), vmin, vmax, vstep)
-    n_levels = len(levels) - 1
-
-    n_levels = max(n_levels, 1)
+    n_levels = max(n_bands, 1)
 
     try:
         mpl_cmap = plt.get_cmap(cmap).resampled(n_levels)
     except ValueError:
         mpl_cmap = plt.get_cmap('viridis').resampled(n_levels)
 
-    # each band takes 2 entries of the same color, so the colorscale is flat
+    # each band has 2 entries of the same color, so the colorscale is flat
     # within a band
     colorscale: list[list[Any]] = []
     for i in range(n_levels):

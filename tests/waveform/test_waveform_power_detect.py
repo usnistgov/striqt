@@ -95,8 +95,7 @@ class TestStatUfuncFromShorthand:
 
 
 class TestRoundoffModels:
-    """the tolerance models against which the rest of this module measures the
-    library"""
+    """the tolerance models of the binned power detectors"""
 
     @pytest.mark.parametrize('func', [stat_rtol, bin_power_rtol], ids=func_id)
     def test_unknown_statistic_raises(self, func):
@@ -143,8 +142,9 @@ class TestIqToBinPower:
     @pytest.mark.parametrize('kind', ['mean', 'max'])
     @pytest.mark.parametrize('size', [2**14, 2**17])
     def test_long_bin_statistics_stay_within_the_reduction_model(self, xp, size, kind):
-        """a mean over 1e5 float32 samples rounds a few units, where the n*u bound of
-        recursive summation would have allowed 1e-2; a max over the bin is exact"""
+        """a mean over 2**14 to 2**17 float32 samples stays within `bin_power_bound`,
+        below the ``n*u`` bound of recursive summation, and a max over the bin is
+        exact"""
         rng = np.random.default_rng(size)
         iq = rng.standard_normal((4, size)) + 1j * rng.standard_normal((4, size))
         iq = (iq / np.sqrt(2)).astype(np.complex64)
@@ -187,12 +187,8 @@ class TestIqToBinPower:
         data=st.data(),
     )
     def test_matches_reference(self, size, kind, channels, negative_axis, data):
-        """each bin is the statistic of |iq|**2 over `size` samples, for a 1-D
-        waveform (axis 0) and a (channel, sample) array (axis 1 or -1).
-
-        The kinds are one name from each group of BIN_STATS. The aliases are
-        covered by TestStatUfuncFromShorthand, and the cupy cross-comparison runs
-        every kind because each is a separate kernel there."""
+        """each bin is the statistic of ``|iq|**2`` over `size` samples, for a 1-D
+        waveform (axis 0) and a (channel, sample) array (axis 1 or -1)"""
         waveforms = iq_waveforms(
             min_size=size, max_size=32 * size, multiple_of=size, channels=channels
         )
@@ -269,8 +265,7 @@ class TestIqToBinPower:
 
 
 class TestIqToCyclicPower:
-    """`iq_to_cyclic_power` on (channel, sample) input with axis=1, as the
-    `cyclic_channel_power` measurement calls the function.
+    """`iq_to_cyclic_power` on (channel, sample) input with ``axis=1``.
 
     The expectations follow doc/papers/cyclic_power.tex: the detector output is
     folded into a (cycle, lag) matrix with cyclic_period / detector_period lags per
@@ -485,8 +480,7 @@ class TestSampleCcdf:
 class TestNumpyCupyCrossComparison:
     """the numpy and cupy results of each detector compared against each other.
 
-    Tolerances come from the ulp budgets in `striqt.waveform.lib.power`, so a
-    difference larger than the rounding bounds of the 2 libraries fails the test.
+    Tolerances come from the ulp budgets in `striqt.waveform.lib.power`.
     """
 
     @for_each_bin_size

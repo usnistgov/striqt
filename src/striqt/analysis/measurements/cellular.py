@@ -204,8 +204,8 @@ def get_5g_ssb_spans(
 
     The band centered at `frequency_offset` (in Hz from the capture center) is
     shifted to 0 Hz and resampled from `capture.sample_rate` to `sample_rate` over
-    the first ``corr_size`` samples of each synchronization block. The correlator of
-    `kind` reads those samples alone. Inside a `registry.cache_context`,
+    the first ``corr_size`` samples of each synchronization block. Inside a
+    `registry.cache_context`,
     `ssb_iq_cache` returns the stored result for the same `iq` object, `capture`,
     `spec`, and `kind`.
 
@@ -248,7 +248,6 @@ def cellular_stft_window_fractions(
     if cyclic_prefix == 'normal':
         return Fraction(13, 28), Fraction(15, 28)
     else:
-        # extended CP
         return Fraction(3, 8), Fraction(5, 8)
 
 
@@ -613,8 +612,8 @@ def validated_ssb_spectrogram_sizing(
 ) -> spectrum.SpectrogramSizing:
     """return the STFT sizing of the SSB spectrogram of `capture` under `spec`.
 
-    The symbol layout follows `subcarrier_spacing` and `discovery_periodicity` alone.
-    The 3GPP TS 38.213 §4.1 SSB case is not read.
+    The symbol layout is set by `subcarrier_spacing` and `discovery_periodicity`
+    alone. The 3GPP TS 38.213 §4.1 SSB case is not read.
 
     Raises:
         ValueError: if the STFT does not fit the capture (as
@@ -777,7 +776,6 @@ def cellular_5g_ssb_spectrogram(
     )
     assert spg.shape[1] == symbol_count
 
-    # select frequency
     nfft = round(capture.sample_rate / spec.subcarrier_spacing)
     spg = sw.fourier.truncate_freqs(
         spg,
@@ -788,7 +786,6 @@ def cellular_5g_ssb_spectrogram(
         axis=2,
     )
 
-    # split by synchronization block
     spg = spg.reshape((x.shape[0], block_count, symbol_count, spg.shape[2]))
 
     return spg, attrs
@@ -828,8 +825,8 @@ def tdd_config_from_str(
             ``'s'`` characters, one per slot; a single character for every slot; or
             None for all downlink
         special_symbols: the symbol types of each ``'s'`` slot as a string of ``'d'``,
-            ``'u'``, and ``'f'`` characters; with an ``'s'`` slot and None, every
-            symbol of the frame is downlink
+            ``'u'``, and ``'f'`` characters; with an ``'s'`` slot and None, the
+            per-symbol string is all downlink
         normal_cp: 14 symbols per slot when True, 12 when False
         flex_as: ``'d'`` or ``'u'``, the link direction that claims flexible
             symbols; None masks flexible symbols from both
@@ -1314,7 +1311,6 @@ def apply_mask(
             'only "downlink" or "uplink" are valid values for link_direction tuple'
         )
 
-    # null in time to select each of the {down,up} links
     masks = build_tdd_link_symbol_masks(
         subcarrier_spacing=subcarrier_spacing,
         frame_slots=frame_slots,
@@ -1326,10 +1322,10 @@ def apply_mask(
         normal_cp=normal_cp,
     )
 
-    # broadcast into dimensions (input channel, link direction, symbols elapsed, frequency)
     out = masks[np.newaxis, :, :, np.newaxis] * spectrogram[:, np.newaxis, :, :]
 
-    # null frequencies in the guard interval. `spectrogram` may be a shared cache entry
+    # the guard bands are nulled in `out` rather than in `spectrogram`, which may be a
+    # shared cache entry
     eps = 1e-6
     ilo = xp.searchsorted(freqs, xp.asarray(-channel_bandwidth / 2 + guard_left + eps))
     ihi = xp.searchsorted(freqs, xp.asarray(channel_bandwidth / 2 - guard_right - eps))

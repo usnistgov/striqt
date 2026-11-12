@@ -57,7 +57,7 @@ if TYPE_CHECKING:
         # zarr 2.x
         ZarrStore: TypeAlias = zarr.storage.Store
     elif hasattr(zarr, 'abc'):
-        # zarr 3.x; the `hasattr` checks let ty resolve each branch under both the
+        # zarr 3.x. The `hasattr` checks let ty resolve each branch under both the
         # zarr 2 and zarr 3 stubs. `Any` applies where neither layout resolves.
         ZarrStore: TypeAlias = zarr.abc.store.Store
     else:

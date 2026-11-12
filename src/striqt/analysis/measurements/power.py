@@ -188,9 +188,9 @@ def channel_power_time_series(
 
     results = evaluate_channel_power_time_series(x, capture=capture, spec=spec)
 
-    # no noise_bandwidth attr: the bandwidth is the analysis_bandwidth (or sample_rate)
-    # of the capture, which varies between the captures of one sweep, and a variable
-    # attr is written once per store
+    # the noise bandwidth is omitted from the attrs because an attr is written once per
+    # store and the analysis_bandwidth (or sample_rate) of the capture varies between
+    # the captures of one sweep
     return results, spec.to_dict()
 
 
@@ -217,7 +217,6 @@ def make_power_bins(power_low, power_high, power_resolution, xp=np):
     if power_high - ret[-1] > power_resolution / 2:
         ret = xp.pad(ret, [[0, 1]], mode='constant', constant_values=power_high).copy()
 
-    # catch-all bins for counts outside of the specified range
     bottom_inf = xp.array([float('-inf')])
     top_inf = xp.array([float('inf')])
     ret = xp.concatenate((bottom_inf, ret, top_inf))
@@ -276,7 +275,7 @@ def channel_power_bin(
         the bin centers and an empty attrs dict
     """
     bins = make_power_bins(spec.power_low, spec.power_high, spec.power_resolution)
-    # no noise_bandwidth attr; see channel_power_time_series
+    # no noise_bandwidth attr (see channel_power_time_series)
     return bins, {}
 
 
@@ -343,7 +342,7 @@ def channel_power_histogram(
 
     data = xp.asarray(data, dtype=count_dtype)
 
-    # no noise_bandwidth attr; see channel_power_time_series
+    # no noise_bandwidth attr (see channel_power_time_series)
     metadata = {'detector_period': spec.detector_period}
 
     return data, metadata
@@ -518,5 +517,5 @@ def cyclic_channel_power(
         [xp.stack(list(d.values()), axis=1) for d in nested_ret.values()], axis=1
     )
 
-    # no noise_bandwidth attr; see channel_power_time_series
+    # no noise_bandwidth attr (see channel_power_time_series)
     return sw.powtodB(x).astype('float32', copy=False)

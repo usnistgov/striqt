@@ -74,8 +74,8 @@ class TestGetWindow:
         assert_array_equal(w[before + nwindow :], 0)
 
     def test_equivalent_argument_spellings_share_one_cache_entry(self):
-        """the analysis warms the cache with a dtype string and no xp, while stft
-        asks with a numpy dtype object and the namespace. Both must hit one entry."""
+        """a call with a dtype string and no `xp` and a call with a numpy dtype object
+        and ``xp=np`` hit one cache entry"""
         window, nwindow, nzero = ('kaiser', 11.884), 3840, 3328
         get_window.cache_clear()
 
@@ -109,7 +109,7 @@ class TestEquivalentNoiseBandwidth:
         target = 1.5
         param = find_window_param_from_enbw(window, target, nfft=1024)
         enbw = equivalent_noise_bandwidth((window, param), 1024)
-        # bisect stops at |param error| <= atol=1e-6; the ENBW slope in the
+        # bisect stops at |param error| <= atol=1e-6. The ENBW slope in the
         # parameter is of order 1, so rtol=1e-4 is loose by a factor of 100
         assert_allclose(enbw, target, rtol=1e-4)
 
@@ -126,7 +126,7 @@ class TestEquivalentNoiseBandwidth:
 # %% numpy vs cupy
 class TestNumpyCupyCrossComparison:
     def test_get_window(self, cupy_available):
-        """`get_window` designs on numpy and converts, so one case covers the xp path"""
+        """the window designed with ``xp=cupy`` equals the numpy design"""
         dtype = np.float32
         design = functools.partial(get_window, 'hamming', 129, dtype=dtype)
         w_np, w_cp = numpy_and_cupy(cupy_available, design, xp_kwarg='xp')

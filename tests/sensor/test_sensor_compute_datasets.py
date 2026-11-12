@@ -192,8 +192,8 @@ def test_build_capture_coords_splits_tuple_fields_per_port():
 
 def test_build_capture_coords_carries_burst_and_burst_index():
     """`burst` is a capture field and `burst_index` an acquisition info field, so both
-    are ``capture`` coordinates. `burst` takes the `Meta` description of the field as
-    its ``standard_name``; `burst_index` has no `Meta` and no attrs."""
+    are ``capture`` coordinates. The ``standard_name`` attr of `burst` is the `Meta`
+    description of the field. `burst_index` has no `Meta` and no attrs."""
     capture = two_port_captures(burst=3)[0]
     info = ss.specs.AcquisitionInfo(burst_index=2)
     coords = datasets.build_capture_coords(capture, info, ())
@@ -246,8 +246,8 @@ def test_concat_time_dim_places_the_frames_back_to_back():
     )
     assert first.sizes['spectrogram_time'] == frames
     assert first.sizes['capture'] == 2, 'one capture row per port'
-    # the synthetic tone is the same on both ports; offset the second row so that a
-    # join of the first row alone is distinguishable
+    # the synthetic tone is the same on both ports, so a join of the first row alone
+    # is distinguishable only with the second row offset
     first['spectrogram'].values[1] += 1
     second['spectrogram'].values[1] += 2
 
@@ -293,9 +293,9 @@ def burst_dataset(burst: int, segments=None):
 
 
 def test_get_looped_coords_adds_burst_index_only_with_bursts():
-    """a dataset of `burst=1` rows lists the loop fields alone; a dataset with any
-    `burst` above 1 appends `burst_index`, so the index over the loop fields and
-    `port` stays unique"""
+    """for a dataset of `burst=1` rows, the looped coords are the loop fields alone.
+    With any `burst` above 1, `burst_index` is appended, so the index over the loop
+    fields and `port` stays unique."""
     assert compute.get_looped_coords(burst_dataset(1)) == ['snr']
     assert compute.get_looped_coords(burst_dataset(2)) == ['snr', 'burst_index']
     assert compute.get_looped_coords(burst_dataset(2), include_repeats=True) == [
@@ -336,6 +336,27 @@ def test_unstack_dataset_forms_the_2x2_grid():
     assert unstacked.port.values.tolist() == [0, 1]
     # row 3 of the flat dataset is (capture 1, port 1)
     cell = unstacked.iq_waveform.sel(frequency_offset=OFFSETS[1], port=1)
+    assert np.array_equal(cell.values, ds.iq_waveform.values[3])
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=ValueError,
+    reason='unstack_dataset selects the first sweep with `isel(sweep_start_time=0)` '
+    'for both sweep dimensions, so a `sweep_index` dimension without '
+    '`sweep_start_time` raises in xarray',
+)
+def test_unstack_dataset_drops_the_sweep_index_from_the_capture_coordinates():
+    """an acquisition from a function source carries `sweep_index` and no
+    `sweep_start_time`, so `sweep_index` is the only sweep dimension of the dataset.
+    The data keep that dimension and the capture coordinates span the loop
+    dimensions alone."""
+    ds = full_run()
+    dims = ['sweep_index', 'frequency_offset', 'port']
+    unstacked = compute.unstack_dataset(ds, dims)
+    assert [unstacked.sizes[d] for d in dims] == [1, 2, 2]
+    assert unstacked.snr.dims == ('frequency_offset', 'port')
+    cell = unstacked.iq_waveform.sel(sweep_index=0, frequency_offset=OFFSETS[1], port=1)
     assert np.array_equal(cell.values, ds.iq_waveform.values[3])
 
 
@@ -384,7 +405,8 @@ def test_check_coord_indexes_warns_on_old_xarray(monkeypatch, caplog):
 
 def test_drop_conflicts_keeps_agreeing_keys_and_drops_differing_ones():
     """the ``combine_attrs='drop_conflicts'`` rule of `xarray.concat`: a key in one
-    mapping is kept, equal values are kept, differing values are dropped for good"""
+    mapping is kept, equal values are kept, differing values are dropped and stay
+    dropped"""
     merged = datasets.drop_conflicts([
         {'a': 1, 'b': [1, 2], 'c': 'x'},
         {'a': 1, 'b': [1, 2], 'd': 4},
@@ -404,8 +426,9 @@ def mixed_rate_reference():
 
 
 def test_sweep_template_matches_the_outer_join_geometry(subtests):
-    """without IQ, the template has the union grids, coordinate values and attrs, and
-    the spec attrs of `xarray.concat(join='outer', combine_attrs='drop_conflicts')`"""
+    """before any acquisition, the template has the union grids, coordinate values and
+    attrs, and the spec attrs of
+    ``xarray.concat(join='outer', combine_attrs='drop_conflicts')``"""
     sweep = mixed_rate_sweep()
     ref = mixed_rate_reference()
     delayed = delayed_results(sweep)
@@ -473,8 +496,8 @@ def test_sweep_template_attrs_hold_the_shared_capture_fields_and_the_given_attrs
 
 
 def test_sweep_template_power_units_follow_the_source():
-    """a full-scale source labels the template in the FS family: the dB and amplitude
-    forms are kept, and non-power units are untouched"""
+    """with a full-scale source, the power units of the template are in the FS family:
+    the dB and amplitude forms follow, and non-power units are unchanged"""
     template, *_ = datasets.sweep_template(
         mixed_rate_sweep(), 'x', ss.specs.AcquisitionInfo, attrs={}, power_units='FS'
     )
@@ -485,8 +508,7 @@ def test_sweep_template_power_units_follow_the_source():
 
 
 def test_sweep_template_requires_the_power_units():
-    """a template allocated without the family of the source would label an
-    uncalibrated sweep in mW"""
+    """`power_units` is a required keyword of `sweep_template`"""
     with pytest.raises(TypeError):
         datasets.sweep_template(
             mixed_rate_sweep(), 'x', ss.specs.AcquisitionInfo, attrs={}
@@ -494,8 +516,8 @@ def test_sweep_template_requires_the_power_units():
 
 
 def test_row_index_and_scatter_rows_reproduce_the_outer_join_fill():
-    """a capture's rows land where `xarray.align(join='outer')` puts them, with NaN
-    where the capture has no value"""
+    """the rows of a capture fall at the positions of ``xarray.align(join='outer')``,
+    with NaN where the capture has no value"""
     sweep = mixed_rate_sweep()
     ref = mixed_rate_reference()
     _, grids, *_ = datasets.sweep_template(

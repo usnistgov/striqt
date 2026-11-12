@@ -2,9 +2,9 @@
 
 The operator switches the noise diode by hand. The runner acquires the capture grid
 of each port once with the diode off and once with the diode on, and prompts the
-operator between the passes. The diode state is not a capture field. The state
-enters each acquisition through the `extra_data` of the pipeline and is a dimension
-of the saved corrections beside the capture fields.
+operator between the passes. The diode state is not a capture field. The state is
+written into the `extra_data` of each acquisition and is a dimension of the saved
+corrections beside the capture fields.
 """
 
 from __future__ import annotations as __
@@ -73,9 +73,11 @@ def calibration_analysis(
 
 
 def _limit_nyquist_bandwidth(data: xr.DataArray) -> xr.DataArray:
-    """replace float('inf') analysis bandwidth with the Nyquist bandwidth"""
+    """return the `analysis_bandwidth` (Hz) of `data`, broadcast like `data`.
 
-    # return bandwidth with same shape as dataset.channel_power_time_series
+    The result is squeezed. An infinite entry is replaced by the `backend_sample_rate`
+    at that point.
+    """
     bw = data.analysis_bandwidth.broadcast_like(data).copy().squeeze()
     sample_rate = data.backend_sample_rate.broadcast_like(data).squeeze()
     where = ~np.isfinite(bw.values)
@@ -88,16 +90,15 @@ def compute_y_factor_corrections(
 ) -> xr.Dataset:
     """return the Y-factor noise figure and power correction of each grid point.
 
-    The dimensions of `dataset` are the calibration fields and
-    ``noise_diode_enabled``. The variables are `channel_power_time_series` (dB,
-    ``rms`` and ``peak`` detectors over ``time_elapsed``), `analysis_bandwidth`
-    (Hz), and `backend_sample_rate` (S/s). The rms detector is averaged in linear
-    power over ``time_elapsed`` before the Y-factor is formed. An infinite
-    `analysis_bandwidth` counts as the backend sample rate.
+    The variables of `dataset` are `channel_power_time_series` (dB, ``rms`` and
+    ``peak`` detectors over ``time_elapsed``), `analysis_bandwidth` (Hz), and
+    `backend_sample_rate` (S/s). The ``rms`` detector is averaged in linear power over
+    ``time_elapsed`` before the Y-factor is formed. An infinite `analysis_bandwidth`
+    counts as the backend sample rate.
 
     Args:
-        dataset: the collected captures, indexed by the calibration fields and the
-            diode state
+        dataset: the collected captures, with the calibration fields and
+            ``noise_diode_enabled`` as dimensions
         enr_dB: the excess noise ratio (dB) of the noise diode
         Tref: the reference temperature (K) of the ENR and the noise figure
 
@@ -172,12 +173,12 @@ def save_yfactor_corrections(
     *,
     enr_dB: float,
 ) -> xr.Dataset:
-    """save the Y-factor corrections computed from the collected captures to `path`.
+    """write the Y-factor corrections of the collected captures to `path`.
 
-    Each of `calibration_fields` becomes a dimension of the concatenated captures.
-    The corrections of `compute_y_factor_corrections` at `enr_dB` are written to
-    `path` as netCDF with a ``calibration_fields`` attr, and a summary per port is
-    printed to stdout.
+    The captures are concatenated and re-indexed by `calibration_fields`, one
+    dimension per field. The corrections of `compute_y_factor_corrections` at `enr_dB`
+    are written to `path` as netCDF with a ``calibration_fields`` attr, and a summary
+    per port is printed to stdout.
 
     Args:
         data: one dataset per capture
@@ -195,7 +196,7 @@ def save_yfactor_corrections(
     """
     fields = list(calibration_fields)
 
-    # re-index by radio setting rather than by capture; the diode state is a data
+    # re-index by radio setting rather than by capture. The diode state is a data
     # variable from `extra_data`, and the other fields are capture coordinates
     capture_data = xr.concat(data, compute.CAPTURE_DIM).drop_vars(
         _DROP_FIELDS, errors='ignore'
@@ -242,8 +243,8 @@ def build_calibration_sweep(
     Raises:
         TypeError: if the class of `spec` is not bound to a sensor
         msgspec.ValidationError: if `calibration.detector_period` is None and the
-            captures and loops have more than one `duration`, or if the sweep fails
-            `validate_sweep`
+            captures and loops have more than one `duration`, or if `validate_sweep`
+            rejects the sweep
     """
     sweep_cls = type(spec).sweep_cls
     if sweep_cls is None:
@@ -260,8 +261,8 @@ def build_calibration_sweep(
         adjust_captures=spec.adjust_captures,
         analysis=calibration_analysis(spec),
         # reuse_iq shares one acquisition across the analysis_bandwidth points of a
-        # radio setting; the runner calls Controller.discard_iq at each diode switch,
-        # since the diode state is not a capture field
+        # radio setting. The diode state is not a capture field, so the runner calls
+        # Controller.discard_iq at each diode switch
         options=specs.SweepOptions(
             reuse_iq=True, loop_only_nyquist=True, skip_warmup=True
         ),
@@ -313,8 +314,8 @@ def calibration_fields(
     """return the capture fields that index the saved corrections.
 
     The implied loops of `spec.calibration` come first, then the loop fields of
-    `sweep` in order. The diode state follows `port`, or comes first when `port` is
-    absent. `sample_rate` is replaced by `backend_sample_rate`.
+    `sweep` in order. ``noise_diode_enabled`` follows `port`, or comes first when
+    `port` is absent. `sample_rate` is replaced by `backend_sample_rate`.
     """
     fields = list(spec.calibration.implied_loops)
     fields += [loop.field for loop in sweep.loops if loop.field is not None]
@@ -370,12 +371,7 @@ def switch_diode(port: Any, diode_on: bool) -> None:
 
 @registry.runner(spec_type=specs.ManualYFactorCalibration)
 class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
-    """the runner of a `ManualYFactorCalibration`.
-
-    `sweep` is `build_calibration_sweep` of `spec`. The sink is a `MemoryCacheSink`
-    that collects the captures of every pass; after the last pass the corrections are
-    written to ``spec.sink.path`` as netCDF, or nowhere when the path is None.
-    """
+    """the runner of a `ManualYFactorCalibration`."""
 
     spec: specs.ManualYFactorCalibration[SS, SP, SC, SA]
 
@@ -388,12 +384,12 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
 
         Raises:
             TypeError: if the class of `spec` is not bound to a sensor
-            msgspec.ValidationError: if `spec` fails the checks of
-                `build_calibration_sweep`
+            msgspec.ValidationError: if `build_calibration_sweep` rejects `spec`
         """
         return build_calibration_sweep(self.spec)
 
     def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
+        """return a `MemoryCacheSink` that collects the captures of every pass."""
         return MemoryCacheSink(self.sweep)
 
     def iterate(
@@ -407,11 +403,12 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
     ) -> Generator[xr.Dataset | compute.DelayedDataset | None]:
         """run the calibration passes over `resources`.
 
-        Each pass prompts the operator, discards any reused acquisition, and runs
-        `iterate_captures` over the captures at one port. Within a pass, `reuse_iq`
-        applies. After the last pass, the corrections are saved when the sink is a
-        `MemoryCacheSink` and ``spec.sink.path`` is not None. A None path logs at
-        INFO on the ``sink`` logger.
+        The operator confirms the ENR first. Before each pass, the operator is
+        prompted to switch the diode, any reused acquisition is discarded, and
+        `iterate_captures` runs over the captures at one port. Within a pass,
+        `reuse_iq` applies. After the last pass, the corrections are saved when the
+        sink is a `MemoryCacheSink` and ``spec.sink.path`` is not None. A None path
+        logs at INFO on the ``sink`` logger.
 
         Yields:
             the yields of `iterate_captures` for each pass in turn, as `always_yield`

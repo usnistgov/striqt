@@ -250,13 +250,13 @@ class TestSpectrogram:
 
     def test_odd_nfft_cannot_be_trimmed_to_the_analysis_bandwidth(self):
         """`slice_freqs` centers the band that `trim_stopband` keeps at index nfft/2,
-        a half-integer for 7 bins, so the band has no whole-bin edges"""
+        a half-integer for 7 bins, so the band has no whole-bin edges."""
         capture = CAPTURE.replace(analysis_bandwidth=FS / 2)
         iq = testing.tone(DURATION, FS)
         with pytest.raises(msgspec.ValidationError, match='analysis_bandwidth'):
             spg_of(iq, capture, frequency_resolution=FS / 7, as_xarray=False)
 
-        # the same nfft passes once the band is not cut
+        # the same nfft is accepted once the band is not cut
         da = spg_of(iq, capture, frequency_resolution=FS / 7, trim_stopband=False)
         assert da.sizes['spectrogram_baseband_frequency'] == 7
 
@@ -533,9 +533,7 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
     The populated bin is at 0 dBm, the tone power, independent of the 50 kHz
     `noise_bandwidth` attr. The empty bins are in the -inf catch-all bin.
 
-    The fractions are 19/20 and 1/20. `HIST_NFFT` is 20, not a power of 2, so neither
-    fraction is dyadic and the comparison uses a float32 tolerance rather than exact
-    equality.
+    The fractions are 19/20 and 1/20.
     """
     iq = sa.testing.tone(
         HIST_DURATION, HIST_FS, frequency=2 * HIST_FREQUENCY_RESOLUTION
@@ -546,12 +544,13 @@ def test_spectrogram_histogram_concentrates_bin_centered_tone():
     assert da.attrs['noise_bandwidth'] == HIST_FREQUENCY_RESOLUTION
     bins, fractions = zip(*populated(da.values[0], da.spectrogram_power_bin.values))
     assert bins == (float('-inf'), 0.0)
+    # 19/20 and 1/20 are not dyadic, so the float32 fractions carry roundoff
     assert_close(fractions, ((HIST_NFFT - 1) / HIST_NFFT, 1 / HIST_NFFT), rtol=RTOL)
 
 
 def test_spectrogram_histogram_bin_coordinate_follows_the_integration_bandwidth():
     """the `noise_bandwidth` attr of the bin coordinate and of the histogram variable
-    is the `integration_bandwidth`, 2 bins of the 50 kHz resolution"""
+    is the `integration_bandwidth`, 2 bins of the 50 kHz resolution."""
     iq = sa.AcquiredIQ(
         sa.testing.tone(HIST_DURATION, HIST_FS), HIST_CAPTURE, power_units='mW'
     )
@@ -625,9 +624,8 @@ def ratio_histogram(iq, **kwargs):
 def two_ports_offset_by(offset_dB):
     """return noise repeated on 2 ports, with port 1 scaled by `offset_dB` (dB).
 
-    Noise rather than a tone keeps every spectrogram bin above the float32 roundoff
-    floor. In the near-empty bins of the spectrogram of a tone, the cross-port ratio
-    is roundoff rather than the applied offset.
+    Every spectrogram bin of the noise is above the float32 roundoff floor, so the
+    cross-port ratio of each bin is the applied offset.
     """
     iq = sa.testing.circular_awgn(HIST_DURATION, HIST_FS, power=1e-6 * HIST_FS, ports=2)
     iq[1] = iq[0] * 10 ** (offset_dB / 20)
@@ -637,7 +635,7 @@ def two_ports_offset_by(offset_dB):
 @pytest.mark.parametrize('offset_dB', [0.0, 6.0, -7.0], ids='offset{:g}dB'.format)
 def test_spectrogram_ratio_histogram_offset_ports(offset_dB):
     """row 0 is spg[0]-spg[1] and row 1 is spg[1]-spg[0], so a level offset between
-    the ports puts the 2 rows at the offset with opposite signs"""
+    the ports puts the 2 rows at the offset with opposite signs."""
     da = ratio_histogram(two_ports_offset_by(offset_dB))
 
     bins = da.spectrogram_ratio_power_bin.values

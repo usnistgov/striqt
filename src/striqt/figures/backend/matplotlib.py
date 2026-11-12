@@ -42,8 +42,11 @@ class _LayoutKws(typing.TypedDict):
 def select_mpl_backend(style: str | None, interactive: TerminalGraphics | None) -> None:
     """select a matplotlib backend, with the terminal style when `interactive` is set.
 
+    Interactive pyplot mode is turned off.
+
     Args:
-        style: a matplotlib style name applied with the terminal style, or None
+        style: a matplotlib style name, or None; the terminal style is applied after
+            it when `interactive` is set
         interactive: ``'sixel'``, ``'kitcat'``, or ``'kitty'`` selects a terminal
             graphics backend; None selects ``'agg'``
 
@@ -117,14 +120,13 @@ def batch_term_images(
 class MatplotlibBackend(PlotBackend['xarray.plot.FacetGrid']):
     """a plotting backend that draws with matplotlib, one `FacetGrid` per figure.
 
-    Each drawing method lays out the facets from `opts` and returns the grid.
-    `finish` writes and shows the figure as `output_dir` and `interactive` select.
-    Artists with more than 10000 values and all bands are rasterized, and lines
-    drawn onto a `target` add no legend.
+    Each drawing method lays out the facets from `opts` and returns the grid. An
+    image or line of more than 10000 values, and every band, is rasterized. A line
+    drawn onto a `target` adds no legend entry.
     """
 
     output_dir: Path | None
-    """the directory that `finish` writes figure files in; `None` writes no file"""
+    """the directory of the figure files written by `finish`; `None` writes no file"""
     interactive: bool | str | None
     """True leaves pyplot interactive after `finish`; a `TerminalGraphics` name
     shows each figure in the terminal; False or `None` does neither"""
@@ -168,8 +170,8 @@ class MatplotlibBackend(PlotBackend['xarray.plot.FacetGrid']):
     def _coord_kws(self) -> _LayoutKws:
         """return the facet layout keywords of the xarray plot calls from `opts`.
 
-        Without `col` or `row` in `opts`, `col` is the size-1 `_view` dimension that
-        `coerce_column` adds to the data.
+        Without `col` or `row` in `opts`, the `col` keyword is the size-1 `_view`
+        dimension of `coerce_column`.
         """
         if self.opts.col is None and self.opts.row is None:
             col = '_view'
@@ -332,11 +334,17 @@ class MatplotlibBackend(PlotBackend['xarray.plot.FacetGrid']):
     ) -> Path | None:
         """label `target` from the attrs of the drawn data and the formats of `opts`.
 
-        The figure file is written to `output_dir` at the dpi between 120 and 300
-        that resolves each sample of the drawn data, and a record is logged on the
-        ``analysis`` logger at INFO. Interactive mode is turned on when `interactive`
-        is True. The figure is shown in the terminal and closed when `interactive`
-        names a terminal graphics protocol. `target` is kept as `last_grid`.
+        With `output_dir` set, the figure file named by `opts.filename_fmt` is written
+        there at the dpi between 120 and 300 that resolves each sample of the drawn
+        data, and a record is logged on the ``analysis`` logger at INFO. Interactive
+        pyplot mode is turned on when `interactive` is True. The figure is shown in
+        the terminal and closed when `interactive` names a terminal graphics
+        protocol. `target` is kept as `last_grid`.
+
+        Args:
+            target: the grid returned by a drawing method of this backend
+            xticklabelunits: whether each x tick label ends with the units; ``'auto'``
+                selects True for a `units` attr of 1 or 2 characters
 
         Returns:
             the path of the figure file, or `None` when `output_dir` is `None`
@@ -492,7 +500,7 @@ class MatplotlibBackend(PlotBackend['xarray.plot.FacetGrid']):
 
 def _set_axis_vars(grid: xarray.plot.FacetGrid, x: str, y: str | None) -> None:
     """set the x and y variable names of `grid`."""
-    # xarray annotates both attributes as None and assigns Hashable values to them
+    # xarray annotates both attributes as None but assigns Hashable values
     grid._x_var = x  # ty: ignore[invalid-assignment]
     grid._y_var = y  # ty: ignore[invalid-assignment]
 
@@ -502,9 +510,9 @@ def _facet_subsets(
 ) -> Iterator[tuple[matplotlib.axes.Axes, xr.DataArray]]:
     """yield each named facet axis of `grid` with the subset of `data` on that facet.
 
-    The subset is `data` indexed by the `grid.name_dicts` entry of the facet, by
-    position on a dimension without coordinate values. An axis without a name (the
-    padding of a wrapped grid) is skipped.
+    The subset is `data` at the `grid.name_dicts` entry of the facet, selected by
+    label, or by position on a dimension without coordinate values. The padding axes
+    of a wrapped grid have no name and are skipped.
 
     Raises:
         ValueError: if `data` lacks a facet dimension or value of `grid`
@@ -526,10 +534,11 @@ def _facet_values(
 ) -> list[float | None]:
     """return one value of `values` per facet of `grid`, in `grid.axs.flat` order.
 
-    The value of a facet is the minimum of `values` selected by the `grid.name_dicts`
-    entry of the facet. A facet without a name, which is an unused axis of a wrapped
-    grid, gets None. Without `name_dicts`, `values` are returned in order, one per
-    facet, with None for each remaining axis.
+    The value of a facet is the minimum of `values` at the `grid.name_dicts` entry
+    of the facet, matched on an index, on a coordinate, or by position on a
+    dimension without coordinate values. The value is None when nothing matches or
+    the axis is an unnamed padding axis of a wrapped grid. Without `name_dicts`,
+    `values` are returned in order, one per facet, and None for each remaining axis.
     """
     name_dicts = getattr(grid, 'name_dicts', None)
     if name_dicts is None:
@@ -566,9 +575,10 @@ def _select_dpi(
 ) -> float:
     """return the dpi in [`min_`, `max_`] that resolves one sample per pixel per facet.
 
-    The dpi of a facet is the sample count of `x_data` per inch of axis width or,
-    when `y_data` is set and larger, the sample count of `y_data` per inch of axis
-    height. The result is the largest facet dpi, clipped to [`min_`, `max_`].
+    The dpi of a facet is the sample count of `x_data` per inch of axis width. With
+    `y_data` set, the sample count of `y_data` per inch of axis height replaces a
+    smaller value. The result is the largest facet dpi, clipped to [`min_`, `max_`].
+    The colorbar axes is excluded.
     """
     dpi = min_
     scale_inv = grid.fig.dpi_scale_trans.inverted()

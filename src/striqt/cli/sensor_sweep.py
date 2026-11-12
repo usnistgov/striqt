@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""console entry point ``sensor-sweep``, installed on the shell PATH by pyproject.toml"""
+"""the ``sensor-sweep`` console entry point"""
 
 from typing import TYPE_CHECKING, Any, Callable, Union
 
@@ -41,7 +41,7 @@ def log_overloads(dd: 'ss.lib.compute.DelayedDataset') -> None:
     """log a WARNING on the ``analysis`` logger when a port of `dd.capture` overloaded.
 
     Args:
-        dd: the analyzed capture
+        dd: the delayed dataset of the analyzed acquisition
     """
     import striqt.analysis as sa
     from striqt.sensor.lib.compute import summary
@@ -60,8 +60,8 @@ def log_spectrogram_snr(
 ) -> None:
     """log the peak SNR of each port at INFO on the ``analysis`` logger.
 
-    One line per port is logged when `cache` is a spectrogram cache and
-    `sweep.source.calibration` is set.
+    One record per port with a finite SNR is logged when `cache` is a spectrogram
+    cache and `sweep.source.calibration` is set.
 
     Args:
         resources: the open resources of the run

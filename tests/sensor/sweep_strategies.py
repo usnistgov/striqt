@@ -58,7 +58,7 @@ class QuickAnalyses(
 @functools.lru_cache
 def quick_binding(action=ss.specs.Sweep) -> type[ss.lib.controller.Controller]:
     """return the `single_tone` sensor bound for `action` over `QuickAnalyses`,
-    unregistered"""
+    unregistered."""
     schema = dataclasses.replace(
         ss.bindings.single_tone.schema, action=action, analysis=QuickAnalyses
     )
@@ -114,7 +114,7 @@ lo_frequencies = st.floats(min_value=1e6, max_value=1e10)
 @st.composite
 def ports_and_lo(draw):
     """draw a port tuple and an `external_lo_frequency` value: a tuple of the same
-    length, a scalar, or None"""
+    length, a scalar, or None."""
     port = draw(port_tuples)
     per_port = st.tuples(*[lo_frequencies] * len(port))
     lo = draw(st.one_of(st.none(), lo_frequencies, per_port))
@@ -131,7 +131,7 @@ def capture_kwargs(draw, ports=port_values):
         # an integer sample count keeps Capture.__post_init__ satisfied
         'duration': count / sample_rate,
         # finite, since Sweep construction rejects an lo_shift loop over an infinite
-        # bandwidth; 0.5 MHz clears the FIR transition band at every SAMPLE_RATES entry
+        # bandwidth. 0.5 MHz clears the FIR transition band at every SAMPLE_RATES entry
         'analysis_bandwidth': 0.5e6,
         'frequency_offset': draw(st.floats(min_value=0, max_value=1e5)),
         'snr': draw(st.one_of(st.none(), st.floats(min_value=0, max_value=60))),
@@ -212,7 +212,7 @@ def sweeps(draw, min_captures: int = 1):
     loops = draw(loop_sets())
 
     # a loop point overwrites its field in every capture, so Sweep rejects captures
-    # that disagree on a looped field; capture_kwargs draws those fields freely
+    # that disagree on a looped field. capture_kwargs draws those fields freely
     looped = {l.field for l in loops if l.isin == 'capture' and l.field is not None}
     shared = {f: getattr(captures[0], f) for f in looped} if captures else {}
     if shared:
@@ -268,7 +268,7 @@ def make_calibration_sweep(**kws):
 
 def as_sweep(spec):
     """return the `Sweep` that runs for `spec`: `spec` itself, or the sweep built by
-    the runner of `spec`"""
+    the runner of `spec`."""
     if isinstance(spec, ss.specs.Sweep):
         return spec
     return ss.lib.actions.registry.lookup(spec)(spec).sweep
@@ -312,7 +312,7 @@ def receiver_gain(gain_dB, front_end_gain_dB=50.0, fs_mW=1.0):
 
 def noise_figure_lookup(nf_dB, port, center_frequency) -> float:
     """return the noise figure (dB) of `port` at `center_frequency` from `nf_dB`, keyed
-    ``{port: value}`` or ``{port: {center_frequency: value}}``"""
+    ``{port: value}`` or ``{port: {center_frequency: value}}``."""
     value = nf_dB[port]
     if isinstance(value, dict):
         return value[center_frequency]
@@ -323,7 +323,7 @@ def yfactor_rms_power(
     gain_dB, nf_dB, bandwidth, *, diode_on, enr_dB=YFACTOR_ENR_DB, T0=T_REF, **gain_kws
 ):
     """return the rms output power (full-scale units) of the modeled receiver in
-    `bandwidth` (Hz)"""
+    `bandwidth` (Hz)."""
     Te = T0 * (10 ** (nf_dB / 10) - 1)
     Tsource = T0 + np.where(diode_on, T0 * 10 ** (enr_dB / 10), 0.0)
     return (
@@ -354,7 +354,7 @@ def make_yfactor_dataset(
     """return a calibration dataset with one dimension per key of `grid` plus
     `noise_diode_enabled`.
 
-    The `channel_power_time_series` variable (dBfs) is constant over `time_count`
+    The `channel_power_time_series` variable (dBFS) is constant over `time_count`
     bins at the receiver model power for `enr_dB`, with the peak detector `papr_dB`
     above the rms detector.
     """
@@ -392,7 +392,7 @@ def make_yfactor_dataset(
 
 def expected_yfactor(grid=YFACTOR_GRID, nf_dB=YFACTOR_NF_DB, *, T0=T_REF, **gain_kws):
     """return the closed-form `noise_figure` (dB), `temperature` (K), and
-    `power_correction` of the receiver model over `grid`"""
+    `power_correction` of the receiver model over `grid`."""
     import xarray as xr
 
     nf = _noise_figure_grid(grid, nf_dB)
@@ -469,7 +469,7 @@ def make_cell_channel(**kws):
 def cellular_sweep_cls():
     """return the bound `site_cellular` sweep spec class.
 
-    The import of `site_strategies` registers the site extension module.
+    The call imports `site_strategies`, which registers the site extension module.
     """
     from site_strategies import EXT
 
@@ -478,7 +478,7 @@ def cellular_sweep_cls():
 
 def make_cellular_capture(**kws):
     """return a site capture at the `CELL_CHANNEL` center frequency with `sample_rate`
-    and `analysis_bandwidth` left at the defaults"""
+    and `analysis_bandwidth` left at the defaults."""
     kws = {
         'port': 0,
         'center_frequency': CELL_CHANNEL.center_frequency,
@@ -555,7 +555,7 @@ AIR = ss.bindings.air7101b
 
 def air_sweep(capture=None, *, analysis=None, **source_kws):
     """return an `air7101b` sweep of one `capture` (a default `soapy_capture` when None)
-    with `source_kws` forwarded to the source spec and `analysis` set when given"""
+    with `source_kws` forwarded to the source spec and `analysis` set when given."""
     if capture is None:
         capture = soapy_capture()
     kws = {} if analysis is None else {'analysis': analysis}
@@ -566,7 +566,7 @@ def air_sweep(capture=None, *, analysis=None, **source_kws):
 
 def make_delayed(extra_data, *, sweep, capture, extra_coords=None):
     """return a `DelayedDataset` of `capture` in `sweep` with no measurements and
-    `extra_data` (the acquisition-side variables such as ``adc_headroom``)"""
+    `extra_data` (the acquisition-side variables such as ``adc_headroom``)."""
     config = ss.lib.compute.EvaluationOptions(
         sweep_spec=sweep, registry=sa.registry, as_xarray='delayed', extra_attrs={}
     )
@@ -583,7 +583,7 @@ def make_delayed(extra_data, *, sweep, capture, extra_coords=None):
 
 def spectrogram_result(peak_dBm=-100.0, shape=(1, 4, 8), noise_bandwidth=1e4):
     """return a linear-power spectrogram of `shape` (port, time, frequency) with the
-    center bin of every port at `peak_dBm` above a 1e-30 floor, and its attrs"""
+    center bin of every port at `peak_dBm` above a 1e-30 floor, and its attrs."""
     spg = np.full(shape, 1e-30, dtype='float32')
     spg[:, shape[1] // 2, shape[2] // 2] = 10 ** (peak_dBm / 10)
     return spg, {'noise_bandwidth': noise_bandwidth}

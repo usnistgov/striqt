@@ -125,7 +125,7 @@ class TestCapture:
         self, sample_rate, from_dict, exc_type, match
     ):
         """the `Meta` bound ``> 0`` on `sample_rate` applies on the decode path, and
-        the sample count check rejects nan and inf on both paths"""
+        the sample count check rejects nan and inf on both paths."""
         build = (lambda **kws: Capture.from_dict(kws)) if from_dict else Capture
         with pytest.raises(exc_type, match=match):
             build(duration=1e-3, sample_rate=sample_rate)

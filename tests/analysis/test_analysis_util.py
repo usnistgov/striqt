@@ -1,6 +1,5 @@
 """striqt.analysis.lib.util: logging adapters, stopwatch, compute lock, and small
-helpers
-"""
+helpers."""
 
 from __future__ import annotations
 
@@ -63,7 +62,7 @@ class TestShowMessages:
         assert len(screen_handlers('analysis')) == 1
         assert adapter._screen_handler.level == logging.DEBUG
 
-        # a second call replaces the handler rather than stacking another
+        # a second call replaces the handler
         util.show_messages(logging.INFO, colors=False, logger_names=('analysis',))
         assert len(screen_handlers('analysis')) == 1
         assert adapter.logger.handlers.count(adapter._screen_handler) == 1
@@ -229,7 +228,7 @@ def test_elementwise_atol_without_an_off_peak_depth_is_flat():
 
 def test_elementwise_atol_grows_with_depth_and_diverges_at_off_peak_dBc():
     """the bound equals `peak` at the peak element, widens below the peak, and is
-    infinite from `off_peak_dBc.peak` down"""
+    infinite from `off_peak_dBc.peak` down."""
     err = 1e-4
     additive = 5e-4
     tol = sa.specs.Tolerance(

@@ -1,12 +1,9 @@
 """zarr stores that stage metadata documents in memory and pass chunk keys through
 to an inner store.
 
-A zip archive cannot replace an entry, and the ``ZipStore`` of zarr 2 and zarr 3
-each append a duplicate entry on a repeated key. zarr rewrites the metadata
-document of a node on every attribute update, resize, and consolidation. The
-wrappers here keep the metadata documents in memory until `flush_metadata` or
-`close` and record each chunk key written to the inner store.
-`staged_metadata_store` selects the class for the installed zarr version.
+A zip archive cannot replace an entry, and the ``ZipStore`` classes of zarr 2 and
+zarr 3 append a duplicate entry on a repeated key. zarr rewrites the metadata
+document of a node on every attribute update, resize, and consolidation.
 """
 
 from __future__ import annotations as __
@@ -92,15 +89,15 @@ def _child_names(keys: Iterable[str], prefix: str) -> set[str]:
 class _StagedStoreV2(_V2Base):
     """a zarr 2 store that keeps metadata documents in memory until flushed.
 
-    A staged key is read from memory; every other key is read from the inner store.
-    A chunk key is written to the inner store on assignment. A chunk key assigned a
-    second time logs a WARNING on the ``analysis`` logger.
+    A staged key is read from memory. Every other key is read from the inner store.
+    A chunk key is written to the inner store on assignment. The store logs a
+    WARNING on the ``analysis`` logger when a chunk key is assigned a second time.
     """
 
     path: str
 
     def __init__(self, store: Any) -> None:
-        """wrap `store`; nothing is read or written."""
+        """wrap `store` without reading or writing a key."""
         self._inner = store
         self._staged: dict[str, Any] = {}
         self._dirty: set[str] = set()
@@ -201,14 +198,14 @@ class _StagedStoreV2(_V2Base):
 class _StagedStoreV3(_V3Base):
     """a zarr 3 store that keeps metadata documents in memory until flushed.
 
-    A staged key is read from memory; every other key is read from the inner store.
-    A chunk key is written to the inner store on `set`. A chunk key set a second
-    time logs a WARNING on the ``analysis`` logger. A read-only copy made through
-    `with_read_only` shares the staged documents of the original.
+    A staged key is read from memory. Every other key is read from the inner store.
+    A chunk key is written to the inner store on `set`. The store logs a WARNING on
+    the ``analysis`` logger when a chunk key is set a second time. A read-only copy
+    made through `with_read_only` shares the staged documents of the original.
     """
 
     def __init__(self, store: InnerStoreV3) -> None:
-        """wrap `store`; nothing is read or written."""
+        """wrap `store` without reading or writing a key."""
         self._store = store
         self._staged: dict[str, bytes] = {}
         self._dirty: set[str] = set()

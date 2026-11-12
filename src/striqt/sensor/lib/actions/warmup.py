@@ -1,6 +1,6 @@
 """the warmup: a one-capture `NoSource` sweep run before a GPU sweep.
 
-The warmup runs the python imports and JIT compilation of the analysis before the
+The imports and the JIT compilation of the analysis run during the warmup, before the
 first hardware capture. The warmup sweep is derived from the sweep to run, and the
 resources of the warmup are opened without hardware or files.
 """
@@ -21,13 +21,13 @@ if TYPE_CHECKING:
     from .core import ActionRunner
 
 
-# functools rather than sw.util.lru_cache, which clear_caches() empties. A cleared
-# cache would bind a second controller and sweep class for the same origin.
+# functools rather than sw.util.lru_cache, which clear_caches() empties. After a clear,
+# the next call would bind a second controller and sweep class for the same origin.
 @functools.lru_cache
 def warmup_binding(
     origin: type[Controller[Any, Any, Any, Any, Any, Any]],
 ) -> type[Controller[specs.NoSource, specs.NoPeripherals, Any, Any, Any, Any]]:
-    """return the unregistered ``warmup`` binding for the capture type of `origin`.
+    """return the unregistered ``warmup`` binding for the spec types of `origin`.
 
     The binding combines the implementation classes and source spec of the
     ``warmup`` sensor with the capture, peripherals, and analysis spec types of
@@ -58,12 +58,12 @@ def derive_warmup_sweep(
 ) -> specs.Sweep[specs.NoSource, specs.NoPeripherals, SC, SA]:
     """return the warmup `Sweep` for `sweep_spec`.
 
-    The source is a `NoSource` with ``max(port) + 1`` ports over every port that a
-    capture or a `port` loop names, and the `master_clock_rate` and `signal_trigger`
-    of `sweep_spec.source`. The captures are the first `count` captures of the loop
-    expansion of `sweep_spec`, with no loops and `burst` 1. `analysis` is copied.
-    `sink` is copied with `path` None. The result is an instance of the sweep class of the
-    `warmup_binding` of the binding of `sweep_spec`.
+    The result is an instance of the sweep class of the `warmup_binding` for the
+    controller of `sweep_spec`. The source is a `NoSource` with ``max(port) + 1`` ports
+    over every port that a capture or a `port` loop names, the `master_clock_rate` and
+    `signal_trigger` of `sweep_spec.source`, and no `trigger_strobe`. The captures are
+    the first `count` captures of the loop expansion of `sweep_spec`, each with `burst`
+    1, and the loops are empty. `analysis` is copied. `sink` is copied with `path` None.
 
     Args:
         sweep_spec: the sweep to run after the warmup
@@ -73,7 +73,6 @@ def derive_warmup_sweep(
 
     binding = warmup_binding(bindings.get_controller(sweep_spec))
 
-    # ports are numbered from 0, so the source needs max(port) + 1 ports
     ports: list[Any] = [c.port for c in sweep_spec.captures]
     max_rx_ports = 0
     for loop in sweep_spec.loops:
@@ -129,11 +128,11 @@ def warmup_sweep_for(
 def open_warmup_resources(
     runner: ActionRunner[Any, specs.NoSource, specs.NoPeripherals, SC, SA, PS, PC],
 ) -> Resources[specs.NoSource, specs.NoPeripherals, SC, SA, PS, PC]:
-    """return the resources of a warmup `runner`, opened without hardware or files.
+    """return the `Resources` of a warmup `runner` with no hardware or files.
 
-    The source is a `NoSource` controller for `runner.sweep.source`, the peripherals
-    are `NoPeripherals`, and the sink is a `NoSink`. The ``source`` entry is returned
-    unentered.
+    The ``source`` entry is a `NoSource` controller for `runner.sweep.source`, not
+    entered. The peripherals are `NoPeripherals`, the sink is a `NoSink`, and
+    `calibration` and `format_path` are None.
     """
     from ...bindings import warmup
 

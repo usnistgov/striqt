@@ -34,7 +34,7 @@ def get_802_16_phy(
 
 
 class Phy802_16(PhyOFDM):
-    """Sampling and index parameters and lookup tables for IEEE 802.16-2017 OFDMA"""
+    """an IEEE 802.16-2017 OFDMA frame model: FFT size, sample rate, cyclic prefixes."""
 
     VALID_CP_RATIOS: typing.ClassVar[set[float]] = {1 / 32, 1 / 16, 1 / 8, 1 / 4}
     VALID_FFT_SIZES: typing.ClassVar[set[int]] = {128, 512, 1024, 2048}
@@ -52,12 +52,14 @@ class Phy802_16(PhyOFDM):
         50e-3,
     }
 
-    SAMPLING_FACTOR_BY_FREQUENCY_DIV: typing.ClassVar[dict[float, float]] = {
-        1.25: 28 / 25,
-        1.5: 28 / 25,
-        1.75e6: 8 / 7,
-        2: 28 / 25,
-        2.75: 28 / 25,
+    # the sampling factor n of IEEE 802.16-2017 §8.4.2.4, by the channel bandwidth
+    # divisor (in Hz); the standard tests the 1.75 MHz multiple first
+    SAMPLING_FACTOR_BY_FREQUENCY_DIV: typing.ClassVar[dict[int, float]] = {
+        1_750_000: 8 / 7,
+        1_250_000: 28 / 25,
+        1_500_000: 28 / 25,
+        2_000_000: 28 / 25,
+        2_750_000: 28 / 25,
     }
 
     def __init__(
@@ -118,11 +120,12 @@ class Phy802_16(PhyOFDM):
             )
 
         for freq_divisor, n in self.SAMPLING_FACTOR_BY_FREQUENCY_DIV.items():
-            if isclose(channel_bandwidth % freq_divisor, 0, abs_tol=1e-6):
+            if round(channel_bandwidth) % freq_divisor == 0:
                 sampling_factor = self.sampling_factor = n
                 break
         else:
-            # no match with the table - standardized default
+            # 8/7 is the IEEE 802.16-2017 sampling factor for a bandwidth outside the
+            # table
             sampling_factor = self.sampling_factor = 8 / 7
 
         std_sample_rate = np.floor(sampling_factor * channel_bandwidth / 8000) * 8000
@@ -198,18 +201,13 @@ def _802_16_index_cyclic_prefix(
     )
 
     grid = [
-        # axis 0: symbol number in each frame
         phy.cp_start_idx[symbol_inds],
-        # axis 1: frame number
         frames * phy.frame_size,
-        # axis 2: cp index
         xp.ogrid[0 : phy.cp_sizes[1]],
     ]
 
-    # pad the axis dimensions so they can be broadcast together
     a = xp.meshgrid(*grid, indexing='ij', copy=False)
 
-    # sum all of the index offsets
     inds = a[0].copy()
     for sub in a[1:]:
         inds += sub

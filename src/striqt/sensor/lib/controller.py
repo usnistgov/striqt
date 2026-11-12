@@ -39,7 +39,7 @@ else:
 class lookup:
     """lookup of the controller, source ID, and readiness of a source spec.
 
-    Each lookup blocks until a controller is registered for the spec. `TimeoutError`
+    Each call blocks until a controller is registered for the spec. `TimeoutError`
     is raised when none is registered within `timeout` seconds.
     """
 
@@ -52,8 +52,8 @@ class lookup:
     def _get(cls, spec: specs.Source) -> PendingController:
         """return the controller, pending event, or stored exception for `spec`.
 
-        The registry references controllers weakly. A dead reference is cleared. The
-        pending event that replaces the reference is returned.
+        The slot of `spec` holds a weak reference to the controller. A dead reference
+        is cleared, and the pending event that replaces the reference is returned.
         """
         obj = cls._obj[spec]
         if isinstance(obj, weakref.ref):
@@ -106,9 +106,9 @@ class lookup:
     def power_units(cls, spec: specs.Source, timeout=0.5) -> sw.units.PowerUnits:
         """return the power units of the controller registered for `spec`.
 
-        The call blocks until the backend of the controller is constructed, which is
-        when the source id is set. `TimeoutError` is raised when no controller is
-        registered within `timeout` seconds.
+        The call blocks until the controller has constructed its backend and set the
+        source id. `TimeoutError` is raised when no controller is registered within
+        `timeout` seconds.
         """
         controller = cls.instance(spec, timeout)
         cls._wait_id(spec)
@@ -116,7 +116,11 @@ class lookup:
 
     @classmethod
     def _wait_id(cls, spec: specs.Source) -> str:
-        """return the source id of the registered controller, waiting for it to be set"""
+        """return the source id of the registered controller after the id is set.
+
+        Raises:
+            RuntimeError: if the controller closes before an id is set
+        """
         obj: Event | str | BaseException = cls._id[spec]
         if isinstance(obj, BaseException):
             util.propagate_thread_interrupts()
@@ -249,7 +253,12 @@ def read_retries(source: Controller) -> Generator[None]:
 
 
 def _put_waiting(queue: AcquisitionQueue, iq: specs.AcquiredIQ) -> None:
-    """put `iq`, waiting for a free slot and checking for a thread interrupt."""
+    """put `iq` on `queue` when a slot is free.
+
+    Raises:
+        ThreadInterruptRequest: in a worker thread, when `cancel_threads` has been
+            called while the queue is full
+    """
     while True:
         try:
             queue.put(iq, timeout=0.1)
@@ -263,8 +272,7 @@ class AcquisitionQueue(_QueueBase):
     """the bounded hand-off of acquisitions from the acquisition thread to analysis.
 
     The items are `AcquiredIQ` objects and the sentinel or exception objects that the
-    producer puts to end the iteration. `maxsize` is the `buffers` count given at
-    construction.
+    producer puts to end the iteration.
     """
 
     nbytes: int
@@ -518,8 +526,8 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         """return whether the backend of this instance is open.
 
         Args:
-            wait: if True, block up to the controller timeout for an open in
-                progress; if False, report the state at the time of the call
+            wait: if True, the call blocks up to the controller timeout for an open
+                in progress; if False, the state at the time of the call is returned
 
         Returns:
             False once `close` has run on this instance, even if another controller
@@ -619,24 +627,25 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     ) -> tuple[Array, int | None]:
         """read the IQ of one burst segment of the armed capture.
 
-        Segment 0, and a segment read with `resume`, triggers the backend and applies
-        the transient holdoff. A later segment continues the enabled stream from the
-        samples carried over after the previous segment. The carryover is kept for
-        the next segment and cleared after the last segment of the burst.
+        The read of segment 0, or of a segment with `resume`, triggers the backend
+        and applies the transient holdoff. The read of a later segment continues the
+        enabled stream from the samples carried over after the previous segment. The
+        carryover is kept for the next segment and cleared after the last segment of
+        the burst.
 
         Args:
             overlaps: the ``(lead, tail)`` overlap in source samples around the
                 record
             burst_index: the index of the segment within the burst of the armed
                 capture, from 0 to ``capture.burst - 1``
-            resume: True reads segment `burst_index` as the first segment after a
-                stream error, with no carryover
+            resume: if True, segment `burst_index` is read as the first segment after
+                a stream error, with no carryover
 
         Returns:
             ``(samples, start_time_ns)``: the samples as a C-contiguous complex64
             array with shape (ports, count) in the namespace of the source
-            `array_backend`, and the time of the first record sample or None
-            without a time stamp
+            `array_backend`, and the time (in ns) of the first record sample, or
+            None when the record is filled from the carryover without a backend read
 
         Raises:
             ValueError: if `overlaps` is not 2 non-negative integers
@@ -680,7 +689,6 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             overlap=sum(overlaps),
         )
 
-        # the total number of samples to acquire per channel
         # a segment that continues the stream consumes no holdoff, so the read, the
         # copy, and the queued memory are bounded by the record and overlaps
         buffer_count = buffers.get_read_count(
@@ -776,19 +784,19 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
 
         The read of segment 0, or of a segment with `resume`, is repeated up to
         ``source_info.retries`` times on a stream error or overflow. A stream error
-        during a later segment is raised to the caller, which manages the burst.
+        during a later segment is raised.
 
         Args:
             overlaps: the ``(lead, tail)`` overlap in source samples, or None to
                 derive the overlap from the capture and the analysis target
             burst_index: the index of the segment within the burst, stamped on
                 ``info.burst_index``
-            resume: True reads segment `burst_index` as the first segment after a
-                stream error
+            resume: if True, segment `burst_index` is read as the first segment after
+                a stream error
 
         Returns:
             the acquisition, with `x` of shape ``(ports, lead + record + tail)`` at
-            the source rate; the `reuse_iq` copy of the previous acquisition when
+            the source rate, or the `reuse_iq` copy of the previous acquisition when
             the armed capture is reusable
 
         Raises:
@@ -872,17 +880,18 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     ) -> list[specs.AcquiredIQ]:
         """acquire the ``capture.burst`` segments of the armed capture.
 
-        The segments are read back to back with the stream enabled. A stream error
-        or overflow during segment `k` is retried up to ``source_info.retries`` times in
-        total per burst, after `prepare_retrigger` on the backend: under
-        ``bursts.on_gap='skip'`` segment `k` is read again as a first segment; under
-        ``'except'`` the segments of the burst still in `queue` are removed and the
-        burst restarts from segment 0. With no retries the error is raised.
+        The segments are read back to back with the stream enabled. After a stream
+        error or overflow during segment `k`, the backend runs `prepare_retrigger`
+        and the read is repeated, up to ``source_info.retries`` times per burst.
+        Under ``bursts.on_gap='skip'``, segment `k` is read again as a first segment.
+        Under ``'except'``, the segments of the burst still in `queue` are removed
+        and the burst restarts from segment 0.
 
-        Each segment passes through `finalize` before it is queued or returned. A
-        segment that finds `queue` full is dropped with a WARNING on the ``source``
-        logger under ``'skip'``, and raises under ``'except'``. The acquisition of a
-        capture with `burst` 1 waits for a free slot instead.
+        Each segment passes through `finalize` before it is queued or returned. When
+        `queue` is full, the put of a segment of a capture with `burst` above 1 is
+        skipped with a WARNING on the ``source`` logger under ``'skip'`` and raises
+        under ``'except'``. The put of a capture with `burst` 1 waits for a free
+        slot.
 
         Args:
             overlaps: the ``(lead, tail)`` overlap in source samples, or None to

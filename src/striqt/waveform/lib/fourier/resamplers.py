@@ -26,14 +26,15 @@ if typing.TYPE_CHECKING:
 
 OLA_MAX_FFT_SIZE = 128 * 1024
 
-# the scratch of the in-place bin reorder; larger blocks mean fewer kernel launches
+# the scratch size of the in-place bin reorder. The kernel launch count falls as the
+# scratch grows
 _REORDER_SCRATCH_BYTES = 8 * 2**20
 
 
 def _next_smooth_size(n: int) -> int:
     """return the smallest 2·3·5·7-smooth integer at or above `n`."""
-    # scipy.fft.next_fast_len admits a factor of 11; cuFFT is tuned for sizes of the
-    # form 2^a 3^b 5^c 7^d
+    # scipy.fft.next_fast_len admits a factor of 11, and cuFFT is tuned for sizes of
+    # the form 2^a 3^b 5^c 7^d
     size = max(n, 1)
     while True:
         remainder = size
@@ -48,24 +49,28 @@ def _next_smooth_size(n: int) -> int:
 class ResamplerDesign(typing.TypedDict):
     """the radio and COLA resampler settings that realize a target sample rate.
 
-    ``fs_sdr`` and ``fs`` are both the radio sample rate (in S/s) at the resampler
-    input. ``nfft`` and ``nfft_out`` are the input and output FFT sizes, in the exact
-    ratio of the radio rate to the target rate and both divisible by the COLA
-    divisor of ``window``. ``lo_offset`` is the offset (in Hz) by which the radio is
-    tuned below the center frequency: a whole number of ``fs_sdr / nfft`` bins, or 0
-    without an LO shift. ``frequency_shift`` is the requested shift direction.
-    ``passband`` is the pair of protected band edges (in Hz) relative to the tuned
-    LO, or ``(None, None)`` for an unbounded bandwidth.
+    ``nfft / nfft_out`` equals the ratio of the radio rate to the target rate exactly,
+    and both sizes are even multiples of the COLA divisor of ``window``.
     """
 
     fs_sdr: float
+    """the radio sample rate (in S/s) at the resampler input"""
     lo_offset: float
+    """the offset (in Hz) by which the radio is tuned below the center frequency, a
+    whole number of ``fs_sdr / nfft`` bins; 0 without an LO shift"""
     window: str | tuple[str, float]
+    """the COLA window of the STFT"""
     nfft: int
+    """the input block size (in samples)"""
     nfft_out: int
+    """the output block size (in samples)"""
     frequency_shift: ShiftType
+    """the requested shift direction"""
     passband: tuple[float | None, float | None]
+    """the ``(low, high)`` protected band edges (in Hz) relative to the tuned LO;
+    ``(None, None)`` for an unbounded bandwidth"""
     fs: float
+    """the radio sample rate (in S/s), equal to ``fs_sdr``"""
 
 
 @util.lru_cache()
@@ -82,15 +87,14 @@ def design_cola_resampler(
 ) -> ResamplerDesign:
     """design the radio sample rate, LO offset, and COLA FFT sizes of a resampler.
 
-    The design resamples from the radio rate ``fs_sdr`` (an integer division of
-    `fs_base`, unless given) to `fs_target` with FFT sizes in the ratio
-    ``nfft / nfft_out == fs_sdr / fs_target`` exactly. The sizes are ``k * p`` and
-    ``k * q`` for the reduced ratio ``p / q`` of ``fs_sdr`` to `fs_target`. The
-    multiplier ``k`` is the smallest even multiple of the COLA divisor of `window`
-    that is 2·3·5·7-smooth and puts ``nfft_out`` above `min_fft_size`. With
-    `shift`, the radio is tuned ``lo_offset`` below the center frequency, and
-    ``fs_sdr`` is the largest integer division of `fs_base` at or above
-    ``fs_target + min_oversampling * bw + bw_lo``. The magnitude of
+    ``nfft / nfft_out`` equals ``fs_sdr / fs_target`` exactly. The sizes are
+    ``k * p`` and ``k * q`` for the reduced ratio ``p / q`` of ``fs_sdr`` to
+    `fs_target`, with ``k`` the smallest even multiple of the COLA divisor of
+    `window` that is 2·3·5·7-smooth and puts ``nfft_out`` above `min_fft_size`.
+    Without `fs_sdr`, the radio rate is `fs_base` divided by the largest integer
+    that keeps the rate at or above ``fs_target + min_oversampling * bw + bw_lo``
+    with `shift`, or at or above `fs_target` without. With `shift`, the radio is
+    tuned ``lo_offset`` below the center frequency, and the magnitude of
     ``lo_offset`` is ``bw / 2 + bw_lo / 2`` rounded up to a whole number of
     ``fs_sdr / nfft`` bins that is a multiple of the frames per hop of `window`.
 
@@ -107,7 +111,8 @@ def design_cola_resampler(
         shift: ``'left'`` or ``'right'`` places the protected band below or above
             the tuned LO; ``'none'``, None, or False leaves the LO at the center
             frequency
-        window: a key of the COLA window divisor table; None selects ``'hann'``
+        window: a key of the COLA window divisor table; None selects the divisor 1
+            for the sizes and the LO offset, and ``'hann'`` in the result
         fs_sdr: the radio sample rate (in S/s) to use instead of selecting one
 
     Returns:
@@ -150,7 +155,6 @@ def design_cola_resampler(
 
         raise ValueError(msg)
     else:
-        # the source permits arbitrary sample rates
         decimation = int(fs_base / fs_sdr_min)
         fs_sdr = fs_base / decimation
 
@@ -193,7 +197,7 @@ def design_cola_resampler(
         passband = (None, None)
     else:
         # records handed to `resample` are padded to a multiple of nfft_in, so an
-        # offset on the fs_sdr / nfft_in grid is a whole number of their bins too.
+        # offset on the fs_sdr / nfft_in grid is a whole number of record bins too.
         # `oaresample` demodulates each STFT frame by the shift, and consecutive
         # frames agree in phase only when the shift is a multiple of the frames per
         # hop
@@ -273,7 +277,7 @@ def design_fir_resampler(
 def resample_edges(
     nfft_in: int, nfft_out: int, shift: int = 0
 ) -> tuple[int, int] | None:
-    """return the input bin range ``[edge_low, edge_high)`` that `resample` keeps.
+    """return the input bin range ``[edge_low, edge_high)`` kept when downsampling.
 
     The range indexes the `nfft_in`-bin spectrum in ascending frequency order. The
     range is `nfft_out` bins wide and centered `shift` bins above the input center.
@@ -323,8 +327,8 @@ def resample(
         window: must be None
         domain: ``'time'`` takes `x` as a waveform; ``'frequency'`` takes `x` as a
             spectrum
-        overwrite_x: True evaluates in the buffer of `x`; when downsampling, no new
-            array is then allocated
+        overwrite_x: True evaluates the forward transform in the buffer of `x`; the
+            contents of `x` are undefined after the call
         scale: a gain applied to the output
         shift: the offset (in input bins) of the kept band above the input center
             when downsampling, as in `resample_edges`
@@ -363,7 +367,8 @@ def resample(
     resample_scale = float(nfft_out) / float(nfft_in) * scale
 
     if domain == 'time':
-        # fftshift in the time domain avoids a copy and makes downsampling a slice
+        # with the fftshift in the time domain, downsampling is a slice of the
+        # frequency axis and no fftshift copy is made
         x = time_fftshift(x, resample_scale, overwrite_x=overwrite_x, axis=axis)
         y = fft(x, axis=axis, overwrite_x=True, out=x)
     else:
@@ -377,21 +382,19 @@ def resample(
 
     in_place = True
     if nfft_out < nfft_in:
-        # downsample by trimming frequency. The slice has strided rows for an N-D `x`.
-        # pocketfft transforms the strided rows without a copy, and the cupy path
-        # copies the rows into a contiguous buffer of its own before an in-place
-        # transform
+        # the slice has strided rows for an N-D `x`. pocketfft transforms the strided
+        # rows without a copy, and the cupy path copies the rows into a contiguous
+        # buffer of its own before an in-place transform
         bounds = _find_downsample_copy_range(nfft_in, nfft_out, edge_low, edge_high)[1]
         y = axis_slice(y, *bounds, axis=axis)
         in_place = False
 
     elif nfft_out > nfft_in:
-        # upsample by zero-padding frequency, which allocates a copy
+        # the padded `y` is a new allocation
         pad_left = (nfft_out - nfft_in) // 2
         pad_right = pad_left + (nfft_out - nfft_in) % 2
         y = pad_along_axis(y, [[pad_left, pad_right]], axis=axis)
 
-    # Inverse transform
     if in_place:
         xout = ifft(y, axis=axis, overwrite_x=True, out=y)
     else:
@@ -405,7 +408,6 @@ def oaresample(
     up,
     down,
     fs,
-    # analysis_filter: dict,
     *,
     window: str | tuple[str, float] = 'hann',
     overwrite_x: bool = False,
@@ -457,8 +459,8 @@ def oaresample(
             multiple of ``fs / down`` times the frames per hop, or moves the output
             band past an edge of the input band; if `up` or `down` is odd or not a
             multiple of the COLA divisor; if `window` has no COLA divisor; if
-            `filter_bandwidth` is finite and at most `transition_bandwidth`, which
-            leaves no passband; or if `out` is not C-contiguous, has another dtype,
+            `filter_bandwidth` is finite and at most `transition_bandwidth`; or if
+            `out` is not C-contiguous, has another dtype,
             has fewer than ``x.size * up // down`` elements, or shares memory with
             `x` without `overwrite_x`
     """
@@ -475,7 +477,6 @@ def oaresample(
     )
 
     if frequency_shift == 0:
-        # no frequency shift
         edge_low = edge_high = None
     elif down < up:
         raise ValueError('frequency_shift is only supported when downsampling')
@@ -596,8 +597,7 @@ def _copy_bins_to_fftfreq_order(
     overwrite_x: bool = False,
     block_rows: int | None = None,
 ) -> Array:
-    """return the `bounds_in` bins of each STFT segment of `y` as `nfft_out` bins in
-    `fftfreq` order.
+    """reorder a band of each segment of `y` into `nfft_out` bins in `fftfreq` order.
 
     `y` has segments on `axis` and bins in ascending frequency order on ``axis + 1``.
     The copied bins occupy the ascending-order range `bounds_out` of the output, and
@@ -618,8 +618,7 @@ def _copy_bins_to_fftfreq_order(
             `y`, and `y` is C-contiguous; the contents of `y` are then undefined
             after the call
         block_rows: the segments reordered per block in place; None selects a block
-            of about 8 MiB. The tests pass a few rows to force the scratch path on
-            an STFT smaller than one default block.
+            of about 8 MiB
 
     Returns:
         a C-contiguous array allocated by the call, or under `overwrite_x` a
@@ -633,7 +632,7 @@ def _copy_bins_to_fftfreq_order(
     offset = bounds_in[0] - bounds_out[0]
 
     def fftfreq_order_chunks(start: int, stop: int) -> Iterator[tuple[int, int, int]]:
-        # split an ascending-order range at the DC bin, since each half maps onto one
+        # each half of an ascending-order range split at the DC bin maps onto one
         # contiguous range of fftfreq-order bins
         for a, b in ((start, min(stop, half)), (max(start, half), stop)):
             if b > a:

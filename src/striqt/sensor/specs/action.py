@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 def validate_action(spec: structs.ActionSpec[Any, Any, Any]) -> None:
     """check that the action runner for `spec` derives a `Sweep` from `spec`.
 
-    An unbound spec, or a spec type with no runner, passes without a check.
+    An unbound spec, or a spec type with no runner, is not checked.
 
     Raises:
         msgspec.ValidationError: if a field of `spec` is rejected when the `Sweep` is
@@ -83,13 +83,12 @@ def validate_sweep(
     Args:
         sweep: the sweep to check
         source_id: hex id of the open source, selecting the `adjust_captures` block
-            of that source. `None` resolves `adjust_captures` through the
-            ``'defaults'`` block alone, and the per-source remaps are not checked.
+            applied on top of ``'defaults'``; `None` applies ``'defaults'`` alone
 
     Raises:
-        SpecValidationError: (a `msgspec.ValidationError`) at the offending path. A
-            capture is located by the `sweep.captures` entry and the loop point that
-            produced the capture.
+        SpecValidationError: at the offending path, with an expanded capture located
+            by the `sweep.captures` entry and the loop point that produced the
+            capture
     """
     _validate_loops(sweep.loops)
     _validate_loop_capture_collisions(sweep.loops, sweep.captures)
@@ -104,8 +103,8 @@ def _validate_loops(loops: tuple[structs.LoopSpec, ...]) -> None:
     if len(loops) == 0:
         return
 
-    # an outermost repeat is legal, so index the rest of the list against the
-    # position the user wrote rather than against the slice
+    # an outermost repeat is legal, so the offset reports the index in the sweep
+    # rather than in the slice
     offset = 1 if loops[0].field is None else 0
     fields = [l.field for l in loops[offset:]]
 
@@ -143,11 +142,12 @@ def _validate_loop_capture_collisions(
 ) -> None:
     """reject a loop over a field that the `captures:` entries set to different values.
 
-    A loop over a field that the capture class lacks is not rejected here.
+    Analysis loops and a loop over a field that the capture class lacks are not
+    rejected.
 
     Raises:
-        SpecValidationError: at the loop, locating the first two `captures:` entries
-            that differ in the looped field
+        SpecValidationError: at the loop, locating ``captures[0]`` and the first
+            later entry with a different value in the looped field
     """
     if len(captures) < 2:
         return
@@ -174,7 +174,7 @@ def _validate_loop_capture_collisions(
 def _validate_measurement_names(sweep: structs.Sweep) -> None:
     """reject a measurement named like a capture field.
 
-    A sweep with neither `captures` nor a sensor binding passes.
+    A sweep with neither `captures` nor a sensor binding is not checked.
 
     Raises:
         SpecValidationError: at ``$.analysis``, for the first such measurement
@@ -201,12 +201,11 @@ def _validate_bursts(
 ) -> None:
     """check each expanded capture with `burst` above 1 against the sweep.
 
-    The rules, each located at the first capture that fails:
+    The rules, each located at the first capture that violates the rule:
 
-    * `options.reuse_iq` must be false: the reuse cache holds one acquisition;
+    * `options.reuse_iq` must be false;
     * with a `source.trigger_strobe`, `duration` must be a whole number of strobe
-      periods: every segment starts on the strobe grid, so a shorter remainder would
-      leave a gap between segments.
+      periods.
 
     Raises:
         SpecValidationError: at ``$.options.reuse_iq`` or at the `duration` of the
@@ -237,9 +236,9 @@ def _validate_sweep_analysis(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
-    """validate each unique (capture, analysis) combination that `sweep` runs.
+    """validate each unique (capture, analysis) combination run by `sweep`.
 
-    A sweep with no measurement enabled in `analysis` passes without expanding.
+    A sweep with no measurement enabled in `analysis` is not expanded or checked.
 
     Raises:
         SpecValidationError: for the first capture that a measurement rejects,
@@ -262,12 +261,12 @@ def _validate_sweep_corrections(
     sweep: structs.Sweep[Any, Any, SC, Any],
     source_id: types.SourceID | None = None,
 ) -> None:
-    """reject each unique capture that the conditioning stages could not process for `sweep`.
+    """reject each unique capture of `sweep` that conditioning cannot process.
 
     The checks are the trigger lookup, the analysis filter band of each capture
     with a finite `analysis_bandwidth`, the resampler design, and the LO shift of
-    the overlap-add resampler when `USE_OARESAMPLE` is set. A `FileCapture` skips
-    the resampler and LO shift checks.
+    the overlap-add resampler when `USE_OARESAMPLE` is set. The resampler and LO
+    shift checks are not run on a `FileCapture`.
 
     Raises:
         SpecValidationError: at ``$.source.signal_trigger`` when `sweep.analysis`
@@ -315,14 +314,15 @@ def _unique_capture_origins(
     """iterate the distinct ``(key(capture), analysis)`` combinations of `sweep`.
 
     The analysis is `sweep.analysis` with the `adjust_analysis` of the capture
-    applied. A sweep with neither `captures` nor a sensor binding yields nothing.
+    applied. Nothing is yielded for a sweep with neither `captures` nor a sensor
+    binding.
 
     Yields:
         ``(capture, analysis, origin)`` for the first capture of each combination,
         in expansion order, until the captures are exhausted
     """
     if len(sweep.captures) == 0 and sweep.sensor is None:
-        # loop_captures refuses this combination; leave such a sweep constructible
+        # loop_captures rejects this combination, and such a sweep stays constructible
         return
 
     seen = set()
@@ -344,9 +344,10 @@ def _located_in_sweep(
     capture: structs.SensorCapture,
     origin: sequencing.CaptureOrigin,
 ) -> Generator[None, None, None]:
-    """re-raise a validation failure at the entry and loop points that made `capture`.
+    """re-raise a validation failure at the origin entry and loop point of `capture`.
 
-    Only `SpecValidationError` is intercepted; any other exception propagates as is.
+    Only `SpecValidationError` is intercepted, and any other exception propagates
+    unchanged.
 
     Raises:
         SpecValidationError: the caught error with the locations from
@@ -363,7 +364,7 @@ def _located_in_sweep(
 def _capture_field_path(
     origin: sequencing.CaptureOrigin, field: str
 ) -> tuple[str, ...]:
-    """locate `field` in the `captures:` entry behind `origin`, as path parts.
+    """locate `field` in the `captures:` entry of `origin`, as path parts.
 
     The path is empty for a capture built from loops alone.
     """

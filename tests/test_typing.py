@@ -1,13 +1,9 @@
 """what the type checker sees at the keyword-unpacking sites of striqt.
 
-Generic wrappers that never run at test time give the static types of measurement
-signatures, coordinate factories, `Controller` construction and `arm`, the cache and
-`retry` decorators, and the `Unpack[TypedDict]` forwarders. A broken Protocol or a
-lost `ParamSpec` is silent at run time. Each probe under `tests/ty_probes/` is
-ordinary typed code that must check clean: an accepted call asserts the result with
-`assert_type`, and a rejected call is marked ``# ty: ignore[<rule>]``. ty reports the
-ignore as unused if the rejection stops. The probe over the registered measurements is
-generated from `sa.registry`.
+Each probe under `tests/ty_probes/` is typed code that must check clean under ty: an
+accepted call asserts the result with `assert_type`, and a rejected call carries
+``# ty: ignore[<rule>]``, which ty reports as unused once the rejection stops. The
+probe over the registered measurements is generated from `sa.registry`.
 """
 
 from __future__ import annotations
@@ -85,10 +81,9 @@ def _named(name: str, extra: tuple[str, ...]) -> bool:
 def registry_probe() -> str:
     """return the source of a probe calling every registered measurement.
 
-    Valid calls on an array and on an `AcquiredIQ` must return the `as_xarray` types,
-    an unknown keyword must be rejected, and each spec field must reject an
-    ``object()``. The rejection of ``object()`` shows that the field is a known, typed
-    parameter.
+    The probe asserts the `as_xarray` return types of valid calls on an array and on
+    an `AcquiredIQ`, and marks as rejected an unknown keyword and an ``object()`` for
+    each spec field.
     """
     modules = sorted({info.func.__module__ for info in sa.registry.values()})
     lines = [

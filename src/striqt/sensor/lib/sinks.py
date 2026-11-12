@@ -1,7 +1,7 @@
 """sinks that write or collect the analyzed dataset of each acquisition.
 
 Every sink is constructed from a `Sweep` and reads the `sink` block of that sweep.
-A capture with `burst` above 1 reaches the sink once per burst segment.
+A sink receives one dataset per burst segment of a capture with `burst` above 1.
 """
 
 from __future__ import annotations as __
@@ -81,7 +81,7 @@ class Zipper:
         Args:
             input_dir: the ``.zarr`` directory to archive
             out_file: the zip path; None selects `input_dir` with ``.zip`` appended
-            force: if True, overwrite an existing `out_file`
+            force: if True, an existing `out_file` is overwritten
 
         Raises:
             IOError: if `input_dir` does not exist, or if `out_file` exists and
@@ -284,7 +284,7 @@ class ZarrSinkBase(SinkBase):
         if self.store is None:
             raise OSError('store is not open')
 
-        # a staging store wraps the store that owns the path
+        # a staging store wraps the store that holds the path
         for store in (
             self.store,
             getattr(self.store, '_inner', None),
@@ -372,13 +372,12 @@ class ZarrCaptureSink(ZarrSinkBase):
 
     `open` allocates every data variable and coordinate of the store from the sweep
     spec, with one row per port per burst segment of every expanded capture along
-    ``capture`` (`sweep_row_count`), and keeps the metadata in memory until each
-    `append` (directory store) or until `close` (zip store). The power `units` attrs
-    of the allocated variables and coordinates are in the power family of the source
-    (`Controller.power_units`). `append` places the
-    arrays of a `DelayedDataset` on the union grid of the sweep and writes every
-    chunk that the acquisition completes, so each chunk is written once. A burst
-    segment re-acquired after a stream overflow is a further row:
+    ``capture``, and keeps the metadata in memory until each `append` for a
+    directory store or until `close` for a zip store. The power `units` attrs of the
+    allocated variables and coordinates are in the power family of the source.
+    `append` places the arrays of a `DelayedDataset` on the union grid of the sweep
+    and writes every chunk that the acquisition completes. Each chunk is written
+    once. A burst segment re-acquired after a stream overflow is a further row:
     ``(capture_index, burst_index)`` may repeat, with a later ``start_time``. `close`
     writes the partial chunks, trims the store to the rows written, and consolidates
     the metadata.
@@ -395,8 +394,8 @@ class ZarrCaptureSink(ZarrSinkBase):
         super().__init__(sweep_spec, format_path, force=force)
         self._action_spec = sweep_spec if action_spec is None else action_spec
 
-        # in case this is run from `open_resources`, reify imports now before blocking
-        # on radio access for the source id below
+        # the imports are reified before the wait on the source id, which blocks
+        # until the radio opens
         from striqt.analysis.lib import stores  # noqa: F401
         from striqt.analysis.lib.util import pd
 
@@ -439,7 +438,8 @@ class ZarrCaptureSink(ZarrSinkBase):
         from striqt.analysis.lib import stores
 
         super().open()
-        # a zip entry cannot be rewritten, so a zip store sees its metadata at close
+        # a zip entry cannot be rewritten, so the metadata of a zip store is written
+        # at close
         self._flush_each = not self.get_root_path().lower().endswith('.zip')
         self.store = stores.staged_metadata_store(self.store)
 
@@ -527,7 +527,11 @@ class ZarrCaptureSink(ZarrSinkBase):
             self._next_row[name] += n
 
     def _update_attrs(self, name: str, incoming: dict[str, Any]):
-        """add the run-time attrs of one capture, dropping a key that conflicts."""
+        """merge the attrs of one capture into the attrs of the array `name`.
+
+        A key with a value that differs between captures is removed and not added
+        again.
+        """
         array = self._arrays[name]
         dropped = self._dropped_attrs.setdefault(name, set())
         current = dict(array.attrs)
@@ -554,7 +558,7 @@ class ZarrCaptureSink(ZarrSinkBase):
         new = {k: v for k, v in extra.items() if k not in self._arrays}
         if not new:
             return
-        # xarray replaces the root attrs on every write, so the template carries them
+        # xarray replaces the root attrs on every write, so the template holds them
         template = xr.Dataset(attrs=self._root_attrs)
         encoding: dict[str, dict[str, Any]] = {}
         for name, var in new.items():
@@ -570,10 +574,11 @@ class ZarrCaptureSink(ZarrSinkBase):
             cast('StagedMetadataStore', self.store).flush_metadata()
 
     def append(self, capture_result: compute.DelayedDataset) -> compute.DelayedDataset:
-        """queue the rows of `capture_result` and write every queued row that is ready.
+        """queue the rows of `capture_result` for writing.
 
-        A row is ready when the acquisition has no pending peripheral read or the read
-        has completed. The rows behind a pending row wait, so the store keeps the
+        The queued rows are written from the head while the head is ready. A row is
+        ready when the acquisition has no pending peripheral read or the read has
+        completed. The rows behind a pending row wait, so the store keeps the
         acquisition order.
         """
         self._deferred.append(capture_result)
@@ -581,10 +586,10 @@ class ZarrCaptureSink(ZarrSinkBase):
         return capture_result
 
     def _write_ready(self, block: bool) -> None:
-        """write the queued rows from the head while the head is ready, or all with `block`.
+        """write the ready rows from the head of the queue, or every row with `block`.
 
-        A pending read that failed is written without the peripheral entries, with a
-        WARNING on the ``sink`` logger.
+        The rows of an acquisition with a failed peripheral read are written without
+        the peripheral entries, with a WARNING on the ``sink`` logger.
         """
         while self._deferred:
             dd = self._deferred[0]
@@ -624,7 +629,8 @@ class ZarrCaptureSink(ZarrSinkBase):
                 index = compute.datasets.row_index(grid, dd.capture, delayed.spec)
                 result = compute.datasets.scatter_rows(grid, result, index)
             self._push(name, result)
-            # the body attrs carry the power form; the composition resolves it
+            # a `units` attr from the measurement body is in a power form, and
+            # `measurement_attrs` resolves the form into `power_units`
             self._update_attrs(
                 name,
                 sa.dataarrays.measurement_attrs(

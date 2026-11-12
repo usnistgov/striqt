@@ -1,7 +1,7 @@
 """3GPP (LTE and 5G NR) frame model.
 
-Cyclic prefix sizes and start indices follow TS 38.211 §5.3.1; slot timing follows
-§4.3.2.
+Cyclic prefix sizes and start indices follow 3GPP TS 38.211 §5.3.1, and slot timing
+follows §4.3.2.
 """
 
 from __future__ import annotations as __
@@ -21,6 +21,9 @@ def slot_period(subcarrier_spacing: float) -> float:
 
     A 10 ms radio frame has 10 subframes of ``subcarrier_spacing/15e3`` slots each
     (3GPP TS 38.211 §4.3.2).
+
+    References:
+        3GPP TS 38.211, "NR; Physical channels and modulation".
     """
     return 10e-3 / (10 * subcarrier_spacing / 15e3)
 
@@ -75,8 +78,9 @@ NR_FR1_RESOURCE_BLOCKS: dict[float, dict[float, int]] = {
     },
 }
 
-# lcm(128, 14): 128 keeps the 5G NR cyclic prefixes of `Phy3GPP` whole samples, and
-# 14 keeps the 15/28 window fill of the SCS/2 spectrograms whole samples
+# lcm(128, 14): a multiple of 128 subcarriers makes the 5G NR cyclic prefixes of
+# `Phy3GPP` whole samples, and a multiple of 14 makes the 15/28 window fill of the
+# SCS/2 spectrograms whole samples
 NR_SAMPLE_RATE_STEP_SUBCARRIERS = 896
 
 
@@ -87,11 +91,15 @@ def nr_occupied_bandwidth(channel_bandwidth: float, subcarrier_spacing: float) -
     Table 5.3.2-1.
 
     Args:
-        channel_bandwidth: the nominal channel bandwidth (Hz), a key of the table
+        channel_bandwidth: the nominal channel bandwidth (Hz), a key of
+            `NR_FR1_RESOURCE_BLOCKS`
         subcarrier_spacing: 15e3, 30e3, or 60e3 (Hz)
 
     Raises:
-        ValueError: if 3GPP TS 38.104 Table 5.3.2-1 has no entry for the pair
+        ValueError: if `NR_FR1_RESOURCE_BLOCKS` has no entry for the pair
+
+    References:
+        3GPP TS 38.104, "NR; Base Station (BS) radio transmission and reception".
     """
     try:
         n_rb = NR_FR1_RESOURCE_BLOCKS[subcarrier_spacing][channel_bandwidth]
@@ -175,41 +183,35 @@ def _get_3gpp_index_cyclic_prefix(
     )
 
     grid = [
-        # axis 0: symbol number within each slot
         phy.cp_start_idx[symbol_inds],
-        # axis 1: slot number
         phy.contiguous_size * slot_inds,
-        # axis 2: frame number
         frames * frame_size,
-        # axis 3: cp index
         xp.ogrid[0 : phy.cp_sizes[1]],
     ]
 
-    # pad the axis dimensions so they can be broadcast together
     inds, *offsets = xp.meshgrid(*grid, indexing='ij', copy=False)
 
-    # sum all of the index offsets
     inds = inds.copy()
     for offset in offsets:
         inds += offset
 
-    # drop singleton axes only after the sum, so that a single non-zero
-    # frame, slot or symbol selection keeps its offset
+    # the squeeze follows the sum so that a single nonzero frame, slot, or symbol
+    # selection keeps its offset
     return inds.squeeze()
 
 
 class Phy3GPP(PhyOFDM):
-    """Sampling and index parameters and lookup tables for 3GPP 5G-NR.
+    """an OFDM frame model of one 3GPP slot: FFT size, sample rate, and cyclic prefixes.
 
-    These are equivalent to LTE if subcarrier_spacing is fixed to 15 kHz
-    and slot length is redefined to match the period of 14 symbols including
-    cyclic prefix.
+    ``generation='4G'`` selects the LTE normal cyclic prefix at 15 kHz subcarrier
+    spacing. ``generation='5G'`` scales the 5G NR cyclic prefix (3GPP TS 38.211
+    §5.3.1) to `subcarrier_spacing`, with the longer first prefix in every slot.
 
     References:
-        3GPP TS 38.211.
+        3GPP TS 38.211, "NR; Physical channels and modulation".
     """
 
-    # a slot is 15 symbol periods of samples: 14 FFTs and 1 period of cyclic prefixes
+    # a slot is 15 FFT periods: 14 FFTs and cyclic prefixes that sum to 1 FFT period
     FFT_PER_SLOT = 14
 
     FFT_SIZE_TO_SUBCARRIERS: typing.ClassVar[dict[int, int]] = {
@@ -221,7 +223,8 @@ class Phy3GPP(PhyOFDM):
         2048: 1201,
     }
 
-    # "default" sample rates from LTE
+    # the sample rates of the LTE channel bandwidths, 1.536 times the bandwidth from
+    # 5 MHz up
     BW_TO_SAMPLE_RATE: typing.ClassVar[dict[float, float]] = {
         1.4e6: 1.92e6,
         3e6: 3.84e6,
@@ -237,10 +240,8 @@ class Phy3GPP(PhyOFDM):
         100e6: 153.6e6,
     }
 
-    # Slot structure and cyclic prefix (CP) sizes follow 3GPP TS 38.211, Section
-    # 5.3.1. These are the sizes (in samples) of the 14 CPs in 1 slot for FFT size
-    # 128 at 15 kHz SCS; CP size scales proportionally to FFT size. 1 slot is the
-    # minimum number of contiguous symbols in a sequence.
+    # the sizes (in samples) of the 14 cyclic prefixes of one 15 kHz slot at FFT size
+    # 128 (3GPP TS 38.211 §5.3.1). The sizes scale with the FFT size
     LTE_MIN_CP_SIZES = (10, 9, 9, 9, 9, 9, 9, 10, 9, 9, 9, 9, 9, 9)
 
     SCS_TO_SLOTS_PER_FRAME: typing.ClassVar[dict[float, int]] = {
@@ -249,7 +250,7 @@ class Phy3GPP(PhyOFDM):
         60e3: 40,
     }
 
-    # FR1 only; the FR2 spacings (120 kHz and above) are not modeled
+    # FR1 only: 120 kHz and above (FR2) are not modeled
     SUBCARRIER_SPACINGS: typing.ClassVar[set[float]] = {15e3, 30e3, 60e3}
 
     def __init__(
@@ -280,10 +281,9 @@ class Phy3GPP(PhyOFDM):
             self.subcarriers = self.FFT_SIZE_TO_SUBCARRIERS[nfft]
 
         if generation.upper() == '4G':
-            # assert subcarrier_spacing == 15e3, '4G LTE only supports 15 kHz subcarrier spacing'
             cp_sizes = nfft * xp.array(self.LTE_MIN_CP_SIZES, dtype=int) // 128
         elif generation.upper() == '5G':
-            Tc = Fraction(1, 4096 * 480) * 1000  # microsec
+            Tc = Fraction(1, 4096 * 480) * 1000  # T_c of 3GPP TS 38.211 §4.1, in µs
             kappa = 64
             fs_MHz = Fraction(round(sample_rate), 1_000_000)
 

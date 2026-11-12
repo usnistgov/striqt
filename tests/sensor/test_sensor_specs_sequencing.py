@@ -827,8 +827,8 @@ def test_adjust_captures_missing_required_default_lookup_raises():
         S.adjust_captures(make_capture_kws(frequency_offset=300.0), spec, None)
 
 
-# a remap of snr keyed on frequency_offset, the capture it is applied to, and the
-# adjustment it produces. PER_PORT hits 100 and misses 200.
+# (remap kws, capture kws, expected adjustment) for a remap of snr keyed on
+# frequency_offset. PER_PORT hits 100 and misses 200.
 SCALAR_HIT = {'frequency_offset': 100.0}
 SCALAR_MISS = {'frequency_offset': 300.0}
 PER_PORT = {'port': (0, 1), 'frequency_offset': (100.0, 200.0)}
@@ -953,8 +953,15 @@ def test_multi_field_key_with_per_port_values(site_sweep):
     reason='_convert_label_lookup_keys prunes remaps keyed on unknown fields with a '
     '`continue` that precedes the intended raise',
 )
-def test_remap_keyed_on_an_unknown_field_is_rejected():
-    remap = Remap(key='centre_frequency', lookup={1.0: 'x'})
+@pytest.mark.parametrize(
+    'key, lookup_key',
+    [('centre_frequency', 1.0), (('centre_frequency', 'port'), (1.0, 0))],
+    ids=['scalar_key', 'tuple_key'],
+)
+def test_remap_keyed_on_an_unknown_field_is_rejected(key, lookup_key):
+    """an unknown remap key is rejected like an unknown field name, on the scalar
+    and the tuple key branches alike."""
+    remap = Remap(key=key, lookup={lookup_key: 'x'})
     with pytest.raises(msgspec.ValidationError, match='centre_frequency'):
         make_site_sweep(adjust_captures={'defaults': {'channel_name': remap}})
 

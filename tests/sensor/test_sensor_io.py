@@ -298,7 +298,11 @@ def _json_round_trip(spec) -> dict:
 
 def _write_spec_attrs(tmp_path, spec, **extra) -> Path:
     """write the JSON attrs of `spec`, plus `extra`, into an empty zarr group at
-    ``tmp_path / 'out.zarr'`` and return the path"""
+    ``tmp_path / 'out.zarr'``.
+
+    Returns:
+        the path of the group
+    """
     import zarr
 
     path = tmp_path / 'out.zarr'

@@ -80,8 +80,8 @@ def _prune_ticks(ticks: tuple, count: int, prefer: tuple = ()) -> np.ndarray:
 class EngFormatter(_ticker.Formatter):
     """a tick formatter in engineering notation with one SI prefix for every tick.
 
-    The prefix is that of `striqt.waveform.units.si_prefix` over the tick locations,
-    or the frozen `exponent`. With `unit_in_tick` True each tick ends with the prefixed
+    The prefix is that of `exponent` when given, else `striqt.waveform.units.si_prefix`
+    over the tick locations. With `unit_in_tick` True each tick ends with the prefixed
     units and `axis_units_label` returns ``''``. With `unit_in_tick` False each tick
     is a bare mantissa and `axis_units_label` returns the prefixed units for the axis
     label.
@@ -96,7 +96,7 @@ class EngFormatter(_ticker.Formatter):
         places: int | None = None,
         sep: str = ' ',
     ) -> None:
-        """store the formatting options; no tick location is read.
+        """store the formatting options.
 
         Args:
             units: the units string of the tick values, ``''`` for a bare prefix, or
@@ -119,7 +119,7 @@ class EngFormatter(_ticker.Formatter):
         )
 
     def set_locs(self, locs: typing.Sequence[float]) -> None:
-        """store the tick locations and, unless the exponent is frozen, select the prefix."""
+        """store `locs` and select the prefix from `locs` unless `exponent` is set."""
         self._locs = list(locs)
         if not self._frozen:
             self._prefix = sw.units.si_prefix(
@@ -182,7 +182,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
         return self.tick_values(max(vmin, dmin), min(vmax, dmax))
 
     def _bound_axis(self) -> _axis.Axis:
-        """return the axis the locator is attached to.
+        """return the `Axis` that holds the locator.
 
         Raises:
             RuntimeError: if no axis has been set on the locator
@@ -230,7 +230,7 @@ class GammaMaxNLocator(_ticker.MaxNLocator):
         vmin, vmax = min((vmin, vmax)), max((vmin, vmax))
 
         if not np.isfinite(minpos):
-            minpos = 1e-12  # arbitrary floor well below any plotted probability
+            minpos = 1e-12  # a floor below any plotted probability
 
         ret = (
             max(minpos, vmin),
@@ -361,7 +361,7 @@ def _has_tick_label_collision(ax, which: str, spacing_threshold=10):
     """return whether adjacent tick labels along an axis are closer than `spacing_threshold`.
 
     Args:
-        ax: the matplotlib axes that owns the tick labels
+        ax: the matplotlib axes with the tick labels
         which: ``'x'`` or ``'y'``
         spacing_threshold: the minimum gap between adjacent label boxes, in display
             pixels
@@ -436,6 +436,9 @@ def xaxis_concise_dates(fig, ax, adjacent_offset: bool = True):
 
     With `adjacent_offset` True, the tick labels are drawn unrotated and the date
     offset is prepended to the first tick label. The figure is redrawn.
+
+    Returns:
+        `ax`
     """
 
     # lazy_import does not work for matplotlib submodules

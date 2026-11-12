@@ -52,7 +52,7 @@ def test_facet_values_by_dimension_position() -> None:
 
 
 def test_facet_values_reduce_captures_that_share_a_facet() -> None:
-    """the facet shared by the 2 captures at 1 GHz takes the minimum of the 2 levels"""
+    """the facet shared by the 2 captures at 1 GHz has the minimum of the 2 levels"""
     values = noise_levels().set_xindex('center_frequency')
     grid = fake_grid([{'center_frequency': 1e9}, {'center_frequency': 2e9}])
 
@@ -127,8 +127,8 @@ def test_histogram_facet_limits_and_noise_lines_are_per_capture() -> None:
 def capture_backend(col_wrap: int | None = None) -> mpl_backend.MatplotlibBackend:
     """return a backend faceted on the `capture` dimension of the synthetic dataset.
 
-    The dataset has no `start_time` coordinate. The suptitle and the facet titles
-    format from `center_frequency`.
+    The dataset has no `start_time` coordinate, so the suptitle and the facet titles
+    are formatted from `center_frequency`.
     """
     opts = specs.SharedPlotOptions(
         col='capture',
@@ -146,7 +146,8 @@ def data_axes(grid) -> list:
 
 @pytest.fixture(scope='module')
 def stepped_grid() -> Iterator[FacetGrid]:
-    """the grid of `line(mean, step='post')` with the min-max bands drawn onto it"""
+    """yield the grid of ``line(mean, step='post')`` with the min-max bands drawn
+    onto it."""
     import matplotlib.pyplot as plt
 
     low, mean, high = cyclic_statistics()
@@ -161,7 +162,7 @@ def stepped_grid() -> Iterator[FacetGrid]:
 
 def test_fill_between_on_a_line_grid_matches_the_line_colors(stepped_grid) -> None:
     """the band of hue index `i` drawn onto the grid of `line` has the facecolor of
-    the `i`th line on every facet, and adds no line."""
+    the `i`th line on every facet, and the line count is unchanged."""
     from matplotlib import colors
 
     for ax in data_axes(stepped_grid):
@@ -204,7 +205,8 @@ def test_line_on_target_adds_lines_to_the_existing_figure() -> None:
 
 @pytest.mark.parametrize('method', ['line', 'fill_between'])
 def test_target_with_a_facet_the_data_lacks_raises(method: str) -> None:
-    """a grid of 3 captures rejects data with 2 captures"""
+    """`line` and `fill_between` raise `ValueError` for data with 2 captures on a
+    `target` grid of 3 captures."""
     import matplotlib.pyplot as plt
 
     low, mean, high = cyclic_statistics()
@@ -239,7 +241,7 @@ def test_step_post_holds_each_value_until_the_next_sample(stepped_grid) -> None:
         for i, band in enumerate(ax.collections):
             vertices = band.get_paths()[0].vertices
             edge = cbook.pts_to_poststep(x, low.values[i_capture, i])
-            # vertex 0 is the first point of the upper edge; the lower edge follows
+            # vertex 0 is the first point of the upper edge, and the lower edge follows
             np.testing.assert_allclose(vertices[1 : 1 + edge.shape[1]], edge.T)
 
 

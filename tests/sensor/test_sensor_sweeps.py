@@ -4,9 +4,10 @@ under sweeps/, and in-memory sweeps checked against the generators the sources c
 The PSD oracle is the spectrum of the window: a unit tone at fine bin k0 puts
 ``|W(k - k0)|**2 / (nfft * sum(w**2))`` of its power in fine bin k (Parseval), and a
 reported bin integrates the fine bins it spans. For a bin-centered tone with no
-integration this is the ``-10*log10(enbw_bins)`` of tests/analysis. With the 24-bin
-integration of quick.yaml the oracle is the in-block fraction of the kaiser window,
-about -0.002 dB, and the remaining -33 dB spills into the neighboring block.
+integration, the fraction in the tone bin is the ``-10*log10(enbw_bins)`` of
+tests/analysis. With the 24-bin integration of ``fragments/analysis/quick.yaml`` the
+oracle is the in-block fraction of the kaiser window, about -0.002 dB, and the
+remaining -33 dB spills into the neighboring block.
 """
 
 from __future__ import annotations
@@ -55,10 +56,17 @@ def tone_bin_powers(window, nfft, nzero, tone_bin, bin_centers, half_width):
     """return the fraction of the power of a unit tone that each reported PSD bin
     receives.
 
-    `tone_bin`, `bin_centers`, and `half_width` are in units of fine (nfft) bins. A
-    reported bin integrates the fine bins within `half_width` of the bin center. The
-    window is ``nfft - nzero`` samples long and zero-padded to `nfft`, as
-    `sw.spectrogram` does for ``window_fill < 1``.
+    Args:
+        window: the window name or ``(name, parameter)`` of `sw.get_window`
+        nfft: the fine-bin count of the zero-padded window
+        nzero: the zero-padded samples, as `sw.spectrogram` adds for
+            ``window_fill < 1``
+        tone_bin: the tone position, in fine bins
+        bin_centers: the center of each reported bin, in fine bins
+        half_width: the half-width of a reported bin, in fine bins
+
+    Returns:
+        the power fraction of each entry of `bin_centers`, as a float64 array
     """
     w = np.zeros(nfft)
     w[: nfft - nzero] = np.asarray(sw.get_window(window, nfft - nzero), dtype='float64')

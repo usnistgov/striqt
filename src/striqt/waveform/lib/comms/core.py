@@ -1,4 +1,4 @@
-"""OFDM frame-model base class shared by the standard-specific PHY models."""
+"""Standard-agnostic OFDM frame model of the cyclic-prefix and symbol sample positions."""
 
 from __future__ import annotations as __
 
@@ -65,22 +65,18 @@ class PhyOFDM:
         if contiguous_size is not None:
             self.contiguous_size = contiguous_size
         else:
-            # the default contiguous block is the symbols with cyclic prefixes and no padding
             self.contiguous_size = int(np.sum(cp_sizes) + len(cp_sizes) * nfft)
 
-        # build a (start_idx, size) pair for each CP
         pair_sizes = xp.concatenate((xp.array((0,)), self.cp_sizes + self.nfft))
         self.cp_start_idx = (pair_sizes.cumsum()).astype(int)[:-1]
         start_and_size = zip(self.cp_start_idx, self.cp_sizes)
 
         idx_range = xp.arange(self.contiguous_size).astype(int)
 
-        # indices in the contiguous range that are CP
         self.cp_idx = xp.concatenate([
             idx_range[start : start + size] for start, size in start_and_size
         ])
 
-        # indices in the contiguous range that are not CP
         self.symbol_idx = xp.setdiff1d(idx_range, self.cp_idx)
 
     def index_cyclic_prefix(self) -> Array:

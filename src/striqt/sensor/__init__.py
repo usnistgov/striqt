@@ -1,5 +1,5 @@
-# lib must load before specs: specs.structs imports lib.typing, and lib.compute
-# reads specs.SensorCapture at import time
+# lib must load before specs, because specs.structs imports lib.typing and
+# lib.compute reads specs.SensorCapture at import time
 from . import lib
 
 # isort: split

@@ -1,7 +1,7 @@
-"""shared builders for the waveform tests: the comms fixtures (the 3GPP PHY at the
-analysis sample rate, cyclic-prefix cases on a synthetic OFDM waveform, and silent
-synchronization blocks with embedded PSS symbols) and the fourier strategies (noise
-waveforms, sample rates, STFT parameters, and the cross-backend FFT tolerance).
+"""shared builders and strategies for the waveform tests.
+
+The comms builders default to the 30 kHz subcarrier spacing and to `FS`, the sample
+rate of the analysis synchronization block.
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ def phy_5g(scs, fs=FS, xp=None):
 
 
 def sync_params(scs=30e3, fs=FS, **kws):
-    """return `pss_params` for the sensor sweep configuration: `shared_spectrum`
-    defaults to True at 30 kHz."""
+    """return `pss_params` at `scs` and `fs`, with `shared_spectrum` defaulting to
+    True at 30 kHz."""
     kws.setdefault('shared_spectrum', round(scs) == 30_000)
     return sync_5gnr.pss_params(sample_rate=fs, subcarrier_spacing=scs, **kws)
 
@@ -172,7 +172,7 @@ def noise_waveforms(min_size=64, max_size=2048, dtype=None):
 
 def tiled_tone(fs, f0, count, channels=None):
     """return a unit-amplitude complex64 tone at `f0` (in Hz) sampled at `fs` (in Hz)
-    over `count` samples, tiled to shape ``(channels, count)``; `channels=None`
+    over `count` samples, tiled to shape ``(channels, count)``. ``channels=None``
     returns the 1-D tone."""
     x = testing.tone(None, fs, frequency=f0, count=count)[0]
     return x if channels is None else np.tile(x, (channels, 1))
@@ -180,11 +180,7 @@ def tiled_tone(fs, f0, count, channels=None):
 
 @st.composite
 def stft_parameters(draw):
-    """draw STFT parameters: `nperseg`, `noverlap`, `fs`, and `window`.
-
-    Window names and sizes come from short lists, so the persistent on-disk cache of
-    `get_window` does not fill with one-off entries.
-    """
+    """draw STFT parameters: `nperseg`, `noverlap`, `fs`, and `window`."""
     nperseg = draw(st.sampled_from([64, 128, 256]))
     return {
         'nperseg': nperseg,

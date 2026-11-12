@@ -1,10 +1,9 @@
-"""striqt.waveform.lib.comms.sync_5gnr: the 5G NR synchronization used by the cellular
-measurements.
+"""striqt.waveform.lib.comms.sync_5gnr: the 5G NR synchronization sequences,
+parameters, and correlators.
 
-The checks compare the PSS/SSS sequences, the SSB cases of TS 38.213 Section 4.1, the
-sync parameters, SSB IQ extraction, the correlation grid, and the offset choice against
-an independent restatement of the standard or a synthetic waveform with a known sync
-sequence. The numpy and cupy paths are compared against each other.
+The expectations come from an independent restatement of TS 38.211 and TS 38.213 or
+from a synthetic waveform with an embedded sync sequence. The numpy and cupy paths are
+compared against each other.
 """
 
 from __future__ import annotations
@@ -224,13 +223,13 @@ class TestIndexPssSymbols:
 
 class TestSyncParams:
     def test_pss_params_structure(self):
-        """the production configuration: 30 kHz Case C shared spectrum at 7.68 MS/s.
+        """the parameters of 30 kHz Case C with shared spectrum at 7.68 MS/s.
 
         TS 38.213 4.1 Case C with shared spectrum puts the PSS in symbols {2, 8} + 14n
         for n = 0..9. The closest pair is 6 symbols apart, so 5 lag symbols are
         searched, and the last candidate (134) plus those lags rounds up to 10 slots.
         A 30 kHz slot at 7.68 MS/s is 3840 samples, so a short symbol is
-        3840 // 14 = 274 samples; the normal CP is 144 * 256 / 2048 = 18 samples and
+        3840 // 14 = 274 samples. The normal CP is 144 * 256 / 2048 = 18 samples, and
         the excess 16 kappa in the first symbol is 7.68e6 / 1.92e6 = 4 samples.
         """
         params = sync_params()
@@ -324,8 +323,8 @@ class TestGet5gSsbSpans:
         ids=['centered', 'above', 'below'],
     )
     def test_recenters_every_span(self, f0, frequency_offset):
-        """a tone at frequency_offset + f0 in the capture comes out at f0, at its
-        level, in every span"""
+        """a tone at ``frequency_offset + f0`` in the capture is at `f0` in every
+        span, at the level of the tone"""
         params = sync_params()
         iq = self._tones(params, f0 + frequency_offset)
         spans = sync_5gnr.get_5g_ssb_spans(
@@ -364,7 +363,7 @@ class TestGet5gSsbSpans:
 
     def test_one_frame_is_one_block(self):
         """a record of one 10 ms frame with a 20 ms discovery period yields the span
-        of one block, as the whole-record path does"""
+        of one block"""
         params = sync_params()
         frame_in = params.frame_size * round(self.FS_IN / FS)
         iq = self._tones(params, 1e6, n_blocks=1)[:, :frame_in]
@@ -445,7 +444,7 @@ class TestCorrelateSyncSequence:
         spans = spans[..., : params.corr_size]
         ports, sync_count, _ = spans.shape
         nfft = sync_5gnr._correlation_fft_size(params.corr_size + pss.shape[1] - 1, np)
-        # 1 byte splits the 3 cell IDs into chunks of one; a product buffer of
+        # 1 byte splits the 3 cell IDs into chunks of one, and a product buffer of
         # exactly 2 cells splits the cell IDs into chunks of 2 and 1
         one_cell = ports * sync_count * nfft * np.dtype(np.complex64).itemsize
         max_chunk_bytes = max(1, cells * one_cell)
@@ -476,7 +475,7 @@ class TestCorrelateSyncSequence:
         ids=['two_frames', 'partial_frame', 'empty'],
     )
     def test_sync_frame_count(self, frames, extra_samples, count):
-        """a whole number of 10 ms frames is counted; a partial or empty record is
+        """a whole number of 10 ms frames is counted, and a partial or empty record is
         rejected by `sync_frame_count` and by `correlate_sync_sequence`"""
         params, _, pss, _ = pss_setup()
         size = frames * params.frame_size + extra_samples
@@ -557,7 +556,7 @@ class TestChooseSsbOffset:
         )
 
     def test_max_beams(self):
-        """only the first max_beams SSB candidates are searched"""
+        """only the first `max_beams` SSB candidates are searched"""
         params, phy, pss, bodies = pss_setup()
         iq = silent_block(params)
         embed_symbol(iq, phy, bodies[1], params.symbol_indexes[1], 55)
@@ -573,7 +572,8 @@ class TestChooseSsbOffset:
             sync_5gnr.weighted_ssb_detect(R[0, 0], params)
 
     def test_from_capture_rate_waveform(self):
-        """the measurement path: capture at 15.36 MS/s, resample to 7.68 MS/s, detect"""
+        """a PSS embedded at 15.36 MS/s is located to within one lag after the spans
+        are cut to 7.68 MS/s"""
         fs_in = 15.36e6
         params, _, pss, _ = pss_setup()
         _, phy_in, _, bodies_in = pss_setup(fs_in)
@@ -678,9 +678,9 @@ def _window_params():
 
 @pytest.mark.parametrize('params', _window_params())
 def test_pieces_match_the_rolled_and_trimmed_index_map(params):
-    """assembling the pieces from an index ramp equals the lag window cut from the
-    ramp rolled by -offs, split into slots, trimmed of the excess CP and merged; every
-    source slice lies inside the inverse FFT"""
+    """the pieces assembled from an index ramp equal the lag window cut from the ramp
+    rolled by ``-offs``, split into slots, trimmed of the excess CP, and merged, and
+    every source slice lies inside the inverse FFT"""
     head, offs, nfft = window_cut(params)
     pieces = sync_5gnr._lag_window_pieces(params, head, offs)
 
@@ -702,7 +702,7 @@ def test_pieces_match_the_rolled_and_trimmed_index_map(params):
 
 def test_pieces_reject_a_window_past_the_span():
     """symbol 9 at 274 samples per symbol needs lags 2466 to 3836 of a 3836-sample
-    trimmed slot; one more lag ends past the span"""
+    trimmed slot, and one more lag ends past the span"""
     params = dataclasses.replace(
         sync_params(), slot_count=1, corr_size=3840, symbol_indexes=[9], lag_count=1371
     )

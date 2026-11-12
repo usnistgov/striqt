@@ -136,9 +136,9 @@ class SourceBackend(Protocol[_SS, SC]):
         pass
 
     def disarm(self) -> None:
-        """stop streaming until the next `trigger`; the tuning of `arm` is kept.
+        """stop streaming until the next `trigger`.
 
-        The base implementation does nothing.
+        The tuning of `arm` is kept. The base implementation does nothing.
         """
 
     def power_units(self) -> sw.units.PowerUnits:

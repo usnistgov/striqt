@@ -85,8 +85,8 @@ def frequency_axis(ax) -> xr.DataArray:
 
 
 def test_units_in_the_label_leave_bare_ticks(ax) -> None:
-    """the extent 0.8 to 1.1 GHz spans 300 MHz, so the shared prefix is M: it goes
-    in the axis label, and every tick is a bare mantissa"""
+    """the extent 0.8 to 1.1 GHz spans 300 MHz, so the shared prefix is M. The prefix
+    is in the axis label, and every tick is a bare mantissa."""
     freq = frequency_axis(ax)
 
     labels.label_axis('x', freq, ax=ax, tick_units=False)
@@ -146,7 +146,7 @@ def test_all_nan_data_is_still_labeled(ax) -> None:
 
 
 def test_auto_tick_units_follow_the_unit_length(ax) -> None:
-    """a 1 or 2 character unit goes in the ticks, a longer one in the label"""
+    """a 1 or 2 character unit is in the ticks, and a longer one in the label"""
     freq = frequency_axis(ax)
     labels.label_axis('x', freq, ax=ax)
     assert '(' not in ax.get_xlabel()
@@ -223,8 +223,8 @@ def test_label_by_coord_renders_each_coordinate_kind(
     fmt: str, expected: list[str]
 ) -> None:
     """a float64 coordinate is formatted in its units with the prefix shared by the
-    facet values (the 100 MHz step lowers 2 GHz to MHz); a format spec that is one
-    prefix symbol forces the prefix, and any other spec formats the bare number"""
+    facet values, so the 100 MHz step lowers 2 GHz to MHz. A format spec that is one
+    prefix symbol forces the prefix, and any other spec formats the bare number."""
     assert labels.label_by_coord(facet_array(), fmt, coord_or_dim='capture') == expected
 
 

@@ -1,5 +1,8 @@
-"""frozen containers, field subsets, conversion caches, and schema hooks for the
-specification structs."""
+"""support for the spec structs.
+
+Conversions between dicts, structs, and other structs go through `msgspec.convert`
+with ``strict=False`` and a decode hook that reads a `fractions.Fraction` from a
+float or a string."""
 
 from __future__ import annotations as __
 
@@ -165,14 +168,30 @@ class frozendict(Mapping[_K, _V]):
 
 
 @_like_meta(msgspec.Meta)
-def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
-    """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
+def Meta(
+    standard_name: str,
+    units: str | None = None,
+    *,
+    description: str | None = None,
+    **kws,
+) -> msgspec.Meta:
+    """return the field annotation that sets the `standard_name` and `units` attrs.
+
+    Args:
+        standard_name: the `standard_name` attr of the field in xarray output
+        units: the `units` attr; None writes no units attr
+        description: the text rendered in the schema reference; None selects
+            `standard_name`
+        **kws: constraints forwarded to `msgspec.Meta` (``gt``, ``ge``, ...)
+    """
     extra = {'standard_name': standard_name}
     if units is not None:
         # xarray objects with units == None cannot be saved to netcdf;
         # in this case, omit
         extra['units'] = units
-    return msgspec.Meta(description=standard_name, extra=extra, **kws)
+    if description is None:
+        description = standard_name
+    return msgspec.Meta(description=description, extra=extra, **kws)
 
 
 # %% validation of (capture, analysis spec) combinations
@@ -182,8 +201,7 @@ class SpecValidationError(msgspec.ValidationError):
     `path` is the chain of field accesses from the document root, rendered as
     msgspec renders a path (``$.analysis.spectrogram``) ahead of `message`.
     `locations` are further roots at which the same failure is located, rendered
-    as an ``at ... on ...`` trailer in the order given. msgspec propagates an
-    instance raised in `__post_init__` unchanged.
+    as an ``at ... on ...`` trailer in the order given.
     """
 
     def __init__(
@@ -358,7 +376,7 @@ def narrow_analysis_group(group: _G, names: Iterable[str]) -> _G:
 
 @util.lru_cache(4096)
 def convert_spec_cached(spec_cls: type[_T], spec: Any) -> _T:
-    """project `spec` onto the fields that `spec_cls` declares.
+    """project `spec` onto the fields declared by `spec_cls`.
 
     Results are cached in a process-global `lru_cache` of 4096 entries.
     `clear_caches` empties the cache.
@@ -426,8 +444,8 @@ def lru_cache_on_converted(
         maxsize: the `lru_cache` size, or None for unbounded
 
     Returns:
-        a decorator; the wrapper the decorator returns exposes `cache_clear` and
-        `cache_info` and is registered for `clear_caches`
+        a decorator. The wrapper that the decorator returns exposes `cache_clear`
+        and `cache_info` and is registered for `clear_caches`.
 
     Raises:
         TypeError: from the wrapper, when fewer than ``len(spec_types)`` arguments

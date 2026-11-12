@@ -58,7 +58,8 @@ def noise_lines(ax, level: float) -> list:
 
 
 def plot_functions() -> dict[str, Any]:
-    """return the public callables of `data_vars` with leading `(data, plotter)`."""
+    """return the public callables of `data_vars` with leading ``(data, plotter)``
+    parameters."""
     found = {}
     for name, obj in vars(data_vars).items():
         if name.startswith('_') or inspect.ismodule(obj) or not callable(obj):

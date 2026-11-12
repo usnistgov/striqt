@@ -1,8 +1,8 @@
 """striqt.sensor.lib.actions.sweep: SweepRunner, and the iterate_sweep dispatch through
 resources['runner'].
 
-The pipeline run by `SweepRunner.iterate` is covered in `test_sensor_actions_core.py`
-through `ss.iterate_sweep`.
+`test_sensor_actions_core.py` tests the pipeline of `SweepRunner.iterate` through
+`ss.iterate_sweep`.
 """
 
 from __future__ import annotations

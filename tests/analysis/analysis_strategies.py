@@ -1,8 +1,4 @@
-"""strategies, spec factories, and shared constants for the analysis tests.
-
-This module is not a conftest. A nested conftest would shadow the root conftest that
-the other test directories import by name.
-"""
+"""strategies, spec factories, and shared constants for the analysis tests."""
 
 from __future__ import annotations
 
@@ -23,11 +19,7 @@ from striqt.analysis.specs.helpers import frozendict
 
 
 def registered_tolerance(capture, spec, **kwargs) -> sa.specs.Tolerance:
-    """return the tolerance registered for the measurement that `spec` selects.
-
-    The tolerance is read through `sa.registry.tolerances` on a `BuiltinAnalyses`
-    group, the same path a sweep uses.
-    """
+    """return the tolerance registered for the measurement that `spec` selects."""
     name = sa.registry[type(spec)].name
     group = sa.specs.BuiltinAnalyses(**{name: spec})
     return sa.registry.tolerances(capture, group, **kwargs)[name]
@@ -55,8 +47,8 @@ def tolerance(spec, duration: float = DURATION, **kws) -> sa.specs.Tolerance:
 _SAMPLE_RATES = (1e6, 2e6, 7.68e6, 15.36e6)
 _SSB_SAMPLE_RATE = 7.68e6
 
-# a fractional part of at least 1e-3 samples stays clear of the 1e-6 sample
-# tolerance in Capture.__post_init__
+# a fractional part of at least 1e-3 samples exceeds the 1e-6 sample tolerance in
+# Capture.__post_init__
 fractional_parts = st.floats(min_value=1e-3, max_value=1 - 1e-3)
 
 
@@ -147,8 +139,7 @@ SSB_WINDOW_FILL = Fraction(15, 28)
 
 # the STFT nfft is sample_rate/(subcarrier_spacing/2) and must be a multiple of 28
 # for the 13/28 overlap and 15/28 window fill to be whole samples. 420 kHz is the
-# smallest rate that satisfies this constraint, so it gives the cheapest capture that
-# spans a whole 20 ms discovery period
+# smallest such rate, so a whole 20 ms discovery period takes the fewest samples
 SSB_SPECTROGRAM_SCS = 30e3
 SSB_SPECTROGRAM_FS = 420e3
 SSB_SPECTROGRAM_SAMPLE_RATE = 120e3
@@ -245,8 +236,11 @@ def stft_pairs(draw, spec_type=sa.specs.Spectrogram, **extra):
 
 @st.composite
 def detector_pairs(draw, spec_type=sa.specs.ChannelPowerTimeSeries, **extra):
-    """draw a (capture, spec) pair for the binned power detectors. `extra` is as in
-    `stft_pairs`."""
+    """draw a (capture, spec) pair for the binned power detectors.
+
+    Each `extra` entry maps a spec field name to ``(valid, bad)`` strategies, as in
+    `stft_pairs`.
+    """
     valid = {
         'samples': draw(st.sampled_from((100, 1000))),
         'sample_rate': 1e6,
@@ -271,7 +265,10 @@ def detector_pairs(draw, spec_type=sa.specs.ChannelPowerTimeSeries, **extra):
 @st.composite
 def ssb_correlator_pairs(draw, spec_type=sa.specs.Cellular5GNRPSSCorrelator, **extra):
     """draw a (capture, spec) pair for the PSS/SSS correlators and synchronizers.
-    `extra` is as in `stft_pairs`."""
+
+    Each `extra` entry maps a spec field name to ``(valid, bad)`` strategies, as in
+    `stft_pairs`.
+    """
     samples = draw(st.integers(min_value=1, max_value=2)) * CELL_FRAME
     step = CELL_FS / samples
     scs = draw(st.sampled_from((15e3, 30e3)))

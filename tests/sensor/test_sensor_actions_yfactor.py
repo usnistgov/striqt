@@ -45,9 +45,6 @@ TOGGLE = 'noise_diode_enabled'
 DURATION_LOOP = ss.specs.List(field='duration', values=(1e-3, 2e-3))
 
 
-# %% ManualYFactorRunner construction
-
-
 # %% compute_y_factor_corrections
 
 
@@ -141,9 +138,8 @@ def test_explicit_detector_period_is_used():
     ids=['capture', 'loop'],
 )
 def test_default_detector_period_is_the_one_duration(loops, period):
-    """the default period is one bin per capture. The rms mean of the Y-factor math
-    does not depend on the bin count, and the PAPR diagnostics collapse to 0 dB. A
-    looped duration overrides the duration of the capture."""
+    """the default period is one bin per capture. A looped duration overrides the
+    duration of the capture."""
     sweep = make_calibration_sweep(
         captures=(make_calibration_capture(duration=2e-3),), loops=loops
     )
@@ -165,9 +161,8 @@ def test_calibration_analysis_is_the_group_of_the_binding():
 
 
 def test_default_detector_period_needs_one_duration():
-    """the constructor of the bound spec builds the `sweep` of the runner. A duration
-    loop with 2 values leaves no single duration, and the `detector_period` error is
-    raised at construction."""
+    """a duration loop with 2 values leaves no single duration, and the
+    `detector_period` error is raised at construction of the spec"""
     with pytest.raises(msgspec.ValidationError, match=r'calibration\.detector_period'):
         make_calibration_sweep(loops=(DURATION_LOOP,))
 
@@ -234,8 +229,9 @@ def test_pass_sweep_fixes_the_port_and_drops_the_port_loop():
 
 
 def test_explicit_captures_with_implied_loops():
-    """2 explicit captures at different ports give one pass per port over the capture
-    at that port. The whole calibration acquires 2 ports x 2 states x 1 capture."""
+    """with 2 explicit captures at different ports, the pass of each port covers the
+    one capture at that port. The whole calibration acquires 2 ports x 2 states x 1
+    capture."""
     sweep = ss.read_yaml_spec(SITE_DIR / 'site-calibration-explicit.yaml')
     runner = ManualYFactorRunner(sweep)
     assert 'external_lo_frequency' in sweep.calibration.implied_loops

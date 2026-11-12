@@ -1,9 +1,7 @@
 """text labels of measured quantities from dataset attrs and capture field metadata.
 
-A `Measurand` is the frozen set of facts that name a quantity: the variable or field
-name, `standard_name`, `long_name`, `units`, and `noise_bandwidth`. The label
-functions compose text from those facts alone, so a label is composed in one place
-and the attrs never carry rendered text.
+A label is composed from `standard_name`, `long_name`, `units`, and
+`noise_bandwidth` by each call. No attr carries rendered text.
 """
 
 from __future__ import annotations as __
@@ -24,10 +22,10 @@ from . import util
 
 @dataclasses.dataclass(frozen=True)
 class Measurand:
-    """the facts that name a measured quantity, as a hashable key for its labels."""
+    """the facts that name a measured quantity, as a hashable key for the labels."""
 
     name: str
-    """the variable or field name, the label of last resort"""
+    """the variable or field name, the label when the 2 name attrs are None"""
     standard_name: Union[str, None] = None
     """the short noun phrase of the quantity, without units"""
     long_name: Union[str, None] = None
@@ -44,8 +42,8 @@ def measurand_from_attrs(
     """return the `Measurand` named by the `attrs` of a variable or coordinate.
 
     Args:
-        attrs: the attrs mapping; `standard_name`, `long_name`, `units`, and
-            `noise_bandwidth` are read and other keys ignored
+        attrs: the attrs of a variable or coordinate, of which `standard_name`,
+            `long_name`, `units`, and `noise_bandwidth` are read
         name: the variable or coordinate name, or None for ``''``
     """
     bandwidth = attrs.get('noise_bandwidth', None)
@@ -62,7 +60,7 @@ def measurand_from_field(capture_cls: type[msgspec.Struct], field: str) -> Measu
     """return the `Measurand` of the `Meta` metadata of `field` in `capture_cls`.
 
     Raises:
-        KeyError: if `capture_cls` has no field `field`
+        KeyError: when `capture_cls` has no field `field`
     """
     attrs = specs.helpers.get_capture_type_attrs(capture_cls)[field]
     return measurand_from_attrs(attrs, field)
@@ -101,7 +99,7 @@ def units_label(m: Measurand, *, prefix: str = '') -> Union[str, None]:
 def quantity_label(
     m: Measurand, *, short: bool = False, with_units: bool = True, prefix: str = ''
 ) -> str:
-    """return the text that names `m`, with its units in parentheses.
+    """return the text that names `m`, with the units in parentheses.
 
     The text is the first of `m.long_name`, `m.standard_name`, and `m.name` that is
     not None. `short` puts `m.standard_name` first.
@@ -111,7 +109,7 @@ def quantity_label(
         short: True selects `standard_name` over `long_name`
         with_units: True appends ``' (units)'`` from `units_label` when the measurand
             has units
-        prefix: the SI prefix symbol passed to `units_label`
+        prefix: the SI prefix symbol placed before the base unit, ``''`` for none
     """
     names = (m.standard_name, m.long_name) if short else (m.long_name, m.standard_name)
     text = next((n for n in names if n is not None), m.name)
@@ -130,12 +128,13 @@ def describe_value(
     Args:
         value: a number, a tuple of numbers, a string, or None
         m: the measurand, a units string, or None for no units
-        prefix: the SI prefix of the numbers; ``'auto'`` shares one prefix across a
-            tuple, a symbol forces that prefix
+        prefix: the SI prefix of the numbers: ``'auto'`` selects one prefix shared
+            across a tuple, a symbol selects that prefix
 
     Returns:
-        ``'None'`` for None; the members of a tuple in parentheses; a finite number in
-        engineering notation with the units; otherwise ``repr(value)``
+        ``'None'`` for None, the members of a tuple in parentheses, a finite number
+        in engineering notation with the units when `m` has units, and otherwise
+        ``repr(value)``
     """
     units = m.units if isinstance(m, Measurand) else m
     if value is None:
@@ -157,10 +156,12 @@ def describe_value(
 
 
 def describe_field(capture: specs.Capture, name: str, *, sep: str = '=') -> str:
-    """return ``'<name><sep><value>'`` for the field `name` of `capture` in its units.
+    """return ``'<name><sep><value>'`` for the field `name` of `capture`.
+
+    The value is written in the units of the field.
 
     Raises:
-        KeyError: if `capture` has no field `name`
+        KeyError: when `capture` has no field `name`
     """
     m = measurand_from_field(type(capture), name)
     return f'{name}{sep}{describe_value(getattr(capture, name), m)}'

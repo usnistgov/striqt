@@ -122,7 +122,7 @@ class SignalModel:
 
     def waveform(self, port, start, count, *, gain_dB, lo_frequency, sample_rate, rng):
         """return `count` complex64 samples of `port` from `start` samples after stream
-        activation"""
+        activation."""
         sigma2 = self.noise_variance(port, gain_dB, sample_rate, lo_frequency)
         x = rng.normal(scale=np.sqrt(sigma2 / 2), size=(2, count))
         x = (x[0] + 1j * x[1]).astype('complex64')
@@ -149,7 +149,7 @@ class FakeStream:
 
 class FakeDevice:
     """the subset of the `SoapySDR.Device` interface that `SoapySource` calls, with the
-    capabilities of an Airstack"""
+    capabilities of an Airstack."""
 
     def __init__(self, module: FakeSoapySDR, **kwargs):
         self.module = module

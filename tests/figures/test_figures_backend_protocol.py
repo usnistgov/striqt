@@ -23,8 +23,8 @@ def test_coerce_column_adds_a_view_dim_only_without_col_and_row(
 ) -> None:
     """a size-1 ``_view`` dimension is prepended when neither `col` nor `row` is set,
     and the values are unchanged"""
-    # striqt.figures.specs.SharedPlotOptions rejects col=None in __post_init__; the
-    # sensor base struct has no validation
+    # striqt.figures.specs.SharedPlotOptions rejects col=None in __post_init__, and
+    # the sensor base struct has no validation
     plotter = types.SimpleNamespace(opts=ss.specs.SharedPlotOptions(col=col, row=row))
     data = make_dataset()['channel_power_time_series']
 

@@ -3,8 +3,8 @@
 The measurement tests assert against the closed forms documented in
 `striqt.analysis.testing`, so these tests pin the closed forms: a unit tone of mean
 power 1, noise of total power `noise_psd * sample_rate`, and amplitudes of
-`10**(power/20)`. Each generator keeps the `xp` fixture on one closed-form test and
-on the windowing test, which run the cupy branches on the Jetson; the remaining
+`10**(power/20)`. Each generator takes the `xp` fixture on one closed-form test and
+on the windowing test, which run the cupy branches on the Jetson. The remaining
 checks run on numpy.
 """
 
@@ -83,8 +83,7 @@ def generate(func, xp=np, duration=DURATION, fs=FS, **kws):
 @pytest.mark.parametrize('name', list(GENERATORS), ids=list(GENERATORS))
 @pytest.mark.parametrize('dtype', [None, 'complex128'], ids=['default', 'complex128'])
 def test_generator_dtype(xp, name, dtype):
-    """the dtype is complex64 unless requested. The windowing test below covers the
-    shape on every backend."""
+    """the dtype is complex64 unless `dtype` is given"""
     func, kws = GENERATORS[name]
     requested = {} if dtype is None else {'dtype': dtype}
     x = func(DURATION, FS, xp=xp, **kws, **requested)
@@ -196,7 +195,7 @@ def test_circular_awgn_preroll_is_independent_of_the_capture():
 @pytest.mark.parametrize('name', SEEDED, ids=SEEDED)
 def test_seed_determines_the_noise(name):
     """`seed` defaults to 0, equal seeds reproduce the samples, and a different seed
-    changes the samples"""
+    changes the samples."""
     func, kws = GENERATORS[name]
     x0 = generate(func, seed=0, **kws)
     assert np.array_equal(x0, generate(func, **kws))
@@ -288,7 +287,7 @@ def test_dirac_delta_preroll_has_the_impulse_only_at_its_time(time):
 def test_window_is_a_slice_of_the_longer_call(xp, name, window):
     """a call with `start_index` and `count` equals the slice of one longer call that
     starts `PREROLL` samples before index 0, on both sides of index 0 and with the
-    default count"""
+    default count."""
     func, kws = GENERATORS[name]
     start_index, count = WINDOWS[window]
     kws = {'ports': 2, **kws}
@@ -307,7 +306,7 @@ def test_window_is_a_slice_of_the_longer_call(xp, name, window):
 @pytest.mark.parametrize('kws', list(INVALID_KWS.values()), ids=list(INVALID_KWS))
 def test_invalid_arguments_raise(kws):
     """every generator checks `ports`, `count`, and `start_index` through
-    `_resolve_count`, so one generator covers the rejections"""
+    `_resolve_count`, so one generator covers the rejections."""
     func, defaults = GENERATORS['tone']
     with pytest.raises(ValueError):
         func(DURATION, FS, **defaults, **kws)

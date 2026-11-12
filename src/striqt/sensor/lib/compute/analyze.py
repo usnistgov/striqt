@@ -17,7 +17,6 @@ from . import corrections, datasets
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from ..typing import Array
     from .datasets import DelayedDataset
 
 
@@ -42,7 +41,7 @@ def get_trigger_from_spec(
     if name is None:
         return None
 
-    # the spec inside a struct-form trigger takes precedence over the sweep analysis
+    # the analysis spec inside a struct-form signal_trigger replaces the sweep analysis
     if isinstance(setup.signal_trigger, specs.AnalysisGroup):
         analysis = setup.signal_trigger
 
@@ -93,33 +92,32 @@ def analyze(
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions[Literal[False]],
-) -> dict[str, Array]: ...
+) -> dict[str, sa.dataarrays.DelayedDataArray]: ...
 
 
 @sa.util.stopwatch('', 'analysis')
 def analyze(
     iq: specs.AcquiredIQ,
     options: datasets.EvaluationOptions,
-) -> dict[str, Array] | xr.Dataset | datasets.DelayedDataset:
+) -> dict[str, sa.dataarrays.DelayedDataArray] | xr.Dataset | datasets.DelayedDataset:
     """run the analysis of ``options.sweep_spec`` on `iq`.
 
     The analysis is ``options.sweep_spec.analysis`` adjusted by
     ``iq.capture.adjust_analysis``. The signal trigger is resolved from that adjusted
-    group. The `select_analysis` of `options`, when set, then receives the capture
-    and the adjusted group and returns the group to evaluate, so a measurement that
-    prefers aligned input aligns whether or not the field of the trigger measurement
-    is in the returned group. Each measurement selects a conditioning of `iq`
-    through `preprocess`, and a conditioning stage runs on the first selection that
-    needs the stage. The resampling stage consumes `iq.x` in place unless
+    group. ``options.select_analysis``, when set, receives the capture and the
+    adjusted group and returns the group to evaluate. A measurement that prefers
+    aligned input aligns whether or not the returned group enables the trigger
+    measurement. The resampling stage consumes `iq.x` in place unless
     ``options.sweep_spec.options.reuse_iq`` is set. cupy arrays in `iq.extra_data`
-    are replaced in place by numpy copies. The `cache_callback` of `options` runs
-    each time a measurement fills a cache.
+    are replaced in place by numpy copies. ``options.cache_callback`` runs each time
+    a measurement fills a cache.
 
     Returns:
-        as `options.as_xarray` selects: a dict of arrays by measurement name
-        (False), a `DelayedDataset` (``'delayed'``), or an `xr.Dataset` (True); the
-        latter 2 have the capture fields and acquisition info as coordinates and
-        `iq.extra_data` as variables
+        the result selected by `options.as_xarray`: a dict of `DelayedDataArray`
+        by measurement name for False, a `DelayedDataset` for ``'delayed'``, or an
+        `xr.Dataset` for True. The `DelayedDataset` and the `xr.Dataset` carry the
+        capture fields and acquisition info as coordinates and `iq.extra_data` as
+        variables.
 
     Raises:
         TypeError: if `iq.capture` is not a `SensorCapture`, or if `select_analysis`
@@ -163,7 +161,7 @@ def analyze(
                 iq.extra_data[name] = value.get()
 
     if not options.as_xarray:
-        return cast('dict[str, Array]', da_delayed)
+        return da_delayed
 
     assert isinstance(iq.capture, specs.SensorCapture)
 
@@ -185,19 +183,19 @@ def analyze(
 def prepare_compute(
     spec: specs.Sweep[Any, Any, Any, Any], skip_warmup: bool = False
 ) -> Generator[xr.Dataset | DelayedDataset | None]:
-    """import the compute backend of `spec`, then run the warmup sweep.
+    """yield the results of the warmup sweep of `spec`.
 
     The cupy imports and configuration run before the first yield when
-    ``spec.source.array_backend`` is ``'cupy'``. The ``Mean of empty slice``
-    `RuntimeWarning` is filtered out process-wide.
+    ``spec.source.array_backend`` is ``'cupy'``. A `RuntimeWarning` matching
+    ``Mean of empty slice`` is filtered process-wide.
 
     Args:
-        skip_warmup: True runs no warmup sweep
+        skip_warmup: True selects no warmup sweep
 
     Yields:
-        one None when `skip_warmup` is set or `warmup_sweep_for` returns None;
-        otherwise the yields of a `SweepRunner` over the warmup sweep with
-        `always_yield` set, and nothing when the warmup sweep has no captures
+        None once when `skip_warmup` is set or `warmup_sweep_for` returns None.
+        Otherwise each yield of a `SweepRunner` over the warmup sweep with
+        `always_yield` set, and nothing when the warmup sweep has no captures.
     """
     if spec.source.array_backend == 'cupy':
         with sa.util.stopwatch('configure cupy', 'sweep', 1):

@@ -1,5 +1,5 @@
 """striqt.analysis.lib.labels: the `Measurand` built from attrs or capture field
-metadata, and the quantity, units, and value text composed from it"""
+metadata, and the quantity, units, and value text composed from it."""
 
 from __future__ import annotations
 
