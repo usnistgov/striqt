@@ -58,13 +58,13 @@ platforms = ["linux-aarch64", "linux-64", "win-64"]
 [feature.cupy.dependencies]
 cupy = ">=12.2"
 
-# zensical requires python >= 3.11, and the test feature is shared with test39
-[feature.zensical.dependencies]
+# zensical requires python >= 3.11; the `doc` environment pairs the feature with py315
+[feature.doc.dependencies]
 zensical = "*"
 mkdocstrings-python = "*"
 mkdocs-click = "*"
 
-[feature.zensical.tasks]
+[feature.doc.tasks]
 docs-api = { cmd = "python docs/gen_api.py", env = { MPLCONFIGDIR = ".cache/matplotlib", MPLBACKEND = "agg", STRIQT_CACHE_DIR = ".cache/striqt" } }
 docs = { cmd = "python docs/gen_api.py && zensical build --clean --strict", env = { MPLCONFIGDIR = ".cache/matplotlib", MPLBACKEND = "agg", STRIQT_CACHE_DIR = ".cache/striqt" } }
 docs-serve = { cmd = "zensical serve", env = { MPLCONFIGDIR = ".cache/matplotlib", MPLBACKEND = "agg", STRIQT_CACHE_DIR = ".cache/striqt" } }
@@ -76,4 +76,5 @@ test = ["test"]
 py39 = ["py39"]
 py315 = ["py315"]
 test39 = ["test","py39"]
-test315 = ["test","py315","zensical"]
+test315 = ["test","py315"]
+doc = ["doc", "py315"]

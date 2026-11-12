@@ -14,7 +14,7 @@ echo "1. Generating the API pages and building the site"
 echo "========================================"
 # the `docs` task regenerates docs/api/**/*.md from the public namespaces, then runs
 # `zensical build --clean --strict`
-pixi run -e test315 docs
+pixi run -e doc docs
 
 if ! git diff --quiet -- docs/api; then
     echo "docs/api changed when regenerated; commit the regenerated pages and rerun." >&2

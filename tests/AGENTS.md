@@ -45,7 +45,7 @@ repository.
   `docs/griffe_striqt.py` substitutes into griffe's tree; skips without griffe), and
   `tests/test_gen_api.py` (the committed `docs/api/**/*.md` pages equal the output of
   `docs/gen_api.py`, so a public name added to a namespace fails until
-  `pixi run -e test315 docs-api` is rerun).
+  `pixi run -e doc docs-api` is rerun).
 - The downstream project's patterns are reproduced by `tests/sensor/sweeps/src/extensions.py`
   and the `site*` sweep directories; the papers the cyclic-power and sync tests derive their
   expectations from are under `_training_material/papers/` (untracked; locate with a search).

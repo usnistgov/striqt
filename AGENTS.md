@@ -5,8 +5,8 @@ This file is the guidance for coding agents and new contributors working in this
 ## Commands
 
 Access the environment through `pixi`. The `test39` and `test315` environments carry the
-test and dev tooling (pytest, ruff, ty) on Python 3.9 and 3.15, and `test315` also carries
-zensical with the mkdocstrings and mkdocs-click handlers;
+test and dev tooling (pytest, ruff, ty) on Python 3.9 and 3.15; `doc` carries zensical with
+the mkdocstrings and mkdocs-click handlers on Python 3.15;
 `cupy` is defined for `linux-aarch64` (the Jetson), `linux-64`, and `win-64`, not macOS:
 
 ```sh
@@ -19,9 +19,9 @@ pixi run -e test39 ruff check src tests docs
 pixi run -e test315 ty check src                                  # type check (must pass on test39 and test315)
 pixi run -e test315 pyright src                                   # advisory; accepted count in Conventions → Typing
 pixi run -e test315 pyrefly check                                 # advisory; accepted count in Conventions → Typing
-pixi run -e test315 docs                                          # API pages, then the zensical site into site/ (chores/push-docs.sh deploys)
-pixi run -e test315 docs-api                                      # regenerate docs/api/**/*.md from the public namespaces
-pixi run -e test315 docs-serve                                    # zensical preview on localhost:8000
+pixi run -e doc docs                                              # API pages, then the zensical site into site/ (chores/push-docs.sh deploys)
+pixi run -e doc docs-api                                          # regenerate docs/api/**/*.md from the public namespaces
+pixi run -e doc docs-serve                                        # zensical preview on localhost:8000
 pixi run -e cupy pytest                                          # GPU path, Jetson only
 STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/pipeline_sync.py --buffers 2  # own disk caches
 ```

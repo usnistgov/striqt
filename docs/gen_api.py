@@ -375,7 +375,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if stale:
         print(
-            'stale API pages (run `pixi run -e test315 docs-api`):', *stale, sep='\n  '
+            'stale API pages (run `pixi run -e doc docs-api`):', *stale, sep='\n  '
         )
         return 1
     return 0
