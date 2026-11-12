@@ -10,6 +10,7 @@ exclude_docs = """
 griffe_striqt.py
 __pycache__/
 templates/
+overrides/
 """
 
 nav = [
@@ -43,6 +44,10 @@ nav = [
 ]
 
 [project.theme]
+# docs/overrides/main.html adds the pages.nist.gov analytics, header, footer, and exit script
+custom_dir = "docs/overrides"
+# system fonts: a pages.nist.gov page loads no fonts from Google
+font = false
 features = ["navigation.tabs", "navigation.sections", "navigation.indexes", "content.code.copy"]
 
 # setting markdown_extensions replaces the defaults, so the ones the pages use are relisted
