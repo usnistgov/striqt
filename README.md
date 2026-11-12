@@ -1,4 +1,4 @@
-[![License](https://img.shields.io/badge/license-NIST-blue)](https://github.com/usnistgov/striqt/blob/master/LICENSE.md)
+[![License](https://img.shields.io/badge/license-NIST-blue)](https://github.com/usnistgov/striqt/blob/main/LICENSE.md)
 ![Last commit](https://img.shields.io/github/last-commit/usnistgov/striqt)
 [![Documentation](https://img.shields.io/badge/Docs-purple)](https://pages.nist.gov/striqt/)
 
@@ -36,11 +36,10 @@ Provides optimized and validated real-time signal analysis of complex-valued IQ 
 * Power detectors in various time-domain representation
 * Empirical statistical distributions
 * Cellular cyclic prefix and synchronization correlators
-* Extensible with custom analyses based on custom
+* Extensible with custom measurements registered beside the built-in ones
 
 Interoperability within the modern python data ecosystem:
-* Interchangable across CPU (numpy) and GPU (cupy) based on full-precision (32-bit) floating point
-* Fast `numba` numerical kernels for speed and portability across operating systems
+* Interchangeable across CPU (numpy) and GPU (cupy) in 32-bit floating point
 * Package as multi-dimensional [`xarray.Dataset` objects](https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html) 
     - Detailed coordinates, units, and metadata across all axes
 * Load and save [`zarr`](https://zarr.dev/) dataset archive format for easy aggregation and dissemination local or cloud storage
@@ -57,52 +56,38 @@ Implements batch IQ data acquisition and resampling oriented toward test and mea
 Implements visualization for the data variables produced by `striqt.analysis`
 * Provides a plot function for each type of data variable
 * Uses the labeled coordinates and metadata to display proper units
-* Generates plots in `matplotlib` for publication-ready in selectable output formats
+* Generates plots with `matplotlib` or `plotly` through one backend protocol
 
 ### Installation
 The following assume access to the open internet.
 
-#### Option 1: Conda Environment
-Installation with radio hardware and GPU support is provided via conda environments. Several variants of a `striqt` environment are provided here, targeted at different host computing environments.
+#### Option 1: pixi environment
+The repository carries a [`pixi`](https://pixi.sh) manifest with the conda-forge dependencies, including `SoapySDR`, and a `cupy` environment for CUDA GPUs:
 
-1. Ensure that `conda` is installed (or `mamba`/`micromamba` substituted in what follows)
-2. Clone this repository
-3. Download a predefined environment based on needed capabilities:
-    - [`cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/cpu.yml): acquire radio data, perform CPU-only IQ signal analysis, load/save `zarr` archives, and plot data
-    - [`gpu-cpu.yml`](https://github.com/usnistgov/striqt/blob/main/environments/gpu-cpu.yml): support the above, and analyze IQ on CUDA GPUs
-4. Create the chosen environment:
-    ```sh
-        conda env create -f [path-to-environment-here.yml]
-    ```
-5. To activate the environment, select the `striqt` conda environment in your IDE, or run 
-    ```sh
-        conda activate striqt
-    ```
+1. Install `pixi` and clone this repository
+2. In the repository, run `pixi install -e test315` (CPU) or `pixi install -e cupy` (CUDA GPU, linux or windows)
+3. Run the tools through the environment, for example `pixi run -e test315 sensor-sweep --help`
 
 #### Option 2: pip installation
-A limited environment that supports the latest APIs and CLIs for post-analysis, plotting, testing, etc. can be installed via the python package index (`pypi`):
+An environment for post-analysis, plotting, and testing can be installed from the repository:
 
 ```sh
 pip install "striqt @ git+https://github.com/usnistgov/striqt"
 ```
 
-It is encouraged to use a lockfile (through `pipenv`, `uv`, `pixi`, etc. in lieu of `pip` above) to enforce a fully reproducable install.
+A lockfile (through `uv`, `pixi`, or `pipenv`) pins the dependency versions of an install; a container or virtual environment isolates it from other packages.
 
-> **_NOTE:_** In order to create an environment that is reproducible environment and to isolate the install from dependency versioning conflicts, it is _highly_ recommended to install `striqt`` into a container or virtual environment.
-
-> **_NOTE:_** `SoapySDR` is required to to acquire radio captures, but it is not distributed on `pypi`
+> **_NOTE:_** `SoapySDR` is required to acquire radio captures. It is distributed on conda-forge, not on `pypi`.
 
 ### Development status
-`striqt` is in early beta. The pace of change has slowed
-* The API in the base of each module is expected not to change, but internals (`.lib`, etc.) may change without warning
-* Incompatible changes to yaml schemas in `striqt.sensor` and `striqt.figure` (and the CLIs) may still change slightly
+`striqt` is in early beta.
+* The API in the base of each package is expected not to change, but internals (`.lib`, etc.) may change without warning
+* The yaml schemas of `striqt.sensor` and `striqt.figures`, and the CLI options, may still change
 * The data variable, coordinate, and metadata field names in `.zarr` files follow the names in the yaml schemas
 
 ## Documentation
-In keeping with the early beta development status of this codebase, documentation is limited.
-* [reference](https://github.com/usnistgov/striqt/blob/main/doc/reference-sweep.yaml) for the `yaml` configuration files that drive `edge_sensor`
-* Docstrings in the source code are the most up-to-date API documentation
-* A few examples are located in [tests](https://github.com/usnistgov/striqt/tree/main/tests) and [notebooks](https://github.com/usnistgov/striqt/tree/main/notebooks). Some of these may not be up to date.
+* The [documentation site](https://pages.nist.gov/striqt/) renders the command-line and API reference from the docstrings
+* Worked sweep specifications are the YAML files under [tests/sensor/sweeps](https://github.com/usnistgov/striqt/tree/main/tests/sensor/sweeps)
 <!-- 
 ### See Also
 * [Validation and calibration with hardware](https://github.com/usnistgov/striqt-tests) -->
