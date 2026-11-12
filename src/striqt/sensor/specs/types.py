@@ -77,10 +77,7 @@ Format = Annotated[
 ]
 FrequencyOffset = Annotated[float, Meta('Baseband frequency offset', 'Hz')]
 GainScalar = Annotated[float, Meta('Gain setting', 'dB')]
-Gain = Annotated[
-    Union[GainScalar, tuple[GainScalar, ...]],
-    Meta('Gain setting for each channel', 'dB'),
-]
+Gain = Annotated[PerPort[GainScalar], Meta('Gain setting for each channel', 'dB')]
 ImpliedLoops = Annotated[
     tuple[str, ...],
     Meta(standard_name='List of looped fields embedded in the capture list'),
@@ -95,8 +92,7 @@ LOFrequencyScalar = Annotated[
     Meta('LO frequency of external frequency converter'),
 ]
 LOFrequency = Annotated[
-    Union[LOFrequencyScalar, tuple[LOFrequencyScalar, ...]],
-    Meta('LO frequency of external frequency converter'),
+    PerPort[LOFrequencyScalar], Meta('LO frequency of external frequency converter')
 ]
 LOShift = Annotated[Literal['left', 'right', 'none'], Meta('LO shift direction')]
 MockSource = Annotated[
@@ -109,10 +105,7 @@ ModuleName = Annotated[
 ]
 OnOverflow = Literal['ignore', 'except', 'log']
 PortScalar = Annotated[int, Meta('Input port index', ge=0)]
-Port = Annotated[
-    Union[PortScalar, tuple[PortScalar, ...]],
-    Meta('Input port indices'),
-]
+Port = Annotated[PerPort[PortScalar], Meta('Input port indices')]
 PSD = Annotated[float, Meta('noise total channel power', 'mW/Hz', ge=0)]
 Power = Annotated[float, Meta('peak power level', 'dBm')]
 PowerUnits = Annotated[

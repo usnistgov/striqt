@@ -1,9 +1,40 @@
 import fractions
-from typing import Annotated, Literal, Union
+import types
+from typing import Annotated, Literal, TypeVar, Union, get_args, get_origin
 
 import striqt.waveform as sw
 
 from .helpers import Meta
+
+_T = TypeVar('_T')
+
+
+class _PerPortMarker:
+    """the `Annotated` metadata that marks a `PerPort` type"""
+
+    def __repr__(self) -> str:
+        return 'PER_PORT'
+
+
+PER_PORT = _PerPortMarker()
+
+# `PerPort[T]` is the type of a capture field with one value per port: a scalar applies
+# to every port, and a tuple has one entry per entry of `port`, in `port` order
+PerPort = Annotated[Union[_T, tuple[_T, ...]], PER_PORT]
+
+
+def is_per_port(hint: object) -> bool:
+    """return True if `hint` is a `PerPort` type, under any `Annotated` or `Union`
+    wrapper such as ``Annotated[PerPort[float], Meta(...)]`` or
+    ``Optional[PerPort[str]]``."""
+    origin = get_origin(hint)
+    if origin is Annotated:
+        args = get_args(hint)
+        return PER_PORT in args[1:] or is_per_port(args[0])
+    if origin is Union or origin is getattr(types, 'UnionType', None):
+        return any(is_per_port(arg) for arg in get_args(hint))
+    return False
+
 
 AnalysisBandwidth = Annotated[float, Meta('Analysis bandwidth', 'Hz')]
 AsXArray = Literal['delayed', True, False]
@@ -48,8 +79,7 @@ CellularAverageRBs = Annotated[
 ]
 CenterFrequencyScalar = Annotated[float, Meta('RF center frequency', 'Hz', gt=0)]
 CenterFrequency = Annotated[
-    Union[CenterFrequencyScalar, tuple[CenterFrequencyScalar, ...]],
-    Meta('Center frequency for each port', 'Hz'),
+    PerPort[CenterFrequencyScalar], Meta('Center frequency for each port', 'Hz')
 ]
 CyclicPeriod = Annotated[
     float,
@@ -88,7 +118,7 @@ MaxLagSymbols = Annotated[
     int,
     Meta('limit the number of symbols of lag in the 5G sync correlator', ge=1, le=6),
 ]
-PerPort = Annotated[
+PerPortSync = Annotated[
     bool, Meta('whether to evaluate signal synchronization separately on each port')
 ]
 PowerDetectors = Annotated[
