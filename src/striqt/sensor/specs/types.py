@@ -3,8 +3,6 @@ from __future__ import annotations as __
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, Optional, Union
 
-import msgspec
-
 import striqt.waveform as sw
 from striqt.analysis.lib.util import pd
 from striqt.analysis.specs.types import *
@@ -64,9 +62,10 @@ ContinuousTrigger = Annotated[
 StartDelay = Annotated[float, Meta('Delay in acquisition start time', 's', gt=0)]
 ENR = Annotated[
     float,
-    msgspec.Meta(
+    Meta(
+        'Excess noise ratio',
+        'dB',
         description='Excess noise ratio, referred to a diode-off source temperature of 290 K',
-        extra={'standard_name': 'Excess noise ratio', 'units': 'dB'},
     ),
 ]
 ImpliedLoops = Annotated[

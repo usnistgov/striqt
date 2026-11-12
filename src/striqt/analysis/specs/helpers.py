@@ -168,14 +168,30 @@ class frozendict(Mapping[_K, _V]):
 
 
 @_like_meta(msgspec.Meta)
-def Meta(standard_name: str, units: str | None = None, **kws) -> msgspec.Meta:
-    """annotation that is used to generate 'standard_name' and 'units' fields of xarray attrs objects"""
+def Meta(
+    standard_name: str,
+    units: str | None = None,
+    *,
+    description: str | None = None,
+    **kws,
+) -> msgspec.Meta:
+    """return the field annotation that sets the `standard_name` and `units` attrs.
+
+    Args:
+        standard_name: the `standard_name` attr of the field in xarray output
+        units: the `units` attr; None writes no units attr
+        description: the text rendered in the schema reference; None selects
+            `standard_name`
+        **kws: constraints forwarded to `msgspec.Meta` (``gt``, ``ge``, ...)
+    """
     extra = {'standard_name': standard_name}
     if units is not None:
         # xarray objects with units == None cannot be saved to netcdf;
         # in this case, omit
         extra['units'] = units
-    return msgspec.Meta(description=standard_name, extra=extra, **kws)
+    if description is None:
+        description = standard_name
+    return msgspec.Meta(description=description, extra=extra, **kws)
 
 
 # %% validation of (capture, analysis spec) combinations
