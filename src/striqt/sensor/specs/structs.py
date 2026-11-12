@@ -7,7 +7,17 @@ msgspec resolves the field annotations at runtime. Field types are written as
 from __future__ import annotations as __
 
 import warnings
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, Optional, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Generic,
+    Literal,
+    Optional,
+    Union,
+    cast,
+)
 
 import msgspec
 
@@ -25,7 +35,7 @@ from striqt.analysis.specs import (
     Capture,
     SpecBase,
 )
-from striqt.analysis.specs.helpers import SpecValidationError, subset_of
+from striqt.analysis.specs.helpers import Meta, SpecValidationError, subset_of
 
 from ..lib.typing import SA, SC, SP, SS, TypeVar
 from . import types
@@ -338,17 +348,14 @@ class NoPeripherals(Peripherals, frozen=True, kw_only=True):
 class ManualYFactorSpec(Peripherals, frozen=True, kw_only=True):
     """the `calibration:` block of a `ManualYFactorCalibration`.
 
-    `implied_loops` names the capture fields that the operator varies by hand
-    between captures, and the saved corrections are indexed by these fields ahead
-    of the loop fields. `detector_period` None selects the one `duration` shared by
-    the captures and loops as the bin of the generated `channel_power_time_series`
-    analysis, and a bound spec with more than one duration is rejected. `enr` is
-    referred to a diode-off source temperature of 290 K.
+    `detector_period` None selects the one `duration` shared by the captures and
+    loops as the bin of the generated `channel_power_time_series` analysis, and a
+    bound spec with more than one duration is rejected.
     """
 
     enr: types.ENR
     ambient_temperature: types.AmbientTemperature
-    implied_loops: tuple[str, ...] = ()
+    implied_loops: types.ImpliedLoops = ()
     detector_period: Optional[types.DetectorPeriod] = None
 
 
@@ -521,13 +528,19 @@ class CapturePlan(
     action runs, and the `adjust_captures` remaps for the open source are applied to
     each expanded capture. Construction rejects a `repeat` loop that is not the
     outermost entry, two loops over one field, and a loop over a field that the
-    listed captures set to different values. Lookup keys in `adjust_captures` are
-    converted to the type of the keyed capture field.
+    listed captures set to different values.
     """
 
     captures: tuple[SC, ...] = ()
     loops: tuple[LoopSpec, ...] = ()
-    adjust_captures: AdjustCapturesType = msgspec.field(default_factory=dict)
+    adjust_captures: Annotated[
+        AdjustCapturesType,
+        Meta(
+            "Remaps of capture fields by source id (or 'defaults'), keyed by the value "
+            'of another capture field; lookup keys are converted to the type of the '
+            'keyed field'
+        ),
+    ] = msgspec.field(default_factory=dict)
 
     def __post_init__(self) -> None:
         from . import action, sequencing

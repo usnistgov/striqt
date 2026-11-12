@@ -3,6 +3,8 @@ from __future__ import annotations as __
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, Optional, Union
 
+import msgspec
+
 import striqt.waveform as sw
 from striqt.analysis.lib.util import pd
 from striqt.analysis.specs.types import *
@@ -60,7 +62,20 @@ ContinuousTrigger = Annotated[
     Meta('Whether to trigger immediately after each call to acquire() when armed'),
 ]
 StartDelay = Annotated[float, Meta('Delay in acquisition start time', 's', gt=0)]
-ENR = Annotated[float, Meta(standard_name='Excess noise ratio', units='dB')]
+ENR = Annotated[
+    float,
+    msgspec.Meta(
+        description='Excess noise ratio, referred to a diode-off source temperature of 290 K',
+        extra={'standard_name': 'Excess noise ratio', 'units': 'dB'},
+    ),
+]
+ImpliedLoops = Annotated[
+    tuple[str, ...],
+    Meta(
+        'Capture fields varied by hand between captures; the saved corrections are '
+        'indexed by these fields ahead of the loop fields'
+    ),
+]
 ExtensionPath = Annotated[
     str,
     Meta('path to append to sys.path before extension imports'),
