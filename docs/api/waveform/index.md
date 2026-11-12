@@ -14,16 +14,15 @@ Array-namespace dispatch between numpy and cupy, axis helpers, and the cupy conf
         module_docstring: false
       members:
         - array_namespace
-        - is_cupy_array
-        - configure_cupy
-        - pinned_array_as_cupy
         - axis_index
         - axis_slice
         - axis_to_blocks
         - binned_mean
+        - configure_cupy
         - histogram_last_axis
+        - is_cupy_array
         - isroundmod
-        - cp
+        - pinned_array_as_cupy
 
 ## Fourier analysis and resampling
 
@@ -34,22 +33,22 @@ FFT and STFT evaluation, window design, overlap-add convolution, and rational re
       extra:
         module_docstring: false
       members:
-        - fft
-        - ifft
-        - fftfreq
-        - stft
-        - istft
-        - spectrogram
-        - get_window
+        - ResamplerDesign
+        - design_cola_resampler
+        - design_fir_lpf
         - equivalent_noise_bandwidth
+        - fft
+        - fftfreq
+        - get_max_cupy_fft_chunk
+        - get_window
+        - ifft
+        - istft
         - oaconvolve
         - oaresample
         - resample
-        - design_cola_resampler
-        - design_fir_lpf
-        - ResamplerDesign
-        - get_max_cupy_fft_chunk
         - set_max_cupy_fft_chunk
+        - spectrogram
+        - stft
 
 ## Power
 
@@ -60,12 +59,12 @@ Power detectors, empirical distributions, and conversions between dB, power, and
       extra:
         module_docstring: false
       members:
-        - iq_to_bin_power
-        - iq_to_cyclic_power
-        - sample_ccdf
-        - dBtopow
-        - powtodB
-        - envtodB
-        - envtopow
         - dBlinmean
         - dBlinsum
+        - dBtopow
+        - envtodB
+        - envtopow
+        - iq_to_bin_power
+        - iq_to_cyclic_power
+        - powtodB
+        - sample_ccdf

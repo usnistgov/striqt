@@ -13,17 +13,16 @@ Evaluation of measurement specs against IQ captures into xarray objects, the mea
       extra:
         module_docstring: false
       members:
-        - analyze_by_spec
         - AcquiredIQ
+        - AnalysisRegistry
         - EvaluationOptions
         - Preprocessor
-        - AnalysisRegistry
-        - registry
         - Trigger
-        - Capture
+        - analyze_by_spec
         - dump
         - load
         - open_store
+        - registry
 
 ## Measurements
 
@@ -34,17 +33,17 @@ The registered measurements, each evaluated from an IQ capture into one `xarray.
       extra:
         module_docstring: false
       members:
-        - power_spectral_density
-        - spectrogram
-        - spectrogram_histogram
-        - spectrogram_ratio_histogram
+        - cellular_5g_pss_correlation
+        - cellular_5g_pss_sync
+        - cellular_5g_ssb_spectrogram
+        - cellular_5g_sss_correlation
+        - cellular_cyclic_autocorrelation
+        - cellular_resource_power_histogram
         - channel_power_histogram
         - channel_power_time_series
         - cyclic_channel_power
         - iq_waveform
-        - cellular_5g_pss_correlation
-        - cellular_5g_pss_sync
-        - cellular_5g_sss_correlation
-        - cellular_5g_ssb_spectrogram
-        - cellular_cyclic_autocorrelation
-        - cellular_resource_power_histogram
+        - power_spectral_density
+        - spectrogram
+        - spectrogram_histogram
+        - spectrogram_ratio_histogram

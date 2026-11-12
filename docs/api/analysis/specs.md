@@ -5,29 +5,31 @@ Spec structs for captures, measurement parameters, and analysis groups, which al
 ::: striqt.analysis.specs
     options:
       members:
-        - SpecBase
         - Analysis
         - AnalysisCapture
         - AnalysisFilter
         - AnalysisGroup
         - BuiltinAnalyses
         - BuiltinTriggers
-        - FilteredCapture
-        - FrequencyAnalysisSpecBase
-        - ErrorBound
-        - Tolerance
-        - PowerSpectralDensity
-        - Spectrogram
-        - SpectrogramHistogram
-        - SpectrogramHistogramRatio
+        - Capture
+        - Cellular5GNPSSSync
+        - Cellular5GNRPSSCorrelator
+        - Cellular5GNRSSBSpectrogram
+        - Cellular5GNRSSSCorrelator
+        - Cellular5GNSSSSync
+        - CellularCyclicAutocorrelator
+        - CellularResourcePowerHistogram
         - ChannelPowerHistogram
         - ChannelPowerTimeSeries
         - CyclicChannelPower
+        - ErrorBound
+        - FilteredCapture
+        - FrequencyAnalysisSpecBase
         - IQWaveform
-        - Cellular5GNRPSSCorrelator
-        - Cellular5GNRSSSCorrelator
-        - Cellular5GNPSSSync
-        - Cellular5GNSSSSync
-        - Cellular5GNRSSBSpectrogram
-        - CellularCyclicAutocorrelator
-        - CellularResourcePowerHistogram
+        - PowerSpectralDensity
+        - SpecBase
+        - Spectrogram
+        - SpectrogramHistogram
+        - SpectrogramHistogramRatio
+        - Tolerance
+        - Meta

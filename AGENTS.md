@@ -5,8 +5,8 @@ This file is the guidance for coding agents and new contributors working in this
 ## Commands
 
 Access the environment through `pixi`. The `test39` and `test315` environments carry the
-test and dev tooling (pytest, ruff, ty) on Python 3.9 and 3.15; `doc` carries sphinx;
-`test315` also carries zensical with the mkdocstrings and mkdocs-click handlers;
+test and dev tooling (pytest, ruff, ty) on Python 3.9 and 3.15, and `test315` also carries
+zensical with the mkdocstrings and mkdocs-click handlers;
 `cupy` is defined for `linux-aarch64` (the Jetson), `linux-64`, and `win-64`, not macOS:
 
 ```sh
@@ -19,8 +19,8 @@ pixi run -e test39 ruff check src tests docs
 pixi run -e test315 ty check src                                  # type check (must pass on test39 and test315)
 pixi run -e test315 pyright src                                   # advisory; accepted count in Conventions → Typing
 pixi run -e test315 pyrefly check                                 # advisory; accepted count in Conventions → Typing
-pixi run -e doc sphinx-build -E -a -b html doc doc/html          # docs (see chores/push-docs.sh to deploy)
-pixi run -e test315 docs                                          # zensical site (zensical.toml, docs/) into site/
+pixi run -e test315 docs                                          # API pages, then the zensical site into site/ (chores/push-docs.sh deploys)
+pixi run -e test315 docs-api                                      # regenerate docs/api/**/*.md from the public namespaces
 pixi run -e test315 docs-serve                                    # zensical preview on localhost:8000
 pixi run -e cupy pytest                                          # GPU path, Jetson only
 STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/pipeline_sync.py --buffers 2  # own disk caches
@@ -54,11 +54,11 @@ SoapySDR tests come in three tiers: pure units and tests against the fake `Soapy
 
 Four packages under `src/striqt/`, stacked bottom-up: `striqt.waveform` → `striqt.analysis` → `striqt.sensor` → `striqt.figures`. Each depends only on those below it. Public API lives in each package's top level (`striqt.analysis`, `striqt.sensor`, …). Everything under `.lib` is internal and changes without warning.
 
-The architecture guide is in `doc/agents/`, written primarily for ingest by coding agents. Read the page for an area before changing code in that area:
+The architecture guide is in `docs/agents/`, written primarily for ingest by coding agents. Read the page for an area before changing code in that area:
 
-- `doc/agents/architecture.md`: package layout and the re-export shims, spec structs as the YAML/JSON/zarr schema, and the measurement registry (caches, `prefer_filtered`/`prefer_aligned`, signal triggers, the `BuiltinAnalyses` group).
-- `doc/agents/waveform_numerics.md`: numpy/cupy dispatch, the Fourier package, STFT layout, resampling, the window cache, and the OFDM and 5G NR synchronization models.
-- `doc/agents/sensor.md`: sensor bindings, actions and runners (sweep, Y-factor calibration, cellular sweep), extensions and the downstream project, sweep execution and the per-capture signal path, and logging and concurrency.
+- `docs/agents/architecture.md`: package layout and the re-export shims, spec structs as the YAML/JSON/zarr schema, and the measurement registry (caches, `prefer_filtered`/`prefer_aligned`, signal triggers, the `BuiltinAnalyses` group).
+- `docs/agents/waveform_numerics.md`: numpy/cupy dispatch, the Fourier package, STFT layout, resampling, the window cache, and the OFDM and 5G NR synchronization models.
+- `docs/agents/sensor.md`: sensor bindings, actions and runners (sweep, Y-factor calibration, cellular sweep), extensions and the downstream project, sweep execution and the per-capture signal path, and logging and concurrency.
 
 ### Known gaps are recorded as strict xfails
 
@@ -125,7 +125,7 @@ Library defects that need a design decision rather than a local fix are written 
 
   If a comment is needed to explain *what* code does, prefer renaming or extracting a function instead — that removes the cause rather than the symptom. Comments are for *why*. A comment takes the function or the value as subject and states or cites the constraint, standard, or issue; it is checked once under **Check**.
 
-- **Docstrings** are the API reference (sphinx autodoc + napoleon render them into `doc/`), so write them as the caller's contract: inputs, outputs, side effects, exceptions. Google sections only — `Args:`, `Returns:`, `Yields:`, `Raises:`, `Examples:`, `References:` — never `Arguments:`, numpy underlines, or ad hoc headers. Compose each part from its template and run **Check** once on the finished docstring.
+- **Docstrings** are the API reference (mkdocstrings renders them into the zensical site from `docs/api/`), so write them as the caller's contract: inputs, outputs, side effects, exceptions. Google sections only — `Args:`, `Returns:`, `Yields:`, `Raises:`, `Examples:`, `References:` — never `Arguments:`, numpy underlines, or ad hoc headers. Compose each part from its template and run **Check** once on the finished docstring.
   - **Templates.** Each part states what the signature cannot: units (Hz, s, S/s, dB vs linear power), shape and which axis holds what, dtype, dimension names, dict keys, valid range or ratio constraint, and what `None`, `inf`, or `'auto'` selects. `x: input array` and `fs: sampling rate` are omissions, not entries.
 
     | Part | Template |
@@ -147,12 +147,12 @@ Library defects that need a design decision rather than a local fix are written 
   - **Entries before prose.** A fact about one parameter is that parameter's `Args:` entry, and a fact about the return value is the `Returns:` entry; the prose above the sections carries only facts that span several parameters or the object's state. Three sentences that each name one parameter are an `Args:` block written in the wrong place. An entry says how the value selects, constrains, or shapes the output, not what the body does with it ("the implementation invokes ...", "the calibration path and the source id are read"); a behavior the body applies to one argument is a prose sentence when this function owns the behavior, and one prose sentence naming the owning function when another function does ("An implementation runs `iterate_captures` over `resources`."). A sentence that restates an entry, or that points the reader to another object's docstring ("whose docstring describes the yields"), is deleted: the docstring stands on its own, and autodoc links the names in backticks.
   - **Summary line.** `pixi run -e test39 ruff check --select D401 src` lists non-imperative summaries ("an iterator that ...", "helper for ...", "designs ..."); it is not enforced, so run it on files you touch. One claim per line: a trailing participial clause is cut into its section (", yielding what the sink's `append` returns" becomes a `Yields:` entry; ", raising what the builder raises" a `Raises:` entry). "run the action over `resources`." is a whole summary. A coordinate factory docstring is the one exception to the imperative summary, so `D401` flags it by design.
   - **Module docstrings.** Do not catalog the module's contents or repeat details of the objects in its namespace; autodoc renders those from the objects' own docstrings. No return types, signatures, or naming patterns of the members (`describe_*`); no statement of what the module does not do ("nothing here logs"); no reference to the program that consumes the output.
-  - **Class and attribute docstrings.** Every fact about one method, property, or field goes in that member's docstring; a class docstring sentence that names one field is an attribute docstring written in the wrong place. For a `Protocol`, the class docstring states the role an implementation plays and nothing about registration, callers, or inheritance. Spec-struct fields are documented through `Meta`, and the spec class docstring says how the fields interact. Do not write an `Attributes:` section: with `undoc-members` on, napoleon's `.. attribute::` entries duplicate autodoc's member list. `doc/conf.py` sets `napoleon_include_init_with_doc = True` so an `__init__` docstring renders.
+  - **Class and attribute docstrings.** Every fact about one method, property, or field goes in that member's docstring; a class docstring sentence that names one field is an attribute docstring written in the wrong place. For a `Protocol`, the class docstring states the role an implementation plays and nothing about registration, callers, or inheritance. Spec-struct fields are documented through `Meta`, and the spec class docstring says how the fields interact. Do not write an `Attributes:` section: mkdocstrings lists the documented attributes itself. An `__init__` docstring is merged into the class page (`merge_init_into_class`).
   - **Predicate nouns.** In every "X of Y" and "Y's X", Y is the thing that has X. "The IM3 victims of a port" fails: the products belong to the signal of the capture at that port, and the victims are the frequencies those products fall on. Rewrite until each possessive names the actual owner.
   - **Present tense, present code.** Nothing about what the code used to do, was changed to do, or may do later; the time and change words are in the **Not written** table. Code that converts older data describes the condition it finds ("`units` of the form `dBm/<bandwidth>`"), not the version or era that wrote it ("stores written before X carried Y").
   - **Cite external context.** A standard section, a paper, or an upstream issue is cited in its short form inline, in parentheses ("(3GPP TS 38.211 §5.3.1)", "(Gardner 1986)"). The long form of each citation (full title, authors or standards body, year, URL or DOI) goes under a `References:` section at the end of the docstring, one entry per source.
   - **Do not duplicate what the tooling injects.** Spec-struct fields are documented through `Meta(description=..., units)`; the class docstring says what the block configures and how its fields interact, never a field list. A measurement docstring ends with `Args:\n    {args}`, which the registry fills from the `Meta` field metadata of `spec_type`, so every field is already documented there; the prose above repeats none of that content. Read the field metadata first to find the context the prose still has to supply: the output values (dtype, units, normalization), how the fields interact, and the conditioning the measurement registers. `Controller` subclass and `arm` docstrings are generated. The griffe extension `docs/griffe_striqt.py` substitutes the filled measurement docstrings and the `Meta` field descriptions into the static model when zensical renders the API reference.
-  - **Measurement docstrings.** A function decorated with `@registry.measurement` carries an `Output:` section between the prose and the remaining sections, written as this bullet list with the placeholders verbatim (`doc/conf.py` registers `Output` as a napoleon section, and the registry fills `{dtype}`, `{dims}`, `{coords}`, and `{attrs}` at registration):
+  - **Measurement docstrings.** A function decorated with `@registry.measurement` carries an `Output:` section between the prose and the remaining sections, written as this bullet list with the placeholders verbatim (the registry fills `{dtype}`, `{dims}`, `{coords}`, and `{attrs}` at registration, and mkdocstrings renders the section as an admonition):
 
     ```
         Output:
@@ -177,4 +177,4 @@ The map of the test suite (where things are tested, which module owns shared set
 
 ## Status
 
-Early beta. Base-package APIs are expected to be stable; `.lib` internals, YAML schemas, and CLI options may still shift. The sweep schema is documented in `doc/reference/schema.rst` (generated from the msgspec structs). `tests/sensor/sweeps/synthetic.yaml`, `tests/sensor/sweeps/site/*.yaml` and `tests/sensor/sweeps/fake_soapy-*.yaml` are the most current worked examples.
+Early beta. Base-package APIs are expected to be stable; `.lib` internals, YAML schemas, and CLI options may still shift. The sweep schema is the set of spec structs under `striqt.sensor.specs` (`sa.specs.helpers.json_schema` renders it as JSON schema). `tests/sensor/sweeps/synthetic.yaml`, `tests/sensor/sweeps/site/*.yaml` and `tests/sensor/sweeps/fake_soapy-*.yaml` are the most current worked examples.

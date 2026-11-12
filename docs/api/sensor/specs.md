@@ -13,31 +13,44 @@ Spec structs for sweeps, actions, capture settings, and the loops that expand on
       extra:
         module_docstring: false
       members:
-        - Sweep
-        - SweepOptions
         - ActionSpec
-        - Cellular5GNRSweep
-        - ManualYFactorSpec
-        - SensorCapture
-        - SoapyCapture
-        - FileCapture
-        - NoiseCapture
-        - SingleToneCapture
-        - SawtoothCapture
-        - DiracDeltaCapture
         - BurstOptions
-        - CaptureRemap
         - CapturePlan
-        - LoopBase
-        - Repeat
-        - Range
-        - FrequencyBinRange
+        - CaptureRemap
         - CellChannel
         - Cellular5GNRAnalysis
+        - Cellular5GNRSweep
+        - CellularChannelPowerHistogramSpec
+        - CellularChannelPowerTimeSeriesSpec
+        - CellularCyclicAutocorrelationSpec
+        - CellularCyclicChannelPowerSpec
+        - CellularIQWaveformSpec
+        - CellularPowerSpectralDensitySpec
+        - CellularPSSCorrelationSpec
+        - CellularPSSSyncSpec
+        - CellularResourcePowerHistogramSpec
+        - CellularSpectrogramSpec
+        - CellularSSBSpectrogramSpec
         - Description
+        - DiracDeltaCapture
         - Extension
+        - FileCapture
+        - FrequencyBinRange
+        - List
+        - LoopBase
+        - ManualYFactorCalibration
+        - NoiseCapture
+        - PlotOptions
+        - Range
+        - Repeat
+        - SawtoothCapture
         - Schema
+        - SensorCapture
+        - SingleToneCapture
+        - SoapyCapture
         - SpecValidationError
+        - Sweep
+        - SweepOptions
 
 ## Sources, sinks, and peripherals
 
@@ -48,24 +61,23 @@ Spec structs for IQ sources, data sinks, peripherals, and the acquisition metada
       extra:
         module_docstring: false
       members:
-        - Source
-        - SoapySource
-        - ZarrIQSource
-        - MATSource
-        - TDMSSource
-        - FunctionSource
-        - NoSource
-        - SourceInfo
-        - Sink
-        - ZarrSink
-        - DataOptions
-        - PlotOptions
-        - SharedPlotOptions
-        - Peripherals
-        - NoPeripherals
-        - ManualYFactorCalibration
-        - AcquisitionInfo
-        - SoapyAcquisitionInfo
-        - FileAcquisitionInfo
         - AcquiredIQ
+        - AcquisitionInfo
+        - DataOptions
+        - FileAcquisitionInfo
+        - FunctionSource
+        - ManualYFactorSpec
+        - MATSource
+        - NoPeripherals
+        - NoSource
         - PendingExtraData
+        - Peripherals
+        - SharedPlotOptions
+        - Sink
+        - SoapyAcquisitionInfo
+        - SoapySource
+        - Source
+        - SourceInfo
+        - TDMSSource
+        - ZarrIQSource
+        - ZarrSink
