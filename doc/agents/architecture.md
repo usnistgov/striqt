@@ -63,6 +63,17 @@ Field types are semantic aliases in `specs/types.py`, built as
 attrs and into the generated JSON schema. A new field is annotated with `Meta`
 rather than with a bare `float`.
 
+A field with one value per port is `Annotated[PerPort[Scalar], Meta(...)]`
+(`CenterFrequency`, `Gain`, `LOFrequency`, `Port`). `PerPort[T]`
+(`analysis/specs/types.py`) is `Union[T, tuple[T, ...]]` with the `PER_PORT` marker in
+its `Annotated` metadata: a scalar applies to every port, and a tuple has one entry per
+entry of `port`. `is_per_port(hint)` reads the marker through `Annotated` and
+`Optional` wrappers; `parse_type_and_meta` and msgspec ignore it, so the JSON schema
+and the field attrs are those of the union. `sensor/specs/captures.py:split_capture_ports`
+distributes every tuple-valued field whose length equals the port count, marker or
+not, so a downstream capture type with `Union[str, tuple[str, ...], None]` fields splits
+as before.
+
 ## The measurement registry
 
 `analysis/lib/register.py` defines `AnalysisRegistry`, a dict keyed by spec type, and

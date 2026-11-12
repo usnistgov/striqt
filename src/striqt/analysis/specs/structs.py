@@ -299,7 +299,7 @@ class Cellular5GNRSSSCorrelator(_Cellular5GNRSSBCorrelator, kw_only=True, frozen
 
 class _Cellular5GNRSSBSync(_Cellular5GNRSSBCorrelator, frozen=True, kw_only=True):
     window_fill: types.WindowFill = 1
-    per_port: types.PerPort = False
+    per_port: types.PerPortSync = False
     max_beams: Union[types.MaxBeams, None] = None
 
 

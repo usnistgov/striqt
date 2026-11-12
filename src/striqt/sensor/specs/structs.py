@@ -773,7 +773,7 @@ class CellularPSSSyncSpec(SpecBase, frozen=True, kw_only=True):
     discovery_periodicity: float = 20e-3
     delay: float = 0.0
     shared_spectrum: bool = False
-    per_port: types.PerPort = False
+    per_port: types.PerPortSync = False
     max_beams: Optional[types.MaxBeams] = None
 
 

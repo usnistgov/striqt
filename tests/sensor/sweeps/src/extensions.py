@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 from math import nan
-from typing import Annotated, Optional, Union
+from typing import Annotated, Optional
 
 import striqt.analysis as sa
 from striqt.sensor import bindings, peripherals, sources, specs
@@ -23,7 +23,7 @@ Elevation = Annotated[
 ]
 Azimuth = Annotated[float, specs.Meta('Azimuth pointing angle', 'deg', ge=-180, le=180)]
 SwitchInput = Annotated[int, specs.Meta('RF input switch index', ge=0, le=1)]
-Label = Union[str, tuple[str, ...], None]
+Label = Optional[specs.types.PerPort[str]]
 
 
 class SiteCapture(specs.SingleToneCapture, frozen=True, kw_only=True):
@@ -43,7 +43,7 @@ class SiteCapture(specs.SingleToneCapture, frozen=True, kw_only=True):
     antenna_name: Label = ''
     antenna_model: Label = ''
     antenna_polarization: Label = ''
-    antenna_index: Union[int, tuple[int, ...], None] = None
+    antenna_index: Optional[specs.types.PerPort[int]] = None
 
     def __post_init__(self):
         super().__post_init__()

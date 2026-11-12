@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Union
+
 import pytest
 from hypothesis import given, strategies as st
 from sweep_strategies import capture_tuples, make_capture, ports_and_lo
@@ -53,6 +55,20 @@ def test_split_rejects_a_tuple_field_shorter_than_port():
     capture = make_capture(port=(0, 1, 2), external_lo_frequency=(1e9, 2e9))
     with pytest.raises(ValueError):
         C.split_capture_ports(capture)
+
+
+class _LabeledCapture(ss.specs.SoapyCapture, frozen=True, kw_only=True):
+    label: Union[str, tuple[str, ...], None] = None
+
+
+def test_split_distributes_an_unmarked_union_field_by_length():
+    """the split is by value length, not by the `PerPort` marker: a field spelled
+    ``Union[str, tuple[str, ...], None]`` is distributed over the ports"""
+    capture = _LabeledCapture(
+        port=(0, 1), center_frequency=1e9, gain=0.0, label=('omni', 'panel')
+    )
+    assert not ss.specs.types.is_per_port(_LabeledCapture.__annotations__['label'])
+    assert [c.label for c in C.split_capture_ports(capture)] == ['omni', 'panel']
 
 
 def test_pairwise_without_previous_capture():
