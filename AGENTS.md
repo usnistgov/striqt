@@ -6,6 +6,7 @@ This file is the guidance for coding agents and new contributors working in this
 
 Access the environment through `pixi`. The `test39` and `test315` environments carry the
 test and dev tooling (pytest, ruff, ty) on Python 3.9 and 3.15; `doc` carries sphinx;
+`test315` also carries zensical with the mkdocstrings and mkdocs-click handlers;
 `cupy` is defined for `linux-aarch64` (the Jetson), `linux-64`, and `win-64`, not macOS:
 
 ```sh
@@ -13,12 +14,14 @@ pixi run -e test39 pytest                                        # full suite, p
 pixi run -e test315 pytest                                       # full suite, py315
 pixi run -e test39 pytest tests/waveform/test_waveform_fourier_stft.py -q   # one file
 pixi run -e test39 pytest -k test_stft_linearity                 # one test by name
-pixi run -e test39 ruff format src tests                         # format (single quotes, 88 cols)
-pixi run -e test39 ruff check src tests
+pixi run -e test39 ruff format src tests docs                    # format (single quotes, 88 cols)
+pixi run -e test39 ruff check src tests docs
 pixi run -e test315 ty check src                                  # type check (must pass on test39 and test315)
 pixi run -e test315 pyright src                                   # advisory; accepted count in Conventions → Typing
 pixi run -e test315 pyrefly check                                 # advisory; accepted count in Conventions → Typing
 pixi run -e doc sphinx-build -E -a -b html doc doc/html          # docs (see chores/push-docs.sh to deploy)
+pixi run -e test315 docs                                          # zensical site (zensical.toml, docs/) into site/
+pixi run -e test315 docs-serve                                    # zensical preview on localhost:8000
 pixi run -e cupy pytest                                          # GPU path, Jetson only
 STRIQT_CACHE_DIR=$(mktemp -d) pixi run -e cupy python tests/profiling/pipeline_sync.py --buffers 2  # own disk caches
 ```
@@ -63,7 +66,7 @@ Library defects that need a design decision rather than a local fix are written 
 
 ## Conventions
 
-- **Lint.** `pixi run -e test39 ruff check src tests` reports nothing. The rule set is ruff's default plus preview, with the architectural exclusions and the reason for each in `[tool.ruff.lint] ignore` in `pyproject.toml`; `pyupgrade.keep-runtime-typing` keeps `Union`/`Optional` for msgspec. A line that must keep a flagged pattern carries `# noqa: <RULE>` with the reason, never a bare `# noqa`. Three import orders are pinned with `# isort: split`/`# isort: off` because the sorted order breaks an import cycle or ty inference; keep the comment beside each. Fix with `ruff check --fix-only --fixable <RULES>` under the full config rather than `--select`, which redefines the enabled set and makes RUF100 report every other `noqa` as unused.
+- **Lint.** `pixi run -e test39 ruff check src tests docs` reports nothing. The rule set is ruff's default plus preview, with the architectural exclusions and the reason for each in `[tool.ruff.lint] ignore` in `pyproject.toml`; `pyupgrade.keep-runtime-typing` keeps `Union`/`Optional` for msgspec. A line that must keep a flagged pattern carries `# noqa: <RULE>` with the reason, never a bare `# noqa`. Three import orders are pinned with `# isort: split`/`# isort: off` because the sorted order breaks an import cycle or ty inference; keep the comment beside each. Fix with `ruff check --fix-only --fixable <RULES>` under the full config rather than `--select`, which redefines the enabled set and makes RUF100 report every other `noqa` as unused.
 - **Python 3.9 is the floor** (`requires-python = ">=3.9"`, ruff `target-version = "py39"`; the `test39` and `test315` pixi environments cover both ends). Modules start with `from __future__ import annotations as __` so annotations can use modern syntax, but anything evaluated at runtime cannot.
 - **msgspec resolves struct annotations at runtime.** In spec structs use `Union[...]`/`Optional[...]`, not `X | None`, and keep the names importable at runtime. `eval_type_backport` is a hard dependency for this reason. Several recent commits are reverts of "simplifications" here — collapsing a `Union`, or rewriting a `Literal` containing bools, has broken msgspec decoding before. Run the tests in `tests/sensor/` after touching a spec type.
 - **Lazy imports are enforced.** Heavy modules are loaded via `util.lazy_import('scipy')` under an `if TYPE_CHECKING:`/`else:` split. `tests/test_imports.py` asserts that `scipy`, `xarray`, and `pandas` are still unreified and that `dask` was never imported after importing all four packages. Adding a module-level `import xarray` in the wrong place fails that test.
@@ -148,7 +151,7 @@ Library defects that need a design decision rather than a local fix are written 
   - **Predicate nouns.** In every "X of Y" and "Y's X", Y is the thing that has X. "The IM3 victims of a port" fails: the products belong to the signal of the capture at that port, and the victims are the frequencies those products fall on. Rewrite until each possessive names the actual owner.
   - **Present tense, present code.** Nothing about what the code used to do, was changed to do, or may do later; the time and change words are in the **Not written** table. Code that converts older data describes the condition it finds ("`units` of the form `dBm/<bandwidth>`"), not the version or era that wrote it ("stores written before X carried Y").
   - **Cite external context.** A standard section, a paper, or an upstream issue is cited in its short form inline, in parentheses ("(3GPP TS 38.211 §5.3.1)", "(Gardner 1986)"). The long form of each citation (full title, authors or standards body, year, URL or DOI) goes under a `References:` section at the end of the docstring, one entry per source.
-  - **Do not duplicate what the tooling injects.** Spec-struct fields are documented through `Meta(description=..., units)`; the class docstring says what the block configures and how its fields interact, never a field list. A measurement docstring ends with `Args:\n    {args}`, which the registry fills from the `Meta` field metadata of `spec_type`, so every field is already documented there; the prose above repeats none of that content. Read the field metadata first to find the context the prose still has to supply: the output values (dtype, units, normalization), how the fields interact, and the conditioning the measurement registers. `Controller` subclass and `arm` docstrings are generated.
+  - **Do not duplicate what the tooling injects.** Spec-struct fields are documented through `Meta(description=..., units)`; the class docstring says what the block configures and how its fields interact, never a field list. A measurement docstring ends with `Args:\n    {args}`, which the registry fills from the `Meta` field metadata of `spec_type`, so every field is already documented there; the prose above repeats none of that content. Read the field metadata first to find the context the prose still has to supply: the output values (dtype, units, normalization), how the fields interact, and the conditioning the measurement registers. `Controller` subclass and `arm` docstrings are generated. The griffe extension `docs/griffe_striqt.py` substitutes the filled measurement docstrings and the `Meta` field descriptions into the static model when zensical renders the API reference.
   - **Measurement docstrings.** A function decorated with `@registry.measurement` carries an `Output:` section between the prose and the remaining sections, written as this bullet list with the placeholders verbatim (`doc/conf.py` registers `Output` as a napoleon section, and the registry fills `{dtype}`, `{dims}`, `{coords}`, and `{attrs}` at registration):
 
     ```
