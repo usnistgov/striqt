@@ -219,9 +219,9 @@ def measurement_attrs(
     """return the attrs of the output of the measurement `info` for one acquisition.
 
     The registered attrs of `info`, the fields of `spec`, and `body_attrs` are merged
-    in that order. A later source wins on a shared key. A `units` entry in a power
-    form (`striqt.waveform.units.DB_POWER`, `POWER`, or `AMPLITUDE`) is resolved
-    into `power_units`.
+    in that order. A key set in several sources takes the value from the last source.
+    A `units` entry in a power form (`striqt.waveform.units.DB_POWER`, `POWER`, or
+    `AMPLITUDE`) is resolved into `power_units`.
 
     Args:
         info: the registration of the measurement

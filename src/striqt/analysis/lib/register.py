@@ -410,7 +410,7 @@ class AnalysisRegistry(dict[type[specs.Analysis], AnalysisInfo]):
         resolved into the `power_units` of the acquisition when the output is built.
         A literal unit such as the ratio ``'dB'`` is stored as written. The fields of
         the spec and the attrs returned by the function are added to the registered
-        attrs and win on a shared key.
+        attrs, and a key set in both takes the value from the function.
 
         The wrapper returns, by `as_xarray`:
 

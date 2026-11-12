@@ -57,7 +57,7 @@ class PendingExtraData:
     peripherals: Future[dict[str, Any]]
     """the running peripheral read of the capture, resolving to one dict"""
     override: dict[str, Any]
-    """entries that win over the peripheral dict on a shared key"""
+    """entries that replace the peripheral value of the same key"""
 
 
 @dataclasses.dataclass

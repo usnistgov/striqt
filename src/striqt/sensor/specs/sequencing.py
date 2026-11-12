@@ -1,9 +1,9 @@
 """expansion of a sweep specification into the captures that the sweep runs.
 
 Loops nest over the listed captures, the `adjust_captures` remaps for the open source
-are applied on top, and the loop point is applied last. A looped field wins over an
-adjustment. Each expanded capture is paired with the entry and loop point that
-produced the capture.
+are applied on top, and the loop point is applied last. A field named in both the
+loop and an adjustment takes the loop value. Each expanded capture is paired with the
+entry and loop point that produced the capture.
 """
 
 from __future__ import annotations as __
@@ -700,9 +700,9 @@ def list_capture_adjustments(
 ) -> dict[str, tuple[Any, ...]]:
     """list the unique values of each adjusted capture field across the sweep.
 
-    The values are those of the expanded captures. A loop over an adjusted field
-    wins over the adjustment, and the loop values appear in loop order. No value is
-    listed for a capture left without the field by a `CaptureRemap` miss.
+    The values are those of the expanded captures. A field named in both a loop and
+    the adjustment takes the loop values, in loop order. No value is listed for a
+    capture left without the field by a `CaptureRemap` miss.
 
     Args:
         sweep: the sweep with the `adjust_captures` block to list
@@ -724,7 +724,7 @@ def list_capture_adjustments(
 
     for capture, cdict in zip(captures, cdicts):
         # `adjust_captures` tells which remaps resolved. The value is read from the
-        # capture, where a loop over the same field has already won.
+        # capture, which holds the loop value when a loop set the same field.
         resolved = adjust_captures(cdict, adjust, source_id=source_id)
         for name in resolved:
             result[name][getattr(capture, name)] = None
