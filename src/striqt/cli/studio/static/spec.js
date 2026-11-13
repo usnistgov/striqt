@@ -238,6 +238,7 @@ export function init(app) {
         renderActions();
         const key = JSON.stringify([
             msg.validation, msg.editable, msg.changed_sections || [], msg.mode,
+            msg.apply_error,
         ]);
         if (key !== lastValidation) {
             lastValidation = key;
@@ -293,6 +294,7 @@ export function init(app) {
             // the sections with file values that differ from the spec applied last
             changed: new Set(state ? state.changed_sections || [] : []),
             busy: !!state && (state.mode === 'running' || state.mode === 'prompting'),
+            applyError: state ? state.apply_error || null : null,
             review,
             schema: app.latest.schema ? app.latest.schema.schema : null,
             send: sendEdits,
@@ -585,6 +587,9 @@ export function init(app) {
     function renderMessages(ctx) {
         messages.innerHTML = '';
         const texts = ctx.errors.map((e) => (e.path ? `${e.path}: ` : '') + e.message);
+        if (ctx.applyError) {
+            texts.unshift(`apply failed: ${ctx.applyError.split('\n').filter(Boolean).pop()}`);
+        }
         if (lastError) {
             texts.unshift(lastError);
         }

@@ -9,6 +9,7 @@ resources and reopens the resources for the edited spec. No two of these overlap
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import itertools
 import logging
@@ -42,6 +43,12 @@ class Apply:
     """reopen the resources for `spec`"""
 
     spec: ss.specs.ActionSpec
+    tree: Any = None
+    """the merged tree of the files as decoded for `spec`, kept as `applied_tree`"""
+
+
+class OpenFailed(Exception):
+    """the resources for an applied spec did not open"""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -126,6 +133,8 @@ class StudioSession:
     JSON spec"""
     applied_tree: Any = None
     """the merged tree of the files as decoded for `applied_spec`"""
+    apply_error: Optional[str] = None
+    """the traceback text of the last `Apply` that failed to open, or None"""
     sweep: Optional[ss.specs.Sweep] = None
     """the sweep spec of the open resources"""
     source_id: Optional[str] = None
@@ -343,9 +352,14 @@ def output_path(
 
 
 def configure(
-    session: StudioSession, spec: ss.specs.ActionSpec, resources: Resources
+    session: StudioSession,
+    spec: ss.specs.ActionSpec,
+    tree: Any,
+    resources: Resources,
 ) -> None:
     """set the fields of `session` derived from `spec` and the open `resources`.
+
+    `spec` becomes `applied_spec` and `tree` becomes `applied_tree` together.
 
     The variables offered are the enabled measurements of the sweep with a plot in
     `striqt.figures.data_var_plotters`. `selected_variable` is replaced by the first
@@ -359,6 +373,7 @@ def configure(
 
     sweep = resources['sweep_spec']
     session.applied_spec = spec
+    session.applied_tree = tree
     session.sweep = sweep
     session.source_id = resources['source'].source_id
 
@@ -559,7 +574,10 @@ def run_sweep(
 
 
 def serve_spec(
-    session: StudioSession, spec: ss.specs.ActionSpec, events: SessionEvents
+    session: StudioSession,
+    spec: ss.specs.ActionSpec,
+    tree: Any,
+    events: SessionEvents,
 ) -> Command:
     """open the resources for `spec` and execute the queued commands until an `Apply` or `Close`.
 
@@ -568,14 +586,17 @@ def serve_spec(
 
     Returns:
         the `Apply` or `Close` command that ended the block
+
+    Raises:
+        OpenFailed: if the resources do not open, from the exception raised
     """
-    ctx = ss.open_resources(
-        null_sink(spec),
-        session.spec_path,
-        prompt=lambda text: ask_operator(session, events, text),
-    )
-    with ctx as resources:
-        configure(session, spec, resources)
+    with contextlib.ExitStack() as stack:
+        try:
+            ctx = ss.open_resources(null_sink(spec), session.spec_path)
+            resources = stack.enter_context(ctx)
+        except Exception as ex:
+            raise OpenFailed(str(ex)) from ex
+        configure(session, spec, tree, resources)
         session.mode = 'idle'
         events.state_changed()
         while not session.stop.is_set():
@@ -593,16 +614,33 @@ def serve_spec(
 def worker(session: StudioSession, events: SessionEvents) -> None:
     """the body of the worker thread: serve each applied spec in turn.
 
-    The thread ends on a `Close` command, when ``session.stop`` is set, or on an
-    exception outside a run, which is logged on the ``sweep`` logger.
+    An applied spec that fails to open is logged on the ``sweep`` logger and kept as
+    ``session.apply_error``, and the previous spec is reopened. The thread ends on a
+    `Close` command, when ``session.stop`` is set, or on an exception outside a run,
+    which is logged on the ``sweep`` logger.
     """
     spec = session.applied_spec
+    tree = session.applied_tree
     assert spec is not None
+    fallback: Optional[tuple[ss.specs.ActionSpec, Any]] = None
     try:
         while not session.stop.is_set():
-            command = serve_spec(session, spec, events)
+            try:
+                command = serve_spec(session, spec, tree, events)
+            except OpenFailed:
+                if fallback is None:
+                    raise
+                session.apply_error = traceback.format_exc()
+                _logger().exception(
+                    'the applied spec did not open; reopening the previous spec'
+                )
+                spec, tree = fallback
+                fallback = None
+                continue
             if isinstance(command, Apply):
-                spec = command.spec
+                fallback = (spec, tree)
+                spec, tree = command.spec, command.tree
+                session.apply_error = None
             else:
                 break
     except Exception:

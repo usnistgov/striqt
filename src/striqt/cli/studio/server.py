@@ -16,6 +16,7 @@ import dataclasses
 import logging
 import os
 import socket
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
@@ -153,8 +154,11 @@ def run_message(session: StudioSession) -> dict[str, Any]:
 
 
 def state_message(session: StudioSession) -> dict[str, Any]:
-    """return the ``state`` message: the mode, variables, selections, and progress."""
-    coordinates: dict[str, Any] = {'num_ports': 1, 'fields': []}
+    """return the ``state`` message: the mode, variables, selections, and progress.
+
+    ``coordinates`` is None until the first acquisition is analyzed.
+    """
+    coordinates: dict[str, Any] | None = None
     if session.dataset is not None:
         coordinates = coordinates_message(session.dataset, session.varying_fields)
     spec = session.edited_spec or session.applied_spec
@@ -168,12 +172,12 @@ def state_message(session: StudioSession) -> dict[str, Any]:
         'variable_labels': session.variable_labels,
         'selected_variable': session.selected_variable,
         'coordinates': coordinates,
-        'varying_fields': sorted(session.varying_fields),
         'capture_options': capture_options(session.choices),
         'capture_selection': capture_selection(session),
         'running': session.running,
         'run': run_message(session),
         'prompt': None if prompt is None else {'id': prompt.id, 'text': prompt.text},
+        'apply_error': session.apply_error,
         'validation': {
             'ok': not session.validation_errors,
             'errors': session.validation_errors,
@@ -254,7 +258,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     SESSION.stop.set()
     CLIENTS.websockets.clear()
     if SESSION.thread is not None:
-        SESSION.thread.join()
+        await asyncio.to_thread(SESSION.thread.join)
 
 
 app = FastAPI(
@@ -407,8 +411,7 @@ async def handle_message(websocket: WebSocket, msg: dict[str, Any]) -> None:
             await broadcast_plot_update()
     elif kind == 'select_variable':
         SESSION.selected_variable = msg['variable']
-        if SESSION.plotter is not None:
-            SESSION.plotter.reset(limits=True)
+        await asyncio.to_thread(_reset_plotter)
         await broadcast_plot_update()
     elif kind == 'select_captures':
         session_.apply_capture_selection(SESSION, msg)
@@ -426,9 +429,10 @@ async def handle_message(websocket: WebSocket, msg: dict[str, Any]) -> None:
         elif SESSION.edited_spec is None:
             await _error(websocket, 'the spec files do not validate', kind)
         else:
+            tree = None
             if SESSION.provenance is not None:
-                SESSION.applied_tree = copy.deepcopy(SESSION.provenance.tree)
-            SESSION.commands.put(session_.Apply(SESSION.edited_spec))
+                tree = copy.deepcopy(SESSION.provenance.tree)
+            SESSION.commands.put(session_.Apply(SESSION.edited_spec, tree))
     elif kind == 'run_start':
         if SESSION.mode != 'preview':
             await _error(
@@ -516,6 +520,16 @@ def _select_delayed_variable(
     return dataclasses.replace(result, delayed={name: result.delayed[name]})
 
 
+_PLOT_LOCK = threading.Lock()
+"""serializes the draws and resets of the plotter between the server threads"""
+
+
+def _reset_plotter() -> None:
+    with _PLOT_LOCK:
+        if SESSION.plotter is not None:
+            SESSION.plotter.reset(limits=True)
+
+
 def _prepare_plot_data_sync(
     result: ss.lib.compute.DelayedDataset,
     plotter: PlotlyBackend,
@@ -524,7 +538,8 @@ def _prepare_plot_data_sync(
 ) -> list[go.Figure]:
     """return the figures of `variable` in `result`.
 
-    The function blocks until the delayed dataset is materialized.
+    The function blocks until the delayed dataset is materialized, and holds the
+    plotter lock while drawing.
 
     Args:
         result: the delayed dataset of the analyzed capture
@@ -539,8 +554,6 @@ def _prepare_plot_data_sync(
     import striqt.figures as sf
     from striqt.sensor.lib import compute
 
-    plotter.reset()
-
     plot_func = sf.data_var_plotters()[variable]
 
     delayed = _select_delayed_variable(result, variable)
@@ -553,9 +566,10 @@ def _prepare_plot_data_sync(
         if filtered_select:
             ds = ds.sel(filtered_select)
 
-    plot_func(ds, plotter)
-
-    return plotter.get_plot_data()
+    with _PLOT_LOCK:
+        plotter.reset()
+        plot_func(ds, plotter)
+        return plotter.get_plot_data()
 
 
 def _serialize_plot_message(
@@ -669,7 +683,7 @@ def session_events(loop: asyncio.AbstractEventLoop) -> session_.SessionEvents:
     """return the `SessionEvents` that schedule the broadcasts on `loop`."""
 
     def schedule(coro: Any) -> None:
-        if loop.is_running():
+        if loop.is_running() and not SESSION.stop.is_set():
             asyncio.run_coroutine_threadsafe(coro, loop)
         else:
             coro.close()
@@ -748,5 +762,3 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
         loop.run_until_complete(serve())
     finally:
         SESSION.stop.set()
-        if SESSION.thread is not None:
-            SESSION.thread.join()

@@ -25,9 +25,7 @@ export function init(app) {
         updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
         updateCaptureSelects(msg.capture_options, msg.capture_selection);
         updateRunButton(msg.running !== false, msg.mode);
-        if (msg.coordinates) {
-            updateCoordsTable(msg.coordinates, msg.varying_fields);
-        }
+        updateCoordsTable(msg.coordinates);
     });
 
     app.on('plot_data', (msg) => {
@@ -37,7 +35,7 @@ export function init(app) {
             updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
         }
         if (msg.coordinates) {
-            updateCoordsTable(msg.coordinates, app.latest.state ? app.latest.state.varying_fields : null);
+            updateCoordsTable(msg.coordinates);
         }
     });
 
@@ -62,16 +60,16 @@ export function init(app) {
     });
 
     // The capture fields that differ between the captures: entries, one column per
-    // port. `varying` is the list from the state message; an empty list shows a note.
-    function updateCoordsTable(coordinatesData, varying) {
-        const fields = coordinatesData ? coordinatesData.fields : null;
-        if (!fields || fields.length === 0) {
-            const text = (varying && varying.length === 0 && coordinatesData && coordinatesData.num_ports)
+    // port. `coordinatesData` is null until the first acquisition is analyzed.
+    function updateCoordsTable(coordinatesData) {
+        if (!coordinatesData || !coordinatesData.fields || coordinatesData.fields.length === 0) {
+            const text = coordinatesData
                 ? 'No capture field differs between the entries'
                 : 'No capture data yet';
             coordsSidebar.innerHTML = `<div class="coords-section"><p class="placeholder">${text}</p></div>`;
             return;
         }
+        const fields = coordinatesData.fields;
 
         const numPorts = coordinatesData.num_ports || 1;
         let html = `

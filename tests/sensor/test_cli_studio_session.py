@@ -413,3 +413,54 @@ def test_changed_sections_and_revert_edits(tmp_path):
     assert session.changed_sections(state) == ['loops']
     with pytest.raises(KeyError):
         session.revert_edits(state, 'nonexistent')
+
+
+def test_failed_apply_keeps_the_previous_spec(tmp_path, monkeypatch):
+    """an applied spec that does not open is recorded as `apply_error` and the worker
+    reopens the previous spec"""
+    import logging
+    import shutil
+
+    from conftest import SWEEP_DIR
+
+    import striqt.sensor as ss
+
+    monkeypatch.chdir(tmp_path)
+    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
+    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    spec = ss.read_yaml_spec(str(path))
+    bad = spec.replace(captures=spec.captures[:1])
+    state = session.StudioSession(
+        spec_path=str(path), applied_spec=spec, applied_tree={'spec': 'old'}
+    )
+    opened = []
+    real_open = ss.open_resources
+
+    def open_resources(target, *args, **kwargs):
+        opened.append(target)
+        if target.captures == bad.captures:
+            raise RuntimeError('the radio is unplugged')
+        return real_open(target, *args, **kwargs)
+
+    monkeypatch.setattr(session.ss, 'open_resources', open_resources)
+    events = session.SessionEvents(
+        state_changed=lambda: None,
+        data_ready=lambda: None,
+        attach_logs=logging.NullHandler,
+        detach_logs=lambda handler: None,
+        closed=lambda: None,
+    )
+    thread = session.start(state, events)
+    try:
+        wait_for(lambda: state.mode == 'preview')
+        state.commands.put(session.Apply(bad, {'spec': 'new'}))
+        wait_for(lambda: state.apply_error is not None, what='the apply error')
+        wait_for(lambda: state.mode == 'preview', what='the preview after the failure')
+        assert 'the radio is unplugged' in state.apply_error
+        assert state.applied_spec is spec
+        assert state.applied_tree == {'spec': 'old'}
+        assert len(opened) == 3
+        assert thread.is_alive()
+    finally:
+        state.stop.set()
+        thread.join(60)
