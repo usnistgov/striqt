@@ -47,7 +47,8 @@ xfailed on py39 (3044 to 2729 collected items) and 2417, 274, 36 on py315. On
 added items 93 to 96 and parametrized item 9 over both of its branches (`xfailed` 36
 to 41; 33 to 37 markers), and fixed 5 defects without a ledger number (listed under
 "Fixed on 2026-11-07 without a ledger number" below); the suite then ran 2431 passed,
-276 skipped, 41 xfailed on py39 and 2431, 274, 41 on py315. Items are listed in
+276 skipped, 41 xfailed on py39 and 2431, 274, 41 on py315. Item 52 was retired on
+2026-11-13 when `SoapySource.close` was fixed (`xfailed` 40). Items are listed in
 priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
@@ -105,7 +106,6 @@ item is open.
 | 8 | `test_adjust_captures_missing_required_default_lookup_raises` | High | B | trivial |
 | 9 | `test_remap_keyed_on_an_unknown_field_is_rejected` | High | B | trivial |
 | 44 | `TestLookupPowerCorrection::test_recovers_the_receiver_gain[single_frequency_calibration]` | High | B | trivial |
-| 52 | `TestSoapySourceClose::test_close_releases_the_stream_and_device` | High | B | trivial |
 | 16 | `test_remap_keyed_on_a_fixed_numeric_alias_accepts_numeric_keys` | High | B | trivial |
 | 62 | `test_three_deep_adjust_analysis_is_hashable` | High | B | small |
 | 65 | `test_no_overlap_roundtrip_is_identity` | High | B | design |
@@ -217,19 +217,6 @@ and `[tuple_key]` (parametrized over both branches on 2026-11-07)
 - **Impact.** A calibration sweep with one `center_frequency` value.
 - **Fix.** `dropna` first, or squeeze every dimension except
   `center_frequency`. Trivial.
-
-### 52. `SoapySource.close` never closes the device
-
-`tests/sensor/test_sensor_sources_soapy.py::TestSoapySourceClose::test_close_releases_the_stream_and_device`
-
-- **Mechanism.** `soapy.py:648` and `:649` read `self._device` and
-  `self._rx_stream` with `getattr(..., None)`; the attributes are `device` and
-  `rx_stream`, so both are `None` and the `try` body does nothing.
-- **Impact.** The stream is never deactivated or closed and `Device.close`
-  is never called. On the Jetson the process exit releases the radio, so a
-  single sweep works; opening a second controller in one process, or the
-  `Controller.close`/reopen path, relies on the driver tolerating it.
-- **Fix.** Rename the two lookups. Trivial.
 
 ### 16. Remaps keyed on a fixed numeric alias reject numeric keys
 
