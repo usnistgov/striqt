@@ -124,6 +124,8 @@ class StudioSession:
     provenance: Optional[ProvenanceTree] = None
     """the merged tree of the YAML files with the file of each value, or None for a
     JSON spec"""
+    applied_tree: Any = None
+    """the merged tree of the files as decoded for `applied_spec`"""
     sweep: Optional[ss.specs.Sweep] = None
     """the sweep spec of the open resources"""
     source_id: Optional[str] = None
@@ -680,3 +682,95 @@ def spec_schema_json(session: StudioSession) -> dict[str, Any]:
 def spec_dir(session: StudioSession) -> Path:
     """return the directory of the spec file."""
     return Path(session.spec_path).parent
+
+
+# %% reverting a section to the applied tree
+
+
+def yaml_text(value: Any) -> str:
+    """return `value` as one line of YAML flow text.
+
+    A string that YAML 1.1 would read as another type is quoted, so the text reads
+    back as the same value.
+    """
+    import yaml
+
+    text = yaml.safe_dump(value, default_flow_style=True, width=float('inf'))
+    return text.strip().removesuffix('\n...').strip()
+
+
+def tree_edits(current: Any, target: Any, pointer: str = '') -> list[Any]:
+    """return the edits that turn `current` into `target` at `pointer`.
+
+    Mappings are compared key by key and lists element by element when the lengths
+    agree, so an unchanged value is left in place; a list with a changed length and
+    every other difference is replaced as a whole.
+
+    Returns:
+        `YAMLEdit` instances in application order: deletions of keys absent from
+        `target`, then sets
+    """
+    from striqt.analysis.lib.io import YAMLEdit
+
+    if isinstance(current, dict) and isinstance(target, dict):
+        edits: list[Any] = [
+            YAMLEdit(f'{pointer}/{_escape(key)}', 'delete', None)
+            for key in current
+            if key not in target
+        ]
+        for key, value in target.items():
+            child = f'{pointer}/{_escape(key)}'
+            if key not in current:
+                edits.append(YAMLEdit(child, 'set', yaml_text(value)))
+            else:
+                edits.extend(tree_edits(current[key], value, child))
+        return edits
+    if (
+        isinstance(current, list)
+        and isinstance(target, list)
+        and len(current) == len(target)
+    ):
+        edits = []
+        for i, (a, b) in enumerate(zip(current, target)):
+            edits.extend(tree_edits(a, b, f'{pointer}/{i}'))
+        return edits
+    if current == target and type(current) is type(target):
+        return []
+    return [YAMLEdit(pointer, 'set', yaml_text(target))]
+
+
+def _escape(key: Any) -> str:
+    return str(key).replace('~', '~0').replace('/', '~1')
+
+
+def changed_sections(session: StudioSession) -> list[str]:
+    """return the top-level keys whose file values differ from `applied_tree`."""
+    prov = session.provenance
+    if prov is None or session.applied_tree is None:
+        return []
+    current = prov.tree if isinstance(prov.tree, dict) else {}
+    applied = session.applied_tree if isinstance(session.applied_tree, dict) else {}
+    names = list(current) + [k for k in applied if k not in current]
+    return [str(k) for k in names if current.get(k) != applied.get(k)]
+
+
+def revert_edits(session: StudioSession, section: str) -> list[Any]:
+    """return the edits that restore `section` of the files to `applied_tree`.
+
+    Raises:
+        KeyError: if `section` is a key of neither tree
+    """
+    from striqt.analysis.lib.io import YAMLEdit
+
+    prov = session.provenance
+    assert prov is not None and session.applied_tree is not None
+    current = prov.tree
+    applied = session.applied_tree
+    if section not in current and section not in applied:
+        raise KeyError(section)
+    pointer = f'/{_escape(section)}'
+    if section not in applied:
+        return [YAMLEdit(pointer, 'delete', None)]
+    if section not in current:
+        return [YAMLEdit(pointer, 'set', yaml_text(applied[section]))]
+    return tree_edits(current[section], applied[section], pointer)

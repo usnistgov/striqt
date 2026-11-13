@@ -337,3 +337,77 @@ def test_run_stop_ends_the_run_early(tmp_path, monkeypatch):
     finally:
         state.stop.set()
         thread.join(60)
+
+
+# %% reverting a section
+
+
+@pytest.mark.parametrize(
+    ('value', 'text'),
+    [
+        (70, '70'),
+        ('3750e6', '3750e6'),
+        ('yes', "'yes'"),
+        (None, 'null'),
+        ([0, 1], '[0, 1]'),
+        ({'a': 1, 'b': [True, 'x']}, '{a: 1, b: [true, x]}'),
+    ],
+)
+def test_yaml_text_reads_back_as_the_value(value, text):
+    import yaml
+
+    assert session.yaml_text(value) == text
+    assert yaml.safe_load(text) == value
+
+
+def test_tree_edits_touch_only_the_differences():
+    current = {'a': 1, 'b': {'c': 2, 'd': 3}, 'e': [1, 2], 'f': [1, 2, 3]}
+    target = {'a': 1, 'b': {'c': 2, 'd': 4, 'g': 5}, 'f': [1, 2], 'h': 'x'}
+    edits = session.tree_edits(current, target, '/s')
+    assert [(e.pointer, e.op, e.value_text) for e in edits] == [
+        ('/s/e', 'delete', None),
+        ('/s/b/d', 'set', '4'),
+        ('/s/b/g', 'set', '5'),
+        ('/s/f', 'set', '[1, 2]'),
+        ('/s/h', 'set', 'x'),
+    ]
+
+
+def test_tree_edits_of_equal_trees_are_empty():
+    tree = {'a': [1, {'b': 'c'}]}
+    assert session.tree_edits(tree, dict(tree)) == []
+
+
+def test_changed_sections_and_revert_edits(tmp_path):
+    import shutil
+
+    from conftest import SWEEP_DIR
+
+    from striqt.analysis.lib import io
+
+    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
+    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    state = session.StudioSession(spec_path=str(path))
+    state.provenance = io.load_yaml_provenance(path)
+    state.applied_tree = io.load_yaml_provenance(path).tree
+    assert session.changed_sections(state) == []
+
+    io.apply_yaml_edits(
+        state.provenance,
+        [
+            io.YAMLEdit('/captures/0/snr', 'set', '70'),
+            io.YAMLEdit('/loops/0/count', 'set', '3'),
+        ],
+    )
+    state.provenance = io.load_yaml_provenance(path)
+    assert session.changed_sections(state) == ['captures', 'loops']
+
+    edits = session.revert_edits(state, 'captures')
+    assert [(e.pointer, e.op, e.value_text) for e in edits] == [
+        ('/captures/0/snr', 'set', '80')
+    ]
+    io.apply_yaml_edits(state.provenance, edits)
+    state.provenance = io.load_yaml_provenance(path)
+    assert session.changed_sections(state) == ['loops']
+    with pytest.raises(KeyError):
+        session.revert_edits(state, 'nonexistent')

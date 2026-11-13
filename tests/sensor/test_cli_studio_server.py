@@ -277,3 +277,47 @@ def test_spec_message_of_a_site_sweep_encodes_with_relative_paths():
         for key in remap.get('lookup', {})
     }
     assert all(isinstance(key, str) for key in keys)
+
+
+# %% revert over the websocket
+
+
+def test_revert_restores_the_applied_section(tmp_path, monkeypatch):
+    import copy
+    import shutil
+
+    from conftest import SWEEP_DIR
+    from fastapi.testclient import TestClient
+
+    from striqt.analysis.lib import io
+
+    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
+    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    original = path.read_text()
+    spec = ss.read_yaml_spec(str(path))
+    state = server.SESSION
+    monkeypatch.setattr(state, 'spec_path', str(path))
+    monkeypatch.setattr(state, 'applied_spec', spec)
+    monkeypatch.setattr(state, 'edited_spec', spec)
+    monkeypatch.setattr(state, 'provenance', io.load_yaml_provenance(path))
+    monkeypatch.setattr(state, 'applied_tree', copy.deepcopy(state.provenance.tree))
+    monkeypatch.setattr(state, 'validation_errors', [])
+    monkeypatch.setattr(server.CLIENTS, 'websockets', set())
+
+    with TestClient(server.app) as client, client.websocket_connect('/ws') as ws:
+        ws.send_json({
+            'type': 'edit',
+            'edits': [
+                {'pointer': '/captures/0/duration', 'op': 'set', 'value_text': '3e-3'}
+            ],
+        })
+        ws.receive_json()
+        edited = ws.receive_json()
+        ws.send_json({'type': 'revert', 'section': 'captures'})
+        ws.receive_json()
+        reverted = ws.receive_json()
+
+    assert edited['changed_sections'] == ['captures']
+    assert reverted['changed_sections'] == []
+    assert reverted['applied_differs'] is False
+    assert path.read_text() == original

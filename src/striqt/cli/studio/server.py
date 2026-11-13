@@ -11,6 +11,7 @@ built from the `StudioSession` it shares with the handlers here.
 from __future__ import annotations
 
 import asyncio
+import copy
 import dataclasses
 import logging
 import os
@@ -181,6 +182,7 @@ def state_message(session: StudioSession) -> dict[str, Any]:
             'errors': session.validation_errors,
         },
         'editable': session.provenance is not None,
+        'changed_sections': session_.changed_sections(session),
         'applied_differs': (
             spec is not None
             and session.applied_spec is not None
@@ -354,6 +356,31 @@ async def handle_edit(websocket: WebSocket, msg: dict[str, Any]) -> None:
     await broadcast_state()
 
 
+async def handle_revert(websocket: WebSocket, msg: dict[str, Any]) -> None:
+    """restore one top-level section of the files to the applied values.
+
+    Args:
+        websocket: the client that sent the message
+        msg: ``{'section': <top-level key>}``
+    """
+    from striqt.analysis.lib import io
+
+    prov = SESSION.provenance
+    if prov is None or SESSION.applied_tree is None:
+        await _error(websocket, 'a JSON spec is not editable in the page', 'revert')
+        return
+    try:
+        edits = session_.revert_edits(SESSION, str(msg['section']))
+        if edits:
+            await asyncio.to_thread(io.apply_yaml_edits, prov, edits)
+    except (KeyError, ValueError, TypeError) as ex:
+        await _error(websocket, f'{type(ex).__name__}: {ex}', 'revert')
+        return
+    await reload_spec_files()
+    await broadcast_spec()
+    await broadcast_state()
+
+
 async def reload_spec_files() -> None:
     """load the provenance of the spec files again and decode the files."""
     from striqt.analysis.lib import io
@@ -393,12 +420,16 @@ async def handle_message(websocket: WebSocket, msg: dict[str, Any]) -> None:
         await broadcast_state()
     elif kind == 'edit':
         await handle_edit(websocket, msg)
+    elif kind == 'revert':
+        await handle_revert(websocket, msg)
     elif kind == 'apply':
         if SESSION.mode in ('running', 'prompting'):
             await _error(websocket, 'stop the run before applying the spec', kind)
         elif SESSION.edited_spec is None:
             await _error(websocket, 'the spec files do not validate', kind)
         else:
+            if SESSION.provenance is not None:
+                SESSION.applied_tree = copy.deepcopy(SESSION.provenance.tree)
             SESSION.commands.put(session_.Apply(SESSION.edited_spec))
     elif kind == 'run_start':
         if SESSION.mode != 'preview':
@@ -692,6 +723,7 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
         from striqt.analysis.lib import io
 
         SESSION.provenance = io.load_yaml_provenance(SESSION.spec_path)
+        SESSION.applied_tree = copy.deepcopy(SESSION.provenance.tree)
 
     loop = asyncio.new_event_loop()
     config = uvicorn.Config(app, host=host, port=port, loop='asyncio')
