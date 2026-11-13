@@ -578,7 +578,7 @@ def serve_spec(
 
 
 def worker(session: StudioSession, events: SessionEvents) -> None:
-    """the body of the worker thread: serve each applied spec in turn.
+    """serve each applied spec in turn, as the body of the worker thread.
 
     An applied spec that fails to open is logged on the ``sweep`` logger and kept as
     ``session.apply_error``, and the previous spec is reopened. The thread ends on a
