@@ -63,6 +63,13 @@
 .spec-nav-item.invalid {
     color: #e94560;
 }
+/* a dot after the name of a section edited since the last apply */
+.spec-nav-item.changed > span:first-child::after {
+    content: ' \25CF';
+    color: #fbbf24;
+    font-size: 0.6rem;
+    vertical-align: middle;
+}
 .lock-glyph {
     font-size: 0.75rem;
     opacity: 0.7;
@@ -209,6 +216,24 @@
 .section-header.invalid h2 {
     color: #e94560;
 }
+.section-header .revert-button {
+    margin-left: auto;
+    font-size: 0.75rem;
+    background: transparent;
+    color: #fbbf24;
+    border: 1px solid #fbbf24;
+    border-radius: 4px;
+    padding: 0.15rem 0.6rem;
+    cursor: pointer;
+}
+.section-header .revert-button:hover:not(:disabled) {
+    background: #fbbf24;
+    color: #1a1a2e;
+}
+.section-header .revert-button:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
 .muted {
     color: #888;
     font-size: 0.8rem;
@@ -290,10 +315,12 @@
 .spec-grid td.value {
     min-width: 8rem;
 }
+/* the provenance bar: every cell in the first sub-column of a capture, head to foot */
 .spec-grid td.value, .spec-grid td.container, .spec-grid th.column-head {
     border-left: 3px solid #0f3460;
 }
-.spec-grid td[data-file], .spec-grid th.column-head[data-file] {
+.spec-grid td.value[data-file], .spec-grid td.container[data-file],
+.spec-grid th.column-head[data-file] {
     border-left-color: var(--file-color);
 }
 .spec-grid td.default input, .spec-grid td.default select {
@@ -312,7 +339,7 @@
 .spec-grid td.value.sub {
     min-width: 5rem;
 }
-.spec-grid td.value.sub.inner, .spec-grid td.value.sub.inner[data-file] {
+.spec-grid td.value.sub.inner {
     border-left: 1px dashed #2b4a7a;
 }
 .spec-grid td.read-only {
@@ -362,34 +389,27 @@
     border-radius: 4px;
 }
 
-.tied {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-.tied input[type=text], .tied select {
-    flex: 1;
-    min-width: 0;
-}
-.pill {
-    flex-shrink: 0;
+/* the per-port toggle of a row, after the field name and units */
+.spec-grid th.field-name .link-toggle {
+    float: right;
+    margin-left: 0.6rem;
     background: transparent;
-    border: 1px solid #0f3460;
-    border-radius: 999px;
-    color: #888;
-    cursor: pointer;
-    padding: 0 0.45rem;
-    font-size: 0.65rem;
-    line-height: 1.6;
-    white-space: nowrap;
-}
-.pill:hover:not(:disabled) {
-    border-color: #e94560;
+    border: none;
     color: #eee;
+    cursor: pointer;
+    padding: 0 0.1rem;
+    font-size: 0.8rem;
+    line-height: 1.2;
 }
-.pill:disabled {
-    cursor: default;
-    opacity: 0.6;
+.spec-grid th.field-name .link-toggle.split {
+    opacity: 0.35;
+}
+.spec-grid th.field-name .link-toggle.mixed {
+    opacity: 0.65;
+}
+.spec-grid th.field-name .link-toggle:hover:not(:disabled) {
+    opacity: 1;
+    color: #e94560;
 }
 .stepper {
     display: inline-flex;

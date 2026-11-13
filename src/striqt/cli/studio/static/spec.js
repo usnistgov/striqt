@@ -236,7 +236,9 @@ export function init(app) {
     });
     app.on('state', (msg) => {
         renderActions();
-        const key = JSON.stringify(msg.validation) + String(msg.editable);
+        const key = JSON.stringify([
+            msg.validation, msg.editable, msg.changed_sections || [], msg.mode,
+        ]);
         if (key !== lastValidation) {
             lastValidation = key;
             scheduleRender();
@@ -288,6 +290,9 @@ export function init(app) {
             files: spec ? spec.files : [],
             errors: state ? state.validation.errors : [],
             editable: !!(state && state.editable) && hasTree,
+            // the sections with file values that differ from the spec applied last
+            changed: new Set(state ? state.changed_sections || [] : []),
+            busy: !!state && (state.mode === 'running' || state.mode === 'prompting'),
             review,
             send: sendEdits,
         };
@@ -526,6 +531,10 @@ export function init(app) {
             if (section.name === selected) {
                 button.classList.add('active');
             }
+            if (ctx.changed.has(section.name)) {
+                button.classList.add('changed');
+                button.title = 'edited since the last apply';
+            }
             if (errorsAt(pointer([section.name]), ctx).length) {
                 button.classList.add('invalid');
             }
@@ -606,6 +615,16 @@ export function init(app) {
         const header = el('header', 'section-header');
         const ptr = pointer([section.name]);
         header.append(el('h2', '', section.name));
+        if (ctx.changed.has(section.name) && ctx.editable) {
+            const revert = el('button', 'revert-button', 'Revert');
+            revert.type = 'button';
+            revert.title = 'discard the edits to this section since the last apply';
+            revert.disabled = ctx.busy;
+            revert.addEventListener('click', () => {
+                app.send({ type: 'revert', section: section.name });
+            });
+            header.append(revert);
+        }
         if (section.read_only) {
             header.append(el('span', 'lock-glyph', READ_ONLY_GLYPH), el('span', 'muted', 'read-only'));
         }
@@ -680,6 +699,9 @@ export function init(app) {
                 name.classList.add('required');
             }
             addTitle(name, fieldTip(row.field));
+            if (row.field.per_port && row.field.name !== 'port' && columns.some((c) => c.capture)) {
+                name.append(rowToggle(row.field, row, columns, ctx));
+            }
             tr.append(name);
             for (const column of columns) {
                 const ptr = column.pointer + pointer(row.path);
@@ -802,20 +824,39 @@ export function init(app) {
         return box;
     }
 
-    // the pill that ties a per-port field to one value for every port (set to the
-    // first value) or splits it into one value per port (set to N copies)
-    function pill(split, field, ptr, value, present, ports, ctx) {
-        const button = el('button', 'pill', split ? '▥ per port' : '▣ all ports');
+    // The toggle of a per-port row acts on every capture column at once. A click
+    // splits each tied capture (N copies of its value or the schema default, N its
+    // port count) while any capture is tied; otherwise it ties every capture to its
+    // first value. The row is `split` when every capture holds a list, `mixed` when
+    // some do.
+    function rowToggle(field, row, columns, ctx) {
+        const targets = columns.filter((c) => c.capture).map((c) => {
+            const ptr = c.pointer + pointer(row.path);
+            return { ptr, value: valueAt(ctx.tree, ptr), ports: c.span || 1 };
+        });
+        const lists = targets.filter((t) => Array.isArray(t.value)).length;
+        const state = lists === 0 ? 'tied' : lists === targets.length ? 'split' : 'mixed';
+        const button = el('button', 'link-toggle', '\u{1F517}');
         button.type = 'button';
-        button.title = split
-            ? 'one value per port; click to use the first value for every port'
-            : 'one value for every port; click to set a value per port';
+        button.classList.toggle('split', state === 'split');
+        button.classList.toggle('mixed', state === 'mixed');
+        button.title = state === 'tied'
+            ? 'one value for every port; click for one value per port'
+            : state === 'split'
+                ? 'one value per port; click for one value for every port'
+                : 'mixed: click for one value per port';
         button.addEventListener('click', () => {
-            if (split) {
-                ctx.send([setEdit(ptr, scalarText(value[0], field.kind), ctx)]);
-            } else {
-                const one = present ? value : field.default;
-                ctx.send([setEdit(ptr, flowText(Array(ports).fill(one), field.kind), ctx)]);
+            const edits = [];
+            for (const t of targets) {
+                if (state === 'split') {
+                    edits.push(setEdit(t.ptr, scalarText(t.value[0], field.kind), ctx));
+                } else if (!Array.isArray(t.value)) {
+                    const one = t.value === undefined ? field.default : t.value;
+                    edits.push(setEdit(t.ptr, flowText(Array(t.ports).fill(one), field.kind), ctx));
+                }
+            }
+            if (edits.length) {
+                ctx.send(edits);
             }
         });
         return button;
@@ -823,21 +864,13 @@ export function init(app) {
 
     // The cells of a per-port field in the sub-columns of a capture: one spanning
     // cell for a tied value (a scalar or an absent key), one cell per port for a split
-    // value (a list). The `port` field is split by its own length and has no pill.
+    // value (a list). The `port` field is split by its own length.
     function perPortCells(field, ptr, ctx, column) {
         const ports = column.span || 1;
-        const isPort = field.name === 'port';
         const value = valueAt(ctx.tree, ptr);
         if (!Array.isArray(value)) {
-            const td = el('td', 'value tied');
+            const td = valueCell(field, ptr, ctx);
             td.colSpan = ports;
-            const { present } = decorateCell(td, ptr, ctx);
-            const box = el('div', 'tied');
-            box.append(control(field, ptr, value, present, ctx));
-            if (!isPort) {
-                box.append(pill(false, field, ptr, value, present, ports, ctx));
-            }
-            td.append(box);
             return [td];
         }
         const mismatch = value.length !== ports;
@@ -871,12 +904,7 @@ export function init(app) {
                     ctx.send([setEdit(ptr, `[${items.join(', ')}]`, ctx)]);
                 }
             });
-            const box = el('div', 'tied');
-            box.append(input);
-            if (k === 0 && !isPort) {
-                box.append(pill(true, field, ptr, value, true, ports, ctx));
-            }
-            td.append(box);
+            td.append(input);
             cells.push(td);
         }
         return cells;
