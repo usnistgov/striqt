@@ -676,8 +676,9 @@ def read_spec(path: str) -> ss.specs.ActionSpec:
 def validation_pointers(text: str) -> list[str]:
     """return the JSON pointer of each msgspec path (``$.a[0].b``) in `text`, in order.
 
-    A `SpecValidationError` names the failing field first and the further
-    locations of the failure after ``at``; a plain msgspec error names one path.
+    A plain `msgspec.ValidationError` names its path in the message only; a
+    `SpecValidationError` carries the path and the locations as fields, read by
+    `pointers_of`.
     """
     import re
 
@@ -697,9 +698,13 @@ def revalidate(session: StudioSession) -> None:
     except msgspec.ValidationError as ex:
         session.edited_spec = None
         text = str(ex)
-        pointers = validation_pointers(text) or ['']
+        if isinstance(ex, sa.specs.helpers.SpecValidationError):
+            path, locations = sa.specs.helpers.pointers_of(ex)
+        else:
+            pointers = validation_pointers(text) or ['']
+            path, locations = pointers[0], pointers[1:]
         session.validation_errors = [
-            {'path': pointers[0], 'locations': pointers[1:], 'message': text}
+            {'path': path, 'locations': locations, 'message': text}
         ]
     except Exception as ex:  # a YAML syntax error or a missing include
         session.edited_spec = None

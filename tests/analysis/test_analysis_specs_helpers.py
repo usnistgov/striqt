@@ -1056,3 +1056,29 @@ def test_narrow_analysis_group_keeps_the_named_fields_at_their_values(names):
 def test_narrow_analysis_group_rejects_a_name_that_is_not_enabled(names, match):
     with pytest.raises(KeyError, match=match):
         narrow_analysis_group(THREE_MEASUREMENTS, names)
+
+
+# %% pointers_of
+
+
+@pytest.mark.parametrize(
+    ('path', 'pointer'),
+    [
+        ('.captures[0].gain', '/captures/0/gain'),
+        ('.loops[2]', '/loops/2'),
+        (".loops: {'repeat': 0, 'snr': 60.0}", '/loops'),
+        ('', ''),
+    ],
+)
+def test_json_pointer_of_path_reads_the_leading_tokens(path, pointer):
+    assert sa.specs.helpers.json_pointer_of_path(path) == pointer
+
+
+def test_pointers_of_a_spec_validation_error():
+    error = sa.specs.helpers.SpecValidationError(
+        'too long', ('.analysis', '.spectrogram'), ('.captures[0]', ".loops: {'a': 1}")
+    )
+    assert sa.specs.helpers.pointers_of(error) == (
+        '/analysis/spectrogram',
+        ['/captures/0', '/loops'],
+    )

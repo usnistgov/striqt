@@ -10,6 +10,7 @@ import contextlib
 import dataclasses
 import fractions
 import functools
+import re
 import types
 from collections.abc import (
     Collection,
@@ -362,6 +363,35 @@ class SpecValidationError(msgspec.ValidationError):
     def at(self, *locations: str) -> SpecValidationError:
         """return a copy with `locations` prepended to the ``at ... on ...`` trailer"""
         return type(self)(self.message, self.path, tuple(locations) + self.locations)
+
+
+_PATH_TOKEN = re.compile(r'\.([A-Za-z_]\w*)|\[(\d+)\]')
+
+
+def json_pointer_of_path(path: str) -> str:
+    """return the JSON pointer of the msgspec path tokens that start `path`.
+
+    `path` is a joined `SpecValidationError.path` or one of its `locations`, such as
+    ``'.captures[0].gain'``; the tokens end at the first character that is neither a
+    ``.name`` nor an ``[index]``, so a description after the tokens is not read.
+    """
+    pointer = []
+    position = 0
+    while True:
+        match = _PATH_TOKEN.match(path, position)
+        if match is None:
+            return ''.join(pointer)
+        name, index = match.groups()
+        pointer.append(f'/{name or index}')
+        position = match.end()
+
+
+def pointers_of(error: SpecValidationError) -> tuple[str, list[str]]:
+    """return the JSON pointer of the field `error` names and of its further locations."""
+    return (
+        json_pointer_of_path(''.join(error.path)),
+        [json_pointer_of_path(location) for location in error.locations],
+    )
 
 
 @contextlib.contextmanager
