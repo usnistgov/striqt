@@ -10,5 +10,6 @@ Sweep execution against a bound sensor, and readers for sweep specs and calibrat
         - open_store
         - read_calibration
         - read_json_spec
+        - read_spec
         - read_yaml_spec
         - read_zarr_spec
