@@ -744,7 +744,7 @@ def _escape(key: Any) -> str:
 
 
 def changed_sections(session: StudioSession) -> list[str]:
-    """return the top-level keys whose file values differ from `applied_tree`."""
+    """return the top-level keys with a file value that differs from `applied_tree`."""
     prov = session.provenance
     if prov is None or session.applied_tree is None:
         return []
