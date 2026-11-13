@@ -3,8 +3,6 @@ spec file and the edits written back into its files, JSON pointers, and flow tex
 
 from __future__ import annotations
 
-import shutil
-from pathlib import Path
 
 import pytest
 import yaml
@@ -240,14 +238,6 @@ def test_tree_edits_escape_keys_and_index_equal_length_lists():
 # %% load_yaml_provenance
 
 
-@pytest.fixture
-def sweeps(tmp_path) -> Path:
-    """a copy of the fixture sweep tree, so that edits stay out of the repository"""
-    dest = tmp_path / 'sweeps'
-    shutil.copytree(SWEEP_DIR, dest, ignore=shutil.ignore_patterns('__pycache__'))
-    return dest.resolve()
-
-
 def changed_lines(before: list[str], after: list[str]) -> list[int]:
     """the indexes at which 2 line lists of equal length differ"""
     assert len(before) == len(after)
@@ -264,12 +254,12 @@ def test_provenance_tree_equals_the_pyyaml_decode(name):
     assert load_provenance(path).tree == sa.specs.helpers.unfreeze(load(path))
 
 
-def test_provenance_origin_names_the_file_that_set_each_key(sweeps):
-    site = sweeps / 'site' / 'site-cpu.yaml'
-    tone = sweeps / 'fragments' / 'source' / 'tone.yaml'
-    tone_unsync = sweeps / 'fragments' / 'source' / 'tone_unsync.yaml'
-    captures = sweeps / 'fragments' / 'captures' / 'tone.yaml'
-    sites = tuple(sorted((sweeps / 'sites').glob('*.yaml')))
+def test_provenance_origin_names_the_file_that_set_each_key(sweeps_copy):
+    site = sweeps_copy / 'site' / 'site-cpu.yaml'
+    tone = sweeps_copy / 'fragments' / 'source' / 'tone.yaml'
+    tone_unsync = sweeps_copy / 'fragments' / 'source' / 'tone_unsync.yaml'
+    captures = sweeps_copy / 'fragments' / 'captures' / 'tone.yaml'
+    sites = tuple(sorted((sweeps_copy / 'sites').glob('*.yaml')))
 
     prov = load_provenance(site)
 
@@ -280,7 +270,7 @@ def test_provenance_origin_names_the_file_that_set_each_key(sweeps):
     assert prov.origin['/captures/0'] == (captures, '/0')
     assert prov.origin['/captures/0/gain'] == (captures, '/0/gain')
     assert prov.origin['/adjust_captures/defaults'] == (
-        sweeps / 'sites' / 'global.yaml',
+        sweeps_copy / 'sites' / 'global.yaml',
         '/defaults',
     )
     assert prov.regions['/source'] == (tone, tone_unsync)
@@ -291,9 +281,9 @@ def test_provenance_origin_names_the_file_that_set_each_key(sweeps):
     assert all(p.is_absolute() for p in prov.files)
 
 
-def test_provenance_resolves_merge_keys_in_the_owning_file(sweeps):
-    spec = sweeps / 'synthetic.yaml'
-    plot = sweeps / 'fragments' / 'plot' / 'synthetic.yaml'
+def test_provenance_resolves_merge_keys_in_the_owning_file(sweeps_copy):
+    spec = sweeps_copy / 'synthetic.yaml'
+    plot = sweeps_copy / 'fragments' / 'plot' / 'synthetic.yaml'
 
     prov = load_provenance(spec)
 
@@ -323,8 +313,8 @@ def test_provenance_of_concatenated_includes_offsets_the_element_origins(write_y
 # %% apply_yaml_edits
 
 
-def test_set_rewrites_one_line_and_keeps_the_rest(sweeps):
-    spec = sweeps / 'synthetic.yaml'
+def test_set_rewrites_one_line_and_keeps_the_rest(sweeps_copy):
+    spec = sweeps_copy / 'synthetic.yaml'
     before = spec.read_text().splitlines()
 
     written = apply_edits(
@@ -340,9 +330,9 @@ def test_set_rewrites_one_line_and_keeps_the_rest(sweeps):
     assert load(spec)['captures'][0]['snr'] == 70
 
 
-def test_set_through_an_include_writes_the_fragment_only(sweeps):
-    site = sweeps / 'site' / 'site-cpu.yaml'
-    fragment = sweeps / 'fragments' / 'captures' / 'tone.yaml'
+def test_set_through_an_include_writes_the_fragment_only(sweeps_copy):
+    site = sweeps_copy / 'site' / 'site-cpu.yaml'
+    fragment = sweeps_copy / 'fragments' / 'captures' / 'tone.yaml'
     site_bytes = site.read_bytes()
     before = fragment.read_text().splitlines()
 
@@ -357,10 +347,10 @@ def test_set_through_an_include_writes_the_fragment_only(sweeps):
     assert load(site)['captures'][0]['gain'] == -20
 
 
-def test_set_of_a_new_key_in_a_merged_region_lands_in_the_last_file(sweeps):
-    site = sweeps / 'site' / 'site-cpu.yaml'
-    tone = sweeps / 'fragments' / 'source' / 'tone.yaml'
-    tone_unsync = sweeps / 'fragments' / 'source' / 'tone_unsync.yaml'
+def test_set_of_a_new_key_in_a_merged_region_lands_in_the_last_file(sweeps_copy):
+    site = sweeps_copy / 'site' / 'site-cpu.yaml'
+    tone = sweeps_copy / 'fragments' / 'source' / 'tone.yaml'
+    tone_unsync = sweeps_copy / 'fragments' / 'source' / 'tone_unsync.yaml'
     tone_bytes = tone.read_bytes()
 
     written = apply_edits(
@@ -373,9 +363,9 @@ def test_set_of_a_new_key_in_a_merged_region_lands_in_the_last_file(sweeps):
     assert load(site)['source']['warmup_sweeps'] == 2
 
 
-def test_delete_removes_the_key_from_the_fragment(sweeps):
-    site = sweeps / 'site' / 'site-cpu.yaml'
-    fragment = sweeps / 'fragments' / 'captures' / 'tone.yaml'
+def test_delete_removes_the_key_from_the_fragment(sweeps_copy):
+    site = sweeps_copy / 'site' / 'site-cpu.yaml'
+    fragment = sweeps_copy / 'fragments' / 'captures' / 'tone.yaml'
     before = fragment.read_text().splitlines()
 
     written = apply_edits(
@@ -388,9 +378,9 @@ def test_delete_removes_the_key_from_the_fragment(sweeps):
     assert 'backend_sample_rate' not in load(site)['captures'][0]
 
 
-def test_insert_appends_a_capture_to_the_fragment_sequence(sweeps):
-    site = sweeps / 'site' / 'site-cpu.yaml'
-    fragment = sweeps / 'fragments' / 'captures' / 'tone.yaml'
+def test_insert_appends_a_capture_to_the_fragment_sequence(sweeps_copy):
+    site = sweeps_copy / 'site' / 'site-cpu.yaml'
+    fragment = sweeps_copy / 'fragments' / 'captures' / 'tone.yaml'
     site_bytes = site.read_bytes()
     capture = 'port: 1\ncenter_frequency: 3900e6 # Hz\n'
 
@@ -406,8 +396,8 @@ def test_insert_appends_a_capture_to_the_fragment_sequence(sweeps):
     assert captures[1] == {'port': 1, 'center_frequency': '3900e6'}
 
 
-def test_float_text_and_flow_sequence_are_written_as_typed(sweeps):
-    spec = sweeps / 'synthetic.yaml'
+def test_float_text_and_flow_sequence_are_written_as_typed(sweeps_copy):
+    spec = sweeps_copy / 'synthetic.yaml'
 
     apply_edits(
         load_provenance(spec),
@@ -434,9 +424,9 @@ def test_float_text_and_flow_sequence_are_written_as_typed(sweeps):
     ],
     ids=['missing_element', 'missing_key', 'unknown_op', 'no_value', 'not_a_sequence'],
 )
-def test_edit_errors_write_nothing(sweeps, edit, exc):
-    site = sweeps / 'site' / 'site-cpu.yaml'
-    fragment = sweeps / 'fragments' / 'captures' / 'tone.yaml'
+def test_edit_errors_write_nothing(sweeps_copy, edit, exc):
+    site = sweeps_copy / 'site' / 'site-cpu.yaml'
+    fragment = sweeps_copy / 'fragments' / 'captures' / 'tone.yaml'
     fragment_bytes = fragment.read_bytes()
 
     with pytest.raises(exc):
@@ -445,10 +435,10 @@ def test_edit_errors_write_nothing(sweeps, edit, exc):
     assert fragment.read_bytes() == fragment_bytes
 
 
-def test_delete_of_a_merge_key_value_raises(sweeps):
+def test_delete_of_a_merge_key_value_raises(sweeps_copy):
     """``window`` of `power_spectral_density` comes from the ``<<: *spectrogram``
     alias, so it is not a key of that mapping to remove."""
-    spec = sweeps / 'synthetic.yaml'
+    spec = sweeps_copy / 'synthetic.yaml'
     with pytest.raises(KeyError, match='merge key'):
         apply_edits(
             load_provenance(spec),

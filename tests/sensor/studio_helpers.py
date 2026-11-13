@@ -5,7 +5,13 @@ from __future__ import annotations
 
 import threading
 
-from synthetic_sources import SPECTROGRAM, TONE_OFFSETS, preset_sweep, tone_captures
+from synthetic_sources import (
+    SPECTROGRAM,
+    TONE_OFFSETS,
+    preset_sweep,
+    run_in_memory,
+    tone_captures,
+)
 
 import striqt.sensor as ss
 from striqt.cli.studio import session
@@ -56,9 +62,26 @@ def analyzed_dataset():
     sweep = preset_sweep(
         'single_tone', tone_captures(TONE_OFFSETS[:1]), analysis=SPECTROGRAM
     )
-    with ss.open_resources(sweep, None) as res:
-        results = ss.iterate_sweep(res, sink=ss.sinks.NoSink(sweep))
-        return next(dd for dd in results if dd is not None)
+    return run_in_memory(sweep, take=1, delayed=True)[0]
+
+
+def recording_events(state):
+    """return `SessionEvents` that record each mode change and each dataset of `state`,
+    with the lists and the close event they fill"""
+    import logging
+    import threading
+
+    modes = []
+    datasets = []
+    closed = threading.Event()
+    events = session.SessionEvents(
+        state_changed=lambda: modes.append(state.mode),
+        data_ready=lambda: datasets.append((state.mode, state.dataset)),
+        attach_logs=logging.NullHandler,
+        detach_logs=lambda handler: None,
+        closed=closed.set,
+    )
+    return events, modes, datasets, closed
 
 
 class HookedStop(threading.Event):

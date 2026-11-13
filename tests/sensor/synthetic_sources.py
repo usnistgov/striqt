@@ -342,12 +342,12 @@ def expected_corrected(binding: str, capture, *, count=None, xp=np):
     )
 
 
-def run_in_memory(sweep, *, loop=False, take=None, **replace) -> list:
+def run_in_memory(sweep, *, loop=False, take=None, delayed=False, **replace) -> list:
     """run `sweep` through `open_resources` and `iterate_sweep` with a `NoSink`.
 
     Returns:
-        one `xarray.Dataset` per capture, truncated to the first `take` when `take`
-        is set
+        one `xarray.Dataset` per capture, or the `DelayedDataset` of each when
+        `delayed` is True, truncated to the first `take` when `take` is set
     """
     datasets = []
     with ss.open_resources(sweep, None) as resources:
@@ -357,7 +357,7 @@ def run_in_memory(sweep, *, loop=False, take=None, **replace) -> list:
         for dd in results:
             if dd is None:
                 continue
-            datasets.append(ss.lib.compute.from_delayed(dd))
+            datasets.append(dd if delayed else ss.lib.compute.from_delayed(dd))
             if take is not None and len(datasets) >= take:
                 break
     return datasets

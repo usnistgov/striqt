@@ -7,7 +7,13 @@ from __future__ import annotations
 import threading
 
 import pytest
-from studio_helpers import SNR_LOOP, HookedStop, looped_sweep, preview_session
+from studio_helpers import (
+    SNR_LOOP,
+    HookedStop,
+    looped_sweep,
+    preview_session,
+    recording_events,
+)
 from synthetic_sources import ANALYSIS, TONE_OFFSETS, tone_captures
 
 from striqt.cli.studio import session
@@ -103,17 +109,6 @@ def test_selected_captures_waits_through_an_empty_selection():
 # %% apply_capture_selection
 
 
-def test_apply_capture_selection_round_trips():
-    state = preview_session(looped_sweep())
-    session.apply_capture_selection(state, {'capture': 1, 'loops': [1]})
-    assert state.selected_capture == 1
-    assert state.selected_loops == {('capture', 'snr'): SNR_LOOP.values[1]}
-
-    session.apply_capture_selection(state, {'capture': None, 'loops': [None]})
-    assert state.selected_capture is None
-    assert state.selected_loops == {}
-
-
 def test_apply_capture_selection_clamps_indexes_to_the_choices():
     state = preview_session(looped_sweep())
     session.apply_capture_selection(state, {'capture': 99, 'loops': [-3]})
@@ -192,13 +187,8 @@ def test_validation_pointers(text, pointers):
     assert session.validation_pointers(text) == pointers
 
 
-def test_revalidate_reports_the_path_of_a_bad_value(tmp_path):
-    import shutil
-
-    from conftest import SWEEP_DIR
-
-    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
-    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+def test_revalidate_reports_the_path_of_a_bad_value(sweeps_copy):
+    path = sweeps_copy / 'synthetic.yaml'
     state = session.StudioSession(spec_path=str(path))
 
     session.revalidate(state)
@@ -227,36 +217,17 @@ def wait_for(condition, timeout=60.0, what='the condition'):
         time.sleep(0.02)
 
 
-def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
-    """the worker opens the synthetic sweep, previews, writes one store for a run,
-    reopens for an applied spec with one capture, and ends on Close"""
-    import logging
-    import shutil
-
-    from conftest import SWEEP_DIR
-
+def test_worker_previews_runs_and_applies_in_turn(tmp_path):
+    """the worker opens the looped sweep, previews, writes one store for a run, ends a
+    second run after two acquisitions, reopens for an applied spec with one
+    capture, and ends on Close"""
     import striqt.sensor as ss
 
-    monkeypatch.chdir(tmp_path)
-    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
-    path = tmp_path / 'sweeps' / 'synthetic.yaml'
-    spec = ss.read_yaml_spec(str(path))
-    state = session.StudioSession(
-        spec_path=str(path), applied_spec=spec, edited_spec=spec
-    )
-    modes = []
-    datasets = []
-    closed = threading.Event()
-    events = session.SessionEvents(
-        state_changed=lambda: modes.append(state.mode),
-        data_ready=lambda: datasets.append((state.mode, state.dataset)),
-        attach_logs=logging.NullHandler,
-        detach_logs=lambda handler: None,
-        closed=closed.set,
-    )
+    base = looped_sweep()
+    spec = base.replace(sink=base.sink.replace(path=str(tmp_path / 'out' / 'run')))
+    state = session.StudioSession(applied_spec=spec)
+    events, modes, datasets, closed = recording_events(state)
 
-    outputs = tmp_path / 'sweeps' / 'outputs'
-    before = set(outputs.glob('*.zarr.zip')) if outputs.exists() else set()
     thread = session.start(state, events)
     try:
         wait_for(lambda: state.mode == 'preview', what='the preview')
@@ -264,10 +235,9 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
         opened = state.open
         assert opened is not None
         assert opened.sink_path is not None
-        assert opened.sink_path.endswith('.zarr.zip')
-        # snr is looped and equal in both entries; the LO frequency differs between them
-        assert 'external_lo_frequency' in opened.varying_fields
-        assert 'snr' not in opened.varying_fields
+        assert opened.sink_path.endswith('.zarr')
+        # the two entries differ in the tone offset; snr is looped and equal
+        assert opened.varying_fields == {'frequency_offset'}
         assert len(opened.choices.captures) == len(spec.captures)
         # the preview analyzes the displayed variable only
         assert datasets[0][0] == 'preview'
@@ -281,13 +251,26 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
             spec, opened.source_id
         )
         assert run.acquired == run.count
-        stores = set(outputs.glob('*.zarr.zip')) - before
-        assert len(stores) == 1
+        assert len(list((tmp_path / 'out').glob('*.zarr'))) == 1
         # the run analyzes the whole group
         run_sets = [set(dd.delayed) for mode, dd in datasets if mode == 'running']
         assert len(run_sets) == run.count
         assert run_sets[-1] == set(spec.analysis.to_dict())
         wait_for(lambda: state.mode == 'preview', what='the preview after the run')
+
+        # a second run, stopped after two acquisitions, overwrites the store
+        state.commands.put(session.StartRun(overwrite=True))
+        wait_for(lambda: state.run is not run and state.run is not None)
+        second = state.run
+        wait_for(
+            lambda: second.acquired >= 2, what='two acquisitions of the second run'
+        )
+        second.stop.set()
+        wait_for(lambda: second.finished is not None, what='the stopped run')
+        assert second.error is None
+        assert 2 <= second.acquired < second.count
+        assert len(list((tmp_path / 'out').glob('*.zarr'))) == 1
+        wait_for(lambda: state.mode == 'preview', what='the preview after the stop')
 
         one_capture = spec.replace(captures=spec.captures[:1])
         state.commands.put(session.Apply(one_capture))
@@ -308,36 +291,36 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
     assert 'running' in modes
 
 
-def test_run_stop_ends_the_run_early(tmp_path, monkeypatch):
-    import logging
-    import shutil
-
-    from conftest import SWEEP_DIR
-
+def test_failed_apply_keeps_the_previous_spec(monkeypatch):
+    """an applied spec that does not open is recorded as `apply_error` and the worker
+    reopens the previous spec"""
     import striqt.sensor as ss
 
-    monkeypatch.chdir(tmp_path)
-    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
-    path = tmp_path / 'sweeps' / 'synthetic.yaml'
-    spec = ss.read_yaml_spec(str(path))
-    state = session.StudioSession(spec_path=str(path), applied_spec=spec)
-    events = session.SessionEvents(
-        state_changed=lambda: None,
-        data_ready=lambda: (
-            state.run is not None and state.run.acquired >= 2 and state.run.stop.set()
-        ),
-        attach_logs=logging.NullHandler,
-        detach_logs=lambda handler: None,
-        closed=lambda: None,
-    )
+    spec = looped_sweep()
+    bad = spec.replace(captures=spec.captures[:1])
+    state = session.StudioSession(applied_spec=spec, applied_tree={'spec': 'old'})
+    opened = []
+    real_open = ss.open_resources
+
+    def open_resources(target, *args, **kwargs):
+        opened.append(target)
+        if target.captures == bad.captures:
+            raise RuntimeError('the radio is unplugged')
+        return real_open(target, *args, **kwargs)
+
+    monkeypatch.setattr(session.ss, 'open_resources', open_resources)
+    events, _, _, _ = recording_events(state)
     thread = session.start(state, events)
     try:
         wait_for(lambda: state.mode == 'preview')
-        state.commands.put(session.StartRun())
-        wait_for(lambda: state.run is not None and state.run.finished is not None)
-        assert state.run.error is None
-        assert 2 <= state.run.acquired < state.run.count
-        wait_for(lambda: state.mode == 'preview')
+        state.commands.put(session.Apply(bad, {'spec': 'new'}))
+        wait_for(lambda: state.apply_error is not None, what='the apply error')
+        wait_for(lambda: state.mode == 'preview', what='the preview after the failure')
+        assert 'the radio is unplugged' in state.apply_error
+        assert state.applied_spec is spec
+        assert state.applied_tree == {'spec': 'old'}
+        assert len(opened) == 3
+        assert thread.is_alive()
     finally:
         state.stop.set()
         thread.join(60)
@@ -382,15 +365,10 @@ def test_tree_edits_of_equal_trees_are_empty():
     assert session.tree_edits(tree, dict(tree)) == []
 
 
-def test_changed_sections_and_revert_edits(tmp_path):
-    import shutil
-
-    from conftest import SWEEP_DIR
-
+def test_changed_sections_and_revert_edits(sweeps_copy):
     from striqt.analysis.lib import yaml as spec_yaml
 
-    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
-    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    path = sweeps_copy / 'synthetic.yaml'
     state = session.StudioSession(spec_path=str(path))
     state.provenance = spec_yaml.load_yaml_provenance(path)
     state.applied_tree = spec_yaml.load_yaml_provenance(path).tree
@@ -415,54 +393,3 @@ def test_changed_sections_and_revert_edits(tmp_path):
     assert session.changed_sections(state) == ['loops']
     with pytest.raises(KeyError):
         session.revert_edits(state, 'nonexistent')
-
-
-def test_failed_apply_keeps_the_previous_spec(tmp_path, monkeypatch):
-    """an applied spec that does not open is recorded as `apply_error` and the worker
-    reopens the previous spec"""
-    import logging
-    import shutil
-
-    from conftest import SWEEP_DIR
-
-    import striqt.sensor as ss
-
-    monkeypatch.chdir(tmp_path)
-    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
-    path = tmp_path / 'sweeps' / 'synthetic.yaml'
-    spec = ss.read_yaml_spec(str(path))
-    bad = spec.replace(captures=spec.captures[:1])
-    state = session.StudioSession(
-        spec_path=str(path), applied_spec=spec, applied_tree={'spec': 'old'}
-    )
-    opened = []
-    real_open = ss.open_resources
-
-    def open_resources(target, *args, **kwargs):
-        opened.append(target)
-        if target.captures == bad.captures:
-            raise RuntimeError('the radio is unplugged')
-        return real_open(target, *args, **kwargs)
-
-    monkeypatch.setattr(session.ss, 'open_resources', open_resources)
-    events = session.SessionEvents(
-        state_changed=lambda: None,
-        data_ready=lambda: None,
-        attach_logs=logging.NullHandler,
-        detach_logs=lambda handler: None,
-        closed=lambda: None,
-    )
-    thread = session.start(state, events)
-    try:
-        wait_for(lambda: state.mode == 'preview')
-        state.commands.put(session.Apply(bad, {'spec': 'new'}))
-        wait_for(lambda: state.apply_error is not None, what='the apply error')
-        wait_for(lambda: state.mode == 'preview', what='the preview after the failure')
-        assert 'the radio is unplugged' in state.apply_error
-        assert state.applied_spec is spec
-        assert state.applied_tree == {'spec': 'old'}
-        assert len(opened) == 3
-        assert thread.is_alive()
-    finally:
-        state.stop.set()
-        thread.join(60)

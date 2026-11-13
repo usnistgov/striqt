@@ -374,6 +374,15 @@ def iq_waveforms(
 SWEEP_DIR = Path(__file__).parent / 'sensor' / 'sweeps'
 
 
+@pytest.fixture
+def sweeps_copy(tmp_path) -> Path:
+    """a copy of the fixture sweep tree under `tmp_path`, for tests that edit or write
+    beside a spec file"""
+    dest = tmp_path / 'sweeps'
+    shutil.copytree(SWEEP_DIR, dest, ignore=shutil.ignore_patterns('__pycache__'))
+    return dest.resolve()
+
+
 @pytest.fixture(scope='session')
 def synthetic_spec_path() -> Path:
     return SWEEP_DIR / 'synthetic.yaml'

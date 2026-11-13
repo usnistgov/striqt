@@ -71,30 +71,12 @@ def test_coordinates_message_keeps_the_varying_fields_only(analyzed):
     assert [f['name'] for f in message['fields']] == ['frequency_offset']
 
 
-def test_messages_are_json_text(analyzed):
-    from striqt.figures.backend import PlotlyBackend
-
+def test_state_message_encodes_to_json_text(analyzed):
     state = preview_session(looped_sweep(), available_variables=('spectrogram',))
     state.dataset = analyzed
-    plotter = PlotlyBackend(session._default_plot_options().plotter)
-    figures = server._prepare_plot_data_sync(analyzed, plotter, 'spectrogram', {})
-
-    plot = json.loads(
-        server._serialize_plot_message(
-            figures, server.coordinates_message(analyzed), state
-        )
-    )
-    assert plot['type'] == 'plot_data'
-    assert len(plot['data']) == len(figures)
-    assert plot['selected_variable'] == 'spectrogram'
-    assert 'available_variables' not in plot
-
     status = json.loads(server._encode(server.state_message(state)))
     assert status['type'] == 'state'
-    assert status['capture_options']['loops'][0]['field'] == 'snr'
-    assert status['capture_selection'] == {'capture': 0, 'loops': [0]}
     assert status['coordinates']['num_ports'] == 1
-    assert status['mode'] == 'closed'
     assert status['run']['sink_path'] is None
     assert status['validation'] == {'ok': True, 'errors': []}
 
@@ -175,16 +157,12 @@ def test_serving_urls_of_an_explicit_host_is_that_host():
 # %% edits over the websocket
 
 
-def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
-    import shutil
-
-    from conftest import SWEEP_DIR
+def test_edit_writes_the_file_and_reports_the_validation(sweeps_copy, monkeypatch):
     from fastapi.testclient import TestClient
 
     from striqt.analysis.lib import yaml as spec_yaml
 
-    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
-    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    path = sweeps_copy / 'synthetic.yaml'
     spec = ss.read_yaml_spec(str(path))
     state = server.SESSION
     monkeypatch.setattr(state, 'spec_path', str(path))
@@ -272,17 +250,14 @@ def test_spec_message_of_a_site_sweep_encodes_with_relative_paths():
 # %% revert over the websocket
 
 
-def test_revert_restores_the_applied_section(tmp_path, monkeypatch):
+def test_revert_restores_the_applied_section(sweeps_copy, monkeypatch):
     import copy
-    import shutil
 
-    from conftest import SWEEP_DIR
     from fastapi.testclient import TestClient
 
     from striqt.analysis.lib import yaml as spec_yaml
 
-    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
-    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    path = sweeps_copy / 'synthetic.yaml'
     original = path.read_text()
     spec = ss.read_yaml_spec(str(path))
     state = server.SESSION

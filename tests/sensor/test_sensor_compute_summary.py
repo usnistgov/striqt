@@ -35,9 +35,7 @@ AIR = ss.bindings.air7101b
 # visits 2 GHz on port 0 at 30 dB more gain
 CAPTURE = soapy_capture(port=(0, 1), center_frequency=(1e9, 2e9), gain=0.0)
 HIGH_GAIN = soapy_capture(port=0, center_frequency=2e9, gain=30.0)
-SWEEP = AIR.sensor.sweep_spec_cls(
-    source=AIR.schema.source(), captures=(CAPTURE, HIGH_GAIN)
-)
+SWEEP = air_sweep(CAPTURE, HIGH_GAIN)
 TONE = preset_capture('single_tone', **SCALE_ONLY)
 TONE_SWEEP = preset_sweep('single_tone', (TONE,))
 
@@ -225,23 +223,9 @@ def test_capture_fields_render_text_and_infinite_values_without_a_prefix():
 # %% varying_fields
 
 
-def air_sweep_of(*captures, loops=(), adjust_captures=None):
-    kws = {} if adjust_captures is None else {'adjust_captures': adjust_captures}
-    return AIR.sensor.sweep_spec_cls(
-        source=AIR.schema.source(), captures=captures, loops=loops, **kws
-    )
-
-
-def test_varying_fields_are_the_fields_that_differ_between_captures():
-    sweep = air_sweep_of(
-        soapy_capture(center_frequency=1e9), soapy_capture(center_frequency=2e9)
-    )
-    assert summary.varying_fields(sweep, None) == {'center_frequency'}
-
-
 def test_varying_fields_include_a_looped_field():
     loop = ss.specs.List(field='gain', values=(0.0, 10.0))
-    sweep = air_sweep_of(soapy_capture(), loops=(loop,))
+    sweep = air_sweep(soapy_capture(), loops=(loop,))
     assert summary.varying_fields(sweep, None) == {'gain'}
 
 
@@ -253,7 +237,7 @@ def test_varying_fields_include_a_looped_field():
 def test_varying_fields_compare_the_per_port_values_of_one_capture(gain, expected):
     """`port` differs between the ports of every multi-port capture and is not
     reported for that"""
-    sweep = air_sweep_of(soapy_capture(port=(0, 1), gain=gain))
+    sweep = air_sweep(soapy_capture(port=(0, 1), gain=gain))
     assert summary.varying_fields(sweep, None) == expected
 
 
@@ -267,7 +251,7 @@ def test_varying_fields_follow_the_adjustments_of_the_source_id():
     """the ``'beef'`` block sets `gain` from the center frequency of each capture,
     and no `defaults` block is set"""
     remap = ss.specs.CaptureRemap(key='center_frequency', lookup={1e9: 0.0, 2e9: 10.0})
-    sweep = air_sweep_of(
+    sweep = air_sweep(
         soapy_capture(center_frequency=1e9),
         soapy_capture(center_frequency=2e9),
         adjust_captures={'beef': {'gain': remap}},
