@@ -52,7 +52,9 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
         """
         ...
 
-    def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
+    def open_sink(
+        self, format_path: specs.paths.PathFormatter | None, *, force: bool = False
+    ) -> SinkBase[SC]:
         """return the sink for `sweep`, not yet entered.
 
         A ``sweep.sink.path`` of None selects a sink that writes nothing.
@@ -60,6 +62,7 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
         Args:
             format_path: the formatter of the ``{field}`` templates in the sink path,
                 or None to use the path as written
+            force: True removes a store already at the sink path before opening
         """
         ...
 

@@ -35,6 +35,18 @@ def test_build_sweep_is_the_spec_itself():
         assert isinstance(res['runner'], SweepRunner)
 
 
+def test_open_sink_forwards_force_to_the_zarr_sink(monkeypatch):
+    lookup = ss.lib.controller.lookup
+    monkeypatch.setattr(lookup, 'id', lambda spec, timeout=0.5: 'beef')
+    monkeypatch.setattr(lookup, 'power_units', lambda spec, timeout=0.5: 'FS')
+    runner = SweepRunner(tone_sweep(OFFSETS, sink=ss.specs.Sink(path='out.zarr')))
+
+    assert runner.open_sink(None).force is False
+    forced = runner.open_sink(None, force=True)
+    assert isinstance(forced, ss.sinks.ZarrCaptureSink)
+    assert forced.force is True
+
+
 # %% iterate_sweep dispatch
 
 

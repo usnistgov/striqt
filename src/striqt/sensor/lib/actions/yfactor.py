@@ -410,8 +410,15 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
         """
         return build_calibration_sweep(self.spec)
 
-    def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        """return a `MemoryCacheSink` that collects the captures of every pass."""
+    def open_sink(
+        self, format_path: specs.paths.PathFormatter | None, *, force: bool = False
+    ) -> SinkBase[SC]:
+        """return a `MemoryCacheSink` that collects the captures of every pass.
+
+        Args:
+            format_path: unused; the corrections path is formatted at save time
+            force: unused; the in-memory sink has no store to remove
+        """
         return MemoryCacheSink(self.sweep)
 
     def iterate(
