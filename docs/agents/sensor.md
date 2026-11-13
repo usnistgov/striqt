@@ -260,7 +260,7 @@ files. The resources open with `sink.path` None, so a store is written only by a
 `select_plan` filters the expanded plan by them; `compute/summary.py:varying_fields`
 names the capture fields the sidebar table keeps; `specs/schema.py:spec_schema` describes
 the spec class for the grid editor. The page writes each edit into the owning YAML file
-through `analysis/lib/io.py:apply_yaml_edits`, and `read_yaml_spec` decodes the files
+through `analysis/lib/yaml.py:apply_yaml_edits`, and `read_yaml_spec` decodes the files
 after each edit to report the validation errors.
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in

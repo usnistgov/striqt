@@ -334,17 +334,18 @@ async def handle_edit(websocket: WebSocket, msg: dict[str, Any]) -> None:
         websocket: the client that sent the message
         msg: ``{'edits': [{'pointer', 'op', 'value_text'}, ...]}``
     """
-    from striqt.analysis.lib import io
+    from striqt.analysis.lib import yaml as spec_yaml
 
     prov = SESSION.provenance
     if prov is None:
         await _error(websocket, 'a JSON spec is not editable in the page', 'edit')
         return
     edits = [
-        io.YAMLEdit(e['pointer'], e['op'], e.get('value_text')) for e in msg['edits']
+        spec_yaml.YAMLEdit(e['pointer'], e['op'], e.get('value_text'))
+        for e in msg['edits']
     ]
     try:
-        await asyncio.to_thread(io.apply_yaml_edits, prov, edits)
+        await asyncio.to_thread(spec_yaml.apply_yaml_edits, prov, edits)
     except (KeyError, ValueError) as ex:
         await _error(websocket, f'{type(ex).__name__}: {ex}', 'edit')
         return
@@ -360,7 +361,7 @@ async def handle_revert(websocket: WebSocket, msg: dict[str, Any]) -> None:
         websocket: the client that sent the message
         msg: ``{'section': <top-level key>}``
     """
-    from striqt.analysis.lib import io
+    from striqt.analysis.lib import yaml as spec_yaml
 
     prov = SESSION.provenance
     if prov is None or SESSION.applied_tree is None:
@@ -369,7 +370,7 @@ async def handle_revert(websocket: WebSocket, msg: dict[str, Any]) -> None:
     try:
         edits = session_.revert_edits(SESSION, str(msg['section']))
         if edits:
-            await asyncio.to_thread(io.apply_yaml_edits, prov, edits)
+            await asyncio.to_thread(spec_yaml.apply_yaml_edits, prov, edits)
     except (KeyError, ValueError, TypeError) as ex:
         await _error(websocket, f'{type(ex).__name__}: {ex}', 'revert')
         return
@@ -380,11 +381,11 @@ async def handle_revert(websocket: WebSocket, msg: dict[str, Any]) -> None:
 
 async def reload_spec_files() -> None:
     """load the provenance of the spec files again and decode the files."""
-    from striqt.analysis.lib import io
+    from striqt.analysis.lib import yaml as spec_yaml
 
     try:
         SESSION.provenance = await asyncio.to_thread(
-            io.load_yaml_provenance, SESSION.spec_path
+            spec_yaml.load_yaml_provenance, SESSION.spec_path
         )
     except Exception as ex:
         SESSION.validation_errors = [
@@ -717,9 +718,9 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     SESSION.applied_spec = spec
     SESSION.edited_spec = spec
     if SESSION.spec_path.endswith(('.yaml', '.yml')):
-        from striqt.analysis.lib import io
+        from striqt.analysis.lib import yaml as spec_yaml
 
-        SESSION.provenance = io.load_yaml_provenance(SESSION.spec_path)
+        SESSION.provenance = spec_yaml.load_yaml_provenance(SESSION.spec_path)
         SESSION.applied_tree = copy.deepcopy(SESSION.provenance.tree)
 
     loop = asyncio.new_event_loop()

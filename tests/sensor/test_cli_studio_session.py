@@ -385,31 +385,31 @@ def test_changed_sections_and_revert_edits(tmp_path):
 
     from conftest import SWEEP_DIR
 
-    from striqt.analysis.lib import io
+    from striqt.analysis.lib import yaml as spec_yaml
 
     shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
     path = tmp_path / 'sweeps' / 'synthetic.yaml'
     state = session.StudioSession(spec_path=str(path))
-    state.provenance = io.load_yaml_provenance(path)
-    state.applied_tree = io.load_yaml_provenance(path).tree
+    state.provenance = spec_yaml.load_yaml_provenance(path)
+    state.applied_tree = spec_yaml.load_yaml_provenance(path).tree
     assert session.changed_sections(state) == []
 
-    io.apply_yaml_edits(
+    spec_yaml.apply_yaml_edits(
         state.provenance,
         [
-            io.YAMLEdit('/captures/0/snr', 'set', '70'),
-            io.YAMLEdit('/loops/0/count', 'set', '3'),
+            spec_yaml.YAMLEdit('/captures/0/snr', 'set', '70'),
+            spec_yaml.YAMLEdit('/loops/0/count', 'set', '3'),
         ],
     )
-    state.provenance = io.load_yaml_provenance(path)
+    state.provenance = spec_yaml.load_yaml_provenance(path)
     assert session.changed_sections(state) == ['captures', 'loops']
 
     edits = session.revert_edits(state, 'captures')
     assert [(e.pointer, e.op, e.value_text) for e in edits] == [
         ('/captures/0/snr', 'set', '80')
     ]
-    io.apply_yaml_edits(state.provenance, edits)
-    state.provenance = io.load_yaml_provenance(path)
+    spec_yaml.apply_yaml_edits(state.provenance, edits)
+    state.provenance = spec_yaml.load_yaml_provenance(path)
     assert session.changed_sections(state) == ['loops']
     with pytest.raises(KeyError):
         session.revert_edits(state, 'nonexistent')

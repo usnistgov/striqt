@@ -189,7 +189,7 @@ def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
     from conftest import SWEEP_DIR
     from fastapi.testclient import TestClient
 
-    from striqt.analysis.lib import io
+    from striqt.analysis.lib import yaml as spec_yaml
 
     shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
     path = tmp_path / 'sweeps' / 'synthetic.yaml'
@@ -198,7 +198,7 @@ def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
     monkeypatch.setattr(state, 'spec_path', str(path))
     monkeypatch.setattr(state, 'applied_spec', spec)
     monkeypatch.setattr(state, 'edited_spec', spec)
-    monkeypatch.setattr(state, 'provenance', io.load_yaml_provenance(path))
+    monkeypatch.setattr(state, 'provenance', spec_yaml.load_yaml_provenance(path))
     monkeypatch.setattr(state, 'validation_errors', [])
     monkeypatch.setattr(server.CLIENTS, 'websockets', set())
 
@@ -251,11 +251,11 @@ def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
 def test_spec_message_of_a_site_sweep_encodes_with_relative_paths():
     from conftest import SITE_DIR
 
-    from striqt.analysis.lib import io
+    from striqt.analysis.lib import yaml as spec_yaml
 
     path = SITE_DIR / 'site-cpu.yaml'
     state = session.StudioSession(spec_path=str(path))
-    state.provenance = io.load_yaml_provenance(path)
+    state.provenance = spec_yaml.load_yaml_provenance(path)
 
     message = json.loads(server._encode(server.spec_message(state)))
 
@@ -287,7 +287,7 @@ def test_revert_restores_the_applied_section(tmp_path, monkeypatch):
     from conftest import SWEEP_DIR
     from fastapi.testclient import TestClient
 
-    from striqt.analysis.lib import io
+    from striqt.analysis.lib import yaml as spec_yaml
 
     shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
     path = tmp_path / 'sweeps' / 'synthetic.yaml'
@@ -297,7 +297,7 @@ def test_revert_restores_the_applied_section(tmp_path, monkeypatch):
     monkeypatch.setattr(state, 'spec_path', str(path))
     monkeypatch.setattr(state, 'applied_spec', spec)
     monkeypatch.setattr(state, 'edited_spec', spec)
-    monkeypatch.setattr(state, 'provenance', io.load_yaml_provenance(path))
+    monkeypatch.setattr(state, 'provenance', spec_yaml.load_yaml_provenance(path))
     monkeypatch.setattr(state, 'applied_tree', copy.deepcopy(state.provenance.tree))
     monkeypatch.setattr(state, 'validation_errors', [])
     monkeypatch.setattr(server.CLIENTS, 'websockets', set())

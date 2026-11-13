@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     import striqt.figures as sf
-    from striqt.analysis.lib.io import ProvenanceTree
+    from striqt.analysis.lib.yaml import ProvenanceTree
     from striqt.figures.backend import PlotlyBackend
     from striqt.sensor.lib.resources import Resources
     from striqt.sensor.specs.sequencing import PlanChoices
@@ -715,7 +715,7 @@ def tree_edits(current: Any, target: Any, pointer: str = '') -> list[Any]:
         `YAMLEdit` instances in application order: deletions of keys absent from
         `target`, then sets
     """
-    from striqt.analysis.lib.io import YAMLEdit
+    from striqt.analysis.lib.yaml import YAMLEdit
 
     if isinstance(current, dict) and isinstance(target, dict):
         edits: list[Any] = [
@@ -765,7 +765,7 @@ def revert_edits(session: StudioSession, section: str) -> list[Any]:
     Raises:
         KeyError: if `section` is a key of neither tree
     """
-    from striqt.analysis.lib.io import YAMLEdit
+    from striqt.analysis.lib.yaml import YAMLEdit
 
     prov = session.provenance
     assert prov is not None and session.applied_tree is not None

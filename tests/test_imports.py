@@ -15,7 +15,7 @@ LAZY_IMPORT_CHECK = textwrap.dedent(
     import striqt.sensor
 
     # zarr is not checked because some pytest plugins reify it
-    names = ('scipy', 'xarray', 'pandas', 'dask', 'dask.array')
+    names = ('scipy', 'xarray', 'pandas', 'ruamel.yaml', 'dask', 'dask.array')
     print(json.dumps({n: repr(type(sys.modules.get(n))) if n in sys.modules else None for n in names}))
     """
 )
@@ -65,7 +65,7 @@ def assert_absent(subtests, types: dict, names):
 
 def test_lazy_import(subtests):
     types = module_types_in_fresh_interpreter(LAZY_IMPORT_CHECK)
-    assert_lazy(subtests, types, ('scipy', 'xarray', 'pandas'))
+    assert_lazy(subtests, types, ('scipy', 'xarray', 'pandas', 'ruamel.yaml'))
     assert_absent(subtests, types, ('dask', 'dask.array'))
 
 
