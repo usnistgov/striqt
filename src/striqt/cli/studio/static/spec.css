@@ -1,0 +1,453 @@
+/* the Spec tab: the section list, the toolbar, and the grid editor */
+
+/* one color per spec file, keyed by the index in the `files` list of the spec message */
+.spec-editor [data-file] { --file-color: #888; }
+.spec-editor [data-file="0"] { --file-color: #60a5fa; }
+.spec-editor [data-file="1"] { --file-color: #f472b6; }
+.spec-editor [data-file="2"] { --file-color: #facc15; }
+.spec-editor [data-file="3"] { --file-color: #34d399; }
+.spec-editor [data-file="4"] { --file-color: #fb923c; }
+.spec-editor [data-file="5"] { --file-color: #a78bfa; }
+.spec-editor [data-file="6"] { --file-color: #22d3ee; }
+.spec-editor [data-file="7"] { --file-color: #f87171; }
+
+.spec-nav {
+    width: 200px;
+    flex-shrink: 0;
+    height: 100%;
+    background: #16213e;
+    border-radius: 8px;
+    padding: 0.75rem 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.spec-nav-title {
+    padding: 0.25rem 1rem 0.75rem;
+    margin-bottom: 0.5rem;
+    color: #4ade80;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-bottom: 1px solid #0f3460;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.spec-nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    background: transparent;
+    border: none;
+    border-left: 3px solid transparent;
+    color: #aaa;
+    text-align: left;
+    padding: 0.45rem 1rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.spec-nav-item:hover {
+    background: #0f3460;
+    color: #eee;
+}
+.spec-nav-item.active {
+    color: #eee;
+    background: #1a1a2e;
+    border-left-color: #e94560;
+}
+.spec-nav-item.read-only {
+    color: #666;
+}
+.spec-nav-item.invalid {
+    color: #e94560;
+}
+.lock-glyph {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.spec-editor {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.spec-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    background: #16213e;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+}
+.spec-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+    color: #aaa;
+}
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 24rem;
+}
+.legend-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+}
+.swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    background: var(--file-color, #888);
+}
+.spec-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: auto;
+}
+.spec-actions .note, .spec-body .note {
+    color: #fbbf24;
+    font-size: 0.8rem;
+}
+.badge.differs {
+    color: #fbbf24;
+    font-size: 0.8rem;
+}
+.apply-button {
+    font-size: 0.85rem;
+    background: #0f3460;
+    color: #eee;
+    border: 1px solid #1a1a2e;
+    padding: 0.45rem 0.9rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.apply-button:hover:not(:disabled) {
+    border-color: #4ade80;
+}
+.apply-button:disabled {
+    color: #777;
+    cursor: default;
+}
+
+.spec-messages {
+    background: rgba(233, 69, 96, 0.12);
+    border: 1px solid #e94560;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+    color: #eee;
+    max-height: 8rem;
+    overflow: auto;
+}
+.spec-messages[hidden] {
+    display: none;
+}
+.spec-messages .message {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.spec-messages .message + .message {
+    margin-top: 0.3rem;
+    padding-top: 0.3rem;
+    border-top: 1px solid rgba(233, 69, 96, 0.4);
+}
+
+/* a fieldset so that `disabled` reaches every control of a read-only spec */
+.spec-body {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+    background: #16213e;
+    border-radius: 8px;
+    border: none;
+    margin: 0;
+    padding: 1rem;
+}
+.spec-body:disabled {
+    opacity: 0.8;
+}
+.spec-body .placeholder {
+    color: #666;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+}
+
+.section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    padding: 0.3rem 0.6rem;
+    border-left: 3px solid transparent;
+}
+.section-header[data-file] {
+    border-left-color: var(--file-color);
+}
+.section-header h2 {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #4ade80;
+}
+.section-header.invalid h2 {
+    color: #e94560;
+}
+.muted {
+    color: #888;
+    font-size: 0.8rem;
+}
+
+.spec-grid {
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+}
+.spec-grid th, .spec-grid td {
+    border: 1px solid #0f3460;
+    padding: 0.25rem 0.4rem;
+    vertical-align: top;
+    text-align: left;
+}
+.spec-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #16213e;
+}
+.spec-grid th.group-label {
+    width: 1.6rem;
+    padding: 0.4rem 0.2rem;
+    background: #0f3460;
+    color: #4ade80;
+    font-weight: 500;
+    text-align: center;
+    vertical-align: middle;
+}
+.spec-grid .vertical {
+    display: inline-block;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    white-space: nowrap;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+}
+.spec-grid th.field-name {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-weight: 400;
+    color: #aaa;
+    white-space: nowrap;
+    min-width: 10rem;
+    vertical-align: middle;
+}
+.spec-grid th.field-name.required::after {
+    content: ' *';
+    color: #e94560;
+}
+.spec-grid .units {
+    color: #888;
+    font-style: italic;
+    font-size: 0.75rem;
+    margin-left: 0.4rem;
+}
+.spec-grid th.column-head {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-weight: 500;
+    color: #eee;
+    white-space: nowrap;
+}
+.spec-grid th.column-head .column-label {
+    margin-right: 0.4rem;
+}
+.spec-grid th.column-add, .spec-grid td.column-add {
+    border-color: transparent;
+    background: transparent;
+    text-align: center;
+}
+.spec-grid td.value {
+    min-width: 8rem;
+}
+.spec-grid td.value, .spec-grid td.container, .spec-grid th.column-head {
+    border-left: 3px solid #0f3460;
+}
+.spec-grid td[data-file], .spec-grid th.column-head[data-file] {
+    border-left-color: var(--file-color);
+}
+.spec-grid td.default input, .spec-grid td.default select {
+    color: #777;
+    font-style: italic;
+}
+.spec-grid td.invalid, .spec-grid th.invalid {
+    background: rgba(233, 69, 96, 0.18);
+    outline: 1px solid #e94560;
+    outline-offset: -1px;
+}
+.spec-grid td.review {
+    background: rgba(251, 191, 36, 0.18);
+}
+.spec-grid td.read-only {
+    color: #aaa;
+}
+.spec-grid input[type=text], .spec-grid select {
+    width: 100%;
+    min-width: 6rem;
+    background: #1a1a2e;
+    color: #eee;
+    border: 1px solid #1a1a2e;
+    border-radius: 3px;
+    padding: 0.25rem 0.4rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+}
+.spec-grid select {
+    cursor: pointer;
+}
+.spec-grid input[type=text]:focus, .spec-grid select:focus {
+    outline: none;
+    border-color: #e94560;
+}
+.spec-grid input[type=text]:hover, .spec-grid select:hover {
+    border-color: #0f3460;
+}
+.spec-grid input:disabled, .spec-grid select:disabled {
+    color: #888;
+    cursor: default;
+}
+.spec-grid pre.opaque, .spec-section > pre.opaque {
+    margin: 0;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    color: #aaa;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-width: 40rem;
+    max-height: 14rem;
+    overflow: auto;
+}
+.spec-section > pre.opaque {
+    max-width: none;
+    max-height: none;
+    padding: 0.5rem 0.75rem;
+    background: #1a1a2e;
+    border-radius: 4px;
+}
+
+.per-port {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.3rem;
+}
+.per-port-values {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+.per-port-row {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.port-label {
+    width: 1.4rem;
+    flex-shrink: 0;
+    color: #888;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.7rem;
+}
+
+.icon-button {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    color: #aaa;
+    cursor: pointer;
+    padding: 0 0.3rem;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+.icon-button:hover:not(:disabled) {
+    border-color: #e94560;
+    color: #eee;
+}
+.icon-button:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+.icon-button.remove {
+    color: #e94560;
+}
+.icon-button.add {
+    color: #4ade80;
+    font-weight: 600;
+}
+.icon-button.lock {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.1rem;
+}
+
+.entry, .measurement {
+    margin-bottom: 1rem;
+}
+.entry-header, .measurement-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.3rem 0.6rem;
+    margin-bottom: 0.4rem;
+    border-left: 3px solid transparent;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    color: #eee;
+}
+.entry-header[data-file], .measurement-toggle[data-file] {
+    border-left-color: var(--file-color);
+}
+.entry-header.invalid, .measurement-toggle.invalid {
+    background: rgba(233, 69, 96, 0.18);
+}
+.entry-header select {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+.measurement-toggle {
+    display: inline-flex;
+    cursor: pointer;
+}
+.measurement-toggle input {
+    accent-color: #e94560;
+    cursor: pointer;
+}
+.add-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+.add-row input[type=text] {
+    background: #1a1a2e;
+    color: #eee;
+    border: 1px solid #0f3460;
+    border-radius: 3px;
+    padding: 0.25rem 0.4rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+}
