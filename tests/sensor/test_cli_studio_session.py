@@ -255,6 +255,8 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
         closed=closed.set,
     )
 
+    outputs = tmp_path / 'sweeps' / 'outputs'
+    before = set(outputs.glob('*.zarr.zip')) if outputs.exists() else set()
     thread = session.start(state, events)
     try:
         wait_for(lambda: state.mode == 'preview', what='the preview')
@@ -275,7 +277,7 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
             spec, state.source_id
         )
         assert run.acquired == run.count
-        stores = list((tmp_path / 'sweeps' / 'outputs').glob('*.zarr.zip'))
+        stores = set(outputs.glob('*.zarr.zip')) - before
         assert len(stores) == 1
         # the run analyzes the whole group
         run_sets = [set(dd.delayed) for mode, dd in datasets if mode == 'running']
