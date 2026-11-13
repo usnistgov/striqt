@@ -13,18 +13,19 @@ import contextlib
 import itertools
 import threading
 from collections.abc import Generator, Iterable, Mapping, Sized
+from pathlib import Path
 from queue import Empty
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Optional, Protocol
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import pd, xr
 
 from ... import specs
-from .. import compute, util
+from .. import compute, io, util
 from ..compute import corrections
 from ..controller import AcquisitionQueue
 from ..resources import AnyResources, Resources
-from ..sinks import SinkBase
+from ..sinks import NoSink, SinkBase, ZarrCaptureSink
 from ..typing import PC, PS, SA, SC, SP, SS, TA, Unpack
 
 if TYPE_CHECKING:
@@ -52,7 +53,9 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
         """
         ...
 
-    def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
+    def open_sink(
+        self, format_path: specs.paths.PathFormatter | None, *, force: bool = False
+    ) -> SinkBase[SC]:
         """return the sink for `sweep`, not yet entered.
 
         A ``sweep.sink.path`` of None selects a sink that writes nothing.
@@ -60,6 +63,7 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
         Args:
             format_path: the formatter of the ``{field}`` templates in the sink path,
                 or None to use the path as written
+            force: True removes a store already at the sink path before opening
         """
         ...
 
@@ -95,6 +99,71 @@ class ActionRunner(Protocol[TA, SS, SP, SC, SA, PS, PC]):
             ValueError: if `captures` is given with `loop` True
         """
         ...
+
+
+def open_capture_sink(
+    sweep: specs.Sweep[SS, SP, SC, SA],
+    action_spec: specs.ActionSpec[Any, SP, SA],
+    format_path: specs.paths.PathFormatter | None,
+    *,
+    force: bool = False,
+) -> SinkBase[SC]:
+    """return a `ZarrCaptureSink` at ``sweep.sink.path``, or a `NoSink` for a None
+    path, not yet entered.
+
+    Args:
+        sweep: the sweep with the `sink` block that the sink reads
+        action_spec: the spec written into the attrs of the store
+        format_path: the formatter of the ``{field}`` templates in the sink path, or
+            None to use the path as written
+        force: True removes a store already at the sink path before opening
+    """
+    if sweep.sink.path is None:
+        return NoSink(sweep)
+    return ZarrCaptureSink(sweep, format_path, force=force, action_spec=action_spec)
+
+
+def output_path(
+    spec: specs.ActionSpec[Any, Any, Any],
+    format_path: specs.paths.PathFormatter | None,
+    *,
+    root: Path | None = None,
+) -> Optional[str]:
+    """return the path that a run of `spec` writes, or None when ``spec.sink.path`` is
+    None.
+
+    A `ManualYFactorCalibration` writes the netCDF corrections file at
+    `corrections_path`; a spec with a `ZarrSink` writes the store at
+    `resolve_store_path`; any other spec writes ``sink.path`` formatted. A template
+    that `format_path` cannot fill is returned as written.
+
+    Args:
+        spec: the action spec
+        format_path: the formatter of the ``{field}`` templates in the sink path, or
+            None to use the path as written
+        root: the directory against which a relative result is resolved, or None to
+            return the relative path
+    """
+    from . import yfactor
+
+    if spec.sink.path is None:
+        return None
+
+    result: str = spec.sink.path
+    try:
+        if isinstance(spec, specs.ManualYFactorCalibration):
+            runner = yfactor.ManualYFactorRunner(spec)
+            result = str(yfactor.corrections_path(runner.sweep, format_path))
+        elif isinstance(spec.sink, specs.ZarrSink):
+            result = str(io.resolve_store_path(spec.sink, format_path=format_path))
+        elif format_path is not None:
+            result = format_path(result)
+    except (KeyError, ValueError):
+        result = spec.sink.path
+
+    if root is not None and not Path(result).is_absolute():
+        result = str(Path(root) / result)
+    return result
 
 
 def iterate_sweep(

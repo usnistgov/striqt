@@ -11,6 +11,7 @@ else:
     tomllib = None
 
 PYPROJECT = Path(__file__).parent.parent / 'pyproject.toml'
+CLI_DIR = Path(__file__).parent.parent / 'src' / 'striqt' / 'cli'
 
 
 def console_script_targets() -> list[str]:
@@ -21,14 +22,20 @@ def console_script_targets() -> list[str]:
     return sorted(scripts.values())
 
 
+def cli_modules() -> set[str]:
+    """return the qualified name of each module and package under `striqt.cli`"""
+    names = {p.stem for p in CLI_DIR.glob('*.py') if p.stem != '__init__'}
+    names |= {p.parent.name for p in CLI_DIR.glob('*/__init__.py')}
+    return {f'striqt.cli.{name}' for name in names}
+
+
 # %% cli
 
 
 @pytest.mark.skipif(tomllib is None, reason='tomllib requires python >= 3.11')
 def test_console_scripts_are_listed() -> None:
     targets = console_script_targets()
-    assert len(targets) >= 8, targets
-    assert all(t.startswith('striqt.cli.') for t in targets), targets
+    assert {t.split(':')[0] for t in targets} == cli_modules()
 
 
 @pytest.mark.parametrize('target', console_script_targets())

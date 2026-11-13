@@ -447,7 +447,7 @@ class ZarrCaptureSink(ZarrSinkBase):
         super().open()
         # a zip entry cannot be rewritten, so the metadata of a zip store is written
         # at close
-        self._flush_each = not self.get_root_path().lower().endswith('.zip')
+        self._flush_each = not sa.lib.io.is_zip_store(self.get_root_path())
         self.store = stores.staged_metadata_store(self.store)
 
         if self._spec.max_threads is not None:
@@ -704,7 +704,7 @@ class ZarrTimeAppendSink(ZarrSinkBase):
             raise ValueError(
                 '"analysis" spec must include "spectrogram" to append on spectrogram time axis'
             )
-        if sweep_spec.sink.store == 'zip' or str(sweep_spec.sink.path).endswith('.zip'):
+        if sa.lib.io.is_zip_store(io.resolve_store_path(sweep_spec.sink).name):
             raise ValueError('ZarrTimeAppendSink writes directory stores only')
 
         super().__init__(sweep_spec, format_path, force=force)

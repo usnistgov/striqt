@@ -45,24 +45,16 @@ if TYPE_CHECKING:
     from typing_extensions import Self as _Self
 
 
-@sa.util.lru_cache()
-def _validate_multichannel(port, gain):
-    """ensure self.gain is a number or matches len(self.port)"""
-    if not isinstance(port, tuple):
-        if isinstance(gain, tuple):
-            raise ValueError(
-                'gain must be a single number unless multiple ports are specified'
-            )
-    else:
-        if isinstance(gain, tuple) and len(gain) != len(port):
-            raise ValueError('gain, when specified as a tuple, must match port count')
-
-
 # %% Capture specs
 
 
 class SensorCapture(Capture, frozen=True, kw_only=True):
-    """Capture specification for a generic waveform with resampling support"""
+    """Capture specification for a generic waveform with resampling support.
+
+    Construction rejects a `port` tuple with a repeated index, a tuple in a `PerPort`
+    field when `port` is a scalar, and a tuple in a `PerPort` field with a length
+    other than the port count.
+    """
 
     # acquisition
     port: types.Port
@@ -73,20 +65,18 @@ class SensorCapture(Capture, frozen=True, kw_only=True):
     external_lo_frequency: types.LOFrequency = None
     burst: types.BurstCount = 1
 
+    def __post_init__(self):
+        from . import captures
+
+        super().__post_init__()
+        captures.validate_ports(self)
+
 
 class SoapyCapture(SensorCapture, frozen=True, kw_only=True):
-    """the capture of a SoapySDR source: a `SensorCapture` with a tuned frequency and gain.
-
-    Construction rejects a gain tuple when the port is a scalar, and a gain tuple
-    with a length other than the port count.
-    """
+    """the capture of a SoapySDR source: a `SensorCapture` with a tuned frequency and gain."""
 
     center_frequency: types.CenterFrequency
     gain: types.Gain
-
-    def __post_init__(self):
-        super().__post_init__()
-        _validate_multichannel(self.port, self.gain)
 
 
 class SingleToneCapture(SensorCapture, frozen=True, kw_only=True):

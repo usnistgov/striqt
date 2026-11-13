@@ -264,7 +264,7 @@ def capture_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
         return ()
 
     groups: dict[type, list[FieldValue]] = {}
-    for name, owner in _field_owners(type(dd.capture)).items():
+    for name, owner in sa.specs.helpers.field_owners(type(dd.capture)).items():
         if name not in coords:
             continue
         coord = coords[name]
@@ -272,6 +272,51 @@ def capture_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
         items = _coordinate_items(coord.values)
         groups.setdefault(owner, []).append(_field_value(name, items, units))
     return _as_groups(groups)
+
+
+def varying_fields(
+    sweep: specs.Sweep[Any, Any, Any, Any],
+    source_id: specs.types.SourceID | None,
+) -> frozenset[str]:
+    """return the names of the capture fields that vary across the plan of `sweep`.
+
+    The plan is `loop_captures` of `sweep` for `source_id`, with each planned
+    capture split into its single-port captures. A field varies when its value
+    differs between any 2 single-port captures of the plan, so a field set to a
+    per-port tuple with unequal entries varies within one capture. Values are
+    compared by the rule of `drop_conflicts`: a tuple by position, a dict field
+    (`adjust_analysis`) by its items, and None is unequal to every set value. `port`
+    is compared between the planned captures as a whole, not between the ports of
+    one capture.
+
+    Args:
+        sweep: the sweep to expand
+        source_id: hex id of the open source, selecting the `adjust_captures` block
+            applied on top of ``'defaults'``; None applies ``'defaults'`` alone
+
+    Returns:
+        the field names, empty when the sweep plans no captures
+
+    Raises:
+        msgspec.ValidationError: if `loop_captures` rejects the loops or the
+            adjustments of `sweep`
+    """
+    captures = specs.sequencing.loop_captures(sweep, source_id)
+    if not captures:
+        return frozenset()
+
+    per_port = [
+        {k: v for k, v in c.to_dict().items() if k != 'port'}
+        for capture in captures
+        for c in specs.captures.split_capture_ports(capture)
+    ]
+    names = set().union(*per_port)
+    varying = names - set(datasets.drop_conflicts(per_port))
+
+    ports = [{'port': c.port} for c in captures]
+    if 'port' not in datasets.drop_conflicts(ports):
+        varying.add('port')
+    return frozenset(varying)
 
 
 def acquisition_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
@@ -291,7 +336,7 @@ def acquisition_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
     attrs = sa.specs.helpers.get_capture_type_attrs(type(info))
 
     groups: dict[type, list[FieldValue]] = {}
-    for name, owner in _field_owners(type(info)).items():
+    for name, owner in sa.specs.helpers.field_owners(type(info)).items():
         if name == 'signal_trigger':
             continue
         value = getattr(info, name)
@@ -328,21 +373,6 @@ def analysis_labels(
         fallback = name.replace('_', ' ').title()
         labels[name] = titles.get(name, fallback)
     return labels
-
-
-def _field_owners(cls: type) -> dict[str, type]:
-    """return the struct class in the MRO of `cls` that first declares each field.
-
-    The dict is keyed by field name in base-to-derived order.
-    """
-    owners: dict[str, type] = {}
-    for klass in reversed(cls.__mro__):
-        fields = getattr(klass, '__struct_fields__', None)
-        if not isinstance(fields, tuple):
-            continue
-        for name in fields:
-            owners.setdefault(name, klass)
-    return owners
 
 
 def _as_groups(groups: dict[type, list[FieldValue]]) -> tuple[FieldGroup, ...]:

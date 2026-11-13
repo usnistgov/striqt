@@ -35,8 +35,10 @@ if TYPE_CHECKING:
         CachedCallback,
         P,
         PassThroughWrapper,
+        PromptCallback,
         R,
         SourceOpenCallback,
+        SweepCallbacksKws,
     )
 
 
@@ -63,6 +65,9 @@ class SweepCallbacks:
     """hook run with ``(capture, analysis)`` before each analysis, returning the
     group to evaluate in place of the adjusted `analysis`; None selects the whole
     group"""
+    prompt: PromptCallback | None = None
+    """hook run with the text of each operator prompt, returning the operator's
+    answer; None reads one line from stdin through `blocking_input`"""
 
 
 if TYPE_CHECKING:
@@ -141,6 +146,15 @@ else:
         callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
 
+def prompt_hook(resources: Resources[SS, SP, SC, SA, PS, PC]) -> PromptCallback:
+    """return the operator prompt of ``resources['callbacks']``, or
+    `sa.util.blocking_input` when the key is missing or the hook is None."""
+    callbacks = resources.get('callbacks')
+    if callbacks is None or callbacks.prompt is None:
+        return sa.util.blocking_input
+    return callbacks.prompt
+
+
 def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
     return sa.util.stopwatch(
         desc, 'sweep', threshold=0.5, logger_level=util.logging.INFO
@@ -159,15 +173,58 @@ class ConnectionManager(
     contextlib.ExitStack,
     Generic[SS, SP, SC, SA, PS, PC],
 ):
+    """the open contexts of one action spec, opened on entry and closed on exit.
+
+    Construction stores the spec and its options; nothing opens until `__enter__`,
+    which yields the `Resources` dict. `set_callbacks` sets the hooks of the runs
+    before entry.
+    """
+
     _resources: AnyResources[SS, SP, SC, SA, PS, PC]
 
-    def __init__(self, sweep_spec: specs.Sweep[SS, SP, SC, SA]):
+    def __init__(
+        self,
+        spec: specs.ActionSpec[SS, SP, SA],
+        spec_path: str | Path | None = None,
+        *,
+        test_only: bool = False,
+    ):
         super().__init__()
-        self._resources = AnyResources(sweep_spec=sweep_spec)
+        self._spec = spec
+        self._spec_path = spec_path
+        self._test_only = test_only
+        self._callbacks = SweepCallbacks()
+        self._opened = False
+        self._resources = AnyResources()
+
+    def set_callbacks(
+        self,
+        callbacks: SweepCallbacks | None = None,
+        /,
+        **hooks: typing_extensions.Unpack[SweepCallbacksKws],
+    ) -> ConnectionManager[SS, SP, SC, SA, PS, PC]:
+        """set the hooks of the runs over the resources and return the manager.
+
+        `hooks` replace the named fields of `callbacks`, or of the hooks set so far
+        when `callbacks` is None; the fields of `SweepCallbacks` are the accepted
+        keywords.
+
+        Raises:
+            RuntimeError: if the resources are already open, since
+                `on_source_opened` runs during the open
+        """
+        if self._opened:
+            raise RuntimeError('set the callbacks before entering the resources')
+        base = self._callbacks if callbacks is None else callbacks
+        self._callbacks = dataclasses.replace(base, **hooks)
+        return self
 
     # ExitStack is inherited for the callback registry. `with` yields the collected
     # resources rather than the stack
     def __enter__(self) -> Resources[SS, SP, SC, SA, PS, PC]:  # ty: ignore[invalid-method-override]
+        if not self._opened:
+            self._opened = True
+            _open(self)
         return self.resources
 
     @util.cached_property
@@ -274,50 +331,41 @@ def _prepare_sweep(spec: specs.Sweep, callbacks: SweepCallbacks) -> None:
         callbacks.on_source_opened(spec, source_id)
 
 
-@sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
 def open_resources(
     spec: specs.ActionSpec[SS, SP, SA],
     spec_path: str | Path | None = None,
     *,
     test_only: bool = False,
-    on_source_opened: SourceOpenCallback | None = None,
-    on_analyzed: AnalyzedCallback | None = None,
-    on_sink_cached: CachedCallback | None = None,
-    select_analysis: AnalysisSelector | None = None,
 ) -> ConnectionManager[SS, SP, SC, SA, PS, PC]:
-    """open the sensor hardware and software contexts needed to run `spec`.
+    """return the manager of the sensor hardware and software contexts that run `spec`.
 
-    The source, peripherals, sink, calibration file, and log file open concurrently
-    for the `sweep` of the action runner built from `spec`. The compute warmup runs
-    in the calling thread. The returned `ConnectionManager` yields the open
-    `Resources` on entry and closes every resource on exit. An exception from a hook
+    On entry, the source, peripherals, sink, calibration file, and log file open
+    concurrently for the `sweep` of the action runner built from `spec`, and the
+    compute warmup runs in the calling thread; the manager yields the open
+    `Resources` and closes every resource on exit. The hooks of the runs are set
+    with `ConnectionManager.set_callbacks` before entry; an exception from a hook
     ends the run. Progress is logged at INFO on the ``sweep`` logger.
 
     Args:
         spec: the action spec
-        spec_path: the file from which `spec` was read, or None; the process working
-            directory becomes the directory of the file, and the ``{spec_path}`` path
-            field is set
+        spec_path: the file from which `spec` was read, or None; on entry the
+            process working directory becomes the directory of the file, and the
+            ``{spec_path}`` path field is set
         test_only: if True, open `NoPeripherals` in place of the peripherals and
             skip the compute warmup
-        on_source_opened: hook run once with ``(sweep, source_id)`` in a worker
-            thread after the source opens and before the first capture
-        on_analyzed: hook run in the analysis thread with the `DelayedDataset` of
-            each acquisition, before the sink receives the dataset; the `extra_data`
-            of the dataset lacks the peripheral entries
-        on_sink_cached: hook run in the analysis thread with ``(resources, cache,
-            capture, result, **kwargs)`` each time a measurement fills a `KwArgCache`
-        select_analysis: hook run in the analysis thread with ``(capture, analysis)``
-            before each analysis, returning the group to evaluate in place of the
-            adjusted `analysis`; a sink that allocates a store from the full group
-            rejects the narrowed result
 
     Raises:
-        TypeError: if no action runner is registered for the type of `spec`
-        KeyError: if no sensor binding is registered for the type of `spec`
-        ExceptionGroup: if more than one resource fails to open; a single failure
-            raises that exception
+        TypeError: on entry, if no action runner is registered for the type of `spec`
+        KeyError: on entry, if no sensor binding is registered for the type of `spec`
+        ExceptionGroup: on entry, if more than one resource fails to open; a single
+            failure raises that exception
     """
+    return ConnectionManager(spec, spec_path, test_only=test_only)
+
+
+@sa.util.stopwatch('open resources', 'sweep', 1.0, sa.util.INFO)
+def _open(conn: ConnectionManager[SS, SP, SC, SA, PS, PC]) -> None:
+    """open every resource of `conn` into `conn._resources`, and close every opened one on a failure."""
 
     import numpy as np  # noqa: F401  avoids import concurrency bugs on python < 3.15
 
@@ -328,22 +376,20 @@ def open_resources(
 
     from . import actions
 
+    spec = conn._spec
+    spec_path = conn._spec_path
+    test_only = conn._test_only
+    callbacks = conn._callbacks
+
     fmt = specs.paths.PathFormatter(spec, spec_path=spec_path)
 
     if spec_path is not None:
         os.chdir(str(Path(spec_path).parent))
 
-    callbacks = SweepCallbacks(
-        on_source_opened=on_source_opened,
-        on_analyzed=on_analyzed,
-        on_sink_cached=on_sink_cached,
-        select_analysis=select_analysis,
-    )
-
     runner = actions.registry.lookup(spec)(spec)
     sweep = runner.sweep
     ctrl_cls = bindings.get_controller(spec)
-    conn = ConnectionManager(sweep_spec=sweep)
+    conn._resources['sweep_spec'] = sweep
 
     exc = util.ExceptionStack('failed to open resources', cancel_on_except=True)
     with util.share_thread_interrupts():
@@ -409,9 +455,6 @@ def open_resources(
         raise
 
     conn._resources['action_spec'] = spec
-    conn._resources['sweep_spec'] = sweep
     conn._resources['runner'] = runner
     conn._resources['format_path'] = fmt
     conn._resources['callbacks'] = callbacks
-
-    return conn

@@ -20,7 +20,7 @@ from striqt.analysis.specs.helpers import SpecValidationError, spec_subset
 from ... import specs
 from .. import compute
 from ..resources import Resources
-from ..sinks import NoSink, SinkBase, ZarrCaptureSink
+from ..sinks import SinkBase
 from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
@@ -448,12 +448,11 @@ class Cellular5GNRSweepRunner(Generic[SS, SP, SC, SA, PS, PC]):
         """
         return build_cellular_sweep(self.spec)
 
-    def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        """return a `ZarrCaptureSink` at ``sweep.sink.path``, or a `NoSink` for a None
-        path."""
-        if self.sweep.sink.path is None:
-            return NoSink(self.sweep)
-        return ZarrCaptureSink(self.sweep, format_path, action_spec=self.spec)
+    def open_sink(
+        self, format_path: specs.paths.PathFormatter | None, *, force: bool = False
+    ) -> SinkBase[SC]:
+        """return the `open_capture_sink` of `sweep` and `spec`."""
+        return core.open_capture_sink(self.sweep, self.spec, format_path, force=force)
 
     def iterate(
         self,

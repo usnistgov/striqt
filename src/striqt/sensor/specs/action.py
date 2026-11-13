@@ -45,6 +45,13 @@ def validate_action(spec: structs.ActionSpec[Any, Any, Any]) -> None:
     _ = runner_cls(spec).sweep
 
 
+def null_sink(
+    spec: structs.ActionSpec[Any, Any, Any],
+) -> structs.ActionSpec[Any, Any, Any]:
+    """return `spec` with ``sink.path`` None, so that a run of the spec writes no store."""
+    return spec.replace(sink=spec.sink.replace(path=None))
+
+
 def analysis_group_type(
     spec: structs.ActionSpec[Any, Any, Any],
 ) -> type[sa.specs.AnalysisGroup]:

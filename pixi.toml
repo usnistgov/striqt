@@ -65,7 +65,7 @@ mkdocs-click = "*"
 docs-api = { cmd = "python docs/gen_api.py", env = { MPLCONFIGDIR = ".cache/matplotlib", MPLBACKEND = "agg", STRIQT_CACHE_DIR = ".cache/striqt" } }
 docs = { cmd = "python docs/gen_api.py && zensical build --clean --strict", env = { MPLCONFIGDIR = ".cache/matplotlib", MPLBACKEND = "agg", STRIQT_CACHE_DIR = ".cache/striqt" } }
 docs-deploy = "python docs/deploy.py"
-docs-serve = { cmd = "zensical serve", env = { MPLCONFIGDIR = ".cache/matplotlib", MPLBACKEND = "agg", STRIQT_CACHE_DIR = ".cache/striqt" } }
+docs-serve = { cmd = "python docs/gen_api.py && zensical serve", env = { MPLCONFIGDIR = ".cache/matplotlib", MPLBACKEND = "agg", STRIQT_CACHE_DIR = ".cache/striqt" } }
 
 [environments]
 default = ["py39"]

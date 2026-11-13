@@ -808,19 +808,32 @@ class TestSoapySourceClose:
         fake_soapy._SoapySDR.Device_deactivateStream = None
         source.close()
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason='SoapySource.close reads self._device and self._rx_stream, which do '
-        'not exist (the attributes are device and rx_stream), so nothing is closed',
-    )
     def test_close_releases_the_stream_and_device(self, fake_soapy):
         source = _source()
         source.setup(rx_ports=(0,))
-        source.close()
         device = fake_soapy.devices[0]
-        assert device.closed
+
+        source.close()
+
+        assert call_names(device, 'closeStream', 'close') == ['closeStream', 'close']
         assert device.streams == []
+        assert device.closed
+
+    def test_close_without_a_stream_releases_the_device(self, fake_soapy):
+        source = _source()
+        source.setup()
+        source.close()
+        assert call_names(fake_soapy.devices[0], 'closeStream', 'close') == ['close']
+
+    def test_close_twice_is_a_no_op(self, fake_soapy):
+        source = _source()
+        source.setup(rx_ports=(0,))
+        device = fake_soapy.devices[0]
+
+        source.close()
+        source.close()
+
+        assert call_names(device, 'closeStream', 'close') == ['closeStream', 'close']
 
 
 # %% real SoapySDR bindings: the null driver (pixi environments)

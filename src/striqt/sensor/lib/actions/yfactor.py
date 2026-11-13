@@ -11,7 +11,7 @@ from __future__ import annotations as __
 
 from collections.abc import Generator, Iterable, Sequence
 from pathlib import Path
-from typing import Any, Generic
+from typing import TYPE_CHECKING, Any, Generic
 
 import striqt.analysis as sa
 from striqt.analysis.lib.util import np, pd, xr
@@ -20,11 +20,14 @@ from striqt.analysis.specs.helpers import SpecValidationError
 from ... import specs
 from .. import compute, io
 from ..compute import cal_lookups
-from ..resources import Resources
+from ..resources import Resources, prompt_hook
 from ..sinks import MemoryCacheSink, SinkBase
 from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
 from .registry import registry
+
+if TYPE_CHECKING:
+    from ..typing import PromptCallback
 
 DIODE_FIELD = 'noise_diode_enabled'
 
@@ -343,30 +346,49 @@ def corrections_path(
     return Path(path)
 
 
-def confirm_enr(enr: float) -> None:
+def confirm_enr(enr: float, prompt: PromptCallback | None = None) -> None:
     """block on a prompt until the operator confirms the noise diode ENR `enr` (dB).
 
     The prompt repeats until the answer is ``y`` or ``n``.
 
+    Args:
+        enr: the excess noise ratio (dB) named in the prompt text
+        prompt: hook called with the prompt text, returning the operator's answer;
+            None reads one line from stdin through `blocking_input`
+
     Raises:
         RuntimeError: if the operator answers ``n``
     """
-    prompt = f'Confirm that the noise diode ENR is {enr} dB (y/n): '
+    if prompt is None:
+        prompt = sa.util.blocking_input
+    text = f'Confirm that the noise diode ENR is {enr} dB (y/n): '
     while True:
-        response = sa.util.blocking_input(prompt)
+        response = prompt(text)
         if response.lower() == 'y':
             return
         elif response.lower() == 'n':
             raise RuntimeError('Set the proper noise diode ENR and run again')
 
 
-def switch_diode(port: Any, diode_on: bool) -> None:
-    """block on a prompt to switch the noise diode at `port` to `diode_on`."""
+def switch_diode(
+    port: Any, diode_on: bool, prompt: PromptCallback | None = None
+) -> None:
+    """block on a prompt to switch the noise diode at `port` to `diode_on`.
+
+    Args:
+        port: the port named in the prompt text
+        diode_on: the diode state the prompt asks for
+        prompt: hook called with the prompt text, returning when the operator has
+            switched the diode; None reads one line from stdin through
+            `blocking_input`
+    """
+    if prompt is None:
+        prompt = sa.util.blocking_input
     what = f'noise diode at port {port}'
     if diode_on:
-        sa.util.blocking_input(f'enable {what} and press enter: ')
+        prompt(f'enable {what} and press enter: ')
     else:
-        sa.util.blocking_input(f'disable {what} and press enter: ')
+        prompt(f'disable {what} and press enter: ')
 
 
 @registry.runner(spec_type=specs.ManualYFactorCalibration)
@@ -388,8 +410,15 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
         """
         return build_calibration_sweep(self.spec)
 
-    def open_sink(self, format_path: specs.paths.PathFormatter | None) -> SinkBase[SC]:
-        """return a `MemoryCacheSink` that collects the captures of every pass."""
+    def open_sink(
+        self, format_path: specs.paths.PathFormatter | None, *, force: bool = False
+    ) -> SinkBase[SC]:
+        """return a `MemoryCacheSink` that collects the captures of every pass.
+
+        Args:
+            format_path: unused; the corrections path is formatted at save time
+            force: unused; the in-memory sink has no store to remove
+        """
         return MemoryCacheSink(self.sweep)
 
     def iterate(
@@ -405,10 +434,12 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
 
         The operator confirms the ENR first. Before each pass, the operator is
         prompted to switch the diode, any reused acquisition is discarded, and
-        `iterate_captures` runs over the captures at one port. Within a pass,
-        `reuse_iq` applies. After the last pass, the corrections are saved when the
-        sink is a `MemoryCacheSink` and ``spec.sink.path`` is not None. A None path
-        logs at INFO on the ``sink`` logger.
+        `iterate_captures` runs over the captures at one port. The operator answers
+        each prompt through ``resources['callbacks'].prompt``, or stdin when the
+        hook is None or the key is missing. Within a pass, `reuse_iq` applies. After
+        the last pass, the corrections are saved when the sink is a
+        `MemoryCacheSink` and ``spec.sink.path`` is not None. A None path logs at
+        INFO on the ``sink`` logger.
 
         Yields:
             the yields of `iterate_captures` for each pass in turn, as `always_yield`
@@ -425,7 +456,8 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
         if captures is not None:
             raise ValueError('a calibration acquires its own capture passes')
 
-        confirm_enr(self.spec.calibration.enr)
+        prompt = prompt_hook(resources)
+        confirm_enr(self.spec.calibration.enr, prompt)
 
         source_id = resources['source'].source_id
         sweeps = {
@@ -438,7 +470,7 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
         indexer = core.AcquisitionIndexer(count)
 
         for port, diode_on in calibration_passes(self.spec):
-            switch_diode(port, diode_on)
+            switch_diode(port, diode_on, prompt)
             # the diode state is not a capture field, so reuse_iq would otherwise keep
             # the acquisition from the previous diode state
             resources['source'].discard_iq()

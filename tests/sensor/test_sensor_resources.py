@@ -196,7 +196,9 @@ def test_on_source_opened_is_called_once_with_the_spec_and_id():
     calls = []
     sweep = tone_sweep(OFFSETS)
     on_opened = lambda *a: calls.append(a)
-    with ss.open_resources(sweep, None, on_source_opened=on_opened) as res:
+    with ss.open_resources(sweep, None).set_callbacks(
+        on_source_opened=on_opened
+    ) as res:
         source_id = ss.lib.controller.lookup.id(sweep.source)
         assert res['callbacks'].on_source_opened is on_opened
     assert calls == [(sweep, source_id)]
@@ -205,3 +207,46 @@ def test_on_source_opened_is_called_once_with_the_spec_and_id():
 def test_resources_carry_empty_callbacks_by_default():
     with ss.open_resources(tone_sweep(OFFSETS), None) as res:
         assert res['callbacks'] == ss.lib.resources.SweepCallbacks()
+
+
+def test_prompt_hook_is_bundled_into_the_callbacks():
+    answer = lambda text: 'y'
+    with ss.open_resources(tone_sweep(OFFSETS), None).set_callbacks(
+        prompt=answer
+    ) as res:
+        assert res['callbacks'].prompt is answer
+
+
+def test_set_callbacks_replaces_the_named_hooks_of_a_bundle():
+    seen = lambda dd: None
+    answer = lambda text: 'y'
+    bundle = ss.lib.resources.SweepCallbacks(on_analyzed=seen)
+    manager = ss.open_resources(tone_sweep(OFFSETS), None)
+    assert manager.set_callbacks(bundle, prompt=answer) is manager
+    with manager as res:
+        assert res['callbacks'] == ss.lib.resources.SweepCallbacks(
+            on_analyzed=seen, prompt=answer
+        )
+        with pytest.raises(RuntimeError, match='before entering'):
+            manager.set_callbacks(prompt=None)
+
+
+def test_nothing_opens_before_entry():
+    manager = ss.open_resources(tone_sweep(OFFSETS), None)
+    assert 'source' not in manager._resources
+    with manager as res:
+        assert res['source'].is_open()
+
+
+def test_prompt_hook_returns_the_callback_or_stdin(scripted_input):
+    """the hook of `resources['callbacks']` when set; otherwise `blocking_input`,
+    looked up when `prompt_hook` is called"""
+    answer = lambda text: 'y'
+    callbacks = ss.lib.resources.SweepCallbacks(prompt=answer)
+    assert ss.lib.resources.prompt_hook({'callbacks': callbacks}) is answer
+
+    scripted_input['answers'] += ['a', 'b']
+    assert ss.lib.resources.prompt_hook({})('first?') == 'a'
+    unset = ss.lib.resources.SweepCallbacks()
+    assert ss.lib.resources.prompt_hook({'callbacks': unset})('second?') == 'b'
+    assert scripted_input['prompts'] == ['first?', 'second?']

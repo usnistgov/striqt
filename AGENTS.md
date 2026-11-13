@@ -20,7 +20,7 @@ pixi run -e test315 ty check src                                  # type check (
 pixi run -e test315 pyright src                                   # advisory; accepted count in Conventions → Typing
 pixi run -e test315 pyrefly check                                 # advisory; accepted count in Conventions → Typing
 pixi run -e doc docs                                              # API pages, then the zensical site into site/
-pixi run -e doc docs-api                                          # regenerate docs/api/**/*.md from the public namespaces
+pixi run -e doc docs-api                                          # write docs/api/**/*.md from the public namespaces (untracked; `docs` and `docs-serve` run it first)
 pixi run -e doc docs-serve                                        # zensical preview on localhost:8000
 pixi run -e doc docs-deploy                                       # build, then push site/ to the nist-pages branch (docs/deploy.py)
 pixi run -e cupy pytest                                          # GPU path, Jetson only

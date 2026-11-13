@@ -35,6 +35,18 @@ def test_build_sweep_is_the_spec_itself():
         assert isinstance(res['runner'], SweepRunner)
 
 
+def test_open_sink_forwards_force_to_the_zarr_sink(monkeypatch):
+    lookup = ss.lib.controller.lookup
+    monkeypatch.setattr(lookup, 'id', lambda spec, timeout=0.5: 'beef')
+    monkeypatch.setattr(lookup, 'power_units', lambda spec, timeout=0.5: 'FS')
+    runner = SweepRunner(tone_sweep(OFFSETS, sink=ss.specs.Sink(path='out.zarr')))
+
+    assert runner.open_sink(None).force is False
+    forced = runner.open_sink(None, force=True)
+    assert isinstance(forced, ss.sinks.ZarrCaptureSink)
+    assert forced.force is True
+
+
 # %% iterate_sweep dispatch
 
 
@@ -86,7 +98,8 @@ def test_open_resources_builds_the_registered_runner(monkeypatch):
 
 def test_open_resources_raises_for_an_unregistered_spec_type(monkeypatch):
     """with the Sweep registration removed, nothing in the MRO of a bound sweep
-    is registered"""
+    is registered; the lookup runs on entry"""
     monkeypatch.delitem(registry, ss.specs.Sweep)
-    with pytest.raises(TypeError, match=SweepCls.__name__):
-        ss.open_resources(tone_sweep(OFFSETS), None)
+    manager = ss.open_resources(tone_sweep(OFFSETS), None)
+    with pytest.raises(TypeError, match=SweepCls.__name__), manager:
+        pass

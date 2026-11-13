@@ -5,7 +5,16 @@ from __future__ import annotations
 
 import fractions
 import pickle
-from typing import Annotated, Any, Optional, Union
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    Optional,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+)
 
 import msgspec
 import pytest
@@ -29,20 +38,25 @@ from striqt.analysis.specs.helpers import (
     convert_dict,
     convert_spec,
     convert_spec_cached,
+    field_owners,
     freeze,
     frozendict,
     get_capture_type_attrs,
     infer_coord_info,
     inspect_freeze_depths,
+    is_union_origin,
     json_schema,
     lru_cache_on_converted,
     narrow_analysis_group,
+    qualname,
+    resolve_hint,
     spec_subset,
     subset_of,
     to_analysis_capture,
     unfreeze,
     validation_path,
 )
+from striqt.analysis.specs.types import PerPort
 
 VAR_TUPLE_DEPTH_XFAIL = pytest.mark.xfail(
     strict=True,
@@ -246,6 +260,127 @@ def test_capture_type_attrs():
     # the Optional[...] alias of a field must reach the attrs
     assert attrs['backend_sample_rate']['units'] == 'S/s'
     assert 'standard_name' in attrs['snr']
+
+
+def test_capture_type_attrs_of_a_per_port_field_come_from_the_outer_meta():
+    """`CenterFrequency` wraps `PerPort[CenterFrequencyScalar]` in a second `Meta`,
+    and the attrs of the field are those of that outer `Meta`"""
+    attrs = get_capture_type_attrs(ss.specs.SoapyCapture)
+    assert attrs['center_frequency'] == {
+        'standard_name': 'Center frequency for each port',
+        'units': 'Hz',
+    }
+
+
+# %% resolve_hint
+
+
+OUTER = Meta('outer', 'Hz')
+INNER = Meta('inner', 's', gt=0)
+_B = TypeVar('_B', bound=float)
+_U = TypeVar('_U')
+
+
+def test_resolve_hint_of_a_per_port_optional_scalar():
+    r = resolve_hint(Optional[PerPort[Annotated[float, INNER]]])
+    assert r.members == (float,)
+    assert r.optional
+    assert r.per_port
+    assert r.metas == (INNER,)
+
+
+def test_resolve_hint_keeps_the_variadic_tuple_without_a_scalar_member():
+    r = resolve_hint(Optional[tuple[str, ...]])
+    assert r.members == (tuple[str, ...],)
+    assert r.optional
+    assert not r.per_port
+
+
+def test_resolve_hint_of_a_literal_keeps_declaration_order():
+    hint = Annotated[Literal['left', 'right', 'none'], OUTER]
+    (member,) = resolve_hint(hint).members
+    assert get_args(member) == ('left', 'right', 'none')
+
+
+def test_resolve_hint_of_a_bool_literal_union():
+    r = resolve_hint(Union[bool, Literal['half']])
+    assert r.members == (bool, Literal['half'])
+    assert not r.optional
+    assert r.metas == ()
+
+
+@pytest.mark.parametrize(
+    'hint, bounds, expected',
+    [
+        (_B, None, float),
+        (_U, None, Any),
+        (_U, {'_U': int}, int),
+        (_B, {'_B': int}, int),
+        (Optional[_B], {'_B': str}, str),
+    ],
+    ids=['bound', 'unbound', 'bounds_arg', 'bounds_over_bound', 'optional'],
+)
+def test_resolve_hint_replaces_a_typevar(hint, bounds, expected):
+    r = resolve_hint(hint, bounds=bounds)
+    assert r.members == (expected,)
+
+
+def test_resolve_hint_metas_are_outermost_first():
+    """`typing` flattens nested `Annotated` with the innermost metadata first"""
+    hint = Annotated[Annotated[float, INNER], OUTER]
+    assert get_args(hint)[1:] == (INNER, OUTER)
+    assert resolve_hint(hint).metas == (OUTER, INNER)
+
+    nested = Annotated[Optional[Annotated[float, INNER]], OUTER]
+    assert resolve_hint(nested).metas == (OUTER, INNER)
+
+
+def test_resolve_hint_is_frozen():
+    r = resolve_hint(float)
+    with pytest.raises(AttributeError):
+        r.optional = True
+
+
+@pytest.mark.parametrize(
+    'hint, expected',
+    [(Union[int, str], True), (Optional[int], True), (list[int], False), (int, False)],
+    ids=str,
+)
+def test_is_union_origin(hint, expected):
+    assert is_union_origin(get_origin(hint)) is expected
+
+
+# %% field_owners and qualname
+
+
+class OwnerBase(msgspec.Struct):
+    a: int = 0
+
+
+class OwnerDerived(OwnerBase):
+    b: int = 0
+    a: int = 1
+
+
+def test_field_owners_of_soapy_capture():
+    owners = field_owners(ss.specs.SoapyCapture)
+    assert owners['duration'] is sa.specs.structs.Capture
+    assert owners['port'] is ss.specs.SensorCapture
+    assert owners['gain'] is ss.specs.SoapyCapture
+    assert list(owners) == list(ss.specs.SoapyCapture.__struct_fields__)
+
+
+def test_field_owners_keeps_a_redeclared_field_with_its_first_declaring_class():
+    assert field_owners(OwnerDerived) == {'a': OwnerBase, 'b': OwnerDerived}
+
+
+def test_field_owners_is_cached():
+    assert field_owners(OwnerDerived) is field_owners(OwnerDerived)
+
+
+def test_qualname():
+    assert qualname(OwnerBase) == f'{__name__}.OwnerBase'
+    assert qualname(ss.specs.SoapyCapture) == 'striqt.sensor.specs.SoapyCapture'
 
 
 # %% json_schema
@@ -921,3 +1056,29 @@ def test_narrow_analysis_group_keeps_the_named_fields_at_their_values(names):
 def test_narrow_analysis_group_rejects_a_name_that_is_not_enabled(names, match):
     with pytest.raises(KeyError, match=match):
         narrow_analysis_group(THREE_MEASUREMENTS, names)
+
+
+# %% pointers_of
+
+
+@pytest.mark.parametrize(
+    ('path', 'pointer'),
+    [
+        ('.captures[0].gain', '/captures/0/gain'),
+        ('.loops[2]', '/loops/2'),
+        (".loops: {'repeat': 0, 'snr': 60.0}", '/loops'),
+        ('', ''),
+    ],
+)
+def test_json_pointer_of_path_reads_the_leading_tokens(path, pointer):
+    assert sa.specs.helpers.json_pointer_of_path(path) == pointer
+
+
+def test_pointers_of_a_spec_validation_error():
+    error = sa.specs.helpers.SpecValidationError(
+        'too long', ('.analysis', '.spectrogram'), ('.captures[0]', ".loops: {'a': 1}")
+    )
+    assert sa.specs.helpers.pointers_of(error) == (
+        '/analysis/spectrogram',
+        ['/captures/0', '/loops'],
+    )

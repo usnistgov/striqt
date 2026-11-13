@@ -1,9 +1,10 @@
-"""striqt.analysis.lib.io: YAML decoding with `!include`, zarr store access and
-allocation, and the attr repair of stores written with bandwidth-suffixed units."""
+"""striqt.analysis.lib.io: zarr store access and allocation, and the attr repair of
+stores written with bandwidth-suffixed units."""
 
 from __future__ import annotations
 
 import zipfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -13,132 +14,10 @@ import zarr
 import striqt.analysis as sa
 from striqt.analysis.lib import stores
 
-load = sa.lib.io.decode_from_yaml_file
-
 ZARR_MAJOR = int(zarr.__version__.split('.')[0])
 
 # the keys of a group or array document in either zarr format
 METADATA_BASENAMES = {'.zarray', '.zattrs', '.zgroup', '.zmetadata', 'zarr.json'}
-
-
-# %% !include
-
-
-def test_glob_include_merges_in_sorted_filename_order(write_yaml):
-    """a key set by 2 files of a glob include takes the value from the file with the
-    later name, whatever the order in which the files were written."""
-    write_yaml('sites/c.yaml', 'z: 3\n')
-    write_yaml('sites/a.yaml', 'x: 1\ny: 1\n')
-    write_yaml('sites/b.yaml', 'y: 2\nz: 2\n')
-    spec = write_yaml('spec.yaml', 'sites: !include "sites/*.yaml"\n')
-    assert load(spec)['sites'] == {'x': 1, 'y': 2, 'z': 3}
-
-
-@pytest.mark.parametrize(
-    'order,expected',
-    [
-        ('[a.yaml, b.yaml]', {'x': 1, 'y': 2}),
-        ('[b.yaml, a.yaml]', {'x': 1, 'y': 1}),
-    ],
-    ids=['a_then_b', 'b_then_a'],
-)
-def test_list_include_merges_dicts_with_later_files_winning(
-    write_yaml, order, expected
-):
-    write_yaml('a.yaml', 'x: 1\ny: 1\n')
-    write_yaml('b.yaml', 'y: 2\n')
-    spec = write_yaml('spec.yaml', f'source: !include {order}\n')
-    assert load(spec)['source'] == expected
-
-
-def test_include_resolves_against_the_including_file_under_a_relative_spec_path(
-    write_yaml, tmp_path, monkeypatch
-):
-    """an `!include` path resolves against the including file when the spec path is
-    relative to the working directory, at both levels of a nested include."""
-    write_yaml('spec.yaml', 'plot: !include fragments/plot.yaml\n')
-    write_yaml('fragments/plot.yaml', 'style: !include deeper/style.yaml\n')
-    write_yaml('fragments/deeper/style.yaml', 'name: dark\n')
-    monkeypatch.chdir(tmp_path.parent)
-    assert load(f'{tmp_path.name}/spec.yaml') == {'plot': {'style': {'name': 'dark'}}}
-
-
-def test_glob_include_merges_only_one_level_deep(write_yaml):
-    write_yaml('sites/a.yaml', 'block:\n  x: 1\n  y: 1\n')
-    write_yaml('sites/b.yaml', 'block:\n  y: 2\n')
-    spec = write_yaml('spec.yaml', 'sites: !include "sites/*.yaml"\n')
-    assert load(spec)['sites'] == {'block': {'y': 2}}
-
-
-# (fragment files, spec path, spec text, expected document). A relative include path
-# resolves against the including file, and ``{root}`` is the temporary root.
-INCLUDE_PATHS = {
-    'nested_relative_to_the_including_file': (
-        {'frag/leaf.yaml': 'v: 1\n', 'frag/c.yaml': 'x: !include leaf.yaml\n'},
-        'spec.yaml',
-        'top: !include frag/c.yaml\n',
-        {'top': {'x': {'v': 1}}},
-    ),
-    'parent_relative_glob_from_subdirectory': (
-        {
-            'sites/global.yaml': 'defaults: {a: 1}\n',
-            'sites/radio.yaml': 'beef: {b: 2}\n',
-        },
-        'site/spec.yaml',
-        'adjust: !include "../sites/*.yaml"\n',
-        {'adjust': {'defaults': {'a': 1}, 'beef': {'b': 2}}},
-    ),
-    'absolute_inside_root': (
-        {'frag.yaml': 'v: 1\n'},
-        'site/spec.yaml',
-        'top: !include {root}/frag.yaml\n',
-        {'top': {'v': 1}},
-    ),
-    'absolute_outside_root': (
-        {'elsewhere/frag.yaml': 'v: 1\n'},
-        'site/spec.yaml',
-        'top: !include {root}/elsewhere/frag.yaml\n',
-        {'top': {'v': 1}},
-    ),
-}
-
-
-@pytest.mark.parametrize('case', list(INCLUDE_PATHS), ids=list(INCLUDE_PATHS))
-def test_include_path_resolution(write_yaml, tmp_path, case):
-    fragments, spec_path, spec_text, expected = INCLUDE_PATHS[case]
-    for path, text in fragments.items():
-        write_yaml(path, text)
-    spec = write_yaml(spec_path, spec_text.format(root=tmp_path))
-    assert load(spec) == expected
-
-
-def test_list_include_concatenates_sequences(write_yaml):
-    write_yaml('a.yaml', '- 1\n- 2\n')
-    write_yaml('b.yaml', '- 3\n')
-    spec = write_yaml('spec.yaml', 'items: !include [a.yaml, b.yaml]\n')
-    assert load(spec)['items'] == [1, 2, 3]
-
-
-def test_mixed_include_types_raise(write_yaml):
-    write_yaml('a.yaml', 'x: 1\n')
-    write_yaml('b.yaml', '- 3\n')
-    spec = write_yaml('spec.yaml', 'items: !include [a.yaml, b.yaml]\n')
-    with pytest.raises(TypeError, match='all mappings or all sequences'):
-        load(spec)
-
-
-def test_empty_glob_raises_with_the_pattern(write_yaml):
-    spec = write_yaml('spec.yaml', 'sites: !include "missing/*.yaml"\n')
-    with pytest.raises(FileNotFoundError, match=r'missing/\*\.yaml'):
-        load(spec)
-
-
-# %% loader behavior
-
-
-def test_flow_sequence_mapping_keys_become_tuples(write_yaml):
-    spec = write_yaml('spec.yaml', 'lookup:\n  [0, 1]: 2\n  [1, 0]: 3\n')
-    assert load(spec)['lookup'] == {(0, 1): 2, (1, 0): 3}
 
 
 # %% repair_legacy_attrs
@@ -426,6 +305,23 @@ def test_load_repairs_legacy_attrs(tmp_path):
     assert loaded.cellular_5g_pss_correlation.attrs['noise_bandwidth'] == pytest.approx(
         30e3
     )
+
+
+# %% is_zip_store
+
+
+@pytest.mark.parametrize(
+    ('path', 'expected'),
+    [
+        ('out/run.zip', True),
+        ('out/run.zarr.zip', True),
+        ('out/RUN.ZIP', True),
+        ('out/run.zarr', False),
+    ],
+)
+def test_is_zip_store_tests_the_suffix_in_any_case(path, expected):
+    assert sa.lib.io.is_zip_store(path) is expected
+    assert sa.lib.io.is_zip_store(Path(path)) is expected
 
 
 # %% open_store and zarr_format_kws

@@ -204,13 +204,15 @@ cannot be executed on a laptop. A cupy-only change is unverified until someone r
 
 ## Sweep execution
 
-`open_resources(spec, callbacks=...)` builds the runner registered for the type of the
-spec and opens the source, peripherals, and sink for `runner.sweep`. The returned
-`Resources` dict has the keys `action_spec` (the spec passed in), `sweep_spec` (the
-built sweep), `runner`, and `callbacks`.
+`open_resources(spec, spec_path, test_only=...)` returns a `ConnectionManager`; on
+entry the manager builds the runner registered for the type of the spec and opens the
+source, peripherals, and sink for `runner.sweep`. The yielded `Resources` dict has the
+keys `action_spec` (the spec passed in), `sweep_spec` (the built sweep), `runner`, and
+`callbacks`.
 
-A front end registers hooks for one run as keywords of `open_resources`, each one
-callable or None: `on_source_opened(sweep, source_id)` runs from a worker thread after
+A front end registers hooks for one run through `ConnectionManager.set_callbacks`
+before entry, as a `SweepCallbacks` bundle or as keywords (`**SweepCallbacksKws`), each
+one callable or None: `on_source_opened(sweep, source_id)` runs from a worker thread after
 the source opens; `on_analyzed(dd)` receives the `DelayedDataset` of each acquisition in
 the analysis thread, after `compute.analyze` and before the dataset is submitted to
 `sink.append`; `on_sink_cached(resources, cache, capture, result, **kwargs)` runs in the
@@ -218,7 +220,9 @@ analysis thread each time a measurement fills a `KwArgCache` (the pipeline forwa
 cache's own callback arguments and prepends `resources`, since the SNR line needs the
 calibration, `format_path`, and `source_id`); `select_analysis(capture, analysis)` runs
 in the analysis thread before each analysis with the group adjusted by
-`capture.adjust_analysis`, and returns the group to evaluate. `compute.analyze` resolves
+`capture.adjust_analysis`, and returns the group to evaluate; `prompt(text)` returns
+the operator's answer to an operator prompt of the Y-factor runner, in place of a stdin
+read through `sa.util.blocking_input`. `compute.analyze` resolves
 the signal trigger from the adjusted group before the hook runs, so a measurement that
 prefers aligned input aligns whether or not the trigger measurement survives the
 selection, and `adjust_analysis` warns about no parameter of a dropped measurement.
@@ -227,7 +231,7 @@ selection, and `adjust_analysis` warns about no parameter of a dropped measureme
 raises `ValueError` on a dataset that lacks one, so the hook pairs with a `NoSink` or a
 `MemoryCacheSink`. A front end that wants two behaviors on one event writes one
 function. A callback exception ends the run like an analysis error. No hooks are
-registered by default. `open_resources` bundles the four into the internal dataclass
+registered by default. `set_callbacks` keeps the five in the internal dataclass
 `lib/resources.py:SweepCallbacks` under `resources['callbacks']`, which
 `iterate_captures` reads; `iterate_sweep(res, callbacks=...)` replaces that bundle for
 one run.
@@ -238,17 +242,35 @@ result)` one `SpectrogramSNR` per port with a finite SNR, None without a calibra
 the `describe_*` functions render each as one line. The logging callbacks are CLI code:
 `cli/sensor_sweep.py:log_overloads` (`on_analyzed`) and `log_spectrogram_snr`
 (`on_sink_cached`, gated on `'spectrogram' in cache.name`), which `sensor-sweep` registers
-beside `confirm_labels`; `web-plotter` registers `log_overloads` from its own
+beside `confirm_labels`; `striqt-studio` registers `log_overloads` from its own
 `on_analyzed`. `from_delayed` emits none of these messages.
 
-`cli/web_plotter.py` is the live preview. The runner runs with a null sink and two
-extensions of the pipeline: `select_analysis` narrows each analysis to the variable on
-display, and `iterate_sweep(res, captures=...)` takes a generator that yields the
-captures matching the entry of `captures:` and the loop values chosen in the page.
-`specs.sequencing.plan_choices(sweep, source_id)` lists those choices from
-`loop_capture_origins`, and `select_plan` filters the expanded plan by them.
-`compute/summary.py:capture_fields`, `acquisition_fields`, and `analysis_labels` return
-the sidebar and selector text as data, and the page renders them.
+`cli/studio/` is the browser page of `striqt-studio`. `session.py:worker` holds one open
+`Resources` in a thread named `striqt-studio` and executes the commands queued by the
+websocket handlers in order, so a preview, a run, and a reopen never overlap. The facts
+derived from the open resources (the sweep, source id, plan choices, varying fields,
+adjustments, output path, plot variables, and plotter) live in one `OpenSpec` on the
+session, None while closed. A preview runs `iterate_captures(res, captures=...,
+sink=NoSink(...), callbacks=...)` over the captures selected in the page, with
+`select_analysis` narrowed to the displayed variable. A run builds the runner of the
+applied spec, opens `runner.open_sink(format_path, force=overwrite)`, and runs
+`iterate_sweep(res, sink=..., runner=..., action_spec=..., sweep_spec=...,
+callbacks=cli/sensor_sweep.py:logging_callbacks(...))`, the same overload and spectrogram
+SNR hooks as `sensor-sweep` plus a `prompt` hook answered from the page; `logs.py`
+forwards the ``striqt`` log records over the websocket for the duration of the run. An
+apply exits the `open_resources` context and reopens the resources for the spec decoded
+from the edited files; an applied spec that fails to open is kept as `apply_error` and
+the previous spec is reopened. The resources open with `sink.path` None
+(`specs/action.py:null_sink`), so a store is written only by a run, at the path
+`actions/core.py:output_path` names. `specs.sequencing.plan_choices(sweep, source_id)`
+lists the selector choices and `select_plan` filters the expanded plan by them;
+`compute/summary.py:varying_fields` over the entries without loops names the capture
+fields the sidebar table keeps; `specs/frontend.py:spec_schema` describes the spec class for
+the grid editor. `session.py:revalidate` reads the files through
+`analysis/lib/yaml.py:load_yaml_provenance` and `read_spec` after each edit, and the page
+writes each edit into the owning YAML file through `analysis/lib/yaml.py:apply_yaml_edits`;
+a `revert` restores one section through `tree_edits` against the tree kept at the last
+apply.
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in
 `actions/core.py:iterate_captures`. A dedicated acquisition thread (`striqt-acquire`)

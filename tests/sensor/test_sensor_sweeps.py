@@ -41,7 +41,7 @@ from synthetic_sources import (
 import striqt.analysis as sa
 import striqt.sensor as ss
 import striqt.waveform as sw
-from striqt.cli import check_sweep, sensor_sweep
+from striqt.cli import check_sweep, convert_spec, sensor_sweep
 from striqt.sensor.lib.compute import capture_tolerances, correction_error
 from striqt.waveform import fourier
 from striqt.waveform.fourier import off_peak_floor_dBc, on_peak_roundoff
@@ -319,6 +319,64 @@ def test_check_sweep_lists_the_looped_field_over_its_adjustment(
     out = capsys.readouterr().out
     assert "'host_resample': (True, False)" in out
     assert "'snr': (5.0,)" in out
+
+
+SINK_SPEC = """
+sensor_binding: single_tone
+source:
+  master_clock_rate: 125e6
+  num_rx_ports: 1
+  array_backend: numpy
+captures:
+  - port: 0
+    sample_rate: 6.144e6
+    duration: 1e-3
+    analysis_bandwidth: 5e6
+analysis:
+  iq_waveform: {}
+sink:
+  path: out/run.zip
+"""
+
+
+def sink_output(out: str) -> str:
+    """return the ``sink output:`` path of a ``check-sweep`` report"""
+    line = re.search(r'^sink output:\n +(.*)$', out, re.MULTILINE)
+    assert line is not None, out
+    return ast.literal_eval(line[1])
+
+
+def test_check_sweep_reports_the_sink_output_under_the_spec_directory(
+    write_yaml, monkeypatch, capsys
+):
+    """the store path is the resolved zip store beside the spec, and the check
+    writes no store"""
+    path = write_yaml('sink-output.yaml', SINK_SPEC)
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(path))
+
+    assert sink_output(capsys.readouterr().out) == str(
+        path.parent / 'out' / 'run.zarr.zip'
+    )
+    assert not (path.parent / 'out').exists()
+
+
+def test_check_sweep_reads_the_json_written_by_convert_spec(
+    write_yaml, monkeypatch, capsys
+):
+    path = write_yaml('sink-output.yaml', SINK_SPEC)
+    json_path = convert_spec.run(str(path), yaml=False)
+    assert json_path.suffix == '.json'
+    # open_resources chdirs into the spec directory and does not change back
+    monkeypatch.chdir(os.getcwd())
+
+    check_sweep.run(str(json_path))
+
+    assert sink_output(capsys.readouterr().out) == str(
+        path.parent / 'out' / 'run.zarr.zip'
+    )
 
 
 # %% cellular sweeps: the Sweep that the runner derives from a Cellular5GNRSweep

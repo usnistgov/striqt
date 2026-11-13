@@ -24,6 +24,7 @@ nav = [
       { Acquisition = "cli/acquisition.md" },
       { Specs = "cli/specs.md" },
       { Datasets = "cli/datasets.md" },
+      { Studio = "cli/studio.md" },
   ] },
   { "striqt.waveform" = [
       "api/waveform/index.md",

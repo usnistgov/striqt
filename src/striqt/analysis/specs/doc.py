@@ -1,10 +1,11 @@
 from __future__ import annotations as __
 
 import functools
-import types
 import typing
 
 import msgspec
+
+from .helpers import is_union_origin
 
 
 def format_type_hint(hint) -> str:
@@ -21,10 +22,7 @@ def format_type_hint(hint) -> str:
     args = typing.get_args(hint)
 
     if origin:
-        # `types.UnionType` is absent on Python 3.9
-        if origin is typing.Union or (
-            hasattr(types, 'UnionType') and origin is types.UnionType
-        ):
+        if is_union_origin(origin):
             return ' | '.join(format_type_hint(a) for a in args)
 
         # literals
@@ -93,11 +91,8 @@ def parse_type_and_meta(hint):
                 all_metas.extend(metas)
 
         try:
-            if hasattr(types, 'UnionType') and origin is types.UnionType:
-                import operator
-                from functools import reduce
-
-                clean_type = reduce(operator.or_, cleaned_args)
+            if is_union_origin(origin):
+                clean_type = typing.Union[tuple(cleaned_args)]
             else:
                 clean_type = origin[tuple(cleaned_args)]
         except Exception:

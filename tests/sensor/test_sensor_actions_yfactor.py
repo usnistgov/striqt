@@ -344,6 +344,51 @@ class TestOperatorPrompts:
         ]
 
 
+class _RecordingPrompt:
+    """a `prompt` hook that appends each text to `texts` and pops `answers`"""
+
+    def __init__(self, *answers):
+        self.answers = list(answers)
+        self.texts = []
+
+    def __call__(self, text):
+        self.texts.append(text)
+        return self.answers.pop(0)
+
+
+@pytest.fixture
+def no_stdin(monkeypatch):
+    """fail the test if `sa.util.blocking_input` is called"""
+    import striqt.analysis as sa
+
+    def refuse(prompt=None):
+        raise AssertionError(f'stdin read with prompt {prompt!r}')
+
+    monkeypatch.setattr(sa.util, 'blocking_input', refuse)
+
+
+class TestPromptHook:
+    def test_confirm_enr_asks_the_hook(self, no_stdin):
+        prompt = _RecordingPrompt('y')
+        yfactor.confirm_enr(20.87, prompt)
+        (text,) = prompt.texts
+        assert 'ENR' in text and '20.87' in text
+
+    def test_confirm_enr_rejection_through_the_hook_raises(self, no_stdin):
+        prompt = _RecordingPrompt('n')
+        with pytest.raises(RuntimeError, match='ENR'):
+            yfactor.confirm_enr(20.87, prompt)
+
+    def test_switch_diode_asks_the_hook(self, no_stdin):
+        prompt = _RecordingPrompt('', '')
+        yfactor.switch_diode(1, True, prompt)
+        yfactor.switch_diode(1, False, prompt)
+        assert [t.split(' and press enter')[0] for t in prompt.texts] == [
+            'enable noise diode at port 1',
+            'disable noise diode at port 1',
+        ]
+
+
 # %% registry
 
 
@@ -386,6 +431,34 @@ def test_each_pass_begins_with_a_fresh_acquisition(monkeypatch, scripted_input):
         (2, {TOGGLE: True}),
         (3, {TOGGLE: False}),
         (4, {TOGGLE: True}),
+    ]
+
+
+def test_iterate_prompts_through_the_callbacks_hook(monkeypatch, no_stdin):
+    """the ENR confirmation and each diode switch go to `resources['callbacks'].prompt`"""
+    runner = make_calibration_runner(loops=(PORT_LOOP,))
+    passes = yfactor.calibration_passes(runner.spec)
+    prompt = _RecordingPrompt('y', *[''] * len(passes))
+
+    def fake_iterate_captures(resources, **kws):
+        yield from ()
+
+    monkeypatch.setattr(yfactor.core, 'iterate_captures', fake_iterate_captures)
+    resources = {
+        'source': _RecordingSource(),
+        'sink': ss.sinks.NoSink,
+        'format_path': None,
+        'callbacks': ss.lib.resources.SweepCallbacks(prompt=prompt),
+    }
+    list(runner.iterate(resources))
+
+    assert 'ENR' in prompt.texts[0]
+    switches = [
+        re.match(r'(enable|disable) noise diode at port (\d+)', text).groups()
+        for text in prompt.texts[1:]
+    ]
+    assert switches == [
+        ('enable' if on else 'disable', str(port)) for port, on in passes
     ]
 
 

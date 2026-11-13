@@ -5,22 +5,20 @@ import functools
 import importlib
 import math
 import re
-import threading
 import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Mapping
 from pathlib import Path
 
-from yaml import SequenceNode
-
-from .. import specs
 from . import dataarrays, register, util
 from .util import np, pd, xr
 
+# re-exported: `striqt.sensor.lib.io` and `striqt.sensor.io` import the decoder from here
+from .yaml import decode_from_yaml_file as decode_from_yaml_file
+
 if typing.TYPE_CHECKING:
     import numcodecs
-    import yaml
     import zarr
     from typing_extensions import TypeIs
 
@@ -29,11 +27,16 @@ if typing.TYPE_CHECKING:
 else:
     numcodecs = util.lazy_import('numcodecs')
     zarr = util.lazy_import('zarr')
-    yaml = util.lazy_import('yaml')
 
 warnings.filterwarnings(
     'ignore', '.*removed in a Zarr-Python version 3.*', FutureWarning
 )
+
+
+def is_zip_store(path: str | Path) -> bool:
+    """return True when `path` ends in ``.zip`` in any letter case, the suffix of a
+    zarr zip store."""
+    return str(path).lower().endswith('.zip')
 
 
 def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> ZarrStore:
@@ -82,7 +85,7 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
             kws = {}
         fs, _ = fsspec.url_to_fs(target, asynchronous=True, **kws)
         return fs.get_mapper('')
-    elif str(target).endswith('.zip'):
+    elif is_zip_store(target):
         store = storage.ZipStore(target, mode=mode, compression=0)
     else:
         store = DirectoryStore(target)
@@ -406,53 +409,6 @@ def load_attrs(path: str | Path) -> dict[str, typing.Any]:
     with open_store(path, mode='r') as store:
         array = zarr.open(store)
         return array.attrs.asdict()
-
-
-_S = typing.TypeVar('_S', bound=specs.SpecBase)
-
-
-@typing.overload
-def decode_from_yaml_file(
-    path: str | Path, *, type: type[dict] = ...
-) -> dict[str, typing.Any]: ...
-
-
-@typing.overload
-def decode_from_yaml_file(path: str | Path, *, type: type[_S]) -> _S: ...
-
-
-def decode_from_yaml_file(
-    path: str | Path, *, type: type[specs.SpecBase | dict] = dict
-) -> dict[str, typing.Any] | specs.SpecBase:
-    """decode a YAML file into a dict or a spec struct.
-
-    An ``!include`` tag is expanded relative to the directory of the file that
-    contains the tag. YAML sequences decode as tuples.
-
-    Args:
-        path: the YAML file
-        type: `dict` for the mapping as decoded, or a `specs.SpecBase` subclass to
-            convert the mapping into
-
-    Returns:
-        the decoded dict, or an instance of `type`
-
-    Raises:
-        TypeError: when `type` is neither `dict` nor a `specs.SpecBase` subclass
-        FileNotFoundError: when `path` or an ``!include`` pattern matches no file
-        yaml.YAMLError: when the document is malformed
-        msgspec.ValidationError: when the document does not match `type`
-    """
-
-    with open(path) as f, _YAMLIncludeConstructor(path):
-        obj = yaml.load(f, _YAMLFrozenLoader)
-
-    if issubclass(type, dict):
-        return obj
-    elif issubclass(type, specs.SpecBase):
-        return type.from_dict(obj)
-    else:
-        raise TypeError(f'unsupported type {type!r}')
 
 
 class _FileStreamBase:
@@ -977,111 +933,3 @@ def _build_encodings_zarr_v2(
             encodings[name]['compressor'] = compressor
 
     return encodings
-
-
-class _YAMLFrozenLoader(yaml.SafeLoader):
-    def _construct_sequence(
-        self, node: SequenceNode, deep: bool = False
-    ) -> tuple[typing.Any, ...]:
-        return tuple(super().construct_sequence(node, deep))
-
-
-_YAMLFrozenLoader.add_constructor(
-    yaml.resolver.BaseResolver.DEFAULT_SEQUENCE_TAG,  # ty: ignore
-    _YAMLFrozenLoader._construct_sequence,
-)
-
-
-def _expand_paths(node: yaml.Node, root_dir: Path) -> list[str]:
-    """expand the ``!include`` patterns in `node` into sorted paths.
-
-    Args:
-        node: a scalar node with one glob pattern, or a sequence node of patterns
-        root_dir: the directory under which relative patterns are globbed
-
-    Raises:
-        FileNotFoundError: when a pattern matches no file
-        TypeError: when `node` is neither a scalar nor a sequence
-    """
-
-    def glob_path(s: str) -> list[str]:
-        p = Path(s)
-        if p.is_absolute():
-            rel = p.parent
-            s = p.name
-        else:
-            rel = root_dir
-        paths = [str(g) for g in rel.glob(s)]
-        if len(paths) == 0:
-            raise FileNotFoundError(s)
-        return sorted(paths)
-
-    if isinstance(node.value, str):
-        values = glob_path(node.value)
-    elif isinstance(node.value, (list, tuple)):
-        values = []
-        for n in node.value:
-            values.extend(glob_path(n.value))
-    else:
-        raise TypeError(f'invalid tag type {type(node.value)!r} in !import')
-
-    return values
-
-
-class _YAMLIncludeConstructor(yaml.Loader):
-    _lock = threading.RLock()
-
-    def __init__(self, path):
-        self.nested_paths: list[Path] = [Path(path)]
-
-    def __enter__(self):
-        self._lock.acquire()
-        yaml.add_constructor('!include', self, Loader=_YAMLFrozenLoader)
-
-    def __exit__(self, *args):
-        self._lock.release()
-
-    def get_include_path(self, s: str) -> Path:
-        """push and return the path of an included file.
-
-        A relative `s` is kept relative to the working directory, not to the
-        including file.
-        """
-        p = Path(s)
-        self.nested_paths.append(p)
-        return p
-
-    def pop_include_path(self):
-        self.nested_paths.pop()
-
-    def __call__(self, loader: _YAMLFrozenLoader, node: yaml.Node):
-        if not node.tag.startswith('!include'):
-            raise ValueError(f'unknown tag {node.tag!r}')
-
-        values = _expand_paths(node, root_dir=self.nested_paths[-1].parent)
-
-        content = []
-        for v in values:
-            path = self.get_include_path(v)
-            with open(path, 'rb') as stream:
-                content.append(yaml.load(stream, _YAMLFrozenLoader))
-            self.pop_include_path()
-
-        if len(content) == 1:
-            return content[0]
-
-        if all(isinstance(c, dict) for c in content):
-            result = dict(content[0])
-            for d in content[1:]:
-                result.update(d)
-        elif all(isinstance(c, (tuple, list)) for c in content):
-            result = list(content[0])
-            for l in content[1:]:
-                result.extend(l)
-        else:
-            raise TypeError(
-                'contents of multiple !include files be '
-                'either all mappings or all sequences'
-            )
-
-        return result

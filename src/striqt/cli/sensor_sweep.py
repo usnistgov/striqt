@@ -2,16 +2,38 @@
 
 """the ``sensor-sweep`` console entry point"""
 
-from typing import TYPE_CHECKING, Any, Callable, Union
+import functools
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import click
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import striqt.sensor as ss
-    from striqt.sensor.lib.resources import Resources
+    from striqt.sensor.lib.resources import Resources, SweepCallbacks
+    from striqt.sensor.lib.typing import PromptCallback
 
 
-def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
+def confirm_labels(
+    spec: 'ss.specs.Sweep',
+    source_id: str,
+    prompt: 'Optional[PromptCallback]' = None,
+) -> None:
+    """block on a y/n prompt that lists the capture adjustments of `spec` at `source_id`.
+
+    Nothing is prompted when `spec.adjust_captures` sets no field. The prompt repeats
+    until the answer is ``y`` or ``n``.
+
+    Args:
+        spec: the sweep with the `adjust_captures` block
+        source_id: the id of the open source, selecting the adjustments
+        prompt: hook called with the prompt text, returning the operator's answer;
+            None reads one line from stdin through `blocking_input`
+
+    Raises:
+        KeyboardInterrupt: if the operator answers ``n``
+    """
     from pprint import pformat
 
     import striqt.analysis as sa
@@ -20,6 +42,8 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
     labels = ss.specs.sequencing.list_capture_adjustments(spec, source_id)
     if len(labels) == 0:
         return
+    if prompt is None:
+        prompt = sa.util.blocking_input
 
     dict_repr = pformat(labels, indent=2, sort_dicts=False)
     info = (
@@ -30,7 +54,7 @@ def confirm_labels(spec: 'ss.specs.Sweep', source_id: str):
     )
 
     while True:
-        answer = sa.util.blocking_input(f'{info}\nconfirm: are these correct? (y/n) ')
+        answer = prompt(f'{info}\nconfirm: are these correct? (y/n) ')
         if answer.lower() == 'y':
             break
         elif answer.lower() == 'n':
@@ -91,28 +115,78 @@ def log_spectrogram_snr(
         )
 
 
-def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None):
-    from pathlib import Path
+def logging_callbacks(
+    *,
+    on_analyzed: 'Optional[Callable[[ss.lib.compute.DelayedDataset], None]]' = None,
+    on_source_opened: Union[Callable[..., None], None] = None,
+    prompt: 'Optional[PromptCallback]' = None,
+) -> 'SweepCallbacks':
+    """return the hooks of a run with the log lines of `sensor-sweep`.
 
+    The returned bundle logs a WARNING for each overloaded port after each analysis
+    and the spectrogram SNR of each cached spectrogram.
+
+    Args:
+        on_analyzed: a further hook run with each analyzed dataset after the
+            overload check, or None
+        on_source_opened: hook run once with ``(sweep, source_id)`` after the source
+            opens, or None
+        prompt: hook called with the text of each operator prompt, or None to read
+            stdin
+    """
+    from striqt.sensor.lib.resources import SweepCallbacks
+
+    def analyzed(dd: 'ss.lib.compute.DelayedDataset') -> None:
+        log_overloads(dd)
+        if on_analyzed is not None:
+            on_analyzed(dd)
+
+    return SweepCallbacks(
+        on_source_opened=on_source_opened,
+        on_analyzed=analyzed,
+        on_sink_cached=log_spectrogram_snr,
+        prompt=prompt,
+    )
+
+
+def run(
+    path: 'Union[str, Path]',
+    *,
+    output_path: Optional[str] = None,
+    check_func: Union[Callable[..., None], None] = None,
+    prompt: 'Optional[PromptCallback]' = None,
+) -> None:
+    """run the action spec in the yaml or json file at `path`.
+
+    Args:
+        path: the yaml or json spec file
+        output_path: replaces `sink.path` of the spec when given
+        check_func: hook run once with ``(sweep, source_id, prompt=prompt)`` after
+            the source opens and before the first capture, or None for no hook
+        prompt: hook called with the text of each operator prompt, returning the
+            operator's answer; None reads one line from stdin through
+            `blocking_input`
+
+    Raises:
+        click.ClickException: if the suffix of `path` is none of ``.yaml``, ``.yml``,
+            or ``.json``
+    """
     import striqt.sensor as ss
 
-    if isinstance(path, Path):
-        path = str(path)
+    path = str(path)
 
-    if path.endswith(('.yaml', '.yml')):
-        spec = ss.read_yaml_spec(path, output_path=output_path)
-    elif path.endswith('.json'):
-        spec = ss.read_json_spec(path, output_path=output_path)
+    try:
+        spec = ss.read_spec(path, output_path=output_path)
+    except ValueError as ex:
+        raise click.ClickException(str(ex)) from ex
+
+    if check_func is None:
+        on_source_opened = None
     else:
-        raise click.ClickException('expected file to have .json or .yaml suffix')
+        on_source_opened = functools.partial(check_func, prompt=prompt)
 
-    ctx = ss.open_resources(
-        spec,
-        path,
-        on_source_opened=check_func,
-        on_analyzed=log_overloads,
-        on_sink_cached=log_spectrogram_snr,
-    )
+    callbacks = logging_callbacks(on_source_opened=on_source_opened, prompt=prompt)
+    ctx = ss.open_resources(spec, path).set_callbacks(callbacks)
     with ctx as resources:
         sweep = ss.iterate_sweep(resources, yield_values=False, always_yield=True)
         for _ in sweep:
@@ -152,7 +226,14 @@ def run(path: str, *, output_path=None, check_func: Union[Callable, None] = None
     type=click.Path(),
     help='override the output file path in the yaml specification',
 )
-def cli(*, path: str, debug: bool, verbose: bool, skip_confirm: bool, output_path):
+def cli(
+    *,
+    path: str,
+    debug: bool,
+    verbose: bool,
+    skip_confirm: bool,
+    output_path: Optional[str],
+) -> None:
     """run the sweep specified at PATH.
 
     PATH is a YAML or JSON sweep specification. The results are written to the sink

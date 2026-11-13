@@ -553,14 +553,17 @@ def _restricted_cellular_binding(origin):
 AIR = ss.bindings.air7101b
 
 
-def air_sweep(capture=None, *, analysis=None, **source_kws):
-    """return an `air7101b` sweep of one `capture` (a default `soapy_capture` when None)
-    with `source_kws` forwarded to the source spec and `analysis` set when given."""
-    if capture is None:
-        capture = soapy_capture()
+def air_sweep(*captures, analysis=None, loops=(), adjust_captures=None, **source_kws):
+    """return an `air7101b` sweep of `captures` (one default `soapy_capture` when none
+    is given) with `source_kws` forwarded to the source spec, and `analysis`,
+    `loops`, and `adjust_captures` set when given."""
+    if not captures:
+        captures = (soapy_capture(),)
     kws = {} if analysis is None else {'analysis': analysis}
+    if adjust_captures is not None:
+        kws['adjust_captures'] = adjust_captures
     return AIR.sensor.sweep_spec_cls(
-        source=AIR.schema.source(**source_kws), captures=(capture,), **kws
+        source=AIR.schema.source(**source_kws), captures=captures, loops=loops, **kws
     )
 
 

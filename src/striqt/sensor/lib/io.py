@@ -24,6 +24,45 @@ if TYPE_CHECKING:
     from .typing import ZarrStore
 
 
+def resolve_store_path(
+    spec: specs.ZarrSink,
+    *,
+    format_path: specs.paths.PathFormatter | None = None,
+) -> Path:
+    """return the path of the zarr store that `open_store` opens for `spec`.
+
+    The path ends in ``.zarr.zip`` when `spec.path` ends in ``.zip`` or `spec.store`
+    is ``'zip'``, and otherwise in ``.zarr``.
+
+    Args:
+        spec: the sink block with the `path` and `store` type
+        format_path: expands the ``{fields}`` of `spec.path`; None leaves the path
+            as is
+
+    Raises:
+        ValueError: if `spec.path` is None
+    """
+    if spec.path is None:
+        raise ValueError('sink.path is null, but a zarr store needs a path')
+    spec_path = spec.path
+
+    if format_path is not None:
+        spec_path = format_path(spec_path)
+
+    spec_path = Path(spec_path)
+    name = spec_path.name.lower()
+
+    if spec.store == 'zip' or name.endswith('.zip'):
+        if name.endswith('.zarr.zip'):
+            return spec_path
+        if name.endswith('.zip'):
+            return spec_path.with_name(spec_path.name[: -len('.zip')] + '.zarr.zip')
+        return spec_path.with_name(spec_path.name + '.zarr.zip')
+    if name.endswith('.zarr'):
+        return spec_path
+    return spec_path.with_name(spec_path.name + '.zarr')
+
+
 def open_store(
     spec: specs.ZarrSink,
     *,
@@ -47,30 +86,7 @@ def open_store(
         ValueError: if `spec.path` is None
         FileExistsError: if a non-empty store is at the path and `force` is False
     """
-    if spec.path is None:
-        raise ValueError('sink.path is null, but a zarr store needs a path')
-    spec_path = spec.path
-
-    if format_path is not None:
-        spec_path = format_path(spec_path)
-
-    spec_path = Path(spec_path)
-    name = spec_path.name.lower()
-
-    if spec.store == 'zip' or name.endswith('.zip'):
-        if name.endswith('.zarr.zip'):
-            fixed_path = spec_path
-        elif name.endswith('.zip'):
-            fixed_path = spec_path.with_name(
-                spec_path.name[: -len('.zip')] + '.zarr.zip'
-            )
-        else:
-            fixed_path = spec_path.with_name(spec_path.name + '.zarr.zip')
-    elif name.endswith('.zarr'):
-        fixed_path = spec_path
-    else:
-        fixed_path = spec_path.with_name(spec_path.name + '.zarr')
-
+    fixed_path = resolve_store_path(spec, format_path=format_path)
     fixed_path.parent.mkdir(parents=True, exist_ok=True)
     occupied = fixed_path.is_file() or (
         fixed_path.is_dir() and any(fixed_path.iterdir())
@@ -165,6 +181,47 @@ def read_json_spec(
         output_path=output_path,
         store_backend=store_backend,
     )
+
+
+def read_spec(
+    path: str | Path,
+    *,
+    type: type[specs.ActionSpec] | None = None,
+    output_path: Optional[str] = None,
+    store_backend: Optional[str] = None,
+) -> specs.ActionSpec:
+    """decode the action spec in the yaml or json file at `path` by its suffix.
+
+    A ``.yaml`` or ``.yml`` suffix selects `read_yaml_spec`, and ``.json`` selects
+    `read_json_spec`. The suffix comparison ignores case.
+
+    Args:
+        path: the yaml or json file
+        type: the action spec type to decode into, or None to select the type
+            bound under the ``sensor_binding`` tag
+        output_path: replaces `sink.path` in the returned spec when given
+        store_backend: replaces `sink.store` of a `Sweep` spec when given
+
+    Returns:
+        an instance of `type`, or of the bound class when `type` is None
+
+    Raises:
+        ValueError: if the suffix of `path` is none of ``.yaml``, ``.yml``, or
+            ``.json``
+        msgspec.ValidationError: if the file does not validate as the spec class, or
+            if the tag names no registered binding
+        TypeError: if `store_backend` is given and the `sink` of the spec is not a
+            `ZarrSink`
+        FileNotFoundError: if `extensions.import_path` does not exist
+    """
+    suffix = Path(path).suffix
+    if suffix.lower() in ('.yaml', '.yml'):
+        reader = read_yaml_spec
+    elif suffix.lower() == '.json':
+        reader = read_json_spec
+    else:
+        raise ValueError(f'expected a .yaml, .yml, or .json spec file, not {suffix!r}')
+    return reader(path, type=type, output_path=output_path, store_backend=store_backend)
 
 
 def read_zarr_spec(

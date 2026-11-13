@@ -21,6 +21,7 @@ dependencies = [
     # schemas for the yaml specs and validation
     "msgspec>=0.19.0",
     "pyyaml",
+    "ruamel.yaml>=0.18",
     # for built-in debugging
     "ipython>=8.18.1",
     # platform introspection tooling
@@ -73,7 +74,7 @@ plot-capture = "striqt.cli.plot_capture:cli"
 rechunk-zarr = "striqt.cli.rechunk_zarr:cli"
 convert-spec = "striqt.cli.convert_spec:cli"
 zip-zarr = "striqt.cli.zip_zarr:cli"
-web-plotter = "striqt.cli.web_plotter:cli"
+striqt-studio = "striqt.cli.studio:cli"
 
 [tool.ruff]
 target-version = "py39"

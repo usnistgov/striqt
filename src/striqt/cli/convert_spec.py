@@ -28,7 +28,16 @@ def cli(path, yaml: bool):
     print(f'wrote "{out_path!s}"')
 
 
-def run(path, yaml: bool) -> 'Path':
+def run(path: str, yaml: bool) -> 'Path':
+    """write the spec at `path` beside the file as json, or as yaml with `yaml`.
+
+    Returns:
+        the written path
+
+    Raises:
+        click.ClickException: if the suffix of `path` is none of ``.yaml``, ``.yml``,
+            or ``.json``
+    """
     from pathlib import Path
 
     import msgspec
@@ -36,12 +45,10 @@ def run(path, yaml: bool) -> 'Path':
     import striqt.analysis as sa
     import striqt.sensor as ss
 
-    if path.endswith(('.yaml', '.yml')):
-        spec = ss.read_yaml_spec(path)
-    elif path.endswith('.json'):
-        spec = ss.read_json_spec(path)
-    else:
-        raise click.ClickException(f'unrecognized file extension for {path}')
+    try:
+        spec = ss.read_spec(path)
+    except ValueError as ex:
+        raise click.ClickException(str(ex)) from ex
 
     if yaml:
         out_path = Path(path).with_suffix('.yaml')

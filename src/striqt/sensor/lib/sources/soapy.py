@@ -681,16 +681,18 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             # the soapy module is partially torn down after some exceptions
             return
 
-        self.device.__del__ = lambda: None
-        device = getattr(self, '_device', None)
-        rx_stream = getattr(self, '_rx_stream', None)
+        # `device` is unset after a close, and when `__init__` raised before it was set
+        device = getattr(self, 'device', None)
+        if device is None:
+            return
+        rx_stream = getattr(self, 'rx_stream', None)
 
         try:
-            if device is not None and rx_stream is not None:
+            if rx_stream is not None:
                 rx_stream.close(device)
         finally:
-            if device is not None:
-                device.close()
+            device.close()
+            del self.device
 
         sa.util.get_logger('source').info('closed')
 

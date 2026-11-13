@@ -51,14 +51,18 @@ def test_split_leaves_adjust_analysis_intact(subtests):
             assert c.adjust_analysis == {'a': (1, 2, 3)}
 
 
-def test_split_rejects_a_tuple_field_shorter_than_port():
-    capture = make_capture(port=(0, 1, 2), external_lo_frequency=(1e9, 2e9))
-    with pytest.raises(ValueError):
-        C.split_capture_ports(capture)
-
-
 class _LabeledCapture(ss.specs.SoapyCapture, frozen=True, kw_only=True):
     label: Union[str, tuple[str, ...], None] = None
+
+
+def test_split_rejects_an_unmarked_tuple_field_shorter_than_port():
+    """construction checks only the `PerPort` fields, and `split_capture_ports`
+    rejects a wrong-length tuple in a field without the marker"""
+    capture = _LabeledCapture(
+        port=(0, 1, 2), center_frequency=1e9, gain=0.0, label=('omni', 'panel')
+    )
+    with pytest.raises(ValueError, match='label'):
+        C.split_capture_ports(capture)
 
 
 def test_split_distributes_an_unmarked_union_field_by_length():
