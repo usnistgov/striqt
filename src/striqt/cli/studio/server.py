@@ -26,6 +26,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+import striqt.analysis as sa
+
 from . import logs, session as session_
 from .session import StudioSession
 
@@ -38,13 +40,7 @@ if TYPE_CHECKING:
     from striqt.figures.backend import PlotlyBackend
 
 
-def _enc_hook(obj: Any) -> Any:
-    import striqt.analysis as sa
-
-    return sa.specs.helpers._enc_hook_no_tuple_keys(obj)
-
-
-_json_encoder = msgspec.json.Encoder(enc_hook=_enc_hook)
+_json_encoder = msgspec.json.Encoder(enc_hook=sa.specs.helpers._enc_hook_no_tuple_keys)
 _json_decoder = msgspec.json.Decoder()
 
 _STATIC_DIR = Path(__file__).parent / 'static'
@@ -62,15 +58,11 @@ class Clients:
     """True while a plot broadcast is in progress"""
     data_updated: bool = False
     """True when a dataset arrived during a broadcast"""
+    log_handler: Optional[logs.WebSocketLogHandler] = None
+    """the handler forwarding the records of the run in progress, or None"""
 
 
 CLIENTS = Clients()
-
-
-def _logger() -> logging.LoggerAdapter:
-    import striqt.analysis as sa
-
-    return sa.util.get_logger('sweep')
 
 
 # %% messages to the page
@@ -92,7 +84,7 @@ def capture_options(choices: ss.specs.sequencing.PlanChoices | None) -> dict[str
 def capture_selection(session: StudioSession) -> dict[str, Any]:
     """return the selections of `session` as indexes into `capture_options`."""
     loops: list[int | None] = []
-    for loop in () if session.choices is None else session.choices.loops:
+    for loop in () if session.open is None else session.open.choices.loops:
         key = (loop.isin, loop.field)
         if key in session.selected_loops:
             loops.append(loop.values.index(session.selected_loops[key]))
@@ -132,11 +124,13 @@ def coordinates_message(
 def run_message(session: StudioSession) -> dict[str, Any]:
     """return the ``run`` field of the state message: the output path and progress."""
     run = session.run
-    path = session.sink_path
+    opened = session.open
+    path = None if opened is None else opened.sink_path
+    adjustments = {} if opened is None else opened.adjustments
     message: dict[str, Any] = {
         'sink_path': path,
         'exists': path is not None and Path(path).exists(),
-        'adjustments': {k: list(v) for k, v in session.adjustments.items()},
+        'adjustments': {k: list(v) for k, v in adjustments.items()},
     }
     if run is not None:
         message.update({
@@ -157,23 +151,26 @@ def state_message(session: StudioSession) -> dict[str, Any]:
 
     ``coordinates`` is None until the first acquisition is analyzed.
     """
+    opened = session.open
     coordinates: dict[str, Any] | None = None
-    if session.dataset is not None:
-        coordinates = coordinates_message(session.dataset, session.varying_fields)
-    spec = session.edited_spec or session.applied_spec
+    if session.dataset is not None and opened is not None:
+        coordinates = coordinates_message(session.dataset, opened.varying_fields)
+    spec = session_.current_spec(session)
     prompt = session.prompt
     return {
         'type': 'state',
         'mode': session.mode,
         'spec_filename': Path(session.spec_path).name,
         'action_class': None if spec is None else type(spec).__name__,
-        'available_variables': session.available_variables,
-        'variable_labels': session.variable_labels,
+        'available_variables': []
+        if opened is None
+        else list(opened.available_variables),
+        'variable_labels': {} if opened is None else opened.variable_labels,
         'selected_variable': session.selected_variable,
         'coordinates': coordinates,
-        'capture_options': capture_options(session.choices),
+        'capture_options': capture_options(None if opened is None else opened.choices),
         'capture_selection': capture_selection(session),
-        'running': session.running,
+        'running': session.preview_enabled,
         'run': run_message(session),
         'prompt': None if prompt is None else {'id': prompt.id, 'text': prompt.text},
         'apply_error': session.apply_error,
@@ -226,6 +223,8 @@ def json_tree(node: Any) -> Any:
 
     A sequence-valued YAML key (``[0, 1]: 0`` in an `adjust_captures` lookup) is a
     tuple in the merged tree and ``'(0, 1)'`` in the provenance pointers.
+    `_enc_hook_no_tuple_keys`, which encodes the spec defaults and the zarr attrs,
+    writes the same key as ``'[0, 1]'``.
     """
     if isinstance(node, dict):
         return {
@@ -307,17 +306,11 @@ async def broadcast_spec() -> None:
     await send_message(spec_message(SESSION))
 
 
-LOG_LEVELS = {
-    'DEBUG': logging.DEBUG,
-    'INFO': logging.INFO,
-    'WARNING': logging.WARNING,
-    'ERROR': logging.ERROR,
-}
-
-
 def log_level(name: Any) -> int:
     """return the logging level named by `name`, or INFO for an unknown name."""
-    return LOG_LEVELS.get(str(name).upper(), logging.INFO)
+    from striqt.sensor.lib.util import _LOG_LEVEL_NAMES
+
+    return _LOG_LEVEL_NAMES.get(str(name).lower(), logging.INFO)
 
 
 async def _error(websocket: WebSocket, text: str, command: str | None = None) -> None:
@@ -352,7 +345,7 @@ async def handle_edit(websocket: WebSocket, msg: dict[str, Any]) -> None:
     except (KeyError, ValueError) as ex:
         await _error(websocket, f'{type(ex).__name__}: {ex}', 'edit')
         return
-    await reload_spec_files()
+    await asyncio.to_thread(session_.revalidate, SESSION)
     await broadcast_spec()
     await broadcast_state()
 
@@ -377,26 +370,9 @@ async def handle_revert(websocket: WebSocket, msg: dict[str, Any]) -> None:
     except (KeyError, ValueError, TypeError) as ex:
         await _error(websocket, f'{type(ex).__name__}: {ex}', 'revert')
         return
-    await reload_spec_files()
+    await asyncio.to_thread(session_.revalidate, SESSION)
     await broadcast_spec()
     await broadcast_state()
-
-
-async def reload_spec_files() -> None:
-    """load the provenance of the spec files again and decode the files."""
-    from striqt.analysis.lib import yaml as spec_yaml
-
-    try:
-        SESSION.provenance = await asyncio.to_thread(
-            spec_yaml.load_yaml_provenance, SESSION.spec_path
-        )
-    except Exception as ex:
-        SESSION.validation_errors = [
-            {'path': '', 'message': f'{type(ex).__name__}: {ex}'}
-        ]
-        SESSION.edited_spec = None
-        return
-    await asyncio.to_thread(session_.revalidate, SESSION)
 
 
 async def handle_message(websocket: WebSocket, msg: dict[str, Any]) -> None:
@@ -416,7 +392,7 @@ async def handle_message(websocket: WebSocket, msg: dict[str, Any]) -> None:
         session_.apply_capture_selection(SESSION, msg)
         await broadcast_state()
     elif kind == 'set_running':
-        SESSION.running = bool(msg['running'])
+        SESSION.preview_enabled = bool(msg['running'])
         await broadcast_state()
     elif kind == 'edit':
         await handle_edit(websocket, msg)
@@ -451,8 +427,8 @@ async def handle_message(websocket: WebSocket, msg: dict[str, Any]) -> None:
         if not session_.answer_prompt(SESSION, int(msg['id']), str(msg['text'])):
             await _error(websocket, 'no prompt is waiting for that answer', kind)
     elif kind == 'set_log_level':
-        if LOG_HANDLER.handler is not None:
-            LOG_HANDLER.handler.setLevel(log_level(msg.get('level')))
+        if CLIENTS.log_handler is not None:
+            CLIENTS.log_handler.setLevel(log_level(msg.get('level')))
     else:
         await _error(websocket, f'unknown message type {kind!r}', kind)
 
@@ -469,7 +445,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         CLIENTS.websockets.discard(websocket)
     except Exception:
-        _logger().exception('websocket handler failed')
+        session_._logger().exception('websocket handler failed')
         CLIENTS.websockets.discard(websocket)
 
 
@@ -525,8 +501,8 @@ _PLOT_LOCK = threading.Lock()
 
 def _reset_plotter() -> None:
     with _PLOT_LOCK:
-        if SESSION.plotter is not None:
-            SESSION.plotter.reset(limits=True)
+        if SESSION.open is not None:
+            SESSION.open.plotter.reset(limits=True)
 
 
 def _prepare_plot_data_sync(
@@ -595,9 +571,10 @@ def _serialize_plot_message(
 
 async def _do_broadcast() -> None:
     result = SESSION.dataset
-    plotter = SESSION.plotter
-    if result is None or plotter is None or not CLIENTS.websockets:
+    opened = SESSION.open
+    if result is None or opened is None or not CLIENTS.websockets:
         return
+    plotter = opened.plotter
 
     variable = SESSION.selected_variable
     if variable not in result.delayed:
@@ -606,7 +583,7 @@ async def _do_broadcast() -> None:
 
     try:
         plot_data = await asyncio.to_thread(
-            _prepare_plot_data_sync, result, plotter, variable, SESSION.data_select
+            _prepare_plot_data_sync, result, plotter, variable, opened.data_select
         )
 
         if not plot_data:
@@ -617,7 +594,7 @@ async def _do_broadcast() -> None:
             return
 
         coordinates = await asyncio.to_thread(
-            coordinates_message, result, SESSION.varying_fields
+            coordinates_message, result, opened.varying_fields
         )
         message = await asyncio.to_thread(
             _serialize_plot_message, plot_data, coordinates, SESSION
@@ -625,7 +602,7 @@ async def _do_broadcast() -> None:
         await _send_all(message)
 
     except Exception as e:
-        _logger().exception(f"plotting '{variable}' failed")
+        session_._logger().exception(f"plotting '{variable}' failed")
         await send_message({
             'type': 'error',
             'message': f"Error plotting '{variable}': {e!s}",
@@ -665,18 +642,13 @@ def serving_urls(host: str, port: int) -> list[str]:
     return [f'http://{name}:{port}' for name in names]
 
 
-@dataclasses.dataclass
-class LogForwarding:
-    """the log handler of the run in progress, or None between runs"""
+def session_events(
+    loop: asyncio.AbstractEventLoop, server: Any
+) -> session_.SessionEvents:
+    """return the `SessionEvents` that schedule the broadcasts on `loop`.
 
-    handler: Optional[logs.WebSocketLogHandler] = None
-
-
-LOG_HANDLER = LogForwarding()
-
-
-def session_events(loop: asyncio.AbstractEventLoop) -> session_.SessionEvents:
-    """return the `SessionEvents` that schedule the broadcasts on `loop`."""
+    `server` is the uvicorn server, which exits when the worker thread ends.
+    """
 
     def schedule(coro: Any) -> None:
         if loop.is_running() and not SESSION.stop.is_set():
@@ -687,20 +659,20 @@ def session_events(loop: asyncio.AbstractEventLoop) -> session_.SessionEvents:
     def attach_logs(level: int) -> logs.WebSocketLogHandler:
         handler = logs.WebSocketLogHandler(send_message, loop, level)
         logging.getLogger(logs.PARENT_LOGGER).addHandler(handler)
-        LOG_HANDLER.handler = handler
+        CLIENTS.log_handler = handler
         return handler
 
     def detach_logs(handler: logs.WebSocketLogHandler) -> None:
         logging.getLogger(logs.PARENT_LOGGER).removeHandler(handler)
-        if LOG_HANDLER.handler is handler:
-            LOG_HANDLER.handler = None
+        if CLIENTS.log_handler is handler:
+            CLIENTS.log_handler = None
 
     return session_.SessionEvents(
         state_changed=lambda: schedule(broadcast_state()),
         data_ready=lambda: schedule(broadcast_plot_update()),
         attach_logs=attach_logs,
         detach_logs=detach_logs,
-        closed=lambda: None,
+        closed=lambda: setattr(server, 'should_exit', True),
     )
 
 
@@ -726,11 +698,8 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     except ValueError as ex:
         raise click.ClickException(str(ex)) from ex
     SESSION.applied_spec = spec
-    SESSION.edited_spec = spec
-    if SESSION.spec_path.endswith(('.yaml', '.yml')):
-        from striqt.analysis.lib import yaml as spec_yaml
-
-        SESSION.provenance = spec_yaml.load_yaml_provenance(SESSION.spec_path)
+    session_.revalidate(SESSION)
+    if SESSION.provenance is not None:
         SESSION.applied_tree = copy.deepcopy(SESSION.provenance.tree)
 
     loop = asyncio.new_event_loop()
@@ -746,13 +715,10 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
             await asyncio.sleep(0.05)
         if server.started:
             urls = ', '.join(serving_urls(host, port))
-            _logger().info(f'serving the studio at {urls}')
+            session_._logger().info(f'serving the studio at {urls}')
         await task
 
-    events = dataclasses.replace(
-        session_events(loop), closed=lambda: setattr(server, 'should_exit', True)
-    )
-    session_.start(SESSION, events)
+    session_.start(SESSION, session_events(loop, server))
 
     try:
         loop.run_until_complete(serve())

@@ -106,12 +106,44 @@ class PendingPrompt:
 _prompt_ids = itertools.count(1)
 
 
+@dataclasses.dataclass(frozen=True)
+class OpenSpec:
+    """the facts derived from the applied spec and the open resources.
+
+    An instance is built by `configure` once the resources open and replaced as a
+    whole on the next apply.
+    """
+
+    sweep: ss.specs.Sweep
+    """the sweep spec of the open resources"""
+    source_id: str
+    """the id of the open source"""
+    choices: PlanChoices
+    """the capture entries and loop values available for selection"""
+    varying_fields: frozenset[str]
+    """the capture fields that differ between the ``captures:`` entries of the spec,
+    or between the ports of one entry; a field varied by a loop or an adjustment
+    alone is not included"""
+    adjustments: dict[str, tuple[Any, ...]]
+    """the unique values of each adjusted capture field, from `list_capture_adjustments`"""
+    sink_path: Optional[str]
+    """the resolved output path of a run, or None when the spec writes nothing"""
+    available_variables: tuple[str, ...]
+    """the enabled measurements of the sweep that have a registered plot"""
+    variable_labels: dict[str, str]
+    """the display label of each available variable"""
+    plotter: PlotlyBackend
+    """the backend that draws the selected variable"""
+    data_select: dict[str, Any]
+    """the ``plot_opts.data.select`` indexers"""
+
+
 @dataclasses.dataclass
 class StudioSession:
     """the state shared by the worker thread and the websocket server.
 
-    The worker thread sets the fields derived from the open resources, `mode`, `run`,
-    and `prompt`. The websocket handlers set the selections and queue commands. A
+    The worker thread writes `open`, the applied spec, the mode, the run, and the
+    prompt; the websocket handlers write the selections and the edited files. A
     selection is replaced as a whole, never mutated in place.
     """
 
@@ -121,6 +153,10 @@ class StudioSession:
     """``'closed'``, ``'idle'``, ``'preview'``, ``'running'``, or ``'prompting'``"""
     applied_spec: Optional[ss.specs.ActionSpec] = None
     """the spec the resources are open for, with the sink path as written"""
+    applied_tree: Any = None
+    """the merged tree of the files as decoded for `applied_spec`"""
+    apply_error: Optional[str] = None
+    """the traceback text of the last `Apply` that failed to open, or None"""
     edited_spec: Optional[ss.specs.ActionSpec] = None
     """the latest valid spec decoded from the files, or None when they fail to decode"""
     validation_errors: list[dict[str, Any]] = dataclasses.field(default_factory=list)
@@ -129,49 +165,23 @@ class StudioSession:
     provenance: Optional[ProvenanceTree] = None
     """the merged tree of the YAML files with the file of each value, or None for a
     JSON spec"""
-    applied_tree: Any = None
-    """the merged tree of the files as decoded for `applied_spec`"""
-    apply_error: Optional[str] = None
-    """the traceback text of the last `Apply` that failed to open, or None"""
-    sweep: Optional[ss.specs.Sweep] = None
-    """the sweep spec of the open resources"""
-    source_id: Optional[str] = None
-    """the id of the open source"""
-    plot_opts: Optional[sf.specs.PlotOptions] = None
-    """the plot options from ``sweep.plot_hint`` or the preview default"""
-    plotter: Optional[PlotlyBackend] = None
-    """the backend that draws the selected variable"""
-    data_select: dict[str, Any] = dataclasses.field(default_factory=dict)
-    """the ``plot_opts.data.select`` indexers"""
-    available_variables: list[str] = dataclasses.field(default_factory=list)
-    """the enabled measurements of the sweep that have a registered plot"""
-    variable_labels: dict[str, str] = dataclasses.field(default_factory=dict)
-    """the display label of each available variable"""
+    open: Optional[OpenSpec] = None
+    """the facts derived from the open resources, or None while closed"""
     selected_variable: str = 'spectrogram'
     """the variable on display"""
-    choices: Optional[PlanChoices] = None
-    """the capture entries and loop values available for selection"""
     selected_capture: Optional[int] = None
     """the index into ``sweep.captures`` to acquire, or None for every entry"""
     selected_loops: dict[tuple[str, str], Any] = dataclasses.field(default_factory=dict)
     """the loop values to acquire, keyed by ``(isin, field)``, with every value kept
     for a loop absent from the mapping"""
-    varying_fields: frozenset[str] = frozenset()
-    """the capture fields that differ between the ``captures:`` entries of the applied
-    spec, or between the ports of one entry; a field varied by a loop or an
-    adjustment alone is not included"""
-    adjustments: dict[str, tuple[Any, ...]] = dataclasses.field(default_factory=dict)
-    """the unique values of each adjusted capture field, from `list_capture_adjustments`"""
-    sink_path: Optional[str] = None
-    """the resolved output path of a run, or None when the spec writes nothing"""
+    preview_enabled: bool = True
+    """True while the preview acquires; False pauses before the next capture"""
     dataset: Optional[ss.lib.compute.DelayedDataset] = None
     """the latest analyzed acquisition"""
     run: Optional[RunState] = None
     """the latest run, or None before the first"""
     prompt: Optional[PendingPrompt] = None
     """the operator prompt awaiting an answer, or None"""
-    running: bool = True
-    """True while the preview acquires; False pauses before the next capture"""
     commands: queue.Queue = dataclasses.field(default_factory=queue.Queue)
     """the commands for the worker thread, executed in order"""
     stop: threading.Event = dataclasses.field(default_factory=threading.Event)
@@ -226,10 +236,10 @@ def current_plan(session: StudioSession) -> tuple[ss.specs.SensorCapture, ...]:
     """return the captures that match the selections of `session`, in sweep order."""
     from striqt.sensor.specs import sequencing
 
-    assert session.sweep is not None
+    assert session.open is not None
     return sequencing.select_plan(
-        session.sweep,
-        session.source_id,
+        session.open.sweep,
+        session.open.source_id,
         capture=session.selected_capture,
         loops=session.selected_loops,
     )
@@ -240,7 +250,7 @@ def selected_captures(session: StudioSession) -> Iterator[ss.specs.SensorCapture
 
     The plan is re-read before each capture, and a selection change takes effect at
     the next acquisition. The generator polls every 0.1 s while the plan is empty or
-    ``session.running`` is False, and ends when ``session.stop`` is set or
+    ``session.preview_enabled`` is False, and ends when ``session.stop`` is set or
     ``session.commands`` holds a command.
 
     Yields:
@@ -249,7 +259,7 @@ def selected_captures(session: StudioSession) -> Iterator[ss.specs.SensorCapture
     i = 0
     while not session.stop.is_set() and session.commands.empty():
         plan = current_plan(session)
-        if len(plan) == 0 or not session.running:
+        if len(plan) == 0 or not session.preview_enabled:
             session.stop.wait(0.1)
             continue
         yield plan[i % len(plan)]
@@ -260,12 +270,11 @@ def select_first(session: StudioSession) -> None:
     """select the first ``captures:`` entry and the first value of each loop.
 
     No entry is selected when the sweep lists no captures, and a loop without
-    values is left unselected. `session` is unchanged when ``session.choices`` is
-    None.
+    values is left unselected. `session` is unchanged while the resources are closed.
     """
-    choices = session.choices
-    if choices is None:
+    if session.open is None:
         return
+    choices = session.open.choices
     session.selected_capture = 0 if choices.captures else None
     session.selected_loops = {
         (loop.isin, loop.field): loop.values[0] for loop in choices.loops if loop.values
@@ -277,25 +286,24 @@ def apply_capture_selection(session: StudioSession, msg: dict[str, Any]) -> None
 
     A capture index is clamped to the ``captures:`` list and a loop index to the
     values of the loop. None keeps every entry or every value. `session` is
-    unchanged when ``session.choices`` is None.
+    unchanged while the resources are closed.
 
     Args:
         session: the session to update
         msg: ``{'capture': int | None, 'loops': [int | None, ...]}`` with indexes
             into the option lists, in the order of ``choices.loops``
     """
-    if session.choices is None:
+    if session.open is None:
         return
+    choices = session.open.choices
     capture = msg.get('capture')
-    if capture is None or not session.choices.captures:
+    if capture is None or not choices.captures:
         session.selected_capture = None
     else:
-        session.selected_capture = min(
-            max(int(capture), 0), len(session.choices.captures) - 1
-        )
+        session.selected_capture = min(max(int(capture), 0), len(choices.captures) - 1)
     selected: dict[tuple[str, str], Any] = {}
     indexes = msg.get('loops') or []
-    for loop, index in zip(session.choices.loops, indexes):
+    for loop, index in zip(choices.loops, indexes):
         if index is not None and loop.values:
             selected[loop.isin, loop.field] = loop.values[
                 min(max(int(index), 0), len(loop.values) - 1)
@@ -355,11 +363,10 @@ def configure(
     tree: Any,
     resources: Resources,
 ) -> None:
-    """set the fields of `session` derived from `spec` and the open `resources`.
+    """set `session.open` from `spec` and the open `resources`.
 
-    `spec` becomes `applied_spec` and `tree` becomes `applied_tree` together.
-
-    The variables offered are the enabled measurements of the sweep with a plot in
+    `spec` becomes `applied_spec` and `tree` becomes `applied_tree` together. The
+    variables offered are the enabled measurements of the sweep with a plot in
     `striqt.figures.data_var_plotters`. `selected_variable` is replaced by the first
     offered variable when the current selection is not offered. The capture
     selection starts at the first entry and the first value of each loop.
@@ -370,39 +377,37 @@ def configure(
     from striqt.sensor.specs import sequencing
 
     sweep = resources['sweep_spec']
+    source_id = resources['source'].source_id
     session.applied_spec = spec
     session.applied_tree = tree
-    session.sweep = sweep
-    session.source_id = resources['source'].source_id
 
     if sweep.plot_hint is None:
         plot_opts = _default_plot_options()
     else:
         plot_opts = sf.specs.PlotOptions.from_spec(sweep.plot_hint)
-    session.plot_opts = plot_opts
-    session.plotter = PlotlyBackend(plot_opts.plotter)
-    session.data_select = dict(plot_opts.data.select)
 
     plotters = sf.data_var_plotters()
     labels = summary.analysis_labels(sweep.analysis)
-    session.available_variables = [name for name in labels if name in plotters]
-    session.variable_labels = {
-        name: labels[name] for name in session.available_variables
-    }
-    if (
-        session.selected_variable not in session.available_variables
-        and session.available_variables
-    ):
-        session.selected_variable = session.available_variables[0]
+    available = tuple(name for name in labels if name in plotters)
+    if session.selected_variable not in available and available:
+        session.selected_variable = available[0]
 
-    session.choices = sequencing.plan_choices(sweep, session.source_id)
-    select_first(session)
     # the loop selectors show the looped values, so the table lists the fields that
     # differ between the entries themselves
     entries = sweep.replace(loops=(), adjust_captures={})
-    session.varying_fields = summary.varying_fields(entries, session.source_id)
-    session.adjustments = sequencing.list_capture_adjustments(sweep, session.source_id)
-    session.sink_path = output_path(spec, resources['format_path'])
+    session.open = OpenSpec(
+        sweep=sweep,
+        source_id=source_id,
+        choices=sequencing.plan_choices(sweep, source_id),
+        varying_fields=summary.varying_fields(entries, source_id),
+        adjustments=sequencing.list_capture_adjustments(sweep, source_id),
+        sink_path=output_path(spec, resources['format_path']),
+        available_variables=available,
+        variable_labels={name: labels[name] for name in available},
+        plotter=PlotlyBackend(plot_opts.plotter),
+        data_select=dict(plot_opts.data.select),
+    )
+    select_first(session)
 
 
 def null_sink(spec: ss.specs.ActionSpec) -> ss.specs.ActionSpec:
@@ -690,9 +695,26 @@ def validation_pointers(text: str) -> list[str]:
 
 
 def revalidate(session: StudioSession) -> None:
-    """decode the spec files again and set `edited_spec` and `validation_errors`."""
+    """load the spec files again and set `provenance`, `edited_spec`, and `validation_errors`.
+
+    A YAML spec is read twice: once for the provenance of each value and once as
+    the bound spec. A file that fails to load or decode leaves `edited_spec` None and
+    one error; a `SpecValidationError` adds the JSON pointers of the failing field
+    and of the further locations the error names.
+    """
     import msgspec
 
+    from striqt.analysis.lib import yaml as spec_yaml
+
+    if session.spec_path.endswith(('.yaml', '.yml')):
+        try:
+            session.provenance = spec_yaml.load_yaml_provenance(session.spec_path)
+        except Exception as ex:
+            session.edited_spec = None
+            session.validation_errors = [
+                {'path': '', 'locations': [], 'message': f'{type(ex).__name__}: {ex}'}
+            ]
+            return
     try:
         session.edited_spec = read_spec(session.spec_path)
     except msgspec.ValidationError as ex:
@@ -706,7 +728,7 @@ def revalidate(session: StudioSession) -> None:
         session.validation_errors = [
             {'path': path, 'locations': locations, 'message': text}
         ]
-    except Exception as ex:  # a YAML syntax error or a missing include
+    except Exception as ex:
         session.edited_spec = None
         session.validation_errors = [
             {'path': '', 'locations': [], 'message': f'{type(ex).__name__}: {ex}'}
@@ -719,9 +741,14 @@ def spec_schema_json(session: StudioSession) -> dict[str, Any]:
     """return the editor schema of the edited spec class, or of the applied one."""
     from striqt.sensor.specs import schema
 
-    spec = session.edited_spec or session.applied_spec
+    spec = current_spec(session)
     assert spec is not None
     return schema.schema_json(type(spec))
+
+
+def current_spec(session: StudioSession) -> Optional[ss.specs.ActionSpec]:
+    """return the latest valid spec of the files, or the applied spec when none decodes."""
+    return session.edited_spec or session.applied_spec
 
 
 def spec_dir(session: StudioSession) -> Path:

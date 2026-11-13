@@ -27,10 +27,10 @@ def analyzed():
 
 def test_capture_options_list_one_entry_per_loop_and_capture():
     state = preview_session(looped_sweep())
-    options = server.capture_options(state.choices)
+    options = server.capture_options(state.open.choices)
     assert len(options['captures']) == len(TONE_OFFSETS)
     assert [loop['field'] for loop in options['loops']] == ['snr']
-    assert options['loops'][0]['labels'] == list(state.choices.loops[0].labels)
+    assert options['loops'][0]['labels'] == list(state.open.choices.loops[0].labels)
 
 
 def test_capture_selection_round_trips():
@@ -74,9 +74,8 @@ def test_coordinates_message_keeps_the_varying_fields_only(analyzed):
 def test_messages_are_json_text(analyzed):
     from striqt.figures.backend import PlotlyBackend
 
-    state = preview_session(looped_sweep())
+    state = preview_session(looped_sweep(), available_variables=('spectrogram',))
     state.dataset = analyzed
-    state.available_variables = ['spectrogram']
     plotter = PlotlyBackend(session._default_plot_options().plotter)
     figures = server._prepare_plot_data_sync(analyzed, plotter, 'spectrogram', {})
 
@@ -108,24 +107,16 @@ def test_websocket_serves_the_state_the_plot_and_a_selection(analyzed, monkeypat
     stored dataset, and answers ``select_captures`` with the updated state"""
     from fastapi.testclient import TestClient
 
-    from striqt.figures.backend import PlotlyBackend
-
     state = server.SESSION
-    configured = preview_session(looped_sweep())
-    for name in ('sweep', 'choices'):
-        monkeypatch.setattr(state, name, getattr(configured, name))
-    monkeypatch.setattr(state, 'applied_spec', configured.sweep)
+    configured = preview_session(looped_sweep(), available_variables=('spectrogram',))
+    monkeypatch.setattr(state, 'open', configured.open)
+    monkeypatch.setattr(state, 'applied_spec', configured.open.sweep)
     monkeypatch.setattr(state, 'dataset', analyzed)
-    monkeypatch.setattr(
-        state, 'plotter', PlotlyBackend(session._default_plot_options().plotter)
-    )
-    monkeypatch.setattr(state, 'available_variables', ['spectrogram'])
     monkeypatch.setattr(state, 'selected_variable', 'spectrogram')
-    monkeypatch.setattr(state, 'data_select', {})
     monkeypatch.setattr(state, 'selected_capture', configured.selected_capture)
     monkeypatch.setattr(state, 'selected_loops', configured.selected_loops)
     monkeypatch.setattr(server.CLIENTS, 'websockets', set())
-    monkeypatch.setattr(state, 'running', True)
+    monkeypatch.setattr(state, 'preview_enabled', True)
     monkeypatch.setattr(state, 'stop', threading.Event())
 
     with TestClient(server.app) as client, client.websocket_connect('/ws') as ws:
@@ -162,7 +153,7 @@ def test_websocket_serves_the_state_the_plot_and_a_selection(analyzed, monkeypat
     assert state.selected_loops == {('capture', 'snr'): SNR_LOOP.values[0]}
     assert paused['type'] == 'state'
     assert paused['running'] is False
-    assert state.running is False
+    assert state.preview_enabled is False
 
 
 # %% serving_urls

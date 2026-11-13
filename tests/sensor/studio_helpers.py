@@ -24,10 +24,29 @@ def looped_sweep(analysis=SPECTROGRAM):
     )
 
 
-def preview_session(sweep) -> session.StudioSession:
+def open_spec(sweep, **overrides) -> session.OpenSpec:
+    """return the `OpenSpec` of `sweep` with no source, for tests without resources"""
+    from striqt.figures.backend import PlotlyBackend
+
+    fields = {
+        'sweep': sweep,
+        'source_id': '',
+        'choices': sequencing.plan_choices(sweep, None),
+        'varying_fields': frozenset(),
+        'adjustments': {},
+        'sink_path': None,
+        'available_variables': (),
+        'variable_labels': {},
+        'plotter': PlotlyBackend(session._default_plot_options().plotter),
+        'data_select': {},
+    }
+    fields.update(overrides)
+    return session.OpenSpec(**fields)
+
+
+def preview_session(sweep, **overrides) -> session.StudioSession:
     """return a session over `sweep` with the first entry of every choice selected"""
-    state = session.StudioSession(sweep=sweep)
-    state.choices = sequencing.plan_choices(sweep, None)
+    state = session.StudioSession(open=open_spec(sweep, **overrides))
     session.select_first(state)
     return state
 

@@ -80,12 +80,12 @@ def test_selected_captures_waits_while_not_running():
     """a paused generator polls `stop` and yields nothing until `running` is set"""
     sweep = looped_sweep()
     state = preview_session(sweep)
-    state.stop = HookedStop(lambda stop: setattr(state, 'running', True))
+    state.stop = HookedStop(lambda stop: setattr(state, 'preview_enabled', True))
     items = session.selected_captures(state)
     first = next(items)
     assert state.stop.waits == 0
 
-    state.running = False
+    state.preview_enabled = False
     assert next(items) == first
     assert state.stop.waits == 1
     state.stop.set()
@@ -261,12 +261,14 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
     try:
         wait_for(lambda: state.mode == 'preview', what='the preview')
         wait_for(lambda: len(datasets) >= 1, what='the first preview dataset')
-        assert state.sink_path is not None
-        assert state.sink_path.endswith('.zarr.zip')
+        opened = state.open
+        assert opened is not None
+        assert opened.sink_path is not None
+        assert opened.sink_path.endswith('.zarr.zip')
         # snr is looped and equal in both entries; the LO frequency differs between them
-        assert 'external_lo_frequency' in state.varying_fields
-        assert 'snr' not in state.varying_fields
-        assert len(state.choices.captures) == len(spec.captures)
+        assert 'external_lo_frequency' in opened.varying_fields
+        assert 'snr' not in opened.varying_fields
+        assert len(opened.choices.captures) == len(spec.captures)
         # the preview analyzes the displayed variable only
         assert datasets[0][0] == 'preview'
         assert list(datasets[0][1].delayed) == [state.selected_variable]
@@ -276,7 +278,7 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
         run = state.run
         assert run.error is None, run.error
         assert run.count == ss.specs.sequencing.count_acquisitions(
-            spec, state.source_id
+            spec, opened.source_id
         )
         assert run.acquired == run.count
         stores = set(outputs.glob('*.zarr.zip')) - before
@@ -293,7 +295,7 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
             lambda: state.applied_spec is one_capture and state.mode == 'preview',
             what='the applied spec',
         )
-        assert len(state.choices.captures) == 1
+        assert len(state.open.choices.captures) == 1
 
         state.commands.put(session.Close())
         wait_for(closed.is_set, what='the close')
