@@ -26,6 +26,7 @@ from synthetic_sources import (
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+from striqt.analysis.specs.helpers import qualname
 from striqt.sensor.lib.compute import summary
 
 AIR = ss.bindings.air7101b
@@ -159,10 +160,6 @@ def test_spectrogram_snr_skips_a_port_with_no_power(calibration_nc):
 
 
 # %% capture_fields
-
-
-def qualname(cls) -> str:
-    return f'{cls.__module__}.{cls.__qualname__}'
 
 
 def field_by_name(groups) -> dict[str, summary.FieldValue]:

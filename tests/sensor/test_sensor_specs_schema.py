@@ -8,12 +8,9 @@ import msgspec
 
 import striqt.analysis as sa
 import striqt.sensor as ss
+from striqt.analysis.specs.helpers import qualname
 from striqt.sensor.specs import schema
 from striqt.sensor.specs.types import PerPort
-
-
-def qualname(cls: type) -> str:
-    return f'{cls.__module__}.{cls.__qualname__}'
 
 
 def by_name(fields) -> dict:
@@ -28,21 +25,9 @@ class SiteCapture(ss.specs.SingleToneCapture, frozen=True, kw_only=True):
     antenna_model: Optional[PerPort[str]] = None
 
 
-# %% field_owners
-
-
-def test_field_owners_of_soapy_capture():
-    owners = schema.field_owners(ss.specs.SoapyCapture)
-    assert owners['duration'] is sa.specs.structs.Capture
-    assert owners['port'] is ss.specs.SensorCapture
-    assert owners['gain'] is ss.specs.SoapyCapture
-    assert list(owners) == list(ss.specs.SoapyCapture.__struct_fields__)
-
-
-def test_field_owners_of_a_downstream_capture():
-    owners = schema.field_owners(SiteCapture)
-    assert owners['antenna_model'] is SiteCapture
-    assert len(set(owners.values())) == 4
+class FieldProbe(msgspec.Struct, frozen=True):
+    average_rbs: sa.specs.types.CellularAverageRBs = False
+    window: sa.specs.types.WindowType = 'hamming'
 
 
 # %% struct_schema
@@ -153,30 +138,16 @@ def test_struct_schema_of_a_source():
     assert src['adc_overload_limit'].optional
 
 
-# %% field_schema
-
-
-def test_field_schema_of_a_bool_literal_union():
-    f = schema.field_schema(
-        'average_rbs',
-        sa.specs.types.CellularAverageRBs,
-        owner=ss.specs.SoapyCapture,
-        default=False,
-        required=False,
-    )
+def test_struct_schema_of_a_bool_literal_union():
+    f = by_name(schema.struct_schema(FieldProbe).fields)['average_rbs']
+    assert f.owner == qualname(FieldProbe)
     assert f.kind == 'literal'
     assert f.choices == (True, False, 'half')
     assert f.default is False
 
 
-def test_field_schema_of_a_window_union_is_opaque():
-    f = schema.field_schema(
-        'window',
-        sa.specs.types.WindowType,
-        owner=ss.specs.SoapyCapture,
-        default='hamming',
-        required=False,
-    )
+def test_struct_schema_of_a_window_union_is_opaque():
+    f = by_name(schema.struct_schema(FieldProbe).fields)['window']
     assert f.kind == 'opaque'
     assert f.read_only
 

@@ -10,6 +10,7 @@ import contextlib
 import dataclasses
 import fractions
 import functools
+import types
 from collections.abc import (
     Collection,
     Generator,
@@ -22,9 +23,12 @@ from collections.abc import (
 )
 from typing import (
     TYPE_CHECKING,
+    Annotated,
     Any,
     Callable,
+    ForwardRef,
     TypeVar,
+    Union,
     cast,
     get_args,
     get_origin,
@@ -192,6 +196,135 @@ def Meta(
     if description is None:
         description = standard_name
     return msgspec.Meta(description=description, extra=extra, **kws)
+
+
+# %% type hint introspection
+class _PerPortMarker:
+    """the `Annotated` metadata that marks a `PerPort` type"""
+
+    def __repr__(self) -> str:
+        return 'PER_PORT'
+
+
+PER_PORT = _PerPortMarker()
+
+_NoneType = type(None)
+
+
+@dataclasses.dataclass(frozen=True)
+class ResolvedHint:
+    """a field type hint with its `Annotated`, ``Optional``, and `PerPort` wrappers removed."""
+
+    members: tuple[Any, ...]
+    """the union members other than None, each without its `Annotated` wrapper"""
+    metas: tuple[msgspec.Meta, ...]
+    """the `msgspec.Meta` objects of the wrappers, outermost first"""
+    optional: bool
+    """True when None is a member"""
+    per_port: bool
+    """True when an `Annotated` wrapper carries the `PER_PORT` marker"""
+
+
+def is_union_origin(origin: Any) -> bool:
+    """return True when `origin` is `typing.Union` or `types.UnionType`."""
+    # types.UnionType, the origin of ``X | Y``, is absent on python 3.9
+    union_type = getattr(types, 'UnionType', None)
+    return origin is Union or (union_type is not None and origin is union_type)
+
+
+def _is_variadic_tuple(hint: Any) -> bool:
+    args = get_args(hint)
+    return get_origin(hint) is tuple and len(args) == 2 and args[1] is Ellipsis
+
+
+def _typevar_bound(var: TypeVar, bounds: Mapping[str, Any] | None) -> Any:
+    if bounds is not None and var.__name__ in bounds:
+        return bounds[var.__name__]
+    bound = var.__bound__
+    # a bound written as a string (``bound='specs.Source'``) is a `ForwardRef` with no
+    # namespace here; `bounds` supplies the type in its place
+    if bound is None or isinstance(bound, (str, ForwardRef)):
+        return Any
+    return bound
+
+
+def _unwrap(
+    hint: Any, bounds: Mapping[str, Any] | None, metas: list[msgspec.Meta]
+) -> tuple[list[Any], bool]:
+    """return the union members of `hint` and whether a wrapper carries `PER_PORT`.
+
+    The `msgspec.Meta` objects of the wrappers are appended to `metas`, outermost
+    first. A `TypeVar` is replaced by `_typevar_bound`.
+    """
+    origin = get_origin(hint)
+    if origin is Annotated:
+        args = get_args(hint)
+        # typing flattens nested Annotated hints, so the outermost metadata is last
+        metas.extend(m for m in reversed(args[1:]) if isinstance(m, msgspec.Meta))
+        members, per_port = _unwrap(args[0], bounds, metas)
+        return members, per_port or any(m is PER_PORT for m in args[1:])
+    if is_union_origin(origin):
+        members: list[Any] = []
+        per_port = False
+        for arg in get_args(hint):
+            inner, flag = _unwrap(arg, bounds, metas)
+            members.extend(inner)
+            per_port = per_port or flag
+        return members, per_port
+    if isinstance(hint, TypeVar):
+        return _unwrap(_typevar_bound(hint, bounds), bounds, metas)
+    return [hint], False
+
+
+def resolve_hint(hint: Any, *, bounds: Mapping[str, Any] | None = None) -> ResolvedHint:
+    """strip the `Annotated`, ``Optional``, and `PerPort` wrappers of a field type hint.
+
+    Args:
+        hint: a type hint with its `Annotated` wrappers, as `msgspec.structs.fields`
+            resolves it
+        bounds: the type that replaces each `TypeVar` in `hint`, keyed by the name
+            of the variable; a variable absent from `bounds` resolves to its
+            ``bound`` when that is a type, else to `Any`
+
+    Returns:
+        a `ResolvedHint` with the union members other than None in declaration
+        order, the `msgspec.Meta` objects outermost first, `optional` from a None
+        member, and `per_port` from the `PER_PORT` marker; a variadic tuple member
+        (the tuple side of `PerPort`) is dropped when a scalar member remains
+    """
+    metas: list[msgspec.Meta] = []
+    members, per_port = _unwrap(hint, bounds, metas)
+    optional = _NoneType in members
+    members = [m for m in members if m is not _NoneType]
+    scalars = [m for m in members if not _is_variadic_tuple(m)]
+    if scalars:
+        members = scalars
+    return ResolvedHint(tuple(members), tuple(metas), optional, per_port)
+
+
+def qualname(cls: type) -> str:
+    """return the module-qualified name of `cls`, as ``module.QualName``."""
+    return f'{cls.__module__}.{cls.__qualname__}'
+
+
+@util.lru_cache()
+def field_owners(cls: type) -> dict[str, type]:
+    """return the struct class in the MRO of `cls` that first declares each field.
+
+    The returned dict is cached and shared between calls. Callers must not mutate
+    the dict.
+
+    Returns:
+        a dict keyed by field name in base-to-derived order
+    """
+    owners: dict[str, type] = {}
+    for klass in reversed(cls.__mro__):
+        fields = getattr(klass, '__struct_fields__', None)
+        if not isinstance(fields, tuple):
+            continue
+        for name in fields:
+            owners.setdefault(name, klass)
+    return owners
 
 
 # %% validation of (capture, analysis spec) combinations
@@ -510,11 +643,17 @@ def _unwrap_type_info(type_: mi.Type) -> tuple[dict[str, Any], list[mi.Type]]:
 def get_capture_type_attrs(capture_cls: type[msgspec.Struct]) -> dict[str, Any]:
     """return the `Meta` attrs (`standard_name`, `units`) of each field in `capture_cls`.
 
-    The returned dict is cached and shared between calls. Callers must not mutate
-    the dict.
+    A key set by several `Meta` wrappers of one field takes the value of the
+    outermost wrapper. The returned dict is cached and shared between calls.
+    Callers must not mutate the dict.
     """
-    fields = cast('mi.StructType', mi.type_info(capture_cls)).fields
-    return {field.name: _unwrap_type_info(field.type)[0] for field in fields}
+    attrs: dict[str, Any] = {}
+    for name, hint in get_capture_field_types(capture_cls).items():
+        field_attrs: dict[str, Any] = {}
+        for meta in reversed(resolve_hint(hint).metas):
+            field_attrs.update(meta.extra or {})
+        attrs[name] = field_attrs
+    return attrs
 
 
 @util.lru_cache()

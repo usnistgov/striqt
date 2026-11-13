@@ -264,7 +264,7 @@ def capture_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
         return ()
 
     groups: dict[type, list[FieldValue]] = {}
-    for name, owner in specs.schema.field_owners(type(dd.capture)).items():
+    for name, owner in sa.specs.helpers.field_owners(type(dd.capture)).items():
         if name not in coords:
             continue
         coord = coords[name]
@@ -336,7 +336,7 @@ def acquisition_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
     attrs = sa.specs.helpers.get_capture_type_attrs(type(info))
 
     groups: dict[type, list[FieldValue]] = {}
-    for name, owner in specs.schema.field_owners(type(info)).items():
+    for name, owner in sa.specs.helpers.field_owners(type(info)).items():
         if name == 'signal_trigger':
             continue
         value = getattr(info, name)

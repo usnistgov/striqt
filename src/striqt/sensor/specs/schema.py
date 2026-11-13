@@ -11,17 +11,16 @@ from __future__ import annotations as __
 import dataclasses
 import fractions
 import math
-import types as _types
 import typing
-from typing import Annotated, Any, Literal, Optional, Union, get_args, get_origin
+from typing import Any, Literal, Optional, Union, get_args, get_origin
 
 import msgspec
 
 import striqt.analysis as sa
 from striqt.analysis.specs import helpers
+from striqt.analysis.specs.helpers import field_owners, qualname, resolve_hint
 
 from . import captures, structs
-from .types import is_per_port
 
 Kind = Literal[
     'number',
@@ -40,7 +39,8 @@ SectionKind = Literal[
 ]
 
 # the generic parameters of `ActionSpec` and `CapturePlan`, which an unbound action
-# class leaves in its field hints; each resolves to the bound of the TypeVar
+# class leaves in its field hints; `striqt.sensor.lib.typing` declares each bound as
+# a string, which `resolve_hint` does not evaluate
 _TYPEVAR_BOUNDS: dict[str, type] = {
     'SS': structs.Source,
     'SC': structs.SensorCapture,
@@ -50,8 +50,6 @@ _TYPEVAR_BOUNDS: dict[str, type] = {
 
 # top-level fields that an editor shows but does not edit, whatever the hint
 _OPAQUE_SECTIONS = frozenset({'adjust_captures', 'plot_hint', 'mock_source'})
-
-_NoneType = type(None)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -149,18 +147,6 @@ class SpecSchema:
 
 
 @dataclasses.dataclass(frozen=True)
-class _Resolved:
-    """a field hint with its wrappers removed"""
-
-    members: tuple[Any, ...]
-    """the union members other than None, with every `Annotated` wrapper removed"""
-    metas: tuple[msgspec.Meta, ...]
-    """the `msgspec.Meta` objects found, outermost first"""
-    optional: bool
-    """True when None is a member"""
-
-
-@dataclasses.dataclass(frozen=True)
 class _Shape:
     """the kind of a resolved hint and the nested schemas of that kind"""
 
@@ -173,16 +159,6 @@ class _Shape:
     variants: tuple[StructSchema, ...] = ()
 
 
-def _qualname(cls: type) -> str:
-    return f'{cls.__module__}.{cls.__qualname__}'
-
-
-def _is_union(origin: Any) -> bool:
-    # types.UnionType is absent on python 3.9, where the getattr default is None
-    union_type = getattr(_types, 'UnionType', None)
-    return origin is Union or (union_type is not None and origin is union_type)
-
-
 def _is_class(hint: Any) -> bool:
     # on python 3.9, isinstance(tuple[int, ...], type) is True
     return isinstance(hint, type) and get_origin(hint) is None
@@ -190,52 +166,6 @@ def _is_class(hint: Any) -> bool:
 
 def _is_struct(hint: Any) -> bool:
     return _is_class(hint) and issubclass(hint, msgspec.Struct)
-
-
-def _is_variadic_tuple(hint: Any) -> bool:
-    args = get_args(hint)
-    return get_origin(hint) is tuple and len(args) == 2 and args[1] is Ellipsis
-
-
-def _typevar_bound(var: typing.TypeVar) -> Any:
-    return _TYPEVAR_BOUNDS.get(var.__name__, Any)
-
-
-def _unwrap(hint: Any, metas: list[msgspec.Meta]) -> list[Any]:
-    """return the union members of `hint` with the `Annotated` wrappers removed.
-
-    The `msgspec.Meta` objects of the wrappers are appended to `metas`, outermost
-    first. A `TypeVar` is replaced by its bound.
-    """
-    origin = get_origin(hint)
-    if origin is Annotated:
-        args = get_args(hint)
-        metas.extend(m for m in args[1:] if isinstance(m, msgspec.Meta))
-        return _unwrap(args[0], metas)
-    if _is_union(origin):
-        members: list[Any] = []
-        for arg in get_args(hint):
-            members.extend(_unwrap(arg, metas))
-        return members
-    if isinstance(hint, typing.TypeVar):
-        return _unwrap(_typevar_bound(hint), metas)
-    return [hint]
-
-
-def _resolve(hint: Any) -> _Resolved:
-    """strip the `Annotated`, ``Optional``, and `PerPort` wrappers of `hint`.
-
-    A variadic tuple member of a union with other members (the tuple side of
-    `PerPort`) is dropped, so the scalar member sets the kind.
-    """
-    metas: list[msgspec.Meta] = []
-    members = _unwrap(hint, metas)
-    optional = _NoneType in members
-    members = [m for m in members if m is not _NoneType]
-    scalars = [m for m in members if not _is_variadic_tuple(m)]
-    if scalars:
-        members = scalars
-    return _Resolved(tuple(members), tuple(metas), optional)
 
 
 def _literal_choices(members: tuple[Any, ...]) -> Optional[tuple[Any, ...]]:
@@ -264,7 +194,7 @@ def _tagged_union(
 
 
 def _element(hint: Any, owner: type) -> FieldSchema:
-    return field_schema('', hint, owner=owner, default=None, required=False)
+    return _field_schema('', hint, owner=owner, default=None, required=False)
 
 
 def _shape_one(hint: Any, owner: type) -> _Shape:
@@ -294,7 +224,7 @@ def _shape_one(hint: Any, owner: type) -> _Shape:
         return _Shape('list', item=_element(args[0], owner))
     if origin is dict and len(args) == 2:
         key, value = args
-        if _resolve(key).members != (str,) or value is Any:
+        if resolve_hint(key, bounds=_TYPEVAR_BOUNDS).members != (str,) or value is Any:
             return _Shape('opaque')
         return _Shape('dict', item=_element(value, owner))
     return _Shape('opaque')
@@ -381,23 +311,7 @@ def _raw_default(info: msgspec.structs.FieldInfo) -> Any:
     return info.default
 
 
-def field_owners(cls: type) -> dict[str, type]:
-    """return the struct class in the MRO of `cls` that first declares each field.
-
-    Returns:
-        a dict keyed by field name in base-to-derived order
-    """
-    owners: dict[str, type] = {}
-    for klass in reversed(cls.__mro__):
-        fields = getattr(klass, '__struct_fields__', None)
-        if not isinstance(fields, tuple):
-            continue
-        for name in fields:
-            owners.setdefault(name, klass)
-    return owners
-
-
-def field_schema(
+def _field_schema(
     name: str, hint: Any, *, owner: type, default: Any, required: bool
 ) -> FieldSchema:
     """return the editor schema of one field from its resolved type hint.
@@ -415,7 +329,7 @@ def field_schema(
         a None member, `kind` and the nested schemas from the remaining members, and
         the units, names, and bounds from the outermost `Meta` that sets each
     """
-    resolved = _resolve(hint)
+    resolved = resolve_hint(hint, bounds=_TYPEVAR_BOUNDS)
     shape = _shape(resolved.members, owner)
     standard_name = _first_extra(resolved.metas, 'standard_name')
     description = _first(resolved.metas, 'description')
@@ -423,10 +337,10 @@ def field_schema(
         description = None
     return FieldSchema(
         name=name,
-        owner=_qualname(owner),
+        owner=qualname(owner),
         kind=shape.kind,
         choices=shape.choices,
-        per_port=is_per_port(hint),
+        per_port=resolved.per_port,
         optional=resolved.optional,
         required=required,
         default=None if required else _json_default(default),
@@ -455,7 +369,7 @@ def struct_schema(cls: type[msgspec.Struct]) -> StructSchema:
     """
     owners = field_owners(cls)
     fields = tuple(
-        field_schema(
+        _field_schema(
             info.name,
             info.type,
             owner=owners[info.name],
@@ -466,7 +380,7 @@ def struct_schema(cls: type[msgspec.Struct]) -> StructSchema:
     )
     tag = cls.__struct_config__.tag
     return StructSchema(
-        cls=_qualname(cls),
+        cls=qualname(cls),
         tag_value=None if tag is None else str(tag),
         fields=fields,
     )
@@ -480,7 +394,7 @@ def _is_optional_struct_dict(struct: StructSchema) -> bool:
 
 
 def _struct_of(hint: Any) -> Optional[type[msgspec.Struct]]:
-    members = _resolve(hint).members
+    members = resolve_hint(hint, bounds=_TYPEVAR_BOUNDS).members
     if len(members) == 1 and _is_struct(members[0]):
         return typing.cast('type[msgspec.Struct]', members[0])
     return None
@@ -520,7 +434,7 @@ def _section(spec_cls: type, name: str, hint: Any, field: FieldSchema) -> Sectio
         if name == 'captures':
             element: Any = captures.get_capture_type(typing.cast('Any', spec_cls))
         else:
-            element = get_args(_resolve(hint).members[0])[0]
+            element = get_args(resolve_hint(hint, bounds=_TYPEVAR_BOUNDS).members[0])[0]
         cls = _struct_of(element)
         if cls is None:
             return opaque
@@ -553,7 +467,7 @@ def spec_schema(spec_cls: type[structs.ActionSpec]) -> SpecSchema:
         hint = info.type
         if isinstance(hint, typing.TypeVar) and isinstance(default, msgspec.Struct):
             hint = type(default)
-        field = field_schema(
+        field = _field_schema(
             info.name,
             hint,
             owner=owners[info.name],
@@ -563,7 +477,7 @@ def spec_schema(spec_cls: type[structs.ActionSpec]) -> SpecSchema:
         sections.append(_section(spec_cls, info.name, hint, field))
     tag = spec_cls.__struct_config__.tag
     return SpecSchema(
-        action_cls=_qualname(spec_cls),
+        action_cls=qualname(spec_cls),
         sensor_binding=None if tag is None else str(tag),
         sections=tuple(sections),
     )

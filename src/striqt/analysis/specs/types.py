@@ -1,22 +1,11 @@
 import fractions
-import types
-from typing import Annotated, Literal, TypeVar, Union, get_args, get_origin
+from typing import Annotated, Literal, TypeVar, Union
 
 import striqt.waveform as sw
 
-from .helpers import Meta
+from .helpers import PER_PORT, Meta, resolve_hint
 
 _T = TypeVar('_T')
-
-
-class _PerPortMarker:
-    """the `Annotated` metadata that marks a `PerPort` type"""
-
-    def __repr__(self) -> str:
-        return 'PER_PORT'
-
-
-PER_PORT = _PerPortMarker()
 
 # `PerPort[T]` is the type of a capture field with one value per port: a scalar applies
 # to every port, and a tuple has one entry per entry of `port`, in `port` order
@@ -27,13 +16,7 @@ def is_per_port(hint: object) -> bool:
     """return True if `hint` is a `PerPort` type, under any `Annotated` or `Union`
     wrapper such as ``Annotated[PerPort[float], Meta(...)]`` or
     ``Optional[PerPort[str]]``."""
-    origin = get_origin(hint)
-    if origin is Annotated:
-        args = get_args(hint)
-        return PER_PORT in args[1:] or is_per_port(args[0])
-    if origin is Union or origin is getattr(types, 'UnionType', None):
-        return any(is_per_port(arg) for arg in get_args(hint))
-    return False
+    return resolve_hint(hint).per_port
 
 
 AnalysisBandwidth = Annotated[float, Meta('Analysis bandwidth', 'Hz')]
