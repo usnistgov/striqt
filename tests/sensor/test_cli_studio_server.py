@@ -59,18 +59,16 @@ def test_coordinates_message_has_one_value_per_port(analyzed):
     message = server.coordinates_message(analyzed)
     ports = len(ss.specs.captures.split_capture_ports(analyzed.capture))
     assert message['num_ports'] == ports
-    names = {f['name'] for fields in message['groups'].values() for f in fields}
+    names = {f['name'] for f in message['fields']}
     assert {'frequency_offset', 'sample_rate', 'duration'} <= names
-    for fields in message['groups'].values():
-        for field in fields:
-            assert len(field['values']) == ports
+    for field in message['fields']:
+        assert len(field['values']) == ports
     assert 'extra_coords' not in message
 
 
 def test_coordinates_message_keeps_the_varying_fields_only(analyzed):
     message = server.coordinates_message(analyzed, frozenset({'frequency_offset'}))
-    names = [f['name'] for fields in message['groups'].values() for f in fields]
-    assert names == ['frequency_offset']
+    assert [f['name'] for f in message['fields']] == ['frequency_offset']
 
 
 def test_messages_are_json_text(analyzed):

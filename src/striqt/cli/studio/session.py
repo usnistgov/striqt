@@ -150,7 +150,9 @@ class StudioSession:
     """the loop values to acquire, keyed by ``(isin, field)``, with every value kept
     for a loop absent from the mapping"""
     varying_fields: frozenset[str] = frozenset()
-    """the capture fields that differ across the plan of the applied spec"""
+    """the capture fields that differ between the ``captures:`` entries of the applied
+    spec, or between the ports of one entry; a field varied by a loop or an
+    adjustment alone is not included"""
     adjustments: dict[str, tuple[Any, ...]] = dataclasses.field(default_factory=dict)
     """the unique values of each adjusted capture field, from `list_capture_adjustments`"""
     sink_path: Optional[str] = None
@@ -382,7 +384,10 @@ def configure(
 
     session.choices = sequencing.plan_choices(sweep, session.source_id)
     select_first(session)
-    session.varying_fields = summary.varying_fields(sweep, session.source_id)
+    # the loop selectors show the looped values, so the table lists the fields that
+    # differ between the entries themselves
+    entries = sweep.replace(loops=(), adjust_captures={})
+    session.varying_fields = summary.varying_fields(entries, session.source_id)
     session.adjustments = sequencing.list_capture_adjustments(sweep, session.source_id)
     session.sink_path = output_path(spec, resources['format_path'])
 

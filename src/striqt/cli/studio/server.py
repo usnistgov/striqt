@@ -110,24 +110,21 @@ def coordinates_message(
         varying: the field names to keep, or None to keep every field
 
     Returns:
-        a dict with ``num_ports`` and ``groups`` (the kept capture fields keyed by
-        defining class, one value per port)
+        a dict with ``num_ports`` and ``fields`` (the kept capture fields in
+        declaration order, one value per port)
     """
     import striqt.sensor as ss
     from striqt.sensor.lib.compute import summary
 
-    groups = {}
-    for group in summary.capture_fields(dd):
-        fields = [
-            {'name': f.name, 'values': list(f.values), 'unit': f.units}
-            for f in group.fields
-            if varying is None or f.name in varying
-        ]
-        if fields:
-            groups[group.owner] = fields
+    fields = [
+        {'name': f.name, 'values': list(f.values), 'unit': f.units}
+        for group in summary.capture_fields(dd)
+        for f in group.fields
+        if varying is None or f.name in varying
+    ]
     return {
         'num_ports': len(ss.specs.captures.split_capture_ports(dd.capture)),
-        'groups': groups,
+        'fields': fields,
     }
 
 
@@ -157,7 +154,7 @@ def run_message(session: StudioSession) -> dict[str, Any]:
 
 def state_message(session: StudioSession) -> dict[str, Any]:
     """return the ``state`` message: the mode, variables, selections, and progress."""
-    coordinates: dict[str, Any] = {'num_ports': 1, 'groups': {}}
+    coordinates: dict[str, Any] = {'num_ports': 1, 'fields': []}
     if session.dataset is not None:
         coordinates = coordinates_message(session.dataset, session.varying_fields)
     spec = session.edited_spec or session.applied_spec

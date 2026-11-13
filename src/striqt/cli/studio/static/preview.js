@@ -1,5 +1,5 @@
-// the Preview tab: the live plot of the selected variable, the capture and loop
-// selectors, and the table of the capture fields that vary across the plan
+// the Preview tab: the live plot of the selected variable, the loop and capture
+// selectors, and the table of the capture fields that differ between the entries
 
 import { Plot } from './plot.js';
 
@@ -61,14 +61,13 @@ export function init(app) {
         app.send({ type: 'set_running', running: !running });
     });
 
-    // The varying capture fields in one table with a section-header row per defining
-    // class, one column per port. `varying` is the list from the state message; an
-    // empty list hides the table with a note.
+    // The capture fields that differ between the captures: entries, one column per
+    // port. `varying` is the list from the state message; an empty list shows a note.
     function updateCoordsTable(coordinatesData, varying) {
-        const groups = coordinatesData ? coordinatesData.groups : null;
-        if (!groups || Object.keys(groups).length === 0) {
+        const fields = coordinatesData ? coordinatesData.fields : null;
+        if (!fields || fields.length === 0) {
             const text = (varying && varying.length === 0 && coordinatesData && coordinatesData.num_ports)
-                ? 'No capture field varies across the plan'
+                ? 'No capture field differs between the entries'
                 : 'No capture data yet';
             coordsSidebar.innerHTML = `<div class="coords-section"><p class="placeholder">${text}</p></div>`;
             return;
@@ -77,8 +76,6 @@ export function init(app) {
         const numPorts = coordinatesData.num_ports || 1;
         let html = `
             <div class="coords-section">
-            <details class="coords-details" open>
-                <summary>Varying capture fields</summary>
                 <table class="coords-table">
                     <thead>
                         <tr>
@@ -88,21 +85,16 @@ export function init(app) {
             html += `<th class="coord-value">Port ${i}</th>`;
         }
         html += `<th class="coord-unit"></th></tr></thead><tbody>`;
-
-        for (const [className, coords] of Object.entries(groups)) {
-            const numCols = numPorts + 2; // name + ports + unit
-            html += `<tr class="section-header"><td colspan="${numCols}">${className}</td></tr>`;
-            for (const coord of coords) {
-                html += `<tr><td class="coord-name">${coord.name}</td>`;
-                const values = coord.values || [coord.value];
-                for (let i = 0; i < numPorts; i++) {
-                    const val = values[i] !== undefined ? values[i] : values[0];
-                    html += `<td class="coord-value">${val}</td>`;
-                }
-                html += `<td class="coord-unit">${coord.unit || ''}</td></tr>`;
+        for (const coord of fields) {
+            html += `<tr><td class="coord-name">${coord.name}</td>`;
+            const values = coord.values || [coord.value];
+            for (let i = 0; i < numPorts; i++) {
+                const val = values[i] !== undefined ? values[i] : values[0];
+                html += `<td class="coord-value">${val}</td>`;
             }
+            html += `<td class="coord-unit">${coord.unit || ''}</td></tr>`;
         }
-        html += `</tbody></table></details></div>`;
+        html += `</tbody></table></div>`;
         coordsSidebar.innerHTML = html;
     }
 
@@ -164,9 +156,7 @@ export function init(app) {
             return;
         }
         const sel = selection || { capture: 0, loops: [] };
-        if (options.captures && options.captures.length > 1) {
-            captureControls.appendChild(buildCaptureSlider(options.captures.length, sel.capture));
-        }
+        // the loops nest outside the captures: entry, so the slider follows them
         (options.loops || []).forEach((loop, j) => {
             if (loop.labels.length === 0) {
                 return;
@@ -175,6 +165,9 @@ export function init(app) {
             captureControls.appendChild(
                 buildSelect(`loop-select-${j}`, `${loop.field}:`, loop.labels, chosen));
         });
+        if (options.captures && options.captures.length > 1) {
+            captureControls.appendChild(buildCaptureSlider(options.captures.length, sel.capture));
+        }
     }
 
     function indexOf(element) {

@@ -263,7 +263,9 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
         wait_for(lambda: len(datasets) >= 1, what='the first preview dataset')
         assert state.sink_path is not None
         assert state.sink_path.endswith('.zarr.zip')
-        assert 'snr' in state.varying_fields
+        # snr is looped and equal in both entries; the LO frequency differs between them
+        assert 'external_lo_frequency' in state.varying_fields
+        assert 'snr' not in state.varying_fields
         assert len(state.choices.captures) == len(spec.captures)
         # the preview analyzes the displayed variable only
         assert datasets[0][0] == 'preview'
