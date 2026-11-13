@@ -219,6 +219,13 @@
     font-size: 0.8rem;
     margin-bottom: 0.5rem;
 }
+/* a one-column grid fills the editor, the value cell taking the remaining width */
+.spec-grid.single {
+    width: 100%;
+}
+.spec-grid.single td.value {
+    width: 100%;
+}
 .spec-grid th, .spec-grid td {
     border: 1px solid #0f3460;
     padding: 0.25rem 0.4rem;
@@ -301,6 +308,13 @@
 .spec-grid td.review {
     background: rgba(251, 191, 36, 0.18);
 }
+/* the sub-columns of one capture: a dashed, lighter border inside the group */
+.spec-grid td.value.sub {
+    min-width: 5rem;
+}
+.spec-grid td.value.sub.inner, .spec-grid td.value.sub.inner[data-file] {
+    border-left: 1px dashed #2b4a7a;
+}
 .spec-grid td.read-only {
     color: #aaa;
 }
@@ -348,29 +362,52 @@
     border-radius: 4px;
 }
 
-.per-port {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.3rem;
-}
-.per-port-values {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-}
-.per-port-row {
+.tied {
     display: flex;
     align-items: center;
     gap: 0.3rem;
 }
-.port-label {
-    width: 1.4rem;
+.tied input[type=text], .tied select {
+    flex: 1;
+    min-width: 0;
+}
+.pill {
     flex-shrink: 0;
+    background: transparent;
+    border: 1px solid #0f3460;
+    border-radius: 999px;
     color: #888;
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 0 0.45rem;
+    font-size: 0.65rem;
+    line-height: 1.6;
+    white-space: nowrap;
+}
+.pill:hover:not(:disabled) {
+    border-color: #e94560;
+    color: #eee;
+}
+.pill:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+.stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    margin: 0 0.5rem;
+    vertical-align: middle;
+}
+.stepper-label {
+    color: #aaa;
+    font-weight: 400;
+    font-size: 0.75rem;
+    padding: 0 0.2rem;
+}
+.icon-button.step {
+    padding: 0 0.3rem;
+    font-size: 0.8rem;
+    line-height: 1.3;
 }
 
 .icon-button {
@@ -397,10 +434,6 @@
 .icon-button.add {
     color: #4ade80;
     font-weight: 600;
-}
-.icon-button.lock {
-    font-size: 0.75rem;
-    padding: 0.2rem 0.1rem;
 }
 
 .entry, .measurement {

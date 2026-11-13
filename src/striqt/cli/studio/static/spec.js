@@ -7,8 +7,7 @@
 // kinds with typed text sent as written, without the quoting of a string scalar
 const RAW_KINDS = new Set(['number', 'integer', 'fraction']);
 
-const LOCKED = '\u{1F512}';
-const UNLOCKED = '\u{1F513}';
+const READ_ONLY_GLYPH = '\u{1F512}';
 
 // %% pointers and values
 
@@ -59,6 +58,22 @@ function isObject(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+// A whole-entry rewrite is built from the keys of the tree node only, so that a
+// schema default never reaches the file as a key the user did not set: the keys of
+// `item` that `fields` declare, with the values of the tree.
+function presentKeys(item, fields) {
+    const kept = {};
+    if (!isObject(item)) {
+        return kept;
+    }
+    for (const field of fields) {
+        if (item[field.name] !== undefined) {
+            kept[field.name] = item[field.name];
+        }
+    }
+    return kept;
+}
+
 // %% YAML text
 
 // text that YAML 1.1 reads as a non-string plain scalar, or that contains a flow
@@ -101,6 +116,15 @@ function itemKind(field) {
     return field.item ? field.item.kind : undefined;
 }
 
+// YAML flow text of a whole struct entry, with the number-kind values of `fields`
+// written as read from the file (`6.144e6` rather than `"6.144e6"`)
+function entryText(item, fields) {
+    const kinds = new Map(fields.map((f) => [f.name, f.kind === 'list' ? itemKind(f) : f.kind]));
+    const entries = Object.entries(item).map(
+        ([k, v]) => `${scalarText(k, 'string')}: ${flowText(v, kinds.get(k))}`);
+    return '{' + entries.join(', ') + '}';
+}
+
 // the text shown in the control of `field` for a value of the tree
 function displayText(value, field) {
     if (value === undefined) {
@@ -118,16 +142,6 @@ function typedText(field, text) {
         return text;
     }
     return needsQuotes(text) ? JSON.stringify(text) : text;
-}
-
-// the element count of flow list text; 1 for a scalar
-function flowListLength(text) {
-    const t = text.trim();
-    if (!t.startsWith('[')) {
-        return 1;
-    }
-    const inner = t.slice(1, t.lastIndexOf(']') < 0 ? t.length : t.lastIndexOf(']')).trim();
-    return inner === '' ? 0 : inner.split(',').length;
 }
 
 function portCount(capture) {
@@ -166,7 +180,7 @@ function preOf(value) {
 }
 
 function fieldTip(field) {
-    return [field.standard_name, field.description].filter(Boolean).join('\n');
+    return field.description || field.standard_name || '';
 }
 
 function isReadOnly(field) {
@@ -324,31 +338,41 @@ export function init(app) {
         ctx.send([setEdit(ptr, typedText(field, trimmed), ctx)]);
     }
 
-    // The port list sets the port count of its capture. Each unlocked per-port field
-    // of the capture is padded with its last value or truncated to the new count.
-    function commitPort(field, ptr, present, text, ctx, capture) {
-        const trimmed = text.trim();
-        if (trimmed === '') {
-            commit(field, ptr, present, text, ctx);
-            return;
-        }
-        const edits = [setEdit(ptr, trimmed, ctx)];
-        const count = flowListLength(trimmed);
+    // One edit message sets the port count of a capture to `n`: `port` is renumbered
+    // 0..n-1 (the first port alone when n is 1), and each split per-port field of the
+    // capture is padded with its last value or truncated to n (its first value alone
+    // when n is 1) and marked for review.
+    function resizePorts(capture, n, ctx) {
+        const portPtr = child(capture.pointer, 'port');
+        const port = capture.item ? capture.item.port : undefined;
+        const first = Array.isArray(port) ? port[0] : (port === undefined || port === null ? 0 : port);
+        const portText = n === 1
+            ? scalarText(first, 'integer')
+            : flowText(Array.from({ length: n }, (_, k) => k), 'integer');
+        const edits = [setEdit(portPtr, portText, ctx)];
         const reviewed = [];
         for (const other of capture.fields) {
-            if (!other.per_port || other.name === field.name) {
+            if (!other.per_port || other.name === 'port') {
                 continue;
             }
             const otherPtr = child(capture.pointer, other.name);
             const current = valueAt(ctx.tree, otherPtr);
-            if (!Array.isArray(current) || current.length === 0 || current.length === count) {
+            if (!Array.isArray(current) || current.length === 0) {
                 continue;
             }
-            const last = current[current.length - 1];
-            const resized = current.length > count
-                ? current.slice(0, count)
-                : [...current, ...Array(count - current.length).fill(last)];
-            edits.push({ pointer: otherPtr, op: 'set', value_text: flowText(resized, other.kind) });
+            let text;
+            if (n === 1) {
+                text = scalarText(current[0], other.kind);
+            } else if (current.length === n) {
+                continue;
+            } else {
+                const last = current[current.length - 1];
+                const resized = current.length > n
+                    ? current.slice(0, n)
+                    : [...current, ...Array(n - current.length).fill(last)];
+                text = flowText(resized, other.kind);
+            }
+            edits.push({ pointer: otherPtr, op: 'set', value_text: text });
             reviewed.push(otherPtr);
         }
         ctx.send(edits, reviewed);
@@ -389,19 +413,20 @@ export function init(app) {
         }
     }
 
-    function errorsAt(ptr, ctx) {
+    // the messages of the errors at `ptr` or under it; at `ptr` only when `exact`
+    function errorsAt(ptr, ctx, exact = false) {
         const found = [];
         for (const error of ctx.errors) {
             const where = [error.path, ...(error.locations || [])];
-            if (where.some((w) => w && (w === ptr || w.startsWith(`${ptr}/`)))) {
+            if (where.some((w) => w && (w === ptr || (!exact && w.startsWith(`${ptr}/`))))) {
                 found.push(error.message);
             }
         }
         return found;
     }
 
-    function markErrors(node, ptr, ctx) {
-        const found = errorsAt(ptr, ctx);
+    function markErrors(node, ptr, ctx, exact = false) {
+        const found = errorsAt(ptr, ctx, exact);
         if (found.length) {
             node.classList.add('invalid');
             addTitle(node, found.join('\n'));
@@ -496,7 +521,7 @@ export function init(app) {
             button.append(el('span', '', section.name));
             if (section.read_only) {
                 button.classList.add('read-only');
-                button.append(el('span', 'lock-glyph', LOCKED));
+                button.append(el('span', 'lock-glyph', READ_ONLY_GLYPH));
             }
             if (section.name === selected) {
                 button.classList.add('active');
@@ -582,7 +607,7 @@ export function init(app) {
         const ptr = pointer([section.name]);
         header.append(el('h2', '', section.name));
         if (section.read_only) {
-            header.append(el('span', 'lock-glyph', LOCKED), el('span', 'muted', 'read-only'));
+            header.append(el('span', 'lock-glyph', READ_ONLY_GLYPH), el('span', 'muted', 'read-only'));
         }
         addTitle(header, fieldTip(section.field));
         markProvenance(header, ptr, ctx);
@@ -592,11 +617,16 @@ export function init(app) {
     }
 
     // One table: the rows of `fields` grouped by owner with a vertical class label,
-    // and one value column per entry of `columns` ({pointer, label, capture,
-    // removable}). `options.heads` adds the column heading row and `options.add`
-    // a trailing column with an add button.
+    // and one value column per entry of `columns` ({pointer, label, span, capture,
+    // removable}); a column with `span` > 1 has one sub-column per port, which the
+    // split per-port fields of a capture occupy one cell each. `options.heads` adds
+    // the column heading row, `options.add` a trailing column with an add button,
+    // and `options.single` the class of a one-column grid.
     function renderGrid(fields, columns, ctx, options = {}) {
         const table = el('table', 'spec-grid');
+        if (options.single) {
+            table.classList.add('single');
+        }
         const rows = fieldRows(fields);
         if (options.heads) {
             const thead = el('thead');
@@ -604,7 +634,11 @@ export function init(app) {
             tr.append(el('th', 'group-label'), el('th', 'field-name'));
             for (const column of columns) {
                 const th = el('th', 'column-head');
+                th.colSpan = column.span || 1;
                 th.append(el('span', 'column-label', column.label));
+                if (column.capture) {
+                    th.append(portStepper(column, ctx));
+                }
                 markProvenance(th, column.pointer, ctx);
                 markErrors(th, column.pointer, ctx);
                 if (column.removable) {
@@ -649,13 +683,19 @@ export function init(app) {
             tr.append(name);
             for (const column of columns) {
                 const ptr = column.pointer + pointer(row.path);
+                const span = column.span || 1;
                 if (row.container) {
                     const td = el('td', 'container');
+                    td.colSpan = span;
                     markProvenance(td, ptr, ctx);
                     markErrors(td, ptr, ctx);
                     tr.append(td);
+                } else if (row.field.per_port && column.capture) {
+                    tr.append(...perPortCells(row.field, ptr, ctx, column));
                 } else {
-                    tr.append(valueCell(row.field, ptr, ctx, column));
+                    const td = valueCell(row.field, ptr, ctx);
+                    td.colSpan = span;
+                    tr.append(td);
                 }
             }
             if (options.add) {
@@ -667,8 +707,8 @@ export function init(app) {
         return table;
     }
 
-    function valueCell(field, ptr, ctx, column) {
-        const td = el('td', 'value');
+    // the classes, color, and tooltips of a value cell at `ptr`
+    function decorateCell(td, ptr, ctx) {
         const value = valueAt(ctx.tree, ptr);
         const present = value !== undefined;
         if (!present) {
@@ -680,11 +720,15 @@ export function init(app) {
         }
         markProvenance(td, ptr, ctx);
         markErrors(td, ptr, ctx);
+        return { value, present };
+    }
+
+    function valueCell(field, ptr, ctx) {
+        const td = el('td', 'value');
+        const { value, present } = decorateCell(td, ptr, ctx);
         if (isReadOnly(field)) {
             td.classList.add('read-only');
             td.append(preOf(present ? value : field.default));
-        } else if (field.per_port && column.capture) {
-            renderPerPort(td, field, ptr, value, present, ctx, column.capture);
         } else {
             td.append(control(field, ptr, value, present, ctx));
         }
@@ -743,84 +787,123 @@ export function init(app) {
         return input;
     }
 
-    // A per-port field holds one value (locked) or a list with one value per port
-    // (unlocked). The port list itself is typed as flow text, so its length can change.
-    function renderPerPort(td, field, ptr, value, present, ctx, capture) {
-        const unlocked = Array.isArray(value);
-        const count = portCount(capture.item);
-        const isPort = field.name === 'port';
-        const box = el('div', 'per-port');
-        const values = el('div', 'per-port-values');
-        if (isPort) {
-            const text = present ? displayText(value, field)
-                : (field.default === null ? '' : displayText(field.default, field));
-            const input = textInput(ptr, text);
-            input.addEventListener('change', () => {
-                commitPort(field, ptr, present, input.value, ctx, capture);
-            });
-            values.append(input);
-        } else if (unlocked) {
-            if (value.length !== count) {
-                td.classList.add('review');
-                addTitle(td, `${value.length} values for ${count} ports`);
+    // the `ports N` stepper of a capture column; the port count is at least 1
+    function portStepper(column, ctx) {
+        const ports = column.span || 1;
+        const box = el('span', 'stepper');
+        const minus = iconButton('−', 'remove the last port', () => {
+            resizePorts(column.capture, ports - 1, ctx);
+        }, 'step');
+        minus.disabled = ports <= 1;
+        const plus = iconButton('+', 'add a port', () => {
+            resizePorts(column.capture, ports + 1, ctx);
+        }, 'step');
+        box.append(minus, el('span', 'stepper-label', `ports ${ports}`), plus);
+        return box;
+    }
+
+    // the pill that ties a per-port field to one value for every port (set to the
+    // first value) or splits it into one value per port (set to N copies)
+    function pill(split, field, ptr, value, present, ports, ctx) {
+        const button = el('button', 'pill', split ? '▥ per port' : '▣ all ports');
+        button.type = 'button';
+        button.title = split
+            ? 'one value per port; click to use the first value for every port'
+            : 'one value for every port; click to set a value per port';
+        button.addEventListener('click', () => {
+            if (split) {
+                ctx.send([setEdit(ptr, scalarText(value[0], field.kind), ctx)]);
+            } else {
+                const one = present ? value : field.default;
+                ctx.send([setEdit(ptr, flowText(Array(ports).fill(one), field.kind), ctx)]);
             }
-            value.forEach((v, k) => {
-                const row = el('label', 'per-port-row');
-                row.append(el('span', 'port-label', `p${k}`));
-                const elementPtr = child(ptr, k);
-                const input = textInput(elementPtr, String(v));
-                input.addEventListener('change', () => {
-                    const t = input.value.trim();
-                    ctx.send([{
-                        pointer: elementPtr,
-                        op: 'set',
-                        value_text: t === '' ? 'null' : typedText(field, t),
-                    }]);
-                });
-                row.append(input);
-                values.append(row);
-            });
-        } else {
-            values.append(control(field, ptr, value, present, ctx));
+        });
+        return button;
+    }
+
+    // The cells of a per-port field in the sub-columns of a capture: one spanning
+    // cell for a tied value (a scalar or an absent key), one cell per port for a split
+    // value (a list). The `port` field is split by its own length and has no pill.
+    function perPortCells(field, ptr, ctx, column) {
+        const ports = column.span || 1;
+        const isPort = field.name === 'port';
+        const value = valueAt(ctx.tree, ptr);
+        if (!Array.isArray(value)) {
+            const td = el('td', 'value tied');
+            td.colSpan = ports;
+            const { present } = decorateCell(td, ptr, ctx);
+            const box = el('div', 'tied');
+            box.append(control(field, ptr, value, present, ctx));
+            if (!isPort) {
+                box.append(pill(false, field, ptr, value, present, ports, ctx));
+            }
+            td.append(box);
+            return [td];
         }
-        const lock = iconButton(
-            unlocked ? UNLOCKED : LOCKED,
-            unlocked ? 'one value per port; click for one value for every port'
-                : 'one value for every port; click for one value per port',
-            () => {
-                if (unlocked) {
-                    ctx.send([setEdit(ptr, scalarText(value[0], field.kind), ctx)]);
+        const mismatch = value.length !== ports;
+        const cells = [];
+        for (let k = 0; k < ports; k += 1) {
+            const elementPtr = child(ptr, k);
+            const td = el('td', k === 0 ? 'value sub' : 'value sub inner');
+            if (k === 0) {
+                markProvenance(td, ptr, ctx);
+            }
+            markErrors(td, elementPtr, ctx);
+            markErrors(td, ptr, ctx, true);
+            if (mismatch) {
+                td.classList.add('review');
+                addTitle(td, `${value.length} values for ${ports} ports`);
+            } else if (ctx.review.has(ptr)) {
+                td.classList.add('review');
+                addTitle(td, 'resized to the port count; check the values');
+            }
+            const input = textInput(elementPtr, k < value.length ? String(value[k]) : '');
+            input.addEventListener('change', () => {
+                const t = input.value.trim();
+                const text = t === '' ? 'null' : typedText(field, t);
+                if (k < value.length) {
+                    ctx.send([{ pointer: elementPtr, op: 'set', value_text: text }]);
                 } else {
-                    const one = present ? value : field.default;
-                    const n = isPort ? 1 : count;
-                    ctx.send([setEdit(ptr, flowText(Array(n).fill(one), field.kind), ctx)]);
+                    // the server sets an existing element only, so a value past the end
+                    // of the list rewrites the list padded with null up to that index
+                    const padded = [...value, ...Array(k + 1 - value.length).fill(null)];
+                    const items = padded.map((v, j) => (j === k ? text : scalarText(v, field.kind)));
+                    ctx.send([setEdit(ptr, `[${items.join(', ')}]`, ctx)]);
                 }
-            },
-            'lock');
-        box.append(values, lock);
-        td.append(box);
+            });
+            const box = el('div', 'tied');
+            box.append(input);
+            if (k === 0 && !isPort) {
+                box.append(pill(true, field, ptr, value, true, ports, ctx));
+            }
+            td.append(box);
+            cells.push(td);
+        }
+        return cells;
     }
 
     function renderStructList(section, ctx) {
         const base = pointer([section.name]);
         const items = valueAt(ctx.tree, base);
         const list = Array.isArray(items) ? items : [];
-        const label = section.name.replace(/s$/, '');
         const fields = section.schema.fields;
         const wrap = sectionShell(section, ctx);
         const columns = list.map((item, i) => ({
             pointer: child(base, i),
-            label: `${label} ${i}`,
+            label: `#${i}`,
+            span: portCount(item),
             capture: { pointer: child(base, i), item, fields },
             removable: true,
         }));
         const add = () => {
-            // JSON is YAML flow text, so the copy goes into the file as one value
-            const text = list.length ? JSON.stringify(list[list.length - 1]) : '{}';
+            // the copy goes into the file as one flow mapping of the keys present in
+            // the tree, so no schema default is written as a key
+            const last = list[list.length - 1];
+            const text = isObject(last) ? entryText(last, fields) : '{}';
             ctx.send([insertEdit(base, text, ctx)]);
         };
         wrap.append(renderGrid(fields, columns, ctx, {
-            heads: true, add, addTitle: `add a copy of the last ${label}`,
+            heads: true, add, addTitle: 'add a copy of the last entry',
         }));
         return wrap;
     }
@@ -830,7 +913,8 @@ export function init(app) {
         if (section.schema.fields.length === 0) {
             wrap.append(el('p', 'placeholder', 'no fields'));
         } else {
-            wrap.append(renderGrid(section.schema.fields, [{ pointer: pointer([section.name]) }], ctx));
+            const columns = [{ pointer: pointer([section.name]) }];
+            wrap.append(renderGrid(section.schema.fields, columns, ctx, { single: true }));
         }
         return wrap;
     }
@@ -852,12 +936,11 @@ export function init(app) {
         const list = Array.isArray(items) ? items : [];
         const schema = section.schema;
         const tag = schema.tag;
-        const label = section.name.replace(/s$/, '');
         const wrap = sectionShell(section, ctx);
         list.forEach((item, i) => {
             const ptr = child(base, i);
             const card = el('div', 'entry');
-            const head = entryHeader(ptr, `${label} ${i}`, ctx, () => {
+            const head = entryHeader(ptr, `#${i}`, ctx, () => {
                 ctx.send([{ pointer: ptr, op: 'delete' }]);
             });
             const current = isObject(item) ? item[tag] : undefined;
@@ -879,13 +962,8 @@ export function init(app) {
                 if (!next) {
                     return;
                 }
-                const kept = { [tag]: next.tag_value };
-                for (const f of next.fields) {
-                    if (isObject(item) && item[f.name] !== undefined) {
-                        kept[f.name] = item[f.name];
-                    }
-                }
-                ctx.send([setEdit(ptr, JSON.stringify(kept), ctx)]);
+                const kept = { [tag]: next.tag_value, ...presentKeys(item, next.fields) };
+                ctx.send([setEdit(ptr, entryText(kept, next.fields), ctx)]);
             });
             head.insertBefore(select, head.lastChild);
             card.append(head);
@@ -898,7 +976,7 @@ export function init(app) {
             wrap.append(card);
         });
         const addRow = el('div', 'add-row');
-        addRow.append(iconButton('+', `add a ${label}`, () => {
+        addRow.append(iconButton('+', 'add an entry', () => {
             const text = JSON.stringify({ [tag]: 'list', field: '', values: [] });
             ctx.send([insertEdit(base, text, ctx)]);
         }, 'add'));
@@ -974,7 +1052,7 @@ export function init(app) {
             } else {
                 const table = el('table', 'spec-grid');
                 const tr = el('tr');
-                tr.append(valueCell(item, ptr, ctx, {}));
+                tr.append(valueCell(item, ptr, ctx));
                 table.append(tr);
                 card.append(table);
             }
