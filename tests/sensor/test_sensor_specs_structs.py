@@ -46,6 +46,7 @@ TRIGGERS = ('cellular_5g_pss_sync', 'cellular_5g_sss_sync')
 
 SCALAR_GAIN_MSG = 'gain must be a single number'
 GAIN_COUNT_MSG = 'must match port count'
+PORT_UNIQUE_MSG = 'port indices must be unique'
 FILE_RATE_MSG = 'fixed by the file source'
 TRIGGER_MSG = 'signal_trigger must be one of'
 REPEAT_MSG = re.escape('Expected a `repeat` loop only as the outermost')
@@ -93,6 +94,16 @@ class TestSoapyCapture:
         capture = SoapyCapture(port=(0, 1), gain=0.0, **BASE)
         with pytest.raises(ValueError, match=GAIN_COUNT_MSG):
             capture.replace(gain=(1.0,))
+
+    @pytest.mark.parametrize('port', [(0, 0), (1, 0, 1)], ids=['pair', 'triple'])
+    def test_repeated_port_index_rejected(self, port):
+        raises_on_both_paths(
+            SoapyCapture, ValueError, PORT_UNIQUE_MSG, port=port, gain=0.0, **BASE
+        )
+
+    def test_unordered_distinct_ports_accepted(self):
+        for capture in construct_both(SoapyCapture, port=(1, 0), gain=0.0, **BASE):
+            assert capture.port == (1, 0)
 
     @pytest.mark.xfail(
         strict=True,

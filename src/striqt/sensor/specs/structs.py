@@ -62,7 +62,10 @@ def _validate_multichannel(port, gain):
 
 
 class SensorCapture(Capture, frozen=True, kw_only=True):
-    """Capture specification for a generic waveform with resampling support"""
+    """Capture specification for a generic waveform with resampling support.
+
+    Construction rejects a port tuple with a repeated index.
+    """
 
     # acquisition
     port: types.Port
@@ -72,6 +75,11 @@ class SensorCapture(Capture, frozen=True, kw_only=True):
     adjust_analysis: types.AnalysisAdjustments = msgspec.field(default_factory=dict)
     external_lo_frequency: types.LOFrequency = None
     burst: types.BurstCount = 1
+
+    def __post_init__(self):
+        super().__post_init__()
+        if isinstance(self.port, tuple) and len(set(self.port)) != len(self.port):
+            raise ValueError('port indices must be unique')
 
 
 class SoapyCapture(SensorCapture, frozen=True, kw_only=True):
