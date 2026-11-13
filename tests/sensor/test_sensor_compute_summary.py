@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 from soapy_factories import soapy_capture
 from sweep_strategies import (
@@ -155,6 +156,17 @@ def test_spectrogram_snr_skips_a_port_with_no_power(calibration_nc):
         air_sweep(capture, calibration=calibration_nc), capture, (spg, attrs)
     )
     assert entries == ()
+
+
+def test_spectrogram_snr_is_none_when_axis_0_is_not_the_port_axis(calibration_nc):
+    """the SSB spectrogram shares the spectrogram cache and stacks its blocks on axis
+    0, so a result with more rows than ports is not a per-port spectrogram"""
+    capture = soapy_capture(port=(0, 1), gain=0.0)
+    spg, attrs = spectrogram_result(PEAK_DBM)
+    stacked = np.concatenate([spg] * 5, axis=0)
+    assert stacked.shape[0] == 10
+    sweep = air_sweep(capture, calibration=calibration_nc)
+    assert summary.spectrogram_snr(sweep, capture, (stacked, attrs)) is None
 
 
 # %% capture_fields

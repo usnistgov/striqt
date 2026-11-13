@@ -84,8 +84,9 @@ def log_spectrogram_snr(
 ) -> None:
     """log the peak SNR of each port at INFO on the ``analysis`` logger.
 
-    One record per port with a finite SNR is logged when `cache` is a spectrogram
-    cache and `sweep.source.calibration` is set.
+    One record per port with a finite SNR is logged when `cache` is the spectrogram
+    cache, `sweep.source.calibration` is set, and `result` holds one spectrogram per
+    port; the entry of the SSB spectrogram, which shares the cache, logs nothing.
 
     Args:
         resources: the open resources of the run

@@ -159,7 +159,9 @@ def spectrogram_snr(
 
     Returns:
         one entry per port with a finite SNR, in `split_capture_ports` order, or None
-        when `sweep.source.calibration` is None
+        when `sweep.source.calibration` is None or when axis 0 of the spectrogram is
+        not the port axis (the SSB spectrogram shares the spectrogram cache and
+        stacks its blocks on axis 0)
 
     Raises:
         KeyError: if the radio settings of a port are not in the calibration grid
@@ -170,6 +172,9 @@ def spectrogram_snr(
         return None
 
     spg, attrs = result
+    ports = specs.captures.split_capture_ports(capture)
+    if spg.shape[0] != len(ports):
+        return None
     xp = sw.array_namespace(spg)
     peaks = spg.max(axis=tuple(range(1, spg.ndim)))
     noise = cal_lookups.lookup_system_noise_power(
@@ -182,7 +187,6 @@ def spectrogram_snr(
     )
 
     entries = []
-    ports = specs.captures.split_capture_ports(capture)
     for c, snr in zip(ports, sw.powtodB(peaks) - noise):
         if sw.is_cupy_array(snr.data):
             value = float(snr.data.get())
