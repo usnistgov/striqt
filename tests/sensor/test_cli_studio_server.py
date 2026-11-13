@@ -213,6 +213,7 @@ def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
         })
         spec_msg = ws.receive_json()
         status = ws.receive_json()
+        reread = ss.read_yaml_spec(str(path))
         ws.send_json({
             'type': 'edit',
             'edits': [
@@ -231,7 +232,7 @@ def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
     assert spec_msg['origin']['/captures/0/duration'][0] == 0
     assert status['validation'] == {'ok': True, 'errors': []}
     assert status['applied_differs'] is True
-    assert ss.read_yaml_spec(str(path)).captures[0].duration == 3e-3
+    assert reread.captures[0].duration == 3e-3
 
     assert bad_spec['tree']['captures'][0]['duration'] == -1
     assert bad_status['validation']['ok'] is False
