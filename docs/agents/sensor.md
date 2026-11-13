@@ -243,14 +243,25 @@ the `describe_*` functions render each as one line. The logging callbacks are CL
 beside `confirm_labels`; `striqt-studio` registers `log_overloads` from its own
 `on_analyzed`. `from_delayed` emits none of these messages.
 
-`cli/studio/server.py` is the live preview. The runner runs with a null sink and two
-extensions of the pipeline: `select_analysis` narrows each analysis to the variable on
-display, and `iterate_sweep(res, captures=...)` takes a generator that yields the
-captures matching the entry of `captures:` and the loop values chosen in the page.
-`specs.sequencing.plan_choices(sweep, source_id)` lists those choices from
-`loop_capture_origins`, and `select_plan` filters the expanded plan by them.
-`compute/summary.py:capture_fields`, `acquisition_fields`, and `analysis_labels` return
-the sidebar and selector text as data, and the page renders them.
+`cli/studio/` is the browser page of `striqt-studio`. `session.py:worker` holds one open
+`Resources` in a thread named `striqt-studio` and executes the commands queued by the
+websocket handlers in order, so a preview, a run, and a reopen never overlap. A preview
+runs `iterate_captures(res, captures=..., sink=NoSink(...), callbacks=...)` over the
+captures selected in the page, with `select_analysis` narrowed to the displayed
+variable. A run builds the runner of the applied spec, opens
+`runner.open_sink(format_path, force=overwrite)`, and runs `iterate_sweep(res, sink=...,
+runner=..., action_spec=..., sweep_spec=..., callbacks=...)` with `on_analyzed`
+(overload log and progress), `on_sink_cached` (the spectrogram SNR line), and `prompt`
+(the Y-factor prompts answered from the page) hooks; `logs.py` forwards the ``striqt``
+log records over the websocket for the duration of the run. An apply exits the
+`open_resources` context and reopens the resources for the spec decoded from the edited
+files. The resources open with `sink.path` None, so a store is written only by a run.
+`specs.sequencing.plan_choices(sweep, source_id)` lists the selector choices and
+`select_plan` filters the expanded plan by them; `compute/summary.py:varying_fields`
+names the capture fields the sidebar table keeps; `specs/schema.py:spec_schema` describes
+the spec class for the grid editor. The page writes each edit into the owning YAML file
+through `analysis/lib/io.py:apply_yaml_edits`, and `read_yaml_spec` decodes the files
+after each edit to report the validation errors.
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in
 `actions/core.py:iterate_captures`. A dedicated acquisition thread (`striqt-acquire`)
