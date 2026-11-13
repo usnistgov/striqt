@@ -240,10 +240,10 @@ result)` one `SpectrogramSNR` per port with a finite SNR, None without a calibra
 the `describe_*` functions render each as one line. The logging callbacks are CLI code:
 `cli/sensor_sweep.py:log_overloads` (`on_analyzed`) and `log_spectrogram_snr`
 (`on_sink_cached`, gated on `'spectrogram' in cache.name`), which `sensor-sweep` registers
-beside `confirm_labels`; `web-plotter` registers `log_overloads` from its own
+beside `confirm_labels`; `striqt-studio` registers `log_overloads` from its own
 `on_analyzed`. `from_delayed` emits none of these messages.
 
-`cli/web_plotter.py` is the live preview. The runner runs with a null sink and two
+`cli/studio/server.py` is the live preview. The runner runs with a null sink and two
 extensions of the pipeline: `select_analysis` narrows each analysis to the variable on
 display, and `iterate_sweep(res, captures=...)` takes a generator that yields the
 captures matching the entry of `captures:` and the loop values chosen in the page.

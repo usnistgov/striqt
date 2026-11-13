@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>striqt studio</title>
+    <meta charset="utf-8">
+    <script src="/vendor/plotly.min.js"></script>
+    <link rel="stylesheet" href="/static/studio.css">
+    <link rel="stylesheet" href="/static/spec.css">
+    <link rel="stylesheet" href="/static/run.css">
+</head>
+<body>
+    <div class="header">
+        <h1 id="header-title">&#x1F4E1; striqt studio</h1>
+        <nav class="tabs" role="tablist">
+            <button type="button" class="tab" data-tab="spec" role="tab">Spec</button>
+            <button type="button" class="tab active" data-tab="preview" role="tab">Preview</button>
+            <button type="button" class="tab" data-tab="run" role="tab">Run</button>
+        </nav>
+        <div class="controls">
+            <span id="mode-badge" class="mode-badge" title="Acquisition mode">closed</span>
+            <button type="button" id="status-button" class="status" title="Disconnect">
+                <div class="status-dot connecting" id="status-dot"></div>
+                <span id="status-text">Connecting...</span>
+            </button>
+        </div>
+    </div>
+    <main class="main">
+        <section id="tab-spec" class="tab-panel" role="tabpanel" hidden></section>
+        <section id="tab-preview" class="tab-panel" role="tabpanel">
+            <div class="sidebar">
+                <div id="capture-controls" class="selectors"></div>
+                <div id="coords-sidebar">
+                    <div class="coords-section">
+                        <p class="placeholder">Waiting for data...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="plot-area">
+                <div class="plot-stage">
+                    <select id="variable-select" class="plot-title-select" title="Data variable">
+                        <option value="">Loading...</option>
+                    </select>
+                    <button type="button" id="run-button" class="run-button" disabled>Pause</button>
+                    <div id="plot-container">
+                        <div class="loading">Waiting for data...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section id="tab-run" class="tab-panel" role="tabpanel" hidden></section>
+    </main>
+    <script type="module" src="/static/app.js"></script>
+</body>
+</html>

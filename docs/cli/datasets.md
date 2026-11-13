@@ -1,6 +1,6 @@
 # Datasets
 
-The commands below plot, rechunk, archive, and serve the zarr datasets written by a sweep.
+The commands below plot, rechunk, and archive the zarr datasets written by a sweep.
 
 ::: mkdocs-click
     :module: striqt.cli.plot_capture
@@ -20,12 +20,5 @@ The commands below plot, rechunk, archive, and serve the zarr datasets written b
     :module: striqt.cli.zip_zarr
     :command: cli
     :prog_name: zip-zarr
-    :depth: 1
-    :style: table
-
-::: mkdocs-click
-    :module: striqt.cli.web_plotter
-    :command: cli
-    :prog_name: web-plotter
     :depth: 1
     :style: table
