@@ -690,11 +690,11 @@ def revalidate(session: StudioSession) -> None:
 
 def spec_schema_json(session: StudioSession) -> dict[str, Any]:
     """return the editor schema of the edited spec class, or of the applied one."""
-    from striqt.sensor.specs import schema
+    from striqt.sensor.specs import frontend
 
     spec = current_spec(session)
     assert spec is not None
-    return schema.schema_json(type(spec))
+    return frontend.schema_json(type(spec))
 
 
 def current_spec(session: StudioSession) -> Optional[ss.specs.ActionSpec]:

@@ -1,4 +1,4 @@
-"""striqt.sensor.specs.schema: the editor schema of action spec classes"""
+"""striqt.sensor.specs.frontend: the editor schema of action spec classes"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import msgspec
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis.specs.helpers import qualname
-from striqt.sensor.specs import schema
+from striqt.sensor.specs import frontend as schema
 from striqt.sensor.specs.types import PerPort
 
 

@@ -1,5 +1,5 @@
-"""editor schema of an action spec class: each field with its owning class, kind,
-choices, per-port flag, default, units, constraints, and nesting.
+"""the schema of an action spec class for the page editor: each field with its owning
+class, kind, choices, per-port flag, default, units, constraints, and nesting.
 
 Field hints are read from `msgspec.structs.fields`, which holds the resolved
 `Annotated` hints with the `PER_PORT` marker and the `Meta` extras (`standard_name`,

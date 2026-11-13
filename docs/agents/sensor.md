@@ -265,7 +265,7 @@ the previous spec is reopened. The resources open with `sink.path` None
 `actions/core.py:output_path` names. `specs.sequencing.plan_choices(sweep, source_id)`
 lists the selector choices and `select_plan` filters the expanded plan by them;
 `compute/summary.py:varying_fields` over the entries without loops names the capture
-fields the sidebar table keeps; `specs/schema.py:spec_schema` describes the spec class for
+fields the sidebar table keeps; `specs/frontend.py:spec_schema` describes the spec class for
 the grid editor. `session.py:revalidate` reads the files through
 `analysis/lib/yaml.py:load_yaml_provenance` and `read_spec` after each edit, and the page
 writes each edit into the owning YAML file through `analysis/lib/yaml.py:apply_yaml_edits`;
