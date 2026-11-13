@@ -1,11 +1,8 @@
 """serve the studio page and stream its updates over a websocket.
 
-FastAPI and uvicorn serve the page at http://localhost:8000 for
-``striqt-studio path/to/spec.yaml``. Plotly.js renders the plot in the browser
-through WebGL. The static files of the page are in the ``static`` directory beside
-this module, and ``plotly.min.js`` is served from the `plotly` package. The
-acquisition runs in the worker thread of `session`, and every message to the page is
-built from the `StudioSession` it shares with the handlers here.
+Every message to the page is built from the `StudioSession` that the worker thread
+of `session` updates; the static files of the page are served from the ``static``
+directory beside this module, and ``plotly.min.js`` from the `plotly` package.
 """
 
 from __future__ import annotations
@@ -679,9 +676,8 @@ def session_events(
 def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     """run the web server and the worker thread for the spec at `path`.
 
-    The resources open with a None sink path, and a store is written only by a run
-    started from the page. The server exits when the worker thread ends, and the
-    worker thread ends after the capture in progress when the server exits. The URLs
+    The server exits when the worker thread ends, and the worker thread ends after
+    the capture in progress when the server exits. The URLs
     of `serving_urls` are logged at INFO on the ``sweep`` logger once the server
     starts, and the ``uvicorn.error`` logger level is set to WARNING.
 

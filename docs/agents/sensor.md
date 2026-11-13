@@ -245,23 +245,30 @@ beside `confirm_labels`; `striqt-studio` registers `log_overloads` from its own
 
 `cli/studio/` is the browser page of `striqt-studio`. `session.py:worker` holds one open
 `Resources` in a thread named `striqt-studio` and executes the commands queued by the
-websocket handlers in order, so a preview, a run, and a reopen never overlap. A preview
-runs `iterate_captures(res, captures=..., sink=NoSink(...), callbacks=...)` over the
-captures selected in the page, with `select_analysis` narrowed to the displayed
-variable. A run builds the runner of the applied spec, opens
-`runner.open_sink(format_path, force=overwrite)`, and runs `iterate_sweep(res, sink=...,
-runner=..., action_spec=..., sweep_spec=..., callbacks=...)` with `on_analyzed`
-(overload log and progress), `on_sink_cached` (the spectrogram SNR line), and `prompt`
-(the Y-factor prompts answered from the page) hooks; `logs.py` forwards the ``striqt``
-log records over the websocket for the duration of the run. An apply exits the
-`open_resources` context and reopens the resources for the spec decoded from the edited
-files. The resources open with `sink.path` None, so a store is written only by a run.
-`specs.sequencing.plan_choices(sweep, source_id)` lists the selector choices and
-`select_plan` filters the expanded plan by them; `compute/summary.py:varying_fields`
-names the capture fields the sidebar table keeps; `specs/schema.py:spec_schema` describes
-the spec class for the grid editor. The page writes each edit into the owning YAML file
-through `analysis/lib/yaml.py:apply_yaml_edits`, and `read_yaml_spec` decodes the files
-after each edit to report the validation errors.
+websocket handlers in order, so a preview, a run, and a reopen never overlap. The facts
+derived from the open resources (the sweep, source id, plan choices, varying fields,
+adjustments, output path, plot variables, and plotter) live in one `OpenSpec` on the
+session, None while closed. A preview runs `iterate_captures(res, captures=...,
+sink=NoSink(...), callbacks=...)` over the captures selected in the page, with
+`select_analysis` narrowed to the displayed variable. A run builds the runner of the
+applied spec, opens `runner.open_sink(format_path, force=overwrite)`, and runs
+`iterate_sweep(res, sink=..., runner=..., action_spec=..., sweep_spec=...,
+callbacks=cli/sensor_sweep.py:logging_callbacks(...))`, the same overload and spectrogram
+SNR hooks as `sensor-sweep` plus a `prompt` hook answered from the page; `logs.py`
+forwards the ``striqt`` log records over the websocket for the duration of the run. An
+apply exits the `open_resources` context and reopens the resources for the spec decoded
+from the edited files; an applied spec that fails to open is kept as `apply_error` and
+the previous spec is reopened. The resources open with `sink.path` None
+(`specs/action.py:null_sink`), so a store is written only by a run, at the path
+`actions/core.py:output_path` names. `specs.sequencing.plan_choices(sweep, source_id)`
+lists the selector choices and `select_plan` filters the expanded plan by them;
+`compute/summary.py:varying_fields` over the entries without loops names the capture
+fields the sidebar table keeps; `specs/schema.py:spec_schema` describes the spec class for
+the grid editor. `session.py:revalidate` reads the files through
+`analysis/lib/yaml.py:load_yaml_provenance` and `read_spec` after each edit, and the page
+writes each edit into the owning YAML file through `analysis/lib/yaml.py:apply_yaml_edits`;
+a `revert` restores one section through `tree_edits` against the tree kept at the last
+apply.
 
 `iterate_sweep(resources)` calls `resources['runner'].iterate`. Every runner ends in
 `actions/core.py:iterate_captures`. A dedicated acquisition thread (`striqt-acquire`)

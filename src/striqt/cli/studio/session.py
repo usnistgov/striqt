@@ -1,10 +1,7 @@
 """the acquisition session behind the page: one open source, preview and run in turn.
 
 One worker thread holds the resources open for the applied spec and executes the
-commands queued by the websocket handlers in order. A preview acquires the selected
-captures into a `NoSink` with the analysis narrowed to the displayed variable; a run
-acquires the plan of the full spec into the sink of its runner; an apply closes the
-resources and reopens the resources for the edited spec. No two of these overlap.
+commands of the page in order, so a preview, a run, and a reopen never overlap.
 """
 
 from __future__ import annotations
@@ -198,7 +195,7 @@ class SessionEvents:
     """
 
     state_changed: Callable[[], None]
-    """called after a change to `mode`, `run`, `prompt`, or a field set by `configure`"""
+    """called after a change to the mode, the run, the prompt, or the open resources"""
     data_ready: Callable[[], None]
     """called after `StudioSession.dataset` is replaced"""
     attach_logs: Callable[[int], WebSocketLogHandler]
