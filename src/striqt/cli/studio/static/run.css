@@ -1,0 +1,386 @@
+/* the Run tab: the sidebar blocks, the plot and console column, and the prompt dialog */
+
+.run-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.run-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #0f3460;
+}
+.run-action-class {
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: #eee;
+}
+.run-spec-filename {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+    color: #aaa;
+}
+.run-block h2 {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #4ade80;
+    border-bottom: 1px solid #0f3460;
+    padding-bottom: 0.4rem;
+}
+.run-output-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+.run-sink-path {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    color: #eee;
+    word-break: break-all;
+    flex: 1 1 100%;
+}
+.run-badge {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid;
+}
+.run-badge.new {
+    color: #4ade80;
+    border-color: #4ade80;
+}
+.run-badge.exists {
+    color: #fbbf24;
+    border-color: #fbbf24;
+}
+.run-badge.none {
+    color: #888;
+    border-color: #0f3460;
+}
+.run-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+    color: #fbbf24;
+    cursor: pointer;
+}
+.run-checkbox input {
+    accent-color: #e94560;
+}
+.run-level {
+    display: grid;
+    grid-template-columns: 8rem 1fr;
+}
+.run-level select {
+    width: 100%;
+}
+.run-adjustments .coords-table .coord-name {
+    padding-left: 0.5rem;
+    white-space: nowrap;
+}
+.run-note {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: #888;
+    font-style: italic;
+}
+.run-sidebar .run-start {
+    justify-content: center;
+    font-size: 1rem;
+    padding: 0.6rem 1rem;
+}
+.run-sidebar .run-start:not(:disabled) {
+    border-color: #4ade80;
+}
+.run-sidebar .run-start.stop:not(:disabled) {
+    border-color: #e94560;
+}
+.run-hint {
+    font-size: 0.8rem;
+    color: #888;
+    min-height: 1em;
+    margin-top: -0.5rem;
+}
+.run-hint:empty {
+    display: none;
+}
+
+/* progress */
+.run-bar {
+    height: 10px;
+    background: #1a1a2e;
+    border: 1px solid #0f3460;
+    border-radius: 5px;
+    overflow: hidden;
+}
+.run-bar-fill {
+    height: 100%;
+    width: 0;
+    background: #4ade80;
+    transition: width 0.3s ease;
+}
+.run-bar-fill.error {
+    background: #e94560;
+}
+.run-progress-counts,
+.run-progress-text,
+.run-elapsed,
+.run-finished {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+    color: #aaa;
+    margin-top: 0.4rem;
+}
+.run-progress-counts {
+    color: #eee;
+}
+.run-finished:empty {
+    display: none;
+}
+.run-finished {
+    color: #4ade80;
+}
+.run-failed {
+    margin-top: 0.5rem;
+}
+.run-failed-line {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+    color: #e94560;
+    word-break: break-word;
+}
+.run-failed details {
+    margin-top: 0.4rem;
+}
+.run-failed summary {
+    font-size: 0.8rem;
+    color: #aaa;
+    cursor: pointer;
+}
+.run-traceback {
+    margin-top: 0.4rem;
+    padding: 0.5rem;
+    font-size: 0.7rem;
+    color: #ccc;
+    background: #1a1a2e;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 16rem;
+    overflow: auto;
+}
+
+/* the error bar */
+.run-error-bar {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #2a1a2e;
+    border: 1px solid #e94560;
+    border-radius: 4px;
+    color: #eee;
+    font-size: 0.85rem;
+}
+.run-error-bar[hidden] {
+    display: none;
+}
+.run-error-text {
+    flex: 1;
+    word-break: break-word;
+}
+.run-error-close {
+    background: transparent;
+    border: none;
+    color: #e94560;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* the plot and console column */
+.run-main {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.run-plot-stage {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+}
+.run-plot {
+    width: 100%;
+    height: 100%;
+    background: #16213e;
+    border-radius: 8px;
+}
+.run-console {
+    flex: 0 0 30%;
+    min-height: 8rem;
+    display: flex;
+    flex-direction: column;
+    background: #16213e;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.run-console-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid #0f3460;
+}
+.run-console-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #4ade80;
+}
+.run-console-hidden-note {
+    flex: 1;
+    font-size: 0.75rem;
+    color: #888;
+}
+.run-console-clear {
+    background: #0f3460;
+    color: #aaa;
+    border: 1px solid #1a1a2e;
+    border-radius: 4px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.run-console-clear:hover {
+    border-color: #e94560;
+    color: #eee;
+}
+.run-console-rows {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.4rem 0.75rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+.run-log-row {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #eee;
+}
+.run-log-row.level-DEBUG { color: #888; }
+.run-log-row.level-WARNING { color: #fbbf24; }
+.run-log-row.level-ERROR { color: #e94560; }
+.run-log-row .log-time { color: #4ade80; }
+.run-log-row.level-DEBUG .log-time { color: #5a8a6a; }
+.run-log-row .log-level { margin: 0 0.5rem; }
+.run-log-row .log-logger { color: #aaa; }
+.run-log-row .log-progress { color: #6ea8fe; }
+.run-log-row .log-exception {
+    margin: 0.2rem 0 0.4rem 2rem;
+    padding: 0.4rem;
+    background: #1a1a2e;
+    border-left: 2px solid #e94560;
+    color: #ccc;
+    font-size: 0.7rem;
+    white-space: pre-wrap;
+}
+/* the level filter: rows below the selected level are hidden, not removed */
+.run-console.min-INFO .level-DEBUG,
+.run-console.min-WARNING .level-DEBUG,
+.run-console.min-WARNING .level-INFO,
+.run-console.min-ERROR .level-DEBUG,
+.run-console.min-ERROR .level-INFO,
+.run-console.min-ERROR .level-WARNING {
+    display: none;
+}
+
+/* the prompt dialog */
+.run-prompt-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26, 26, 46, 0.75);
+}
+.run-prompt-overlay[hidden] {
+    display: none;
+}
+.run-prompt-dialog {
+    width: min(36rem, 90vw);
+    background: #16213e;
+    border: 1px solid #e94560;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.run-prompt-dialog h2 {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #e94560;
+}
+.run-prompt-text {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 0.95rem;
+    color: #eee;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.run-prompt-input {
+    background: #1a1a2e;
+    color: #eee;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.95rem;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+.run-prompt-input:focus {
+    outline: none;
+    border-color: #e94560;
+}
+.run-prompt-input:disabled {
+    color: #777;
+}
+.run-prompt-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+.run-prompt-buttons button {
+    background: #0f3460;
+    color: #eee;
+    border: 1px solid #1a1a2e;
+    border-radius: 4px;
+    padding: 0.45rem 1rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+.run-prompt-buttons button:hover:not(:disabled) {
+    border-color: #e94560;
+}
+.run-prompt-buttons button:disabled {
+    color: #777;
+    cursor: default;
+}
+.run-prompt-buttons .run-prompt-answer {
+    border-color: #4ade80;
+}
+.run-prompt-buttons button[hidden] {
+    display: none;
+}
