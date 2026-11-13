@@ -65,18 +65,25 @@ def analyzed_dataset():
     return run_in_memory(sweep, take=1, delayed=True)[0]
 
 
-def recording_events(state):
+def recording_events(state, on_data=None):
     """return `SessionEvents` that record each mode change and each dataset of `state`,
-    with the lists and the close event they fill"""
+    with the lists and the close event the events fill; `on_data` is called after
+    each dataset is recorded"""
     import logging
     import threading
 
     modes = []
     datasets = []
     closed = threading.Event()
+
+    def data_ready():
+        datasets.append((state.mode, state.dataset))
+        if on_data is not None:
+            on_data()
+
     events = session.SessionEvents(
         state_changed=lambda: modes.append(state.mode),
-        data_ready=lambda: datasets.append((state.mode, state.dataset)),
+        data_ready=data_ready,
         attach_logs=logging.NullHandler,
         detach_logs=lambda handler: None,
         closed=closed.set,

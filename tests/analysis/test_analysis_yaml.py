@@ -3,7 +3,6 @@ spec file and the edits written back into its files, JSON pointers, and flow tex
 
 from __future__ import annotations
 
-
 import pytest
 import yaml
 from conftest import SWEEP_DIR

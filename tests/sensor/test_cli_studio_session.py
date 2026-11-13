@@ -226,7 +226,15 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path):
     base = looped_sweep()
     spec = base.replace(sink=base.sink.replace(path=str(tmp_path / 'out' / 'run')))
     state = session.StudioSession(applied_spec=spec)
-    events, modes, datasets, closed = recording_events(state)
+    stop_after_two = []
+
+    def stop_second_run():
+        # the captures are 2 ms long, so the stop is set from the data callback
+        run = state.run
+        if stop_after_two and run is stop_after_two[0] and run.acquired >= 2:
+            run.stop.set()
+
+    events, modes, datasets, closed = recording_events(state, stop_second_run)
 
     thread = session.start(state, events)
     try:
@@ -262,10 +270,7 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path):
         state.commands.put(session.StartRun(overwrite=True))
         wait_for(lambda: state.run is not run and state.run is not None)
         second = state.run
-        wait_for(
-            lambda: second.acquired >= 2, what='two acquisitions of the second run'
-        )
-        second.stop.set()
+        stop_after_two.append(second)
         wait_for(lambda: second.finished is not None, what='the stopped run')
         assert second.error is None
         assert 2 <= second.acquired < second.count
