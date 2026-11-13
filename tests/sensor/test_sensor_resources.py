@@ -205,3 +205,9 @@ def test_on_source_opened_is_called_once_with_the_spec_and_id():
 def test_resources_carry_empty_callbacks_by_default():
     with ss.open_resources(tone_sweep(OFFSETS), None) as res:
         assert res['callbacks'] == ss.lib.resources.SweepCallbacks()
+
+
+def test_prompt_hook_is_bundled_into_the_callbacks():
+    answer = lambda text: 'y'
+    with ss.open_resources(tone_sweep(OFFSETS), None, prompt=answer) as res:
+        assert res['callbacks'].prompt is answer

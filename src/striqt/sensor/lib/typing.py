@@ -186,6 +186,8 @@ if typing.TYPE_CHECKING:
 
     AnalyzedCallback: TypeAlias = Callable[[DelayedDataset], None]
 
+    PromptCallback: TypeAlias = Callable[[str], str]
+
     AnalysisSelector: TypeAlias = Callable[
         [specs.SensorCapture, specs.AnalysisGroup], specs.AnalysisGroup
     ]

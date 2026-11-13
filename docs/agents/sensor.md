@@ -218,7 +218,9 @@ analysis thread each time a measurement fills a `KwArgCache` (the pipeline forwa
 cache's own callback arguments and prepends `resources`, since the SNR line needs the
 calibration, `format_path`, and `source_id`); `select_analysis(capture, analysis)` runs
 in the analysis thread before each analysis with the group adjusted by
-`capture.adjust_analysis`, and returns the group to evaluate. `compute.analyze` resolves
+`capture.adjust_analysis`, and returns the group to evaluate; `prompt(text)` returns
+the operator's answer to an operator prompt of the Y-factor runner, in place of a stdin
+read through `sa.util.blocking_input`. `compute.analyze` resolves
 the signal trigger from the adjusted group before the hook runs, so a measurement that
 prefers aligned input aligns whether or not the trigger measurement survives the
 selection, and `adjust_analysis` warns about no parameter of a dropped measurement.
@@ -227,7 +229,7 @@ selection, and `adjust_analysis` warns about no parameter of a dropped measureme
 raises `ValueError` on a dataset that lacks one, so the hook pairs with a `NoSink` or a
 `MemoryCacheSink`. A front end that wants two behaviors on one event writes one
 function. A callback exception ends the run like an analysis error. No hooks are
-registered by default. `open_resources` bundles the four into the internal dataclass
+registered by default. `open_resources` bundles the five into the internal dataclass
 `lib/resources.py:SweepCallbacks` under `resources['callbacks']`, which
 `iterate_captures` reads; `iterate_sweep(res, callbacks=...)` replaces that bundle for
 one run.

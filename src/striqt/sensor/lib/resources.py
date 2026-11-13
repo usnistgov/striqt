@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         CachedCallback,
         P,
         PassThroughWrapper,
+        PromptCallback,
         R,
         SourceOpenCallback,
     )
@@ -63,6 +64,9 @@ class SweepCallbacks:
     """hook run with ``(capture, analysis)`` before each analysis, returning the
     group to evaluate in place of the adjusted `analysis`; None selects the whole
     group"""
+    prompt: PromptCallback | None = None
+    """hook run with the text of each operator prompt, returning the operator's
+    answer; None reads one line from stdin through `blocking_input`"""
 
 
 if TYPE_CHECKING:
@@ -284,6 +288,7 @@ def open_resources(
     on_analyzed: AnalyzedCallback | None = None,
     on_sink_cached: CachedCallback | None = None,
     select_analysis: AnalysisSelector | None = None,
+    prompt: PromptCallback | None = None,
 ) -> ConnectionManager[SS, SP, SC, SA, PS, PC]:
     """open the sensor hardware and software contexts needed to run `spec`.
 
@@ -311,6 +316,9 @@ def open_resources(
             before each analysis, returning the group to evaluate in place of the
             adjusted `analysis`; a sink that allocates a store from the full group
             rejects the narrowed result
+        prompt: hook run with the text of each operator prompt, returning the
+            operator's answer; None reads one line from stdin through
+            `blocking_input`
 
     Raises:
         TypeError: if no action runner is registered for the type of `spec`
@@ -338,6 +346,7 @@ def open_resources(
         on_analyzed=on_analyzed,
         on_sink_cached=on_sink_cached,
         select_analysis=select_analysis,
+        prompt=prompt,
     )
 
     runner = actions.registry.lookup(spec)(spec)
