@@ -264,7 +264,7 @@ def capture_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
         return ()
 
     groups: dict[type, list[FieldValue]] = {}
-    for name, owner in _field_owners(type(dd.capture)).items():
+    for name, owner in specs.schema.field_owners(type(dd.capture)).items():
         if name not in coords:
             continue
         coord = coords[name]
@@ -336,7 +336,7 @@ def acquisition_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
     attrs = sa.specs.helpers.get_capture_type_attrs(type(info))
 
     groups: dict[type, list[FieldValue]] = {}
-    for name, owner in _field_owners(type(info)).items():
+    for name, owner in specs.schema.field_owners(type(info)).items():
         if name == 'signal_trigger':
             continue
         value = getattr(info, name)
@@ -373,21 +373,6 @@ def analysis_labels(
         fallback = name.replace('_', ' ').title()
         labels[name] = titles.get(name, fallback)
     return labels
-
-
-def _field_owners(cls: type) -> dict[str, type]:
-    """return the struct class in the MRO of `cls` that first declares each field.
-
-    The dict is keyed by field name in base-to-derived order.
-    """
-    owners: dict[str, type] = {}
-    for klass in reversed(cls.__mro__):
-        fields = getattr(klass, '__struct_fields__', None)
-        if not isinstance(fields, tuple):
-            continue
-        for name in fields:
-            owners.setdefault(name, klass)
-    return owners
 
 
 def _as_groups(groups: dict[type, list[FieldValue]]) -> tuple[FieldGroup, ...]:
