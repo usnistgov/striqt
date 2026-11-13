@@ -396,3 +396,33 @@ def test_read_zarr_spec_extension_root(tmp_path, site_sweep):
     rebuilt = ss.read_zarr_spec(path, extension_root=SITE_DIR)
     assert type(rebuilt) is type(site_sweep)
     assert rebuilt == site_sweep
+
+
+# %% resolve_store_path
+
+
+@pytest.mark.parametrize(
+    ('path', 'store', 'expected'),
+    [
+        ('out/run', 'directory', 'out/run.zarr'),
+        ('out/run.zarr', 'directory', 'out/run.zarr'),
+        ('out/run', 'zip', 'out/run.zarr.zip'),
+        ('out/run.zip', 'directory', 'out/run.zarr.zip'),
+        ('out/run.zarr.zip', 'zip', 'out/run.zarr.zip'),
+    ],
+)
+def test_resolve_store_path_adds_the_store_suffix(path, store, expected):
+    sink = ss.specs.ZarrSink(path=path, store=store)
+    assert ss.lib.io.resolve_store_path(sink) == Path(expected)
+
+
+def test_resolve_store_path_formats_the_template():
+    sink = ss.specs.ZarrSink(path='{name}')
+    assert ss.lib.io.resolve_store_path(sink, format_path=lambda p: 'run') == Path(
+        'run.zarr'
+    )
+
+
+def test_resolve_store_path_rejects_a_null_path():
+    with pytest.raises(ValueError, match='null'):
+        ss.lib.io.resolve_store_path(ss.specs.ZarrSink(path=None))
