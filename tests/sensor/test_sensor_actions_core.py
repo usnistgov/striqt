@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 from conftest import assert_source_released
 from numeric_checks import assert_close, cross_backend
-from sweep_strategies import SOURCE
+from sweep_strategies import SOURCE, make_calibration_sweep
 from synthetic_sources import (
     BINDINGS,
     IQ_ONLY,
@@ -581,3 +581,70 @@ def test_indexer_advances_once_per_capture():
     assert [r.burst_index for r in results] == [0, 1, 2, 0, 0]
     starts = [int(r.sweep_start_time.astype(int)) for r in results]
     assert starts == [10, 10, 10, 10, 30]
+
+
+# %% open_capture_sink
+
+
+def test_open_capture_sink_is_a_no_sink_for_a_null_path():
+    sweep = tone_sweep((1e6,))
+    assert sweep.sink.path is None
+    assert isinstance(core.open_capture_sink(sweep, sweep, None), ss.sinks.NoSink)
+
+
+def test_open_capture_sink_forwards_force_and_the_action_spec(monkeypatch):
+    lookup = ss.lib.controller.lookup
+    monkeypatch.setattr(lookup, 'id', lambda spec, timeout=0.5: 'beef')
+    monkeypatch.setattr(lookup, 'power_units', lambda spec, timeout=0.5: 'FS')
+    sweep = tone_sweep((1e6,), sink=ss.specs.ZarrSink(path='out.zarr'))
+    action = sweep.replace(options=sweep.options.replace(reuse_iq=True))
+
+    sink = core.open_capture_sink(sweep, action, None, force=True)
+    assert isinstance(sink, ss.sinks.ZarrCaptureSink)
+    assert sink.force is True
+    assert sink._action_spec is action
+    assert core.open_capture_sink(sweep, action, None).force is False
+
+
+# %% output_path
+
+
+@pytest.mark.parametrize(
+    ('sink', 'expected'),
+    [
+        (ss.specs.ZarrSink(path='out/run'), 'out/run.zarr'),
+        (ss.specs.ZarrSink(path='out/run', store='zip'), 'out/run.zarr.zip'),
+        (ss.specs.ZarrSink(path=None), None),
+    ],
+)
+def test_output_path_of_a_sweep_is_the_store_path(sink, expected):
+    sweep = tone_sweep((1e6,), sink=sink)
+    assert core.output_path(sweep, None) == expected
+
+
+def test_output_path_of_a_calibration_is_the_corrections_file():
+    spec = make_calibration_sweep(sink=ss.specs.Sink(path='cal/corrections.nc'))
+    assert core.output_path(spec, None) == 'cal/corrections.nc'
+
+
+def test_output_path_formats_the_template():
+    sweep = tone_sweep((1e6,), sink=ss.specs.ZarrSink(path='out/{name}'))
+    formatted = core.output_path(sweep, lambda p: p.format(name='run'))
+    assert formatted == 'out/run.zarr'
+
+
+def test_output_path_returns_an_unfilled_template_as_written():
+    sweep = tone_sweep((1e6,), sink=ss.specs.ZarrSink(path='out/{bogus}'))
+    assert core.output_path(sweep, lambda p: p.format(name='run')) == 'out/{bogus}'
+
+
+def test_output_path_resolves_a_relative_result_against_root(tmp_path):
+    sweep = tone_sweep((1e6,), sink=ss.specs.ZarrSink(path='out/run'))
+    assert core.output_path(sweep, None, root=tmp_path) == str(
+        tmp_path / 'out/run.zarr'
+    )
+
+    absolute = tone_sweep((1e6,), sink=ss.specs.ZarrSink(path=str(tmp_path / 'run')))
+    assert core.output_path(absolute, None, root=tmp_path / 'elsewhere') == str(
+        tmp_path / 'run.zarr'
+    )

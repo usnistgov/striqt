@@ -211,3 +211,17 @@ def test_prompt_hook_is_bundled_into_the_callbacks():
     answer = lambda text: 'y'
     with ss.open_resources(tone_sweep(OFFSETS), None, prompt=answer) as res:
         assert res['callbacks'].prompt is answer
+
+
+def test_prompt_hook_returns_the_callback_or_stdin(scripted_input):
+    """the hook of `resources['callbacks']` when set; otherwise `blocking_input`,
+    looked up when `prompt_hook` is called"""
+    answer = lambda text: 'y'
+    callbacks = ss.lib.resources.SweepCallbacks(prompt=answer)
+    assert ss.lib.resources.prompt_hook({'callbacks': callbacks}) is answer
+
+    scripted_input['answers'] += ['a', 'b']
+    assert ss.lib.resources.prompt_hook({})('first?') == 'a'
+    unset = ss.lib.resources.SweepCallbacks()
+    assert ss.lib.resources.prompt_hook({'callbacks': unset})('second?') == 'b'
+    assert scripted_input['prompts'] == ['first?', 'second?']

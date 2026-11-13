@@ -20,7 +20,7 @@ from striqt.analysis.specs.helpers import SpecValidationError
 from ... import specs
 from .. import compute, io
 from ..compute import cal_lookups
-from ..resources import Resources
+from ..resources import Resources, prompt_hook
 from ..sinks import MemoryCacheSink, SinkBase
 from ..typing import PC, PS, SA, SC, SP, SS
 from . import core
@@ -456,8 +456,7 @@ class ManualYFactorRunner(Generic[SS, SP, SC, SA, PS, PC]):
         if captures is not None:
             raise ValueError('a calibration acquires its own capture passes')
 
-        callbacks = resources.get('callbacks')
-        prompt = None if callbacks is None else callbacks.prompt
+        prompt = prompt_hook(resources)
         confirm_enr(self.spec.calibration.enr, prompt)
 
         source_id = resources['source'].source_id

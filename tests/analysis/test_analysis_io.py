@@ -4,6 +4,7 @@ stores written with bandwidth-suffixed units."""
 from __future__ import annotations
 
 import zipfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -304,6 +305,23 @@ def test_load_repairs_legacy_attrs(tmp_path):
     assert loaded.cellular_5g_pss_correlation.attrs['noise_bandwidth'] == pytest.approx(
         30e3
     )
+
+
+# %% is_zip_store
+
+
+@pytest.mark.parametrize(
+    ('path', 'expected'),
+    [
+        ('out/run.zip', True),
+        ('out/run.zarr.zip', True),
+        ('out/RUN.ZIP', True),
+        ('out/run.zarr', False),
+    ],
+)
+def test_is_zip_store_tests_the_suffix_in_any_case(path, expected):
+    assert sa.lib.io.is_zip_store(path) is expected
+    assert sa.lib.io.is_zip_store(Path(path)) is expected
 
 
 # %% open_store and zarr_format_kws

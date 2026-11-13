@@ -6,38 +6,52 @@ from striqt.sensor.lib.compute import cal_lookups
 
 
 @click.command()
-@click.argument('yaml_path', type=click.Path(exists=True, dir_okay=False))
-def cli(yaml_path):
-    """report the resources, paths, tolerances, and memory of the sweep at YAML_PATH.
+@click.argument('path', type=click.Path(exists=True, dir_okay=False))
+def cli(path: str) -> None:
+    """report the resources, paths, tolerances, and memory of the sweep at PATH.
 
-    YAML_PATH is a YAML sweep specification. The command opens the source, acquires
-    no capture, and writes no store.
+    PATH is a YAML or JSON sweep specification. The command opens the source,
+    acquires no capture, and writes no store.
     """
     import striqt.analysis as sa
 
     sa.util.show_messages(sa.util.logging.WARNING)
-    run(yaml_path)
+    run(path)
 
 
-def run(yaml_path: str):
+def run(path: str) -> None:
+    """print the report of the sweep in the yaml or json file at `path`.
+
+    Raises:
+        click.ClickException: if the suffix of `path` is none of ``.yaml``, ``.yml``,
+            or ``.json``
+    """
     from pathlib import Path
     from pprint import pformat
 
     import pandas as pd
 
     import striqt.sensor as ss
+    from striqt.sensor.lib.actions.core import output_path
     from striqt.sensor.lib.resources import resident_bytes_bound
 
-    spec = ss.read_yaml_spec(yaml_path)
+    try:
+        spec = ss.read_spec(path)
+    except ValueError as ex:
+        raise click.ClickException(str(ex)) from ex
     print(f'Opened a bound specification for {type(spec).__name__!r} bindings')
 
     print('Opening sensor resources...')
 
+    # `open_resources` changes the working directory to the spec directory, so a
+    # relative `path` is resolved before the change
+    spec_dir = Path(path).resolve().parent
+
     # with a None sink path, `open_resources` writes no store; the paths printed
     # below come from `spec`
-    run_spec = spec.replace(sink=spec.sink.replace(path=None))
+    run_spec = ss.specs.action.null_sink(spec)
 
-    manager = ss.open_resources(run_spec, yaml_path, test_only=True)
+    manager = ss.open_resources(run_spec, path, test_only=True)
 
     with manager as res:
         assert isinstance(spec.sensor, ss.lib.bindings.SensorBinding)
@@ -74,11 +88,13 @@ def run(yaml_path: str):
             else:
                 pf = p
             print('  Exists: ', 'yes' if Path(pf).exists() else 'no')
+        print('sink output:')
+        print('  ', repr(output_path(spec, format_path, root=spec_dir)))
 
         print('\n\nFormat fields available for use in paths:')
         print(80 * '▀')
         afields = ss.specs.paths.get_path_fields(
-            spec, source_id=source_id, spec_path=yaml_path
+            spec, source_id=source_id, spec_path=path
         )
         afields = {f'{{{k}}}': v for k, v in afields.items()}
         afields_repr = pformat(afields, indent=2, sort_dicts=False)

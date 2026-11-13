@@ -206,3 +206,17 @@ def test_in_tree_sweeps_still_load(path):
 def test_downstream_sweep_still_loads():
     sweep = ss.read_yaml_spec(DOWNSTREAM_SWEEP)
     assert len(ss.specs.sequencing.loop_captures(as_sweep(sweep))) > 0
+
+
+# %% null_sink
+
+
+def test_null_sink_clears_the_path_and_keeps_the_rest_of_the_spec():
+    spec = make_sweep(
+        captures=(make_capture(),),
+        sink=ss.specs.ZarrSink(path='out/run', store='zip'),
+    )
+    nulled = ss.specs.action.null_sink(spec)
+    assert nulled.sink.path is None
+    assert nulled.sink.store == 'zip'
+    assert nulled.replace(sink=spec.sink) == spec

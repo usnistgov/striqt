@@ -426,3 +426,37 @@ def test_resolve_store_path_formats_the_template():
 def test_resolve_store_path_rejects_a_null_path():
     with pytest.raises(ValueError, match='null'):
         ss.lib.io.resolve_store_path(ss.specs.ZarrSink(path=None))
+
+
+# %% read_spec
+
+
+@pytest.mark.parametrize('suffix', ['.yaml', '.yml', '.json'])
+def test_read_spec_dispatches_on_the_suffix(tmp_path, synthetic_sweep, suffix):
+    """the one tree of `synthetic.yaml`, written under each suffix, decodes to the
+    spec that `read_yaml_spec` reads from the original"""
+    tree = sa.lib.io.decode_from_yaml_file(SWEEP_DIR / 'synthetic.yaml')
+    path = tmp_path / f'spec{suffix}'
+    if suffix == '.json':
+        path.write_bytes(msgspec.json.encode(tree))
+    else:
+        path.write_bytes(msgspec.yaml.encode(tree))
+
+    assert ss.read_spec(path) == synthetic_sweep
+
+
+def test_read_spec_reads_the_json_fixture(calibration_sweep):
+    assert ss.read_spec(SWEEP_DIR / 'calibration.json') == calibration_sweep
+
+
+def test_read_spec_forwards_the_sink_overrides():
+    spec = ss.read_spec(
+        SWEEP_DIR / 'synthetic.yaml', output_path='out', store_backend='zip'
+    )
+    assert spec.sink.path == 'out'
+    assert spec.sink.store == 'zip'
+
+
+def test_read_spec_rejects_another_suffix(tmp_path):
+    with pytest.raises(ValueError, match=r"not '\.txt'"):
+        ss.read_spec(tmp_path / 'spec.txt')

@@ -33,6 +33,12 @@ warnings.filterwarnings(
 )
 
 
+def is_zip_store(path: str | Path) -> bool:
+    """return True when `path` ends in ``.zip`` in any letter case, the suffix of a
+    zarr zip store."""
+    return str(path).lower().endswith('.zip')
+
+
 def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> ZarrStore:
     """return the zarr store at `target`.
 
@@ -79,7 +85,7 @@ def open_store(target: str | Path, *, mode: typing.Literal['r', 'w', 'a']) -> Za
             kws = {}
         fs, _ = fsspec.url_to_fs(target, asynchronous=True, **kws)
         return fs.get_mapper('')
-    elif str(target).endswith('.zip'):
+    elif is_zip_store(target):
         store = storage.ZipStore(target, mode=mode, compression=0)
     else:
         store = DirectoryStore(target)

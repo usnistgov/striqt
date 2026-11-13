@@ -9,6 +9,7 @@ from .io import (
     open_store,
     read_calibration,
     read_json_spec,
+    read_spec,
     read_yaml_spec,
     read_zarr_spec,
 )

@@ -183,6 +183,47 @@ def read_json_spec(
     )
 
 
+def read_spec(
+    path: str | Path,
+    *,
+    type: type[specs.ActionSpec] | None = None,
+    output_path: Optional[str] = None,
+    store_backend: Optional[str] = None,
+) -> specs.ActionSpec:
+    """decode the action spec in the yaml or json file at `path` by its suffix.
+
+    A ``.yaml`` or ``.yml`` suffix selects `read_yaml_spec`, and ``.json`` selects
+    `read_json_spec`. The suffix comparison ignores case.
+
+    Args:
+        path: the yaml or json file
+        type: the action spec type to decode into, or None to select the type
+            bound under the ``sensor_binding`` tag
+        output_path: replaces `sink.path` in the returned spec when given
+        store_backend: replaces `sink.store` of a `Sweep` spec when given
+
+    Returns:
+        an instance of `type`, or of the bound class when `type` is None
+
+    Raises:
+        ValueError: if the suffix of `path` is none of ``.yaml``, ``.yml``, or
+            ``.json``
+        msgspec.ValidationError: if the file does not validate as the spec class, or
+            if the tag names no registered binding
+        TypeError: if `store_backend` is given and the `sink` of the spec is not a
+            `ZarrSink`
+        FileNotFoundError: if `extensions.import_path` does not exist
+    """
+    suffix = Path(path).suffix
+    if suffix.lower() in ('.yaml', '.yml'):
+        reader = read_yaml_spec
+    elif suffix.lower() == '.json':
+        reader = read_json_spec
+    else:
+        raise ValueError(f'expected a .yaml, .yml, or .json spec file, not {suffix!r}')
+    return reader(path, type=type, output_path=output_path, store_backend=store_backend)
+
+
 def read_zarr_spec(
     path: str | Path,
     *,

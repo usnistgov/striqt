@@ -145,6 +145,15 @@ else:
         callbacks: typing_extensions.NotRequired[SweepCallbacks]
 
 
+def prompt_hook(resources: Resources[SS, SP, SC, SA, PS, PC]) -> PromptCallback:
+    """return the operator prompt of ``resources['callbacks']``, or
+    `sa.util.blocking_input` when the key is missing or the hook is None."""
+    callbacks = resources.get('callbacks')
+    if callbacks is None or callbacks.prompt is None:
+        return sa.util.blocking_input
+    return callbacks.prompt
+
+
 def _timeit(desc: str = '') -> PassThroughWrapper[P, R]:
     return sa.util.stopwatch(
         desc, 'sweep', threshold=0.5, logger_level=util.logging.INFO
