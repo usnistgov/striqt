@@ -87,7 +87,8 @@ def test_messages_are_json_text(analyzed):
     )
     assert plot['type'] == 'plot_data'
     assert len(plot['data']) == len(figures)
-    assert plot['available_variables'] == ['spectrogram']
+    assert plot['selected_variable'] == 'spectrogram'
+    assert 'available_variables' not in plot
 
     status = json.loads(server._encode(server.state_message(state)))
     assert status['type'] == 'state'

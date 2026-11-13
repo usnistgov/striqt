@@ -77,8 +77,6 @@ class RunState:
     """the acquisitions the plan produces"""
     per_sweep: int = 0
     """the captures in one pass of the plan, the period of `capture_index`"""
-    overwrite: bool = False
-    """True when the run removed a store already at the sink path"""
     acquired: int = 0
     """the acquisitions analyzed so far"""
     capture_index: int = -1
@@ -522,7 +520,6 @@ def run_sweep(
     run = RunState(
         count=sequencing.count_acquisitions(sweep, source_id),
         per_sweep=len(sequencing.loop_captures(sweep, source_id)),
-        overwrite=command.overwrite,
     )
     session.run = run
     session.mode = 'running'

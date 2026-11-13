@@ -148,7 +148,6 @@ def run_message(session: StudioSession) -> dict[str, Any]:
             'started': run.started,
             'finished': run.finished,
             'error': run.error,
-            'overwrite': run.overwrite,
         })
     return message
 
@@ -580,7 +579,7 @@ def _serialize_plot_message(
     """return the ``plot_data`` message as JSON text.
 
     Numpy arrays in each figure are encoded as base64 typed arrays by
-    `Figure.to_json`.
+    `Figure.to_json`. ``selected_variable`` names the variable the figures show.
     """
     serialized_plots = [
         _json_decoder.decode(cast(str, fig.to_json())) for fig in plot_data
@@ -590,10 +589,7 @@ def _serialize_plot_message(
         'type': 'plot_data',
         'data': serialized_plots,
         'coordinates': coordinates,
-        'available_variables': session.available_variables,
-        'variable_labels': session.variable_labels,
         'selected_variable': session.selected_variable,
-        'spec_filename': Path(session.spec_path).name,
     })
 
 
