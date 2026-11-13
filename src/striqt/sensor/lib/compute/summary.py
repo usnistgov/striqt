@@ -274,6 +274,51 @@ def capture_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
     return _as_groups(groups)
 
 
+def varying_fields(
+    sweep: specs.Sweep[Any, Any, Any, Any],
+    source_id: specs.types.SourceID | None,
+) -> frozenset[str]:
+    """return the names of the capture fields that vary across the plan of `sweep`.
+
+    The plan is `loop_captures` of `sweep` for `source_id`, with each planned
+    capture split into its single-port captures. A field varies when its value
+    differs between any 2 single-port captures of the plan, so a field set to a
+    per-port tuple with unequal entries varies within one capture. Values are
+    compared by the rule of `drop_conflicts`: a tuple by position, a dict field
+    (`adjust_analysis`) by its items, and None is unequal to every set value. `port`
+    is compared between the planned captures as a whole, not between the ports of
+    one capture.
+
+    Args:
+        sweep: the sweep to expand
+        source_id: hex id of the open source, selecting the `adjust_captures` block
+            applied on top of ``'defaults'``; None applies ``'defaults'`` alone
+
+    Returns:
+        the field names, empty when the sweep plans no captures
+
+    Raises:
+        msgspec.ValidationError: if `loop_captures` rejects the loops or the
+            adjustments of `sweep`
+    """
+    captures = specs.sequencing.loop_captures(sweep, source_id)
+    if not captures:
+        return frozenset()
+
+    per_port = [
+        {k: v for k, v in c.to_dict().items() if k != 'port'}
+        for capture in captures
+        for c in specs.captures.split_capture_ports(capture)
+    ]
+    names = set().union(*per_port)
+    varying = names - set(datasets.drop_conflicts(per_port))
+
+    ports = [{'port': c.port} for c in captures]
+    if 'port' not in datasets.drop_conflicts(ports):
+        varying.add('port')
+    return frozenset(varying)
+
+
 def acquisition_fields(dd: datasets.DelayedDataset) -> tuple[FieldGroup, ...]:
     """return the text of the fields of `dd.extra_coords` that are set.
 

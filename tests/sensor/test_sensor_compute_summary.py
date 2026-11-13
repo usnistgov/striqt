@@ -13,6 +13,7 @@ from sweep_strategies import (
     T_REF,
     air_sweep,
     make_delayed,
+    make_sweep,
     spectrogram_result,
 )
 from synthetic_sources import (
@@ -222,6 +223,80 @@ def test_capture_fields_render_text_and_infinite_values_without_a_prefix():
     assert fields['lo_shift'] == summary.FieldValue('lo_shift', ('none', 'none'), '')
     assert fields['analysis_bandwidth'].values == ('inf', 'inf')
     assert fields['analysis_bandwidth'].units == 'Hz'
+
+
+# %% varying_fields
+
+
+def air_sweep_of(*captures, loops=(), adjust_captures=None):
+    kws = {} if adjust_captures is None else {'adjust_captures': adjust_captures}
+    return AIR.sensor.sweep_spec_cls(
+        source=AIR.schema.source(), captures=captures, loops=loops, **kws
+    )
+
+
+def test_varying_fields_are_the_fields_that_differ_between_captures():
+    sweep = air_sweep_of(
+        soapy_capture(center_frequency=1e9), soapy_capture(center_frequency=2e9)
+    )
+    assert summary.varying_fields(sweep, None) == {'center_frequency'}
+
+
+def test_varying_fields_include_a_looped_field():
+    loop = ss.specs.List(field='gain', values=(0.0, 10.0))
+    sweep = air_sweep_of(soapy_capture(), loops=(loop,))
+    assert summary.varying_fields(sweep, None) == {'gain'}
+
+
+@pytest.mark.parametrize(
+    'gain, expected',
+    [((0.0, 10.0), {'gain'}), ((5.0, 5.0), set())],
+    ids=['unequal', 'equal'],
+)
+def test_varying_fields_compare_the_per_port_values_of_one_capture(gain, expected):
+    """`port` differs between the ports of every multi-port capture and is not
+    reported for that"""
+    sweep = air_sweep_of(soapy_capture(port=(0, 1), gain=gain))
+    assert summary.varying_fields(sweep, None) == expected
+
+
+def test_varying_fields_include_port_when_it_differs_between_captures():
+    """`CAPTURE` spans ports 0 and 1 at 1 GHz and 2 GHz, and `HIGH_GAIN` is port 0 at
+    2 GHz and 30 dB more gain"""
+    assert summary.varying_fields(SWEEP, None) == {'port', 'center_frequency', 'gain'}
+
+
+def test_varying_fields_follow_the_adjustments_of_the_source_id():
+    """the ``'beef'`` block sets `gain` from the center frequency of each capture,
+    and no `defaults` block is set"""
+    remap = ss.specs.CaptureRemap(key='center_frequency', lookup={1e9: 0.0, 2e9: 10.0})
+    sweep = air_sweep_of(
+        soapy_capture(center_frequency=1e9),
+        soapy_capture(center_frequency=2e9),
+        adjust_captures={'beef': {'gain': remap}},
+    )
+    assert summary.varying_fields(sweep, 'beef') == {'center_frequency', 'gain'}
+    assert summary.varying_fields(sweep, None) == {'center_frequency'}
+
+
+def test_varying_fields_of_the_synthetic_sweep(synthetic_sweep):
+    """the 2 ``captures:`` entries of synthetic.yaml differ in
+    `external_lo_frequency` (unset, then one value per port) and in
+    `adjust_analysis` (empty, then `time_statistic`); the loops visit 2 values of
+    `host_resample` and of `snr`, and the `defaults` remap sets `frequency_offset`
+    from `snr`. `port`, `duration`, `sample_rate`, and `analysis_bandwidth` are equal
+    in both entries and in no loop."""
+    assert summary.varying_fields(synthetic_sweep, None) == {
+        'snr',
+        'host_resample',
+        'frequency_offset',
+        'external_lo_frequency',
+        'adjust_analysis',
+    }
+
+
+def test_varying_fields_are_empty_without_planned_captures():
+    assert summary.varying_fields(make_sweep(), None) == frozenset()
 
 
 # %% acquisition_fields
