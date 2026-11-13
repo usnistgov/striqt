@@ -245,3 +245,35 @@ def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
         'command': 'apply',
     }
     assert after_refusal['type'] == 'state'
+
+
+# %% spec message
+
+
+def test_spec_message_of_a_site_sweep_encodes_with_relative_paths():
+    from conftest import SITE_DIR
+
+    from striqt.analysis.lib import io
+
+    path = SITE_DIR / 'site-cpu.yaml'
+    state = session.StudioSession(spec_path=str(path))
+    state.provenance = io.load_yaml_provenance(path)
+
+    message = json.loads(server._encode(server.spec_message(state)))
+
+    assert message['files'][0] == 'site-cpu.yaml'
+    assert '../fragments/source/tone.yaml' in message['files']
+    assert message['regions']['/source'] == [
+        message['files'].index('../fragments/source/tone.yaml'),
+        message['files'].index('../fragments/source/tone_unsync.yaml'),
+    ]
+    # a sequence-valued lookup key arrives as text
+    lookups = message['tree']['adjust_captures']
+    keys = {
+        key
+        for block in lookups.values()
+        for remap in block.values()
+        if isinstance(remap, dict)
+        for key in remap.get('lookup', {})
+    }
+    assert all(isinstance(key, str) for key in keys)

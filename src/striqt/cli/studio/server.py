@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import logging
+import os
 import socket
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -192,8 +193,8 @@ def spec_message(session: StudioSession) -> dict[str, Any]:
     """return the ``spec`` message: the merged tree and the file of each value.
 
     Returns:
-        a dict with ``tree``, ``files`` (paths relative to the directory of the spec,
-        in first-read order), ``origin`` (JSON pointer to ``[file index, pointer in
+        a dict with ``tree`` (mapping keys as strings), ``files`` (paths relative to
+        the directory of the spec, in first-read order), ``origin`` (JSON pointer to ``[file index, pointer in
         that file]``), and ``regions`` (pointer of each include to its file indexes)
     """
     prov = session.provenance
@@ -203,16 +204,10 @@ def spec_message(session: StudioSession) -> dict[str, Any]:
     index = {path: i for i, path in enumerate(paths)}
     root = session_.spec_dir(session)
 
-    def relative(path: Path) -> str:
-        try:
-            return str(path.relative_to(root))
-        except ValueError:
-            return str(path)
-
     return {
         'type': 'spec',
-        'tree': prov.tree,
-        'files': [relative(p) for p in paths],
+        'tree': json_tree(prov.tree),
+        'files': [os.path.relpath(p, root) for p in paths],
         'origin': {
             pointer: [index[path], local]
             for pointer, (path, local) in prov.origin.items()
@@ -222,6 +217,22 @@ def spec_message(session: StudioSession) -> dict[str, Any]:
             for pointer, files in prov.regions.items()
         },
     }
+
+
+def json_tree(node: Any) -> Any:
+    """return `node` with every mapping key that is not a string replaced by `str(key)`.
+
+    A sequence-valued YAML key (``[0, 1]: 0`` in an `adjust_captures` lookup) is a
+    tuple in the merged tree and ``'(0, 1)'`` in the provenance pointers.
+    """
+    if isinstance(node, dict):
+        return {
+            key if isinstance(key, str) else str(key): json_tree(value)
+            for key, value in node.items()
+        }
+    if isinstance(node, (list, tuple)):
+        return [json_tree(item) for item in node]
+    return node
 
 
 def schema_message(session: StudioSession) -> dict[str, Any]:
