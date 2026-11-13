@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import striqt.sensor as ss
-    from striqt.sensor.lib.resources import Resources
+    from striqt.sensor.lib.resources import Resources, SweepCallbacks
     from striqt.sensor.lib.typing import PromptCallback
 
 
@@ -115,6 +115,40 @@ def log_spectrogram_snr(
         )
 
 
+def logging_callbacks(
+    *,
+    on_analyzed: 'Optional[Callable[[ss.lib.compute.DelayedDataset], None]]' = None,
+    on_source_opened: Union[Callable[..., None], None] = None,
+    prompt: 'Optional[PromptCallback]' = None,
+) -> 'SweepCallbacks':
+    """return the hooks of a run with the log lines of `sensor-sweep`.
+
+    The returned bundle logs a WARNING for each overloaded port after each analysis
+    and the spectrogram SNR of each cached spectrogram.
+
+    Args:
+        on_analyzed: a further hook run with each analyzed dataset after the
+            overload check, or None
+        on_source_opened: hook run once with ``(sweep, source_id)`` after the source
+            opens, or None
+        prompt: hook called with the text of each operator prompt, or None to read
+            stdin
+    """
+    from striqt.sensor.lib.resources import SweepCallbacks
+
+    def analyzed(dd: 'ss.lib.compute.DelayedDataset') -> None:
+        log_overloads(dd)
+        if on_analyzed is not None:
+            on_analyzed(dd)
+
+    return SweepCallbacks(
+        on_source_opened=on_source_opened,
+        on_analyzed=analyzed,
+        on_sink_cached=log_spectrogram_snr,
+        prompt=prompt,
+    )
+
+
 def run(
     path: 'Union[str, Path]',
     *,
@@ -151,13 +185,14 @@ def run(
     else:
         on_source_opened = functools.partial(check_func, prompt=prompt)
 
+    callbacks = logging_callbacks(on_source_opened=on_source_opened, prompt=prompt)
     ctx = ss.open_resources(
         spec,
         path,
-        on_source_opened=on_source_opened,
-        on_analyzed=log_overloads,
-        on_sink_cached=log_spectrogram_snr,
-        prompt=prompt,
+        on_source_opened=callbacks.on_source_opened,
+        on_analyzed=callbacks.on_analyzed,
+        on_sink_cached=callbacks.on_sink_cached,
+        prompt=callbacks.prompt,
     )
     with ctx as resources:
         sweep = ss.iterate_sweep(resources, yield_values=False, always_yield=True)

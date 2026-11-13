@@ -334,42 +334,6 @@ def test_failed_apply_keeps_the_previous_spec(monkeypatch):
 # %% reverting a section
 
 
-@pytest.mark.parametrize(
-    ('value', 'text'),
-    [
-        (70, '70'),
-        ('3750e6', '3750e6'),
-        ('yes', "'yes'"),
-        (None, 'null'),
-        ([0, 1], '[0, 1]'),
-        ({'a': 1, 'b': [True, 'x']}, '{a: 1, b: [true, x]}'),
-    ],
-)
-def test_yaml_text_reads_back_as_the_value(value, text):
-    import yaml
-
-    assert session.yaml_text(value) == text
-    assert yaml.safe_load(text) == value
-
-
-def test_tree_edits_touch_only_the_differences():
-    current = {'a': 1, 'b': {'c': 2, 'd': 3}, 'e': [1, 2], 'f': [1, 2, 3]}
-    target = {'a': 1, 'b': {'c': 2, 'd': 4, 'g': 5}, 'f': [1, 2], 'h': 'x'}
-    edits = session.tree_edits(current, target, '/s')
-    assert [(e.pointer, e.op, e.value_text) for e in edits] == [
-        ('/s/e', 'delete', None),
-        ('/s/b/d', 'set', '4'),
-        ('/s/b/g', 'set', '5'),
-        ('/s/f', 'set', '[1, 2]'),
-        ('/s/h', 'set', 'x'),
-    ]
-
-
-def test_tree_edits_of_equal_trees_are_empty():
-    tree = {'a': [1, {'b': 'c'}]}
-    assert session.tree_edits(tree, dict(tree)) == []
-
-
 def test_changed_sections_and_revert_edits(sweeps_copy):
     from striqt.analysis.lib import yaml as spec_yaml
 

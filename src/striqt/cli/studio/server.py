@@ -692,9 +692,11 @@ def run_server(path: str, host: str = '0.0.0.0', port: int = 8000) -> None:
     import click
     import uvicorn
 
+    import striqt.sensor as ss
+
     SESSION.spec_path = str(Path(path).resolve())
     try:
-        spec = session_.read_spec(SESSION.spec_path)
+        spec = ss.read_spec(SESSION.spec_path)
     except ValueError as ex:
         raise click.ClickException(str(ex)) from ex
     SESSION.applied_spec = spec

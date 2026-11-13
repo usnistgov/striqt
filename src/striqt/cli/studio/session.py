@@ -332,31 +332,6 @@ def _default_plot_options() -> sf.specs.PlotOptions:
     )
 
 
-def output_path(
-    spec: ss.specs.ActionSpec, format_path: ss.specs.paths.PathFormatter | None
-) -> Optional[str]:
-    """return the resolved path that a run of `spec` writes, or None for no output.
-
-    A `ManualYFactorCalibration` writes the corrections file of `corrections_path`;
-    a spec with a `ZarrSink` writes the store of `resolve_store_path`. A path
-    template that `format_path` cannot fill is returned as written.
-    """
-    from striqt.sensor.lib import io as sensor_io
-    from striqt.sensor.lib.actions import yfactor
-
-    if spec.sink.path is None:
-        return None
-    try:
-        if isinstance(spec, ss.specs.ManualYFactorCalibration):
-            runner = yfactor.ManualYFactorRunner(spec)
-            return str(yfactor.corrections_path(runner.sweep, format_path))
-        if isinstance(spec.sink, ss.specs.ZarrSink):
-            return str(sensor_io.resolve_store_path(spec.sink, format_path=format_path))
-    except (KeyError, ValueError):
-        return spec.sink.path
-    return spec.sink.path
-
-
 def configure(
     session: StudioSession,
     spec: ss.specs.ActionSpec,
@@ -373,6 +348,7 @@ def configure(
     """
     import striqt.figures as sf
     from striqt.figures.backend import PlotlyBackend
+    from striqt.sensor.lib import actions
     from striqt.sensor.lib.compute import summary
     from striqt.sensor.specs import sequencing
 
@@ -401,18 +377,13 @@ def configure(
         choices=sequencing.plan_choices(sweep, source_id),
         varying_fields=summary.varying_fields(entries, source_id),
         adjustments=sequencing.list_capture_adjustments(sweep, source_id),
-        sink_path=output_path(spec, resources['format_path']),
+        sink_path=actions.core.output_path(spec, resources['format_path']),
         available_variables=available,
         variable_labels={name: labels[name] for name in available},
         plotter=PlotlyBackend(plot_opts.plotter),
         data_select=dict(plot_opts.data.select),
     )
     select_first(session)
-
-
-def null_sink(spec: ss.specs.ActionSpec) -> ss.specs.ActionSpec:
-    """return `spec` with the sink path set to None, so that no store is written."""
-    return spec.replace(sink=spec.sink.replace(path=None))
 
 
 # %% operator prompts
@@ -508,12 +479,10 @@ def run_sweep(
 
     The run ends after the plan, after the acquisition in flight when
     ``session.run.stop`` is set, or on an exception, which is kept as
-    ``session.run.error``. Overloads are logged on the ``analysis`` logger and the
-    spectrogram SNR on each cached spectrogram, as in `sensor-sweep`.
+    ``session.run.error``. The hooks are those of `logging_callbacks`.
     """
-    from striqt.cli.sensor_sweep import log_overloads, log_spectrogram_snr
+    from striqt.cli.sensor_sweep import logging_callbacks
     from striqt.sensor.lib import actions
-    from striqt.sensor.lib.resources import SweepCallbacks
     from striqt.sensor.specs import sequencing
 
     spec = session.applied_spec
@@ -531,7 +500,6 @@ def run_sweep(
     events.state_changed()
 
     def on_analyzed(result: ss.lib.compute.DelayedDataset) -> None:
-        log_overloads(result)
         run.acquired += 1
         run.capture_index = result.extra_coords.capture_index
         run.sweep_index = result.extra_coords.sweep_index
@@ -539,9 +507,8 @@ def run_sweep(
         events.data_ready()
         events.state_changed()
 
-    callbacks = SweepCallbacks(
+    callbacks = logging_callbacks(
         on_analyzed=on_analyzed,
-        on_sink_cached=log_spectrogram_snr,
         prompt=lambda text: ask_operator(session, events, text),
     )
 
@@ -594,7 +561,7 @@ def serve_spec(
     """
     with contextlib.ExitStack() as stack:
         try:
-            ctx = ss.open_resources(null_sink(spec), session.spec_path)
+            ctx = ss.open_resources(ss.specs.action.null_sink(spec), session.spec_path)
             resources = stack.enter_context(ctx)
         except Exception as ex:
             raise OpenFailed(str(ex)) from ex
@@ -665,19 +632,6 @@ def start(session: StudioSession, events: SessionEvents) -> threading.Thread:
 # %% the spec files
 
 
-def read_spec(path: str) -> ss.specs.ActionSpec:
-    """decode the spec at `path` by its suffix.
-
-    Raises:
-        ValueError: if `path` has a suffix other than ``.yaml``, ``.yml``, or ``.json``
-    """
-    if path.endswith(('.yaml', '.yml')):
-        return ss.read_yaml_spec(path)
-    if path.endswith('.json'):
-        return ss.read_json_spec(path)
-    raise ValueError('expected file to have .json or .yaml suffix')
-
-
 def validation_pointers(text: str) -> list[str]:
     """return the JSON pointer of each msgspec path (``$.a[0].b``) in `text`, in order.
 
@@ -716,7 +670,7 @@ def revalidate(session: StudioSession) -> None:
             ]
             return
     try:
-        session.edited_spec = read_spec(session.spec_path)
+        session.edited_spec = ss.read_spec(session.spec_path)
     except msgspec.ValidationError as ex:
         session.edited_spec = None
         text = str(ex)
@@ -759,62 +713,6 @@ def spec_dir(session: StudioSession) -> Path:
 # %% reverting a section to the applied tree
 
 
-def yaml_text(value: Any) -> str:
-    """return `value` as one line of YAML flow text.
-
-    A string that YAML 1.1 would read as another type is quoted, so the text reads
-    back as the same value.
-    """
-    import yaml
-
-    text = yaml.safe_dump(value, default_flow_style=True, width=float('inf'))
-    return text.strip().removesuffix('\n...').strip()
-
-
-def tree_edits(current: Any, target: Any, pointer: str = '') -> list[Any]:
-    """return the edits that turn `current` into `target` at `pointer`.
-
-    Mappings are compared key by key and lists element by element when the lengths
-    agree, so an unchanged value is left in place; a list with a changed length and
-    every other difference is replaced as a whole.
-
-    Returns:
-        `YAMLEdit` instances in application order: deletions of keys absent from
-        `target`, then sets
-    """
-    from striqt.analysis.lib.yaml import YAMLEdit
-
-    if isinstance(current, dict) and isinstance(target, dict):
-        edits: list[Any] = [
-            YAMLEdit(f'{pointer}/{_escape(key)}', 'delete', None)
-            for key in current
-            if key not in target
-        ]
-        for key, value in target.items():
-            child = f'{pointer}/{_escape(key)}'
-            if key not in current:
-                edits.append(YAMLEdit(child, 'set', yaml_text(value)))
-            else:
-                edits.extend(tree_edits(current[key], value, child))
-        return edits
-    if (
-        isinstance(current, list)
-        and isinstance(target, list)
-        and len(current) == len(target)
-    ):
-        edits = []
-        for i, (a, b) in enumerate(zip(current, target)):
-            edits.extend(tree_edits(a, b, f'{pointer}/{i}'))
-        return edits
-    if current == target and type(current) is type(target):
-        return []
-    return [YAMLEdit(pointer, 'set', yaml_text(target))]
-
-
-def _escape(key: Any) -> str:
-    return str(key).replace('~', '~0').replace('/', '~1')
-
-
 def changed_sections(session: StudioSession) -> list[str]:
     """return the top-level keys with a file value that differs from `applied_tree`."""
     prov = session.provenance
@@ -832,6 +730,7 @@ def revert_edits(session: StudioSession, section: str) -> list[Any]:
     Raises:
         KeyError: if `section` is a key of neither tree
     """
+    from striqt.analysis.lib import yaml as spec_yaml
     from striqt.analysis.lib.yaml import YAMLEdit
 
     prov = session.provenance
@@ -840,9 +739,9 @@ def revert_edits(session: StudioSession, section: str) -> list[Any]:
     applied = session.applied_tree
     if section not in current and section not in applied:
         raise KeyError(section)
-    pointer = f'/{_escape(section)}'
+    pointer = spec_yaml.json_pointer([section])
     if section not in applied:
         return [YAMLEdit(pointer, 'delete', None)]
     if section not in current:
-        return [YAMLEdit(pointer, 'set', yaml_text(applied[section]))]
-    return tree_edits(current[section], applied[section], pointer)
+        return [YAMLEdit(pointer, 'set', spec_yaml.yaml_flow_text(applied[section]))]
+    return spec_yaml.tree_edits(current[section], applied[section], pointer)
