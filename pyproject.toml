@@ -21,6 +21,7 @@ dependencies = [
     # schemas for the yaml specs and validation
     "msgspec>=0.19.0",
     "pyyaml",
+    "ruamel.yaml>=0.18",
     # for built-in debugging
     "ipython>=8.18.1",
     # platform introspection tooling
