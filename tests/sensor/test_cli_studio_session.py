@@ -249,7 +249,7 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
     closed = threading.Event()
     events = session.SessionEvents(
         state_changed=lambda: modes.append(state.mode),
-        data_ready=lambda: datasets.append(state.dataset),
+        data_ready=lambda: datasets.append((state.mode, state.dataset)),
         attach_logs=logging.NullHandler,
         detach_logs=lambda handler: None,
         closed=closed.set,
@@ -264,7 +264,8 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
         assert 'snr' in state.varying_fields
         assert len(state.choices.captures) == len(spec.captures)
         # the preview analyzes the displayed variable only
-        assert list(datasets[0].delayed) == [state.selected_variable]
+        assert datasets[0][0] == 'preview'
+        assert list(datasets[0][1].delayed) == [state.selected_variable]
 
         state.commands.put(session.StartRun())
         wait_for(lambda: state.run is not None and state.run.finished is not None)
@@ -277,7 +278,9 @@ def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
         stores = list((tmp_path / 'sweeps' / 'outputs').glob('*.zarr.zip'))
         assert len(stores) == 1
         # the run analyzes the whole group
-        assert set(datasets[-1].delayed) == set(spec.analysis.to_dict())
+        run_sets = [set(dd.delayed) for mode, dd in datasets if mode == 'running']
+        assert len(run_sets) == run.count
+        assert run_sets[-1] == set(spec.analysis.to_dict())
         wait_for(lambda: state.mode == 'preview', what='the preview after the run')
 
         one_capture = spec.replace(captures=spec.captures[:1])

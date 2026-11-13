@@ -141,6 +141,7 @@ def run_message(session: StudioSession) -> dict[str, Any]:
     if run is not None:
         message.update({
             'count': run.count,
+            'captures_per_sweep': run.per_sweep,
             'acquired': run.acquired,
             'capture_index': run.capture_index,
             'sweep_index': run.sweep_index,
@@ -306,8 +307,14 @@ def log_level(name: Any) -> int:
     return LOG_LEVELS.get(str(name).upper(), logging.INFO)
 
 
-async def _error(websocket: WebSocket, text: str) -> None:
-    await websocket.send_text(_encode({'type': 'error', 'message': text}))
+async def _error(websocket: WebSocket, text: str, command: str | None = None) -> None:
+    """send an ``error`` message naming the refused `command`, then the state."""
+    message: dict[str, Any] = {'type': 'error', 'message': text}
+    if command is not None:
+        message['command'] = command
+    await websocket.send_text(_encode(message))
+    if command is not None:
+        await websocket.send_text(_encode(state_message(SESSION)))
 
 
 async def handle_edit(websocket: WebSocket, msg: dict[str, Any]) -> None:
@@ -321,7 +328,7 @@ async def handle_edit(websocket: WebSocket, msg: dict[str, Any]) -> None:
 
     prov = SESSION.provenance
     if prov is None:
-        await _error(websocket, 'a JSON spec is not editable in the page')
+        await _error(websocket, 'a JSON spec is not editable in the page', 'edit')
         return
     edits = [
         io.YAMLEdit(e['pointer'], e['op'], e.get('value_text')) for e in msg['edits']
@@ -329,7 +336,7 @@ async def handle_edit(websocket: WebSocket, msg: dict[str, Any]) -> None:
     try:
         await asyncio.to_thread(io.apply_yaml_edits, prov, edits)
     except (KeyError, ValueError) as ex:
-        await _error(websocket, f'{type(ex).__name__}: {ex}')
+        await _error(websocket, f'{type(ex).__name__}: {ex}', 'edit')
         return
     await reload_spec_files()
     await broadcast_spec()
@@ -377,14 +384,16 @@ async def handle_message(websocket: WebSocket, msg: dict[str, Any]) -> None:
         await handle_edit(websocket, msg)
     elif kind == 'apply':
         if SESSION.mode in ('running', 'prompting'):
-            await _error(websocket, 'stop the run before applying the spec')
+            await _error(websocket, 'stop the run before applying the spec', kind)
         elif SESSION.edited_spec is None:
-            await _error(websocket, 'the spec files do not validate')
+            await _error(websocket, 'the spec files do not validate', kind)
         else:
             SESSION.commands.put(session_.Apply(SESSION.edited_spec))
     elif kind == 'run_start':
         if SESSION.mode != 'preview':
-            await _error(websocket, f'a run cannot start in mode {SESSION.mode!r}')
+            await _error(
+                websocket, f'a run cannot start in mode {SESSION.mode!r}', kind
+            )
         else:
             SESSION.commands.put(
                 session_.StartRun(
@@ -397,12 +406,12 @@ async def handle_message(websocket: WebSocket, msg: dict[str, Any]) -> None:
             SESSION.run.stop.set()
     elif kind == 'prompt_answer':
         if not session_.answer_prompt(SESSION, int(msg['id']), str(msg['text'])):
-            await _error(websocket, 'no prompt is waiting for that answer')
+            await _error(websocket, 'no prompt is waiting for that answer', kind)
     elif kind == 'set_log_level':
         if LOG_HANDLER.handler is not None:
             LOG_HANDLER.handler.setLevel(log_level(msg.get('level')))
     else:
-        await _error(websocket, f'unknown message type {kind!r}')
+        await _error(websocket, f'unknown message type {kind!r}', kind)
 
 
 @app.websocket('/ws')

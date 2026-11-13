@@ -224,6 +224,7 @@ def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
         bad_status = ws.receive_json()
         ws.send_json({'type': 'apply'})
         refused = ws.receive_json()
+        after_refusal = ws.receive_json()
 
     assert spec_msg['type'] == 'spec'
     # YAML 1.1 reads `3e-3` as text; msgspec converts the text when decoding the spec
@@ -238,4 +239,9 @@ def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
     assert bad_status['validation']['ok'] is False
     (error,) = bad_status['validation']['errors']
     assert '/captures/0' in [error['path'], *error['locations']]
-    assert refused == {'type': 'error', 'message': 'the spec files do not validate'}
+    assert refused == {
+        'type': 'error',
+        'message': 'the spec files do not validate',
+        'command': 'apply',
+    }
+    assert after_refusal['type'] == 'state'
