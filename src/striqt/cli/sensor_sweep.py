@@ -186,14 +186,7 @@ def run(
         on_source_opened = functools.partial(check_func, prompt=prompt)
 
     callbacks = logging_callbacks(on_source_opened=on_source_opened, prompt=prompt)
-    ctx = ss.open_resources(
-        spec,
-        path,
-        on_source_opened=callbacks.on_source_opened,
-        on_analyzed=callbacks.on_analyzed,
-        on_sink_cached=callbacks.on_sink_cached,
-        prompt=callbacks.prompt,
-    )
+    ctx = ss.open_resources(spec, path).set_callbacks(callbacks)
     with ctx as resources:
         sweep = ss.iterate_sweep(resources, yield_values=False, always_yield=True)
         for _ in sweep:

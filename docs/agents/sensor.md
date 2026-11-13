@@ -204,13 +204,15 @@ cannot be executed on a laptop. A cupy-only change is unverified until someone r
 
 ## Sweep execution
 
-`open_resources(spec, callbacks=...)` builds the runner registered for the type of the
-spec and opens the source, peripherals, and sink for `runner.sweep`. The returned
-`Resources` dict has the keys `action_spec` (the spec passed in), `sweep_spec` (the
-built sweep), `runner`, and `callbacks`.
+`open_resources(spec, spec_path, test_only=...)` returns a `ConnectionManager`; on
+entry the manager builds the runner registered for the type of the spec and opens the
+source, peripherals, and sink for `runner.sweep`. The yielded `Resources` dict has the
+keys `action_spec` (the spec passed in), `sweep_spec` (the built sweep), `runner`, and
+`callbacks`.
 
-A front end registers hooks for one run as keywords of `open_resources`, each one
-callable or None: `on_source_opened(sweep, source_id)` runs from a worker thread after
+A front end registers hooks for one run through `ConnectionManager.set_callbacks`
+before entry, as a `SweepCallbacks` bundle or as keywords (`**SweepCallbacksKws`), each
+one callable or None: `on_source_opened(sweep, source_id)` runs from a worker thread after
 the source opens; `on_analyzed(dd)` receives the `DelayedDataset` of each acquisition in
 the analysis thread, after `compute.analyze` and before the dataset is submitted to
 `sink.append`; `on_sink_cached(resources, cache, capture, result, **kwargs)` runs in the
@@ -229,7 +231,7 @@ selection, and `adjust_analysis` warns about no parameter of a dropped measureme
 raises `ValueError` on a dataset that lacks one, so the hook pairs with a `NoSink` or a
 `MemoryCacheSink`. A front end that wants two behaviors on one event writes one
 function. A callback exception ends the run like an analysis error. No hooks are
-registered by default. `open_resources` bundles the five into the internal dataclass
+registered by default. `set_callbacks` keeps the five in the internal dataclass
 `lib/resources.py:SweepCallbacks` under `resources['callbacks']`, which
 `iterate_captures` reads; `iterate_sweep(res, callbacks=...)` replaces that bundle for
 one run.

@@ -254,7 +254,7 @@ def test_on_analyzed_sees_each_capture_in_order_before_the_sink():
     sweep = tone_sweep(TONE_OFFSETS)
     events = []
     on_analyzed = lambda dd: events.append(('callback', dd.capture))
-    with ss.open_resources(sweep, None, on_analyzed=on_analyzed) as res:
+    with ss.open_resources(sweep, None).set_callbacks(on_analyzed=on_analyzed) as res:
         sink = RecordingSink(sweep, events)
         results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
 
@@ -287,7 +287,7 @@ def fail_hook(*args):
 def test_a_hook_exception_ends_the_pipeline(hook):
     sweep = tone_sweep(TONE_OFFSETS)
     with (
-        ss.open_resources(sweep, None, **{hook: fail_hook}) as res,
+        ss.open_resources(sweep, None).set_callbacks(**{hook: fail_hook}) as res,
         pytest.raises(RuntimeError, match='hook failed'),
     ):
         list(core.iterate_captures(res, sink=ss.sinks.NoSink(sweep)))
@@ -475,7 +475,7 @@ def test_on_cached_fires_once_per_capture_when_the_spectrogram_cache_fills():
     def on_cached(resources, cache, capture, result, **kwargs):
         calls.append((resources, cache.name, capture, result))
 
-    with ss.open_resources(sweep, None, on_sink_cached=on_cached) as res:
+    with ss.open_resources(sweep, None).set_callbacks(on_sink_cached=on_cached) as res:
         sink = ss.sinks.NoSink(sweep)
         results = [r for r in core.iterate_captures(res, sink=sink) if r is not None]
 

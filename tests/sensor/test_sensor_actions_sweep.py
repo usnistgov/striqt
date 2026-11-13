@@ -98,7 +98,8 @@ def test_open_resources_builds_the_registered_runner(monkeypatch):
 
 def test_open_resources_raises_for_an_unregistered_spec_type(monkeypatch):
     """with the Sweep registration removed, nothing in the MRO of a bound sweep
-    is registered"""
+    is registered; the lookup runs on entry"""
     monkeypatch.delitem(registry, ss.specs.Sweep)
-    with pytest.raises(TypeError, match=SweepCls.__name__):
-        ss.open_resources(tone_sweep(OFFSETS), None)
+    manager = ss.open_resources(tone_sweep(OFFSETS), None)
+    with pytest.raises(TypeError, match=SweepCls.__name__), manager:
+        pass

@@ -10,6 +10,7 @@ from typing import (
     Any,
     Callable,
     Generic,
+    Optional,
     Protocol,
     TypedDict,
     runtime_checkable,
@@ -187,6 +188,15 @@ if typing.TYPE_CHECKING:
     AnalyzedCallback: TypeAlias = Callable[[DelayedDataset], None]
 
     PromptCallback: TypeAlias = Callable[[str], str]
+
+    class SweepCallbacksKws(TypedDict, total=False):
+        """the hooks of `SweepCallbacks`, as the keywords of `ConnectionManager.set_callbacks`"""
+
+        on_source_opened: Optional[SourceOpenCallback]
+        on_analyzed: Optional[AnalyzedCallback]
+        on_sink_cached: Optional[CachedCallback]
+        select_analysis: Optional[AnalysisSelector]
+        prompt: Optional[PromptCallback]
 
     AnalysisSelector: TypeAlias = Callable[
         [specs.SensorCapture, specs.AnalysisGroup], specs.AnalysisGroup

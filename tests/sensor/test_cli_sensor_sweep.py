@@ -120,15 +120,16 @@ def test_confirm_labels_reads_stdin_without_a_hook(scripted_input):
 
 
 def test_run_binds_the_prompt_into_the_check_hook(monkeypatch, synthetic_spec_path):
-    """`run` passes `prompt` to `open_resources` and partially applies it to
-    `check_func`, so that the hook keeps the ``(sweep, source_id)`` signature"""
+    """`run` sets `prompt` on the callbacks of the manager and partially applies it
+    to `check_func`, so that the hook keeps the ``(sweep, source_id)`` signature"""
     seen = {}
 
-    def fake_open_resources(spec, path, **kws):
-        seen.update(kws)
-        raise _Stop
+    class FakeManager:
+        def set_callbacks(self, callbacks):
+            seen['callbacks'] = callbacks
+            raise _Stop
 
-    monkeypatch.setattr(ss, 'open_resources', fake_open_resources)
+    monkeypatch.setattr(ss, 'open_resources', lambda spec, path: FakeManager())
     prompt = _RecordingPrompt('y')
 
     def check(sweep, source_id, prompt=None):
@@ -137,8 +138,9 @@ def test_run_binds_the_prompt_into_the_check_hook(monkeypatch, synthetic_spec_pa
     with pytest.raises(_Stop):
         sensor_sweep.run(synthetic_spec_path, check_func=check, prompt=prompt)
 
-    assert seen['prompt'] is prompt
-    seen['on_source_opened']('sweep', 'beef')
+    callbacks = seen['callbacks']
+    assert callbacks.prompt is prompt
+    callbacks.on_source_opened('sweep', 'beef')
     assert seen['check'] == ('sweep', 'beef', prompt)
 
 
