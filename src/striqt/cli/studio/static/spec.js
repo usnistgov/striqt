@@ -294,6 +294,7 @@ export function init(app) {
             changed: new Set(state ? state.changed_sections || [] : []),
             busy: !!state && (state.mode === 'running' || state.mode === 'prompting'),
             review,
+            schema: app.latest.schema ? app.latest.schema.schema : null,
             send: sendEdits,
         };
     }
@@ -715,7 +716,10 @@ export function init(app) {
                 } else if (row.field.per_port && column.capture) {
                     tr.append(...perPortCells(row.field, ptr, ctx, column));
                 } else {
-                    const td = valueCell(row.field, ptr, ctx);
+                    const custom = row.depth === 0 && options.controls
+                        ? options.controls[row.field.name] || null
+                        : null;
+                    const td = valueCell(row.field, ptr, ctx, custom);
                     td.colSpan = span;
                     tr.append(td);
                 }
@@ -745,10 +749,13 @@ export function init(app) {
         return { value, present };
     }
 
-    function valueCell(field, ptr, ctx) {
+    // `custom` replaces the default control with `custom(field, ptr, value, present, ctx)`
+    function valueCell(field, ptr, ctx, custom = null) {
         const td = el('td', 'value');
         const { value, present } = decorateCell(td, ptr, ctx);
-        if (isReadOnly(field)) {
+        if (custom) {
+            td.append(custom(field, ptr, value, present, ctx));
+        } else if (isReadOnly(field)) {
             td.classList.add('read-only');
             td.append(preOf(present ? value : field.default));
         } else {
@@ -958,6 +965,73 @@ export function init(app) {
         return head;
     }
 
+    // the rows of a loop variant: `isin` then `field` before the rest in schema order;
+    // a `repeat` loop has no field, so neither row is shown
+    function loopRows(variant, tag) {
+        const fields = variant.fields.filter((f) => f.name !== tag);
+        if (variant.tag_value === 'repeat') {
+            return fields.filter((f) => f.name !== 'field' && f.name !== 'isin');
+        }
+        const first = ['isin', 'field']
+            .map((name) => fields.find((f) => f.name === name))
+            .filter(Boolean);
+        return [...first, ...fields.filter((f) => !first.includes(f))];
+    }
+
+    // the names a loop may step: the editable capture fields other than `port` when
+    // `isin` is `capture`, else the parameter names of the enabled measurements
+    function loopFieldOptions(isin, ctx) {
+        const sections = ctx.schema ? ctx.schema.sections : [];
+        const names = new Set();
+        if (isin === 'analysis') {
+            const analysis = sections.find((s) => s.kind === 'optional_struct_dict');
+            const enabled = analysis ? valueAt(ctx.tree, pointer([analysis.name])) : undefined;
+            for (const measurement of analysis ? analysis.schema.fields : []) {
+                const value = isObject(enabled) ? enabled[measurement.name] : undefined;
+                if (value === undefined || value === null) {
+                    continue;
+                }
+                for (const f of measurement.fields) {
+                    names.add(f.name);
+                }
+            }
+            return [...names].sort();
+        }
+        const captures = sections.find((s) => s.name === 'captures' && s.kind === 'struct_list');
+        for (const f of captures ? captures.schema.fields : []) {
+            if (f.name !== 'port' && !['opaque', 'dict', 'struct'].includes(f.kind)) {
+                names.add(f.name);
+            }
+        }
+        return [...names];
+    }
+
+    // the `field` control of a loop: a select over `loopFieldOptions` for the loop's
+    // `isin`, with the current name kept as an option when it is not in the list
+    function loopFieldControl(item) {
+        return (field, ptr, value, present, ctx) => {
+            const isin = isObject(item) && item.isin !== undefined ? item.isin : 'capture';
+            const options = loopFieldOptions(isin, ctx);
+            const select = el('select');
+            select.dataset.pointer = ptr;
+            if (!present) {
+                select.append(el('option', '', ''));
+            } else if (!options.includes(String(value))) {
+                select.append(el('option', '', String(value)));
+            }
+            for (const name of options) {
+                select.append(el('option', '', name));
+            }
+            select.value = present ? String(value) : '';
+            select.addEventListener('change', () => {
+                if (select.value !== '') {
+                    ctx.send([setEdit(ptr, scalarText(select.value, 'string'), ctx)]);
+                }
+            });
+            return select;
+        };
+    }
+
     function renderTaggedList(section, ctx) {
         const base = pointer([section.name]);
         const items = valueAt(ctx.tree, base);
@@ -973,12 +1047,19 @@ export function init(app) {
             });
             const current = isObject(item) ? item[tag] : undefined;
             const variant = schema.variants.find((v) => v.tag_value === current);
+            // a Repeat is the outermost loop, so only loop 0 is offered `repeat`; a
+            // later loop that is `repeat` keeps its value in the list to be changed
+            const offered = schema.variants.filter((v) => i === 0 || v.tag_value !== 'repeat');
             const select = el('select');
             select.dataset.pointer = child(ptr, tag);
             if (!variant) {
                 select.append(el('option', '', current === undefined ? '' : String(current)));
+            } else if (!offered.includes(variant)) {
+                const option = el('option', '', variant.tag_value);
+                option.value = variant.tag_value;
+                select.append(option);
             }
-            for (const v of schema.variants) {
+            for (const v of offered) {
                 const option = el('option', '', v.tag_value);
                 option.value = v.tag_value;
                 select.append(option);
@@ -996,8 +1077,9 @@ export function init(app) {
             head.insertBefore(select, head.lastChild);
             card.append(head);
             if (variant) {
-                const fields = variant.fields.filter((f) => f.name !== tag);
-                card.append(renderGrid(fields, [{ pointer: ptr }], ctx));
+                card.append(renderGrid(loopRows(variant, tag), [{ pointer: ptr }], ctx, {
+                    controls: { field: loopFieldControl(item) },
+                }));
             } else {
                 card.append(preOf(item));
             }
