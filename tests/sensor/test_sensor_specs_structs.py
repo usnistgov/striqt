@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from typing import Optional
 
 import msgspec
 import pytest
@@ -31,6 +32,7 @@ from sweep_strategies import (
 import striqt.analysis as sa
 import striqt.sensor as ss
 from striqt.analysis.specs.helpers import frozendict
+from striqt.sensor.specs.types import PerPort
 
 SoapyCapture = ss.specs.SoapyCapture
 FileCapture = ss.specs.FileCapture
@@ -44,7 +46,7 @@ BASE = {'center_frequency': 1e9, 'duration': 1e-3, 'sample_rate': 1e6}
 MCR = {'master_clock_rate': 1e6}
 TRIGGERS = ('cellular_5g_pss_sync', 'cellular_5g_sss_sync')
 
-SCALAR_GAIN_MSG = 'gain must be a single number'
+SCALAR_GAIN_MSG = 'gain must be a single value'
 GAIN_COUNT_MSG = 'must match port count'
 PORT_UNIQUE_MSG = 'port indices must be unique'
 FILE_RATE_MSG = 'fixed by the file source'
@@ -62,6 +64,12 @@ key_pairs = st.tuples(
 
 
 # %% Capture specs
+
+
+class _LabeledCapture(SoapyCapture, frozen=True, kw_only=True):
+    """a downstream capture with a `PerPort[str]` label, as the site extensions declare"""
+
+    label: Optional[PerPort[str]] = None
 
 
 class TestSoapyCapture:
@@ -105,24 +113,75 @@ class TestSoapyCapture:
         for capture in construct_both(SoapyCapture, port=(1, 0), gain=0.0, **BASE):
             assert capture.port == (1, 0)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            'only gain is validated against the port count; a center_frequency '
-            'tuple of the wrong length is accepted and split_capture_ports then '
-            'drops the extras'
-        ),
-    )
     def test_center_frequency_tuple_length_must_match_ports(self):
         kws = dict(BASE, center_frequency=(1e9, 2e9, 3e9))
-        with pytest.raises(ValueError):
-            SoapyCapture(port=(0, 1), gain=0.0, **kws)
+        raises_on_both_paths(
+            SoapyCapture,
+            ValueError,
+            'center_frequency, when specified as a tuple, must match port count',
+            port=(0, 1),
+            gain=0.0,
+            **kws,
+        )
+
+    @pytest.mark.parametrize('lo', [(1e9,), (1e9, 2e9, 3e9)], ids=['shorter', 'longer'])
+    def test_external_lo_frequency_tuple_length_must_match_ports(self, lo):
+        raises_on_both_paths(
+            SoapyCapture,
+            ValueError,
+            'external_lo_frequency, when specified as a tuple, must match port count',
+            port=(0, 1),
+            gain=0.0,
+            external_lo_frequency=lo,
+            **BASE,
+        )
+
+    def test_external_lo_frequency_tuple_per_port_accepted(self):
+        lo = (1e9, 2e9)
+        for capture in construct_both(
+            SoapyCapture, port=(0, 1), gain=0.0, external_lo_frequency=lo, **BASE
+        ):
+            assert capture.external_lo_frequency == lo
+
+    def test_external_lo_frequency_tuple_with_scalar_port_rejected(self):
+        raises_on_both_paths(
+            SoapyCapture,
+            ValueError,
+            'external_lo_frequency must be a single value',
+            port=0,
+            gain=0.0,
+            external_lo_frequency=(1e9,),
+            **BASE,
+        )
+
+    @pytest.mark.parametrize(
+        'port, label',
+        [((0, 1), ('omni', 'panel', 'dish')), (0, ('omni',))],
+        ids=['wrong_length', 'scalar_port'],
+    )
+    def test_downstream_per_port_str_field_rejected(self, port, label):
+        raises_on_both_paths(
+            _LabeledCapture,
+            ValueError,
+            'label',
+            port=port,
+            gain=0.0,
+            label=label,
+            **BASE,
+        )
+
+    def test_downstream_per_port_str_field_accepted(self):
+        label = ('omni', 'panel')
+        for capture in construct_both(
+            _LabeledCapture, port=(0, 1), gain=0.0, label=label, **BASE
+        ):
+            assert capture.label == label
 
     @pytest.mark.xfail(
         strict=True,
         reason=(
             'port is a VarTuple union that SpecBase never freezes on direct '
-            'construction; the list then fails the lru_cache in _validate_multichannel'
+            'construction; the capture keeps the list'
         ),
     )
     def test_list_port_direct_is_frozen(self):

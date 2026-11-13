@@ -48,8 +48,10 @@ added items 93 to 96 and parametrized item 9 over both of its branches (`xfailed
 to 41; 33 to 37 markers), and fixed 5 defects without a ledger number (listed under
 "Fixed on 2026-11-07 without a ledger number" below); the suite then ran 2431 passed,
 276 skipped, 41 xfailed on py39 and 2431, 274, 41 on py315. Item 52 was retired on
-2026-11-13 when `SoapySource.close` was fixed (`xfailed` 40). Items are listed in
-priority order, not numeric order.
+2026-11-13 when `SoapySource.close` was fixed (`xfailed` 40), and item 70 on
+2026-11-13 when `validate_ports` was added, which checks every `PerPort` field at
+capture construction (`xfailed` 39). Items are listed in priority order, not numeric
+order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -116,7 +118,6 @@ item is open.
 | 88 | `test_build_capture_coords_adds_a_window_loop_coordinate` | High | C | moderate |
 | 53 | `test_capture_changes_port` | High | C | easy |
 | 54 | `TestSoapySourceSetup::test_initial_ports_on_a_non_stream_all_source` | High | C | trivial |
-| 70 | `TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports` | High | C | easy |
 | 20 | `test_list_port_direct_is_frozen`; `test_var_tuple_list_is_frozen_on_direct_construction`; `test_freeze_depths_count_dict_list_and_tuple_nesting`; `test_freeze_depths_of_real_specs`; `test_direct_struct_with_list_validates_and_replaces` | High | C | trivial |
 | 24 | `test_recurses_into_frozendict` | High | C | trivial |
 | 49 | `test_port_info_round_trips_as_probed`; `test_arg_info_validate_round_trips` | High | C | trivial |
@@ -389,17 +390,6 @@ and `[tuple_key]` (parametrized over both branches on 2026-11-07)
   spec. `Controller.from_sweep_spec` always passes `init_rx_ports`.
 - **Fix.** `self.rx_stream.setup(self.device, rx_ports)`. Trivial.
 
-### 70. `SoapyCapture` does not check the `center_frequency` tuple length
-
-`tests/sensor/test_sensor_specs_structs.py::TestSoapyCapture::test_center_frequency_tuple_length_must_match_ports`
-
-- **Mechanism.** Only `gain` is validated against the port count; a
-  `center_frequency` tuple of the wrong length is accepted and only
-  `split_capture_ports` rejects it, with a `ValueError` at run time rather
-  than at spec validation.
-- **Fix.** Extend `_validate_multichannel` to every per-port tuple field.
-  Easy.
-
 ### 20. Variable-length tuple fields are not frozen on direct construction
 
 `tests/sensor/test_sensor_specs_structs.py::TestSoapyCapture::test_list_port_direct_is_frozen`;
@@ -416,8 +406,8 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   `power_detectors`, `captures`, `loops`, `CaptureRemap.key`, and the
   extensions module's `antenna_index`.
 - **Why the test is right.** The sibling fixed-tuple test passes, and
-  `_validate_multichannel` is `lru_cache`d, so an unfrozen list makes
-  `SoapyCapture(port=[0, 1])` raise "unhashable type".
+  `SoapyCapture(port=[0, 1])` keeps the list, so the capture is unhashable and
+  `split_capture_ports` (an `lru_cache`) raises "unhashable type" on it.
 - **Impact.** YAML and `from_dict` go through `msgspec.convert`, which yields
   tuples, so sweeps are unaffected. Only `Controller.arm(port=[...])` and
   hand-built specs hit it.

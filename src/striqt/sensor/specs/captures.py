@@ -30,11 +30,54 @@ def get_capture_type(
 
 
 @sa.util.lru_cache()
+def _per_port_fields(capture_cls: type[structs.SensorCapture]) -> tuple[str, ...]:
+    """return the names of the `PerPort` fields of `capture_cls` other than `port`."""
+    hints = sa.specs.helpers.get_capture_field_types(capture_cls)
+    return tuple(
+        name
+        for name, hint in hints.items()
+        if name != 'port' and sa.specs.types.is_per_port(hint)
+    )
+
+
+def validate_ports(capture: structs.SensorCapture) -> None:
+    """raise if the `port` and `PerPort` fields of `capture` are inconsistent.
+
+    A tuple in a `PerPort` field (`gain`, `center_frequency`,
+    `external_lo_frequency`, and the `PerPort` fields of a subclass) is accepted
+    only when `port` is a tuple of the same length. A field without the `PerPort`
+    marker is not checked.
+
+    Raises:
+        ValueError: if `port` is a tuple with a repeated index, if a `PerPort` field
+            is a tuple when `port` is a scalar, or if a `PerPort` tuple has a length
+            other than the port count
+    """
+    port = capture.port
+    if isinstance(port, tuple) and len(set(port)) != len(port):
+        raise ValueError('port indices must be unique')
+
+    for name in _per_port_fields(type(capture)):
+        value = getattr(capture, name)
+        if not isinstance(value, tuple):
+            continue
+        if not isinstance(port, tuple):
+            raise ValueError(
+                f'{name} must be a single value unless multiple ports are specified'
+            )
+        if len(value) != len(port):
+            raise ValueError(
+                f'{name}, when specified as a tuple, must match port count'
+            )
+
+
+@sa.util.lru_cache()
 def split_capture_ports(capture: SC) -> list[SC]:
     """split a multi-port capture into one single-port capture per entry of `port`.
 
-    Each tuple-valued field is distributed by position. A capture with a scalar
-    `port` is returned as the only element.
+    Each tuple-valued field is distributed by position, with or without the
+    `PerPort` marker. A capture with a scalar `port` is returned as the only
+    element.
 
     Returns:
         one capture per port, in `port` order
