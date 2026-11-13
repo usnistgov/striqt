@@ -17,12 +17,16 @@
             <button type="button" class="tab" data-tab="run" role="tab">Run</button>
         </nav>
         <div class="controls">
-            <span id="mode-badge" class="mode-badge" title="Acquisition mode">closed</span>
-            <button type="button" id="status-button" class="status" title="Disconnect">
+            <span id="mode-badge" class="mode-badge" title="acquisition mode">closed</span>
+            <button type="button" id="status-button" class="status button" title="disconnect">
                 <div class="status-dot connecting" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
             </button>
         </div>
+    </div>
+    <div id="error-bar" hidden>
+        <span class="error-text"></span>
+        <button type="button" class="error-close" title="dismiss">&times;</button>
     </div>
     <main class="main">
         <section id="tab-spec" class="tab-panel" role="tabpanel" hidden></section>
@@ -37,10 +41,10 @@
             </div>
             <div class="plot-area">
                 <div class="plot-stage">
-                    <select id="variable-select" class="plot-title-select" title="Data variable">
+                    <select id="variable-select" class="plot-title-select" title="data variable">
                         <option value="">Loading...</option>
                     </select>
-                    <button type="button" id="run-button" class="run-button" disabled>Pause</button>
+                    <button type="button" id="pause-button" class="pause-button button" disabled>Pause</button>
                     <div id="plot-container">
                         <div class="loading">Waiting for data...</div>
                     </div>

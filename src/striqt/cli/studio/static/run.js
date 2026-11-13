@@ -2,20 +2,10 @@
 // live plot, the log console, and the operator prompt dialog
 
 import { Plot } from './plot.js';
+import { el, busy } from './util.js';
 
 const LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
 const MAX_LOG_ROWS = 2000;
-
-function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) {
-        node.className = className;
-    }
-    if (text !== undefined) {
-        node.textContent = text;
-    }
-    return node;
-}
 
 function pad(n, width) {
     return String(n).padStart(width, '0');
@@ -42,19 +32,15 @@ export function init(app) {
     const panel = document.getElementById('tab-run');
     panel.innerHTML = `
         <div class="sidebar run-sidebar">
-            <div class="run-error-bar" hidden>
-                <span class="run-error-text"></span>
-                <button type="button" class="run-error-close" title="Dismiss">&times;</button>
-            </div>
             <div class="run-heading">
                 <span class="run-action-class">&mdash;</span>
                 <span class="run-spec-filename"></span>
             </div>
             <div class="run-block run-output">
-                <h2>output</h2>
+                <h2 class="panel-heading">output</h2>
                 <div class="run-output-row">
                     <code class="run-sink-path"></code>
-                    <span class="run-badge"></span>
+                    <span class="run-badge button outline"></span>
                 </div>
                 <label class="run-checkbox" hidden>
                     <input type="checkbox" class="run-overwrite"> overwrite the existing output
@@ -67,14 +53,14 @@ export function init(app) {
                 </select>
             </div>
             <div class="run-block run-adjustments">
-                <h2>capture adjustments</h2>
+                <h2 class="panel-heading">capture adjustments</h2>
                 <div class="run-adjustments-body"></div>
-                <p class="run-note">Start confirms these values</p>
+                <p class="note run-note">Start confirms these values</p>
             </div>
-            <button type="button" class="run-button run-start" disabled>Start</button>
-            <p class="run-hint"></p>
+            <button type="button" class="button run-start" disabled>Start</button>
+            <p class="note run-hint"></p>
             <div class="run-block run-progress" hidden>
-                <h2>progress</h2>
+                <h2 class="panel-heading">progress</h2>
                 <div class="run-bar"><div class="run-bar-fill"></div></div>
                 <div class="run-progress-counts"></div>
                 <div class="run-progress-text"></div>
@@ -92,9 +78,9 @@ export function init(app) {
             </div>
             <div class="run-console min-INFO">
                 <div class="run-console-toolbar">
-                    <span class="run-console-title">log</span>
+                    <span class="run-console-title panel-heading">log</span>
                     <span class="run-console-hidden-note"></span>
-                    <button type="button" class="run-console-clear">clear</button>
+                    <button type="button" class="button run-console-clear">clear</button>
                 </div>
                 <div class="run-console-rows"></div>
             </div>
@@ -102,8 +88,6 @@ export function init(app) {
     `;
 
     const q = (selector) => panel.querySelector(selector);
-    const errorBar = q('.run-error-bar');
-    const errorText = q('.run-error-text');
     const actionClass = q('.run-action-class');
     const specFilename = q('.run-spec-filename');
     const sinkPath = q('.run-sink-path');
@@ -157,7 +141,7 @@ export function init(app) {
     }
 
     function renderOutput(run) {
-        badge.className = 'run-badge';
+        badge.className = 'run-badge button outline';
         if (run.sink_path === null) {
             sinkPath.textContent = '';
             sinkPath.hidden = true;
@@ -195,7 +179,7 @@ export function init(app) {
     }
 
     function isRunning() {
-        return !!state && (state.mode === 'running' || state.mode === 'prompting');
+        return !!state && busy(state.mode);
     }
 
     function outputBlocked() {
@@ -369,19 +353,6 @@ export function init(app) {
         followTail = true;
     });
 
-    // %% the error bar
-
-    q('.run-error-close').addEventListener('click', () => { errorBar.hidden = true; });
-
-    const RUN_COMMANDS = ['run_start', 'run_stop', 'prompt_answer', 'set_log_level'];
-
-    app.on('error', (msg) => {
-        if (app.currentTab() === 'run' || RUN_COMMANDS.includes(msg.command)) {
-            errorText.textContent = msg.message;
-            errorBar.hidden = false;
-        }
-    });
-
     // %% the prompt dialog
 
     // appended to the body so the dialog covers the page whichever tab is active
@@ -391,11 +362,11 @@ export function init(app) {
         <div class="run-prompt-dialog" role="dialog" aria-modal="true">
             <h2>operator prompt</h2>
             <pre class="run-prompt-text"></pre>
-            <input type="text" class="run-prompt-input" autocomplete="off">
+            <input type="text" class="text-input run-prompt-input" autocomplete="off">
             <div class="run-prompt-buttons">
-                <button type="button" class="run-prompt-yes" hidden>y</button>
-                <button type="button" class="run-prompt-no" hidden>n</button>
-                <button type="button" class="run-prompt-answer">Answer</button>
+                <button type="button" class="button run-prompt-yes" hidden>y</button>
+                <button type="button" class="button run-prompt-no" hidden>n</button>
+                <button type="button" class="button run-prompt-answer">Answer</button>
             </div>
         </div>
     `;

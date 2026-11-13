@@ -1,8 +1,11 @@
-// the page shell: the websocket client, the message router, and the tab bar.
+// the page shell: the websocket client, the message router, the tab bar, and the
+// error bar.
 //
 // Messages from the server are dispatched by `type` to the handlers that the tab
 // modules register with `on(type, handler)`. The latest `state`, `schema`, and
-// `spec` messages are kept in `latest` so a tab opened later can render them.
+// `spec` messages are kept in `latest` so a tab opened later can render them. Every
+// `error` message is shown in the error bar; one that names the refused `command`
+// marks the tab of that command until the tab is shown.
 
 import { init as initPreview } from './preview.js';
 import { init as initSpec } from './spec.js';
@@ -13,6 +16,15 @@ const statusText = document.getElementById('status-text');
 const statusButton = document.getElementById('status-button');
 const modeBadge = document.getElementById('mode-badge');
 const headerTitle = document.getElementById('header-title');
+const errorBar = document.getElementById('error-bar');
+const errorText = errorBar.querySelector('.error-text');
+
+// the tab that sends each command the server may refuse
+const COMMAND_TAB = {
+    edit: 'spec', apply: 'spec', revert: 'spec',
+    run_start: 'run', run_stop: 'run', prompt_answer: 'run', set_log_level: 'run',
+    select_variable: 'preview', select_captures: 'preview', set_running: 'preview',
+};
 
 let ws = null;
 // set by the status button; suppresses the automatic reconnect
@@ -50,7 +62,7 @@ function dispatch(msg) {
         headerTitle.textContent = '\u{1F4E1} ' + msg.spec_filename;
     }
     if (msg.type === 'error') {
-        console.error('Server error:', msg.message);
+        showError(msg);
     }
     for (const handler of handlers.get(msg.type) || []) {
         try {
@@ -61,19 +73,33 @@ function dispatch(msg) {
     }
 }
 
+function showError(msg) {
+    console.error('Server error:', msg.message);
+    errorText.textContent = msg.message;
+    errorBar.hidden = false;
+    const tab = COMMAND_TAB[msg.command];
+    if (tab && tab !== currentTab()) {
+        document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('has-error');
+    }
+}
+
+errorBar.querySelector('.error-close').addEventListener('click', () => {
+    errorBar.hidden = true;
+});
+
 function setConnectionState(state) {
     statusDot.classList.remove('connecting', 'connected');
     if (state === 'connecting') {
         statusDot.classList.add('connecting');
         statusText.textContent = 'Connecting...';
-        statusButton.title = 'Cancel';
+        statusButton.title = 'cancel';
     } else if (state === 'connected') {
         statusDot.classList.add('connected');
         statusText.textContent = 'Connected';
-        statusButton.title = 'Disconnect';
+        statusButton.title = 'disconnect';
     } else {
         statusText.textContent = 'Disconnected';
-        statusButton.title = 'Connect';
+        statusButton.title = 'connect';
     }
     document.body.dataset.connection = state;
     for (const handler of handlers.get('connection') || []) {
@@ -123,6 +149,9 @@ export function currentTab() {
 export function selectTab(name) {
     for (const button of document.querySelectorAll('.tab')) {
         button.classList.toggle('active', button.dataset.tab === name);
+        if (button.dataset.tab === name) {
+            button.classList.remove('has-error');
+        }
     }
     for (const panel of document.querySelectorAll('.tab-panel')) {
         panel.hidden = panel.id !== `tab-${name}`;

@@ -10,24 +10,21 @@
     flex-direction: column;
     gap: 0.2rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--bg-raised);
 }
 .run-action-class {
     font-size: 1.05rem;
     font-weight: 500;
-    color: #eee;
+    color: var(--fg);
 }
 .run-spec-filename {
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--mono);
     font-size: 0.8rem;
-    color: #aaa;
+    color: var(--fg-2);
 }
 .run-block h2 {
-    font-size: 0.9rem;
-    font-weight: 500;
     margin-bottom: 0.5rem;
-    color: #4ade80;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--bg-raised);
     padding-bottom: 0.4rem;
 }
 .run-output-row {
@@ -37,30 +34,31 @@
     gap: 0.5rem;
 }
 .run-sink-path {
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--mono);
     font-size: 0.75rem;
-    color: #eee;
+    color: var(--fg);
     word-break: break-all;
     flex: 1 1 100%;
 }
+/* a badge is not a control, so the hover border of `.button` is suppressed */
 .run-badge {
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--mono);
     font-size: 0.75rem;
     padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    border: 1px solid;
+    cursor: default;
+}
+.run-badge.button:hover {
+    border-color: currentColor;
 }
 .run-badge.new {
-    color: #4ade80;
-    border-color: #4ade80;
+    color: var(--ok);
 }
 .run-badge.exists {
-    color: #fbbf24;
-    border-color: #fbbf24;
+    color: var(--warn);
 }
-.run-badge.none {
-    color: #888;
-    border-color: #0f3460;
+.run-badge.none, .run-badge.none:hover {
+    color: var(--fg-muted);
+    border-color: var(--bg-raised);
 }
 .run-checkbox {
     display: flex;
@@ -68,11 +66,11 @@
     gap: 0.5rem;
     margin-top: 0.6rem;
     font-size: 0.85rem;
-    color: #fbbf24;
+    color: var(--warn);
     cursor: pointer;
 }
 .run-checkbox input {
-    accent-color: #e94560;
+    accent-color: var(--accent);
 }
 .run-level {
     display: grid;
@@ -87,24 +85,19 @@
 }
 .run-note {
     margin-top: 0.5rem;
-    font-size: 0.75rem;
-    color: #888;
     font-style: italic;
 }
 .run-sidebar .run-start {
-    justify-content: center;
     font-size: 1rem;
     padding: 0.6rem 1rem;
 }
 .run-sidebar .run-start:not(:disabled) {
-    border-color: #4ade80;
+    border-color: var(--ok);
 }
 .run-sidebar .run-start.stop:not(:disabled) {
-    border-color: #e94560;
+    border-color: var(--accent);
 }
 .run-hint {
-    font-size: 0.8rem;
-    color: #888;
     min-height: 1em;
     margin-top: -0.5rem;
 }
@@ -115,45 +108,45 @@
 /* progress */
 .run-bar {
     height: 10px;
-    background: #1a1a2e;
-    border: 1px solid #0f3460;
+    background: var(--bg);
+    border: 1px solid var(--bg-raised);
     border-radius: 5px;
     overflow: hidden;
 }
 .run-bar-fill {
     height: 100%;
     width: 0;
-    background: #4ade80;
+    background: var(--ok);
     transition: width 0.3s ease;
 }
 .run-bar-fill.error {
-    background: #e94560;
+    background: var(--accent);
 }
 .run-progress-counts,
 .run-progress-text,
 .run-elapsed,
 .run-finished {
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--mono);
     font-size: 0.8rem;
-    color: #aaa;
+    color: var(--fg-2);
     margin-top: 0.4rem;
 }
 .run-progress-counts {
-    color: #eee;
+    color: var(--fg);
 }
 .run-finished:empty {
     display: none;
 }
 .run-finished {
-    color: #4ade80;
+    color: var(--ok);
 }
 .run-failed {
     margin-top: 0.5rem;
 }
 .run-failed-line {
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--mono);
     font-size: 0.8rem;
-    color: #e94560;
+    color: var(--accent);
     word-break: break-word;
 }
 .run-failed details {
@@ -161,7 +154,7 @@
 }
 .run-failed summary {
     font-size: 0.8rem;
-    color: #aaa;
+    color: var(--fg-2);
     cursor: pointer;
 }
 .run-traceback {
@@ -169,40 +162,12 @@
     padding: 0.5rem;
     font-size: 0.7rem;
     color: #ccc;
-    background: #1a1a2e;
+    background: var(--bg);
     border-radius: 4px;
     white-space: pre-wrap;
     word-break: break-word;
     max-height: 16rem;
     overflow: auto;
-}
-
-/* the error bar */
-.run-error-bar {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    background: #2a1a2e;
-    border: 1px solid #e94560;
-    border-radius: 4px;
-    color: #eee;
-    font-size: 0.85rem;
-}
-.run-error-bar[hidden] {
-    display: none;
-}
-.run-error-text {
-    flex: 1;
-    word-break: break-word;
-}
-.run-error-close {
-    background: transparent;
-    border: none;
-    color: #e94560;
-    font-size: 1.1rem;
-    line-height: 1;
-    cursor: pointer;
 }
 
 /* the plot and console column */
@@ -222,7 +187,7 @@
 .run-plot {
     width: 100%;
     height: 100%;
-    background: #16213e;
+    background: var(--bg-panel);
     border-radius: 8px;
 }
 .run-console {
@@ -230,7 +195,7 @@
     min-height: 8rem;
     display: flex;
     flex-direction: column;
-    background: #16213e;
+    background: var(--bg-panel);
     border-radius: 8px;
     overflow: hidden;
 }
@@ -239,58 +204,51 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.4rem 0.75rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--bg-raised);
 }
 .run-console-title {
     font-size: 0.85rem;
-    font-weight: 500;
-    color: #4ade80;
 }
 .run-console-hidden-note {
     flex: 1;
     font-size: 0.75rem;
-    color: #888;
+    color: var(--fg-muted);
 }
 .run-console-clear {
-    background: #0f3460;
-    color: #aaa;
-    border: 1px solid #1a1a2e;
-    border-radius: 4px;
+    color: var(--fg-2);
     padding: 0.2rem 0.6rem;
     font-size: 0.75rem;
-    cursor: pointer;
 }
 .run-console-clear:hover {
-    border-color: #e94560;
-    color: #eee;
+    color: var(--fg);
 }
 .run-console-rows {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     padding: 0.4rem 0.75rem;
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--mono);
     font-size: 0.75rem;
     line-height: 1.5;
 }
 .run-log-row {
     white-space: pre-wrap;
     word-break: break-word;
-    color: #eee;
+    color: var(--fg);
 }
-.run-log-row.level-DEBUG { color: #888; }
-.run-log-row.level-WARNING { color: #fbbf24; }
-.run-log-row.level-ERROR { color: #e94560; }
-.run-log-row .log-time { color: #4ade80; }
+.run-log-row.level-DEBUG { color: var(--fg-muted); }
+.run-log-row.level-WARNING { color: var(--warn); }
+.run-log-row.level-ERROR { color: var(--accent); }
+.run-log-row .log-time { color: var(--ok); }
 .run-log-row.level-DEBUG .log-time { color: #5a8a6a; }
 .run-log-row .log-level { margin: 0 0.5rem; }
-.run-log-row .log-logger { color: #aaa; }
+.run-log-row .log-logger { color: var(--fg-2); }
 .run-log-row .log-progress { color: #6ea8fe; }
 .run-log-row .log-exception {
     margin: 0.2rem 0 0.4rem 2rem;
     padding: 0.4rem;
-    background: #1a1a2e;
-    border-left: 2px solid #e94560;
+    background: var(--bg);
+    border-left: 2px solid var(--accent);
     color: #ccc;
     font-size: 0.7rem;
     white-space: pre-wrap;
@@ -315,13 +273,10 @@
     justify-content: center;
     background: rgba(26, 26, 46, 0.75);
 }
-.run-prompt-overlay[hidden] {
-    display: none;
-}
 .run-prompt-dialog {
     width: min(36rem, 90vw);
-    background: #16213e;
-    border: 1px solid #e94560;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent);
     border-radius: 8px;
     padding: 1.25rem 1.5rem;
     display: flex;
@@ -332,30 +287,23 @@
 .run-prompt-dialog h2 {
     font-size: 0.9rem;
     font-weight: 500;
-    color: #e94560;
+    color: var(--accent);
 }
 .run-prompt-text {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 0.95rem;
-    color: #eee;
+    color: var(--fg);
     white-space: pre-wrap;
     word-break: break-word;
 }
 .run-prompt-input {
-    background: #1a1a2e;
-    color: #eee;
-    border: 1px solid #0f3460;
+    border-color: var(--bg-raised);
     border-radius: 4px;
     padding: 0.5rem 0.75rem;
     font-size: 0.95rem;
-    font-family: 'SF Mono', Monaco, monospace;
-}
-.run-prompt-input:focus {
-    outline: none;
-    border-color: #e94560;
 }
 .run-prompt-input:disabled {
-    color: #777;
+    color: var(--fg-disabled);
 }
 .run-prompt-buttons {
     display: flex;
@@ -363,24 +311,9 @@
     gap: 0.5rem;
 }
 .run-prompt-buttons button {
-    background: #0f3460;
-    color: #eee;
-    border: 1px solid #1a1a2e;
-    border-radius: 4px;
     padding: 0.45rem 1rem;
     font-size: 0.9rem;
-    cursor: pointer;
-}
-.run-prompt-buttons button:hover:not(:disabled) {
-    border-color: #e94560;
-}
-.run-prompt-buttons button:disabled {
-    color: #777;
-    cursor: default;
 }
 .run-prompt-buttons .run-prompt-answer {
-    border-color: #4ade80;
-}
-.run-prompt-buttons button[hidden] {
-    display: none;
+    border-color: var(--ok);
 }

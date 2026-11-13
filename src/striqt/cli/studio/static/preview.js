@@ -2,26 +2,24 @@
 // selectors, and the table of the capture fields that differ between the entries
 
 import { Plot } from './plot.js';
+import { el, busy } from './util.js';
 
 export function init(app) {
     const plotContainer = document.getElementById('plot-container');
     const variableSelect = document.getElementById('variable-select');
-    const runButton = document.getElementById('run-button');
+    const pauseButton = document.getElementById('pause-button');
     const coordsSidebar = document.getElementById('coords-sidebar');
     const captureControls = document.getElementById('capture-controls');
 
     const plot = new Plot(plotContainer);
     let running = true;
     let currentVariable = '';
-    let variablesInitialized = false;
 
     app.on('connection', (state) => {
-        runButton.disabled = state !== 'connected';
+        pauseButton.disabled = state !== 'connected';
     });
 
     app.on('state', (msg) => {
-        // a state message always rebuilds the variable list (initial connection)
-        variablesInitialized = false;
         updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
         updateCaptureSelects(msg.capture_options, msg.capture_selection);
         updateRunButton(msg.running !== false, msg.mode);
@@ -30,18 +28,16 @@ export function init(app) {
 
     app.on('plot_data', (msg) => {
         plot.draw(msg.data);
-        // variables follow the first data after a reconnect only
-        if (msg.available_variables && !variablesInitialized) {
-            updateVariableSelect(msg.available_variables, msg.variable_labels, msg.selected_variable);
-        }
         if (msg.coordinates) {
             updateCoordsTable(msg.coordinates);
         }
     });
 
+    // an error that answers no command is a plot failure; a refused command is shown
+    // in the error bar of the page shell alone
     app.on('error', (msg) => {
-        if (app.currentTab() === 'preview') {
-            plot.showError(msg.message, 'Try selecting a different data variable');
+        if (!msg.command) {
+            plot.showError(msg.message, 'try selecting a different data variable');
         }
     });
 
@@ -50,12 +46,12 @@ export function init(app) {
 
     function updateRunButton(isRunning, mode) {
         running = isRunning;
-        runButton.textContent = isRunning ? 'Pause' : 'Resume';
-        runButton.classList.toggle('running', isRunning);
-        runButton.disabled = !app.connected() || mode === 'running' || mode === 'prompting';
+        pauseButton.textContent = isRunning ? 'Pause' : 'Resume';
+        pauseButton.classList.toggle('running', isRunning);
+        pauseButton.disabled = !app.connected() || busy(mode);
     }
 
-    runButton.addEventListener('click', () => {
+    pauseButton.addEventListener('click', () => {
         app.send({ type: 'set_running', running: !running });
     });
 
@@ -85,10 +81,8 @@ export function init(app) {
         html += `<th class="coord-unit"></th></tr></thead><tbody>`;
         for (const coord of fields) {
             html += `<tr><td class="coord-name">${coord.name}</td>`;
-            const values = coord.values || [coord.value];
             for (let i = 0; i < numPorts; i++) {
-                const val = values[i] !== undefined ? values[i] : values[0];
-                html += `<td class="coord-value">${val}</td>`;
+                html += `<td class="coord-value">${coord.values[i]}</td>`;
             }
             html += `<td class="coord-unit">${coord.unit || ''}</td></tr>`;
         }
@@ -99,52 +93,42 @@ export function init(app) {
     // One <select> per loop field and a slider for the captures: entry (when the
     // sweep lists more than one). Values are indexes into the server's option lists.
     function buildSelect(id, labelText, labels, selectedIndex) {
-        const group = document.createElement('div');
-        group.className = 'control-group';
-        const label = document.createElement('label');
+        const group = el('div', 'control-group');
+        const label = el('label', '', labelText);
         label.htmlFor = id;
-        label.textContent = labelText;
-        const select = document.createElement('select');
+        const select = el('select');
         select.id = id;
         labels.forEach((text, i) => {
-            const option = document.createElement('option');
+            const option = el('option', '', text);
             option.value = String(i);
-            option.textContent = text;
-            select.appendChild(option);
+            select.append(option);
         });
         select.value = String(selectedIndex || 0);
         select.addEventListener('change', sendCaptureSelection);
-        group.appendChild(label);
-        group.appendChild(select);
+        group.append(label, select);
         return group;
     }
 
     function buildCaptureSlider(count, selectedIndex) {
-        const group = document.createElement('div');
-        group.className = 'control-group';
-        const label = document.createElement('label');
+        const group = el('div', 'control-group');
+        const label = el('label', '', 'capture');
         label.htmlFor = 'capture-select';
-        label.textContent = 'capture';
-        const input = document.createElement('input');
+        const input = el('input');
         input.type = 'range';
         input.id = 'capture-select';
         input.min = '0';
         input.max = String(count - 1);
         input.step = '1';
         input.value = String(selectedIndex || 0);
-        const value = document.createElement('span');
-        value.className = 'slider-value';
+        const value = el('span', 'slider-value');
         const show = () => { value.textContent = `${input.value} / ${count - 1}`; };
         show();
         // the value follows the thumb; the selection is sent on release
         input.addEventListener('input', show);
         input.addEventListener('change', sendCaptureSelection);
-        const slider = document.createElement('div');
-        slider.className = 'slider';
-        slider.appendChild(input);
-        slider.appendChild(value);
-        group.appendChild(label);
-        group.appendChild(slider);
+        const slider = el('div', 'slider');
+        slider.append(input, value);
+        group.append(label, slider);
         return group;
     }
 
@@ -191,24 +175,20 @@ export function init(app) {
     function updateVariableSelect(variables, labels, selected) {
         variableSelect.innerHTML = '';
         if (!variables || variables.length === 0) {
-            const option = document.createElement('option');
+            const option = el('option', '', 'Waiting for data...');
             option.value = '';
-            option.textContent = 'Waiting for data...';
-            variableSelect.appendChild(option);
-            variablesInitialized = false;
+            variableSelect.append(option);
             return;
         }
         variables.forEach(v => {
-            const option = document.createElement('option');
+            const option = el('option', '', (labels && labels[v]) ? labels[v] : v.replace(/_/g, ' '));
             option.value = v;
-            option.textContent = (labels && labels[v]) ? labels[v] : v.replace(/_/g, ' ');
             if (v === selected) {
                 option.selected = true;
                 currentVariable = v;
             }
-            variableSelect.appendChild(option);
+            variableSelect.append(option);
         });
-        variablesInitialized = true;
     }
 
     variableSelect.addEventListener('change', (e) => {
