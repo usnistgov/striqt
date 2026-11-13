@@ -180,3 +180,61 @@ def test_serving_urls_of_a_wildcard_bind_start_with_loopback_and_the_host_name()
 
 def test_serving_urls_of_an_explicit_host_is_that_host():
     assert server.serving_urls('192.0.2.7', 8001) == ['http://192.0.2.7:8001']
+
+
+# %% edits over the websocket
+
+
+def test_edit_writes_the_file_and_reports_the_validation(tmp_path, monkeypatch):
+    import shutil
+
+    from conftest import SWEEP_DIR
+    from fastapi.testclient import TestClient
+
+    from striqt.analysis.lib import io
+
+    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
+    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    spec = ss.read_yaml_spec(str(path))
+    state = server.SESSION
+    monkeypatch.setattr(state, 'spec_path', str(path))
+    monkeypatch.setattr(state, 'applied_spec', spec)
+    monkeypatch.setattr(state, 'edited_spec', spec)
+    monkeypatch.setattr(state, 'provenance', io.load_yaml_provenance(path))
+    monkeypatch.setattr(state, 'validation_errors', [])
+    monkeypatch.setattr(server.CLIENTS, 'websockets', set())
+
+    with TestClient(server.app) as client, client.websocket_connect('/ws') as ws:
+        ws.send_json({
+            'type': 'edit',
+            'edits': [
+                {'pointer': '/captures/0/duration', 'op': 'set', 'value_text': '3e-3'}
+            ],
+        })
+        spec_msg = ws.receive_json()
+        status = ws.receive_json()
+        ws.send_json({
+            'type': 'edit',
+            'edits': [
+                {'pointer': '/captures/0/duration', 'op': 'set', 'value_text': '-1'}
+            ],
+        })
+        bad_spec = ws.receive_json()
+        bad_status = ws.receive_json()
+        ws.send_json({'type': 'apply'})
+        refused = ws.receive_json()
+
+    assert spec_msg['type'] == 'spec'
+    # YAML 1.1 reads `3e-3` as text; msgspec converts the text when decoding the spec
+    assert spec_msg['tree']['captures'][0]['duration'] == '3e-3'
+    assert spec_msg['files'][0] == 'synthetic.yaml'
+    assert spec_msg['origin']['/captures/0/duration'][0] == 0
+    assert status['validation'] == {'ok': True, 'errors': []}
+    assert status['applied_differs'] is True
+    assert ss.read_yaml_spec(str(path)).captures[0].duration == 3e-3
+
+    assert bad_spec['tree']['captures'][0]['duration'] == -1
+    assert bad_status['validation']['ok'] is False
+    (error,) = bad_status['validation']['errors']
+    assert '/captures/0' in [error['path'], *error['locations']]
+    assert refused == {'type': 'error', 'message': 'the spec files do not validate'}

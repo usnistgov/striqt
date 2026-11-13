@@ -211,3 +211,124 @@ def test_revalidate_reports_the_path_of_a_bad_value(tmp_path):
     assert state.edited_spec is None
     (error,) = state.validation_errors
     assert '/captures/0' in [error['path'], *error['locations']]
+
+
+# %% the worker thread
+
+
+def wait_for(condition, timeout=60.0, what='the condition'):
+    """block until `condition()` is true, failing after `timeout` s"""
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            pytest.fail(f'{what} did not hold within {timeout} s')
+        time.sleep(0.02)
+
+
+def test_worker_previews_runs_and_applies_in_turn(tmp_path, monkeypatch):
+    """the worker opens the synthetic sweep, previews, writes one store for a run,
+    reopens for an applied spec with one capture, and ends on Close"""
+    import logging
+    import shutil
+
+    from conftest import SWEEP_DIR
+
+    import striqt.sensor as ss
+
+    monkeypatch.chdir(tmp_path)
+    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
+    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    spec = ss.read_yaml_spec(str(path))
+    state = session.StudioSession(
+        spec_path=str(path), applied_spec=spec, edited_spec=spec
+    )
+    modes = []
+    datasets = []
+    closed = threading.Event()
+    events = session.SessionEvents(
+        state_changed=lambda: modes.append(state.mode),
+        data_ready=lambda: datasets.append(state.dataset),
+        attach_logs=logging.NullHandler,
+        detach_logs=lambda handler: None,
+        closed=closed.set,
+    )
+
+    thread = session.start(state, events)
+    try:
+        wait_for(lambda: state.mode == 'preview', what='the preview')
+        wait_for(lambda: len(datasets) >= 1, what='the first preview dataset')
+        assert state.sink_path is not None
+        assert state.sink_path.endswith('.zarr.zip')
+        assert 'snr' in state.varying_fields
+        assert len(state.choices.captures) == len(spec.captures)
+        # the preview analyzes the displayed variable only
+        assert list(datasets[0].delayed) == [state.selected_variable]
+
+        state.commands.put(session.StartRun())
+        wait_for(lambda: state.run is not None and state.run.finished is not None)
+        run = state.run
+        assert run.error is None, run.error
+        assert run.count == ss.specs.sequencing.count_acquisitions(
+            spec, state.source_id
+        )
+        assert run.acquired == run.count
+        stores = list((tmp_path / 'sweeps' / 'outputs').glob('*.zarr.zip'))
+        assert len(stores) == 1
+        # the run analyzes the whole group
+        assert set(datasets[-1].delayed) == set(spec.analysis.to_dict())
+        wait_for(lambda: state.mode == 'preview', what='the preview after the run')
+
+        one_capture = spec.replace(captures=spec.captures[:1])
+        state.commands.put(session.Apply(one_capture))
+        wait_for(
+            lambda: state.applied_spec is one_capture and state.mode == 'preview',
+            what='the applied spec',
+        )
+        assert len(state.choices.captures) == 1
+
+        state.commands.put(session.Close())
+        wait_for(closed.is_set, what='the close')
+    finally:
+        state.stop.set()
+        thread.join(60)
+    assert not thread.is_alive()
+    assert state.mode == 'closed'
+    assert modes[:2] == ['idle', 'preview']
+    assert 'running' in modes
+
+
+def test_run_stop_ends_the_run_early(tmp_path, monkeypatch):
+    import logging
+    import shutil
+
+    from conftest import SWEEP_DIR
+
+    import striqt.sensor as ss
+
+    monkeypatch.chdir(tmp_path)
+    shutil.copytree(SWEEP_DIR, tmp_path / 'sweeps')
+    path = tmp_path / 'sweeps' / 'synthetic.yaml'
+    spec = ss.read_yaml_spec(str(path))
+    state = session.StudioSession(spec_path=str(path), applied_spec=spec)
+    events = session.SessionEvents(
+        state_changed=lambda: None,
+        data_ready=lambda: (
+            state.run is not None and state.run.acquired >= 2 and state.run.stop.set()
+        ),
+        attach_logs=logging.NullHandler,
+        detach_logs=lambda handler: None,
+        closed=lambda: None,
+    )
+    thread = session.start(state, events)
+    try:
+        wait_for(lambda: state.mode == 'preview')
+        state.commands.put(session.StartRun())
+        wait_for(lambda: state.run is not None and state.run.finished is not None)
+        assert state.run.error is None
+        assert 2 <= state.run.acquired < state.run.count
+        wait_for(lambda: state.mode == 'preview')
+    finally:
+        state.stop.set()
+        thread.join(60)
