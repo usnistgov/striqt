@@ -4,8 +4,9 @@ Each page lists one public module. A member is a public name of that module (a c
 function, or instance defined under ``striqt``) whose defining module is the page module
 or one of its non-public submodules; a name defined under another page module is listed
 on that page instead. The members of a group are ordered by kind (classes, functions,
-instances) and then by name. Running the module writes the pages, and ``--check`` exits
-with status 1 when a page on disk differs from the output.
+instances) and then by name. Running the module writes the pages under ``docs/api``,
+or under ``--out``; the ``docs`` and ``docs-serve`` pixi tasks run it before the site
+build, so the pages are not tracked.
 """
 
 from __future__ import annotations
@@ -355,29 +356,18 @@ def render(page: Page, listed: dict[int, str]) -> str:
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        '--check',
-        action='store_true',
-        help='compare with the pages on disk instead of writing them',
+        '--out',
+        type=Path,
+        default=API_DIR,
+        help='the directory that receives the pages (default: docs/api)',
     )
     args = parser.parse_args(argv)
 
-    stale = []
     listed: dict[int, str] = {}
     for page in PAGES:
-        path = API_DIR / page.path
-        text = render(page, listed)
-        if args.check:
-            if not path.exists() or path.read_text() != text:
-                stale.append(path.relative_to(ROOT).as_posix())
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text)
-
-    if stale:
-        print(
-            'stale API pages (run `pixi run -e doc docs-api`):', *stale, sep='\n  '
-        )
-        return 1
+        path = args.out / page.path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(render(page, listed))
     return 0
 
 
