@@ -477,11 +477,6 @@ class TestRxStreamClose:
         stream.close(soapy_device)
         assert stream.stream is None
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="RxStream.close prints 'close stream' to stdout",
-    )
     def test_close_is_silent(self, soapy_device, capsys):
         stream = _stream(soapy_device)
         stream.setup(soapy_device, ports=(0,))

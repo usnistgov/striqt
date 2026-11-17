@@ -369,7 +369,6 @@ class RxStream:
                 device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
 
     def close(self, device: SoapySDR.Device):
-        print('close stream')
         stream = getattr(self, 'stream', None)
         if stream is None:
             return
