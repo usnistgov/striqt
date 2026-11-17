@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import gc
 import logging
+import subprocess
+import sys
 import weakref
 from queue import Full
 from threading import Event
@@ -156,6 +158,54 @@ def test_collecting_an_unreferenced_controller_closes_it_and_frees_its_slot(capl
     ):
         assert live.is_open()
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+EXIT_WITH_HELD_CONTROLLER = f"""
+import threading
+import time
+
+import striqt.sensor as ss
+
+
+def report_close():
+    intact = ss.specs is not None and ss.lib.controller.lookup is not None
+    print(f'closed modules_intact={{intact}}', flush=True)
+
+
+def hold(controller):
+    while True:
+        time.sleep(0.05)
+
+
+ctrl = ss.bindings.single_tone.from_source_spec(
+    ss.specs.FunctionSource(master_clock_rate={SOURCE.master_clock_rate!r}, num_rx_ports=2)
+)
+ctrl.backend.close = report_close
+threading.Thread(target=hold, args=(ctrl,), daemon=True).start()
+del ctrl
+raise RuntimeError('unhandled')
+"""
+
+
+def test_exit_with_an_unhandled_exception_closes_the_backend_before_module_teardown():
+    """the finalizer closes a controller that a daemon thread holds when an unhandled
+    exception ends the process, with the module globals intact.
+
+    The daemon thread stands for the acquisition worker, which holds the resources.
+    A fresh interpreter runs the script (about 2 s). `weakref.finalize` calls each
+    live finalizer at exit, before module teardown (Python docs, `weakref.finalize`).
+    """
+    result = subprocess.run(
+        [sys.executable, '-c', EXIT_WITH_HELD_CONTROLLER],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    assert 'RuntimeError: unhandled' in result.stderr
+    assert 'closed modules_intact=True' in result.stdout, result.stdout + result.stderr
+    assert 'Exception ignored' not in result.stderr, result.stderr
 
 
 def test_source_info_of_a_replaced_controller_is_a_connection_error():

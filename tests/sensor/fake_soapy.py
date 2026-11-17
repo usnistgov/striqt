@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import dataclasses
 import time
-import types
 from typing import NamedTuple
 
 import numpy as np
@@ -451,8 +450,6 @@ class FakeSoapySDR:
         self.devices: list[FakeDevice] = []
         for name, value in CONSTANTS.items():
             setattr(self, name, value)
-        # SoapySource.close checks this guard against a torn-down module
-        self._SoapySDR = types.SimpleNamespace(Device_deactivateStream=object())
 
     def Device(self, args=None):
         # the sequence form (SoapySDR issue 472) returns a list of devices

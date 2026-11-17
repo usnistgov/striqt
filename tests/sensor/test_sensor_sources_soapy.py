@@ -802,12 +802,6 @@ class TestSoapySourceAcquire:
 
 
 class TestSoapySourceClose:
-    def test_close_survives_a_torn_down_module(self, fake_soapy):
-        source = _source()
-        source.setup()
-        fake_soapy._SoapySDR.Device_deactivateStream = None
-        source.close()
-
     def test_close_releases_the_stream_and_device(self, fake_soapy):
         source = _source()
         source.setup(rx_ports=(0,))
