@@ -308,7 +308,6 @@ class MatplotlibBackend(PlotBackend['xarray.plot.FacetGrid']):
             for ax, name_dict in zip(grid.axs.flat, grid.name_dicts.flat):
                 if name_dict is None:
                     ax.set_visible(False)
-            grid.fig.tight_layout()
         else:
             grid = target
 
