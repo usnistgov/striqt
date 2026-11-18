@@ -188,10 +188,10 @@ raise RuntimeError('unhandled')
 
 
 def test_exit_with_an_unhandled_exception_closes_the_backend_before_module_teardown():
-    """the finalizer closes a controller that a daemon thread holds when an unhandled
-    exception ends the process, with the module globals intact.
+    """the finalizer closes the backend of a controller held by a daemon thread when
+    an unhandled exception ends the process, with the module globals intact.
 
-    The daemon thread stands for the acquisition worker, which holds the resources.
+    A daemon thread holds the controller, as the acquisition worker does in a sweep.
     A fresh interpreter runs the script (about 2 s). `weakref.finalize` calls each
     live finalizer at exit, before module teardown (Python docs, `weakref.finalize`).
     """

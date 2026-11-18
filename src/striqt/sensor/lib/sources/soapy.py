@@ -671,7 +671,11 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             self.rx_stream.setup(self.device)
 
     def close(self):
-        """deactivate and close the receive stream, then release the device."""
+        """deactivate and close the receive stream, then close the device.
+
+        A second call returns without effect. Logs on the `source` logger at INFO
+        when the device is closed.
+        """
         # `device` is unset after a close, and when `__init__` raised before it was set
         device = getattr(self, 'device', None)
         if device is None:

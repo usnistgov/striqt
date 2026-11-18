@@ -447,10 +447,11 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             self._buffers = buffers.ReceiveBuffers(self)
             self._retry_count = 0
             self.backend = self.sensor.source_cls(spec)
-            # weakref.finalize calls the callback on garbage collection and at
-            # interpreter exit, before the module globals are cleared. The callback
-            # references neither the controller nor _buffers, which hold the
-            # controller, so the controller stays collectable
+            # weakref.finalize calls _close_backend at garbage collection of the
+            # controller and at interpreter exit, before CPython clears the module
+            # globals. The finalizer references the backend alone, because a
+            # reference to the controller, or to _buffers, which holds the
+            # controller, would keep the controller alive
             self._finalizer = weakref.finalize(self, _close_backend, self.backend)
             lookup._set_id(spec, self.source_id)
         except BaseException as ex:
@@ -554,11 +555,12 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
     def close(self) -> None:
-        """close the backend and release the registry slot of the source spec.
+        """close the backend and release the slot of the source spec.
 
-        The backend is closed once: by the first call, or by the finalizer at
-        garbage collection or interpreter exit when no call is made. The stashed
-        receive buffers are dropped.
+        The first call closes the backend, and later calls return without effect.
+        When `close` is never called, the finalizer closes the backend at garbage
+        collection of the controller or at interpreter exit. The carryover held by
+        the receive buffers is dropped.
         """
         if self._closed:
             return
