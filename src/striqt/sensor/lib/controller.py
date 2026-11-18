@@ -353,6 +353,10 @@ def bind_controller(
     return cls
 
 
+def _close_backend(backend: SourceBackend[Any, Any]) -> None:
+    backend.close()
+
+
 class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     """Open the source backend for control and acquisition."""
 
@@ -360,6 +364,7 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
     __setup__: SS
     _capture: SC | None
     _buffers: buffers.ReceiveBuffers
+    _finalizer: weakref.finalize
     _timeout: float = 10
     _closed: bool = False
     _prev_iq: specs.AcquiredIQ | None = None
@@ -442,6 +447,12 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             self._buffers = buffers.ReceiveBuffers(self)
             self._retry_count = 0
             self.backend = self.sensor.source_cls(spec)
+            # weakref.finalize calls _close_backend at garbage collection of the
+            # controller and at interpreter exit, before CPython clears the module
+            # globals. The finalizer references the backend alone, because a
+            # reference to the controller, or to _buffers, which holds the
+            # controller, would keep the controller alive
+            self._finalizer = weakref.finalize(self, _close_backend, self.backend)
             lookup._set_id(spec, self.source_id)
         except BaseException as ex:
             try:
@@ -544,6 +555,13 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
         return lookup.is_ready(self.__setup__, self._timeout, wait=wait)
 
     def close(self) -> None:
+        """close the backend and release the slot of the source spec.
+
+        The first call closes the backend, and later calls return without effect.
+        When `close` is never called, the finalizer closes the backend at garbage
+        collection of the controller or at interpreter exit. The carryover held by
+        the receive buffers is dropped.
+        """
         if self._closed:
             return
         self._closed = True
@@ -556,15 +574,13 @@ class Controller(Generic[SS, SP, SC, SA, PS, PC]):
             lookup._clear(self.__setup__)
 
         try:
-            backend = getattr(self, 'backend', None)
-            if backend is not None:
-                backend.close()
+            # _finalizer is unset when source_cls raised in _setup
+            finalizer = getattr(self, '_finalizer', None)
+            if finalizer is not None:
+                finalizer()
         finally:
             if hasattr(self, '_buffers'):
                 self._buffers.clear()
-
-    def __del__(self):
-        self.close()
 
     def __enter__(self) -> Self:
         return self

@@ -50,8 +50,10 @@ to 41; 33 to 37 markers), and fixed 5 defects without a ledger number (listed un
 276 skipped, 41 xfailed on py39 and 2431, 274, 41 on py315. Item 52 was retired on
 2026-11-13 when `SoapySource.close` was fixed (`xfailed` 40), and item 70 on
 2026-11-13 when `validate_ports` was added, which checks every `PerPort` field at
-capture construction (`xfailed` 39). Items are listed in priority order, not numeric
-order.
+capture construction (`xfailed` 39). Item 58 was retired on 2026-11-17 (branch
+`finalize-backend-at-exit`) when the print in `RxStream.close` was deleted (`xfailed`
+38; 35 to 34 markers); the suite then ran 2615 passed, 279 skipped, 38 xfailed on py39
+and 2624, 274, 38 on py315. Items are listed in priority order, not numeric order.
 
 Every strict xfail becomes an unexpected pass when its defect is fixed and must
 have its marker removed in the same change.
@@ -127,7 +129,6 @@ item is open.
 | 46 | `TestLookupPowerCorrection::test_out_of_range_message_shows_the_limit_in_mhz` | High | D | trivial |
 | 71 | `TestCaptureRemap::test_multi_key_undecodable_key_is_a_validation_error[text]`, `[int]` | High | D | trivial |
 | 56 | `TestHardwareTimeSync::test_unsupported_source_names_itself` | High | D | trivial |
-| 58 | `TestRxStreamClose::test_close_is_silent` | High | D | trivial |
 | 92 | `TestFilterDesign::test_rect_window_filters_without_overlap` | High | C | design decision |
 | 91 | `test_unknown_keyword_through_unpack_is_flagged` | High | tool (none on striqt) | `ty` upgrade |
 
@@ -628,13 +629,6 @@ added 2026-09-16, formerly passing tests that pinned the depth-0 result:
   {self.time_source!r}'` literally.
 - **Impact.** Unreachable through specs: `types.TimeSource` is a `Literal`.
 - **Fix.** Add the `f`. Trivial.
-
-### 58. `RxStream.close` prints to stdout
-
-`tests/sensor/test_sensor_sources_soapy.py::TestRxStreamClose::test_close_is_silent`
-
-- **Mechanism.** `soapy.py:379`, a leftover `print('close stream')`.
-- **Fix.** Delete it, or log at DEBUG on the `source` logger. Trivial.
 
 ## Tool limitations
 

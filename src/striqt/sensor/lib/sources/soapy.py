@@ -369,7 +369,6 @@ class RxStream:
                 device.setGain(SoapySDR.SOAPY_SDR_RX, port, gain)
 
     def close(self, device: SoapySDR.Device):
-        print('close stream')
         stream = getattr(self, 'stream', None)
         if stream is None:
             return
@@ -672,15 +671,11 @@ class SoapySource(SourceBackend[SS, specs.SoapyCapture]):
             self.rx_stream.setup(self.device)
 
     def close(self):
-        if (
-            SoapySDR is None
-            or SoapySDR._SoapySDR is None
-            or SoapySDR._SoapySDR.Device_deactivateStream is None
-            or SoapySDR.Device is None
-        ):
-            # the soapy module is partially torn down after some exceptions
-            return
+        """deactivate and close the receive stream, then close the device.
 
+        A second call returns without effect. Logs on the `source` logger at INFO
+        when the device is closed.
+        """
         # `device` is unset after a close, and when `__init__` raised before it was set
         device = getattr(self, 'device', None)
         if device is None:

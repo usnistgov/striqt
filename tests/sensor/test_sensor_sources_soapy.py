@@ -477,11 +477,6 @@ class TestRxStreamClose:
         stream.close(soapy_device)
         assert stream.stream is None
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="RxStream.close prints 'close stream' to stdout",
-    )
     def test_close_is_silent(self, soapy_device, capsys):
         stream = _stream(soapy_device)
         stream.setup(soapy_device, ports=(0,))
@@ -802,12 +797,6 @@ class TestSoapySourceAcquire:
 
 
 class TestSoapySourceClose:
-    def test_close_survives_a_torn_down_module(self, fake_soapy):
-        source = _source()
-        source.setup()
-        fake_soapy._SoapySDR.Device_deactivateStream = None
-        source.close()
-
     def test_close_releases_the_stream_and_device(self, fake_soapy):
         source = _source()
         source.setup(rx_ports=(0,))
